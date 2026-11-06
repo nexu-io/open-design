@@ -6,18 +6,18 @@
 
 ```bash
 # Transcribe audio/video (uses whisper.cpp locally, no API key needed)
-npx hyperframes transcribe audio.mp3
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe audio.mp3
 
 # Use a larger model for better accuracy
-npx hyperframes transcribe audio.mp3 --model medium.en
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe audio.mp3 --model medium.en
 
 # Filter to English only (skips non-English speech)
-npx hyperframes transcribe audio.mp3 --language en
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe audio.mp3 --language en
 
 # Import an existing transcript from another tool
-npx hyperframes transcribe captions.srt
-npx hyperframes transcribe captions.vtt
-npx hyperframes transcribe openai-response.json
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe captions.srt
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe captions.vtt
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe openai-response.json
 ```
 
 ## Supported Input Formats
@@ -52,10 +52,10 @@ The default model (`small.en`) balances accuracy and speed. For better results, 
 
 ```bash
 # Spanish audio
-npx hyperframes transcribe audio.mp3 --model small --language es
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe audio.mp3 --model small --language es
 
 # Unknown language — let whisper auto-detect
-npx hyperframes transcribe audio.mp3 --model small
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe audio.mp3 --model small
 ```
 
 **Music and vocals over instrumentation**: `small.en` will misidentify lyrics — use `medium.en` as the minimum, or import lyrics manually. Even `medium.en` struggles with heavily produced tracks; for music videos, providing known lyrics as an SRT/VTT and importing with `hyperframes transcribe lyrics.srt` will always beat automated transcription.
@@ -80,7 +80,7 @@ After every transcription, **read the transcript and check for quality issues be
 
 1. **Retry with `medium.en`** if the original used `small.en` or smaller:
    ```bash
-   npx hyperframes transcribe audio.mp3 --model medium.en
+   "$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe audio.mp3 --model medium.en
    ```
 2. **If `medium.en` also fails** (still >20% music tokens or garbled), tell the user the audio is too noisy for local transcription and suggest:
    - Providing lyrics manually as an SRT/VTT file
@@ -123,7 +123,7 @@ curl https://api.openai.com/v1/audio/transcriptions \
   -F "timestamp_granularities[]=word" \
   -o transcript-openai.json
 
-npx hyperframes transcribe transcript-openai.json
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe transcript-openai.json
 ```
 
 **Groq Whisper API** (fast, free tier available):
@@ -136,7 +136,7 @@ curl https://api.groq.com/openai/v1/audio/transcriptions \
   -F "timestamp_granularities[]=word" \
   -o transcript-groq.json
 
-npx hyperframes transcribe transcript-groq.json
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe transcript-groq.json
 ```
 
 ## If No Transcript Exists
@@ -146,6 +146,6 @@ npx hyperframes transcribe transcript-groq.json
    - Speech/voiceover → `small.en`
    - Music with vocals → `medium.en`
    ```bash
-   npx hyperframes transcribe <audio-or-video-file> --model medium.en
+   "$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe <audio-or-video-file> --model medium.en
    ```
 3. **Read the transcript and run the quality check** (see above). If it fails, retry with a larger model or suggest manual lyrics.

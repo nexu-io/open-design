@@ -37,6 +37,10 @@ interface VelaWalletBalanceResponse {
   updatedAt?: unknown;
 }
 
+function isValidUsdBalance(value: unknown): value is string {
+  return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
+}
+
 function publicUser(user: VelaUser | null): AmrWalletSnapshot['user'] {
   if (!user) return null;
   return {
@@ -121,6 +125,8 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       profile: string;
       timeoutMs: number;
       user: AmrWalletSnapshot['user'];
+      env: NodeJS.ProcessEnv;
+      configuredEnv: Record<string, string>;
     },
   ): Promise<AmrWalletSnapshot> {
     const fetchedAt = now().toISOString();
@@ -135,11 +141,15 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         signal: controller.signal,
       });
       if (response.status === 401 || response.status === 403) {
+        // Billing is display-only (OPEND-3553): a wallet rejection must never
+        // expire the AMR session. Vela also maps internal billing failures to
+        // 403, so this only says the balance is unavailable. Genuine credential
+        // expiry is detected by the non-billing workspace directory path.
         cache.delete(key);
         return unavailableSnapshot({
           code: 'unauthorized',
           fetchedAt,
-          message: 'AMR wallet authorization expired. Sign in again to refresh wallet access.',
+          message: 'AMR wallet balance is unavailable for this account right now.',
           profile: input.profile,
           user: input.user,
         });
@@ -164,16 +174,26 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         });
       }
       const body = (await response.json()) as VelaWalletBalanceResponse;
-      const balanceUsd = typeof body.balanceUsd === 'string' ? body.balanceUsd : null;
-      if (balanceUsd === null) {
+      if (!isValidUsdBalance(body.balanceUsd)) {
+        const cached = cache.get(key);
+        if (cached) {
+          return {
+            ...withCacheSource(cached.snapshot, true),
+            error: {
+              code: 'upstream',
+              message: 'AMR wallet balance response contained an invalid balanceUsd.',
+            },
+          };
+        }
         return unavailableSnapshot({
           code: 'upstream',
           fetchedAt,
-          message: 'AMR wallet balance response was missing balanceUsd.',
+          message: 'AMR wallet balance response contained an invalid balanceUsd.',
           profile: input.profile,
           user: input.user,
         });
       }
+      const balanceUsd = body.balanceUsd;
       const snapshot: AmrWalletSnapshot = {
         status: 'available',
         profile: input.profile,
@@ -206,6 +226,7 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       });
     } finally {
       clearTimeout(timeout);
+      controller.abort();
     }
   }
 
@@ -260,6 +281,8 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       profile: context.profile,
       timeoutMs,
       user,
+      env,
+      configuredEnv,
     }).finally(() => {
       inflight.delete(key);
     });

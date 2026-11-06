@@ -3,7 +3,6 @@
    ------------------------------------------------------------------
    Shared visual language for the four detail variants:
    - Smooth scale-in entry (used by every detail backdrop + modal)
-   - Trust-tinted byline strip (PluginByline) reused across surfaces
    - Share popover (PluginShareMenu) reused across surfaces
    - Cinematic media detail layout
    The goal: detail modals feel like curated content viewers users
@@ -20,13 +19,11 @@
 }
 
 .plugin-details-modal-backdrop,
-.ds-modal-backdrop,
-.prompt-template-modal-backdrop {
+.ds-modal-backdrop {
   animation: plugin-detail-fade 160ms ease-out;
 }
 .plugin-details-modal,
-.ds-modal,
-.prompt-template-modal {
+.ds-modal {
   animation: plugin-detail-rise 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
 }
 
@@ -48,7 +45,7 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--radius-pill);
   padding: 5px 11px;
   cursor: pointer;
@@ -58,6 +55,19 @@
 .plugin-share-trigger.ghost {
   border-radius: var(--radius);
   padding: 6px 10px;
+}
+/* Match the adjacent template share trigger so the inline variant keeps a
+   visible anchor while its popover is open. */
+.plugin-share-trigger.ghost:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+.plugin-share-trigger.ghost:hover:not(:disabled),
+.plugin-share-trigger.ghost[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .plugin-share-trigger--solo {
   border: 1px solid var(--border);
@@ -101,13 +111,14 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   border: 0;
   background: transparent;
   border-radius: var(--radius-sm);
   padding: 7px 9px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -117,93 +128,6 @@
 .plugin-share-item:focus-visible {
   background: var(--bg-subtle);
   outline: none;
-}
-
-/* PluginByline — author avatar + name + trust tier + version chip,
-   shared by media + scenario variants, lives just under the modal
-   title bar. The compact variant collapses the secondary link row
-   when used inside dark/gradient headers. */
-.plugin-byline {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.plugin-byline--compact {
-  padding: 8px 16px;
-  border-bottom: none;
-  background: transparent;
-}
-.plugin-byline__avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  overflow: hidden;
-  object-fit: cover;
-}
-.plugin-byline__avatar--fallback {
-  background: linear-gradient(
-    135deg,
-    var(--accent-tint) 0%,
-    var(--bg-subtle) 100%
-  );
-  color: var(--accent);
-}
-.plugin-byline__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-}
-.plugin-byline__primary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.plugin-byline__by {
-  font-size: 11.5px;
-  color: var(--text-faint);
-  text-transform: lowercase;
-}
-.plugin-byline__name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.plugin-byline__version {
-  font-size: 11px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.plugin-byline__secondary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.plugin-byline__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: color 120ms var(--ease-out);
-}
-.plugin-byline__link:hover {
-  color: var(--accent);
 }
 
 /* Plugins section composite — wraps InlinePluginsRail + ContextChipStrip +
@@ -274,7 +198,7 @@
 .inline-plugins-rail--strip .inline-plugins-rail__title {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: 500;
+  font-weight: 600;
 }
 /* Description + trust are hidden inside the strip rail — they live
    in the marketplace detail page. Keeping the strip compact is the
@@ -286,7 +210,7 @@
 
 .inline-plugins-rail__error {
   flex: 0 0 100%;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--danger, #c33);
 }
 
@@ -300,7 +224,7 @@
   align-items: center;
 }
 .context-chip-strip__empty {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .context-chip-strip__chip {
@@ -313,7 +237,7 @@
   border-radius: var(--radius-pill);
   background: var(--c-tint);
   border: 1px solid color-mix(in srgb, var(--c-hue) 22%, var(--border));
-  font-size: 11px;
+  font-size: 12px;
   color: color-mix(in srgb, var(--c-hue) 70%, var(--text-strong));
   max-width: 240px;
   transition:
@@ -382,8 +306,8 @@
   flex: 0 0 auto;
 }
 .context-chip-strip__kind {
-  font-size: 9.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: color-mix(in srgb, var(--c-hue) 60%, var(--text-muted));
@@ -393,7 +317,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-weight: 550;
+  font-weight: 600;
 }
 .context-chip-strip__remove {
   appearance: none;
@@ -441,8 +365,8 @@
 .plugin-inputs-form__label {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -454,7 +378,7 @@
 }
 .plugin-inputs-form__input {
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   padding: 7px 9px;
   border: 1px solid var(--border);
@@ -471,7 +395,6 @@
 .plugin-inputs-form__input:focus {
   outline: none;
   border-color: var(--selected);
-  box-shadow: 0 0 0 3px var(--selected-soft);
   background: var(--bg-panel);
 }
 .plugin-inputs-form__input--textarea {
@@ -504,8 +427,8 @@ select.plugin-inputs-form__input {
   order: 1;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text);
 }
 .plugin-inputs-form__file-shell {
@@ -519,7 +442,7 @@ select.plugin-inputs-form__input {
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   transition:
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -532,7 +455,6 @@ select.plugin-inputs-form__input {
 }
 .plugin-inputs-form__file-shell:focus-within {
   border-color: var(--selected);
-  box-shadow: 0 0 0 3px var(--selected-soft);
 }
 .plugin-inputs-form__input--file {
   position: absolute;
@@ -578,14 +500,15 @@ select.plugin-inputs-form__input {
   min-height: 24px;
   max-width: 100%;
   gap: 0;
-  padding: 0 3px 0 0;
+  /* Same 4px inset as every other composer tag (OPEND-3085). */
+  padding: 4px;
   background: color-mix(in srgb, var(--bg-panel) 88%, var(--c-tint));
   border-color: color-mix(in srgb, var(--c-hue) 16%, var(--border-soft));
 }
 .composer-shell .context-chip-strip__body {
   gap: 6px;
   min-width: 0;
-  padding: 2px 6px 2px 8px;
+  padding: 0;
 }
 /* Drop the badge box — let a small, hue-tinted type icon lead, exactly
    like a file context chip. */
@@ -607,8 +530,8 @@ select.plugin-inputs-form__input {
 }
 .composer-shell .context-chip-strip__label {
   max-width: 168px;
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: 12px;
+  font-weight: 600;
 }
 .composer-shell .context-chip-strip__remove {
   width: 18px;
@@ -631,7 +554,7 @@ select.plugin-inputs-form__input {
   grid-column: 1 / -1;
 }
 .composer-shell .plugin-inputs-form__label {
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0.07em;
   color: var(--text-soft);
@@ -651,7 +574,6 @@ select.plugin-inputs-form__input {
 .composer-shell .plugin-inputs-form__input:focus {
   border-color: var(--selected);
   background-color: var(--bg-panel);
-  box-shadow: 0 0 0 3px var(--selected-soft);
 }
 .composer-shell .plugin-inputs-form__input--textarea {
   min-height: 70px;

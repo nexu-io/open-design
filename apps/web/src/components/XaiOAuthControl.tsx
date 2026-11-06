@@ -319,7 +319,7 @@ export function XaiOAuthControl() {
             <span>
               <strong>Waiting for authorization…</strong>{' '}
               <span className="hint">
-                Open Design is listening for the callback in the background.
+                OpenDesign is listening for the callback in the background.
                 This panel will switch to <em>Signed in</em> within a few
                 seconds of your approving on xAI.
               </span>
@@ -332,7 +332,7 @@ export function XaiOAuthControl() {
               <strong>Not signed in.</strong>{' '}
               <span className="hint">
                 Click Sign in with X to use your SuperGrok subscription for
-                Grok image, video, and TTS in Open Design — no API key
+                Grok image, video, and TTS in OpenDesign — no API key
                 needed.
               </span>
             </span>
@@ -345,7 +345,7 @@ export function XaiOAuthControl() {
           <strong>Heads up:</strong> xAI may show a page that says{' '}
           <em>"Cannot connect to your application"</em> (or 「无法建立连接」
           in Chinese). <strong>That is a UX bug on xAI's side</strong> — the
-          authorization is still being delivered to Open Design in the
+          authorization is still being delivered to OpenDesign in the
           background. Stay on this panel; it will switch to{' '}
           <em>Signed in with X</em> automatically. Do not retry from xAI's
           page.

@@ -1,3 +1,5 @@
+import { readCachedVisiblePlugins } from '../state/projects';
+import { usePageNavigationReady } from '../observability/navigation-timing';
 // Plan G4 / spec §11.6 — Marketplace catalog grid.
 //
 // Lists every installed plugin as a card grid (the most reliable
@@ -24,10 +26,12 @@ interface Marketplace {
 }
 
 export function MarketplaceView() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [marketplaces, setMarketplaces] = useState<Marketplace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  usePageNavigationReady({ page: 'marketplace', visible: !loading, ready: !loading && !loadFailed && readCachedVisiblePlugins() !== null, failure: loadFailed || (!loading && readCachedVisiblePlugins() === null) });
   const [filter, setFilter] = useState<'all' | 'trusted' | 'restricted'>('all');
 
   useEffect(() => {
@@ -35,14 +39,15 @@ export function MarketplaceView() {
     void Promise.all([
       listPlugins(),
       fetch('/api/marketplaces')
-        .then((r) => (r.ok ? r.json() : { marketplaces: [] }))
+        .then((r) => { if (!r.ok) setLoadFailed(true); return r.ok ? r.json() : { marketplaces: [] }; })
         .then((d) => (d?.marketplaces ?? []) as Marketplace[]),
     ]).then(([rows, mps]) => {
       if (cancelled) return;
+      if (readCachedVisiblePlugins() !== rows) setLoadFailed(true);
       setPlugins(rows);
       setMarketplaces(mps);
       setLoading(false);
-    });
+    }).catch(() => { if (!cancelled) { setLoadFailed(true); setLoading(false); } });
     return () => {
       cancelled = true;
     };
@@ -53,41 +58,40 @@ export function MarketplaceView() {
   return (
     <div className="marketplace-view" data-testid="marketplace-view">
       <header className="marketplace-view__header">
-        <h1>Plugins marketplace</h1>
+        <h1>{t('marketplace.title')}</h1>
         <div className="marketplace-view__filters">
           <button
             type="button"
             data-active={filter === 'all'}
             onClick={() => setFilter('all')}
           >
-            All
+            {t('common.all')}
           </button>
           <button
             type="button"
             data-active={filter === 'trusted'}
             onClick={() => setFilter('trusted')}
           >
-            Trusted
+            {t('marketplace.filterTrusted')}
           </button>
           <button
             type="button"
             data-active={filter === 'restricted'}
             onClick={() => setFilter('restricted')}
           >
-            Restricted
+            {t('marketplace.filterRestricted')}
           </button>
         </div>
       </header>
 
       {loading ? (
-        <div className="marketplace-view__loading">Loading…</div>
+        <div className="marketplace-view__loading">{t('common.loading')}</div>
       ) : null}
 
       <section className="marketplace-view__grid" data-testid="marketplace-grid">
         {visible.length === 0 && !loading ? (
           <div className="marketplace-view__empty">
-            No plugins installed yet. Try <code>od plugin install &lt;source&gt;</code> or
-            register a marketplace below.
+            {t('marketplace.emptyBefore')} <code>od plugin install &lt;source&gt;</code>{t('marketplace.emptyAfter')}
           </div>
         ) : null}
         {visible.map((p) => (
@@ -104,7 +108,7 @@ export function MarketplaceView() {
             ) : null}
             <div className="marketplace-view__card-meta">
               <span>v{p.version}</span>
-              <span>trust: {p.trust}</span>
+              <span>{t('marketplace.trustPrefix')}{p.trust}</span>
               <span>{p.sourceKind}</span>
             </div>
           </button>
@@ -112,21 +116,21 @@ export function MarketplaceView() {
       </section>
 
       <section className="marketplace-view__catalogs" data-testid="marketplace-catalogs">
-        <h2>Configured catalogs</h2>
+        <h2>{t('marketplace.catalogsTitle')}</h2>
         {marketplaces.length === 0 ? (
           <div>
-            None registered. Add one with <code>od marketplace add &lt;url&gt;</code>.
+            {t('marketplace.catalogsEmpty')} <code>od marketplace add &lt;url&gt;</code>.
           </div>
         ) : (
           <ul>
             {marketplaces.map((m) => (
               <li key={m.id}>
                 <strong>{m.manifest.name ?? m.url}</strong>{' '}
-                <span className="marketplace-view__catalog-trust">trust: {m.trust}</span>
+                <span className="marketplace-view__catalog-trust">{t('marketplace.trustPrefix')}{m.trust}</span>
                 {' · '}
                 <a href={m.url} target="_blank" rel="noreferrer">{m.url}</a>
                 {' · '}
-                {m.manifest.plugins?.length ?? 0} plugin(s)
+                {t('marketplace.pluginCount', { count: String(m.manifest.plugins?.length ?? 0) })}
               </li>
             ))}
           </ul>

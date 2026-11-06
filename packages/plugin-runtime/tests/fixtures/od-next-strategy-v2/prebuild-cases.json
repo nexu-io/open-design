@@ -1,0 +1,191 @@
+{
+  "fixtureVersion": 1,
+  "source": {
+    "repository": "od_strategy",
+    "commit": "41dac86165f0504750f91fbc40a79d9d6b8a5a9d",
+    "extraction": "prebuild-semantics-only"
+  },
+  "taskProfileCoverage": {
+    "active": ["prototype", "ppt", "marketing", "hyperframes"],
+    "reservedExtensionSlots": []
+  },
+  "cases": [
+    {
+      "id": "request-direct-edit-simple",
+      "taskProfile": "prototype",
+      "input": {
+        "stage": "request",
+        "route": "direct_edit",
+        "executionMode": "simple",
+        "prompt": "Change only the existing hero heading while preserving the current artifact and layout."
+      },
+      "expect": {
+        "preserve": [
+          "baseline_artifact",
+          "change_set",
+          "route_lock",
+          "intake_preflight",
+          "execution_preflight",
+          "main_agent_build"
+        ],
+        "nextStage": "completed",
+        "completionFacts": [
+          "required_deliverable_exists",
+          "canonical_entry_recognized",
+          "artifact_kind_matches"
+        ]
+      }
+    },
+    {
+      "id": "request-full-plan-simple",
+      "taskProfile": "prototype",
+      "input": {
+        "stage": "request",
+        "route": "full_plan",
+        "executionMode": "simple",
+        "prompt": "Create a focused product prototype from the supplied brief and brand references."
+      },
+      "expect": {
+        "preserve": [
+          "task_profile",
+          "resolver",
+          "intake_preflight",
+          "design_spec",
+          "full_plan",
+          "plan_contract",
+          "execution_preflight",
+          "route_lock",
+          "execution_mode_lock"
+        ],
+        "nextStage": "production"
+      }
+    },
+    {
+      "id": "request-full-plan-complex",
+      "taskProfile": "hyperframes",
+      "input": {
+        "stage": "request",
+        "route": "full_plan",
+        "executionMode": "complex",
+        "prompt": "Plan a multi-scene HyperFrames launch film with shared motion and typography rules."
+      },
+      "expect": {
+        "preserve": [
+          "task_profile",
+          "resolver",
+          "intake_preflight",
+          "design_spec",
+          "full_plan",
+          "plan_contract",
+          "execution_preflight",
+          "build_packages",
+          "route_lock",
+          "execution_mode_lock"
+        ],
+        "minimumBuildPackages": 2,
+        "nextStage": "production"
+      }
+    },
+    {
+      "id": "clarification-full-plan",
+      "taskProfile": "prototype",
+      "input": {
+        "stage": "clarification",
+        "route": "full_plan",
+        "executionMode": "simple",
+        "prompt": "Use the submitted form answer as the authoritative audience choice."
+      },
+      "expect": {
+        "preserve": [
+          "single_clarification_round",
+          "affected_resolver_rerun",
+          "affected_preflight_rerun",
+          "task_profile_freeze",
+          "plan_contract",
+          "route_lock"
+        ],
+        "maximumAdditionalQuestions": 0,
+        "nextStage": "production"
+      }
+    },
+    {
+      "id": "contract-repair-full-plan",
+      "taskProfile": "prototype",
+      "input": {
+        "stage": "contract_repair",
+        "route": "full_plan",
+        "executionMode": "simple",
+        "prompt": "Serialize the already-frozen plan into the required machine contract without changing its meaning."
+      },
+      "expect": {
+        "preserve": [
+          "single_serialization_retry",
+          "plan_semantics_lock",
+          "route_lock",
+          "execution_mode_lock",
+          "no_tool_use"
+        ],
+        "maximumSerializationRetries": 1,
+        "nextStage": "production"
+      }
+    },
+    {
+      "id": "production-simple",
+      "taskProfile": "prototype",
+      "input": {
+        "stage": "production",
+        "route": "full_plan",
+        "executionMode": "simple",
+        "prompt": "Build from the frozen Plan Contract in the existing native agent session."
+      },
+      "expect": {
+        "preserve": [
+          "native_session_continuation",
+          "plan_contract_reuse",
+          "main_agent_build",
+          "required_deliverables"
+        ],
+        "buildActions": [
+          "Generate the required prototype source as the Build output."
+        ],
+        "nextStage": "completed",
+        "completionFacts": [
+          "required_deliverable_exists",
+          "canonical_entry_recognized",
+          "artifact_kind_matches"
+        ]
+      }
+    },
+    {
+      "id": "production-complex",
+      "taskProfile": "hyperframes",
+      "input": {
+        "stage": "production",
+        "route": "full_plan",
+        "executionMode": "complex",
+        "prompt": "Execute the ordered Build Packages in the existing native agent session."
+      },
+      "expect": {
+        "preserve": [
+          "native_session_continuation",
+          "plan_contract_reuse",
+          "native_build_children",
+          "dependency_order",
+          "parent_integration",
+          "required_deliverables"
+        ],
+        "minimumBuildPackages": 2,
+        "buildActions": [
+          "Render the required HyperFrames MP4 as the Build output.",
+          "Export the required source bundle as part of Build."
+        ],
+        "nextStage": "completed",
+        "completionFacts": [
+          "required_deliverable_exists",
+          "canonical_entry_recognized",
+          "artifact_kind_matches"
+        ]
+      }
+    }
+  ]
+}

@@ -105,7 +105,7 @@ export function placeholderSvg(slot: ManifestSlot): string {
   <text x='${cx}' y='${cy + metaSize * 1.6}' text-anchor='middle' font-family='Inter Tight, system-ui, sans-serif' font-size='${metaSize}' letter-spacing='3' fill='${INK_FAINT}'>${escapeXml(slot.prompt_section.toUpperCase())}</text>
   <!-- bottom slug -->
   <text x='${inset + 14}' y='${h - inset - 14}' font-family='Inter Tight, system-ui, sans-serif' font-size='${dimsSize}' letter-spacing='2' fill='${INK_FAINT}'>${slot.required ? 'REQUIRED' : 'OPTIONAL'} · ${slot.rekey_on_brand_change ? 'REKEY ON BRAND' : 'STABLE'}</text>
-  <text x='${w - inset - 14}' y='${h - inset - 14}' text-anchor='end' font-family='Inter Tight, system-ui, sans-serif' font-size='${dimsSize}' letter-spacing='2' fill='${INK_FAINT}'>OPEN DESIGN · ATELIER ZERO</text>
+  <text x='${w - inset - 14}' y='${h - inset - 14}' text-anchor='end' font-family='Inter Tight, system-ui, sans-serif' font-size='${dimsSize}' letter-spacing='2' fill='${INK_FAINT}'>OPENDESIGN · ATELIER ZERO</text>
 </svg>`;
 }
 

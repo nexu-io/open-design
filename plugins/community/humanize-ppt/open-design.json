@@ -1,0 +1,32 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "community-humanize-ppt",
+  "title": "Humanize PPT",
+  "version": "1.1.2",
+  "description": "Presentation system for agent-made PPTs — born for the talk, not just the template. Turns raw material into an AST (audience-state-transfer) outline with per-page media decisions, hands a production brief to downstream renderers (HTML-PPT skills or native PPTX), then runs a capped 3-round presentation checkup on the rendered deck.",
+  "license": "MIT",
+  "author": { "name": "LearnPrompt", "url": "https://github.com/LearnPrompt" },
+  "homepage": "https://github.com/LearnPrompt/humanize-ppt",
+  "plugin": { "repo": "https://github.com/LearnPrompt/humanize-ppt" },
+  "tags": ["community", "presentation", "deck", "pptx", "outline", "narrative", "speaker-notes", "qa"],
+  "compat": { "agentSkills": [{ "path": "./SKILL.md" }] },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "platform": "desktop",
+    "scenario": "product",
+    "useCase": {
+      "query": {
+        "en": "Turn my raw notes into a presentation outline that actually presents, then run a presentation checkup on the rendered deck",
+        "zh-CN": "把这份素材整理成能上台讲的 PPT 大纲，渲染完再做演讲体检"
+      }
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "assets": ["./scripts", "./references", "./adapters", "./registry", "./contracts", "./docs", "./SPEC.md"]
+    },
+    "capabilities": ["prompt:inject", "fs:read", "fs:write", "bash"]
+  }
+}

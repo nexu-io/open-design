@@ -91,8 +91,9 @@ function renderEntryView(overrides: Partial<ComponentProps<typeof EntryView>> = 
       onApiModelChange={vi.fn()}
       onConfigPersist={vi.fn()}
       onRefreshAgents={vi.fn()}
-      onThemeChange={vi.fn()}
       onCreateProject={vi.fn()}
+      onBeginProjectCreation={() => ({ projectId: 'optimistic-project', rollback: () => undefined })}
+      onAmrBalanceGateBlockChange={() => undefined}
       onCreatePluginShareProject={vi.fn()}
       onImportClaudeDesign={vi.fn()}
       onOpenProject={vi.fn()}

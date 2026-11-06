@@ -222,6 +222,110 @@ describe('project file version routes', () => {
     expect(listed.versions.filter((version) => version.current)).toHaveLength(1);
   });
 
+  it('inherits Artifact origin only from an explicit parent whose pre-edit bytes still match', async () => {
+    const projectId = await createProject();
+    const projectRoot = path.join(projectsRoot(), projectId);
+    const htmlPath = path.join(projectRoot, 'origin.html');
+    const generated = '<html><body>generated</body></html>';
+    await fs.mkdir(projectRoot, { recursive: true });
+    await fs.writeFile(htmlPath, generated);
+    await snapshotAiHtmlVersionsForRun({
+      projectsRoot: projectsRoot(),
+      projectId,
+      projectRoot,
+      diff: { touchedPaths: [htmlPath] },
+      prompt: 'Generate origin test',
+      promptSource: 'message',
+      origin: {
+        entrySurface: 'external_mcp',
+        externalPluginId: 'open-design',
+        pluginWorkflowId: 'workflow-origin',
+        runId: 'run-origin',
+      },
+    });
+
+    const beforeResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/files/origin.html/versions`,
+    );
+    expect(beforeResponse.status).toBe(200);
+    const before = (await beforeResponse.json()) as {
+      versions: Array<{ id: string; current: boolean }>;
+    };
+    const parent = before.versions.find((version) => version.current);
+    expect(parent).toBeDefined();
+
+    const editResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'origin.html',
+        content: '<html><body>manually edited</body></html>',
+        versionSource: 'manual',
+        parentVersionId: parent!.id,
+      }),
+    });
+    expect(editResponse.status).toBe(200);
+    await expect(editResponse.json()).resolves.toMatchObject({
+      version: {
+        parentVersionId: parent!.id,
+        origin: {
+          entrySurface: 'external_mcp',
+          externalPluginId: 'open-design',
+          pluginWorkflowId: 'workflow-origin',
+          runId: 'run-origin',
+        },
+      },
+    });
+  });
+
+  it('drops inherited Artifact origin when explicit parent no longer matches pre-edit bytes', async () => {
+    const projectId = await createProject();
+    const projectRoot = path.join(projectsRoot(), projectId);
+    const htmlPath = path.join(projectRoot, 'drifted.html');
+    await fs.mkdir(projectRoot, { recursive: true });
+    await fs.writeFile(htmlPath, '<html><body>generated</body></html>');
+    await snapshotAiHtmlVersionsForRun({
+      projectsRoot: projectsRoot(),
+      projectId,
+      projectRoot,
+      diff: { touchedPaths: [htmlPath] },
+      prompt: 'Generate drift test',
+      promptSource: 'message',
+      origin: {
+        entrySurface: 'external_mcp',
+        externalPluginId: 'open-design',
+        pluginWorkflowId: 'workflow-drift',
+        runId: 'run-drift',
+      },
+    });
+    const beforeResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/files/drifted.html/versions`,
+    );
+    const before = (await beforeResponse.json()) as {
+      versions: Array<{ id: string; current: boolean }>;
+    };
+    const parent = before.versions.find((version) => version.current);
+    expect(parent).toBeDefined();
+
+    await fs.writeFile(htmlPath, '<html><body>changed outside the editor</body></html>');
+    const editResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: 'drifted.html',
+        content: '<html><body>manual replacement</body></html>',
+        versionSource: 'manual',
+        parentVersionId: parent!.id,
+      }),
+    });
+    expect(editResponse.status).toBe(200);
+    const edited = (await editResponse.json()) as {
+      version: { parentVersionId?: string; origin?: unknown };
+    };
+    expect(edited.version.parentVersionId).toBeUndefined();
+    expect(edited.version.origin).toBeUndefined();
+  });
+
   it('captures initial HTML versions for batch project uploads', async () => {
     const projectId = await createProject();
     const form = new FormData();

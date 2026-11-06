@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { countFileOps, deriveFileOps } from '../../src/runtime/file-ops';
+import {
+  countArtifactFileOps,
+  countFileOps,
+  deriveFileOps,
+} from '../../src/runtime/file-ops';
 import type { AgentEvent } from '../../src/types';
 
 type ToolUse = Extract<AgentEvent, { kind: 'tool_use' }>;
@@ -125,6 +129,25 @@ describe('deriveFileOps', () => {
     expect(rows.find((row) => row.path === 'c.ts')?.ops).toEqual(['delete']);
   });
 
+  it('preserves ranges for separate reads of the same file', () => {
+    const events: AgentEvent[] = [
+      use('Read', { file_path: '/repo/example.html', offset: 1, limit: 300 }, 'read-1'),
+      ok('read-1'),
+      use('Read', { file_path: '/repo/example.html', offset: 550, limit: 300 }, 'read-2'),
+      ok('read-2'),
+    ];
+
+    const [row] = deriveFileOps(events);
+    expect(row).toBeDefined();
+    // The ChatPanel must be able to distinguish these two valid reads. The
+    // current implementation merges by path and drops offset/limit entirely.
+    expect((row as unknown as { readRanges: Array<{ offset: number; limit: number }> }).readRanges)
+      .toEqual([
+        { offset: 1, limit: 300 },
+        { offset: 550, limit: 300 },
+      ]);
+  });
+
   it('infers simple Bash rm/unlink targets as delete operations', () => {
     const events: AgentEvent[] = [
       use(
@@ -205,5 +228,42 @@ describe('countFileOps', () => {
 
   it('returns zeros when there are no entries', () => {
     expect(countFileOps([])).toEqual({ read: 0, write: 0, edit: 0, delete: 0 });
+  });
+});
+
+describe('countArtifactFileOps', () => {
+  it('counts each unique file once by its primary artifact op, not per write operation', () => {
+    const events: AgentEvent[] = [
+      // a.ts written three times + read once → one write.
+      use('Write', { file_path: '/a.ts' }, 't1'),
+      ok('t1'),
+      use('Write', { file_path: '/a.ts' }, 't2'),
+      ok('t2'),
+      use('Write', { file_path: '/a.ts' }, 't3'),
+      ok('t3'),
+      use('Read', { file_path: '/a.ts' }, 't4'),
+      ok('t4'),
+      // b.ts written THEN edited (the #5909 repro path: create + edit the same
+      // file) → one edit (edit beats write).
+      use('Write', { file_path: '/b.ts' }, 't5'),
+      ok('t5'),
+      use('Edit', { file_path: '/b.ts' }, 't6'),
+      ok('t6'),
+      // c.ts edited three times → still one edit.
+      use('Edit', { file_path: '/c.ts' }, 't7'),
+      ok('t7'),
+      use('Edit', { file_path: '/c.ts' }, 't8'),
+      ok('t8'),
+      use('Edit', { file_path: '/c.ts' }, 't9'),
+      ok('t9'),
+      // d.ts only read → not an artifact file, not counted.
+      use('Read', { file_path: '/d.ts' }, 't10'),
+      ok('t10'),
+    ];
+    const rows = deriveFileOps(events);
+    expect(countArtifactFileOps(rows)).toEqual({ write: 1, edit: 2 });
+    // The op-level counter is unchanged: a.ts (3) + b.ts (1) writes.
+    expect(countFileOps(rows).write).toBe(4);
+    expect(countFileOps(rows).edit).toBe(4);
   });
 });

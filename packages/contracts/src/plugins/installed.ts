@@ -67,6 +67,10 @@ export const PluginInstallOutcomeSchema = z.object({
   plugin:   InstalledPluginRecordSchema.nullable().optional(),
   warnings: z.array(z.string()),
   message:  z.string().optional(),
+  /** Stable machine-readable failure class when the transport provides one. */
+  errorCode: z.string().optional(),
+  /** HTTP status for failures that occur before the install event stream. */
+  status:   z.number().int().optional(),
   log:      z.array(z.string()),
 });
 

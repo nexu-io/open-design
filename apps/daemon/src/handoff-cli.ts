@@ -36,7 +36,9 @@ function isHandoffResponse(value: unknown): value is HandoffResponse {
 
 const USAGE = `Usage:
   od project handoff <projectId> --conversation <id> --api-key <key> --model <model>
-                     [--base-url <url>] [--max-tokens <n>] [--daemon-url <url>] [--json]
+                     [--base-url <url>] [--max-tokens <n>]
+                     [--workspace <id> --workspace-member <id>]
+                     [--daemon-url <url>] [--json]
 
 Synthesizes a "resume conversation" handoff prompt from one conversation's
 transcript via the local daemon. Prints the prompt to stdout; --json emits
@@ -67,6 +69,8 @@ interface ParsedHandoffOptions {
   baseUrl?: string;
   maxTokens?: number;
   daemonUrl?: string;
+  workspaceId?: string;
+  workspaceMemberId?: string;
   json: boolean;
   help: boolean;
 }
@@ -108,6 +112,14 @@ function parseOptions(args: string[]): ParsedHandoffOptions | { error: string } 
       const value = args[++index];
       if (!value) return { error: '--daemon-url requires a URL' };
       options.daemonUrl = value;
+    } else if (arg === '--workspace') {
+      const value = args[++index];
+      if (!value) return { error: '--workspace requires a value' };
+      options.workspaceId = value;
+    } else if (arg === '--workspace-member') {
+      const value = args[++index];
+      if (!value) return { error: '--workspace-member requires a value' };
+      options.workspaceMemberId = value;
     } else if (arg.startsWith('-')) {
       return { error: `unknown option: ${arg}` };
     } else if (options.projectId === undefined) {
@@ -130,6 +142,9 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
   if (!options.conversationId) return fail('handoff requires --conversation <id>');
   if (!options.apiKey) return fail('handoff requires --api-key <key>');
   if (!options.model) return fail('handoff requires --model <model>');
+  if (Boolean(options.workspaceId) !== Boolean(options.workspaceMemberId)) {
+    return fail('pass --workspace <id> and --workspace-member <id> together');
+  }
 
   try {
     const daemonUrl = (
@@ -146,7 +161,15 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
       `${daemonUrl}/api/projects/${encodeURIComponent(options.projectId)}/handoff`,
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(options.workspaceId && options.workspaceMemberId
+            ? {
+                'x-od-workspace-id': options.workspaceId,
+                'x-od-workspace-member-id': options.workspaceMemberId,
+              }
+            : {}),
+        },
         body: JSON.stringify(body),
       },
     );

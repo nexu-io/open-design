@@ -181,6 +181,10 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
             <strong>{t('newproj.locationDefault')}</strong>
             <code>{builtIn.path}</code>
           </div>
+          {/* #5517 puts "+ add folder" on the built-in row and drops the
+              built-in's default radio. The button moves; the radio stays,
+              because it is the only way back to the built-in location once a
+              custom folder has been made default. */}
           <label className="project-location-default-control">
             <input
               type="radio"
@@ -190,6 +194,15 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
             />
             <span>{defaultControlLabel(builtIn.id)}</span>
           </label>
+          <button
+            type="button"
+            className="icon-btn project-location-add"
+            onClick={handleAddFolder}
+            disabled={loading || saving}
+          >
+            <Icon name="plus" size={14} />
+            {t('settings.projectLocationsAddFolder')}
+          </button>
         </div>
       ) : null}
 
@@ -222,15 +235,19 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
         ))}
       </div>
 
-      <button
-        type="button"
-        className="icon-btn project-location-add"
-        onClick={handleAddFolder}
-        disabled={loading || saving}
-      >
-        <Icon name="plus" size={12} />
-        {t('settings.projectLocationsAddFolder')}
-      </button>
+      {/* Fallback entry point: with no built-in card there is no row to host
+          the button above, and "add folder" must never become unreachable. */}
+      {builtIn ? null : (
+        <button
+          type="button"
+          className="icon-btn project-location-add"
+          onClick={handleAddFolder}
+          disabled={loading || saving}
+        >
+          <Icon name="plus" size={14} />
+          {t('settings.projectLocationsAddFolder')}
+        </button>
+      )}
 
       {status ? <p className="settings-rescan-status">{status}</p> : null}
       {error ? <p className="settings-rescan-status error">{error}</p> : null}

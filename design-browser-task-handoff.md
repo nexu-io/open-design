@@ -5,7 +5,7 @@ Generated from this chat session on 2026-05-30.
 ## Repository
 
 - Worktree: `/Users/pftom/.superset/worktrees/d3aab1a3-c696-403f-9692-7e5bc2dfa1f3/accidental-bolt`
-- Product area: Open Design `Design Files` workspace, embedded browser module, desktop host bridge, browser-harness task entry.
+- Product area: OpenDesign `Design Files` workspace, embedded browser module, desktop host bridge, browser-harness task entry.
 
 ## User Queries, In Order
 
@@ -107,7 +107,7 @@ Generated from this chat session on 2026-05-30.
   - https://startups.gallery/
   - https://www.worldindots.com/
   - https://getdesign.md/
-- Add browser-use/browser-harness oriented shortcut/task entry so a user can extract page screenshots/design language/assets and apply them to Open Design artifacts.
+- Add browser-use/browser-harness oriented shortcut/task entry so a user can extract page screenshots/design language/assets and apply them to OpenDesign artifacts.
 
 ## Current Implementation Status
 

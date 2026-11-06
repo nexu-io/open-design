@@ -9,6 +9,11 @@
 
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 import type { PanelEvent } from '@open-design/contracts/critique';
 
 import { useCritiqueReplay } from '../../../../src/components/Theater/hooks/useCritiqueReplay';
@@ -42,6 +47,29 @@ const RUN_ID = 'run_replay';
 
 function ndjson(events: PanelEvent[]): string {
   return events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+}
+
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'member',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 2 }),
+    permissions: buildWorkspacePermissions({
+      role: 'member',
+      lifecycleState: 'active',
+    }),
+  };
 }
 
 const TRANSCRIPT: PanelEvent[] = [
@@ -94,6 +122,31 @@ describe('useCritiqueReplay (Phase 7.3)', () => {
     if (sink.state.phase !== 'shipped') return;
     expect(sink.state.final.composite).toBe(8.2);
     expect(sink.state.rounds).toHaveLength(1);
+  });
+
+  it('fetches a project transcript with its exact persisted Workspace headers', async () => {
+    const sink: Sink = { state: { phase: 'idle' }, status: 'idle', error: null };
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    let transcriptInit: RequestInit | undefined;
+    const fetchTranscript = vi.fn(async (_url: string, init?: RequestInit) => {
+      transcriptInit = init;
+      return ndjson(TRANSCRIPT);
+    });
+    render(
+      <Probe
+        url="/api/projects/project-a/critique/run-a/transcript"
+        speed="instant"
+        options={{ fetchTranscript, workspaceContext: workspaceA }}
+        sink={sink}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(sink.status).toBe('done');
+    });
+    const headers = new Headers(transcriptInit?.headers);
+    expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
+    expect(headers.get('x-od-workspace-member-id')).toBe('member-a');
   });
 
   it('paces events with intervalMs and reaches done after the last tick', async () => {

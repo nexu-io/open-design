@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
+import type { ComponentProps } from 'react';
 
 // Home composer send must show an in-flight state (#4082).
 //
@@ -17,8 +19,21 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
 }));
 
+vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/collab/useWorkspaceContext')>();
+  return {
+    ...actual,
+    useWorkspaceContext: () => ({
+      context: null,
+      loading: false,
+      failure: 'unsupported' as const,
+    }),
+  };
+});
+
 import { HomeView } from '../../src/components/HomeView';
 import { I18nProvider } from '../../src/i18n';
+import { ProjectCreateError } from '../../src/state/projects';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
@@ -60,7 +75,8 @@ const WEB_PROTOTYPE_PLUGIN = {
   },
 };
 
-function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void) {
+function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void,
+  onSubmitWithDraftGuard?: ComponentProps<typeof HomeView>['onSubmitWithDraftGuard']) {
   // Keep the first-run guide quiet so sheen classes never race the
   // sending-state classes asserted below.
   writeHomeGuideStage('done');
@@ -70,15 +86,31 @@ function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void) {
       <HomeView
         projects={[]}
         onSubmit={onSubmit}
+        onSubmitWithDraftGuard={onSubmitWithDraftGuard}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />
     </I18nProvider>,
   );
 }
 
 describe('home composer sending state', () => {
-  it('shows Sending… and swallows repeat clicks while creation is in flight', async () => {
+  it('stamps free-form Design submits as automatic default routing', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    renderHome(onSubmit);
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Build a launch dashboard');
+    fireEvent.click(await screen.findByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'od-default',
+      pluginSelectionProvenance: 'automatic-default',
+      conversationMode: 'design',
+    }));
+  });
+
+  it('shows the existing sending spinner and swallows repeat clicks while creation is in flight', async () => {
     let resolveSubmit: (accepted: boolean) => void = () => undefined;
     const onSubmit = vi.fn(
       () => new Promise<boolean>((resolve) => { resolveSubmit = resolve; }),
@@ -94,8 +126,10 @@ describe('home composer sending state', () => {
     await waitFor(() => {
       expect(submit.disabled).toBe(true);
     });
-    expect(submit.textContent).toContain('Sending…');
-    expect(submit.className).toContain('is-sending');
+    expect(submit.getAttribute('aria-label')).toBe('Sending…');
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.querySelector('svg')).toHaveClass('icon-spin');
+    expect(submit.querySelector('svg')?.getAttribute('width')).toBe('17');
 
     // A second click during the in-flight window must not start a second run.
     fireEvent.click(submit);
@@ -105,6 +139,9 @@ describe('home composer sending state', () => {
     resolveSubmit(true);
     await waitFor(() => {
       expect(submit.disabled).toBe(false);
+      expect(submit.getAttribute('aria-busy')).toBe('false');
+      expect(submit.querySelector('svg')).not.toHaveClass('icon-spin');
+      expect(submit.querySelector('svg')?.getAttribute('width')).toBe('36');
     });
   });
 
@@ -128,13 +165,80 @@ describe('home composer sending state', () => {
     await waitFor(() => {
       expect(submit.disabled).toBe(false);
     });
-    expect(submit.textContent).toContain('Send');
-    expect(submit.className).not.toContain('is-sending');
+    // Icon-only button (#5517): the idle accessible name replaces the old
+    // visible Send label.
+    expect(submit.getAttribute('aria-label')).toBe('Run');
+    expect(submit.getAttribute('aria-busy')).toBe('false');
+    expect(submit.querySelector('svg')).not.toHaveClass('icon-spin');
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Build a landing page');
     expect((await screen.findByRole('alert')).textContent).toMatch(/try again/i);
 
     // The failure path must leave the composer retryable.
     fireEvent.click(submit);
     expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the sending feedback through guarded preflight and releases a handled block without losing the draft', async () => {
+    let settle: (value: 'blocked') => void = () => undefined;
+    const fallback = vi.fn();
+    const guardedSubmit = vi.fn(() => new Promise<'blocked'>((resolve) => { settle = resolve; }));
+    renderHome(fallback, guardedSubmit);
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Keep the preflight draft');
+    const submit = await screen.findByTestId('home-hero-submit');
+    fireEvent.click(submit);
+    await waitFor(() => expect(submit).toHaveAttribute('aria-busy', 'true'));
+    expect(submit).toBeDisabled();
+    expect(submit.querySelector('svg')).toHaveClass('icon-spin');
+    fireEvent.click(submit);
+    expect(guardedSubmit).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
+    settle('blocked');
+    await waitFor(() => expect(submit).toBeEnabled());
+    expect(submit).toHaveAttribute('aria-busy', 'false');
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Keep the preflight draft');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows the daemon recovery message only for a transport failure and preserves the draft', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+    renderHome(onSubmit);
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Keep this draft while the daemon reconnects');
+    fireEvent.click(await screen.findByTestId('home-hero-submit'));
+
+    // OPEND-2849 S28a:标题 + 正文两行(错误块 `white-space: pre-line`)。
+    expect((await screen.findByRole('alert')).textContent?.split('\n')).toEqual([
+      'Local connection lost',
+      'Can’t reach the Open Design service on this computer right now. Please restart the app.',
+    ]);
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent(
+      'Keep this draft while the daemon reconnects',
+    );
+  });
+
+  it('surfaces a business HTTP error without claiming the daemon is unreachable', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new ProjectCreateError(
+      'Workspace membership authority is temporarily unavailable',
+      503,
+      'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      true,
+      'request-1',
+    ));
+    renderHome(onSubmit);
+
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Keep the business failure distinct');
+    fireEvent.click(await screen.findByTestId('home-hero-submit'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Workspace membership authority is temporarily unavailable',
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Local service');
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent(
+      'Keep the business failure distinct',
+    );
   });
 
   it('does not spend the one-shot example-prompt marker on a failed create', async () => {
@@ -171,14 +275,13 @@ describe('home composer sending state', () => {
           projects={[]}
           onSubmit={onSubmit}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
 
     // Seeding through a fallback prompt-example card is what arms the
-    // examplePromptContext marker.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    // examplePromptContext marker; the type comes from the row under the composer.
+    await pickHomeTemplate('prototype');
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     fireEvent.click(exampleCards[0]!);
 

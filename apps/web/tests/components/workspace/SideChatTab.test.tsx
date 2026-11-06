@@ -25,6 +25,7 @@ vi.mock('../../../src/components/workspace/useConversationChat', () => ({
     messages: [],
     streaming: false,
     loading: false,
+    sendDisabled: true,
     error: null,
     onSend: vi.fn(),
     onStop: vi.fn(),
@@ -75,6 +76,7 @@ describe('SideChatTab', () => {
     expect(firstCall?.[0]).toEqual(
       expect.objectContaining({
         config,
+        sendDisabled: true,
       }),
     );
   });

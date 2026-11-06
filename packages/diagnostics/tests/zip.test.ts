@@ -44,6 +44,28 @@ describe("buildDiagnosticsZip", () => {
 
     const machine = JSON.parse(await zip.file("summary/machine-info.json")!.async("string"));
     expect(typeof machine.platform).toBe("string");
+    expect(machine.hostname).toBe("[REDACTED]");
+    expect(machine.username).toBe("[REDACTED]");
+  });
+
+  it("includes redacted in-memory summaries for failures that happened before a run existed", async () => {
+    const result = await buildDiagnosticsZip({
+      context: { app: { name: "open-design" }, source: "test" },
+      sources: [],
+      redaction: { username: "alice" },
+      summaries: {
+        "runtime-health.json": {
+          amr: { sessionState: "reauth_required", credentialRevision: "safe-digest" },
+          note: "/Users/alice/private",
+        },
+      },
+    });
+
+    const zip = await JSZip.loadAsync(result.zip);
+    const runtimeHealth = await zip.file("summary/runtime-health.json")!.async("string");
+    expect(runtimeHealth).toContain('"sessionState": "reauth_required"');
+    expect(runtimeHealth).toContain('/Users/<USER>/private');
+    expect(runtimeHealth).not.toContain('/Users/alice');
   });
 
   it("records a warning placeholder when a file cannot be read", async () => {

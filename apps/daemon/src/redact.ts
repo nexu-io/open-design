@@ -60,6 +60,9 @@ const PATTERNS: readonly Pattern[] = [
   { name: 'google_api_key', regex: /\bAQ\.[A-Za-z0-9_-]{20,}\b/g },
   { name: 'google_api_key', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
 
+  // NVIDIA NGC / inference API keys.
+  { name: 'nvidia_api_key', regex: /\bnvapi-[A-Za-z0-9_-]{20,}\b/g },
+
   // Slack tokens.
   { name: 'slack_token', regex: /\bxox[abprs]-[0-9A-Za-z-]{10,}\b/g },
 

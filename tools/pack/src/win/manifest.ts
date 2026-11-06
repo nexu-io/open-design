@@ -1,8 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { ToolPackConfig } from "../config.js";
-import { readRuntimeAppVersion } from "../versions.js";
+import { packagedAmrConfigFields, writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { readRuntimeAppVersion } from "../versioning/index.js";
 import { pathExists } from "./fs.js";
 import type { WinBuiltAppManifest, WinPaths } from "./types.js";
 
@@ -22,7 +23,7 @@ function createPackagedConfig(
   entrypoints: PackagedConfigEntrypoints = {},
 ): Record<string, unknown> {
   return {
-    ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
+    ...packagedAmrConfigFields(config),
     appVersion: packagedVersion,
     ...entrypoints,
     namespace: config.namespace,
@@ -42,10 +43,9 @@ export async function writePackagedConfigFile(
   entrypoints: PackagedConfigEntrypoints = {},
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(
+  await writePackagedConfigWithBinding(
     filePath,
-      `${JSON.stringify(createPackagedConfig(config, packagedVersion, entrypoints), null, 2)}\n`,
-    "utf8",
+    `${JSON.stringify(createPackagedConfig(config, packagedVersion, entrypoints), null, 2)}\n`,
   );
 }
 

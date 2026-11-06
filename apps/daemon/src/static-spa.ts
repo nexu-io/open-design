@@ -29,6 +29,6 @@ export function registerStaticSpaFallback(app: Express, staticDir: string): void
   app.get('/*splat', (req, res, next) => {
     const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
     if (indexPath == null) return next();
-    res.sendFile(indexPath);
+    res.sendFile('index.html', { root: staticDir });
   });
 }

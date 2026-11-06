@@ -1,0 +1,72 @@
+/* Sits in the topbar's action cluster, so it takes that row's height (26px)
+   and stays transparent until hovered — the same shape as the buttons beside
+   it, wearing a switch instead of an icon. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.toggle:hover {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.toggle[aria-checked='true'] {
+  color: var(--text-strong);
+}
+
+.track {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--bg-muted);
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.toggle[aria-checked='true'] .track {
+  background: var(--accent);
+}
+
+/* White on both themes: it reads as the knob's own material, not as a surface
+   that should follow the theme, and the track behind it carries the state. */
+.knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.toggle[aria-checked='true'] .knob {
+  transform: translateX(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .track,
+  .knob {
+    transition: none;
+  }
+}

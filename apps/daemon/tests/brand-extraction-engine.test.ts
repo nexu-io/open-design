@@ -28,8 +28,16 @@ import {
 import { patchMeta } from '../src/brands/store.js';
 import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
-import { listDesignSystems } from '../src/design-systems/index.js';
-import { buildBrandSystem, deriveTokens, seedFromMaterial } from '../src/brands/engine/index.js';
+import { deleteUserDesignSystem, listDesignSystems } from '../src/design-systems/index.js';
+import {
+  buildBrandSystem,
+  defaultSeed,
+  defaultThemeAlgorithm,
+  deriveTokens,
+  seedFromMaterial,
+  tokensToThemeJson,
+} from '../src/brands/engine/index.js';
+import type { SeedToken } from '../src/brands/engine/types.js';
 import {
   adoptExistingImagery,
   findImageRefs,
@@ -200,10 +208,10 @@ describe('agent-driven brand extraction engine', () => {
   let projectsRoot: string;
   let userDesignSystemsRoot: string;
 
-  it('keeps the generated default theme light even when the source canvas is dark', () => {
+  it('adopts the brand canvas for the default theme when the brand is explicitly dark-first', () => {
     const darkCanvasBrand: Brand = {
       ...VALID_BRAND,
-      name: 'Open Design',
+      name: 'OpenDesign',
       colors: [
         { role: 'background', hex: '#050505', oklch: 'oklch(14% 0 0)', name: 'Black', usage: 'source hero background' },
         { role: 'surface', hex: '#0a0a0a', oklch: 'oklch(17% 0 0)', name: 'Panel', usage: 'source cards' },
@@ -214,14 +222,95 @@ describe('agent-driven brand extraction engine', () => {
 
     const system = buildBrandSystem(darkCanvasBrand);
 
+    // A brand that explicitly carries a dark background role plus a light
+    // foreground role is dark-first: the default theme keeps its canvas
+    // instead of clamping to the light Ant baseline.
+    expect(system.themes.default.colorBgContainer).toBe('#050505');
+    expect(system.themes.dark.colorBgContainer).toBe('#050505');
+    // Neutral text derives from the brand foreground over the dark canvas —
+    // it must read light, not the light-theme #1f1f1f.
+    expect(parseInt(system.themes.default.colorText.slice(1, 3), 16)).toBeGreaterThan(180);
+    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #050505;');
+    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #ffffff;');
+    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #050505;');
+    // The exported ConfigProvider artifact must carry the SAME effective
+    // algorithm as the tokens/CSS/kit above — otherwise a consumer applies the
+    // light algorithm to a dark canvas.
+    expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('dark');
+  });
+
+  it('still falls back to the light default theme when brand neutrals are ambiguous', () => {
+    const midGrayBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'OpenDesign',
+      colors: [
+        { role: 'background', hex: '#808080', oklch: 'oklch(60% 0 0)', name: 'Gray', usage: 'source background' },
+        { role: 'foreground', hex: '#f4f4f4', oklch: 'oklch(96% 0 0)', name: 'White', usage: 'source text' },
+        { role: 'accent', hex: '#56fe13', oklch: 'oklch(86% 0.29 142)', name: 'Signal Green', usage: 'primary actions' },
+      ],
+    };
+
+    const system = buildBrandSystem(midGrayBrand);
+
+    // A mid-gray canvas is not a confident dark-first signal; keep the light
+    // baseline exactly as before.
     expect(system.themes.default.colorBgContainer).toBe('#ffffff');
-    expect(system.themes.default.colorText).toBe('#1f1f1f');
     expect(system.themes.dark.colorBgContainer).toBe('#141414');
-    expect(system.themes.dark.colorText).toBe('#dcdcdc');
-    expect(system.files['kit.html']).toContain('--brand-color-bg-container: #ffffff;');
-    expect(system.files['kit.html']).toContain('--brand-color-text: #1f1f1f;');
-    expect(system.files['kit.html']).not.toContain('--brand-color-bg-container: #141414;');
-    expect(system.files['kit.dark.html']).toContain('--brand-color-bg-container: #141414;');
+    // ...and the exported ConfigProvider artifact stays on the light algorithm.
+    expect(JSON.parse(system.files['theme.json'] ?? '').algorithm).toBe('default');
+  });
+
+  it('drops scraped CSS source junk from font families instead of corrupting the token block', () => {
+    // Extractors sometimes scrape CSS *source text* instead of a real family —
+    // e.g. Tailwind v4's `--theme(--default-font-family` from aliyun.com. The
+    // unbalanced `(` inside the emitted `--brand-font-family` value swallows
+    // every later `:root` declaration (sizes, control heights, radii), which
+    // renders the whole component kit unstyled (issue: kit shows UA serif text
+    // with collapsed buttons while colors declared earlier still work).
+    const junkFontBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Junk Fonts',
+      typography: {
+        display: { family: '--theme(--default-font-family', fallbacks: ['system-ui'], weights: [400, 700] },
+        body: { family: '--theme(--default-font-family', fallbacks: ['system-ui'], weights: [400, 700] },
+      },
+    };
+
+    const system = buildBrandSystem(junkFontBrand);
+
+    // The junk never reaches the seed or any emitted document.
+    expect(system.seed.fontFamily).not.toContain('--theme(');
+    for (const file of ['kit.html', 'kit.dark.html', 'variables.css', 'artifacts/landing.html', 'index.html']) {
+      expect(system.files[file], file).not.toContain('--theme(');
+    }
+    // The declared custom property keeps balanced parens so the declarations
+    // after it (sizes, control heights) survive CSS parsing.
+    const famLine = /--brand-font-family:([^\n]*)/.exec(system.files['kit.html'] ?? '')?.[1] ?? '';
+    expect(famLine).not.toBe('');
+    expect((famLine.match(/\(/g) ?? []).length).toBe((famLine.match(/\)/g) ?? []).length);
+    // Renderable fallbacks survive the sanitization.
+    expect(system.seed.fontFamily).toContain('system-ui');
+  });
+
+  it('keeps theme.json algorithm consistent with the derived theme under a background-only seed override', () => {
+    // Locks the rebuildSystem seed-override path (sanitizeSeedOverrides →
+    // reassembleWithSeed → tokensToThemeJson(seed, defaultThemeAlgorithm(seed))):
+    // a background-only override on an otherwise light brand must NOT be treated
+    // as dark-first, or theme.json would export algorithm:"dark" while the seed
+    // still carries a dark colorTextBase — the ConfigProvider mismatch.
+    const bgOnlyDark: SeedToken = { ...defaultSeed, colorBgBase: '#050505' }; // colorTextBase stays #000000
+    expect(defaultThemeAlgorithm(bgOnlyDark)).toBe('default');
+    // The derived default theme clamps back to the light canvas...
+    expect(deriveTokens(bgOnlyDark, 'default').colorBgContainer).toBe('#ffffff');
+    // ...and the exported ConfigProvider algorithm matches it (no dark/light split).
+    expect(JSON.parse(tokensToThemeJson(bgOnlyDark, defaultThemeAlgorithm(bgOnlyDark))).algorithm).toBe('default');
+
+    // A full override supplying BOTH a dark canvas and a light foreground DOES
+    // opt into dark-first — consistently across the derived theme and export.
+    const fullDark: SeedToken = { ...defaultSeed, colorBgBase: '#050505', colorTextBase: '#f4f4f4' };
+    expect(defaultThemeAlgorithm(fullDark)).toBe('dark');
+    expect(deriveTokens(fullDark, 'default').colorBgContainer).toBe('#050505');
+    expect(JSON.parse(tokensToThemeJson(fullDark, defaultThemeAlgorithm(fullDark))).algorithm).toBe('dark');
   });
 
   it('keeps programmatic dark-site material on a light default seed', () => {
@@ -259,9 +348,9 @@ describe('agent-driven brand extraction engine', () => {
     const brand = brandFromMaterial({
       url: 'https://open-design.ai/',
       finalUrl: 'https://open-design.ai/',
-      siteName: 'Open Design',
-      title: 'Open Design',
-      description: 'Open Design design system.',
+      siteName: 'OpenDesign',
+      title: 'OpenDesign',
+      description: 'OpenDesign design system.',
       colors: [
         { hex: '#262626', count: 19, sources: ['css-var:--ink'] },
         { hex: '#15140f', count: 15, sources: ['css-var:--shadow-ink'] },
@@ -277,8 +366,8 @@ describe('agent-driven brand extraction engine', () => {
       googleFontsUrls: [],
       fontFiles: [],
       logos: [],
-      headings: ['Open Design The Open-source Claude Design alternative'],
-      paragraphs: ['Open Design is a local-first design platform.'],
+      headings: ['OpenDesign The Open-source Claude Design alternative'],
+      paragraphs: ['OpenDesign is a local-first design platform.'],
       navLabels: [],
       extraPages: [],
       screenshot: null,
@@ -437,6 +526,42 @@ describe('agent-driven brand extraction engine', () => {
       defaultStatus: 'draft',
     });
     expect(systems).toHaveLength(0);
+  });
+
+  it('rolls back the scoped draft when the project Workspace binding fails', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const deleteDraftDesignSystem = vi.fn(deleteUserDesignSystem);
+    const bindCreatedProject = vi.fn(() => {
+      throw new Error('workspace project binding failed');
+    });
+    const options = {
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      userDesignSystemsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+      deleteUserDesignSystem: deleteDraftDesignSystem,
+      bindCreatedProject,
+    } as Parameters<typeof startBrandExtraction>[0] & {
+      bindCreatedProject: (projectId: string) => void;
+    };
+
+    await expect(startOfflineBrandExtraction(options))
+      .rejects.toThrow('workspace project binding failed');
+
+    expect(bindCreatedProject).toHaveBeenCalledTimes(1);
+    expect(deleteDraftDesignSystem).toHaveBeenCalledTimes(1);
+    expect(listProjects(db)).toHaveLength(0);
+    expect(readdirSync(projectsRoot)).toEqual([]);
+    expect(readdirSync(brandsRoot)).toEqual([]);
+    await expect(listDesignSystems(userDesignSystemsRoot, {
+      idPrefix: 'user:',
+      source: 'user',
+      isEditable: true,
+      defaultStatus: 'draft',
+    })).resolves.toHaveLength(0);
   });
 
   it('rolls back brand startup state when design-md staging fails before draft reservation', async () => {

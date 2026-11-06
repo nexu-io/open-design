@@ -6,7 +6,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
   type CSSProperties,
   type ComponentPropsWithoutRef,
@@ -14,6 +13,7 @@ import {
   type Ref,
   type SyntheticEvent,
 } from 'react';
+import { bindMotionPreviewActivity, unbindMotionPreviewActivity } from '../runtime/motion-preview-activity';
 
 export const OD_PREVIEW_KEEP_ALIVE =
   typeof process === 'undefined' || process.env.OD_PREVIEW_KEEP_ALIVE !== '0';
@@ -36,12 +36,15 @@ interface IframeKeepAlivePoolValue {
     predicate: (entry: PoolEntry) => boolean,
     options?: { includeActive?: boolean },
   ): void;
+  subscribe(key: string, listener: () => void): () => void;
+  revision(key: string): number;
 }
 
 const IframeKeepAliveContext = createContext<IframeKeepAlivePoolValue | null>(null);
 const subscribeToNoopStore = () => () => {};
 const getClientSnapshot = () => false;
 const getServerSnapshot = () => true;
+const getServerRevision = () => 0;
 
 function useIsServerRender() {
   return useSyncExternalStore(
@@ -59,6 +62,7 @@ function parkIframeElement(frame: HTMLIFrameElement) {
   frame.onload = null;
   frame.removeAttribute('data-testid');
   frame.setAttribute('data-od-active', 'false');
+  frame.setAttribute('data-od-motion-active', 'false');
   frame.setAttribute('aria-hidden', 'true');
   frame.setAttribute('tabindex', '-1');
 }
@@ -82,15 +86,26 @@ export function IframeKeepAliveProvider({
   const parkedHostRef = useRef<HTMLDivElement | null>(null);
   const entriesRef = useRef<Map<string, PoolEntry>>(new Map());
   const activeKeysRef = useRef<Set<string>>(new Set());
-  const [poolRevision, bumpPoolRevision] = useState(0);
+  const maxEntriesRef = useRef(maxEntries);
+  const keyRevisionsRef = useRef<Map<string, number>>(new Map());
+  const keyListenersRef = useRef<Map<string, Set<() => void>>>(new Map());
+  maxEntriesRef.current = maxEntries;
+
+  const invalidateKey = (key: string) => {
+    keyRevisionsRef.current.set(key, (keyRevisionsRef.current.get(key) ?? 0) + 1);
+    for (const listener of keyListenersRef.current.get(key) ?? []) listener();
+  };
 
   const removeEntry = (key: string): boolean => {
     const entry = entriesRef.current.get(key);
     if (!entry) return false;
     const wasActive = activeKeysRef.current.has(key);
+    unbindMotionPreviewActivity(entry.element);
     entry.element.remove();
     entriesRef.current.delete(key);
     activeKeysRef.current.delete(key);
+    if (wasActive) invalidateKey(key);
+    if (!keyListenersRef.current.has(key)) keyRevisionsRef.current.delete(key);
     return wasActive;
   };
 
@@ -98,7 +113,7 @@ export function IframeKeepAliveProvider({
     const inactive = Array.from(entriesRef.current.values())
       .filter((entry) => !activeKeysRef.current.has(entry.key))
       .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
-    while (entriesRef.current.size > maxEntries && inactive.length > 0) {
+    while (entriesRef.current.size > maxEntriesRef.current && inactive.length > 0) {
       const evicted = inactive.shift();
       if (!evicted) break;
       removeEntry(evicted.key);
@@ -122,6 +137,11 @@ export function IframeKeepAliveProvider({
       entry.lastUsedAt = Date.now();
       activeKeysRef.current.add(key);
       host.appendChild(entry.element);
+      // A project switch can leave parked entries behind immediately before
+      // the next project's viewers attach. Enforce the bound here as well as
+      // on release so a newly attached frame cannot temporarily push the pool
+      // above maxEntries while evictable inactive frames still exist.
+      enforceLimit();
       return entry.element;
     },
     release(key) {
@@ -135,33 +155,47 @@ export function IframeKeepAliveProvider({
       enforceLimit();
     },
     evict(key) {
-      if (removeEntry(key)) bumpPoolRevision((value) => value + 1);
+      removeEntry(key);
     },
     evictProject(projectId, options) {
-      let removedActive = false;
       for (const entry of Array.from(entriesRef.current.values())) {
         if (
           entry.projectId === projectId
           && (options?.includeActive || !activeKeysRef.current.has(entry.key))
         ) {
-          removedActive = removeEntry(entry.key) || removedActive;
+          removeEntry(entry.key);
         }
       }
-      if (removedActive) bumpPoolRevision((value) => value + 1);
     },
     evictMatching(predicate, options) {
-      let removedActive = false;
       for (const entry of Array.from(entriesRef.current.values())) {
         if (
           (options?.includeActive || !activeKeysRef.current.has(entry.key))
           && predicate(entry)
         ) {
-          removedActive = removeEntry(entry.key) || removedActive;
+          removeEntry(entry.key);
         }
       }
-      if (removedActive) bumpPoolRevision((value) => value + 1);
     },
-  }), [maxEntries, poolRevision]);
+    subscribe(key, listener) {
+      const listeners = keyListenersRef.current.get(key) ?? new Set<() => void>();
+      listeners.add(listener);
+      keyListenersRef.current.set(key, listeners);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size > 0) return;
+        keyListenersRef.current.delete(key);
+        if (!entriesRef.current.has(key)) keyRevisionsRef.current.delete(key);
+      };
+    },
+    revision(key) {
+      return keyRevisionsRef.current.get(key) ?? 0;
+    },
+  }), []);
+
+  useEffect(() => {
+    enforceLimit();
+  }, [maxEntries]);
 
   useEffect(() => () => {
     for (const key of Array.from(entriesRef.current.keys())) removeEntry(key);
@@ -187,6 +221,7 @@ export function useIframeKeepAlivePool(): IframeKeepAlivePoolValue {
     const removeFallbackEntry = (key: string) => {
       const entry = fallbackEntriesRef.current.get(key);
       if (!entry) return;
+      unbindMotionPreviewActivity(entry.element);
       entry.element.remove();
       fallbackEntriesRef.current.delete(key);
       fallbackActiveKeysRef.current.delete(key);
@@ -229,11 +264,18 @@ export function useIframeKeepAlivePool(): IframeKeepAlivePoolValue {
           if (predicate(entry)) removeFallbackEntry(entry.key);
         }
       },
+      subscribe() {
+        return () => {};
+      },
+      revision() {
+        return 0;
+      },
     };
   }, []);
   useEffect(() => () => {
     for (const key of Array.from(fallbackEntriesRef.current.keys())) {
       const entry = fallbackEntriesRef.current.get(key);
+      if (entry) unbindMotionPreviewActivity(entry.element);
       entry?.element.remove();
       fallbackEntriesRef.current.delete(key);
       fallbackActiveKeysRef.current.delete(key);
@@ -313,6 +355,12 @@ function syncIframeProps(
   appliedAttributes: Set<string>,
   appliedStyleKeys: Set<string>,
 ) {
+  // A pooled srcDoc frame carries `src="about:blank"` as its parking URL.
+  // Set that URL before srcdoc on a fresh DOM node. Reversing this order starts
+  // the real about:srcdoc navigation and then immediately cancels it with the
+  // parking URL, which Electron reports as ERR_ABORTED and users see as a
+  // white preview when opening or reattaching a file tab.
+  setAttribute(frame, 'src', props.src);
   const nextAttributes = new Set<string>();
   for (const [name, value] of Object.entries(props)) {
     if (
@@ -340,7 +388,6 @@ function syncIframeProps(
   frame.onload = props.onLoad
     ? (event) => props.onLoad?.(event as unknown as SyntheticEvent<HTMLIFrameElement>)
     : null;
-  setAttribute(frame, 'src', props.src);
 }
 
 export const PooledIframe = forwardRef<HTMLIFrameElement, PooledIframeProps>(function PooledIframe({
@@ -366,6 +413,11 @@ const ClientPooledIframe = forwardRef<HTMLIFrameElement, PooledIframeProps>(func
   ...props
 }, forwardedRef) {
   const pool = useIframeKeepAlivePool();
+  const poolKeyRevision = useSyncExternalStore(
+    useMemo(() => (listener: () => void) => pool.subscribe(cacheKey, listener), [cacheKey, pool]),
+    useMemo(() => () => pool.revision(cacheKey), [cacheKey, pool]),
+    getServerRevision,
+  );
   const hostRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const propsRef = useRef<PooledIframeProps>({ cacheKey, src, ...props });
@@ -376,14 +428,18 @@ const ClientPooledIframe = forwardRef<HTMLIFrameElement, PooledIframeProps>(func
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;
-    const frame = pool.attach(cacheKey, host, () => document.createElement('iframe'));
+    const frame = pool.attach(cacheKey, host, () => {
+      const next = document.createElement('iframe');
+      bindMotionPreviewActivity(next);
+      return next;
+    });
     iframeRef.current = frame;
     return () => {
       setForwardedRef(forwardedRef, null);
       iframeRef.current = null;
       pool.release(cacheKey);
     };
-  }, [cacheKey, pool, forwardedRef]);
+  }, [cacheKey, pool, poolKeyRevision, forwardedRef]);
 
   useLayoutEffect(() => {
     const frame = iframeRef.current;

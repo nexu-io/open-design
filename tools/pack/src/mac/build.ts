@@ -1,5 +1,5 @@
-import { ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
+import { ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from "./app.js";
 import { seedPackagedAppConfig } from "./app-config.js";
 import { finalizeMacArtifacts } from "./artifacts.js";

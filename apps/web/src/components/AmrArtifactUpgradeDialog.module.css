@@ -1,9 +1,10 @@
+/* Layout only. The scrim material comes from the shared `<Dialog>` backdrop
+   (packages/components dialog.module.css -> --scrim-tint / --scrim-backdrop):
+   this dialog used to carry its own darker, less blurred sheet, which made it
+   the odd one out among every other overlay in the app. */
 .backdrop {
   z-index: 1700;
   padding: 16px;
-  background: rgb(13 12 10 / 58%);
-  backdrop-filter: blur(10px) saturate(0.92);
-  -webkit-backdrop-filter: blur(10px) saturate(0.92);
 }
 
 .panel {
@@ -109,7 +110,7 @@
   min-width: 0;
   color: inherit;
   font-size: 12.5px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   overflow-wrap: break-word;
 }
@@ -128,7 +129,7 @@
 .offerTimerLabel {
   color: color-mix(in srgb, #f8f3ec 70%, transparent);
   font-size: 9.5px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -137,7 +138,7 @@
   font-family: var(--mono);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
   unicode-bidi: isolate;
@@ -149,7 +150,7 @@
   margin: 0 0 10px;
   color: var(--text-strong);
   font-size: 27px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 1.12;
   overflow-wrap: break-word;

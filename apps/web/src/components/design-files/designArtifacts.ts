@@ -16,13 +16,6 @@ export function listDesignArtifactCandidates(
     .map((candidate) => candidate.file);
 }
 
-export function selectInitialDesignPreviewFile(
-  files: ProjectFile[],
-  preferredName?: string | null,
-): ProjectFile | null {
-  return listDesignArtifactCandidates(files, preferredName)[0] ?? null;
-}
-
 function designPreviewRank(file: ProjectFile, preferredName?: string | null): number {
   if (isProcessArtifactFileName(file.name)) return Number.POSITIVE_INFINITY;
   if (preferredName && file.name === preferredName) return 0;

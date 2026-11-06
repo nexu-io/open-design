@@ -1,6 +1,6 @@
-# Open Design
+# OpenDesign
 
-Open Design is a local-first design workspace where projects contain generated design files and agent conversations. This glossary records domain language only, not implementation details.
+OpenDesign is a local-first design workspace where projects contain generated design files and agent conversations. This glossary records domain language only, not implementation details.
 
 ## Language
 
@@ -25,7 +25,7 @@ The sidecar metadata that identifies a project file as a normal artifact and rec
 _Avoid_: live-artifact document, project metadata
 
 **Active Project**:
-The project the user most recently interacted with in the Open Design UI and that MCP tools may use when no project is specified.
+The project the user most recently interacted with in the OpenDesign UI and that MCP tools may use when no project is specified.
 _Avoid_: latest project, default project
 
 **Home Composer Media Surface**:
@@ -53,7 +53,7 @@ The default voice option shown when the Home Audio composer cannot load configur
 _Avoid_: required credential setup, empty voice selector
 
 **AMR Cloud**:
-The user-facing cloud runtime option for Open Design's official model router, shown in onboarding and login-oriented product surfaces.
+The user-facing cloud runtime option for OpenDesign's official model router, shown in onboarding and login-oriented product surfaces.
 _Avoid_: Vela, local CLI label
 
 **AMR CLI**:
@@ -61,12 +61,12 @@ The local command-line runtime adapter used to run AMR from an installed or pack
 _Avoid_: AMR Cloud, cloud account
 
 **AMR CLI Distribution Contract**:
-The separately owned release contract that provides the native AMR CLI builds Open Design can package.
-_Avoid_: Open Design release channel, package build step, source checkout
+The separately owned release contract that provides the native AMR CLI builds OpenDesign can package.
+_Avoid_: OpenDesign release channel, package build step, source checkout
 
 **AMR CLI Distribution Slice**:
 The set of native AMR CLI platforms currently available through the distribution contract; platforms outside the slice do not bundle the AMR CLI.
-_Avoid_: Open Design supported platforms, release channel, future platform promise
+_Avoid_: OpenDesign supported platforms, release channel, future platform promise
 
 **AMR Account Status**:
 Whether the user has authenticated the account needed to use AMR Cloud.
@@ -91,7 +91,7 @@ _Avoid_: continue, finish setup, passive close
 - The **Chip Rail** is the visible Home entry point for choosing a **Home Composer Media Surface**.
 - **Essential Audio Generation** uses an **Audio Source Field** plus model options before creating an audio **Project**.
 - **AMR Cloud** is the user-facing product choice; **AMR CLI** is the local execution adapter behind that capability.
-- The **AMR CLI Distribution Contract** is owned separately from Open Design; Open Design release packaging consumes it instead of defining the native CLI release itself.
+- The **AMR CLI Distribution Contract** is owned separately from OpenDesign; OpenDesign release packaging consumes it instead of defining the native CLI release itself.
 - The first **AMR CLI Distribution Slice** is mac arm64 only.
 - **AMR Account Status** describes account readiness for **AMR Cloud**, not the environment profile or CLI installation state.
 - An **AMR Environment Profile** is independent from release channel identity; a beta, preview, prerelease, or stable package can target different AMR service environments when explicitly configured.

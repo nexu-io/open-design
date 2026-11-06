@@ -14,15 +14,15 @@ describe('default app background colors', () => {
   it('uses the release light background color by default', () => {
     const root = cssBlock(':root');
 
-    expect(root).toContain('--bg: #faf9f7;');
-    expect(root).toContain('--bg-app: #faf9f7;');
+    expect(root).toContain('--bg: #fff;');
+    expect(root).toContain('--bg-app: #fff;');
   });
 
   it('keeps the dark theme background unchanged', () => {
     const dark = cssBlock('[data-theme="dark"]');
 
-    expect(dark).toContain('--bg: #1a1917;');
-    expect(dark).toContain('--bg-app: #1a1917;');
+    expect(dark).toContain('--bg: #202020;');
+    expect(dark).toContain('--bg-app: #202020;');
   });
 
   it('prefers platform UI fonts over optional local app fonts', () => {
@@ -30,8 +30,8 @@ describe('default app background colors', () => {
     const sans = /--sans:\s*([^;]+);/.exec(root)?.[1];
 
     expect(sans).toBeDefined();
-    expect(sans).toContain("'Segoe UI'");
+    expect(sans).toContain('"Albert Sans"');
     expect(sans).not.toContain("'Inter'");
-    expect(sans).toMatch(/'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans'/);
+    expect(sans).toMatch(/"Albert Sans", "PingFang SC", "Microsoft YaHei"/);
   });
 });

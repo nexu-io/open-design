@@ -172,12 +172,42 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+// Stand-alone English translator used when no provider is mounted (e.g. an
+// isolated test). It MUST be a module-level singleton, not rebuilt per render:
+// components legitimately list `t` in effect dependency arrays, and inside the
+// provider `t` is identity-stable (useCallback on [locale]). A fresh closure
+// here would break that contract only on the provider-less path, turning any
+// such effect into an infinite render loop that spins instead of failing —
+// which reads as a hung test suite rather than a bug.
+const FALLBACK_I18N: I18nContextValue = {
+  locale: 'en',
+  setLocale: () => { },
+  t: (key, vars) => {
+    const raw = en[key] ?? key;
+    if (!vars) return raw;
+    return raw.replace(/\{(\w+)\}/g, (_, n: string) => {
+      const v = vars[n];
+      return v == null ? `{${n}}` : String(v);
+    });
+  },
+};
+
 interface ProviderProps {
   initial?: Locale;
   children: ReactNode;
 }
 
 const RTL_LOCALES: Locale[] = ['ar', 'fa'];
+
+/**
+ * Whether a locale lays out right-to-left. Exported because direction also
+ * flips side-anchored UI (the nav rail moves to the right edge, so its
+ * tooltips have to open toward the left) and those callers must not
+ * re-declare the locale list.
+ */
+export function isRtlLocale(locale: Locale): boolean {
+  return RTL_LOCALES.includes(locale);
+}
 
 export function I18nProvider({ initial, children }: ProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => initial ?? detectInitialLocale());
@@ -187,7 +217,7 @@ export function I18nProvider({ initial, children }: ProviderProps) {
   // having to set it itself.
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      const dir = RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr';
+      const dir = isRtlLocale(locale) ? 'rtl' : 'ltr';
       document.documentElement.setAttribute('lang', locale);
       document.documentElement.setAttribute('dir', dir);
     }
@@ -227,25 +257,9 @@ export function I18nProvider({ initial, children }: ProviderProps) {
 }
 
 export function useI18n(): I18nContextValue {
-  const ctx = useContext(I18nContext);
-  if (!ctx) {
-    // Fall back to a stand-alone English translator when no provider is
-    // mounted (e.g. an isolated test). This keeps the API safe to call
-    // without requiring every callsite to wrap in a provider.
-    return {
-      locale: 'en',
-      setLocale: () => { },
-      t: (key, vars) => {
-        const raw = en[key] ?? key;
-        if (!vars) return raw;
-        return raw.replace(/\{(\w+)\}/g, (_, n: string) => {
-          const v = vars[n];
-          return v == null ? `{${n}}` : String(v);
-        });
-      },
-    };
-  }
-  return ctx;
+  // Falling back keeps the API safe to call without requiring every callsite
+  // to wrap in a provider. See FALLBACK_I18N on why it is a shared singleton.
+  return useContext(I18nContext) ?? FALLBACK_I18N;
 }
 
 // Convenience for components that only need the translator function.

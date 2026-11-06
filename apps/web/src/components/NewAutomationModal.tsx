@@ -2,6 +2,7 @@
 // user-facing model is a scheduled agent conversation that can start in a new
 // project or append a new conversation to an existing project.
 
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type {
@@ -23,6 +24,8 @@ import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import { describeRoutineSchedule, describeRoutineScheduleParts } from './routineScheduleLabels';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';
 
 type ProjectSummary = { id: string; name: string };
 type ScheduleKind = RoutineSchedule['kind'];
@@ -247,6 +250,7 @@ export function NewAutomationModal({
 }: Props) {
   const t = useT();
   const { locale } = useI18n();
+  const { context: workspaceContext } = useWorkspaceContext();
   const editingId = initial?.routine?.id ?? null;
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -341,10 +345,9 @@ export function NewAutomationModal({
 
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const releaseScrollLock = lockWebModalScroll();
     return () => {
-      document.body.style.overflow = prev;
+      releaseScrollLock();
     };
   }, [open]);
 
@@ -467,6 +470,14 @@ export function NewAutomationModal({
           ...(selectedPluginIds.length > 0 ? { pluginIds: selectedPluginIds } : {}),
           ...(selectedMcpIds.length > 0 ? { mcpServerIds: selectedMcpIds } : {}),
           ...(selectedConnectorIds.length > 0 ? { connectorIds: selectedConnectorIds } : {}),
+          ...(target.mode === 'create_each_run' && workspaceContext
+            ? {
+                workspaceScope: {
+                  workspaceId: workspaceContext.workspaceId,
+                  workspaceMemberId: workspaceContext.workspaceMemberId,
+                },
+              }
+            : {}),
         },
         enabled: true,
       };
@@ -484,7 +495,10 @@ export function NewAutomationModal({
         : body;
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -625,9 +639,9 @@ export function NewAutomationModal({
                 className={`automation-template-trigger${popover === 'template' ? ' is-active' : ''}`}
                 onClick={() => setPopover((p) => (p === 'template' ? null : 'template'))}
               >
-                <Icon name="sparkles" size={13} />
+                <Icon name="sparkles" size={14} />
                 <span>{selectedTemplate?.title ?? selectedTemplate?.defaultName ?? t('automations.useTemplate')}</span>
-                <Icon name="chevron-down" size={11} />
+                <Icon name="chevron-down" size={14} />
               </button>
               {popover === 'template' ? (
                 <TemplatePopover
@@ -777,9 +791,9 @@ export function NewAutomationModal({
                   onClick={() => removeSelectedContext(item.kind, item.id)}
                   title={t('chat.removeAria', { name: item.label })}
                 >
-                  <Icon name={item.icon} size={11} />
+                  <Icon name={item.icon} size={14} />
                   <span>{item.label}</span>
-                  <Icon name="close" size={10} />
+                  <Icon name="close" size={14} />
                 </button>
               ))}
             </div>
@@ -928,7 +942,7 @@ function TemplatePopover({
             <span className="automation-template-option__title">{template.title ?? template.defaultName}</span>
             <span className="automation-template-option__meta">{kindLabel(template.kind, t)}</span>
           </span>
-          {selectedId === template.id ? <Icon name="check" size={13} /> : null}
+          {selectedId === template.id ? <Icon name="check" size={14} /> : null}
         </button>
       ))}
     </div>
@@ -975,7 +989,7 @@ function MentionItem({
       }}
     >
       <span className="automation-mention-item__icon">
-        {selected ? <Icon name="check" size={11} /> : <Icon name={icon} size={11} />}
+        {selected ? <Icon name="check" size={14} /> : <Icon name={icon} size={14} />}
       </span>
       <span className="automation-mention-item__body">
         <span className="automation-mention-item__title">{label}</span>
@@ -1008,9 +1022,9 @@ function PillButton({
         aria-label={ariaLabel}
         onClick={onClick}
       >
-        <Icon name={icon} size={12} />
+        <Icon name={icon} size={14} />
         <span>{label}</span>
-        <Icon name="chevron-down" size={11} />
+        <Icon name="chevron-down" size={14} />
       </button>
       {children}
     </div>
@@ -1046,7 +1060,7 @@ function PopoverItem({
       title={title}
     >
       <span className="automation-popover__check">
-        {selected ? <Icon name="check" size={12} /> : null}
+        {selected ? <Icon name="check" size={14} /> : null}
       </span>
       <span className="automation-popover__body">
         <span className="automation-popover__label">{label}</span>

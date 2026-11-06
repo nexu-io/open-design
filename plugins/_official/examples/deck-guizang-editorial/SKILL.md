@@ -3,9 +3,9 @@ name: deck-guizang-editorial
 en_name: "Write an Annual Marketing Plan like a World-Class CMO"
 zh_name: "像世界级 CMO 一样写年度营销计划"
 description: |
-  Open Design's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Built as a decision-grade marketing & GTM deck for CMO, growth lead, founder.
+  OpenDesign's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Built as a decision-grade marketing & GTM deck for CMO, growth lead, founder.
 en_description: |
-  Open Design's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Built as a decision-grade marketing & GTM deck for CMO, growth lead, founder.
+  OpenDesign's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Built as a decision-grade marketing & GTM deck for CMO, growth lead, founder.
 zh_description: |
   像世界级 CMO 一样写年度营销计划——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -56,7 +56,7 @@ od:
     zh-CN: "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
   category: "marketing-gtm"
   scenario: "marketing"
-  example_prompt: "Create \"Write an Annual Marketing Plan like a World-Class CMO\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Audience: CMO, growth lead, founder. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
+  example_prompt: "Create \"Write an Annual Marketing Plan like a World-Class CMO\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: OpenDesign's FY26 marketing plan: brand-to-pipeline — audience, offer, channel mix, and the launch calendar that ties creative to growth. Audience: CMO, growth lead, founder. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 ---
 
 【模板: 归藏编辑墨水 Deck (Editorial × E-Ink)】

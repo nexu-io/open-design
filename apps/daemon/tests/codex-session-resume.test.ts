@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 import { writeMcpConfig } from '../src/mcp-config.js';
@@ -52,6 +52,15 @@ describe('codex native session resume', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
 
+  beforeEach(() => {
+    // These plain-reply fixtures exercise native sessions without an OD Next task.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    // These fixtures implement the legacy `codex exec --json` wire format and
+    // assert its argv-level resume contract. Keep this suite on that transport
+    // now that production defaults to the app-server JSON-RPC transport.
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  });
+
   afterEach(async () => {
     await Promise.resolve(started?.shutdown?.());
     if (started?.server) {
@@ -84,7 +93,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -131,7 +140,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -179,7 +188,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -208,7 +217,10 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin }, claude: { CLAUDE_BIN: claudeBin } },
+      agentCliEnv: {
+        codex: { CODEX_BIN: bin, CODEX_HOME: binDir },
+        claude: { CLAUDE_BIN: claudeBin },
+      },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -256,7 +268,7 @@ describe('codex native session resume', () => {
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
     await putConfig(started.url, {
       agentId: 'codex',
-      agentCliEnv: { codex: { CODEX_BIN: bin } },
+      agentCliEnv: { codex: { CODEX_BIN: bin, CODEX_HOME: binDir } },
       telemetry: { metrics: true, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
     });
@@ -460,6 +472,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
   };
 }
 

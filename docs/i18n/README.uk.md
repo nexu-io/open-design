@@ -1,19 +1,15 @@
-<h1 align="center">Open Design: відкрита альтернатива Claude Design</h1>
+<h1 align="center">OpenDesign: перший спільний робочий простір із ШІ-дизайн-агентами</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ вже тут.** Раніше довгі сесії дизайну зривалися на кожній перерві — запуск втрачав своє місце, вибір моделі змушував гадати, а експорт вимагав ще одного обхідного шляху. 0.13.0 зберігає сесію живою: відновлюйте запуски Codex / OpenCode / Pi / Open Design Cloud між ходами, швидше обирайте потрібну модель і передавайте підкріплені скриншотами PPTX / PDF, не залишаючи застосунок. [Завантажити 0.13.0](https://github.com/nexu-io/open-design/releases) · [Примітки до випуску](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
-> ⚡ **Open Design Cloud — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати Open Design Cloud](https://open-design.ai/cloud/)
->
-> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/mHAjSMV6gz).
+> ✨ **[Святкуємо 100K зірок на GitHub з OpenDesign Go](https://open-design.ai/pricing/)** — Кредити Go подвоєно: **8 доларів США за перший місяць і до 120 доларів США щомісячних кредитів для доступних у Design Plan моделей**. Використовуйте їх із понад 10 моделями, зокрема GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X і MiMo V2.6 Flash. Усі особисті тарифи містять доступ до API для Codex, Claude Code, DSH, OpenCode та інших інструментів.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: перший спільний робочий простір із ШІ-дизайн-агентами" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/">Вебсайт</a> ·
   <a href="https://open-design.ai/">Завантажити</a> ·
-  <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
+  <a href="https://open-design.ai/cloud/">OpenDesign Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">Стежити за @OpenDesignHQ</a>
 </p>
@@ -29,78 +25,63 @@
 
 ---
 
-## Що таке Open Design
+## Що таке OpenDesign
 
-🎨 **Локально-орієнтована альтернатива Claude Design з відкритим кодом.** &nbsp;🖥️ **Нативний десктопний застосунок для macOS і Windows.** &nbsp;⚡ **100+ функціональних навичок + окремий каталог шаблонів рендерингу** · ✨ **151 пакет дизайн-систем** · 📦 **277 плагінів.** &nbsp;🤖 **Працює через 25 різних локальних виконуваних файлів CLI**, або на будь-якій OpenAI-сумісній кінцевій точці через BYOK.
+OpenDesign — **перший спільний робочий простір із ШІ-дизайн-агентами**. Почніть з опису завдання та скористайтеся звичним агентом для розробки або OpenDesign Cloud, щоб створити прототип відповідно до вашої дизайн-системи. Поділіться ним із командою, зберіть відгуки й попросіть агента вдосконалити результат у тому самому проєкті.
 
-Open Design перетворює цей цикл на **файлову систему функціональних навичок, шаблонів рендерингу, дизайн-систем і плагінів**, яку агенти можуть читати, записувати та реміксувати.
-
-Це також **альтернатива Figma для епохи агентів** — замість того, щоб пересувати пікселі на полотні, вона доставляє односторінкові артефакти на справжньому CSS, справжніх шрифтах, справжніх компонентах, експортовані одразу в HTML / PDF / PPTX / MP4 — уже сформовані вашою дизайн-системою, уже готові до запуску всередині агента, яким ви користуєтеся щодня.
+Цей процес відкритий і розширюваний. OpenDesign поширюється за ліцензією Apache 2.0: команди можуть вивчати й адаптувати навички, шаблони, дизайн-системи та плагіни до своїх процесів.
 
 
 ---
 
 ## Огляд продукту
 
-Швидкий погляд на те, що таке Open Design і що він робить. Почніть з **Home**, оркеструйте повторювані робочі процеси за допомогою **Automation**, виокремте контракт бренду в **Design System** та розширюйте можливості за допомогою **Plugins** і **integrations**; усередині **Studio** будь-якого проєкту та сама дизайн-система передає потоком прототипи, живі артефакти, HyperFrames, презентації та зображення.
-
 ### Основні сторінки
 
 <table>
 <tr>
-<td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — оглядова точка входу. Виберіть навичку та дизайн-систему, введіть бриф і запустіть усе з одного місця.</sub>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Почніть з опису завдання або прикладу." width="500" /></a><br/>
+<sub><b>Home</b> — Почніть з опису завдання або прикладу.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Повертайтеся до дизайн-систем, медіа та прототипів." width="500" /></a><br/>
+<sub><b>All projects</b> — Повертайтеся до дизайн-систем, медіа та прототипів.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Переглядайте матеріали бренду й удосконалюйте їх разом з агентом." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Переглядайте матеріали бренду й удосконалюйте їх разом з агентом.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Знаходьте навички й запускайте їх через Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — Знаходьте навички й запускайте їх через Try it.</sub>
 </td>
 </tr>
 </table>
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — оркеструйте повторювані дизайн-процеси в багаторазові автоматизації з можливістю планування.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — виокремте <code>DESIGN.md</code> вашої команди в контракт бренду, який формує кожен результат.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — переглядайте, встановлюйте та поширюйте плагіни робочих процесів, щоб розширювати генерацію на вимогу.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — підключайте зовнішні системи та інструменти MCP й використовуйте Open Design з будь-якого IDE, скрипта чи автоматизації.</sub>
-</td>
-</tr>
-</table>
-
-### Studio — багато типів артефактів в одному проєкті
-
-Усередині Studio проєкту та сама дизайн-система передає потоком кілька типів артефактів:
+### Studio — створення й удосконалення в одному проєкті
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — односторінкові HTML-артефакти, які зчитують вашу дизайн-систему та рендеряться в iframe-пісочниці, доступні для миттєвого перегляду й завантаження як вихідний код.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Створюйте й удосконалюйте інтерактивні вебсайти разом з агентом і переглядайте результат наживо." /><br/>
+<sub><b>Prototype</b> — Створюйте й удосконалюйте інтерактивні вебсайти разом з агентом і переглядайте результат наживо.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — програмний рух і анімована графіка, відрендерені у справжній MP4 (наприклад, 1920×1080 · 30fps).</sub>
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Створюйте презентації, перевіряйте слайди й нотатки доповідача, а потім експортуйте." /><br/>
+<sub><b>Slides</b> — Створюйте презентації, перевіряйте слайди й нотатки доповідача, а потім експортуйте.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — презентації, які можна гортати, навігувати з клавіатури та експортувати в PPTX / PDF.</sub>
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Створюйте візуальні матеріали з розмови, перевіряйте результат, а потім завантажуйте або відкривайте." /><br/>
+<sub><b>Image</b> — Створюйте візуальні матеріали з розмови, перевіряйте результат, а потім завантажуйте або відкривайте.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — зображення та візуальні ресурси брендового рівня з генерацією та завантаженням у високій роздільності.</sub>
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Створюйте анімовану графіку з агентом та експортуйте її в MP4." /></a><br/>
+<sub><b>HyperFrames</b> — Створюйте анімовану графіку з агентом та експортуйте її в MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Переглянути відео</a>.</sub>
 </td>
 </tr>
 </table>
@@ -109,17 +90,17 @@ Open Design перетворює цей цикл на **файлову сист�
 
 ## Сумісність платформ
 
-> Open Design постачається як **навички, CLI та сервер MCP**, які основні кодувальні агенти споживають нативно. Щойно OD встановлено, одна команда `od mcp install <agent>` під'єднує сервер MCP до конфігурації цього агента, і ви викликаєте ті самі інструменти зсередини будь-якого агента.
+> OpenDesign постачається як **навички, CLI та сервер MCP**, які основні кодувальні агенти споживають нативно. Щойно OD встановлено, одна команда `od mcp install <agent>` під'єднує сервер MCP до конфігурації цього агента, і ви викликаєте ті самі інструменти зсередини будь-якого агента.
 
 | Кодувальний агент / платформа &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Статус &nbsp;&nbsp; | Встановлення сервера MCP одним рядком &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Підтримується | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Підтримується | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Підтримується | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Підтримується | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Підтримується | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Підтримується | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Підтримується | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Підтримується | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Підтримується | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Підтримується | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Підтримується | `od mcp install antigravity` |
@@ -134,7 +115,7 @@ Open Design перетворює цей цикл на **файлову сист�
 `od mcp install <agent> --print` для попереднього перегляду без застосування · `--uninstall` для видалення · повний список через `od mcp install --help`.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **Не встановлено жодного CLI?** Проксі BYOK на `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` дає вам той самий цикл (без породження процесу) — вставте `baseUrl` + `apiKey` + `model`, з підтримкою OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM або будь-якої OpenAI-сумісної кінцевої точки. Захист від SSRF для кожної цілі блокує внутрішні IP / link-local / CGNAT на межі демона.
@@ -152,16 +133,6 @@ Open Design перетворює цей цикл на **файлову сист�
 Типова поверхня виведення. Односторінкові HTML-артефакти, які зчитують ваш `DESIGN.md` і рендеряться в iframe-пісочниці.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>Вікно входу</b> — виберіть навичку, виберіть дизайн-систему, введіть бриф. Єдина поверхня для прототипів, дашбордів, презентацій, мобільних застосунків, журнальних сторінок.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>Мобільний прототип</b> — піксельно точна оболонка iPhone 15 Pro, багатоекранні потоки. Агент ніколи не перемальовує рамку телефона; спільні рамки пристроїв містяться в <code>assets/frames/</code>.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
@@ -234,7 +205,7 @@ Open Design перетворює цей цикл на **файлову сист�
 
 ### 5 · Відео та HyperFrames — моушн-графіка agent-native
 
-**[HyperFrames][hyperframes]** — це відкрита, agent-native відеоплатформа від HeyGen, інтегрована як повноправний учасник в Open Design. Агент пише HTML + CSS + GSAP, а HyperFrames рендерить це в детермінований MP4 через headless Chrome + FFmpeg. Поєднайте її з **Seedance 2.0** для кінематографічного t2v / i2v, **Veo 3 / Sora 2 / Kling 2** для маршрутизованих варіантів моделей та **Suno v5 / Lyria 2** для аудіошару.
+**[HyperFrames][hyperframes]** — це відкрита, agent-native відеоплатформа від HeyGen, інтегрована як повноправний учасник в OpenDesign. Агент пише HTML + CSS + GSAP, а HyperFrames рендерить це в детермінований MP4 через headless Chrome + FFmpeg. Поєднайте її з **Seedance 2.0** для кінематографічного t2v / i2v, **Veo 3 / Sora 2 / Kling 2** для маршрутизованих варіантів моделей та **Suno v5 / Lyria 2** для аудіошару.
 
 <table>
 <tr>
@@ -257,31 +228,14 @@ Open Design перетворює цей цикл на **файлову сист�
 
 ---
 
-## Чому Open Design
-
-> **У квітні 2026 року Anthropic випустила Claude Design — уперше LLM перестала писати прозу й почала доставляти дизайн-артефакти безпосередньо.** Це стало вірусним. Але вона залишилася закритою, лише платною, лише хмарною, прив'язаною до моделі Anthropic, навичок Anthropic, поверхні Anthropic. Без виходу, без самохостингу, без розгортання на Vercel, без можливості підставити власного агента.
-
-Open Design (OD) — це альтернатива з відкритим кодом. Той самий цикл, та сама ментальна модель «спершу артефакт», без жодної прив'язки:
+## Чому OpenDesign
 
 - 🤖 **Agent-native, незалежна від моделі.** Ми не постачаємо агента. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, які вже є у вашому `PATH`, і є рушієм дизайну. Замінюйте одним кліком.
 - 🧠 **Брендовий рівень за замовчуванням.** Кожен рендер читає `DESIGN.md` активного пакета як основний контракт бренду. Репозиторій містить 151 пакет дизайн-систем; старі пакети можуть складатися лише з `DESIGN.md`, а нові — додавати `manifest.json`, `tokens.css`, компоненти, ресурси та дані про походження. Покладіть теку всередину — селектор її знайде.
-- 🖥️ **Локально-орієнтована, BYOK на кожному шарі.** Нативні десктопні застосунки залишаються локальними, без звернень у хмару. Перш ніж описувати шляхи даних демона, необхідно прочитати кореневий `AGENTS.md`, розділ **Daemon data directory contract**.
+- 🖥️ **Локально-орієнтована, BYOK на кожному шарі.** Нативні десктопні застосунки орієнтовані на локальну роботу. Аналітика продукту й відтворення сесій потребують згоди; очищена телеметрія безпеки та надійності завжди ввімкнена. Перш ніж описувати шляхи даних демона, необхідно прочитати кореневий `AGENTS.md`, розділ **Daemon data directory contract**.
 - 🌍 **Композиційна на чотирьох площинах.** **Плагіни** несуть workflow · **функціональні навички** — поведінку агента · **шаблони дизайну** — креслення рендерингу · **дизайн-системи** — бренд.
-- 🔁 **Оновлюйте наявну кодову базу.** Передайте агенту репозиторій `git` + `DESIGN.md`, і він рефакторить ваші реальні компоненти відповідно до специфікації бренду. Спеціальні плагіни мігрують робочі процеси Figma / Pencil у код React / Next.js / Vue.
-- 🔒 **Приватність за переконанням.** Усе працює там, де живуть ваші дані — на вашому ноутбуці, на сервері вашої команди, у вашому проєкті Vercel. Коли потрібна мережа, проксі BYOK захищений від SSRF.
-
-### Порівняння
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
-|---|---|---|---|---|
-| Відкритий код | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| Самохостинг / десктоп | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent-native (працює у вашому CLI) | Лише Anthropic | ❌ | Лише хмарний агент | **✅ 25 CLI + BYOK** |
-| `DESIGN.md` брендового рівня | Пропрієтарний | Theme JSON | Обмежені токени | **✅ 151 готових систем** |
-| Навички / плагіни / шаблони | Закриті | Магазин плагінів | Закриті | **✅ 100+ функціональних навичок · окремий каталог шаблонів рендерингу · 277 плагінів** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Повноправно** |
-| Оновлення наявного репозиторію до бренду | ❌ | ❌ | ❌ | **✅ через агента + `DESIGN.md`** |
-| Мінімальний білінг | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · будь-яка сумісна кінцева точка** |
+- 🔁 **Оновлюйте наявну кодову базу.** Передайте агенту репозиторій `git` + `DESIGN.md`, і він рефакторить ваші реальні компоненти відповідно до специфікації бренду.
+- 🔒 **Приватність за переконанням.** Проєкти можуть працювати локально або у власному розгортанні. Запити до хмарних моделей та OpenDesign Cloud надсилаються відповідним сервісам. BYOK-проксі містить захист від SSRF.
 
 ---
 
@@ -289,7 +243,7 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ### 🖥️ Завантажте десктопний застосунок (рекомендовано — нуль конфігурації)
 
-Найшвидший спосіб скористатися Open Design. Без Node, без pnpm, без клонування.
+Найшвидший спосіб скористатися OpenDesign. Без Node, без pnpm, без клонування.
 
 - **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/) або [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) або [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -299,13 +253,13 @@ Open Design (OD) — це альтернатива з відкритим код�
 
 ### 🤖 Встановіть у свого кодувального агента (без UI)
 
-Ви можете користуватися Open Design, жодного разу не відкриваючи GUI — викликайте його як навичку, плагін або сервер MCP усередині Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi тощо.
+Ви можете користуватися OpenDesign, жодного разу не відкриваючи GUI — викликайте його як навичку, плагін або сервер MCP усередині Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi тощо.
 
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 Потім усередині агента:
@@ -314,7 +268,7 @@ od mcp install <agent>
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-У локальному CLI-запуску з файловою системою агент компонує функціональну навичку або шаблон із `DESIGN.md`, пише канонічні файли, а Open Design їх показує. BYOK/API без файлових інструментів повертає один повний блок `<artifact>`.
+У локальному CLI-запуску з файловою системою агент компонує функціональну навичку або шаблон із `DESIGN.md`, пише канонічні файли, а OpenDesign їх показує. BYOK/API без файлових інструментів повертає один повний блок `<artifact>`.
 
 ### 🐳 Запуск через Docker
 
@@ -331,7 +285,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-Шаблон Sealos App Store запускає опублікований Docker-образ Open Design із постійним сховищем робочої області та Basic Auth на публічному проксі. Для користувацьких публічних або спільних Docker-розгортань дотримуйтеся рекомендацій щодо зворотного проксі та `OPEN_DESIGN_ALLOWED_ORIGINS` у [`deploy/README.md`](../../deploy/README.md#local-compose).
+Шаблон Sealos App Store запускає опублікований Docker-образ OpenDesign із постійним сховищем робочої області та Basic Auth на публічному проксі. Для користувацьких публічних або спільних Docker-розгортань дотримуйтеся рекомендацій щодо зворотного проксі та `OPEN_DESIGN_ALLOWED_ORIGINS` у [`deploy/README.md`](../../deploy/README.md#local-compose).
 
 ### 🧑‍💻 Запуск із вихідного коду
 
@@ -344,23 +298,23 @@ pnpm tools-dev run web
 
 Відкрийте URL, надрукований `tools-dev`; без явних портових прапорців порти розробки призначаються динамічно.
 
-Node `~24`, pnpm `10.33.x`. Користувачі Windows, див. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Повний швидкий старт, змінні середовища, Nix flake та процес упакованого збирання → [`QUICKSTART.md`](../../QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Користувачі Windows, див. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Повний швидкий старт, змінні середовища та процес упакованого збирання → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### Повний робочий процес — від брифа до артефакта
 
 `бриф → плагін → напрям → дизайн-система → артефакт → передача → пам'ять`
 
 1. **PM подає бриф.** Селектор плагінів пропонує лендинг · пітч-презентацію · дашборд · допис у соцмережі · PM-специфікацію · табель OKR…
-2. **Дизайнер (або агент) фіксує напрям.** Немає бренду? Виберіть з-поміж 5 курованих напрямів. Маєте бренд? Скиньте скриншот / URL → агент під'єднує GitHub, імпортує Figma та кодифікує багаторазовий `DESIGN.md`.
+2. **Дизайнер (або агент) фіксує напрям.** Немає бренду? Виберіть з-поміж 5 курованих напрямів. Маєте бренд? Скиньте скриншот / URL → агент під'єднує GitHub та кодифікує багаторазовий `DESIGN.md`.
 3. **Агент створює перший результат.** CLI із filesystem пише канонічні файли; BYOK/API без файлових інструментів повертає повний `<artifact>`.
 4. **Передача в інженерію.** Артефакт — це справжній HTML/CSS — скиньте його в Cursor, Codex або Claude Code, щоб продовжувати будувати як код. Або експортуйте PPTX / PDF / MP4 прямо в маркетинг.
-5. **Open Design стає розумнішим у міру використання.** Ваші скриншоти, шрифти, палітри та підтверджені артефакти накопичуються як значення за замовчуванням для наступної сесії. Менше переробки, менше дрейфу.
+5. **OpenDesign стає розумнішим у міру використання.** Ваші скриншоти, шрифти, палітри та підтверджені артефакти накопичуються як значення за замовчуванням для наступної сесії. Менше переробки, менше дрейфу.
 
 ---
 
-## Використання Open Design зі свого кодувального агента
+## Використання OpenDesign зі свого кодувального агента
 
-Open Design постачає **сервер MCP через stdio** та **скрипти встановлення** для кожного агента. Будь-який MCP-сумісний агент в іншому репозиторії може читати файли з ваших локальних проєктів Open Design безпосередньо — CSS токенів, JSX-компоненти, вхідний HTML — як структурований API, до якого можна звертатися за іменем. Агент завжди бачить живий файл, а не застарілий експорт.
+OpenDesign постачає **сервер MCP через stdio** та **скрипти встановлення** для кожного агента. Будь-який MCP-сумісний агент в іншому репозиторії може читати файли з ваших локальних проєктів OpenDesign безпосередньо — CSS токенів, JSX-компоненти, вхідний HTML — як структурований API, до якого можна звертатися за іменем. Агент завжди бачить живий файл, а не застарілий експорт.
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -424,9 +378,9 @@ od skills list --json
 
 **AI та LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**Інструменти розробника** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**Інструменти розробника** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**Продуктивність** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**Продуктивність** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -482,7 +436,7 @@ od skills list --json
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -492,7 +446,7 @@ od plugin uninstall od-default       # uninstall
 
 ### Створення плагіна
 
-Плагіну Open Design потрібні `open-design.json` і payload його типу. Навички та сценарії також містять `SKILL.md`; інші типи використовують власний payload:
+Плагіну OpenDesign потрібні `open-design.json` і payload його типу. Навички та сценарії також містять `SKILL.md`; інші типи використовують власний payload:
 
 ```
 my-plugin/
@@ -503,7 +457,7 @@ my-plugin/
 └── examples/           ← optional: concrete use cases
 ```
 
-Основні поля: `specVersion`, `name`, `version`, опційний `compat.agentSkills[].path` лише при експорті Agent Skill, а також `od.kind`, `od.taskKind`, `od.mode`, `od.capabilities[]` і `od.inputs[]`.
+Основні поля: `specVersion`, `name`, `version`, опційний `compat.agentSkills[].path` лише при експорті Agent Skill, а також `od.kind`, `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode`, `od.capabilities[]` і `od.inputs[]`.
 
 Каркасування + валідація локально:
 
@@ -517,7 +471,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ### Внесок плагіна
 
-1. Покладіть теку плагіна в [`plugins/community/`](../../plugins/community/) (сторонні плагіни), або — щоб постачати його в комплекті з Open Design — у відповідний рівень [`plugins/_official/`](../../plugins/_official/).
+1. Покладіть теку плагіна в [`plugins/community/`](../../plugins/community/) (сторонні плагіни), або — щоб постачати його в комплекті з OpenDesign — у відповідний рівень [`plugins/_official/`](../../plugins/_official/).
 2. Пройдіть валідацію: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
 3. Заповніть PR за шаблоном у [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) (ID, версія, лінія, режим, можливості, приклади тригерів; додайте скриншот / попередній перегляд для візуальних плагінів).
 4. Щоб опублікувати у зовнішньому реєстрі (skills.sh / ClawHub / окремий GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
@@ -580,7 +534,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Протокол sidecar + десктоп Electron + автоматизація IPC
 - [x] API лінтингу артефактів + 5-вимірний шлюз самокритики перед видачею
 - [x] **0.8.0** — інфраструктура маркетплейсу плагінів (261 офіційний плагін, специфікація маніфесту, скрипти встановлення для кожного агента)
-- [x] **0.9.0** — Open Design Cloud (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
+- [x] **0.9.0** — OpenDesign Cloud (офіційний Model Router, вбудований у застосунок: нуль конфігурації, вхід в один клік)
 - [x] Упаковані збірки Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (опціональна лінія)
 - [ ] Хірургічні правки в режимі коментарів — частково випущено; надійне цільове патчування в розробці
 - [ ] UX панелі налаштувань, виданої ШІ — ще не реалізовано
@@ -608,7 +562,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## Внесок
 
-Open Design продовжує рухатися, бо контриб'ютори — дизайнери, інженери, автори промптів — продовжують приходити. Багато з найуживаніших навичок, дизайн-систем і плагінів написали люди поза основною командою.
+OpenDesign продовжує рухатися, бо контриб'ютори — дизайнери, інженери, автори промптів — продовжують приходити. Багато з найуживаніших навичок, дизайн-систем і плагінів написали люди поза основною командою.
 
 ### 🎯 З чого почати (максимальний важіль, мінімальна зміна)
 
@@ -645,9 +599,9 @@ gh pr create --fill
 
 Повний дружній до агентів процес внеску, стиль коду та планка PR → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)).
 
-### 🏅 Програма Open Design Fellow
+### 🏅 Програма OpenDesign Fellow
 
-Ми набираємо **Open Design Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють Open Design у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/mHAjSMV6gz).
+Ми набираємо **OpenDesign Fellows** по всьому світу — Fellows формують продукт разом із основною командою, офіційно представляють OpenDesign у своєму регіоні та розвивають спільноту локально, маючи фінансовану підтримку ($1,000 / MR), безкоштовні LLM-кредити та прямий трек рев'ю. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та анонс у [Discord](https://discord.gg/mHAjSMV6gz).
 
 ---
 
@@ -681,7 +635,7 @@ gh pr create --fill
 Дякуємо всім, хто долучився — кодом, документацією, відгуками, влучним issue, новою навичкою, новою дизайн-системою.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="OpenDesign contributors" />
 </a>
 
 ---
@@ -689,7 +643,7 @@ gh pr create --fill
 ## Активність репозиторію
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="OpenDesign — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 SVG вище щодня перегенеровується [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) за допомогою [`lowlighter/metrics`](https://github.com/lowlighter/metrics).
@@ -699,16 +653,16 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 ## Поставте нам зірку
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star OpenDesign on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 Якщо це зекономило вам тридцять хвилин, поставте ★. Зірки не платять за оренду — але вони кажуть наступному дизайнеру, агенту й контриб'ютору, що цей експеримент вартий їхньої уваги. Один клік, три секунди, реальний сигнал.
 
-<a href="https://star-history.com/#nexu-io/open-design&Date">
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 
@@ -718,15 +672,14 @@ SVG вище щодня перегенеровується [`.github/workflows/m
 
 | Проєкт | Роль |
 |---|---|
-| Claude Design | Закритий продукт, відкритою альтернативою якому є цей репозиторій. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | Компас дизайн-філософії — робочий процес джуніор-дизайнера, протокол брендових ресурсів, чекліст проти AI-slop, п'ятивимірна критика. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Навичка веб-PPT у журнальному стилі, включена дослівно під [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). Типова для режиму презентацій. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | Сімейство HTML PPT Studio — 15 шаблонів презентацій, 36 тем, 31 макет сторінки, рантайм анімації, режим презентера з магнітними картками. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | Перша відкрита альтернатива Claude Design; UX-патерни, які ми запозичуємо (цикл потокового артефакта, iframe-пісочниця, жива панель агента). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | UX-патерни, які ми запозичуємо (цикл потокового артефакта, iframe-пісочниця, жива панель агента). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | Архітектура демон + адаптер — виявлення агентів скануванням PATH, локальний демон як єдиний привілейований процес. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Історичне джерело початкової 9-роздільної схеми `DESIGN.md` і 70 систем, похідних від upstream; сучасні пакети можуть розширювати цю основу. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Джерело 57 дизайн-навичок, доданих під `design-systems/`. |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Платформа моушн-графіки HTML→MP4, інтегрована як повноправний `hyperframes-html` в Open Design. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Платформа моушн-графіки HTML→MP4, інтегрована як повноправний `hyperframes-html` в OpenDesign. |
 | [Claude Code skills][skill] | Конвенція `SKILL.md`, яку ми приймаємо дослівно. |
 
 Детальне походження → [`docs/references.md`](../../docs/references.md).

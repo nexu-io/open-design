@@ -37,6 +37,28 @@ describe('byok-opencode runtime config', () => {
     }
   });
 
+  it.each(['openai', 'anthropic', 'google', 'azure', 'ollama', 'senseaudio', 'aihubmix'] as const)(
+    'allows images from attachments and Read tools for unknown %s models',
+    (protocol) => {
+      const out = buildOpenCodeByokProviderConfig(
+        { protocol, apiKey: 'test-key', baseUrl: 'https://provider.example/v1' },
+        'new-custom-model',
+      );
+
+      expect(out?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            models: {
+              'new-custom-model': {
+                modalities: { input: ['text', 'image'], output: ['text'] },
+              },
+            },
+          },
+        },
+      });
+    },
+  );
+
   it('prefixes raw BYOK models with the run-scoped OpenCode provider id', () => {
     expect(opencodeByokModelId('gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
     expect(opencodeByokModelId('open-design-byok/gpt-4o-mini')).toBe('open-design-byok/gpt-4o-mini');
@@ -150,6 +172,98 @@ describe('byok-opencode runtime config', () => {
       },
     });
   });
+
+  it.each([
+    {
+      name: 'MiniMax',
+      baseUrl: 'https://api.minimax.io/anthropic',
+      expectedBaseUrl: 'https://api.minimax.io/anthropic/v1',
+    },
+    {
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      expectedBaseUrl: 'https://api.deepseek.com/anthropic/v1',
+    },
+    {
+      name: 'MiMo',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
+      expectedBaseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic/v1',
+    },
+  ])(
+    'adds the Anthropic API version to the $name compatibility base URL',
+    ({ baseUrl, expectedBaseUrl }) => {
+      expect(buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'anthropic',
+          apiKey: 'anthropic-compatible-key',
+          baseUrl,
+        },
+        'anthropic-compatible-model',
+      )?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            npm: '@ai-sdk/anthropic',
+            options: {
+              baseURL: expectedBaseUrl,
+            },
+          },
+        },
+      });
+    },
+  );
+
+  it('preserves an Anthropic compatibility base URL that already has a version segment', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'anthropic',
+        apiKey: 'anthropic-compatible-key',
+        baseUrl: 'https://gateway.example.com/anthropic/v2/proxy',
+      },
+      'anthropic-compatible-model',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/anthropic',
+          options: {
+            baseURL: 'https://gateway.example.com/anthropic/v2/proxy',
+          },
+        },
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: 'query parameters',
+      baseUrl: 'https://gateway.example.com/anthropic?tenant=x',
+      expectedBaseUrl: 'https://gateway.example.com/anthropic/v1?tenant=x',
+    },
+    {
+      name: 'a fragment',
+      baseUrl: 'https://gateway.example.com/anthropic#route',
+      expectedBaseUrl: 'https://gateway.example.com/anthropic/v1#route',
+    },
+  ])(
+    'preserves $name when versioning an Anthropic compatibility base URL',
+    ({ baseUrl, expectedBaseUrl }) => {
+      expect(buildOpenCodeByokProviderConfig(
+        {
+          protocol: 'anthropic',
+          apiKey: 'anthropic-compatible-key',
+          baseUrl,
+        },
+        'anthropic-compatible-model',
+      )?.config).toMatchObject({
+        provider: {
+          [BYOK_OPENCODE_PROVIDER_ID]: {
+            options: {
+              baseURL: expectedBaseUrl,
+            },
+          },
+        },
+      });
+    },
+  );
 
   it('maps other native BYOK protocols to provider packages', () => {
     expect(buildOpenCodeByokProviderConfig(
@@ -278,9 +392,15 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
-  it('allows keyless local Ollama and normalizes it to the OpenAI-compatible v1 endpoint', () => {
+  it.each([
+    ['http://localhost:11434', 'http://localhost:11434/v1'],
+    ['http://127.0.0.1:11434', 'http://127.0.0.1:11434/v1'],
+    ['http://[::1]:11434', 'http://[::1]:11434/v1'],
+    ['http://[::1]:11434/api', 'http://[::1]:11434/v1'],
+    ['http://[::1]:11434/v1', 'http://[::1]:11434/v1'],
+  ])('allows keyless local Ollama at %s and normalizes its endpoint', (baseUrl, expectedBaseUrl) => {
     const out = buildOpenCodeByokProviderConfig(
-      { protocol: 'ollama', apiKey: '', baseUrl: 'http://localhost:11434' },
+      { protocol: 'ollama', apiKey: '', baseUrl },
       'llama3.2',
     );
 
@@ -291,7 +411,7 @@ describe('byok-opencode runtime config', () => {
         [BYOK_OPENCODE_PROVIDER_ID]: {
           npm: '@ai-sdk/openai-compatible',
           options: {
-            baseURL: 'http://localhost:11434/v1',
+            baseURL: expectedBaseUrl,
           },
         },
       },
@@ -301,12 +421,14 @@ describe('byok-opencode runtime config', () => {
     expect(provider?.options).not.toHaveProperty('apiKey');
   });
 
-  it('still requires an API key for non-local Ollama providers', () => {
-    expect(buildOpenCodeByokProviderConfig(
-      { protocol: 'ollama', apiKey: '', baseUrl: 'https://ollama.com' },
-      'gpt-oss:20b',
-    )).toBeNull();
-  });
+  it.each(['https://ollama.com', 'http://[2001:db8::1]:11434'])(
+    'still requires an API key for non-local Ollama provider %s', (baseUrl) => {
+      expect(buildOpenCodeByokProviderConfig(
+        { protocol: 'ollama', apiKey: '', baseUrl },
+        'gpt-oss:20b',
+      )).toBeNull();
+    },
+  );
 
   it('allows explicit keyless OpenAI-compatible presets such as vLLM', () => {
     const out = buildOpenCodeByokProviderConfig(

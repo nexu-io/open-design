@@ -45,6 +45,8 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
     // it is what makes Ask cheaper than Design/Plan.
     expect(prompt).not.toContain(DISCOVERY_AND_PHILOSOPHY);
     expect(prompt).not.toContain('# Identity and workflow charter (background)');
+    // T69(2026-09-07):设计风格选择题整题下线,Ask 模式也不再提它
+    expect(prompt).not.toContain('direction-cards');
   });
 
   it('uses a top-level Plan mode override that suppresses artifact discovery forms', () => {
@@ -64,25 +66,60 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — TodoWrite plan item coun
 });
 
 describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', () => {
-  it('uses the single-shot task-type form shape from the daemon prompt', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('<question-form id="task-type"');
-    for (const id of ['taskType', 'audience', 'brand', 'scale', 'constraints']) {
-      expect(DISCOVERY_AND_PHILOSOPHY).toContain(`"id": "${id}"`);
-    }
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'This form is intentionally a **single-shot brief**',
+  it('keeps image result copy user-friendly without discarding tool diagnostics', () => {
+    const prompt = composeSystemPrompt({
+      locale: 'zh-CN',
+      metadata: { kind: 'image' } as any,
+    });
+
+    expect(prompt).toContain('reply exactly `图片已生成`');
+    expect(prompt).toContain('提示词没通过内容审核 —— 换个说法、去掉敏感内容再试。');
+    expect(prompt).toContain(
+      '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
     );
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
-      /do NOT emit a second `<question-form id="discovery">` \/ "Quick brief — 30 seconds" form/,
-    );
+    // OPEND-2577: an internal code is a support ticket, not a next step.
+    expect(prompt).not.toContain('错误代码');
+    expect(prompt).not.toContain('图片生成服务暂时不可用');
+    expect(prompt).toContain('tool output and daemon logs');
+    expect(prompt).not.toContain('surface the actual stderr / exit status');
   });
 
-  it('routes task-type form answers through the same RULE 2 / RULE 3 path as discovery answers', () => {
+  it('keeps clarification on demand and leaves task-type routing to od-default', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'A first turn, a new project, a discovery stage, or an unfilled metadata field does not by itself require a form.',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'It owns the conditional `task-type` form',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('<question-form id="task-type"');
+  });
+
+  /**
+   * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
+   * 原用例守的是「API/BYOK 这条路也要教 host 目录契约」,现在守它不再教。
+   *
+   * ⚠️ **答案解读那一半故意留着**(`od tools directions` 那条):缓存的旧提示词、
+   * 旧客户端、模型记住的旧格式都还可能把一份 Host 目录答案交上来,那时 agent
+   * 必须仍然知道 `value` / `foundation` / `guidance` 怎么用 —— 这和渲染器继续
+   * 认得 `direction-cards` 是同一件事的两面(见 e2e `DORMANT_TYPES`)。
+   * 撤的是**发问的能力**,不是**读答案的能力**。
+   */
+  it('API/BYOK 提示词不再教怎么出设计风格题,但仍会读旧答案', () => {
+    const prompt = composeSystemPrompt({ metadata: { kind: 'other' } as any });
+    expect(prompt).not.toContain('direction-cards');
+    expect(prompt).not.toContain("host-owned visual-style catalog");
+    expect(prompt).toContain(
+      'the Host value is catalogue identity and must not be passed to `od tools directions`',
+    );
+    expect(prompt).not.toContain('draft 3–5 distinct directions');
+  });
+
+  it('keeps historical task-type answers compatible with the discovery path', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
       /\[form answers — discovery\][^.]*\[form answers — task-type\]/,
     );
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(
-      'Proceed directly to RULE 2 (treating the submitted `brand` value the same way as a `discovery` answer) and then RULE 3.',
+      'Historical `[form answers — task-type]` replies remain valid input to RULE 2.',
     );
   });
 
@@ -134,6 +171,45 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
     expect(prompt).toContain('themeVariables');
     expect(prompt).toContain('no dark-on-dark labels');
   });
+
+  it('ships API/BYOK decks with the same OD Deck Protocol v1', () => {
+    const prompt = composeSystemPrompt({ skillMode: 'deck', streamFormat: 'plain' });
+
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("data.type !== 'od:slide'");
+    expect(prompt).toContain('go(target);');
+    expect(prompt).toContain("type: 'od:slide-state'");
+    expect(prompt).toContain('## Final handoff — text artifact');
+    expect(prompt).toContain('MUST contain exactly one `<artifact type="text/html">...</artifact>` block');
+    expect(prompt).toContain('the artifact block itself is the canonical deliverable');
+    expect(prompt).not.toContain('## Final handoff — filesystem');
+    expect(prompt).not.toContain('summarize the written or changed deck file');
+  });
+
+  it('ships API/BYOK prototype follow-up deck requests with Deck Protocol v1', () => {
+    const prompt = composeSystemPrompt({
+      metadata: { kind: 'prototype' },
+      skillMode: 'prototype',
+      skillBody: '# Prototype seed\n\nCopy `assets/template.html` before building.',
+      freeformDeckSignal: true,
+      streamFormat: 'plain',
+    });
+
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("type: 'od:slide-state'");
+    expect(prompt).toContain('## Final handoff — text artifact');
+  });
+
+  it('injects nested-diagram discipline through every contracts deck path only', () => {
+    const heading = '## Nested / concentric diagram discipline';
+
+    expect(composeSystemPrompt({ skillMode: 'deck' })).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'deck' } as any })).toContain(heading);
+    expect(composeSystemPrompt({})).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'prototype' } as any })).not.toContain(heading);
+  });
 });
 
 describe('composeSystemPrompt', () => {
@@ -144,55 +220,44 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('`zh-CN` (Simplified Chinese)');
     expect(prompt).toContain('快速简报 — 30 秒');
     expect(prompt).toContain('目标用户');
-    expect(prompt).toContain('视觉调性');
+    /* 这里原本钉的是 `视觉调性` —— 调性题的中文文案。OPEND-2760 把设计风格
+       选择整题下线后,那一行连同它那串风格选项(`编辑 / 杂志感`、`现代极简`…)
+       一起从样例里撤走,否则 zh-CN 用户的提示词里等于还摆着一份风格菜单。
+       改钉 `品牌背景` —— 品牌题按裁决保留,同样能证明样例块确实注入了。 */
+    expect(prompt).toContain('品牌背景');
+    expect(prompt).not.toContain('视觉调性');
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
-  it('preserves canonical default task-type options under locale overrides', () => {
+  /**
+   * OPEND-2707,与 `apps/daemon/tests/prompts/system.test.ts` 同名用例逐条对应。
+   * 两份 locale override 是**手抄件**(daemon 一份、contracts/BYOK 一份);
+   * 只改一边,API 模式的用户就还会拿到一份要求写 helper text 的提示词。
+   */
+  it('本地化清单不再把每题副标题列成一种要翻译的控件文案', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 
+    expect(prompt).not.toContain('helper text');
     expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
+      '`<question-form>` titles, question labels, placeholders, and option labels',
     );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
   });
 
-  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+  it('does not inject a task-type form through the zh-CN locale override', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
+  });
+
+  it('does not inject a task-type form through the zh-TW locale override', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-TW' });
 
     expect(prompt).toContain('# UI locale override');
     expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
     expect(prompt).not.toContain('快速简报 — 30 秒');
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
   });
 
   it('treats an active design system as the visual direction', () => {

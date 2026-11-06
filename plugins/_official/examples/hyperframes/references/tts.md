@@ -14,21 +14,21 @@ Match voice to content. Default is `af_heart`.
 | Documentation | `bf_emma`/`bm_george` | Clear British English      |
 | Casual        | `af_heart`/`af_sky`   | Approachable, natural      |
 
-Run `npx hyperframes tts --list` for all 54 voices (8 languages).
+Run `"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts --list` for all 54 voices (8 languages).
 
 ## Multilingual Phonemization
 
 Kokoro voice IDs encode language in the first letter: `a`=American English, `b`=British English, `e`=Spanish, `f`=French, `h`=Hindi, `i`=Italian, `j`=Japanese, `p`=Brazilian Portuguese, `z`=Mandarin. The CLI auto-detects the phonemizer locale from that prefix — you don't need to pass `--lang` when the voice matches the text.
 
 ```bash
-npx hyperframes tts "La reunión empieza a las nueve" --voice ef_dora --output es.wav
-npx hyperframes tts "今日はいい天気ですね" --voice jf_alpha --output ja.wav
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts "La reunión empieza a las nueve" --voice ef_dora --output es.wav
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts "今日はいい天気ですね" --voice jf_alpha --output ja.wav
 ```
 
 Use `--lang` only to override auto-detection (e.g. stylized accents):
 
 ```bash
-npx hyperframes tts "Hello there" --voice af_heart --lang fr-fr --output accented.wav
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts "Hello there" --voice af_heart --lang fr-fr --output accented.wav
 ```
 
 Valid `--lang` codes: `en-us`, `en-gb`, `es`, `fr-fr`, `hi`, `it`, `pt-br`, `ja`, `zh`.
@@ -45,8 +45,8 @@ Non-English phonemization requires `espeak-ng` installed system-wide (`brew inst
 ## Usage
 
 ```bash
-npx hyperframes tts "Your script here" --voice af_nova --output narration.wav
-npx hyperframes tts script.txt --voice bf_emma --output narration.wav
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts "Your script here" --voice af_nova --output narration.wav
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts script.txt --voice bf_emma --output narration.wav
 ```
 
 In compositions:
@@ -65,8 +65,8 @@ In compositions:
 ## TTS + Captions Workflow
 
 ```bash
-npx hyperframes tts script.txt --voice af_heart --output narration.wav
-npx hyperframes transcribe narration.wav  # → transcript.json with word-level timestamps
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" tts script.txt --voice af_heart --output narration.wav
+"$OD_NODE_BIN" "$OD_HYPERFRAMES_BIN" transcribe narration.wav  # → transcript.json with word-level timestamps
 ```
 
 ## Requirements

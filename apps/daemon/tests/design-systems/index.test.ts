@@ -7,6 +7,7 @@ import {
   createUserDesignSystem,
   createUserDesignSystemRevision,
   deleteUserDesignSystem,
+  isTeamSyncedUserDesignSystem,
   linkUserDesignSystemProject,
   listDesignSystems,
   listUserDesignSystemFiles,
@@ -599,5 +600,31 @@ describe('design systems registry', () => {
     await expect(
       readDesignSystemStaticFile(root, created.id, '.od-generated.json', { idPrefix: 'user:' }),
     ).resolves.toBeNull();
+  });
+
+  // recvqb6mfyqXLD: `isTeamSyncedUserDesignSystem` is the signal routes use to
+  // decide whether a `user:`-prefixed system needs the team-share permission
+  // check before PATCH/DELETE — it must read the exact flag
+  // `markTeamSynced` (server.ts) writes onto a pulled system's metadata.json.
+  describe('isTeamSyncedUserDesignSystem', () => {
+    it('is false for a system the caller authored themselves', async () => {
+      const created = await createUserDesignSystem(root, { title: 'My Own System' });
+      await expect(isTeamSyncedUserDesignSystem(root, created.id)).resolves.toBe(false);
+    });
+
+    it('is true once metadata.json carries the teamSynced flag', async () => {
+      const created = await createUserDesignSystem(root, { title: 'Synced From Teammate' });
+      const dirId = created.id.slice('user:'.length);
+      const metadataPath = path.join(root, dirId, 'metadata.json');
+      const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as Record<string, unknown>;
+      await writeFile(metadataPath, JSON.stringify({ ...metadata, teamSynced: true }, null, 2), 'utf8');
+
+      await expect(isTeamSyncedUserDesignSystem(root, created.id)).resolves.toBe(true);
+    });
+
+    it('is false for an unknown or malformed id', async () => {
+      await expect(isTeamSyncedUserDesignSystem(root, 'user:does-not-exist')).resolves.toBe(false);
+      await expect(isTeamSyncedUserDesignSystem(root, 'not-a-user-id')).resolves.toBe(false);
+    });
   });
 });

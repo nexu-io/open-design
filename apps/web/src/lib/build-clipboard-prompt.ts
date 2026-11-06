@@ -34,7 +34,7 @@ export function buildClipboardPrompt({
 
   return `# Continue in CLI — ${project.name}
 
-You're picking up an Open Design project mid-flight in a fresh \`claude\` CLI session. Run \`claude\` at the working directory below; the design intent is captured in \`DESIGN.md\` at the project root.
+You're picking up an OpenDesign project mid-flight in a fresh \`claude\` CLI session. Run \`claude\` at the working directory below; the design intent is captured in \`DESIGN.md\` at the project root.
 
 ## Working directory
 

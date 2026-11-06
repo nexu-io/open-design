@@ -336,6 +336,23 @@ describe('marketplaces', () => {
     expect(resolved?.marketplaceTrust).toBe('official');
   });
 
+  it('keeps example-open-design-landing catalog version aligned with the bundled manifest', async () => {
+    const officialManifest = JSON.parse(await readFile(
+      new URL('../../../plugins/registry/official/open-design-marketplace.json', import.meta.url),
+      'utf8',
+    )) as {
+      plugins?: Array<{ name?: string; version?: string }>;
+    };
+    const sourceManifest = JSON.parse(await readFile(
+      new URL('../../../plugins/_official/examples/open-design-landing/open-design.json', import.meta.url),
+      'utf8',
+    )) as { version?: string };
+    const catalogEntry = officialManifest.plugins?.find(
+      (plugin) => plugin.name === 'open-design/example-open-design-landing',
+    );
+    expect(catalogEntry?.version).toBe(sourceManifest.version);
+  });
+
   it('keeps checked-in community registry entries pointed at source folders that can pack', async () => {
     const communityManifest = JSON.parse(await readFile(
       new URL('../../../plugins/registry/community/open-design-marketplace.json', import.meta.url),

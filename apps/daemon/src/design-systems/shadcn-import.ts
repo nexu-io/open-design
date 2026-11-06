@@ -1,4 +1,4 @@
-// Import a shadcn registry item as an Open Design design system.
+// Import a shadcn registry item as an OpenDesign design system.
 //
 // A shadcn registry item carries a `cssVars` theme (`theme` / `light` /
 // `dark`) plus optional component `files`. That maps almost 1:1 onto an OD

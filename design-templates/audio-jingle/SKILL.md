@@ -54,8 +54,10 @@ audio-jingle/
 ### Step 0 — Read the project metadata
 
 `audioKind`, `audioModel`, `audioDuration` (seconds), and (for speech)
-`voice`. Branch by `audioKind` and use the values verbatim — no
-clarifying form unless something is marked `(unknown — ask)`.
+`voice`. Branch by known values and use them verbatim. Missing metadata is not
+an instruction to ask: infer a safe default when possible, and emit a
+clarifying form only when the missing answer would materially change the
+requested output or prevent generation.
 
 Important: `voice` is provider-specific. For `minimax-tts`, `--voice`
 must be a valid MiniMax `voice_id` (for example `male-qn-qingse`), not

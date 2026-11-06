@@ -2,7 +2,7 @@
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`skills-protocol.md`](skills-protocol.md) · [`agent-adapters.md`](agent-adapters.md)
 
-Open Design has two related taxonomies:
+OpenDesign has two related taxonomies:
 
 - The **New Project UI** exposes six creation tabs: Prototype, Live Artifact,
   Deck, Template, Media, and Other. Media then selects Image, Video, or Audio.

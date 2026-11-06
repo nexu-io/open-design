@@ -1,71 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import os from 'node:os';
-import path from 'node:path';
-// node-pty is a native module; its TypeScript types resolve after
-// `pnpm install` compiles the addon. The dynamic import keeps the daemon
-// bootable even on a platform where the prebuilt binary is missing — a
-// terminal create that can't load the addon fails the single request
-// instead of crashing the process at module-eval time.
-import type * as NodePty from 'node-pty';
+import { loadNodePty } from './services/node-pty.js';
 
-/**
- * Resolve the candidate paths to node-pty's `spawn-helper` binary. On
- * macOS/Linux, `pty.fork` shells out to this helper via `posix_spawn`; node-pty
- * looks for the native artifacts under `build/Release` first and a
- * platform-tagged `prebuilds/<platform>-<arch>` dir second (see its
- * `loadNativeModule`). We return both so the executable-bit repair below covers
- * whichever one a given install produced. Empty on win32 (ConPTY has no helper)
- * or when node-pty can't be resolved at all.
- */
-export function spawnHelperCandidatePaths(): string[] {
-  if (process.platform === 'win32') return [];
-  let pkgRoot: string;
-  try {
-    // `node-pty`'s "main" is `lib/index.js`, so the package root is two levels
-    // up from the resolved entry. createRequire anchors resolution at this
-    // module regardless of how the daemon is bundled/run.
-    const require = createRequire(import.meta.url);
-    pkgRoot = path.dirname(path.dirname(require.resolve('node-pty')));
-  } catch {
-    return [];
-  }
-  return [
-    path.join(pkgRoot, 'build', 'Release', 'spawn-helper'),
-    path.join(pkgRoot, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'),
-  ];
-}
-
-/**
- * Restore the executable bit on node-pty's `spawn-helper`.
- *
- * pnpm unpacks node-pty's prebuilt binaries into `prebuilds/<platform>-<arch>/`
- * with mode 0644 — and node-pty's own `post-install.js` only chmods files under
- * `build/Release`, which a prebuild-based install never creates. The result is a
- * non-executable `spawn-helper`, so the very first `pty.spawn()` dies with
- * "posix_spawnp failed." (surfaced to the user as "无法启动终端会话" / "Could not
- * start the terminal session"). Re-adding +x before the first fork makes the
- * terminal self-heal across reinstalls without depending on an install hook.
- *
- * Best-effort and idempotent: a missing file (addon not installed for this
- * platform) or a read-only filesystem (e.g. a packaged app bundle) is swallowed,
- * and the subsequent spawn surfaces the real error instead.
- */
-export function ensureSpawnHelperExecutable(): void {
-  for (const file of spawnHelperCandidatePaths()) {
-    try {
-      const stat = fs.statSync(file);
-      // Owner already has the execute bit — nothing to repair.
-      if (stat.mode & 0o100) continue;
-      // OR in execute-for-all, preserving the existing read/write bits.
-      fs.chmodSync(file, stat.mode | 0o111);
-    } catch {
-      // Candidate not present on this install, or fs is read-only: ignore and
-      // let the spawn attempt report the underlying failure.
-    }
-  }
-}
+export {
+  ensureSpawnHelperExecutable,
+  spawnHelperCandidatePaths,
+} from './services/node-pty.js';
 
 /**
  * In-memory interactive Terminal session manager. Mirrors the chat-run
@@ -137,18 +77,6 @@ export function createTerminalService({
   shutdownGraceMs = 3_000,
 } = {}) {
   const sessions = new Map<string, any>();
-  // Lazily loaded so a missing/uncompiled native addon only fails the first
-  // create() instead of the whole daemon import.
-  let ptyModule: typeof NodePty | null = null;
-
-  const loadPty = async (): Promise<typeof NodePty> => {
-    if (ptyModule) return ptyModule;
-    // Repair the prebuilt spawn-helper's executable bit before the first fork;
-    // otherwise spawn() fails with "posix_spawnp failed." on macOS/Linux.
-    ensureSpawnHelperExecutable();
-    ptyModule = (await import('node-pty')) as typeof NodePty;
-    return ptyModule;
-  };
 
   const scheduleCleanup = (session: any) => {
     setTimeout(() => {
@@ -249,7 +177,7 @@ export function createTerminalService({
   };
 
   const create = async (meta: CreateTerminalMeta) => {
-    const pty = await loadPty();
+    const pty = await loadNodePty();
     const now = Date.now();
     const id = randomUUID();
     const cols = clampDimension(meta.cols, DEFAULT_COLS);

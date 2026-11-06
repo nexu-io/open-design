@@ -24,6 +24,8 @@ const baseSource = `<!doctype html>
       <section data-od-id="card" class="hero" style="color: red; padding: 8px;" data-keep="yes">Card</section>
       <p data-od-id="nested"><strong>Nested</strong> copy</p>
       <p>Generated path text</p>
+      <a data-od-id="ambiguous-cta" href="/mixed">Go to <strong>Lab</strong> now</a>
+      <button data-od-id="icon-label-button" data-od-edit="text"><svg viewBox="0 0 1 1"></svg><span>Filed</span></button>
     </main>
   </body>
 </html>`;
@@ -86,11 +88,36 @@ describe('manual edit source patches', () => {
     expect(html).toContain('<svg');
   });
 
-  it('rejects label edits for links with nested markup', () => {
+  it('replaces the sole label text node on a link with a decorative icon', () => {
+    // nested-cta is the icon-span + label-span shape reported in
+    // recvqafedTcNQF: a real label edit must not be rejected just because
+    // the link also carries a decorative <svg> sibling.
     const result = applyManualEditPatch(baseSource, { kind: 'set-link', id: 'nested-cta', text: 'Purchase', href: '/buy' });
+
+    expect(result.ok).toBe(true);
+    const html = readManualEditOuterHtml(result.source, 'nested-cta');
+    expect(html).toContain('href="/buy"');
+    expect(html).toContain('<span>Purchase</span>');
+    expect(html).toContain('<svg');
+  });
+
+  it('rejects label edits for links with genuinely ambiguous nested markup', () => {
+    // ambiguous-cta has three meaningful text nodes ("Go to ", "Lab", " now")
+    // straddling an inline <strong>, so there is no single unambiguous node
+    // to route a flat text edit to — the guard must still refuse this one.
+    const result = applyManualEditPatch(baseSource, { kind: 'set-link', id: 'ambiguous-cta', text: 'Go there', href: '/mixed' });
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('nested markup');
+  });
+
+  it('replaces the sole label text node on a text target with a decorative icon', () => {
+    const result = applyManualEditPatch(baseSource, { kind: 'set-text', id: 'icon-label-button', value: 'Saved' });
+
+    expect(result.ok).toBe(true);
+    const html = readManualEditOuterHtml(result.source, 'icon-label-button');
+    expect(html).toContain('<span>Saved</span>');
+    expect(html).toContain('<svg');
   });
 
   it('updates image src and alt', () => {

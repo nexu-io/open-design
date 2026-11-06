@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   formatFormAnswers,
+  hasUnterminatedQuestionForm,
   splitOnQuestionForms,
   parsePartialQuestionForm,
+  stripTrailingOpenQuestionForm,
 } from '../../src/artifacts/question-form';
 
 const VALID_BODY = `{
@@ -12,6 +14,61 @@ const VALID_BODY = `{
       "options": ["Mobile", "Desktop", "Responsive"], "required": true }
   ]
 }`;
+
+describe('unterminated question-form detection', () => {
+  // Production repro (OD Next strategy turn, no clarification needed): the
+  // model narrated its decision *into* an open tag instead of emitting a form.
+  // The tail is prose, so it can never become a form body — treating the tag
+  // as "a form is still streaming" spins the loading skeleton forever, hides
+  // every character after the tag, and latches the turn as awaiting input.
+  const PROSE_TAIL = '策略判断信息充足，将直接进入生产。\n\n<question-form> 无需提出';
+
+  it('does not treat a prose tail after the open tag as a form in flight', () => {
+    const result = stripTrailingOpenQuestionForm(PROSE_TAIL);
+    expect(result.hadOpenForm).toBe(false);
+    // Nothing may be swallowed: the narration after the tag is ordinary prose.
+    expect(result.text).toBe(PROSE_TAIL);
+    expect(hasUnterminatedQuestionForm(PROSE_TAIL)).toBe(false);
+  });
+
+  it('still reports a form in flight while its body is a plausible JSON prefix', () => {
+    const streaming = [
+      // stream stopped right after the tag — the body may still arrive
+      'One quick check:\n<question-form id="discovery" title="Brief">',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n',
+      // bare JSON prefix
+      'One quick check:\n<question-form id="discovery" title="Brief">{',
+      'One quick check:\n<question-form id="discovery" title="Brief">{"id":"x","questions":[',
+      // fenced ```json wrapper, including the fence itself mid-stream
+      'One quick check:\n<question-form id="discovery" title="Brief">\n``',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n```json',
+      'One quick check:\n<question-form id="discovery" title="Brief">\n```json\n{"questions":[',
+      // the alias tag behaves identically
+      'One quick check:\n<ask-question id="discovery">{"questions":[',
+    ];
+    for (const input of streaming) {
+      const result = stripTrailingOpenQuestionForm(input);
+      expect({ input, hadOpenForm: result.hadOpenForm }).toEqual({ input, hadOpenForm: true });
+      expect(result.text).toBe('One quick check:\n');
+      expect(hasUnterminatedQuestionForm(input)).toBe(true);
+    }
+  });
+
+  it('keeps scanning past a prose tag so a real form later in the message still counts', () => {
+    const input =
+      'Head.\n<question-form> 无需提出\n\nActually:\n<question-form id="d">{"questions":[';
+    const result = stripTrailingOpenQuestionForm(input);
+    expect(result.hadOpenForm).toBe(true);
+    expect(result.text).toBe('Head.\n<question-form> 无需提出\n\nActually:\n');
+  });
+
+  it('leaves a completed form block alone', () => {
+    const input = `Intro.\n<question-form id="discovery">\n${VALID_BODY}\n</question-form>\nOutro.`;
+    const result = stripTrailingOpenQuestionForm(input);
+    expect(result.hadOpenForm).toBe(false);
+    expect(result.text).toBe(input);
+  });
+});
 
 describe('form content language (lang)', () => {
   it('parses a top-level lang tag from the complete form body', () => {
@@ -80,6 +137,65 @@ describe('form content language (lang)', () => {
 });
 
 describe('splitOnQuestionForms', () => {
+  it('renders the legacy child-tag form persisted by older conversations', () => {
+    const input = [
+      '<question-form id="audio-brief" title="Audio brief">',
+      '  <question-select id="format" label="Which format?" required="true">',
+      '    <option value="mp3">MP3</option>',
+      '    <option value="wav">WAV</option>',
+      '  </question-select>',
+      '  <question-text id="mood" label="Describe the mood" placeholder="Warm and concise" />',
+      '</question-form>',
+    ].join('\n');
+
+    expect(splitOnQuestionForms(input)).toEqual([
+      {
+        kind: 'form',
+        raw: input,
+        form: {
+          id: 'audio-brief',
+          title: 'Audio brief',
+          questions: [
+            {
+              id: 'format',
+              label: 'Which format?',
+              type: 'select',
+              required: true,
+              options: [
+                { label: 'MP3', value: 'mp3' },
+                { label: 'WAV', value: 'wav' },
+              ],
+            },
+            {
+              id: 'mood',
+              label: 'Describe the mood',
+              type: 'text',
+              placeholder: 'Warm and concise',
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('keeps a streamed legacy child-tag form hidden instead of leaking markup', () => {
+    const partial = [
+      'One quick check.\n',
+      '<question-form id="audio-brief" title="Audio brief">',
+      '<question-select id="format" label="Which format?">',
+      '<option value="mp3">MP3</option>',
+    ].join('');
+
+    expect(stripTrailingOpenQuestionForm(partial)).toEqual({
+      text: 'One quick check.\n',
+      hadOpenForm: true,
+    });
+    expect(parsePartialQuestionForm(partial)).toMatchObject({
+      id: 'audio-brief',
+      title: 'Audio brief',
+    });
+  });
+
   it('normalizes string and object question options', () => {
     const input = [
       '<question-form id="discovery" title="Quick brief">',
@@ -340,14 +456,16 @@ describe('splitOnQuestionForms', () => {
       `<question-form id="discovery" title="Quick brief">${VALID_BODY}</question-form>\n\n` +
       `Now I'll proceed.`;
     const out = splitOnQuestionForms(input);
-    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
-    if (out[2]?.kind === 'form') {
-      expect(out[2].form.id).toBe('discovery');
-      expect(out[2].form.questions).toHaveLength(1);
-    }
+    const forms = out.filter((segment) => segment.kind === 'form');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.form).toMatchObject({
+      id: 'discovery', title: 'Quick brief',
+      questions: [{ id: 'platform', label: 'Platform', type: 'radio', required: true,
+        options: [{ label: 'Mobile' }, { label: 'Desktop' }, { label: 'Responsive' }] }],
+    });
     // Segments must reconstruct the input without gaps or duplication.
     const reconstructed = out
-      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .map((s) => (s.kind === 'form' ? s.raw : s.text))
       .join('');
     expect(reconstructed).toBe(input);
   });
@@ -358,13 +476,15 @@ describe('splitOnQuestionForms', () => {
       `<question-form id="real" title="Brief">${VALID_BODY}</question-form>\n\n` +
       `Done.`;
     const out = splitOnQuestionForms(input);
-    expect(out.map((s) => s.kind)).toEqual(['text', 'text', 'form', 'text']);
-    if (out[2]?.kind === 'form') {
-      expect(out[2].form.id).toBe('real');
-      expect(out[2].form.questions).toHaveLength(1);
-    }
+    const forms = out.filter((segment) => segment.kind === 'form');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.form).toMatchObject({
+      id: 'real', title: 'Brief',
+      questions: [{ id: 'platform', label: 'Platform', type: 'radio', required: true,
+        options: [{ label: 'Mobile' }, { label: 'Desktop' }, { label: 'Responsive' }] }],
+    });
     const reconstructed = out
-      .map((s) => (s.kind === 'form' ? (s as { raw: string }).raw : (s as { text: string }).text))
+      .map((s) => (s.kind === 'form' ? s.raw : s.text))
       .join('');
     expect(reconstructed).toBe(input);
   });
@@ -425,15 +545,15 @@ describe('parsePartialQuestionForm (true token-by-token streaming)', () => {
     ).toBe('discovery');
   });
 
-  it('does not let a nested question id/description masquerade as form metadata', () => {
+  it('does not let nested or legacy description data become form metadata', () => {
     // No form-level id on the tag or top-level body — only a question-level
     // id. The form id must stay the stable fallback, not adopt "platform"
     // (which would change the live panel's identity mid-stream).
     const f = parsePartialQuestionForm(
-      '<question-form>{"questions":[{"id":"platform","label":"Platform","description":"nested"',
+      '<question-form>{"description":"legacy","questions":[{"id":"platform","label":"Platform","description":"nested"',
     );
     expect(f?.id).toBe('discovery');
-    expect(f?.description).toBeUndefined();
+    expect(f).not.toHaveProperty('description');
     expect(f?.questions.map((q) => q.label)).toEqual(['Platform']);
   });
 

@@ -27,7 +27,7 @@ function grokModelSupportsReasoningEffort(model: string | null | undefined): boo
 // which symlinks `~/.grok/bin/grok` into PATH.
 //
 // `grok` ships its own SuperGrok OAuth dance (same `auth.x.ai` issuer +
-// loopback-redirect shape Open Design's xAI Settings panel uses), so it's
+// loopback-redirect shape OpenDesign's xAI Settings panel uses), so it's
 // already authenticated by the time OD detects the binary; OD does not
 // need to inject credentials. Users authenticate once with `grok login
 // --oauth` and the resulting `~/.grok/auth.json` is what every spawned

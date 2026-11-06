@@ -31,43 +31,12 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('Design Files preview list styles', () => {
-  it('keeps preview-mode rows readable instead of collapsing the name cell', () => {
-    const previewNameCell = cssDeclarations(
-      routinesCss,
-      '.app .df-panel:not(.no-preview) .df-cell-name',
-    );
-    const rowSub = cssDeclarations(designFilesCss, '.df-row-sub');
-    const rowSubPart = cssDeclarations(designFilesCss, '.df-row-sub > span');
-
-    expect(ruleValue(previewNameCell, 'max-width')).toBe('none');
-    expect(ruleValue(rowSub, 'flex-wrap')).toBe('nowrap');
-    expect(ruleValue(rowSub, 'overflow')).toBe('hidden');
-    expect(ruleValue(rowSubPart, 'text-overflow')).toBe('ellipsis');
-  });
-
-  it('keeps the preview split from squeezing the file list toolbar', () => {
-    const previewGrid = cssDeclarations(routinesCss, '.app .df-panel:not(.no-preview)');
-    const topbar = cssDeclarations(designFilesCss, '.df-topbar');
-    const actions = cssDeclarations(designFilesCss, '.df-actions');
-    const topbarLeft = cssDeclarations(designFilesCss, '.df-topbar-left');
-
-    const cols = ruleValue(previewGrid, 'grid-template-columns');
-    // The file list keeps a usable minimum so its toolbar + names stay
-    // clickable on a narrow split…
-    expect(cols).toContain('minmax(280px, 1fr)');
-    // …while the preview pane YIELDS (minmax(0, …)) instead of pinning a
-    // rigid track, so the two columns never sum past the panel width and
-    // push the toolbar / preview off-screen.
-    expect(cols).toMatch(/minmax\(0,\s*\d+px\)/);
-    // The toolbar stays on a single row: it does NOT wrap; instead the
-    // breadcrumb (the growable/shrinkable side) yields while the action
-    // cluster holds its place on the right.
-    expect(ruleValue(topbar, 'flex-wrap')).toBe('nowrap');
-    expect(ruleValue(actions, 'flex-wrap')).toBe('nowrap');
-    expect(ruleValue(actions, 'flex-shrink')).toBe('0');
-    expect(ruleValue(topbarLeft, 'min-width')).toBe('0');
-  });
-
+  // The two preview-split cases that used to live here are gone with the
+  // pane itself (#5517: a click opens the file in a workspace tab). They
+  // asserted the `.df-panel:not(.no-preview)` grid and the name-cell rules
+  // that only existed to keep rows readable beside that pane; keeping them
+  // would pin CSS whose subject no longer renders. The invariants below are
+  // independent of the preview and stay.
   it('collapses toolbar actions to icons-only on a narrow list column', () => {
     const main = cssDeclarations(designFilesCss, '.df-main');
     // The list column is its own query container so the toolbar reacts to
@@ -81,20 +50,32 @@ describe('Design Files preview list styles', () => {
     );
   });
 
-  it('keeps selection actions sticky and renders rounded row checkboxes', () => {
+  it('scrolls both bars with the content and colors the glyph row checkboxes', () => {
+    const tabs = cssDeclarations(designFilesCss, '.df-tabs');
     const batchBar = cssDeclarations(designFilesCss, '.df-batch-bar');
     const row = cssDeclarations(designFilesCss, '.df-row');
     const selectedRow = cssDeclarations(designFilesCss, '.df-row.selected');
     const rowCheck = cssDeclarations(designFilesCss, '.df-row-check');
-    const rowCheckBox = cssDeclarations(designFilesCss, '.df-row-check-box');
+    const checkedRowCheck = cssDeclarations(
+      designFilesCss,
+      '.df-row-check[aria-checked="true"]',
+    );
     const rowSize = cssDeclarations(designFilesCss, '.df-row-size');
 
-    expect(ruleValue(batchBar, 'position')).toBe('sticky');
-    expect(ruleValue(batchBar, 'top')).toBe('0');
+    // Neither bar pins any more (320a36ac1): the category tab bar's sticky
+    // near-opaque strip read as a full-width gray band, so it now scrolls
+    // with the content and paints nothing, letting the panel's veil wash
+    // show through behind the tab pills. See the two obsolete cases this
+    // replaces — the "which bar owns the sticky slot" and "keep the sticky
+    // bar opaque" invariants both died with the sticky bar itself.
+    expect(tabs).not.toMatch(/position\s*:/);
+    expect(tabs).not.toMatch(/background\s*:/);
+    expect(batchBar).not.toMatch(/position\s*:/);
     expect(ruleValue(row, 'grid-template-columns')).toContain('minmax(56px, auto)');
     expect(ruleValue(selectedRow, 'border-radius')).toBe('8px');
     expect(ruleValue(rowCheck, 'border-radius')).toBe('7px');
-    expect(ruleValue(rowCheckBox, 'border-radius')).toBe('5px');
+    // The Remix checkbox glyph carries the box shape; the check span colors it.
+    expect(ruleValue(checkedRowCheck, 'color')).toBe('var(--accent-strong)');
     expect(ruleValue(rowSize, 'text-align')).toBe('right');
   });
 

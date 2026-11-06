@@ -16,6 +16,10 @@ import { installResourceErrorObserver } from './resource-error';
 import { installBootTimingObserver } from './boot-timing';
 import { installVisibilityObserver } from './visibility';
 import { installWhiteScreenDetector } from './white-screen';
+import { installPreviewIframeMessageObserver } from './iframe-error';
+import { installChatInteractionObserver } from './chat-interaction';
+import { installChatScrollFreezeObserver } from './chat-scroll-freeze';
+import { installChatScrollForensicsRetention } from './chat-scroll-forensics';
 
 let installed = false;
 
@@ -30,6 +34,23 @@ export function installWebObservability(): () => void {
     installBootTimingObserver(),
     installVisibilityObserver(),
     installWhiteScreenDetector(),
+    installPreviewIframeMessageObserver(),
+    // Chat input latency is global rather than per-surface: the Event
+    // Timing observer must already be listening when the user's first
+    // interaction lands, which is well before any chat surface mounts.
+    // It attributes entries to the chat panel itself and ignores the rest.
+    installChatInteractionObserver(),
+    // The scroll-freeze probe is global for the same reason: it has to be
+    // listening before the chat log first auto-scrolls, because that is
+    // the transition it most needs in its ring buffer. It discovers the
+    // log from the first scroll event that comes out of it and stays inert
+    // until then.
+    installChatScrollFreezeObserver(),
+    // Banks a full forensic scene the moment the probe calls a freeze, because
+    // the export button lives behind a route change that unmounts the chat log
+    // and takes the frozen surface with it. Costs one empty subscription until
+    // a freeze actually happens. See chat-scroll-forensics.ts.
+    installChatScrollForensicsRetention(),
   ];
 
   return () => {

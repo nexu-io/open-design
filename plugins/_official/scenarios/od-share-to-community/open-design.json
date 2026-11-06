@@ -22,14 +22,14 @@
   },
   "version": "0.1.0",
   "publishedAt": "2026-06-05T08:09:04Z",
-  "description": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to Open Design' submission action.",
+  "description": "Package the work the user just finished into an OpenDesign plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to OpenDesign' submission action.",
   "description_i18n": {
-    "en": "Package the work the user just finished into an Open Design plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to Open Design' submission action.",
-    "zh-CN": "把用户刚做完的作品打包成 Open Design 插件,然后引导他们点已有的 Add to My plugins / Open Design PR 按钮。由生成完成后的 'Share to Open Design' 投稿操作触发。"
+    "en": "Package the work the user just finished into an OpenDesign plugin and route them to the existing Add-to-My-plugins / Open-Design-PR buttons. Triggered by the post-completion 'Share to OpenDesign' submission action.",
+    "zh-CN": "把用户刚做完的作品打包成 OpenDesign 插件,然后引导他们点已有的 Add to My plugins / OpenDesign PR 按钮。由生成完成后的 'Share to OpenDesign' 投稿操作触发。"
   },
   "license": "MIT",
   "author": {
-    "name": "Open Design",
+    "name": "OpenDesign",
     "url": "https://github.com/nexu-io"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-share-to-community",
@@ -78,8 +78,8 @@
     ],
     "useCase": {
       "query": {
-        "en": "Package the work I just finished in this project as an Open Design plugin so I can install it into My plugins and open a PR to the Open Design community catalog. Auto-derive the manifest from what's already in the project — don't ask me for fields the project files already answer.",
-        "zh-CN": "把我在这个 project 里刚做完的作品打包成一个 Open Design 插件,让我可以安装到 My plugins 并提交 PR 到 Open Design 社区。manifest 从项目里已有的内容自动推断,别问我已经能从文件里看出来的字段。"
+        "en": "Package the work I just finished in this project as an OpenDesign plugin so I can install it into My plugins and open a PR to the OpenDesign community catalog. Auto-derive the manifest from what's already in the project — don't ask me for fields the project files already answer.",
+        "zh-CN": "把我在这个 project 里刚做完的作品打包成一个 OpenDesign 插件,让我可以安装到 My plugins 并提交 PR 到 OpenDesign 社区。manifest 从项目里已有的内容自动推断,别问我已经能从文件里看出来的字段。"
       }
     }
   }

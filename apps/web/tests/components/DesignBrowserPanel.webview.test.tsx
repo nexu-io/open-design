@@ -358,7 +358,13 @@ describe('DesignBrowserPanel <webview> navigation', () => {
     });
 
     // The listed image is never fetched, and the manifest records no resources.
-    expect(fetchMock).not.toHaveBeenCalled();
+    // (`/api/workspace/context` is the unrelated workspace-identity read every
+    // mounted DesignBrowserPanel now fires via useWorkspaceContext — filtered
+    // out here since it isn't a page asset.)
+    const assetFetchCalls = fetchMock.mock.calls.filter(
+      ([url]) => url !== '/api/workspace/context',
+    );
+    expect(assetFetchCalls).toEqual([]);
     expect(writes.find((w) => w.name.endsWith('/page.html'))?.content).toContain('Example');
     expect(writes.find((w) => w.name.endsWith('/styles.css'))?.content).toContain('#111');
     const manifestWrite = writes.find((w) => w.name.endsWith('/manifest.json'));
@@ -768,7 +774,10 @@ describe('DesignBrowserPanel <webview> navigation', () => {
   });
 
   it('does not start browser element comments from the external browser toolbar', () => {
-    const onSendBoardCommentAttachments = vi.fn(async (_attachments: unknown[], _images?: File[]) => undefined);
+    const onSendBoardCommentAttachments = vi.fn(async (_attachments: unknown[], _images?: File[]) => ({
+      status: 'queued' as const,
+      commentIds: [],
+    }));
     const { container } = render(
       <DesignBrowserPanel
         initialUrl="https://example.com"

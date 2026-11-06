@@ -3,6 +3,7 @@ import type {
   ChatCommentSelectionKind,
   ChatMessage,
   PreviewAnnotationStyle,
+  PreviewCommentAnchorState,
   PreviewCommentAttachment,
   PreviewCommentMember,
   PreviewComment,
@@ -10,29 +11,11 @@ import type {
   PreviewCommentTarget,
   PreviewVisualMarkKind,
 } from './types';
+import { overlayBoundsFromSnapshot, resolveCommentAnchor } from './comments/anchor';
+import type { CommentAnchorResolution, PreviewCommentSnapshot } from './comments/anchor';
 
-export interface PreviewCommentSnapshot {
-  filePath: string;
-  elementId: string;
-  selector: string;
-  label: string;
-  text: string;
-  position: { x: number; y: number; width: number; height: number };
-  hoverPoint?: { x: number; y: number };
-  htmlHint: string;
-  style?: PreviewAnnotationStyle;
-  selectionKind?: PreviewCommentSelectionKind;
-  memberCount?: number;
-  podMembers?: PreviewCommentMember[];
-  slideIndex?: number;
-}
-
-export interface CommentOverlayBounds {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
+export { overlayBoundsFromSnapshot, resolveCommentAnchor };
+export type { CommentAnchorResolution, PreviewCommentSnapshot };
 
 export interface VisualAnnotationTarget {
   filePath: string;
@@ -177,6 +160,7 @@ export function commentSnapshotEqual(
   if (!commentSnapshotOverlayEqual(a, b)) return false;
   return (
     a.selector === b.selector
+    && a.domSelector === b.domSelector
     && a.label === b.label
     && trimContextText(a.text) === trimContextText(b.text)
     && trimHtmlHint(a.htmlHint) === trimHtmlHint(b.htmlHint)
@@ -201,38 +185,29 @@ export function liveCommentTargetMapsEqual(
   return true;
 }
 
-export function overlayBoundsFromSnapshot(
-  snapshot: PreviewCommentSnapshot,
-  scale: number,
-  offset: { x: number; y: number } = { x: 0, y: 0 },
-): CommentOverlayBounds {
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  const position = normalizePosition(snapshot.position);
-  return {
-    left: offset.x + position.x * safeScale,
-    top: offset.y + position.y * safeScale,
-    width: Math.max(1, position.width * safeScale),
-    height: Math.max(1, position.height * safeScale),
-  };
-}
-
 export function liveSnapshotForComment(
   comment: PreviewComment,
   snapshots: Map<string, PreviewCommentSnapshot>,
 ): PreviewCommentSnapshot | null {
   const snapshot = snapshots.get(comment.elementId);
-  if (snapshot && snapshot.filePath === comment.filePath && isValidCommentOverlayPosition(snapshot.position)) {
-    return snapshot;
-  }
-  if (!comment.elementId.startsWith('pin-')) return null;
-  if (!isValidCommentOverlayPosition(comment.position)) return null;
+  if (snapshot && snapshot.filePath === comment.filePath && isValidCommentOverlayPosition(snapshot.position)) return snapshot;
+  return comment.elementId.startsWith('pin-') && isValidCommentOverlayPosition(comment.position)
+    ? ghostSnapshotFromComment(comment)
+    : null;
+}
+
+function validPosition(position: PreviewComment['position'] | undefined): PreviewCommentSnapshot['position'] | undefined {
+  return position && isValidCommentOverlayPosition(position) ? normalizePosition(position) : undefined;
+}
+
+function ghostSnapshotFromComment(comment: PreviewComment, position?: PreviewCommentSnapshot['position']): PreviewCommentSnapshot {
   return {
     filePath: comment.filePath,
     elementId: comment.elementId,
     selector: comment.selector,
     label: comment.label,
     text: trimContextText(comment.text),
-    position: normalizePosition(comment.position),
+    position: normalizePosition(position ?? comment.position),
     htmlHint: trimHtmlHint(comment.htmlHint),
     style: normalizeStyle(comment.style),
     selectionKind: comment.selectionKind === 'pod' ? 'pod' : 'element',
@@ -240,6 +215,36 @@ export function liveSnapshotForComment(
     podMembers: normalizeMembers(comment.podMembers),
     slideIndex: comment.slideIndex,
   };
+}
+
+export interface AnchorWriteBack {
+  commentId: string;
+  anchorState: PreviewCommentAnchorState;
+  lastGoodPosition: PreviewCommentSnapshot['position'];
+}
+
+/**
+ * The only durable fact the drift ladder needs to persist: when a comment first
+ * becomes `lost`, capture its last-good position so the ghost pin keeps a stable
+ * spot even after the anchoring content is gone. The anchored /
+ * reanchored / stale states are derived per-viewer against that viewer's live
+ * snapshots, so they are intentionally NOT written back — persisting them would
+ * let one member's view overwrite another's. This is idempotent: a comment that
+ * already carries a stored lastGoodPosition is skipped, so re-renders of the
+ * same lost comment never produce a write storm.
+ */
+export function planLostAnchorWriteBacks(
+  entries: Array<{ comment: PreviewComment; resolution: CommentAnchorResolution }>,
+): AnchorWriteBack[] {
+  const out: AnchorWriteBack[] = [];
+  for (const { comment, resolution } of entries) {
+    if (resolution.state !== 'lost') continue;
+    if (validPosition(comment.lastGoodPosition)) continue; // already durable — idempotent
+    const lastGoodPosition = resolution.snapshot ? validPosition(resolution.snapshot.position) : undefined;
+    if (!lastGoodPosition) continue; // no ghost position to anchor even a lost pin
+    out.push({ commentId: comment.id, anchorState: 'lost', lastGoodPosition });
+  }
+  return out;
 }
 
 export function commentToAttachment(
@@ -278,6 +283,33 @@ export function commentToAttachment(
 
 export function commentsToAttachments(comments: PreviewComment[]): ChatCommentAttachment[] {
   return comments.map((comment, index) => commentToAttachment(comment, index + 1));
+}
+
+/**
+ * Provisional canvas pin number for a comment that has not been saved yet.
+ *
+ * Invariant: a new pin gets one past the HIGHEST pin number the daemon could
+ * already have handed out for this file — mirroring its `MAX(pin_seq)+1`
+ * assignment rule (`upsertPreviewComment` in apps/daemon/src/db.ts), which
+ * scans every row for the project/file regardless of status — never
+ * `count + 1`. Pin numbers are permanent: deleting a comment retires its
+ * number, and a non-open comment (resolved / attached / applying /
+ * needs_review / failed) keeps its row — and therefore its number — even
+ * though the canvas renders no marker for it. Callers must therefore pass
+ * the file's comments across ALL statuses, not just the open ones on screen.
+ *
+ * A comment without a server-assigned `pinSeq` yet (legacy row / test
+ * fixture) contributes its creation rank (`index + 1` — callers pass
+ * `comments` in creation order), matching the daemon's creation-ordered
+ * `pin_seq` backfill for pre-`pin_seq` rows.
+ */
+export function provisionalNextPinNumber(comments: readonly PreviewComment[]): number {
+  let highest = 0;
+  comments.forEach((comment, index) => {
+    const rendered = typeof comment.pinSeq === 'number' ? comment.pinSeq : index + 1;
+    if (rendered > highest) highest = rendered;
+  });
+  return highest + 1;
 }
 
 export function buildBoardCommentAttachments(input: {

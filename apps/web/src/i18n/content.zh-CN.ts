@@ -1,6 +1,10 @@
 import type { PromptTemplateSummary } from '../types';
 
 export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePrompt?: string }> = {
+  'motion-design': {
+    description: '辅助当前任务梳理动效脚本、画面连续性、节奏与时间轴实现；产物创建和导出由任务流程负责。',
+    examplePrompt: '为专注计时器做一支15秒动效短片：让杂乱的想法汇聚成一件清晰的行动，用富有表现力的文字、贯穿的视觉元素和有力的收尾表达。',
+  },
   '8-bit-orbit-video-template': {
     description:
       '基于 Hyperframes 的视频模板，用于复古像素卡组动效设计。\n当用户需要高保真、多场景的 HTML-to-video 合成，并配备高级转场、交互式预览控件和开箱即用的默认样式时使用。',
@@ -21,7 +25,7 @@ export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'agent-browser': {
     description:
-      '面向 AI agent 的浏览器自动化 CLI。当用户需要检查、\n测试或自动化浏览器行为时使用：导航页面、填写表单、\n点击按钮、截图、提取页面数据、读取选中的\nOpen Design 浏览器标签页上下文、测试 web 应用、试用 Open Design\n预览、QA、缺陷排查或评审应用质量。除非用户明确要求外部浏览，\n否则优先使用本地 Open Design 预览 URL。',
+      '面向 AI agent 的浏览器自动化 CLI。当用户需要检查、\n测试或自动化浏览器行为时使用：导航页面、填写表单、\n点击按钮、截图、提取页面数据、读取选中的\nOpenDesign 浏览器标签页上下文、测试 web 应用、试用 OpenDesign\n预览、QA、缺陷排查或评审应用质量。除非用户明确要求外部浏览，\n否则优先使用本地 OpenDesign 预览 URL。',
     examplePrompt:
       '面向 AI agent 的浏览器自动化 CLI。',
   },
@@ -849,7 +853,7 @@ export const ZH_CN_SKILL_COPY: Record<string, { description?: string; examplePro
   },
   'ui-ux-pro-max': {
     description:
-      '仅目录索引的 UI/UX Pro Max 条目。完整的上游模板、数据和搜索工作流并未打包进 Open Design。',
+      '仅目录索引的 UI/UX Pro Max 条目。完整的上游模板、数据和搜索工作流并未打包进 OpenDesign。',
     examplePrompt:
       '仅目录索引的 UI/UX Pro Max 条目。',
   },
@@ -959,6 +963,7 @@ export const ZH_CN_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': '柔和圆润、类似 3D 的造型，模拟可塑黏土质感，搭配俏皮蓬松的元素与多彩表面。',
   'clean': '聚焦极简的设计，采用充裕的留白、清晰易读的字体和有限的配色，减少视觉杂乱。',
   'clickhouse': '高速分析数据库。黄色点缀，技术文档风格。',
+  'cloudflare-kumo': 'Cloudflare 面向现代 Web 应用的组件系统：语义化明暗主题令牌、紧凑的 Inter 字体层级、分层中性色表面、无障碍控件与图表配色指南。',
   'cohere': '企业级 AI 平台。鲜艳的渐变，数据丰富的仪表盘美学。',
   'coinbase': '加密货币交易所。简洁的蓝色品牌识别，注重信赖感，带有机构级的质感。',
   'colorful': '鲜艳、高对比的配色与渐变，营造引人入胜、令人难忘的现代用户体验。',

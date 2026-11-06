@@ -3,6 +3,8 @@ import type { ByokChatProviderConfig } from '@open-design/contracts';
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
 export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
+export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
+  'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
 
@@ -72,11 +74,16 @@ export function buildOpenCodeByokProviderConfig(
   const config = {
     provider: {
       [BYOK_OPENCODE_PROVIDER_ID]: {
-        name: 'Open Design BYOK',
+        name: 'OpenDesign BYOK',
         ...providerEntry,
         models: {
           [rawModel]: {
             name: rawModel,
+            // BYOK capability is unknown, not text-only. Allow OpenCode to
+            // forward images (including later Read tool results) and let the
+            // configured endpoint validate them. This run-scoped transport
+            // policy is not a persisted claim about the model's capabilities.
+            modalities: { input: ['text', 'image'], output: ['text'] },
             limit: {
               context: DEFAULT_CONTEXT_TOKEN_LIMIT,
               output: DEFAULT_OUTPUT_TOKEN_LIMIT,
@@ -101,8 +108,8 @@ function normalizeProviderBaseUrl(
 ): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, '');
   if (!trimmed) return trimmed;
-  if (protocol === 'anthropic' && isExactOrigin(trimmed, 'https://api.anthropic.com')) {
-    return 'https://api.anthropic.com/v1';
+  if (protocol === 'anthropic' && !hasVersionedApiPath(trimmed)) {
+    return appendVersionedApiPath(trimmed);
   }
   if (protocol === 'openai' && isExactOrigin(trimmed, 'https://api.openai.com')) {
     return 'https://api.openai.com/v1';
@@ -131,7 +138,7 @@ function isLocalOllamaBaseUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
   } catch {
     return false;
   }
@@ -252,6 +259,20 @@ function safeUrlPathname(value: string): string {
     return new URL(value).pathname.replace(/\/+$/, '');
   } catch {
     return '';
+  }
+}
+
+function hasVersionedApiPath(value: string): boolean {
+  return /\/v\d+(?:\/|$)/.test(safeUrlPathname(value));
+}
+
+function appendVersionedApiPath(value: string): string {
+  try {
+    const url = new URL(value);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/v1`;
+    return url.toString();
+  } catch {
+    return `${value}/v1`;
   }
 }
 

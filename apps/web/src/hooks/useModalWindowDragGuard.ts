@@ -10,12 +10,11 @@ export const MODAL_WINDOW_DRAG_BACKDROP_SELECTOR = [
   '.plugin-details-modal-backdrop',
   '.plugins-import-modal__backdrop',
   '.ds-modal-backdrop',
-  '.prompt-template-modal-backdrop',
-  '.prompt-template-lightbox-backdrop',
   '.home-hero-confirm__backdrop',
   '.project-ds-picker-fullscreen',
   '.staged-preview-modal',
   '.qs-overlay',
+  '.community-template-preview',
 ].join(',');
 
 export function eventHitsModalWindowDragStrip(event: MouseEvent | PointerEvent): boolean {

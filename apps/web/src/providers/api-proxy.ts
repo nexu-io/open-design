@@ -5,8 +5,10 @@ import type {
   ProxyMessage,
   ProxyMessageContent,
   ProxyTextContentBlock,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { projectFileUrl } from './registry';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
 import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
@@ -25,6 +27,8 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
  */
 export interface ProxyContext {
   projectId?: string;
+  /** Exact persisted scope of `projectId`, captured when the turn starts. */
+  workspaceContext?: WorkspaceCollabContext | null;
   byokImageModel?: string;
   byokVideoModel?: string;
   byokSpeechModel?: string;
@@ -51,7 +55,12 @@ export async function streamProxyEndpoint(
     const messages = await buildProxyMessages(endpoint, history, context);
     const resp = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(context?.workspaceContext
+          ? workspaceProjectHeaders(context.workspaceContext)
+          : {}),
+      },
       body: JSON.stringify({
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
@@ -142,7 +151,11 @@ export async function buildProxyMessages(
   for (const message of history) {
     out.push({
       role: message.role,
-      content: await buildAnthropicMessageContent(message, context.projectId),
+      content: await buildAnthropicMessageContent(
+        message,
+        context.projectId,
+        context.workspaceContext,
+      ),
     });
   }
   return out;
@@ -155,6 +168,7 @@ function usesAnthropicMessagesPayload(endpoint: string): boolean {
 async function buildAnthropicMessageContent(
   message: ChatMessage,
   projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ProxyMessageContent> {
   const imageAttachments = sortAttachmentsByUserOrder(
     (message.attachments ?? []).filter((attachment) => attachment.kind === 'image'),
@@ -169,7 +183,11 @@ async function buildAnthropicMessageContent(
   }
 
   for (const attachment of imageAttachments) {
-    const block = await readAnthropicImageBlock(projectId, attachment.path);
+    const block = await readAnthropicImageBlock(
+      projectId,
+      attachment.path,
+      workspaceContext,
+    );
     if (block) {
       blocks.push(block);
     } else if (isAnthropicSupportedImagePath(attachment.path)) {
@@ -202,9 +220,13 @@ function sortAttachmentsByUserOrder<T extends { order?: number }>(attachments: T
 async function readAnthropicImageBlock(
   projectId: string,
   path: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ProxyImageContentBlock | null> {
   try {
-    const resp = await fetch(projectFileUrl(projectId, path), { cache: 'no-store' });
+    const resp = await fetch(projectFileUrl(projectId, path, workspaceContext), {
+      cache: 'no-store',
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    });
     if (!resp.ok) return null;
 
     const mediaType = supportedAnthropicImageMediaType(

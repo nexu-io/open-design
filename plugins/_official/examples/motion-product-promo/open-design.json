@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-product-promo",
+  "title": "Product Promo",
+  "title_i18n": {
+    "en": "Product Promo",
+    "id": "Video Promosi Produk",
+    "de": "Produkt-Promo",
+    "zh-CN": "产品宣传片",
+    "zh-TW": "產品宣傳片",
+    "pt-BR": "Vídeo promocional de produto",
+    "es-ES": "Vídeo promocional de producto",
+    "ru": "Промо-ролик продукта",
+    "fa": "ویدیوی تبلیغاتی محصول",
+    "ar": "فيديو ترويجي لمنتج",
+    "ja": "製品プロモーション動画",
+    "ko": "제품 홍보 영상",
+    "pl": "Film promocyjny produktu",
+    "hu": "Termékpromóciós videó",
+    "fr": "Vidéo promo produit",
+    "uk": "Промо-ролик продукту",
+    "tr": "Ürün Tanıtım Videosu",
+    "th": "วิดีโอโปรโมตสินค้า",
+    "it": "Video promozionale di prodotto"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-09T00:00:00Z",
+  "description": "A 15-second product promo rebuilt from the viral original with a fictional brand: a halftone mascot asks \"Got something to sell?\", product cards pop onto blue, a phone store fills in, a checkout board is stamped \"Handled.\" and the wordmark closes it.",
+  "description_i18n": {
+    "en": "A 15-second product promo rebuilt from the viral original with a fictional brand: a halftone mascot asks \"Got something to sell?\", product cards pop onto blue, a phone store fills in, a checkout board is stamped \"Handled.\" and the wordmark closes it.",
+    "id": "Video promosi produk 15 detik yang dibuat ulang dari versi viralnya dengan merek fiktif: maskot halftone bertanya \"Got something to sell?\", kartu produk muncul di latar biru, toko di ponsel terisi, papan checkout dicap \"Handled.\" dan logo menutup video.",
+    "de": "Ein 15-sekündiges Produkt-Promo nach dem viralen Original, mit fiktiver Marke: Ein Halftone-Maskottchen fragt „Got something to sell?“, Produktkarten springen auf Blau, ein Handy-Shop füllt sich, ein Checkout-Board bekommt den Stempel „Handled.“ und die Wortmarke schließt ab.",
+    "zh-CN": "按爆款原片复刻的 15 秒产品宣传片，品牌为虚构：网点风格的吉祥物问「Got something to sell?」，商品卡片在蓝底上弹出，手机商店逐项填满，结账面板盖上「Handled.」，最后以品牌字收尾。",
+    "zh-TW": "依爆紅原片復刻的 15 秒產品宣傳片，品牌為虛構：網點風格的吉祥物問「Got something to sell?」，商品卡片在藍底上彈出，手機商店逐項填滿，結帳面板蓋上「Handled.」，最後以品牌字收尾。",
+    "pt-BR": "Um vídeo promocional de produto de 15 segundos recriado do original viral com uma marca fictícia: um mascote em meio-tom pergunta \"Got something to sell?\", cards de produtos surgem no azul, uma loja no celular se preenche, um painel de checkout recebe o carimbo \"Handled.\" e a logomarca fecha o vídeo.",
+    "es-ES": "Un vídeo promocional de producto de 15 segundos recreado a partir del original viral con una marca ficticia: una mascota en semitono pregunta \"Got something to sell?\", las tarjetas de producto aparecen sobre azul, una tienda en el móvil se completa, un panel de pago recibe el sello \"Handled.\" y el logotipo cierra.",
+    "ru": "15-секундный промо-ролик продукта, воссозданный по вирусному оригиналу с вымышленным брендом: растровый маскот спрашивает «Got something to sell?», карточки товаров появляются на синем, магазин в телефоне заполняется, панель оплаты получает штамп «Handled.», а финал — логотип.",
+    "fa": "یک ویدیوی تبلیغاتی ۱۵ ثانیه‌ای که از نسخهٔ پربازدید اصلی با یک برند خیالی بازسازی شده است: یک شخصیت نمادین با بافت نقطه‌ای می‌پرسد «Got something to sell?»، کارت‌های محصول روی زمینهٔ آبی ظاهر می‌شوند، فروشگاهی در گوشی پر می‌شود، روی صفحهٔ پرداخت مهر «Handled.» می‌خورد و لوگو پایان‌بخش است.",
+    "ar": "فيديو ترويجي مدته 15 ثانية أُعيد بناؤه من الأصل الرائج بعلامة تجارية خيالية: تميمة بنمط النقاط النصفية تسأل \"Got something to sell?\"، وبطاقات المنتجات تظهر على الأزرق، ومتجر على الهاتف يمتلئ، ولوحة الدفع تُختم بـ \"Handled.\"، ثم يختتم الشعار الفيديو.",
+    "ja": "バズった原作を架空ブランドで再現した 15 秒の製品プロモーション動画。網点のマスコットが「Got something to sell?」と問いかけ、青い画面に商品カードが現れ、スマホのストアが埋まり、決済ボードに「Handled.」のスタンプが押され、ロゴで締めくくります。",
+    "ko": "화제가 된 원작을 가상의 브랜드로 재현한 15초 제품 홍보 영상. 망점 스타일 마스코트가 \"Got something to sell?\"라고 묻고, 파란 화면에 상품 카드가 튀어나오고, 휴대폰 스토어가 채워지고, 결제 보드에 \"Handled.\" 도장이 찍힌 뒤 로고로 마무리됩니다.",
+    "pl": "15-sekundowy film promocyjny odtworzony z viralowego oryginału z fikcyjną marką: maskotka w rastrze pyta „Got something to sell?”, karty produktów wyskakują na niebieskim tle, sklep w telefonie się zapełnia, panel płatności dostaje pieczątkę „Handled.”, a całość zamyka logo.",
+    "hu": "Egy 15 másodperces termékpromó a virális eredeti alapján, kitalált márkával: egy rasztermintás kabalafigura megkérdezi: „Got something to sell?”, termékkártyák ugranak a kék háttérre, megtelik egy mobilos webshop, a fizetési panel „Handled.” pecsétet kap, a végén pedig a logó jön.",
+    "fr": "Une vidéo promo produit de 15 secondes recréée à partir de l’original viral avec une marque fictive : une mascotte en trame demande « Got something to sell? », des cartes produits surgissent sur fond bleu, une boutique sur téléphone se remplit, un tableau de paiement reçoit le tampon « Handled. » et le logo conclut.",
+    "uk": "15-секундний промо-ролик продукту, відтворений за вірусним оригіналом із вигаданим брендом: растровий маскот питає «Got something to sell?», картки товарів з’являються на синьому, магазин у телефоні заповнюється, панель оплати отримує штамп «Handled.», а фінал — логотип.",
+    "tr": "Viral orijinalinden kurgusal bir markayla yeniden yapılan 15 saniyelik ürün tanıtımı: raster dokulu bir maskot \"Got something to sell?\" diye soruyor, ürün kartları maviye fırlıyor, telefondaki mağaza doluyor, ödeme panosuna \"Handled.\" damgası basılıyor ve logo kapanışı yapıyor.",
+    "th": "วิดีโอโปรโมตสินค้า 15 วินาทีที่สร้างใหม่จากต้นฉบับไวรัลด้วยแบรนด์สมมติ: มาสคอตลายฮาล์ฟโทนถามว่า \"Got something to sell?\" การ์ดสินค้าเด้งขึ้นบนพื้นสีน้ำเงิน ร้านค้าในมือถือค่อย ๆ เต็ม แผงชำระเงินถูกประทับตรา \"Handled.\" แล้วปิดท้ายด้วยโลโก้",
+    "it": "Un video promozionale di prodotto di 15 secondi ricreato dall’originale virale con un marchio di fantasia: una mascotte a retino chiede \"Got something to sell?\", le schede prodotto spuntano sul blu, un negozio sul telefono si riempie, un pannello di pagamento riceve il timbro \"Handled.\" e il logo chiude."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "product-promo",
+    "halftone",
+    "ui-motion",
+    "viral-remake"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a 15-second product promo for Pennyflow, a fictional payments product for creators, cut on the beat. A halftone 3D mascot whispers \"psst…\" and asks \"Got something to sell?\". Cards for courses, ebooks and apps pop onto a blue screen, a phone store fills in, and a checkout board handles card payment, an upsell, VAT and payouts before a \"Handled.\" stamp lands. End on \"You create. We handle the flow.\" and the Pennyflow wordmark with a Start selling button.",
+        "id": "Buat video promosi produk 15 detik untuk Pennyflow, produk pembayaran fiktif untuk kreator, dipotong mengikuti ketukan. Maskot 3D bergaya halftone berbisik \"psst…\" lalu bertanya \"Got something to sell?\". Kartu kursus, ebook, dan aplikasi muncul di layar biru, toko di ponsel terisi, dan papan checkout menangani pembayaran kartu, upsell, PPN, serta pencairan dana sebelum cap \"Handled.\" mendarat. Tutup dengan \"You create. We handle the flow.\" dan logo Pennyflow dengan tombol Start selling.",
+        "de": "Mach ein 15-sekündiges Produkt-Promo für Pennyflow, ein fiktives Zahlungsprodukt für Creator, im Takt geschnitten. Ein 3D-Maskottchen im Halftone-Look flüstert „psst…“ und fragt „Got something to sell?“. Karten für Kurse, E-Books und Apps springen auf einen blauen Screen, ein Handy-Shop füllt sich, und ein Checkout-Board erledigt Kartenzahlung, Upsell, Mehrwertsteuer und Auszahlungen, bevor der Stempel „Handled.“ landet. Schluss mit „You create. We handle the flow.“ und der Pennyflow-Wortmarke mit einem Start-selling-Button.",
+        "zh-CN": "为虚构的创作者支付产品 Pennyflow 做一支 15 秒的产品宣传片，按节拍剪辑。一个网点风格的 3D 吉祥物小声说「psst…」，然后问「Got something to sell?」。课程、电子书、App 三张商品卡片弹到蓝色画面上，手机商店逐项填满，结账面板依次处理刷卡付款、加购、增值税和收款，最后盖上「Handled.」印章。结尾是「You create. We handle the flow.」和带 Start selling 按钮的 Pennyflow 品牌字。",
+        "zh-TW": "為虛構的創作者支付產品 Pennyflow 做一支 15 秒的產品宣傳片，依節拍剪輯。一個網點風格的 3D 吉祥物小聲說「psst…」，然後問「Got something to sell?」。課程、電子書、App 三張商品卡片彈到藍色畫面上，手機商店逐項填滿，結帳面板依序處理刷卡付款、加購、增值稅和收款，最後蓋上「Handled.」印章。結尾是「You create. We handle the flow.」和帶 Start selling 按鈕的 Pennyflow 品牌字。",
+        "pt-BR": "Faça um vídeo promocional de 15 segundos para a Pennyflow, um produto fictício de pagamentos para criadores, cortado no ritmo. Um mascote 3D em meio-tom sussurra \"psst…\" e pergunta \"Got something to sell?\". Cards de cursos, e-books e apps surgem numa tela azul, uma loja no celular se preenche e um painel de checkout cuida do pagamento com cartão, do upsell, do imposto e dos repasses até o carimbo \"Handled.\" cair. Termine com \"You create. We handle the flow.\" e a logomarca Pennyflow com um botão Start selling.",
+        "es-ES": "Haz un vídeo promocional de 15 segundos para Pennyflow, un producto ficticio de pagos para creadores, montado al ritmo. Una mascota 3D en semitono susurra \"psst…\" y pregunta \"Got something to sell?\". Tarjetas de cursos, ebooks y apps aparecen sobre una pantalla azul, una tienda en el móvil se completa y un panel de pago gestiona el cobro con tarjeta, la venta adicional, el IVA y los pagos hasta que cae el sello \"Handled.\". Termina con \"You create. We handle the flow.\" y el logotipo de Pennyflow con un botón Start selling.",
+        "ru": "Сделай 15-секундный промо-ролик для Pennyflow — вымышленного платёжного продукта для авторов, с монтажом в ритм. 3D-маскот в растровой стилистике шепчет «psst…» и спрашивает «Got something to sell?». Карточки курсов, электронных книг и приложений появляются на синем экране, магазин в телефоне заполняется, а панель оплаты обрабатывает оплату картой, допродажу, НДС и выплаты, пока не опускается штамп «Handled.». Финал — «You create. We handle the flow.» и логотип Pennyflow с кнопкой Start selling.",
+        "fa": "یک ویدیوی تبلیغاتی ۱۵ ثانیه‌ای برای Pennyflow بساز، محصول پرداخت خیالی برای سازندگان محتوا، با تدوین هماهنگ با ضرب. یک شخصیت سه‌بعدی با بافت نقطه‌ای آرام می‌گوید «psst…» و می‌پرسد «Got something to sell?». کارت‌های دوره، کتاب الکترونیکی و اپلیکیشن روی صفحه‌ای آبی ظاهر می‌شوند، فروشگاهی در گوشی پر می‌شود و صفحهٔ پرداخت، پرداخت با کارت، فروش افزوده، مالیات و تسویه را انجام می‌دهد تا مهر «Handled.» بخورد. با «You create. We handle the flow.» و لوگوی Pennyflow همراه دکمهٔ Start selling تمام کن.",
+        "ar": "اصنع فيديو ترويجيًا مدته 15 ثانية لـ Pennyflow، وهو منتج دفع خيالي لصنّاع المحتوى، مع مونتاج على الإيقاع. تميمة ثلاثية الأبعاد بنمط النقاط النصفية تهمس \"psst…\" ثم تسأل \"Got something to sell?\". تظهر بطاقات للدورات والكتب الإلكترونية والتطبيقات على شاشة زرقاء، ويمتلئ متجر على الهاتف، وتتولى لوحة الدفع الدفع بالبطاقة والبيع الإضافي وضريبة القيمة المضافة والتحويلات حتى يهبط ختم \"Handled.\". اختم بعبارة \"You create. We handle the flow.\" وشعار Pennyflow مع زر Start selling.",
+        "ja": "クリエイター向けの架空の決済サービス Pennyflow の 15 秒プロモーション動画を、ビートに合わせた編集で作って。網点スタイルの 3D マスコットが「psst…」とささやき、「Got something to sell?」と問いかける。講座・電子書籍・アプリのカードが青い画面にポップし、スマホのストアが埋まり、決済ボードがカード決済、アップセル、付加価値税、入金を処理して「Handled.」のスタンプが押される。最後は「You create. We handle the flow.」と、Start selling ボタン付きの Pennyflow のロゴで締める。",
+        "ko": "크리에이터를 위한 가상의 결제 서비스 Pennyflow의 15초 제품 홍보 영상을 비트에 맞춰 편집해서 만들어 줘. 망점 스타일의 3D 마스코트가 \"psst…\"라고 속삭이고 \"Got something to sell?\"라고 묻는다. 강의, 전자책, 앱 카드가 파란 화면에 튀어나오고, 휴대폰 스토어가 채워지고, 결제 보드가 카드 결제, 추가 판매, 부가세, 정산을 처리한 뒤 \"Handled.\" 도장이 찍힌다. 마지막은 \"You create. We handle the flow.\"와 Start selling 버튼이 있는 Pennyflow 로고로 끝낸다.",
+        "pl": "Zrób 15-sekundowy film promocyjny dla Pennyflow, fikcyjnego produktu płatniczego dla twórców, zmontowany do rytmu. Maskotka 3D w stylu rastra szepcze „psst…” i pyta „Got something to sell?”. Karty kursów, e-booków i aplikacji wyskakują na niebieskim ekranie, sklep w telefonie się zapełnia, a panel płatności obsługuje płatność kartą, dosprzedaż, VAT i wypłaty, aż spada pieczątka „Handled.”. Zakończ hasłem „You create. We handle the flow.” i logo Pennyflow z przyciskiem Start selling.",
+        "hu": "Készíts egy 15 másodperces termékpromót a Pennyflow-nak, egy kitalált, alkotóknak szóló fizetési terméknek, ütemre vágva. Egy rasztermintás 3D kabalafigura azt suttogja: „psst…”, majd megkérdezi: „Got something to sell?”. Kurzus-, e-könyv- és alkalmazáskártyák ugranak egy kék képernyőre, megtelik egy mobilos webshop, a fizetési panel pedig intézi a kártyás fizetést, a kiegészítő vásárlást, az áfát és a kifizetéseket, mire lecsap a „Handled.” pecsét. Zárd a „You create. We handle the flow.” felirattal és a Pennyflow logóval egy Start selling gombbal.",
+        "fr": "Fais une vidéo promo produit de 15 secondes pour Pennyflow, un produit de paiement fictif pour les créateurs, montée sur le rythme. Une mascotte 3D en trame chuchote « psst… » puis demande « Got something to sell? ». Des cartes de cours, d’ebooks et d’apps surgissent sur un écran bleu, une boutique sur téléphone se remplit, et un tableau de paiement gère le paiement par carte, la vente additionnelle, la TVA et les versements avant que le tampon « Handled. » ne tombe. Termine sur « You create. We handle the flow. » et le logo Pennyflow avec un bouton Start selling.",
+        "uk": "Зроби 15-секундний промо-ролик для Pennyflow — вигаданого платіжного продукту для авторів, із монтажем у ритм. 3D-маскот у растровій стилістиці шепоче «psst…» і питає «Got something to sell?». Картки курсів, електронних книжок і застосунків з’являються на синьому екрані, магазин у телефоні заповнюється, а панель оплати обробляє оплату карткою, допродаж, ПДВ і виплати, доки не опускається штамп «Handled.». Фінал — «You create. We handle the flow.» і логотип Pennyflow з кнопкою Start selling.",
+        "tr": "İçerik üreticileri için kurgusal bir ödeme ürünü olan Pennyflow için ritme göre kurgulanmış 15 saniyelik bir tanıtım videosu yap. Raster dokulu 3D bir maskot \"psst…\" diye fısıldıyor ve \"Got something to sell?\" diye soruyor. Kurs, e-kitap ve uygulama kartları mavi bir ekrana fırlıyor, telefondaki mağaza doluyor ve ödeme panosu kartla ödemeyi, ek satışı, KDV’yi ve ödemeleri hallediyor; ardından \"Handled.\" damgası iniyor. \"You create. We handle the flow.\" ve Start selling düğmeli Pennyflow logosuyla bitir.",
+        "th": "ทำวิดีโอโปรโมตสินค้า 15 วินาทีให้ Pennyflow ผลิตภัณฑ์รับชำระเงินสมมติสำหรับครีเอเตอร์ ตัดต่อตามจังหวะ มาสคอต 3D ลายฮาล์ฟโทนกระซิบว่า \"psst…\" แล้วถามว่า \"Got something to sell?\" การ์ดคอร์ส อีบุ๊ก และแอปเด้งขึ้นบนจอสีน้ำเงิน ร้านค้าในมือถือค่อย ๆ เต็ม และแผงชำระเงินจัดการการจ่ายด้วยบัตร การขายเพิ่ม ภาษีมูลค่าเพิ่ม และการโอนเงิน ก่อนตรา \"Handled.\" จะประทับลง ปิดท้ายด้วย \"You create. We handle the flow.\" และโลโก้ Pennyflow พร้อมปุ่ม Start selling",
+        "it": "Crea un video promozionale di 15 secondi per Pennyflow, un prodotto di pagamento di fantasia per creator, montato a tempo. Una mascotte 3D a retino sussurra \"psst…\" e chiede \"Got something to sell?\". Schede di corsi, ebook e app spuntano su uno schermo blu, un negozio sul telefono si riempie e un pannello di pagamento gestisce pagamento con carta, upsell, IVA e accrediti prima che cada il timbro \"Handled.\". Chiudi con \"You create. We handle the flow.\" e il logo Pennyflow con un pulsante Start selling."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Product Promo"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

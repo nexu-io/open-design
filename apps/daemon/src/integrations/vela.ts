@@ -1,20 +1,33 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
 import { createCommandInvocation } from '@open-design/platform';
 import type {
+  AmrAuthErrorKind,
+  AmrAuthNetworkPath,
+  AmrAuthStage,
+  AmrAuthStageResult,
   AmrEntryAttribution,
   TrackingAmrEntrySource,
+  TrackingCampaignConversionSource,
+  TrackingCampaignId,
   TrackingPageName,
 } from '@open-design/contracts/analytics';
+import type { AmrSessionState } from '@open-design/contracts';
 
+import {
+  applyAmrEndpointBinding,
+  amrStoredProfileMatchesBinding,
+  readAmrEndpointBinding,
+} from './amr-endpoint-binding.js';
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import { getAgentDef } from '../runtimes/registry.js';
 import { resolveAmrProfile } from './vela-profile.js';
+import { resolveEffectiveVelaConsoleOrigin } from './vela-console-origin.js';
 
 export { resolveAmrProfile } from './vela-profile.js';
 
@@ -24,6 +37,7 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'inline_model_switcher_amr_row',
   'settings_amr_agent_card',
   'settings_amr_authorize',
+  'settings_cloud_callout',
   'settings_amr_console',
   'settings_amr_install',
   'avatar_amr_console',
@@ -32,6 +46,8 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'chat_error_recharge',
   'chat_error_upgrade',
   'chat_balance_gate_upgrade',
+  'chat_upgrade_card',
+  'chat_upgrade_card_auto_recharge',
   'home_balance_gate_upgrade',
   'chat_low_balance_warn_recharge',
   'home_low_balance_warn_recharge',
@@ -43,11 +59,20 @@ const AMR_ENTRY_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'generation_preview_switch_retry_card',
   'settings_amr_upgrade',
   'inline_amr_upgrade',
+  'go_plan_sunset_modal',
+  'deepseek_unpaid_modal',
+  'deepseek_workbench_badge',
+  'deepseek_model_switcher_upgrade',
   'avatar_amr_upgrade',
   'avatar_amr_agent_card',
   'artifact_success_upgrade',
   'home_artifact_upgrade',
 ]);
+
+function isCanonicalAmrAuthAttemptId(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+}
 
 const AMR_ONBOARDING_PROFILE_SOURCES: ReadonlySet<TrackingAmrEntrySource> = new Set([
   'onboarding_amr_card',
@@ -68,6 +93,27 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
   'home',
 ]);
 
+// Fail-closed: an id missing here voids the WHOLE entry, not just its campaign
+// field, so a live campaign left out loses every attributed entry it produces.
+// Both are listed because entries minted during the finished free week can
+// still arrive within their attribution window.
+const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
+  'deepseek_v4_flash',
+  'deepseek_v4_pro',
+  'go_plan_sunset_202608',
+]);
+
+const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =
+  new Set([
+    'go_plan_sunset_modal',
+    'deepseek_unpaid_modal',
+    'deepseek_workbench_badge',
+    'deepseek_model_switcher_upgrade',
+    'landing_home_banner',
+    'landing_pricing_personal_plan',
+    'landing_pricing_team_plan',
+  ]);
+
 const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   TrackingAmrEntrySource,
   AmrEntrySourcePageName
@@ -77,6 +123,7 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   inline_model_switcher_amr_row: 'chat_panel',
   settings_amr_agent_card: 'settings',
   settings_amr_authorize: 'settings',
+  settings_cloud_callout: 'settings',
   settings_amr_console: 'settings',
   settings_amr_install: 'settings',
   avatar_amr_console: 'chat_panel',
@@ -85,6 +132,8 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   chat_error_recharge: 'chat_panel',
   chat_error_upgrade: 'chat_panel',
   chat_balance_gate_upgrade: 'chat_panel',
+  chat_upgrade_card: 'chat_panel',
+  chat_upgrade_card_auto_recharge: 'chat_panel',
   home_balance_gate_upgrade: 'home',
   chat_low_balance_warn_recharge: 'chat_panel',
   home_low_balance_warn_recharge: 'home',
@@ -96,6 +145,10 @@ const AMR_ENTRY_SOURCE_PAGE_BY_SOURCE: Record<
   generation_preview_switch_retry_card: 'file_manager',
   settings_amr_upgrade: 'settings',
   inline_amr_upgrade: 'chat_panel',
+  go_plan_sunset_modal: 'home',
+  deepseek_unpaid_modal: 'home',
+  deepseek_workbench_badge: 'home',
+  deepseek_model_switcher_upgrade: 'chat_panel',
   avatar_amr_upgrade: 'chat_panel',
   avatar_amr_agent_card: 'chat_panel',
   artifact_success_upgrade: 'artifact',
@@ -126,6 +179,10 @@ export interface AmrEntryAnalyticsPayload {
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   entryOccurredAt: string;
+  // Campaign dimensions mirrored from the web consent-gated channel so the
+  // AMR ingest body matches the local PostHog + redirect URL envelope.
+  campaignId?: TrackingCampaignId;
+  conversionSource?: TrackingCampaignConversionSource;
   // Optional self-reported onboarding profile, forwarded to AMR for paid-
   // conversion segmentation. Open strings (not a union) so a new onboarding
   // option never forces a contract bump on either side. useCase is multi-select.
@@ -201,8 +258,13 @@ export interface VelaUser {
   balanceUsd?: string | null;
 }
 
+export interface VelaRegistrationInvite { accountId: string; deviceAuthorizationId: string; }
+
 export interface VelaLoginStatus {
+  registrationInvite?: VelaRegistrationInvite;
   loggedIn: boolean;
+  sessionState?: AmrSessionState;
+  credentialRevision?: string;
   loginInFlight: boolean;
   profile: string;
   user: VelaUser | null;
@@ -226,6 +288,53 @@ export interface VelaLoginStatus {
   userCode?: string;
   /** True when vela warned it could not open the browser automatically. */
   browserOpenFailed?: boolean;
+  /**
+   * Origin of the vela web console this runtime talks to, when it was given
+   * one. See {@link resolveVelaConsoleOrigin} — the client needs it to build
+   * wallet / plans / upgrade links for a non-public AMR environment.
+   */
+  consoleOrigin?: string;
+  authAttemptId?: string;
+  authStages?: VelaLoginAuthStage[];
+  authRoute?: AmrAuthNetworkPath;
+  fallbackUsed?: boolean;
+  loginError?: string;
+}
+
+/**
+ * The vela web console origin this runtime was configured with, normalized
+ * without a trailing slash, or undefined when it was given none.
+ *
+ * Non-prod AMR environments are internal deployments, so their hostnames are
+ * not literals in this public repository: packaging injects the origin from a
+ * CI secret and the packaged runtime forwards it as `OD_VELA_WEB_URL`. Reporting
+ * it on the login status is how the web client learns which console to link to.
+ * The resolver combines that packaged origin with the settings-selected AMR
+ * profile, so a runtime switch cannot keep linking to the package's backend.
+ */
+export function resolveVelaConsoleOrigin(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): string | undefined {
+  return resolveEffectiveVelaConsoleOrigin(env, configuredEnv);
+}
+
+export interface VelaLoginAuthStage {
+  sequence: number;
+  stage: AmrAuthStage;
+  result: AmrAuthStageResult;
+  source: 'daemon';
+  occurredAt: string;
+  route: AmrAuthNetworkPath;
+  errorKind?: AmrAuthErrorKind;
+}
+
+export interface VelaLoginAttemptSnapshot {
+  authAttemptId?: string;
+  authStages?: VelaLoginAuthStage[];
+  authRoute?: AmrAuthNetworkPath;
+  fallbackUsed?: boolean;
+  loginError?: string;
 }
 
 export interface VelaLoginActivation {
@@ -275,7 +384,9 @@ export interface VelaCredentialRevision {
    * in app-config, not just process env). Env-backed sessions report
    * `user: null`, so without this an account switch that only rewrites the
    * Settings-backed env (leaving `~/.amr/config.json` untouched) would reuse the
-   * previous account's cached plan/balance. Empty for non-env auth.
+   * previous account's cached plan/balance. File-backed sessions fingerprint
+   * the stored keys as well, so a successful login is recognized even when a
+   * filesystem preserves the config mtime.
    */
   credentialFingerprint: string;
 }
@@ -288,15 +399,21 @@ export interface VelaControlApiContext {
   configMtimeMs: number | null;
 }
 
-export interface VelaControlApiContext {
+export interface VelaApiContext {
   profile: string;
   apiUrl: string;
-  controlKey: string;
-  user: VelaUser | null;
-  configMtimeMs: number | null;
+}
+
+export interface VelaRuntimeLinkContext {
+  profile: string;
+  linkUrl: string;
+  runtimeKey: string;
 }
 
 interface VelaProfileShape {
+  pendingLogin?: unknown;
+  controlKeyId?: string;
+  registrationInvite?: unknown;
   controlKey?: string;
   runtimeKey?: string;
   apiUrl?: string;
@@ -305,50 +422,147 @@ interface VelaProfileShape {
 }
 
 interface VelaConfigFileShape {
+  pendingRevocations?: unknown[];
   profiles?: Record<string, VelaProfileShape>;
+}
+
+interface VelaProfileConfigSnapshot {
+  profile: string;
+  stored: VelaProfileShape | undefined;
+  configMtimeMs: number | null;
 }
 
 export function mergeVelaEnv(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): NodeJS.ProcessEnv {
-  return {
+  return applyAmrEndpointBinding({
     ...env,
     ...configuredEnv,
-  };
+  });
 }
 
-function configDir(): string {
+function configDir(env: NodeJS.ProcessEnv = process.env): string {
+  const amrHome = (readAmrEndpointBinding(env) ? applyAmrEndpointBinding(env).AMR_HOME : env.AMR_HOME)?.trim();
+  if (amrHome === '~') return homedir();
+  if (amrHome?.startsWith('~/')) return path.join(homedir(), amrHome.slice(2));
+  if (amrHome) return amrHome;
   return path.join(homedir(), '.amr');
 }
 
-export function amrConfigPath(): string {
-  return path.join(configDir(), 'config.json');
+export function amrConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(configDir(env), 'config.json');
 }
 
-function readConfigFile(): VelaConfigFileShape | null {
-  const file = amrConfigPath();
+function readConfigFile(env: NodeJS.ProcessEnv = process.env, includeMismatched = false): VelaConfigFileShape | null {
+  const file = amrConfigPath(env);
   if (!existsSync(file)) return null;
   try {
     const data = readFileSync(file, 'utf8');
     const parsed = JSON.parse(data) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
-    return parsed as VelaConfigFileShape;
+    const config = parsed as VelaConfigFileShape;
+    const binding = readAmrEndpointBinding(env);
+    if (binding && !includeMismatched
+      && !amrStoredProfileMatchesBinding(config.profiles?.[binding.profile], env)) {
+      const profiles = { ...config.profiles };
+      delete profiles[binding.profile];
+      return { ...config, profiles };
+    }
+    return config;
   } catch {
     return null;
   }
+}
+
+function readVelaProfileConfigSnapshot(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaProfileConfigSnapshot {
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  const profile = resolveAmrProfile(mergedEnv);
+  const file = readConfigFile(mergedEnv);
+  const configPath = amrConfigPath(mergedEnv);
+  return {
+    profile,
+    stored: file?.profiles?.[profile],
+    configMtimeMs: existsSync(configPath) ? statSync(configPath).mtimeMs : null,
+  };
 }
 
 export function readVelaLoginStatus(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): VelaLoginStatus {
+  const rawStatus = readRawVelaLoginStatus(env, configuredEnv);
+  const credentialRevision = velaCredentialRevisionDigest(
+    readRawVelaCredentialRevision(env, configuredEnv, rawStatus),
+  );
+  let sessionState: AmrSessionState = 'authenticated';
+  if (!rawStatus.loggedIn) {
+    sessionState = 'signed_out';
+  } else if (expiredVelaCredentialRevisions.has(credentialRevision)) {
+    sessionState = 'reauth_required';
+  }
+  const { registrationInvite, ...sessionStatus } = rawStatus;
+  return {
+    ...sessionStatus,
+    ...(sessionState === 'authenticated' && registrationInvite ? { registrationInvite } : {}),
+    // `loggedIn` remains the backwards-compatible "credential is present"
+    // projection. Routing must not treat an expired credential like a brand
+    // new user and throw them back into first-run onboarding; new callers use
+    // `sessionState` for authoritative validity.
+    loggedIn: latestLoginAttempt?.completionPending && pendingVelaLoginTerminals > 0 ? false : rawStatus.loggedIn,
+    sessionState: latestLoginAttempt?.completionPending && pendingVelaLoginTerminals > 0 ? 'signed_out' : sessionState,
+    credentialRevision,
+  };
+}
+
+function readRegistrationInvite(raw: unknown, accountId: string | undefined): VelaRegistrationInvite | undefined {
+  if (!accountId || !raw || typeof raw !== 'object') return undefined;
+  const claim = raw as Record<string, unknown>;
+  if (claim.accountId !== accountId || typeof claim.deviceAuthorizationId !== 'string'
+    || !claim.deviceAuthorizationId.trim() || claim.deviceAuthorizationId.length > 256) return undefined;
+  return { accountId, deviceAuthorizationId: claim.deviceAuthorizationId };
+}
+
+/** A CLI-issued receipt belongs to the stored account/control API source.
+ * Runtime/env authorization remains unchanged; only onboarding eligibility is
+ * withheld when those request credentials no longer describe that source. */
+function registrationInviteUsesStoredControlSource(
+  stored: VelaProfileShape | undefined,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  const controlOverride = env.VELA_CONTROL_KEY?.trim() ?? '';
+  if (controlOverride && controlOverride !== stored?.controlKey?.trim()) return false;
+  const defaultApi = 'https://amr-api.open-design.ai';
+  const storedApi = stored?.apiUrl?.trim() || defaultApi;
+  // Match readRawVelaControlApiContext: an env control key selects env/default
+  // API directly; otherwise readVelaApiContext applies the explicit API override.
+  const effectiveApi = controlOverride
+    ? env.VELA_API_URL?.trim() || defaultApi
+    : env.VELA_API_URL?.trim() || stored?.apiUrl?.trim() || defaultApi;
+  const normalize = (value: string): string | null => {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+      return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+    } catch { return null; }
+  };
+  const source = normalize(storedApi);
+  return source !== null && source === normalize(effectiveApi);
+}
+
+function readRawVelaLoginStatus(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): Omit<VelaLoginStatus, 'sessionState' | 'credentialRevision'> {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
   const profile = resolveAmrProfile(mergedEnv);
-  const configPath = amrConfigPath();
+  const configPath = amrConfigPath(mergedEnv);
   const loginInFlight = isVelaLoginInFlight();
-  // Only meaningful while signing in (loggedIn becomes true once vela writes the
-  // runtime key); empty otherwise so completed sessions don't echo a stale URL.
+  // Include the active attempt even when an old credential remains during reauthentication.
+  // Completed sessions must not echo a stale activation URL.
   const activationFields: Partial<VelaLoginStatus> =
     loginInFlight && activeLoginActivation
       ? {
@@ -366,12 +580,20 @@ export function readVelaLoginStatus(
   const runtimeKey = mergedEnv.VELA_RUNTIME_KEY?.trim() ?? '';
   const linkUrl = mergedEnv.VELA_LINK_URL?.trim() ?? '';
   if (runtimeKey && linkUrl) {
-    return { loggedIn: true, loginInFlight, profile, user: null, configPath };
+    return {
+      loggedIn: true,
+      loginInFlight,
+      profile,
+      user: null,
+      configPath,
+      ...activationFields,
+      ...readVelaLoginAttemptSnapshot(),
+    };
   }
-  const file = readConfigFile();
+  const file = readConfigFile(mergedEnv);
   const stored = file?.profiles?.[profile];
   const storedRuntimeKey = stored?.runtimeKey?.trim() ?? '';
-  if (!storedRuntimeKey) {
+  if (!storedRuntimeKey || stored?.pendingLogin) {
     return {
       loggedIn: false,
       loginInFlight,
@@ -379,6 +601,7 @@ export function readVelaLoginStatus(
       user: null,
       configPath,
       ...activationFields,
+      ...readVelaLoginAttemptSnapshot(),
     };
   }
   const rawUser = stored?.user ?? null;
@@ -391,7 +614,18 @@ export function readVelaLoginStatus(
         ...(typeof rawUser.plan === 'string' ? { plan: rawUser.plan } : {}),
       }
     : null;
-  return { loggedIn: true, loginInFlight, profile, user, configPath };
+  const registrationInvite = registrationInviteUsesStoredControlSource(stored, mergedEnv)
+    ? readRegistrationInvite(stored?.registrationInvite, user?.id) : undefined;
+  return {
+    loggedIn: true,
+    loginInFlight,
+    profile,
+    user,
+    ...(registrationInvite ? { registrationInvite } : {}),
+    configPath,
+    ...activationFields,
+    ...readVelaLoginAttemptSnapshot(),
+  };
 }
 
 /**
@@ -493,21 +727,40 @@ export function readVelaCredentialRevision(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): VelaCredentialRevision {
+  return readRawVelaCredentialRevision(
+    env,
+    configuredEnv,
+    readRawVelaLoginStatus(env, configuredEnv),
+  );
+}
+
+function readRawVelaCredentialRevision(
+  env: NodeJS.ProcessEnv,
+  configuredEnv: Record<string, string>,
+  status: Omit<VelaLoginStatus, 'sessionState' | 'credentialRevision'>,
+): VelaCredentialRevision {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
-  const status = readVelaLoginStatus(env, configuredEnv);
   const hasEnvCredentials =
     (mergedEnv.VELA_RUNTIME_KEY?.trim() ?? '').length > 0 &&
     (mergedEnv.VELA_LINK_URL?.trim() ?? '').length > 0;
   // One-way hash (never the raw key) so the cache key distinguishes env-backed
   // accounts whose only difference is the configured runtime credential.
-  const credentialFingerprint = hasEnvCredentials
-    ? createHash('sha256')
-        .update(
-          `${mergedEnv.VELA_RUNTIME_KEY ?? ''}\n${mergedEnv.VELA_LINK_URL ?? ''}`,
-        )
-        .digest('hex')
-        .slice(0, 16)
-    : '';
+  const fileProfile = hasEnvCredentials
+    ? undefined
+    : readConfigFile(mergedEnv)?.profiles?.[status.profile];
+  const credentialFingerprint = createHash('sha256')
+    .update(
+      hasEnvCredentials
+        ? `${mergedEnv.VELA_RUNTIME_KEY ?? ''}\n${mergedEnv.VELA_LINK_URL ?? ''}`
+        : [
+            fileProfile?.runtimeKey ?? '',
+            fileProfile?.controlKey ?? '',
+            fileProfile?.linkUrl ?? '',
+            fileProfile?.apiUrl ?? '',
+          ].join('\n'),
+    )
+    .digest('hex')
+    .slice(0, 16);
   return {
     authSource: hasEnvCredentials ? 'env' : status.loggedIn ? 'file' : 'none',
     profile: status.profile,
@@ -526,16 +779,94 @@ export function readVelaCredentialRevision(
   };
 }
 
+const expiredVelaCredentialRevisions = new Set<string>();
+const expiredVelaControlKeys = new Set<string>();
+
+function velaCredentialRevisionDigest(revision: VelaCredentialRevision): string {
+  return createHash('sha256')
+    .update(JSON.stringify(revision))
+    .digest('hex')
+    .slice(0, 20);
+}
+
+/** Mark only the currently-active credential revision as rejected upstream. */
+export function markVelaAuthorizationExpired(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): string {
+  const revision = velaCredentialRevisionDigest(readVelaCredentialRevision(env, configuredEnv));
+  expiredVelaCredentialRevisions.add(revision);
+  const control = readRawVelaControlApiContext(env, configuredEnv);
+  if (control) expiredVelaControlKeys.add(velaControlKeyDigest(control.controlKey));
+  return revision;
+}
+
+/** Test/logout seam. A rotated credential naturally has a different revision. */
+export function clearVelaAuthorizationState(): void {
+  expiredVelaCredentialRevisions.clear();
+  expiredVelaControlKeys.clear();
+}
+
+function velaControlKeyDigest(controlKey: string): string {
+  return createHash('sha256').update(controlKey).digest('hex').slice(0, 20);
+}
+
 export function readVelaControlApiContext(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
+  allowPendingLogin = false,
+): VelaControlApiContext | null {
+  const context = readRawVelaControlApiContext(env, configuredEnv, allowPendingLogin);
+  if (
+    context
+    && expiredVelaControlKeys.has(velaControlKeyDigest(context.controlKey))
+  ) return null;
+  return context;
+}
+
+/** Resolve the CLI runtime identity without borrowing another profile's key. */
+export function readVelaRuntimeLinkContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaRuntimeLinkContext | null {
+  const revision = readVelaCredentialRevision(env, configuredEnv);
+  if (expiredVelaCredentialRevisions.has(velaCredentialRevisionDigest(revision))) return null;
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  const profile = resolveAmrProfile(mergedEnv);
+  const envRuntimeKey = mergedEnv.VELA_RUNTIME_KEY?.trim();
+  const envLinkUrl = mergedEnv.VELA_LINK_URL?.trim();
+  const snapshot = envRuntimeKey && envLinkUrl ? null : readVelaProfileConfigSnapshot(env, configuredEnv);
+  const runtimeKey = envRuntimeKey || snapshot?.stored?.runtimeKey?.trim();
+  if (!runtimeKey) return null;
+  // These are the CLI's built-in Link profiles, used only when neither the
+  // explicit environment nor the selected saved profile provides an endpoint.
+  const defaultLinkUrls = {
+    prod: 'https://amr-link.open-design.ai',
+    test: 'https://vela-link.powerformer.net',
+    'feature-test': 'https://amr-feature-link.powerformer.net',
+    local: 'http://localhost:18081',
+  };
+  const linkUrl = envLinkUrl || snapshot?.stored?.linkUrl?.trim() || defaultLinkUrls[profile];
+  try {
+    const url = new URL(linkUrl);
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null;
+  } catch {
+    return null;
+  }
+  return { profile, linkUrl, runtimeKey };
+}
+
+function readRawVelaControlApiContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+  allowPendingLogin = false,
 ): VelaControlApiContext | null {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
   const profile = resolveAmrProfile(mergedEnv);
   const envControlKey = mergedEnv.VELA_CONTROL_KEY?.trim() ?? '';
   const envApiUrl = mergedEnv.VELA_API_URL?.trim() ?? '';
   if (envControlKey) {
-    const status = readVelaLoginStatus(env, configuredEnv);
+    const status = readRawVelaLoginStatus(env, configuredEnv);
     return {
       profile,
       apiUrl: envApiUrl || 'https://amr-api.open-design.ai',
@@ -544,30 +875,59 @@ export function readVelaControlApiContext(
       configMtimeMs: null,
     };
   }
-  const file = readConfigFile();
-  const stored = file?.profiles?.[profile];
+  const snapshot = readVelaProfileConfigSnapshot(env, configuredEnv);
+  const apiContext = readVelaApiContext(env, configuredEnv, snapshot);
+  const stored = snapshot.stored;
   const controlKey = stored?.controlKey?.trim() ?? '';
-  if (!controlKey) return null;
+  if (!controlKey || (stored?.pendingLogin && !allowPendingLogin)) return null;
   return {
-    profile,
-    apiUrl: stored?.apiUrl?.trim() || envApiUrl || 'https://amr-api.open-design.ai',
+    ...apiContext,
     controlKey,
     user: stored?.user ?? null,
-    configMtimeMs: existsSync(amrConfigPath()) ? statSync(amrConfigPath()).mtimeMs : null,
+    configMtimeMs: snapshot.configMtimeMs,
   };
 }
 
+export function readVelaApiContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+  snapshot: VelaProfileConfigSnapshot = readVelaProfileConfigSnapshot(env, configuredEnv),
+): VelaApiContext {
+  const mergedEnv = mergeVelaEnv(env, configuredEnv);
+  return {
+    profile: readAmrEndpointBinding(mergedEnv)?.profile ?? snapshot.profile,
+    apiUrl:
+      readAmrEndpointBinding(mergedEnv)?.apiUrl
+      || mergedEnv.VELA_API_URL?.trim()
+      || snapshot.stored?.apiUrl?.trim()
+      || 'https://amr-api.open-design.ai',
+  };
+}
+
+export function hasPendingVelaRevocations(): boolean {
+  const pending = readConfigFile()?.pendingRevocations;
+  return Array.isArray(pending) && pending.length > 0;
+}
+
+export function readVelaLogoutTarget(env: NodeJS.ProcessEnv = process.env): {appUserId: string; controlKeyId: string} | null {
+  const profile = readVelaProfileConfigSnapshot(env).stored;
+  if (!profile?.controlKey || !profile.user?.id) return null;
+  return {appUserId: profile.user.id, controlKeyId: profile.controlKeyId ?? ''};
+}
+
 export function forgetVelaLogin(env: NodeJS.ProcessEnv = process.env): void {
-  const file = amrConfigPath();
+  const file = amrConfigPath(env);
   if (!existsSync(file)) return;
-  const parsed = readConfigFile();
+  const parsed = readConfigFile(env, true);
   if (!parsed?.profiles) return;
   const profile = resolveAmrProfile(env);
   if (!Object.prototype.hasOwnProperty.call(parsed.profiles, profile)) return;
   const keptProfileConfig = { ...(parsed.profiles[profile] ?? {}) };
   delete keptProfileConfig.controlKey;
+  delete keptProfileConfig.controlKeyId;
   delete keptProfileConfig.runtimeKey;
   delete keptProfileConfig.user;
+  delete keptProfileConfig.pendingLogin;
   const nextProfiles = { ...parsed.profiles };
   nextProfiles[profile] = keptProfileConfig;
   writeFileSync(
@@ -581,9 +941,35 @@ export interface SpawnedVelaLogin {
   pid: number;
   startedAt: string;
   profile: string;
+  authAttemptId: string;
 }
 
 const activeLoginProcs = new Map<number, ChildProcess>();
+interface VelaLoginAttemptRef {
+  authAttemptId: string;
+  generation: number;
+}
+
+interface VelaLoginAttemptState extends VelaLoginAttemptRef {
+  authRequestId?: string;
+  canceled: boolean;
+  fallbackPending: boolean;
+  fallbackStarted: boolean;
+  currentPid: number | null;
+  route: AmrAuthNetworkPath;
+  fallbackUsed: boolean;
+  stages: VelaLoginAuthStage[];
+  completionPending: boolean;
+  loginError?: string;
+}
+
+let loginGeneration = 0;
+let latestLoginAttempt: VelaLoginAttemptState | null = null;
+// Children registered for supervision until their `close`/`error` terminal
+// handler runs. Distinct from `isVelaLoginInFlight()`: status can drop the
+// public idle projection between `exit` and `close` once `exitCode` is set
+// (especially after cancel, which suppresses the fallbackPending bridge).
+let pendingVelaLoginTerminals = 0;
 const LOGIN_STARTUP_GRACE_MS = 250;
 const LOGIN_ACTIVATION_GRACE_MS = 10_000;
 const LOGIN_CANCEL_KILL_GRACE_MS = 2000;
@@ -609,6 +995,49 @@ interface VelaLoginActivationCapture {
   activation: VelaLoginActivation;
   stdout: string;
   stderr: string;
+  completionProtocol: boolean;
+  credentialsAccepted: boolean;
+}
+
+function recordVelaAuthStage(
+  attempt: VelaLoginAttemptRef,
+  signal: {
+    stage: AmrAuthStage;
+    result: AmrAuthStageResult;
+    errorKind?: AmrAuthErrorKind;
+  },
+  source: 'daemon',
+): void {
+  const current = currentVelaLoginAttempt(attempt);
+  if (!current) return;
+  const duplicate = current.stages.some((stage) =>
+    stage.stage === signal.stage
+      && stage.result === signal.result
+      && stage.route === current.route
+      && stage.errorKind === signal.errorKind,
+  );
+  if (duplicate) return;
+  if (current.stages.length >= 32) return;
+  current.stages.push({
+    sequence: current.stages.length + 1,
+    stage: signal.stage,
+    result: signal.result,
+    source,
+    occurredAt: new Date().toISOString(),
+    route: current.route,
+    ...(signal.errorKind ? { errorKind: signal.errorKind } : {}),
+  });
+}
+
+function appendHumanVelaLoginStdout(
+  capture: VelaLoginActivationCapture,
+  chunk: string,
+): void {
+  if (capture.stdout.length >= LOGIN_CAPTURE_LIMIT_BYTES) return;
+  capture.stdout += chunk.slice(
+    0,
+    LOGIN_CAPTURE_LIMIT_BYTES - capture.stdout.length,
+  );
 }
 
 // Attach lifetime listeners that accumulate the child's stdout/stderr and keep
@@ -617,7 +1046,11 @@ interface VelaLoginActivationCapture {
 // for the whole login so a slow CreateDeviceAuthorization round-trip — common on
 // constrained networks, exactly where the browser handoff also tends to fail —
 // still surfaces the URL once it finally prints.
-function beginLoginActivationCapture(child: ChildProcess): VelaLoginActivationCapture {
+function beginLoginActivationCapture(
+  child: ChildProcess,
+  attempt: VelaLoginAttemptRef,
+  acceptCredentials?: () => void | Promise<void>,
+): VelaLoginActivationCapture {
   const activation: VelaLoginActivation = {
     activationUrl: null,
     userCode: null,
@@ -627,24 +1060,82 @@ function beginLoginActivationCapture(child: ChildProcess): VelaLoginActivationCa
     activation,
     stdout: '',
     stderr: '',
+    completionProtocol: false,
+    credentialsAccepted: false,
   };
   activeLoginActivation = activation;
+  const ownsCapture = () =>
+    currentVelaLoginAttempt(attempt)?.currentPid === child.pid;
+  let receiptBuffer = '';
+  let accepting = false;
+  child.stdin?.on('error', () => undefined);
   child.stdout?.setEncoding('utf8');
   child.stderr?.setEncoding('utf8');
   child.stdout?.on('data', (chunk) => {
-    if (capture.stdout.length < LOGIN_CAPTURE_LIMIT_BYTES) {
-      capture.stdout += String(chunk);
+    // Once a replacement proxy child owns the attempt, late data from the old
+    // direct child must not be attributed to the proxy route. The pid remains
+    // owned through normal `close`, so legitimate close-drain data still lands.
+    if (!ownsCapture()) return;
+    const text = String(chunk);
+    receiptBuffer += text;
+    const lines = receiptBuffer.split('\n');
+    receiptBuffer = lines.pop()?.slice(-LOGIN_CAPTURE_LIMIT_BYTES) ?? '';
+    for (const line of lines) {
+      if (line.trim() === 'OPEN_DESIGN_AMR_AUTH_COMPLETION\tcancelled') {
+        const current = currentVelaLoginAttempt(attempt);
+        if (current) current.loginError = 'login_cancelled';
+      }
+      if (line.trim() === 'OPEN_DESIGN_AMR_AUTH_COMPLETION\tstdin-v1') capture.completionProtocol = true;
+      if (line.trim() === 'OPEN_DESIGN_AMR_AUTH_COMPLETION\tcredentials_persisted' && capture.completionProtocol && !accepting) {
+        accepting = true;
+        void Promise.resolve().then(() => acceptCredentials?.()).then(() => {
+          if (!ownsCapture() || !isChildRunning(child)) return;
+          capture.credentialsAccepted = true;
+          child.stdin?.write('credentials_accepted\n');
+        }).catch(() => {
+          const current = currentVelaLoginAttempt(attempt);
+          if (current) current.loginError = 'credential_acceptance_failed';
+          child.stdin?.end('credentials_rejected\n');
+        });
+      }
     }
+    appendHumanVelaLoginStdout(capture, text);
+    const activationWasReady = Boolean(activation.activationUrl);
     const parsed = parseVelaLoginActivation(capture.stdout, capture.stderr);
     if (parsed.activationUrl) activation.activationUrl = parsed.activationUrl;
     if (parsed.userCode) activation.userCode = parsed.userCode;
+    if (!activationWasReady && activation.activationUrl) {
+      recordVelaAuthStage(
+        attempt,
+        { stage: 'device_auth_create_result', result: 'success' },
+        'daemon',
+      );
+      recordVelaAuthStage(
+        attempt,
+        { stage: 'activation_ready', result: 'success' },
+        'daemon',
+      );
+    }
   });
   child.stderr?.on('data', (chunk) => {
+    if (!ownsCapture()) return;
     if (capture.stderr.length < LOGIN_CAPTURE_LIMIT_BYTES) {
       capture.stderr += String(chunk);
     }
-    if (parseVelaLoginActivation('', capture.stderr).browserOpenFailed) {
+    if (
+      !activation.browserOpenFailed
+      && parseVelaLoginActivation('', capture.stderr).browserOpenFailed
+    ) {
       activation.browserOpenFailed = true;
+      recordVelaAuthStage(
+        attempt,
+        {
+          stage: 'browser_open_result',
+          result: 'failed',
+          errorKind: 'browser_open_error',
+        },
+        'daemon',
+      );
     }
   });
   return capture;
@@ -654,7 +1145,7 @@ function isChildRunning(child: ChildProcess): boolean {
   return child.exitCode === null && child.signalCode === null;
 }
 
-export function isVelaLoginInFlight(): boolean {
+function hasRunningVelaLoginChild(): boolean {
   for (const [pid, child] of activeLoginProcs) {
     if (isChildRunning(child)) return true;
     activeLoginProcs.delete(pid);
@@ -662,12 +1153,57 @@ export function isVelaLoginInFlight(): boolean {
   return false;
 }
 
+export function isVelaLoginInFlight(): boolean {
+  return hasRunningVelaLoginChild()
+    || Boolean(latestLoginAttempt?.fallbackPending && !latestLoginAttempt.canceled);
+}
+
+/**
+ * True once every supervised login child has finished its `close`/`error`
+ * terminal handler and no late proxy fallback is still pending.
+ *
+ * Stronger than `isVelaLoginInFlight()` for tests that must observe the
+ * close-deferred late-fallback decision: the public idle projection can
+ * flip true between `exit` and `close` when the attempt was canceled.
+ */
+export function isVelaLoginSupervisorSettled(): boolean {
+  return pendingVelaLoginTerminals === 0
+    && !Boolean(latestLoginAttempt?.fallbackPending && !latestLoginAttempt.canceled);
+}
+
 export interface CancelVelaLoginResult {
   canceled: boolean;
   pids: number[];
 }
 
-export function cancelVelaLogin(): CancelVelaLoginResult {
+export function cancelVelaLogin(
+  expectedAuthAttemptId?: string | null,
+  expectedAuthRequestId?: string | null,
+): CancelVelaLoginResult {
+  if (
+    expectedAuthAttemptId !== undefined
+    && expectedAuthAttemptId !== null
+    && latestLoginAttempt?.authAttemptId !== expectedAuthAttemptId
+  ) {
+    return { canceled: false, pids: [] };
+  }
+  if (
+    expectedAuthRequestId !== undefined
+    && expectedAuthRequestId !== null
+    && latestLoginAttempt?.authRequestId !== expectedAuthRequestId
+  ) {
+    return { canceled: false, pids: [] };
+  }
+  const attemptWasActive = Boolean(
+    latestLoginAttempt
+      && !latestLoginAttempt.canceled
+      && (latestLoginAttempt.fallbackPending || hasRunningVelaLoginChild()),
+  );
+  if (latestLoginAttempt) latestLoginAttempt.canceled = true;
+  // Invalidate every callback/captured stage belonging to the canceled
+  // attempt before signalling its child. A late direct exit can therefore
+  // never start the proxy fallback after the user has canceled.
+  loginGeneration += 1;
   const pids: number[] = [];
   for (const [pid, child] of activeLoginProcs) {
     if (!isChildRunning(child)) {
@@ -690,64 +1226,127 @@ export function cancelVelaLogin(): CancelVelaLoginResult {
     }, LOGIN_CANCEL_KILL_GRACE_MS);
     killTimer.unref?.();
   }
-  return { canceled: pids.length > 0, pids };
+  return { canceled: attemptWasActive || pids.length > 0, pids };
 }
 
 export interface SpawnVelaLoginDeps {
   configuredEnv?: Record<string, string>;
   baseEnv?: NodeJS.ProcessEnv;
   attribution?: AmrEntryAttribution | null;
+  correlationEnv?: Record<string, string>;
   defaultApiUrl?: string | null;
   // When set, block until the direct attempt reaches device-auth steady state
   // (prints its activation URL) or exits/errors before that, so the login route
   // can fall back to the IPv4 proxy on a real pre-activation failure rather than
   // only on a sub-250ms startup crash. See waitForLoginActivationSteadyState.
   waitForActivation?: boolean;
+  acceptCredentials?: () => void | Promise<void>;
 }
 
-async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> {
-  let stderr = '';
-  let stdout = '';
-  child.stderr?.setEncoding('utf8');
-  child.stdout?.setEncoding('utf8');
-  child.stderr?.on('data', (chunk) => {
-    if (stderr.length < 4096) stderr += String(chunk);
-  });
-  child.stdout?.on('data', (chunk) => {
-    if (stdout.length < 4096) stdout += String(chunk);
-  });
+export interface SpawnVelaLoginWithFallbackDeps extends SpawnVelaLoginDeps {
+  authAttemptId?: string | null;
+  authRequestId?: string | null;
+  proxyApiUrl: string;
+}
 
-  const result = await new Promise<
-    | { kind: 'running' }
-    | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
-    | { kind: 'error'; error: Error }
-  >((resolve) => {
-    let settled = false;
-    const finish = (
-      value:
-        | { kind: 'running' }
-        | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
-        | { kind: 'error'; error: Error },
-    ) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(value);
-    };
-    const timer = setTimeout(
-      () => finish({ kind: 'running' }),
-      LOGIN_STARTUP_GRACE_MS,
-    );
-    child.once('exit', (code, signal) => finish({ kind: 'exit', code, signal }));
-    child.once('error', (error) => finish({ kind: 'error', error }));
-  });
+export function parseVelaAuthAttemptId(input: unknown): string | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const value = (input as { authAttemptId?: unknown }).authAttemptId;
+  return isCanonicalAmrAuthAttemptId(value) ? value : null;
+}
+
+export function parseVelaAuthRequestId(input: unknown): string | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const value = (input as { authRequestId?: unknown }).authRequestId;
+  return typeof value === 'string'
+    && /^pending-amr-auth-[a-z0-9]+-[a-z0-9]+$/.test(value)
+    ? value
+    : null;
+}
+
+function beginVelaLoginAttempt(
+  authAttemptId?: string | null,
+  authRequestId?: string | null,
+): VelaLoginAttemptRef {
+  if (isVelaLoginInFlight()) throw new Error('vela login already running');
+  const attempt: VelaLoginAttemptState = {
+    authAttemptId: isCanonicalAmrAuthAttemptId(authAttemptId)
+      ? authAttemptId
+      : randomUUID(),
+    ...(authRequestId ? { authRequestId } : {}),
+    generation: ++loginGeneration,
+    canceled: false,
+    fallbackPending: false,
+    fallbackStarted: false,
+    currentPid: null,
+    route: 'direct',
+    fallbackUsed: false,
+    stages: [],
+    completionPending: true,
+  };
+  latestLoginAttempt = attempt;
+  recordVelaAuthStage(
+    attempt,
+    { stage: 'attempt_started', result: 'started' },
+    'daemon',
+  );
+  return attempt;
+}
+
+function currentVelaLoginAttempt(
+  attempt: VelaLoginAttemptRef,
+): VelaLoginAttemptState | null {
+  const current = latestLoginAttempt;
+  return current
+    && current.authAttemptId === attempt.authAttemptId
+    && current.generation === attempt.generation
+    && loginGeneration === attempt.generation
+    && !current.canceled
+    ? current
+    : null;
+}
+
+export function readVelaLoginAttemptSnapshot(): VelaLoginAttemptSnapshot {
+  const attempt = latestLoginAttempt;
+  return attempt
+    ? {
+        authAttemptId: attempt.authAttemptId,
+        authStages: attempt.stages.map((stage) => ({ ...stage })),
+        authRoute: attempt.route,
+        fallbackUsed: attempt.fallbackUsed,
+        ...(attempt.loginError ? {loginError: attempt.loginError} : {}),
+      }
+    : {};
+}
+
+type VelaLoginChildTerminal =
+  | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
+  | { kind: 'error'; error: Error };
+
+async function waitForImmediateLoginFailure(
+  capture: VelaLoginActivationCapture,
+  terminal: Promise<VelaLoginChildTerminal>,
+): Promise<void> {
+  const result = await Promise.race<
+    VelaLoginChildTerminal | { kind: 'running' }
+  >([
+    terminal,
+    new Promise<{ kind: 'running' }>((resolve) => {
+      const timer = setTimeout(
+        () => resolve({ kind: 'running' }),
+        LOGIN_STARTUP_GRACE_MS,
+      );
+      timer.unref?.();
+    }),
+  ]);
 
   if (result.kind === 'running') return;
   if (result.kind === 'error') {
     throw new Error(`vela login failed to start: ${result.error.message}`);
   }
-  if (result.code === 0) return;
-  const detail = (stderr || stdout).trim();
+  if (capture.activation.activationUrl) return;
+  const detail = (capture.stderr || capture.stdout).trim();
+  if (detail.includes('unknown flag: --completion-receipt')) throw new Error('Update the Vela CLI to sign in with this Open Design version.');
   throw new Error(
     detail ||
       `vela login exited before authentication completed (code ${result.code ?? 'null'}, signal ${result.signal ?? 'null'})`,
@@ -765,24 +1364,14 @@ async function waitForImmediateLoginFailure(child: ChildProcess): Promise<void> 
 // proxy the proxy hop loses the client IP and the upstream 502s. Only an
 // explicit pre-activation exit/error triggers the proxy fallback.
 async function waitForLoginActivationSteadyState(
-  child: ChildProcess,
   capture: VelaLoginActivationCapture,
   graceMs: number,
+  terminal: Promise<VelaLoginChildTerminal>,
 ): Promise<void> {
   if (capture.activation.activationUrl) return;
-  if (!isChildRunning(child)) {
-    if (child.exitCode === 0) return;
-    const detail = (capture.stderr || capture.stdout).trim();
-    throw new Error(
-      detail ||
-        `vela login exited before device authorization started (code ${child.exitCode ?? 'null'}, signal ${child.signalCode ?? 'null'})`,
-    );
-  }
 
-  const result = await new Promise<
+  const observed = new Promise<
     | { kind: 'activated' }
-    | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
-    | { kind: 'error'; error: Error }
     | { kind: 'still-running' }
   >((resolve) => {
     let settled = false;
@@ -791,8 +1380,6 @@ async function waitForLoginActivationSteadyState(
     const finish = (
       value:
         | { kind: 'activated' }
-        | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
-        | { kind: 'error'; error: Error }
         | { kind: 'still-running' },
     ) => {
       if (settled) return;
@@ -806,34 +1393,50 @@ async function waitForLoginActivationSteadyState(
     }, 50);
     timer = setTimeout(() => finish({ kind: 'still-running' }), graceMs);
     timer.unref?.();
-    child.once('exit', (code, signal) => finish({ kind: 'exit', code, signal }));
-    child.once('error', (error) => finish({ kind: 'error', error }));
     if (capture.activation.activationUrl) finish({ kind: 'activated' });
   });
+  const result = await Promise.race([observed, terminal]);
 
   if (result.kind === 'activated') return;
+  // `close` may win the Promise.race before the 50ms activation poll even
+  // though its final drained stdout chunk already populated the capture.
+  // Observed activation always owns this child; never launch a duplicate
+  // device-auth attempt merely because the child exited immediately after it.
+  if (capture.activation.activationUrl) return;
   // Slow but still alive: leave the direct attempt running and let the request
   // return — do NOT kill it or fall back to the proxy.
   if (result.kind === 'still-running') return;
   if (result.kind === 'error') {
     throw new Error(`vela login failed to start: ${result.error.message}`);
   }
-  if (result.code === 0) return;
   const detail = (capture.stderr || capture.stdout).trim();
+  if (detail.includes('unknown flag: --completion-receipt')) throw new Error('Update the Vela CLI to sign in with this Open Design version.');
   throw new Error(
     detail ||
       `vela login exited before device authorization started (code ${result.code ?? 'null'}, signal ${result.signal ?? 'null'})`,
   );
 }
 
-export async function spawnVelaLogin(
-  deps: SpawnVelaLoginDeps = {},
+interface SpawnVelaLoginAttemptDeps extends SpawnVelaLoginDeps {
+  attempt: VelaLoginAttemptRef;
+  onLatePreActivationFailure?: () => Promise<void>;
+}
+
+async function spawnVelaLoginAttempt(
+  deps: SpawnVelaLoginAttemptDeps,
 ): Promise<SpawnedVelaLogin> {
-  if (isVelaLoginInFlight()) {
-    throw new Error('vela login already running');
-  }
+  const attemptState = currentVelaLoginAttempt(deps.attempt);
+  if (!attemptState) throw new Error('vela login attempt is no longer active');
+  if (hasRunningVelaLoginChild()) throw new Error('vela login already running');
   const def = getAgentDef('amr');
-  if (!def) throw new Error('AMR runtime def not registered');
+  if (!def) {
+    recordVelaAuthStage(
+      deps.attempt,
+      { stage: 'spawn_result', result: 'failed', errorKind: 'internal_error' },
+      'daemon',
+    );
+    throw new Error('AMR runtime def not registered');
+  }
   const baseEnv = deps.baseEnv ?? process.env;
   const configuredEnv = withDefaultVelaApiUrl(
     deps.configuredEnv ?? {},
@@ -843,46 +1446,187 @@ export async function spawnVelaLogin(
   const launch = resolveAgentLaunch(def, configuredEnv);
   const bin = launch.selectedPath;
   if (!bin) {
+    recordVelaAuthStage(
+      deps.attempt,
+      { stage: 'spawn_result', result: 'failed', errorKind: 'internal_error' },
+      'daemon',
+    );
     throw new Error('vela binary not found; install vela or configure VELA_BIN');
   }
-  const env = {
-    ...spawnEnvForAgent('amr', baseEnv, configuredEnv),
+  const env: NodeJS.ProcessEnv = {
+    ...spawnEnvForAgent('amr', baseEnv, configuredEnv, undefined, { allowAmrCredentialMismatch: true }),
     ...velaLoginAttributionEnv(deps.attribution),
+    ...(deps.correlationEnv ?? {}),
+    // The UUID is daemon-owned and written after configured/base env so a
+    // child cannot replace the correlation key selected for this attempt.
+    OPEN_DESIGN_AMR_AUTH_ATTEMPT_ID: deps.attempt.authAttemptId,
   };
+  // This fallback-only change does not opt the child into a structured stage
+  // protocol that the packaged Vela CLI cannot emit.
+  delete env.OPEN_DESIGN_AMR_AUTH_STAGE_FORMAT;
+  env.OPEN_DESIGN_AMR_AUTH_COMPLETION = 'stdin-v1';
   // Route through createCommandInvocation so an npm/Node-style `vela.cmd` or
   // `vela.bat` shim on Windows gets wrapped under `cmd.exe /d /s /c …` with
   // verbatim args, matching what `execAgentFile` / chat-run spawning do. A
   // direct `spawn(bin, args)` on a `.cmd` shim quietly fails to find the
   // shim's actual entry point. POSIX is unchanged (no wrapping needed).
-  const invocation = createCommandInvocation({ command: bin, args: ['login'], env });
-  const child = spawn(invocation.command, invocation.args, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env,
-    detached: false,
-    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-  });
+  const invocation = createCommandInvocation({ command: bin, args: ['login', '--completion-receipt=stdin-v1'], env });
+  let child: ChildProcess;
+  try {
+    child = spawn(invocation.command, invocation.args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env,
+      detached: false,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+    });
+  } catch (error) {
+    recordVelaAuthStage(
+      deps.attempt,
+      { stage: 'spawn_result', result: 'failed', errorKind: 'internal_error' },
+      'daemon',
+    );
+    throw error;
+  }
   if (typeof child.pid !== 'number') {
+    recordVelaAuthStage(
+      deps.attempt,
+      { stage: 'spawn_result', result: 'failed', errorKind: 'internal_error' },
+      'daemon',
+    );
     throw new Error('failed to spawn vela login');
   }
+  attemptState.completionPending = true;
   activeLoginProcs.set(child.pid, child);
-  const cleanup = () => {
+  pendingVelaLoginTerminals += 1;
+  attemptState.currentPid = child.pid;
+  recordVelaAuthStage(
+    deps.attempt,
+    { stage: 'spawn_result', result: 'success' },
+    'daemon',
+  );
+  let spawnReturned = false;
+  let terminalHandled = false;
+  let activationCapture: VelaLoginActivationCapture | null = null;
+  let settleTerminal: (value: VelaLoginChildTerminal) => void = () => undefined;
+  const terminal = new Promise<VelaLoginChildTerminal>((resolve) => {
+    settleTerminal = resolve;
+  });
+  const handleTerminal = (
+    terminalKind: 'exit' | 'error',
+  ) => {
+    if (terminalHandled) return;
+    terminalHandled = true;
+    pendingVelaLoginTerminals = Math.max(0, pendingVelaLoginTerminals - 1);
     if (typeof child.pid === 'number') activeLoginProcs.delete(child.pid);
+    if (latestLoginAttempt?.authAttemptId === deps.attempt.authAttemptId) latestLoginAttempt.completionPending = false;
+    const current = currentVelaLoginAttempt(deps.attempt);
+    if (!current || current.currentPid !== child.pid) return;
+    current.currentPid = null;
+    current.completionPending = false;
+    if (terminalKind === 'exit' && activationCapture?.activation.activationUrl && (!activationCapture.completionProtocol || !activationCapture.credentialsAccepted)) {
+      current.loginError ??= 'cli_upgrade_required';
+    }
+    const exitedBeforeActivation =
+      terminalKind === 'exit' && !activationCapture?.activation.activationUrl;
+    const terminatedBeforeActivation =
+      !activationCapture?.activation.activationUrl;
+    if (
+      exitedBeforeActivation
+      && !current.stages.some((stage) =>
+        stage.route === current.route
+          && stage.stage === 'device_auth_create_result'
+          && stage.result === 'failed',
+      )
+    ) {
+      // Legacy Vela has no structured stage output. A real child exit after
+      // spawn but before activation is the strongest safe boundary we can
+      // infer without classifying raw stderr.
+      recordVelaAuthStage(
+        deps.attempt,
+        {
+          stage: 'device_auth_create_result',
+          result: 'failed',
+          errorKind: 'unknown',
+        },
+        'daemon',
+      );
+    }
+    const shouldFallback = Boolean(
+      terminatedBeforeActivation
+        && spawnReturned
+        && deps.onLatePreActivationFailure
+        && !activeLoginActivation?.activationUrl
+        && !current.fallbackStarted,
+    );
+    if (!shouldFallback) {
+      current.fallbackPending = false;
+      activeLoginActivation = null;
+      return;
+    }
+    // Mark pending before starting the async retry so /status never exposes a
+    // false idle window between the dead direct child and its proxy successor.
+    current.fallbackStarted = true;
+    current.fallbackPending = true;
     activeLoginActivation = null;
+    void deps.onLatePreActivationFailure?.()
+      .catch(() => {
+        recordVelaAuthStage(
+          deps.attempt,
+          {
+            stage: 'device_auth_create_result',
+            result: 'failed',
+            errorKind: 'internal_error',
+          },
+          'daemon',
+        );
+      })
+      .finally(() => {
+        const stillCurrent = currentVelaLoginAttempt(deps.attempt);
+        if (stillCurrent) stillCurrent.fallbackPending = false;
+      });
   };
-  child.once('exit', cleanup);
-  child.once('error', cleanup);
+  child.once('exit', () => {
+    const current = currentVelaLoginAttempt(deps.attempt);
+    if (
+      current
+      && current.currentPid === child.pid
+      && !activationCapture?.activation.activationUrl
+    ) {
+      // `exit` precedes stdio drain/`close` on Node. Keep status continuous but
+      // defer the activation/fallback decision until `close`, after every
+      // queued stdout chunk has reached the parser.
+      current.fallbackPending = true;
+    }
+  });
+  child.once('close', (code, signal) => {
+    const current = currentVelaLoginAttempt(deps.attempt);
+    if (current && code !== 0) current.loginError ??= 'login_failed';
+    if (current && code === 0 && activationCapture?.credentialsAccepted) delete current.loginError;
+    handleTerminal('exit');
+    settleTerminal({ kind: 'exit', code, signal });
+  });
+  child.once('error', (error) => {
+    recordVelaAuthStage(
+      deps.attempt,
+      { stage: 'spawn_result', result: 'failed', errorKind: 'internal_error' },
+      'daemon',
+    );
+    handleTerminal('error');
+    settleTerminal({ kind: 'error', error });
+  });
   // Capture the activation URL/code/warning for the whole login (not just the
   // 250ms startup race) so readVelaLoginStatus can surface them. Start before
   // the grace wait so no early stdout is missed.
-  const activationCapture = beginLoginActivationCapture(child);
-  await waitForImmediateLoginFailure(child);
+  activationCapture = beginLoginActivationCapture(child, deps.attempt, deps.acceptCredentials);
+  await waitForImmediateLoginFailure(activationCapture, terminal);
   if (deps.waitForActivation) {
     await waitForLoginActivationSteadyState(
-      child,
       activationCapture,
       resolveLoginActivationGraceMs(baseEnv),
+      terminal,
     );
   }
+  spawnReturned = true;
   // vela opens the browser itself (OpenBrowser in apps/cli/.../login.go), but it
   // also prints the activation URL + code to stdout first and warns on stderr if
   // the auto-open failed. We capture those above and expose them via
@@ -892,7 +1636,75 @@ export async function spawnVelaLogin(
     pid: child.pid,
     startedAt: new Date().toISOString(),
     profile: resolveAmrProfile(env),
+    authAttemptId: deps.attempt.authAttemptId,
   };
+}
+
+export async function spawnVelaLogin(
+  deps: SpawnVelaLoginDeps = {},
+): Promise<SpawnedVelaLogin> {
+  const attempt = beginVelaLoginAttempt();
+  return spawnVelaLoginAttempt({ ...deps, attempt });
+}
+
+export async function spawnVelaLoginWithFallback(
+  deps: SpawnVelaLoginWithFallbackDeps,
+): Promise<SpawnedVelaLogin> {
+  const attempt = beginVelaLoginAttempt(deps.authAttemptId, deps.authRequestId);
+  const sharedSpawnDeps: SpawnVelaLoginDeps = {
+    ...(deps.acceptCredentials ? {acceptCredentials: deps.acceptCredentials} : {}),
+    ...(deps.configuredEnv ? { configuredEnv: deps.configuredEnv } : {}),
+    ...(deps.baseEnv ? { baseEnv: deps.baseEnv } : {}),
+    ...(deps.attribution !== undefined ? { attribution: deps.attribution } : {}),
+    ...(deps.correlationEnv ? { correlationEnv: deps.correlationEnv } : {}),
+    ...(deps.waitForActivation !== undefined
+      ? { waitForActivation: deps.waitForActivation }
+      : {}),
+  };
+  // A lane's device login must persist its canonical API endpoint. The legacy
+  // loopback proxy would save its own URL in the CLI credential profile.
+  if (readAmrEndpointBinding(deps.baseEnv)) {
+    return spawnVelaLoginAttempt({ ...sharedSpawnDeps, attempt });
+  }
+  const spawnProxy = async (): Promise<SpawnedVelaLogin> => {
+    const current = currentVelaLoginAttempt(attempt);
+    if (!current) throw new Error('vela login attempt is no longer active');
+    current.fallbackStarted = true;
+    current.fallbackPending = true;
+    current.fallbackUsed = true;
+    current.route = 'proxy';
+    recordVelaAuthStage(
+      attempt,
+      { stage: 'attempt_started', result: 'started' },
+      'daemon',
+    );
+    try {
+      return await spawnVelaLoginAttempt({
+        ...sharedSpawnDeps,
+        defaultApiUrl: deps.proxyApiUrl,
+        attempt,
+      });
+    } finally {
+      const stillCurrent = currentVelaLoginAttempt(attempt);
+      if (stillCurrent) stillCurrent.fallbackPending = false;
+    }
+  };
+
+  try {
+    return await spawnVelaLoginAttempt({
+      ...sharedSpawnDeps,
+      attempt,
+      onLatePreActivationFailure: async () => {
+        await spawnProxy();
+      },
+    });
+  } catch (directErr) {
+    const directMessage = directErr instanceof Error
+      ? directErr.message
+      : String(directErr);
+    if (/already running|no longer active/i.test(directMessage)) throw directErr;
+    return spawnProxy();
+  }
 }
 
 function withDefaultVelaApiUrl(
@@ -948,6 +1760,10 @@ export function parseAmrEntryAnalyticsPayload(
   const sourceProduct = raw.sourceProduct;
   const sourceDetail = raw.sourceDetail;
   const entryOccurredAt = raw.entryOccurredAt;
+  const campaignId = raw.campaignId;
+  const conversionSource = raw.conversionSource;
+  const hasCampaignId = campaignId !== undefined;
+  const hasConversionSource = conversionSource !== undefined;
   const odRole = sanitizeOptionalProfileValue(raw.odRole);
   const odOrgSize = sanitizeOptionalProfileValue(raw.odOrgSize);
   const odSource = sanitizeOptionalProfileValue(raw.odSource);
@@ -970,6 +1786,14 @@ export function parseAmrEntryAnalyticsPayload(
       !== AMR_ENTRY_SOURCE_PAGE_BY_SOURCE[sourceDetail as TrackingAmrEntrySource]
     || typeof entryOccurredAt !== 'string'
     || !Number.isFinite(Date.parse(entryOccurredAt))
+    || (hasCampaignId
+      && (typeof campaignId !== 'string'
+        || !AMR_ENTRY_CAMPAIGN_IDS.has(campaignId as TrackingCampaignId)))
+    || (hasConversionSource
+      && (typeof conversionSource !== 'string'
+        || !AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES.has(
+          conversionSource as TrackingCampaignConversionSource,
+        )))
     || odRole === INVALID_PROFILE_VALUE
     || odOrgSize === INVALID_PROFILE_VALUE
     || odSource === INVALID_PROFILE_VALUE
@@ -987,6 +1811,10 @@ export function parseAmrEntryAnalyticsPayload(
     sourceProduct,
     sourceDetail: sourceDetail as TrackingAmrEntrySource,
     entryOccurredAt,
+    ...(hasCampaignId ? { campaignId: campaignId as TrackingCampaignId } : {}),
+    ...(hasConversionSource
+      ? { conversionSource: conversionSource as TrackingCampaignConversionSource }
+      : {}),
     ...(odRole ? { odRole } : {}),
     ...(odOrgSize ? { odOrgSize } : {}),
     ...(odUseCase ? { odUseCase } : {}),
@@ -1158,7 +1986,10 @@ async function mirrorAmrAnalyticsEvent(
 function velaLoginAttributionEnv(
   attribution: AmrEntryAttribution | null | undefined,
 ): Record<string, string> {
-  if (!attribution) return {};
+  // Every login this daemon starts is for the Open Design client, so the
+  // activation page can always offer "Open Open Design" — even for retries or
+  // entry points that carry no entry attribution.
+  if (!attribution) return { OPEN_DESIGN_AMR_ORIGIN: 'open_design' };
   return {
     OPEN_DESIGN_AMR_ENTRY_ID: attribution.entryId,
     OPEN_DESIGN_AMR_ENTRY_SOURCE: attribution.sourceDetail,

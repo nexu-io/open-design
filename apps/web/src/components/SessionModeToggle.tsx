@@ -206,6 +206,12 @@ export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
   const [open, setOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState<ChatSessionMode | null>(null);
   const [cardMaxHeight, setCardMaxHeight] = useState<number | null>(null);
+  // Horizontal viewport clamp (#100): the popover is left-anchored to the
+  // trigger, so with the 320px detail card beside the menu it can run past
+  // the right screen edge when the trigger sits toward the right. Measured
+  // after render; shifts the popover left by the overflow.
+  const [popoverShift, setPopoverShift] = useState(0);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const cardId = useId();
   const modes = MODE_META.map<ModeView>((item) => ({
@@ -271,6 +277,29 @@ export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
     return () => window.removeEventListener('resize', measure);
   }, [showCard]);
 
+  // See popoverShift above: keep the whole popover (menu + detail card)
+  // inside the right viewport edge. Re-measured when the card mounts or the
+  // window resizes; measuring at shift 0 each pass keeps the math stable.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPopoverShift(0);
+      return;
+    }
+    const measure = () => {
+      const popover = popoverRef.current;
+      if (!popover) return;
+      const previous = popover.style.transform;
+      popover.style.transform = 'none';
+      const rect = popover.getBoundingClientRect();
+      popover.style.transform = previous;
+      const overflowRight = rect.right - (window.innerWidth - 16);
+      setPopoverShift(overflowRight > 0 ? Math.ceil(overflowRight) : 0);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open, showCard]);
+
   return (
     <div
       className="session-mode-toggle"
@@ -302,12 +331,16 @@ export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
           setPreviewMode(mode);
         }}
       >
-        <Icon name={active.icon} size={13} />
+        <Icon name={active.icon} size={14} />
         <span className="session-mode-toggle__label">{active.label}</span>
-        <Icon name="chevron-down" size={12} />
+        <Icon name="chevron-down" size={14} />
       </button>
       {open ? (
-        <div className="session-mode-toggle__popover">
+        <div
+          ref={popoverRef}
+          className="session-mode-toggle__popover"
+          style={popoverShift ? { transform: `translateX(-${popoverShift}px)` } : undefined}
+        >
           <div className="session-mode-toggle__menu" role="menu">
             <div className="session-mode-toggle__options">
               {modes.map((item) => {
@@ -331,11 +364,11 @@ export function SessionModeToggle({ mode, onChange, disabled = false }: Props) {
                       closeMenu();
                     }}
                   >
-                    <Icon name={item.icon} size={13} />
+                    <Icon name={item.icon} size={14} />
                     <span className="session-mode-toggle__label">{item.label}</span>
                     <ModeCostTag cost={item.cost} label={item.costLabel} variant="menu" />
                     <span className="session-mode-toggle__check" aria-hidden>
-                      {itemActive ? <Icon name="check" size={13} /> : null}
+                      {itemActive ? <Icon name="check" size={14} /> : null}
                     </span>
                   </button>
                 );

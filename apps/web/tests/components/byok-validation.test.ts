@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { byokPreflightBlockReason } from '../../src/components/byok/preflight';
 import {
   blockingByokDraftFields,
   cleanByokApiKey,
@@ -8,6 +9,33 @@ import {
 } from '../../src/components/byok/validation';
 
 describe('BYOK draft validation', () => {
+  it.each([
+    'http://localhost:11434',
+    'http://127.0.0.1:11434',
+    'http://[::1]:11434',
+  ])('allows a keyless Ollama run at %s', (baseUrl) => {
+    expect(byokPreflightBlockReason({
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl,
+      apiProviderBaseUrl: null,
+      model: 'gemma3:4b',
+    })).toBeNull();
+  });
+
+  it.each([
+    'https://ollama.example.com',
+    'http://[2001:db8::1]:11434',
+  ])('requires an API key for remote Ollama at %s', (baseUrl) => {
+    expect(byokPreflightBlockReason({
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl,
+      apiProviderBaseUrl: null,
+      model: 'gemma3:4b',
+    })).toBe('api_key_required');
+  });
+
   it('cleans pasted API keys without changing the stored value itself', () => {
     expect(cleanByokApiKey(' \u200Bsk-ant-test\n\t')).toBe('sk-ant-test');
   });
@@ -40,6 +68,28 @@ describe('BYOK draft validation', () => {
       'base_url',
       'model',
     ]);
+  });
+
+  it('accepts an empty browser key when a daemon secure profile is configured', () => {
+    const validation = validateByokDraft(
+      'openai',
+      {
+        apiKey: '',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'openrouter/free',
+      },
+      {
+        requiresApiKey: true,
+        credentialConfigured: true,
+      },
+    );
+
+    expect(validation.ok).toBe(true);
+    expect(validation.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'api_key_required' }),
+      ]),
+    );
   });
 
   it('detects obvious API keys pasted into the wrong first-party tab', () => {

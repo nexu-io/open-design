@@ -52,11 +52,11 @@ export function LanguageMenu({
         onClick={() => setOpen((v) => !v)}
         title={LOCALE_LABEL[locale]}
       >
-        <Icon name="languages" size={compact ? 20 : 12} />
+        <Icon name="translate" size={compact ? 20 : 12} />
         {compact ? null : (
           <>
             <span>{LOCALE_LABEL[locale]}</span>
-            <Icon name="chevron-down" size={11} />
+            <Icon name="chevron-down" size={14} />
           </>
         )}
       </button>
@@ -97,7 +97,7 @@ export function LanguageMenu({
                     <span className="lang-menu-code">{code}</span>
                     {active ? (
                       <span className="lang-menu-check" aria-hidden>
-                        <Icon name="check" size={12} />
+                        <Icon name="check" size={14} />
                       </span>
                     ) : null}
                   </motion.button>

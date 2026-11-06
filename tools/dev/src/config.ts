@@ -9,7 +9,6 @@ import {
   SIDECAR_SOURCES,
 } from "@open-design/sidecar-proto";
 import {
-  resolveAppIpcPath,
   resolveAppRuntimePath,
   resolveLogFilePath,
   resolveNamespace,
@@ -40,7 +39,6 @@ export type ToolDevOptions = {
 
 export type ToolDevAppConfig = {
   app: ToolDevAppName;
-  ipcPath: string;
   latestLogPath: string;
   logDir: string;
 };
@@ -89,11 +87,6 @@ function resolveAppConfig(options: {
 }): ToolDevAppConfig {
   return {
     app: options.app,
-    ipcPath: resolveAppIpcPath({
-      app: options.app,
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace: options.namespace,
-    }),
     latestLogPath: resolveLogFilePath({ runtimeRoot: options.namespaceRoot, app: options.app, contract: OPEN_DESIGN_SIDECAR_CONTRACT }),
     logDir: path.dirname(resolveLogFilePath({ runtimeRoot: options.namespaceRoot, app: options.app, contract: OPEN_DESIGN_SIDECAR_CONTRACT })),
   };
@@ -139,6 +132,15 @@ export function parsePortOption(value: number | string | null | undefined, optio
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
     throw new Error(`${optionName} must be an integer between 1 and 65535`);
+  }
+  return parsed;
+}
+
+export function parseParentPidOption(value: number | string | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`--parent-pid must be a positive safe integer`);
   }
   return parsed;
 }

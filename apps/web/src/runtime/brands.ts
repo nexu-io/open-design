@@ -14,7 +14,9 @@ import type {
   BrandExtractFromHtmlRequest,
   BrandFinalizeResponse,
   BrandSummary,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { workspaceProjectHeaders } from '../state/projects';
 
 // One-shot cross-route handoff: the design-system id a navigation wants the
 // Design systems tab to preselect when it mounts. ProjectView's "design system
@@ -54,12 +56,17 @@ export type ExtractBrandFromHtmlOutcome =
 export async function finalizeBrandProject(
   brandId: string,
   projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ExtractBrandFromHtmlOutcome> {
   try {
     const resp = await fetch(`/api/brands/${encodeURIComponent(brandId)}/finalize`, {
       method: 'POST',
       cache: 'no-store',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify({ projectId }),
     });
     if (!resp.ok) {

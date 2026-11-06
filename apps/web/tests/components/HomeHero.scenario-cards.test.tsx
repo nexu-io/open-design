@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { homeTemplateTrigger } from '../helpers/home-template-picker';
 //
 // Scenario-card rail coverage.
 //   - The default create rail renders illustrated scenario cards carrying a
 //     title AND a one-line description.
-//   - The rail leads with Website clone, then the slide deck ("Slides"), per the
+//   - The rail leads with Prototype, then Motion design, per the
 //     curated create order.
 //   - The finer-grained scenarios (wireframe / mobile / document) exist and
 //     route to a working scenario plugin.
@@ -41,7 +42,11 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 }));
 
 import { HomeHero } from '../../src/components/HomeHero';
-import { findChip, orderedCreateChips } from '../../src/components/home-hero/chips';
+import { findChip, ONBOARDING_ARTIFACT_CHIP_IDS, orderedCreateChips } from '../../src/components/home-hero/chips';
+import {
+  prototypeSceneProjectMetadata,
+  prototypeSubChipForSlug,
+} from '../../src/components/home-hero/sub-chips';
 
 afterEach(() => {
   placeholderCarouselMock.reportScenario = false;
@@ -70,37 +75,75 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
   render(<HomeHero {...props} />);
 }
 
+// #5517 removed the illustrated scenario-card rail from Home; scenarios are
+// picked from the composer footer's radial template picker instead.
+// Types are a horizontal pill row under the working-directory row (product,
+// 2026-08-21); anything that does not fit folds into its 全部 popover.
+function typePill(chipId: string): HTMLElement | null {
+  const inline = screen.queryByTestId(`home-hero-type-pill-${chipId}`);
+  if (inline) return inline;
+  if (!screen.queryByTestId('home-hero-type-pills-popover')) fireEvent.click(homeTemplateTrigger());
+  return screen.getByTestId('home-hero-type-pills-popover').querySelector(`[data-chip="${chipId}"]`);
+}
+
 describe('HomeHero scenario cards', () => {
-  it('renders each create scenario card with a title and a description', () => {
+  it('labels each create scenario in the composer template picker', () => {
     renderHero();
-    const prototype = screen.getByTestId('home-hero-rail-prototype');
-    expect(prototype.textContent).toContain('Prototype');
-    expect(prototype.textContent).toContain('Interactive app mockups');
-
-    const deck = screen.getByTestId('home-hero-rail-deck');
-    expect(deck.textContent).toContain('Presentations & pitch decks');
+    expect(typePill('prototype')?.textContent).toContain('Prototype');
+    expect(typePill('deck')?.textContent).toContain('Slide deck');
   });
 
-  it('leads the create rail with Website clone, then the slide deck', () => {
+  it('uses the fixed eleven-item Home creation hierarchy in product order', () => {
     const ordered = orderedCreateChips();
-    expect(ordered[0]?.id).toBe('web-clone');
-    expect(ordered[1]?.id).toBe('deck');
+    const ids = ordered.map((chip) => chip.id);
+    expect(ids).toEqual([
+      'prototype',
+      'motion-design',
+      'deck',
+      'document',
+      'image',
+      'web-clone',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
+      'video',
+      'audio',
+    ]);
+    expect(ids).not.toContain('wireframe');
+    expect(ids).not.toContain('mobile');
   });
 
-  it('adds the finer-grained scenarios as create cards routed to a scenario plugin', () => {
+  it('keeps the design-system onboarding teaser within its existing curated scope', () => {
+    expect(ONBOARDING_ARTIFACT_CHIP_IDS).toEqual([
+      'prototype',
+      'deck',
+      'document',
+      'image',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
+    ]);
+  });
+
+  it('keeps nested prototype scenarios executable without giving them a chip of their own', () => {
     renderHero();
-    for (const id of ['wireframe', 'mobile', 'document']) {
-      const card = screen.getByTestId(`home-hero-rail-${id}`);
-      const tabs = screen.getByTestId('home-hero-type-tabs');
-      expect(tabs.contains(card)).toBe(true);
-      expect(findChip(id)?.action.kind).toBe('apply-scenario');
-    }
-    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
-    expect(findChip('wireframe')?.action).toMatchObject({
+    expect(typePill('wireframe')).toBeNull();
+    expect(typePill('mobile')).toBeNull();
+    expect(typePill('document')).toBeTruthy();
+    // They are scenes, so they have no catalog entry at all — what makes them
+    // executable is the Prototype chip's action plus their own refinement.
+    expect(findChip('wireframe')).toBeUndefined();
+    expect(findChip('mobile')).toBeUndefined();
+    const prototypeChip = findChip('prototype')!;
+    expect(prototypeChip.action).toMatchObject({
+      kind: 'apply-scenario',
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
-      projectMetadata: { kind: 'prototype', fidelity: 'wireframe' },
     });
+    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
+    expect(
+      prototypeSceneProjectMetadata(prototypeChip, prototypeSubChipForSlug('wireframe')),
+    ).toEqual({ kind: 'prototype', fidelity: 'wireframe' });
     expect(findChip('document')?.action).toMatchObject({
       pluginId: 'od-new-generation',
       projectKind: 'other',
@@ -123,5 +166,17 @@ describe('HomeHero scenario cards', () => {
     fireEvent.click(submit);
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onSubmitScenario).not.toHaveBeenCalled();
+  });
+
+  it('uses the nested Prototype scene to scope empty-composer carousel suggestions', async () => {
+    placeholderCarouselMock.reportScenario = true;
+    renderHero({
+      activeChipId: 'prototype',
+      activePrototypeSubtypeId: 'mobile',
+    });
+
+    await waitFor(() => {
+      expect(placeholderCarouselMock.reportedScenarioId).toBe('app-idea');
+    });
   });
 });

@@ -123,6 +123,40 @@ describe('MediaSurface broken-poster fallback (#2955)', () => {
   });
 });
 
+describe('MediaSurface video-ready opacity gate (black first-frame flash)', () => {
+  it('keeps a freshly-mounted video transparent until it reports a decoded frame', () => {
+    // Some Chromium builds paint a solid black frame for an instant right as
+    // autoplay starts decoding a freshly-mounted <video>, before any real
+    // frame is ready. The video sits above the poster <img> (z-index), so
+    // without this gate that flash blacks out the whole card — reported
+    // against the community template gallery (recvqaaFFCGPBC). The poster
+    // underneath must stay visible (video invisible) until `loadeddata`.
+    const { container } = render(
+      <MediaSurface preview={BAKED_CLIP} pluginTitle="Clip" inView={true} />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    expect(video).not.toBeNull();
+    expect(video.style.opacity).toBe('0');
+
+    fireEvent.loadedData(video);
+    expect(video.style.opacity).toBe('1');
+  });
+
+  it('resets the ready gate when the video source itself changes', () => {
+    const { container, rerender } = render(
+      <MediaSurface preview={BAKED_CLIP} pluginTitle="Clip" inView={true} />,
+    );
+    const video = container.querySelector('video') as HTMLVideoElement;
+    fireEvent.loadedData(video);
+    expect(video.style.opacity).toBe('1');
+
+    const nextClip: MediaPreviewSpec = { ...BAKED_CLIP, videoUrl: 'https://example.invalid/clip-2.mp4' };
+    rerender(<MediaSurface preview={nextClip} pluginTitle="Clip" inView={true} />);
+    const nextVideo = container.querySelector('video') as HTMLVideoElement;
+    expect(nextVideo.style.opacity).toBe('0');
+  });
+});
+
 describe('MediaSurface tiered clip preload (scroll-in prefetch)', () => {
   it('keeps preload at metadata while mounted but before the prefetch zone is reached', () => {
     // A non-firing IntersectionObserver models the tile being mounted in the

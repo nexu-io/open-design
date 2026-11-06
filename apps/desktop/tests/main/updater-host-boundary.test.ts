@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = join(here, "../..");
 
 function source(relativePath: string): string {
-  return readFileSync(join(desktopRoot, relativePath), "utf8");
+  return readFileSync(join(desktopRoot, relativePath), "utf8").replace(/\r\n?/g, "\n");
 }
 
 describe("desktop updater host boundary", () => {
@@ -16,6 +16,7 @@ describe("desktop updater host boundary", () => {
     const runtime = source("src/main/runtime.ts");
     expect(runtime).toContain("od:update:status");
     expect(runtime).toContain("od:update:check");
+    expect(runtime).toContain("od:update:clear-cache");
     expect(runtime).toContain("od:update:download");
     expect(runtime).toContain("od:update:install");
     expect(runtime).toContain("od:update:quit");
@@ -23,10 +24,21 @@ describe("desktop updater host boundary", () => {
     expect(runtime).toContain("event.sender !== window.webContents");
   });
 
+  it("lists every registered od:update:* handler in the teardown channel table", () => {
+    const runtime = source("src/main/runtime.ts");
+    const registered = [...runtime.matchAll(/ipcMain\.handle\("(od:update:[^"]+)"/g)].map((match) => match[1]);
+    const tableStart = runtime.indexOf("const UPDATER_IPC_CHANNELS = [");
+    const tableEnd = runtime.indexOf("]", tableStart);
+    expect(tableStart).toBeGreaterThanOrEqual(0);
+    const listed = [...runtime.slice(tableStart, tableEnd).matchAll(/"(od:update:[^"]+)"/g)].map((match) => match[1]);
+    expect(registered.length).toBeGreaterThan(0);
+    expect([...new Set(listed)].sort()).toEqual([...new Set(registered)].sort());
+  });
+
   it("does not turn automatic startup checks into native desktop dialogs", () => {
     const main = source("src/main/index.ts");
     const scheduleStart = main.indexOf("updateScheduler = createDesktopUpdaterScheduler");
-    const nextSection = main.indexOf("attachParentMonitor", scheduleStart);
+    const nextSection = main.indexOf('app.on("before-quit"', scheduleStart);
     expect(scheduleStart).toBeGreaterThanOrEqual(0);
     expect(nextSection).toBeGreaterThan(scheduleStart);
     const scheduleBody = main.slice(scheduleStart, nextSection);
@@ -34,16 +46,51 @@ describe("desktop updater host boundary", () => {
     expect(scheduleBody).not.toContain("showUpdateResultDialog");
   });
 
-  it("starts desktop IPC before creating the BrowserWindow runtime", () => {
+  it("starts the normalized sidecar client after creating the BrowserWindow runtime", () => {
     const main = source("src/main/index.ts");
-    const ipcStart = main.indexOf("ipcServer = await createJsonIpcServer");
     const runtimeStart = main.indexOf("desktop = await createDesktopRuntime");
-    expect(ipcStart).toBeGreaterThanOrEqual(0);
-    expect(runtimeStart).toBeGreaterThan(ipcStart);
-    const startupIpcBody = main.slice(ipcStart, runtimeStart);
+    const clientStart = main.indexOf("void client.start()", runtimeStart);
+    expect(runtimeStart).toBeGreaterThanOrEqual(0);
+    expect(clientStart).toBeGreaterThan(runtimeStart);
     expect(main).toContain('state: "idle"');
-    expect(startupIpcBody).toContain("desktopStatusSnapshot(activeDesktop)");
-    expect(startupIpcBody).toContain("desktop runtime is not initialized");
+    expect(main).toContain("SidecarFactory.create<DesktopMainHandle>");
+    expect(main).not.toContain("createJsonIpcServer");
+  });
+
+  it("registers frame rendering on the normalized sidecar client", () => {
+    const main = source("src/main/index.ts");
+    const handlersStart = main.indexOf("handlers: Object.fromEntries([");
+    const lifecycleStart = main.indexOf("lifecycle:", handlersStart);
+    expect(handlersStart).toBeGreaterThanOrEqual(0);
+    expect(lifecycleStart).toBeGreaterThan(handlersStart);
+    expect(main.slice(handlersStart, lifecycleStart)).toContain("SIDECAR_MESSAGES.RENDER_FRAMES");
+  });
+
+  it("keeps direct sidecar discovery and auth registration soft-failing", () => {
+    const main = source("src/main/index.ts");
+    const wiringStart = main.indexOf("discoverDaemonUrl: async () => {");
+    const wiringEnd = main.indexOf("const started = await runDesktopMain", wiringStart + 1);
+    expect(wiringStart).toBeGreaterThanOrEqual(0);
+    const wiring = main.slice(wiringStart, wiringEnd > wiringStart ? wiringEnd : undefined);
+    expect(wiring).toContain("catch {\n              return null;");
+    expect(wiring.match(/return null;/g)).toHaveLength(2);
+    expect(wiring).toContain("catch {\n              return false;");
+  });
+
+  it("keeps obsolete installed-outer policy outside generic desktop while exposing the SHOW hook", () => {
+    const main = source("src/main/index.ts");
+    const showStart = main.indexOf("case SIDECAR_MESSAGES.SHOW:");
+    const clickStart = main.indexOf("case SIDECAR_MESSAGES.CLICK:", showStart);
+    expect(showStart).toBeGreaterThanOrEqual(0);
+    expect(clickStart).toBeGreaterThan(showStart);
+    const showHandler = main.slice(showStart, clickStart);
+    expect(showHandler).toContain("activeDesktop.show()");
+    expect(showHandler).toContain("dispatchInviteDeeplink(request.input?.deeplinkUrl ?? null)");
+    expect(showHandler).toContain("notifyDesktopExternalShow(options.onExternalShow)");
+    expect(showHandler.indexOf("activeDesktop.show()"))
+      .toBeLessThan(showHandler.indexOf("notifyDesktopExternalShow(options.onExternalShow)"));
+    expect(main).not.toContain("listProcessSnapshots");
+    expect(main).not.toContain("stopProcesses");
   });
 
   it("keeps desktop STATUS responsive when updater status is slow", () => {
@@ -55,12 +102,22 @@ describe("desktop updater host boundary", () => {
     expect(main).not.toContain("return await updater.status()");
   });
 
-  it("keeps updater actions out of native desktop menus", () => {
+  it("adds updater access to the macOS app menu without changing the Windows File menu", () => {
     const main = source("src/main/index.ts");
-    expect(main).not.toContain("Check for Updates");
-    expect(main).not.toContain("Install Update");
-    expect(main).not.toContain("buildUpdateMenuItems");
+    expect(main).toContain("deriveDesktopUpdateMenuItem");
+    expect(main).toContain("DEFAULT_DESKTOP_UPDATE_MENU_LABELS");
+    expect(main).toContain('source: "mac-app-menu"');
+    expect(main).toContain("updateMenuItem.visible");
+    const fileMenuStart = main.indexOf('label: "File"');
+    const editMenuStart = main.indexOf('label: "Edit"', fileMenuStart);
+    expect(fileMenuStart).toBeGreaterThanOrEqual(0);
+    expect(editMenuStart).toBeGreaterThan(fileMenuStart);
+    const fileMenu = main.slice(fileMenuStart, editMenuStart);
+    expect(fileMenu).not.toContain("updateMenuItem");
     expect(main).not.toContain("showUpdateResultDialog");
+    const runtime = source("src/main/runtime.ts");
+    expect(runtime).toContain("pendingUpdateDialogRequest");
+    expect(runtime).toContain("if (!revealed)");
   });
 
   it("keeps installer launch separate from desktop process shutdown", () => {
@@ -70,6 +127,7 @@ describe("desktop updater host boundary", () => {
     expect(installStart).toBeGreaterThanOrEqual(0);
     expect(installEnd).toBeGreaterThan(installStart);
     const installHandler = runtime.slice(installStart, installEnd);
+    expect(installHandler).toContain("guardedUpdaterStatus(updaterOptions)");
     expect(installHandler).toContain("installUpdate()");
     expect(installHandler).not.toContain("quit");
     expect(installHandler).not.toContain("relaunch");
@@ -84,6 +142,7 @@ describe("desktop updater host boundary", () => {
     expect(quitStart).toBeGreaterThanOrEqual(0);
     expect(quitEnd).toBeGreaterThan(quitStart);
     const quitHandler = runtime.slice(quitStart, quitEnd);
+    expect(quitHandler).toContain("guardedUpdaterStatus(updaterOptions)");
     expect(quitHandler).toContain("status.installResult == null");
     expect(quitHandler).toContain("requestQuit");
     expect(quitHandler).not.toContain("app.relaunch()");

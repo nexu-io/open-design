@@ -1,3 +1,8 @@
+import {
+  DEFAULT_VELA_CONSOLE_ORIGIN,
+  resolveEffectiveVelaConsoleOrigin,
+} from '../integrations/vela-console-origin.js';
+
 /** HTTPS links for the web UI when an agent is unavailable. Keys match `AGENT_DEFS[].id`. */
 const AGENT_INSTALL_LINKS: Record<
   string,
@@ -8,7 +13,6 @@ const AGENT_INSTALL_LINKS: Record<
     docsUrl: 'https://ampcode.com/manual',
   },
   amr: {
-    installUrl: 'https://open-design.ai/amr',
     docsUrl: 'https://github.com/nexu-io/open-design/blob/main/docs/new-agent-runtime-acp.md',
   },
   claude: {
@@ -79,6 +83,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/Hmbown/CodeWhale',
     docsUrl: 'https://github.com/Hmbown/CodeWhale/blob/main/README.md',
   },
+  'deepseek-harness': {
+    installUrl: 'https://www.deepseek.com/harness/en/',
+    docsUrl: 'https://github.com/deepseek-ai/deepseek-harness',
+  },
   codebuddy: {
     installUrl: 'https://www.codebuddy.cn',
     docsUrl: 'https://www.codebuddy.cn/docs/workbuddy/Overview',
@@ -101,10 +109,15 @@ function sanitizeHttpsUrl(value: string | undefined): string | undefined {
 
 export function installMetaForAgent(
   agentId: string,
+  configuredEnv: Record<string, string> = {},
 ): { installUrl?: string; docsUrl?: string } {
   const meta = AGENT_INSTALL_LINKS[agentId];
   if (!meta) return {};
-  const installUrl = sanitizeHttpsUrl(meta.installUrl);
+  const installUrl = sanitizeHttpsUrl(
+    agentId === 'amr'
+      ? `${resolveEffectiveVelaConsoleOrigin(process.env, configuredEnv) ?? DEFAULT_VELA_CONSOLE_ORIGIN}/dashboard`
+      : meta.installUrl,
+  );
   const docsUrl = sanitizeHttpsUrl(meta.docsUrl);
   return {
     ...(installUrl ? { installUrl } : {}),

@@ -237,6 +237,90 @@ describe('createProjectEventsConnection', () => {
     conn.close();
   });
 
+  // Collab realtime hop-2: the project events stream now also carries the
+  // project-scoped thin invalidation events. Each is forwarded to onChange so
+  // ProjectView can re-fetch the affected resource (e.g. the comment list).
+  it('forwards collab invalidation events (comment/presence/metadata)', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('comment-changed', {
+      data: JSON.stringify({ type: 'comment-changed', projectId: 'p1', at: 7 }),
+    });
+    es.dispatch('presence-changed', {
+      data: JSON.stringify({ type: 'presence-changed', projectId: 'p1' }),
+    });
+    es.dispatch('project-metadata-changed', {
+      data: JSON.stringify({ type: 'project-metadata-changed', projectId: 'p1' }),
+    });
+    expect(seen).toEqual([
+      { type: 'comment-changed', projectId: 'p1', at: 7 },
+      { type: 'presence-changed', projectId: 'p1' },
+      { type: 'project-metadata-changed', projectId: 'p1' },
+    ]);
+    conn.close();
+  });
+
+  it('forwards project content transfer events as thin invalidations', () => {
+    const seen: ProjectEvent[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      (evt) => seen.push(evt),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('project-content-transfer-state', {
+      data: JSON.stringify({
+        type: 'project-content-transfer-state',
+        projectId: 'p1',
+      }),
+    });
+
+    expect(seen).toEqual([
+      {
+        type: 'project-content-transfer-state',
+        projectId: 'p1',
+      },
+    ]);
+    conn.close();
+  });
+
+  it('reports connection status for poll-as-floor (ready → true, error → false)', () => {
+    const statuses: boolean[] = [];
+    const conn = createProjectEventsConnection(
+      'p1',
+      () => {},
+      {
+        EventSourceCtor: MockEventSource as unknown as typeof EventSource,
+        setTimeoutFn: ((cb: () => void) => 0 as unknown as ReturnType<typeof setTimeout>) as unknown as typeof setTimeout,
+        onConnectedChange: (connected) => statuses.push(connected),
+      },
+    );
+    const es = MockEventSource.instances[0]!;
+    es.dispatch('ready', { data: '{}' });
+    es.dispatch('error', {});
+    expect(statuses).toEqual([true, false]);
+    conn.close();
+  });
+
+  it('notifies consumers after the ready handshake so they can reconcile missed events', () => {
+    const onReady = vi.fn();
+    const conn = createProjectEventsConnection(
+      'p1',
+      vi.fn(),
+      { EventSourceCtor: MockEventSource as unknown as typeof EventSource, onReady },
+    );
+
+    MockEventSource.instances[0]!.dispatch('ready', { data: '{}' });
+
+    expect(onReady).toHaveBeenCalledTimes(1);
+    conn.close();
+  });
+
   it('reconnects with exponential backoff on error', () => {
     let nextDelay = 0;
     const setTimeoutFn = vi.fn((cb: () => void, ms: number) => {
@@ -252,6 +336,9 @@ describe('createProjectEventsConnection', () => {
         EventSourceCtor: MockEventSource as unknown as typeof EventSource,
         initialBackoffMs: 100,
         maxBackoffMs: 800,
+        // Pin jitter to its high edge (multiplier 1.0) so the base doubling
+        // sequence is observable; the jitter range is covered separately.
+        randomFn: () => 1,
         setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
         clearTimeoutFn: clearTimeoutFn as unknown as typeof clearTimeout,
       },
@@ -290,6 +377,7 @@ describe('createProjectEventsConnection', () => {
       {
         EventSourceCtor: MockEventSource as unknown as typeof EventSource,
         initialBackoffMs: 100,
+        randomFn: () => 1,
         setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
       },
     );
@@ -303,6 +391,34 @@ describe('createProjectEventsConnection', () => {
     MockEventSource.instances[2]!.dispatch('error', {});
     expect(nextDelay).toBe(100);
 
+    conn.close();
+  });
+
+  it('jitters each reconnect delay within [0.5, 1.0) of the base', () => {
+    const delays: number[] = [];
+    const setTimeoutFn = vi.fn((_cb: () => void, ms: number) => {
+      delays.push(ms);
+      // Do NOT auto-fire: we only want to observe the scheduled delay per error.
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+    const conn = createProjectEventsConnection(
+      'p1',
+      () => {},
+      {
+        EventSourceCtor: MockEventSource as unknown as typeof EventSource,
+        initialBackoffMs: 1000,
+        maxBackoffMs: 30_000,
+        // random() = 0 → multiplier 0.5 (the low edge of the jitter window).
+        randomFn: () => 0,
+        setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
+      },
+    );
+    // Only one source exists (auto-fire disabled), so re-dispatch error on it to
+    // walk the backoff cursor without opening new connections.
+    const es = MockEventSource.instances[0]!;
+    for (let i = 0; i < 4; i += 1) es.dispatch('error', {});
+    // Base sequence 1000, 2000, 4000, 8000 → all halved by the low-edge jitter.
+    expect(delays).toEqual([500, 1000, 2000, 4000]);
     conn.close();
   });
 

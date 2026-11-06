@@ -30,7 +30,135 @@ export const LOCALE_LABEL: Record<Locale, string> = {
 // flat (not deeply nested) so missing-key TS errors point straight at the
 // offending string instead of a generic object mismatch.
 export interface Dict {
+  "referral.notice.label": string;
+  "referral.notice.registered": string;
+  "referral.notice.pending": string;
+  "referral.notice.pendingAt": string;
+  "referral.notice.exhausted": string;
+  "referral.notice.remaining": string;
+  "referral.notice.invite": string;
+  "referral.notice.subscribe": string;
+  "referral.notice.dismiss": string;
+  "referral.notice.openFailed": string;
+  'workspaceQuota.unavailable': string;
+  'workspaceQuota.designPlanAllowance': string;
+  'workspaceQuota.subscribeToUse': string;
+  'workspaceQuota.usageUnavailable': string;
+  'workspaceQuota.periodMinutes': string;
+  'workspaceQuota.resetIn': string;
+  'workspaceQuota.planHelp': string;
+  'workspaceQuota.meteredHelp': string;
+  'workspaceQuota.freeMeteredHelp': string;
+  'workspaceQuota.exhausted': string;
+  'workspaceQuota.meteredFallback': string;
+  'workspaceQuota.shared': string;
+  'workspaceQuota.contactOwnerForBilling': string;
+  'workspaceQuota.unsubscribed': string;
+  'workspaceQuota.contactOwner': string;
+  'workspaceQuota.payAsYouGo': string;
+  'workspaceQuota.resetAt': string;
+  'workspaceQuota.viewBalance': string;
+  'workspaceInvite.deliveryPending': string;
+  'workspaceInvite.deliveryFailed': string;
+  'workspaceInvite.invalidResponse': string;
+
+  'billing.wallet': string;
+  /** The product name of the allowance pool; kept untranslated in every locale. */
+  'billing.codingPlanDesignPlan': string;
+  /** Period of a quota window, derived from its `durationSeconds`. */
+  'billing.codingPlanPeriodHours': string;
+  'billing.codingPlanPeriodDays': string;
+  /** The share of a window STILL AVAILABLE, the number the bar fills to. */
+  'billing.codingPlanRemainingPercent': string;
+  // Workspace invite acceptance (C lane)
+  'invite.header.eyebrow': string;
+  'invite.loading': string;
+  'invite.landing.title': string;
+  'invite.landing.subtitle': string;
+  'invite.landing.roleLabel': string;
+  'invite.landing.invitedEmail': string;
+  'invite.landing.expires': string;
+  'invite.role.admin': string;
+  'invite.role.member': string;
+  'invite.role.admin.desc': string;
+  'invite.role.member.desc': string;
+  'invite.accept.cta': string;
+  'invite.accountMismatch.title': string;
+  'invite.accountMismatch.body': string;
+  'invite.accountMismatch.continue': string;
+  'invite.accountMismatch.switch': string;
+  'invite.accepting.title': string;
+  'invite.accepting.body': string;
+  'invite.success.title': string;
+  'invite.success.body': string;
+  'invite.success.roleReceipt': string;
+  'invite.success.enter': string;
+  'invite.open.cta': string;
+  'invite.open.opening': string;
+  'invite.open.retry': string;
+  'invite.notInstalled.title': string;
+  'invite.notInstalled.body': string;
+  'invite.notInstalled.download': string;
+  'invite.error.title': string;
+  'invite.error.invite_expired': string;
+  'invite.error.invite_consumed': string;
+  'invite.error.workspace_seat_limit_reached': string;
+  'invite.error.workspace_subscription_locked': string;
+  'invite.error.workspace_not_found': string;
+  'invite.error.workspace_forbidden': string;
+  'invite.error.invite_unavailable': string;
+  'invite.error.generic': string;
+  'invite.error.retry': string;
+  'workspaceInvite.dialogAria': string;
+  'workspaceInvite.title': string;
+  'workspaceInvite.onboardingTitle': string;
+  'workspaceInvite.onboardingBody1': string;
+  'workspaceInvite.onboardingBody2': string;
+  'workspaceInvite.onboardingEmailLabel': string;
+  'workspaceInvite.batchSent': string;
+  'workspaceInvite.completeReceipt': string;
+  'workspaceInvite.completeTitle': string;
+  'workspaceInvite.completeBody': string;
+  'workspaceInvite.completeCountdown': string;
+  'workspaceInvite.submitFailedPreserved': string;
+  'workspaceInvite.enterWorkspace': string;
+  'workspaceInvite.skip': string;
+  'workspaceInvite.cancel': string;
+  'workspaceInvite.helpLabel': string;
+  'workspaceInvite.memberCount': string;
+  'workspaceInvite.errorInvalidEmail': string;
+  'workspaceInvite.errorDuplicateEmail': string;
+  'workspaceInvite.partialSummary': string;
+  'workspaceInvite.sentCount': string;
+  'workspaceInvite.adminDescription': string;
+  'workspaceInvite.memberDescription': string;
+  'workspaceInvite.freePlanBody': string;
+  'workspaceInvite.teamPlanBody': string;
+  'workspaceInvite.seatsExhaustedBody': string;
+  'workspaceInvite.seatsExhaustedAction': string;
+  'workspaceInvite.emailLabel': string;
+  'workspaceInvite.roleLabel': string;
+  'workspaceInvite.defaultRoleLabel': string;
+  'workspaceInvite.emailPlaceholder': string;
+  'workspaceInvite.onboardingEmailPlaceholder': string;
+  'workspaceInvite.onboardingErrorAlreadyMember': string;
+  'workspaceInvite.onboardingErrorPendingInvite': string;
+  'workspaceInvite.onboardingPartialSummary': string;
+  'workspaceInvite.removeRow': string;
+  'workspaceInvite.addMember': string;
+  'workspaceInvite.visibilityQuestion': string;
+  'workspaceInvite.visibilityAnswer': string;
+  'workspaceInvite.sent': string;
+  'workspaceInvite.sending': string;
+  'workspaceInvite.confirm': string;
+  'workspaceInvite.submitFailed': string;
+  'workspaceInvite.errorAlreadyMember': string;
+  'workspaceInvite.errorPendingInvite': string;
+  'workspaceInvite.errorNoSession': string;
+  'workspaceInvite.errorNoWorkspace': string;
+  'workspaceInvite.errorUnreachable': string;
   // Common
+  'account.openFailed': string;
   'common.cancel': string;
   'chat.selectFromLibrary': string;
   'chat.importFigma': string;
@@ -72,6 +200,28 @@ export interface Dict {
   'libraryPicker.add': string;
   'libraryPicker.loading': string;
   'common.save': string;
+  'fileViewer.commentSync.payloadTooLarge': string;
+  'fileViewer.commentSync.sessionMissing': string;
+  'fileViewer.commentSync.shareStoppedPersonal': string;
+  'fileViewer.commentSync.shareStoppedTeam': string;
+  'fileViewer.commentSync.backfillFailedBody': string;
+  'fileViewer.commentSync.backfillRetryingBody': string;
+  'fileViewer.commentSync.backfillReopenedPendingBody': string;
+  'fileViewer.commentSync.backfillReopenedRetryingBody': string;
+  'fileViewer.commentSync.backfillReopenedTerminalBody': string;
+  'fileViewer.commentSync.backfillTerminalBody': string;
+  'fileViewer.commentSync.backfillPendingBody': string;
+  /** K1 with a known batch size: `{count}` is the initial backfill batch's total comment count. */
+  'fileViewer.commentSync.backfillPendingCountBody': string;
+  /** K4: reopen-resume comment sync busy state, shown in the primary share button itself. */
+  'fileViewer.commentSync.reopenSyncBusy': string;
+  'fileViewer.commentSync.alignFailedBody': string;
+  'fileViewer.shareGuide.title': string;
+  'fileViewer.shareGuide.description': string;
+  'fileViewer.shareGuide.tryShare': string;
+  'fileViewer.shareGuide.neverShowAgain': string;
+  'fileViewer.shareGuide.close': string;
+  'fileViewer.shareGuide.preferenceSaveFailed': string;
   'common.close': string;
   'common.clear': string;
   'common.delete': string;
@@ -88,6 +238,7 @@ export interface Dict {
   'common.installed': string;
   'common.notInstalled': string;
   'common.active': string;
+  'common.inactive': string;
   'common.offline': string;
   'common.selected': string;
   'common.create': string;
@@ -103,6 +254,7 @@ export interface Dict {
   'common.justNow': string;
   'common.minutesAgo': string;
   'common.hoursAgo': string;
+  'common.yesterday': string;
   'common.daysAgo': string;
   'common.weeksAgo': string;
   'common.now': string;
@@ -111,6 +263,12 @@ export interface Dict {
   'common.daysShort': string;
   'common.untitled': string;
   'designBrowser.savePageBrief': string;
+  'designBrowser.viewport.desktop': string;
+  'designBrowser.viewport.desktopTitle': string;
+  'designBrowser.viewport.tablet': string;
+  'designBrowser.viewport.tabletTitle': string;
+  'designBrowser.viewport.mobile': string;
+  'designBrowser.viewport.mobileTitle': string;
   'designBrowser.menu': string;
   'designBrowser.copyScreenshot': string;
   'designBrowser.hardReload': string;
@@ -126,6 +284,8 @@ export interface Dict {
   'designBrowser.status.openHttpFirst': string;
   'designBrowser.status.openBeforeScreenshot': string;
   'designBrowser.status.screenshotSaved': string;
+  'designBrowser.addImageToChatButton': string;
+  'designBrowser.status.imageAddedToChat': string;
   'designBrowser.status.screenshotFailed': string;
   'designBrowser.status.openBeforeBrief': string;
   'designBrowser.status.briefSaveFailed': string;
@@ -214,6 +374,11 @@ export interface Dict {
   'settings.onboardingCloudTitle': string;
   'settings.onboardingCloudBody': string;
   'settings.onboardingCloudSignIn': string;
+  'settings.onboardingFreeCredits': string;
+  'settings.onboardingFreeCreditsHint': string;
+  'settings.onboardingOwnAi': string;
+  'settings.onboardingLocalAi': string;
+  'settings.onboardingApiKey': string;
   'settings.onboardingCloudContinue': string;
   'settings.onboardingCloudAlternative': string;
   'settings.onboardingCloudOr': string;
@@ -300,6 +465,8 @@ export interface Dict {
   'settings.kicker': string;
   'settings.title': string;
   'settings.subtitle': string;
+  'settings.general': string;
+  'settings.generalHint': string;
   'settings.modeAria': string;
   'settings.protocolAria': string;
   'settings.modeDaemon': string;
@@ -308,8 +475,12 @@ export interface Dict {
   'settings.modeDaemonOfflineMeta': string;
   'settings.modeDaemonInstalledMeta': string;
   'settings.modeApi': string;
+  'settings.cloudCalloutTitle': string;
+  'settings.cloudCalloutBody': string;
+  'settings.cloudCalloutButton': string;
   'settings.modeApiMeta': string;
   'settings.byokNoFileToolsNotice': string;
+  'settings.byokDraftNotice': string;
   'settings.codeAgent': string;
   'settings.codeAgentHint': string;
   'settings.rescan': string;
@@ -377,14 +548,36 @@ export interface Dict {
   'settings.amrNotSignedIn': string;
   'settings.amrSigningIn': string;
   'settings.amrActivationHint': string;
-  'settings.amrActivationBrowserFailed': string;
+  'settings.amrActivationBrowserFailedTitle': string;
+  'settings.amrActivationBrowserFailedDescription': string;
   'settings.amrActivationOpen': string;
   'settings.amrCancelSignIn': string;
+  'settings.onboardingActivationPrompt': string;
+  'settings.onboardingActivationBrowserFailed': string;
+  'settings.onboardingActivationReopen': string;
   'settings.amrAccountStatus': string;
   'settings.amrConsole': string;
   'settings.amrBalance': string;
   'settings.amrPlan': string;
   'settings.amrUpgrade': string;
+  // Settings > Workspace region (E-frontend, D4.3): the role-gated shell for
+  // other-lane workspace destinations. Shown only for a team workspace.
+  'settings.workspace': string;
+  'settings.workspaceHint': string;
+  'settings.workspaceLede': string;
+  'settings.workspaceBack': string;
+  'settings.workspaceMembers': string;
+  'settings.workspaceMembersHint': string;
+  'settings.workspaceBilling': string;
+  'settings.workspaceBillingHint': string;
+  'settings.workspaceAutoRecharge': string;
+  'settings.workspaceAutoRechargeHint': string;
+  'settings.workspaceTeamSpace': string;
+  'settings.workspaceTeamSpaceHint': string;
+  // Full-page Settings (`/settings`): sidebar nav head above the section list
+  // (back-to-home link, decorative search field, personal group label).
+  'settings.pageBackToHome': string;
+  'settings.pageNavGroupPersonal': string;
   'settings.amrModelUpgradeHint': string;
   'settings.amrLoginErrorCompact': string;
   'settings.apiSection': string;
@@ -452,20 +645,23 @@ export interface Dict {
   'settings.getStarted': string;
   'settings.envConfigure': string;
   'settings.localCli': string;
+  'settings.dshSetupTitle': string;
+  'settings.dshSetupDescription': string;
+  'settings.dshSetupNote': string;
+  'settings.dshSetupConfirm': string;
+  'settings.dshSetupInstalling': string;
+  'settings.dshSetupRequired': string;
   'settings.anthropicApi': string;
   'settings.noAgentSelected': string;
   'settings.language': string;
   'settings.languageHint': string;
-  'settings.appearance': string;
-  'settings.appearanceHint': string;
-  'settings.themeSystem': string;
-  'settings.themeLight': string;
-  'settings.themeDark': string;
   'settings.agentModelHead': string;
   'settings.modelPicker': string;
   'settings.modelSourceLive': string;
+  'settings.modelUsesCliDefault': string;
   'settings.modelSourceFallback': string;
   'settings.reasoningPicker': string;
+  'settings.serviceTierPicker': string;
   'settings.modelPickerHint': string;
   'settings.modelPickerLiveHint': string;
   'settings.modelPickerLiveCatalogOnlyHint': string;
@@ -482,6 +678,7 @@ export interface Dict {
   'settings.modelCustom': string;
   'settings.modelCustomLabel': string;
   'settings.modelCustomPlaceholder': string;
+  'settings.onboardingModelUseCustom': string;
   'settings.mediaProviders': string;
   'settings.mediaProvidersHint': string;
   'settings.mcpServerTitle': string;
@@ -501,6 +698,16 @@ export interface Dict {
   'settings.mediaProviderReloadSuccess': string;
   'settings.mediaProviderLoadError': string;
   'settings.mediaProviderComingSoonHint': string;
+  // #5517 media-providers redesign: provider pill selector + single detail
+  // card (labeled Model field, docs callout, save-bar note, no-key panel).
+  'settings.mediaProviderModelProviders': string;
+  'settings.mediaProviderModel': string;
+  'settings.mediaProviderModelPlaceholder': string;
+  'settings.mediaProviderDocsTitle': string;
+  'settings.mediaProviderDocsHint': string;
+  'settings.mediaProviderSaveHint': string;
+  'settings.mediaProviderNoKeyRequired': string;
+  'settings.mediaProviderNoKeyHint': string;
   'settings.privacy': string;
   'settings.privacyHint': string;
   'settings.privacyConsentKicker': string;
@@ -919,6 +1126,10 @@ export interface Dict {
   'settings.mcpRunningNote': string;
 
   // Notifications (settings + system notifications)
+  // `systemPrefs*` heads the System preferences block on Settings → General,
+  // which groups the completion sound and desktop notification rows.
+  'settings.systemPrefsTitle': string;
+  'settings.systemPrefsHint': string;
   'settings.notifications': string;
   'settings.notificationsHint': string;
   'settings.notifyCompletionSound': string;
@@ -943,19 +1154,34 @@ export interface Dict {
   'notify.failureTitle': string;
   'notify.successBody': string;
   'notify.failureBody': string;
+  'notify.needsReplyBody': string;
+  'notify.runFailedBody': string;
+  'notify.newReplyBody': string;
 
   // Desktop updater
   'updater.available': string;
   'updater.availableBody': string;
+  'updater.activeRunsTitle': string;
+  'updater.activeRunsBody': string;
+  'updater.activeRunsUnknownBody': string;
   'updater.checking': string;
   'updater.download': string;
   'updater.downloading': string;
   'updater.downloadingPercent': string;
+  'updater.dialogAvailableGeneric': string;
+  'updater.dialogAvailableVersion': string;
+  'updater.dialogCheckFailed': string;
+  'updater.dialogDownloadFailed': string;
+  'updater.downloadFailedTitle': string;
+  'updater.dialogReadyGeneric': string;
+  'updater.dialogReadyVersion': string;
+  'updater.dialogUnsupported': string;
   'updater.done': string;
   'updater.failed': string;
   'updater.installerOpenBody': string;
   'updater.installerOpened': string;
   'updater.later': string;
+  'updater.manualDownload': string;
   'updater.allowSilentUpdates': string;
   'updater.openFailedFallback': string;
   'updater.installRestart': string;
@@ -971,13 +1197,22 @@ export interface Dict {
   'updater.ready': string;
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
+  // Forced installer reinstall (feed control.launcher.version.min gate).
+  // Copy priority: operator jump link (reinstall.url) > these defaults.
+  'updater.reinstallLearnMore': string;
+  'updater.reinstallReadyGeneric': string;
+  'updater.reinstallReadyVersion': string;
+  'updater.restartAnyway': string;
   'updater.upToDate': string;
+  'updater.viewVersionFeatures': string;
 
-  // Post-update "what's new" card on the home surface. Release-configured
-  // copy comes from the release feed; these keys cover the card chrome and
-  // the generic fallback when a version ships without highlights.
+  // Post-update "what's new" dialog on the home surface. Cover art, release
+  // headline and highlight bullets come from the hosted highlights document;
+  // these keys cover the dialog chrome only. `updatedTitle` takes the RUNNING
+  // app version — never a literal. `cta` opens the release notes, so it names
+  // that destination rather than teasing "see what's new".
+  'whatsNew.updatedTitle': string;
   'whatsNew.cta': string;
-  'whatsNew.dismissAria': string;
 
   // Newsletter email field on the onboarding About-you step.
   'newsletter.label': string;
@@ -992,10 +1227,41 @@ export interface Dict {
   'entry.tabVideoTemplates': string;
   'entry.openSettingsTitle': string;
   'entry.openSettingsAria': string;
-  'entry.discordLabel': string;
-  'entry.discordAria': string;
+  'entry.communityLabel': string;
+  'entry.communityAria': string;
   'entry.discordAriaWithOnline': string;
   'entry.discordOnlineLabel': string;
+  'entry.xAria': string;
+  'entry.mailAria': string;
+  /** Label beside the mail glyph in the rail's account dock social row. */
+  'entry.accountSettings': string;
+  'chat.collapsePane': string;
+  'collabPresence.ariaOne': string;
+  'collabPresence.aria': string;
+  'collabPresence.ariaWithSelfOne': string;
+  'collabPresence.ariaWithSelf': string;
+  'collabPresence.moreOnline': string;
+  'collabPresence.dialogTitle': string;
+  'collabPresence.onlineCount': string;
+  'collabPresence.selfBadge': string;
+  'collabPresence.roleOwner': string;
+  'collabPresence.roleAdmin': string;
+  'collabPresence.roleMember': string;
+  'comment.authorRole.owner': string;
+  'comment.authorRole.admin': string;
+  'comment.authorRole.member': string;
+  'comment.authorRole.sharePage': string;
+  'comment.sharePageCommentReadOnly': string;
+  'comment.unsentDiscardNotice': string;
+  'comment.anchorState.reanchored': string;
+  'comment.anchorState.stale': string;
+  'comment.saveTargetMissing': string;
+  'comment.savePreviewNotReady': string;
+  'comment.anchorState.lost': string;
+  'collabPresence.viewingFileSelf': string;
+  'collabPresence.viewingFileOther': string;
+  'collabPresence.viewingProjectSelf': string;
+  'collabPresence.viewingProjectOther': string;
   'entry.followXLabel': string;
   'entry.followThreadsLabel': string;
   'entry.youtubeLabel': string;
@@ -1007,6 +1273,60 @@ export interface Dict {
   'entry.useEverywhereTitle': string;
   'entry.useEverywhereAria': string;
   'entry.workspaceTeamsLabel': string;
+  'workspaceRemoval.confirm': string;
+  'workspaceRemoval.title': string;
+  'workspaceRemoval.description': string;
+  'workspaceRemoval.retry': string;
+  'workspaceSwitcher.title': string;
+  'workspaceSwitcher.limitReached': string;
+  'workspaceSwitcher.invite': string;
+  'workspaceSwitcher.createTeam': string;
+  'workspaceSwitcher.draftsTooltip': string;
+  'workspaceSwitcher.allProjectsTooltip': string;
+  'entry.primaryNavAria': string;
+  'entry.billingTierTeam': string;
+  'entry.billingTierFree': string;
+  'entry.billingTierPro': string;
+  'entry.billingTierPlus': string;
+  'entry.billingTierMax': string;
+  'entry.billingTierGo': string;
+  'entry.billingFamilyCreator': string;
+  'entry.creditsAria': string;
+  'entry.creditsAriaWithBalance': string;
+  'entry.creditsGrantTip': string;
+  'entry.creditsUpgrade': string;
+  'entry.creditsManage': string;
+  'entry.creditsOpening': string;
+  'entry.creditsRemaining': string;
+  'entry.credits': string;
+  'entry.creditsUsage': string;
+  'entry.creditsMemberNoticeTitle': string;
+  'entry.creditsMemberNoticeBody': string;
+  'entry.creditsMemberNoticeAction': string;
+  'entry.accountToggleTheme': string;
+  'entry.accountSwitchLanguage': string;
+  'entry.accountLanguageMeta': string;
+  'entry.accountGithubHelp': string;
+  'entry.accountFeatureRequest': string;
+  /** Account menu row that opens the workspace's billing console. */
+  'entry.accountBilling': string;
+  'entry.accountAddAccount': string;
+  'entry.accountSignOut': string;
+  // Sign-out confirmation dialog (recvqgMWpJZqhL) — shared by every logout
+  // entry point (nav-rail account menu + AMR account pill) so a stray click
+  // can never sign the user out without an explicit confirm.
+  'signOut.confirmTitle': string;
+  'signOut.confirmMessage': string;
+  'signOut.confirmAccountMessage': string;
+  'signOut.confirmAction': string;
+  'entry.navRecents': string;
+  'entry.navDashboard': string;
+  'entry.blankDraftsTitle': string;
+  'entry.blankDraftsDescription': string;
+  'entry.projectsLoadFailed': string;
+  'entry.blankAllProjectsTitle': string;
+  'entry.blankAllProjectsDescription': string;
+  'entry.blankCreate': string;
   'entry.workspaceTeamsTitle': string;
   'entry.workspaceTeamsAria': string;
   // Left nav rail (icon-only) — surface labels also serve as tooltips
@@ -1020,19 +1340,81 @@ export interface Dict {
   'entry.navDesignSystems': string;
   'entry.navBrands': string;
   'entry.navIntegrations': string;
+  // Team-edition navigation shell.
+  'entry.navMembers': string;
+  'entry.navWorkspaceSettings': string;
+  'entry.navDrafts': string;
+  'entry.navAllProjects': string;
+  'entry.draftsDescription': string;
+  'entry.allProjectsDescription': string;
+  'entry.navBoard': string;
+  'entry.navTeamSection': string;
+  'entry.teamSlotNote': string;
+  'entry.cloudCalloutTitle': string;
+  'entry.cloudRecovering': string;
+  'entry.authExpiredBody': string;
+  'home.createFailed': string;
+  'home.daemonRecovering': string;
+  /** Toast after POST /api/projects answered PROJECT_CREATE_PREPARATION_TIMEOUT. */
+  'home.createTimedOut': string;
+  'home.amrGateUnavailable': string;
+  'home.bundledScenarioMissing': string;
+  'entry.cloudCalloutBody': string;
+  'entry.cloudCreditsTitle': string;
+  'entry.cloudCreditsBody': string;
+  'entry.cloudCreditsCta': string;
+  /** Name of the identity row on the local (signed-out) account dock. */
+  'entry.localAccountName': string;
+  'entry.cloudCalloutDismissAria': string;
+  'entry.workspaceLockedNote': string;
+  'entry.workspaceLockedRecover': string;
+  // Client message center
+  'messageCenter.openAria': string;
+  'messageCenter.unreadCount': string;
+  'messageCenter.title': string;
+  'messageCenter.subtitle': string;
+  'messageCenter.filterAll': string;
+  'messageCenter.filterUnread': string;
+  'messageCenter.filterRead': string;
+  'messageCenter.markAllRead': string;
+  'messageCenter.emptyAllTitle': string;
+  'messageCenter.emptyUnreadTitle': string;
+  'messageCenter.emptyReadTitle': string;
+  'messageCenter.archive': string;
+  'messageCenter.unarchive': string;
+  'messageCenter.archivedTitle': string;
+  'messageCenter.emptyArchivedTitle': string;
+  'messageCenter.emptyBody': string;
+  'messageCenter.close': string;
+  'messageCenter.desktopSettings': string;
+  'messageCenter.desktopSettingsHint': string;
+  'goPlanSunset.closeAria': string;
+  'goPlanSunset.title': string;
+  'goPlanSunset.subtitle': string;
+  'goPlanSunset.decisionsAria': string;
+  'goPlanSunset.decisionsIntro': string;
+  'goPlanSunset.decisionStopSales': string;
+  'goPlanSunset.decisionRefund': string;
+  'goPlanSunset.decisionUnaffected': string;
+  'goPlanSunset.closing': string;
+  'goPlanSunset.dismissError': string;
+  'goPlanSunset.viewSubscriptions': string;
+  'goPlanSunset.confirming': string;
+  'goPlanSunset.acknowledge': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
 
   // Entry home
   'homeHero.title': string;
+  'homeHero.titleUnselected': string;
+  'homeHero.titleWords': string;
+  'homeHero.subtitle': string;
   'homeHero.startWithTemplate': string;
   'homeHero.startBlankProject': string;
   'homeHero.templatePicker.label': string;
   'homeHero.templatePicker.searchPlaceholder': string;
   'homeHero.templatePicker.projectTypes': string;
-  'homeHero.templatesScrollHint': string;
-  'homeHero.templatesCollapse': string;
   'homeHero.subtitlePrefix': string;
   'homeHero.placeholder': string;
   'homeHero.placeholderActive': string;
@@ -1068,13 +1450,14 @@ export interface Dict {
   'homeHero.clearActivePlugin': string;
   'homeHero.clearActiveSkill': string;
   'homeHero.contextItemsResolved': string;
+  'homeHero.attachmentsScrollPrev': string;
+  'homeHero.attachmentsScrollNext': string;
   'homeHero.removeFile': string;
   'homeHero.contextSearchResults': string;
   'homeHero.contextSurfaces': string;
   'homeHero.loadingContext': string;
   'homeHero.noResults': string;
   'homeHero.searchPrompt': string;
-  'homeHero.parameters': string;
   'homeHero.details': string;
   'homeHero.toRun': string;
   'homeHero.forNewLine': string;
@@ -1104,6 +1487,9 @@ export interface Dict {
   'homeHero.chip.deck': string;
   'homeHero.chip.image': string;
   'homeHero.chip.video': string;
+  'homeHero.chip.motionDesign': string;
+  'homeHero.chip.motionDesignDesc': string;
+  'homeHero.chip.motionDesignHint': string;
   'homeHero.chip.hyperframes': string;
   'homeHero.chip.audio': string;
   'homeHero.chip.createBrandKit': string;
@@ -1148,10 +1534,10 @@ export interface Dict {
   'homeHero.chip.audioNext': string;
   'homeHero.chip.webClonePromptSeed': string;
   'homeWorkingDir.trigger': string;
+  'homeWorkingDir.triggerShort': string;
   'homeWorkingDir.pick': string;
   'homeWorkingDir.replace': string;
   'homeWorkingDir.recent': string;
-  'homeWorkingDir.recentEmpty': string;
   'homeWorkingDir.clear': string;
   'homeWorkingDir.hint': string;
   'homeWorkingDir.missing': string;
@@ -1231,6 +1617,52 @@ export interface Dict {
   'recentProjects.title': string;
   'recentProjects.viewAll': string;
   'recentProjects.empty': string;
+  'recentProjects.ownerAll': string;
+  'recentProjects.ownerMine': string;
+  'recentProjects.ownerOthers': string;
+  'recentProjects.kindAll': string;
+  'recentProjects.kindPrototype': string;
+  'recentProjects.kindSlides': string;
+  'recentProjects.kindDocument': string;
+  'recentProjects.kindImage': string;
+  'recentProjects.kindMedia': string;
+  'recentProjects.kindOther': string;
+  'recentProjects.inviteTeammates': string;
+  'recentProjects.multiSelect': string;
+  'recentProjects.sortAria': string;
+  'recentProjects.sortNewest': string;
+  'recentProjects.sortOldest': string;
+  'recentProjects.sortName': string;
+  /** Heading of the rail's recent-projects disclosure (最近浏览过). */
+  'recentProjects.collectionRecent': string;
+  'recentProjects.collectionPersonalProjects': string;
+  'recentProjects.collectionTeamProjects': string;
+  'recentProjects.viewList': string;
+  'recentProjects.sharedBadge': string;
+  'recentProjects.sharedProjectFallbackName': string;
+  'recentProjects.creatorLine': string;
+  'recentProjects.selfCreator': string;
+  'recentProjects.teamMemberCreator': string;
+  'recentProjects.ownOnlyMutation': string;
+  'recentProjects.shareInProgress': string;
+  'recentProjects.duplicateInProgress': string;
+  'recentProjects.sharedInTeam': string;
+  'recentProjects.moveToTeam': string;
+  'recentProjects.moveToTeamDescPre': string;
+  'recentProjects.moveToTeamDescStrong': string;
+  'recentProjects.moveToTeamDescPost': string;
+  'recentProjects.moveToPersonalDescPre': string;
+  'recentProjects.moveToPersonalDescStrong': string;
+  'recentProjects.moveToPersonalDescPost': string;
+  'recentProjects.moveDontRemind': string;
+  'recentProjects.confirmMoveToTeam': string;
+  'recentProjects.confirmMoveToPersonal': string;
+  'recentProjects.unshareInProgress': string;
+  'recentProjects.moveOutOfTeam': string;
+  'recentProjects.unshareFailed': string;
+  'recentProjects.shareFailed': string;
+  'recentProjects.shareOwnerConflict': string;
+  'recentProjects.clearFilters': string;
   'pluginsHome.title': string;
   'pluginsHome.subtitle': string;
   'pluginsHome.browseRegistry': string;
@@ -1337,6 +1769,8 @@ export interface Dict {
   'pluginsView.availableEmptyFiltered': string;
   'pluginsView.availableEmptyNoSources': string;
   'pluginsView.installing': string;
+  'pluginsView.installWaiting': string;
+  'pluginsView.installQueuedHint': string;
   'pluginsView.install': string;
   'pluginsView.sourcesTitle': string;
   'pluginsView.sourcesSubtitle': string;
@@ -1355,6 +1789,85 @@ export interface Dict {
   'pluginsView.removing': string;
   'pluginsView.teamTitle': string;
   'pluginsView.teamBody': string;
+  'pluginsView.marketplaceTitle': string;
+  'pluginsView.marketplaceBody': string;
+  'pluginsView.marketplaceModeAria': string;
+  'pluginsView.marketplaceSourceFiltersAria': string;
+  'pluginsView.scope.official': string;
+  'pluginsView.scope.team': string;
+  'pluginsView.scope.personal': string;
+  'pluginsView.kind.plugins': string;
+  'pluginsView.kind.skills': string;
+  'pluginsView.searchPlugins': string;
+  'pluginsView.searchSkills': string;
+  'pluginsView.modeNote.plugins': string;
+  'pluginsView.modeNote.skills': string;
+  'pluginsView.create': string;
+  'pluginsView.createTitle': string;
+  'pluginsView.createWithAgent': string;
+  'pluginsView.createWithAgentBody': string;
+  'pluginsView.createWithAgentAction': string;
+  'pluginsView.createPluginBody': string;
+  'pluginsView.createSkillBody': string;
+  'pluginsView.createClose': string;
+  'pluginsView.createTypeAria': string;
+  'pluginsView.importFromUrl': string;
+  'pluginsView.importUrlBody': string;
+  'pluginsView.uploadFolder': string;
+  'pluginsView.uploadFolderBody': string;
+  'pluginsView.importing': string;
+  'pluginsView.importAndUpload': string;
+  'pluginsView.uploading': string;
+  'pluginsView.uploadKind': string;
+  'pluginsView.filesSelected': string;
+  'pluginsView.chooseFolder': string;
+  'pluginsView.emptyNoMatchTitle': string;
+  'pluginsView.emptyNoMatchHint': string;
+  'pluginsView.emptyTeamTitle': string;
+  'pluginsView.emptyTeamHint': string;
+  'pluginsView.emptyPersonalPluginsTitle': string;
+  'pluginsView.emptyPersonalSkillsTitle': string;
+  'pluginsView.emptyPersonalHint': string;
+  'pluginsView.emptyOfficialPluginsTitle': string;
+  'pluginsView.emptyOfficialSkillsTitle': string;
+  'pluginsView.emptyOfficialHint': string;
+  'pluginsView.teamSharedBadge': string;
+  'pluginsView.tryIt': string;
+  'pluginsView.categoriesAria': string;
+  'pluginsView.statSkills': string;
+  'pluginsView.statConnectors': string;
+  'pluginsView.uninstall': string;
+  'pluginsView.uninstalling': string;
+  'pluginsView.uninstallConfirm': string;
+  'pluginsView.uninstallSuccess': string;
+  'pluginsView.uninstallFailed': string;
+  'pluginsView.sharing': string;
+  'pluginsView.unsharing': string;
+  'pluginsView.shareToTeam': string;
+  'pluginsView.syncToTeam': string;
+  'pluginsView.unshareFromTeam': string;
+  'pluginsView.moreActions': string;
+  'pluginsView.skillUrlUnsupported': string;
+  'pluginsView.importPluginSuccess': string;
+  'pluginsView.importFailed': string;
+  'pluginsView.uploadPluginSuccess': string;
+  'pluginsView.uploadFailed': string;
+  'pluginsView.importSkillSuccess': string;
+  'pluginsView.shareSuccess': string;
+  'pluginsView.shareUnavailable': string;
+  'pluginsView.shareFailed': string;
+  'pluginsView.syncSuccess': string;
+  'pluginsView.syncUnavailable': string;
+  'pluginsView.syncFailed': string;
+  'pluginsView.unshareSuccess': string;
+  'pluginsView.unshareUnavailable': string;
+  'pluginsView.unshareFailed': string;
+  'pluginsView.installSuccess': string;
+  'pluginsView.installFailed': string;
+  'pluginsView.skillMissingFile': string;
+  'pluginsView.skillReadFailed': string;
+  'pluginsView.skillMissingName': string;
+  'pluginsView.skillEmptyBody': string;
   'pluginCard.details': string;
   'pluginCard.use': string;
   'pluginCard.useWithQuery': string;
@@ -1377,9 +1890,6 @@ export interface Dict {
   'pluginCard.publishTitle': string;
   'pluginCard.contributeAria': string;
   'pluginCard.contributeTitle': string;
-  'skillPluginCandidate.createForMe': string;
-  'skillPluginCandidate.contributeToMain': string;
-  'skillPluginCandidate.repoDescription': string;
   'integrations.kicker': string;
   'integrations.lede': string;
   'integrations.agentReady': string;
@@ -1786,6 +2296,13 @@ export interface Dict {
   'dsManager.templateSourceAria': string;
   'dsManager.yourSystems': string;
   'dsManager.officialPresets': string;
+  'dsManager.shareToTeam': string;
+  'dsManager.shareToTeamFailed': string;
+  'dsManager.syncToTeam': string;
+  'dsManager.syncToTeamFailed': string;
+  'dsManager.unshareFromTeam': string;
+  'dsManager.unshareFromTeamFailed': string;
+  'dsManager.teamSyncedReadOnly': string;
   'dsManager.enterprise': string;
   'dsManager.yourTemplates': string;
   'dsManager.yourSystemsAria': string;
@@ -1808,6 +2325,7 @@ export interface Dict {
   'dsManager.downloadAria': string;
   'dsManager.downloadFailed': string;
   'dsManager.deleteConfirm': string;
+  'dsManager.deletePermissionDenied': string;
   'dsManager.makeDefault': string;
   'dsManager.statusPublished': string;
   'dsManager.statusDraft': string;
@@ -1833,13 +2351,6 @@ export interface Dict {
   'mcpClient.notForwardedToLabel': string;
   'mcpClient.forwardedAcpNote': string;
   'mcpClient.notForwardedNote': string;
-  // Bottom-of-rail help menu
-  'entry.helpAria': string;
-  'entry.helpMenuAria': string;
-  'entry.helpGetHelp': string;
-  'entry.helpSubmitFeature': string;
-  'entry.helpWhatsNew': string;
-  'entry.helpDownloadDesktop': string;
   // GitHub star pill in the top bar
   'entry.githubStarLabel': string;
   'entry.githubStarTitle': string;
@@ -2005,6 +2516,8 @@ export interface Dict {
   'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
+  'newproj.openFolder': string;
+  'newproj.openingFolder': string;
   'newproj.importClaudeZip': string;
   'newproj.importClaudeZipTitle': string;
   'newproj.importingClaudeZip': string;
@@ -2070,24 +2583,12 @@ export interface Dict {
   'newproj.deleteTemplateError': string;
 
   // Prompt templates
-  'promptTemplates.searchPlaceholder': string;
-  'promptTemplates.countLabel': string;
-  'promptTemplates.emptyImage': string;
-  'promptTemplates.emptyVideo': string;
   'promptTemplates.emptyNoMatch': string;
-  'promptTemplates.attributionFooter': string;
-  'promptTemplates.openPreviewTitle': string;
-  'promptTemplates.sourcePrefix': string;
   'promptTemplates.fetchError': string;
   'promptTemplates.promptLabel': string;
   'promptTemplates.copyPrompt': string;
   'promptTemplates.copyDone': string;
-  'promptTemplates.modelHint': string;
-  'promptTemplates.openSource': string;
-  'promptTemplates.openFullscreen': string;
-  'promptTemplates.closeFullscreen': string;
   'promptTemplates.allSources': string;
-  'promptTemplates.sourceFilterAria': string;
   'promptTemplates.retry': string;
 
   // Designs tab
@@ -2099,6 +2600,11 @@ export interface Dict {
   'designs.emptyNoMatch': string;
   'designs.deleteTitle': string;
   'designs.deleteConfirm': string;
+  'designs.deleteActiveShares': string;
+  'designs.deletedShareTitle': string;
+  'designs.deletedShareRetrying': string;
+  'designs.deletedShareFailed': string;
+  'designs.deletedShareRetry': string;
   'designs.cardFreeform': string;
   'designs.badgeLive': string;
   'designs.liveArtifactBadgesAria': string;
@@ -2137,6 +2643,7 @@ export interface Dict {
   'designs.deleteSelectedPartial': string;
   'designs.tagPrototype': string;
   'designs.tagLiveArtifact': string;
+  'designs.tagWebClone': string;
   'designs.tagSlide': string;
   'designs.tagMedia': string;
   'designs.renameTitle': string;
@@ -2380,6 +2887,7 @@ export interface Dict {
   'avatar.modelSection': string;
   'avatar.modelLabel': string;
   'avatar.reasoningLabel': string;
+  'avatar.serviceTierLabel': string;
   'avatar.customSuffix': string;
   'socialShare.openDesignSection': string;
   'socialShare.openDesignTitle': string;
@@ -2422,6 +2930,7 @@ export interface Dict {
   'inlineSwitcher.missingApiKey': string;
   'inlineSwitcher.openFullSettings': string;
   'inlineSwitcher.customSuffix': string;
+  'inlineSwitcher.unlimitedBadge': string;
 
   // Project view / chat pane / composer
   'project.backToProjects': string;
@@ -2433,6 +2942,10 @@ export interface Dict {
   'project.brandReadyAiOptimize': string;
   'project.brandReadyEditManually': string;
   'project.brandReadyPreviewOpened': string;
+  'project.previewCommentSaveFailed': string;
+  'project.previewCommentSaveFailedTitle': string;
+  'project.previewCommentSaveFailedDescription': string;
+  'project.previewCommentReorderFailed': string;
   'project.metaFreeform': string;
   'project.typePrototype': string;
   'project.typeDeck': string;
@@ -2452,10 +2965,23 @@ export interface Dict {
   'chat.amrCard.chipNoKey': string;
   'chat.amrCard.chipAutoRetry': string;
   'chat.amrCard.switchCta': string;
+  'chat.amrCard.switchedResend': string;
   'chat.amrError.authMessage': string;
   'chat.amrError.balanceMessage': string;
   'chat.amrError.authorizeCta': string;
   'chat.amrError.rechargeCta': string;
+  'chat.amrConcurrencyGate.title': string;
+  'chat.amrConcurrencyGate.message': string;
+  'chat.amrConcurrencyGate.teamTitle': string;
+  'chat.amrConcurrencyGate.teamMessage': string;
+  'chat.amrConcurrencyGate.maxTitle': string;
+  'chat.amrConcurrencyGate.maxMessage': string;
+  'chat.amrConcurrencyCard.available': string;
+  'chat.amrConcurrencyCard.full': string;
+  'chat.amrConcurrencyGate.benefit1': string;
+  'chat.amrConcurrencyGate.benefit2': string;
+  'chat.amrConcurrencyGate.benefit3': string;
+  'chat.amrConcurrencyGate.benefit4': string;
   'chat.amrBalanceGate.title': string;
   'chat.amrBalanceGate.message': string;
   'chat.amrBalanceGate.benefitsTitle': string;
@@ -2469,11 +2995,7 @@ export interface Dict {
   'chat.amrBalanceGate.signedOutMessage': string;
   'chat.amrBalanceGate.signInCta': string;
   'chat.amrBalanceGate.watchingWallet': string;
-  'chat.amrLowBalance.title': string;
-  'chat.amrLowBalance.message': string;
-  'chat.amrLowBalance.rechargeCta': string;
-  'chat.amrLowBalance.proceedCta': string;
-  'chat.amrLowBalance.dontRemind': string;
+  'chat.amrBalanceGate.watchingWalletManual': string;
   'chat.amrArtifactUpgrade.title': string;
   'chat.amrArtifactUpgrade.message': string;
   'chat.amrArtifactUpgrade.benefit1': string;
@@ -2483,42 +3005,98 @@ export interface Dict {
   'chat.amrArtifactUpgrade.promoBanner': string;
   'chat.amrArtifactUpgrade.countdownLabel': string;
   'chat.amrArtifactUpgrade.plansCta': string;
-  'chat.amrArtifactUpgrade.homePlansCta': string;
   'chat.amrArtifactUpgrade.laterCta': string;
-  'chat.amrArtifactUpgrade.homeTitle': string;
-  'chat.amrArtifactUpgrade.homeMessage': string;
-  'chat.amrArtifactUpgrade.homeArtifactCta': string;
   'chat.antigravityError.launchTerminalCta': string;
   'chat.antigravityError.launchSwitchModelCta': string;
   'chat.connectionDropped': string;
   'chat.runError.title.authRequired': string;
   'chat.runError.title.balance': string;
   'chat.runError.title.connectionDropped': string;
-  'chat.runError.title.signInRequired': string;
+  /**
+   * S02 · 本地 agent 没登录 / 登录过期。`{agent}` 由报错卡在渲染时填 ——
+   * 「哪一个 agent 没登录」是这句话的全部信息量,主语不能省。
+   */
+  'chat.runError.title.signInRequired.other': string;
+  /** S04 · Open Design 智能体没登录 / 授权过期。主语固定,没有插值槽。 */
+  'chat.runError.title.signInRequired.amr': string;
   'chat.runError.title.rateLimited': string;
+  'chat.runError.title.modelWindowLimit': string;
+  'chat.runError.title.membershipConcurrencyLimit': string;
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;
   'chat.runError.title.modelUnavailable': string;
+  /**
+   * S13 ·「模型能力不支持」。和 `title.modelUnavailable`(S07「当前模型不可用」)
+   * 是产品文档里的两行,不是一句话的两种说法 —— 一个说「用不了」,一个说「做不了」。
+   */
+  'chat.runError.title.modelCapabilityUnsupported': string;
   'chat.runError.title.upstreamUnavailable': string;
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;
   'chat.runError.title.runtimeConfig': string;
+  /**
+   * S05 · 自带 API key 没配好(daemon `failure_detail: invalid_api_key`)。
+   *
+   * 主语固定,没有插值槽 —— 说的是「你填的那把 key」,不是「哪一个 agent」,
+   * 所以它和 S02 的 `title.signInRequired.other` 不是同一句话:那边要点名是哪个
+   * 本地 agent 还没登录,这边说的是 key 本身填错了。
+   *
+   * 只给 BYOK / API 提供商那一档用(判据 `byokApiKeyIsEditableInSettings`,
+   * `utils/byokProvider.ts`)。本机 CLI 报同一条 detail 时留在 S02 —— 它们的登录
+   * 在用户自己的终端里,详见 `runtime/amr-guidance.ts` 的 `apiKeyInvalidCardFor`。
+   */
+  'chat.runError.title.apiKeyInvalid': string;
   'chat.runError.title.quotaExhausted': string;
   'chat.runError.title.timedOut': string;
   'chat.runError.title.emptyOutput': string;
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
+  'chat.runError.title.cpuUnsupported': string;
+  'chat.runError.title.osUnsupported': string;
+  'chat.runError.title.cliSessionRefused': string;
+  'chat.runError.title.strategyTaskHalted': string;
+  'chat.runError.title.agentReplyIncomplete': string;
+  'chat.runError.title.noDeliverable': string;
+  'chat.runError.agentReplyIncompleteMessage': string;
+  'chat.runError.noDeliverableMessage': string;
+  'chat.runError.title.clarificationRepeated': string;
+  'chat.runError.clarificationRepeatedMessage': string;
+  'chat.runError.title.regionNotSupported': string;
+  'chat.runError.title.clientEnvironment': string;
+  'chat.runError.title.certificateFailure': string;
+  'chat.runError.certificateFailureMessage': string;
+  'chat.runError.title.proxyConfiguration': string;
+  'chat.runError.proxyConfigurationMessage': string;
+  'chat.runError.title.networkConfiguration': string;
+  'chat.runError.networkConfigurationMessage': string;
+  'chat.runError.title.hostPolicyBlock': string;
+  'chat.runError.hostPolicyBlockMessage': string;
+  'chat.runError.title.localStorageFailure': string;
+  'chat.runError.localStorageFailureMessage': string;
+  'chat.runError.title.tierUpgradeRequired': string;
+  'chat.runError.tierUpgradeRequiredMessage': string;
   'chat.runError.title.generic': string;
+  'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
   'chat.runError.signInMessage.other': string;
   'chat.runError.cliMissingMessage': string;
   'chat.runError.promptTooLargeMessage': string;
   'chat.runError.modelUnavailableMessage': string;
+  'chat.runError.modelCapabilityUnsupportedMessage': string;
+  /** S23 · 以前这一格没有正文,报错卡因此落到兜底句上。 */
+  'chat.runError.artifactMissingMessage': string;
   'chat.runError.rateLimitedMessage': string;
+  'chat.runError.modelWindowLimitMessage': string;
+  'chat.runError.modelWindowLimitMessageNoTime': string;
+  'chat.runError.membershipConcurrencyLimitMessage': string;
+  'chat.runError.membershipConcurrencyLimitMessageNoTime': string;
+  'chat.runError.membershipConcurrencyLimitOwnerMessage': string;
   'chat.runError.upstreamUnavailableMessage': string;
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
   'chat.runError.runtimeConfigMessage': string;
+  /** S05 的正文。同样没有插值槽。 */
+  'chat.runError.apiKeyInvalidMessage': string;
   'chat.runError.quotaExhaustedMessage': string;
   'chat.runError.workspaceCreditsMessage': string;
   'chat.runError.timedOutMessage': string;
@@ -2526,6 +3104,22 @@ export interface Dict {
   'chat.runError.emptyOutputMessage': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
+  'chat.runError.cpuUnsupportedMessage': string;
+  'chat.runError.osUnsupportedMessage': string;
+  'chat.runError.title.agentCrashed': string;
+  'chat.runError.agentCrashedMessage': string;
+  'chat.runError.title.accountSuspended': string;
+  'chat.runError.accountSuspendedMessage': string;
+  'chat.runError.fallbackMessage': string;
+  'chat.runError.cliSessionRefusedMessage': string;
+  'chat.runError.strategyTaskStateMismatchMessage': string;
+  'chat.runError.regionNotSupportedMessage': string;
+  'chat.runError.clientEnvironmentMessage': string;
+  'chat.runError.clientEnvironmentCause.certificate': string;
+  'chat.runError.clientEnvironmentCause.proxy': string;
+  'chat.runError.clientEnvironmentCause.network': string;
+  'chat.runError.clientEnvironmentCause.hostPolicy': string;
+  'chat.runError.clientEnvironmentCause.localStorage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -2535,6 +3129,7 @@ export interface Dict {
   'chat.comments.attached': string;
   'chat.comments.emptyAttached': string;
   'chat.comments.saved': string;
+  'chat.comments.loadFailed': string;
   'chat.comments.emptySaved': string;
   'chat.comments.add': string;
   'chat.comments.addAll': string;
@@ -2546,9 +3141,12 @@ export interface Dict {
   'chat.comments.removeAttachmentAria': string;
   'chat.comments.comment': string;
   'chat.comments.sendToChat': string;
+  'chat.comments.viewAll': string;
   'chat.comments.sending': string;
   'chat.comments.edit': string;
   'chat.comments.select': string;
+  'chat.comments.expandBody': string;
+  'chat.comments.collapseBody': string;
   'chat.comments.selectAll': string;
   'chat.comments.deselect': string;
   'chat.comments.nSelected': string;
@@ -2584,6 +3182,7 @@ export interface Dict {
   'chat.annotationFailed': string;
   'chat.annotationProjectCreateFailed': string;
   'chat.annotationUploadFailed': string;
+  'chat.attachmentFolderUnsupported': string;
   'chat.inspect.noEditableTargets': string;
   'chat.inspect.noCommentTargets': string;
   'chat.inspect.editHint': string;
@@ -2591,20 +3190,44 @@ export interface Dict {
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
+  /**
+   * 面板头图标键的名字,也是**聊天面板内唯一**的「新会话」说法。稿子 `729fa43ce7` 的
+   * `docs/design/chat-panel/src/body-scene.html:8`:`aria-label="新会话" data-tip="新会话"`。
+   *
+   * 产品裁决 2026-09-03:**只统一聊天面板内**。面板内原来三种说法收成一句 ——
+   * 这一条、回合动作行的 `assistant.forkConversation`、以及历史下拉里那颗
+   * 「新建」(`chat.new`,连按钮一起删了)。面板**外**的 `chat.newConversation`
+   * (「新建对话」)不动。
+   *
+   * ⚠️ 稿子自己这两处不一致:面板头写「新会话」,回合动作行写「新开会话」
+   * (`src/body-components.html:1189`)。取「新会话」的依据也在稿子里 ——
+   * `src/body-components.html:1243` 那条 fork 分界线是 `aria-label="新会话从这里开始"`,
+   * 稿子自己把 Fork 产出的东西叫「新会话」。于是词族定成 名词「新会话」+ 动词「开始」。
+   * 非中文语种沿用各自既有的「新建对话」措辞,不引入新词。
+   */
+  'chat.newSession': string;
   'chat.newConversationsTitle': string;
   'chat.conversationsHeading': string;
-  'chat.new': string;
   'chat.emptyConversations': string;
+  'chat.conversationsSearchPlaceholder': string;
+  'chat.conversationsNoMatches': string;
   'chat.deleteConversation': string;
   'chat.renameConversationLabel': string;
   'chat.deleteConversationConfirm': string;
   'chat.untitledConversation': string;
-  'chat.forkedConversationTitle': string;
+  /**
+   * 回合动作行那颗按钮失败时的提示。key 名还带 `fork` 是历史,**文案不带** ——
+   * 它和 `assistant.forkConversation` / `assistant.forkingConversation` 是同一颗
+   * 按钮的三个态,过去 hover 说「新开会话」、按下去变「正在分叉…」、失败说
+   * 「无法分叉这个对话」,一颗按钮两套词。产品裁决 2026-09-03 统一成
+   * 名词「新会话」+ 动词「开始」那一族。
+   */
   'chat.forkConversationFailed': string;
   'chat.startTitle': string;
   'chat.startHint': string;
   'chat.brandBrowserAssistDesktopOnly': string;
   'chat.brandBrowserAssistReadFailed': string;
+  'chat.memoryWrittenSummary': string;
   'chat.brandBrowserAssistMessage': string;
   'chat.brandBrowserLocalSnapshotMissing': string;
   'chat.brandBrowserLocalSnapshotReadFailed': string;
@@ -2623,7 +3246,30 @@ export interface Dict {
   'chat.fillInputTitle': string;
   'chat.jumpToLatest': string;
   'chat.scrollToLatest': string;
+  'chat.messageRail.aria': string;
+  'chat.messageRail.jumpAria': string;
+  'chat.messageRail.empty': string;
   'chat.you': string;
+  'chat.record.retryImage': string;
+  'chat.quote.add': string;
+  'chat.quote.count': string;
+  /** 重复添加同一段文案时的轻提示(OPEND-2546) */
+  'chat.quote.duplicate': string;
+  'chat.quote.removeAria': string;
+  'chat.support.title': string;
+  'chat.support.join': string;
+  'chat.sendFailedRetryAria': string;
+  'chat.sendTargetMissing': string;
+  'chat.audio.play': string;
+  'chat.audio.pause': string;
+  'chat.audio.download': string;
+  'chat.upgrade.balance': string;
+  'chat.upgrade.whyLow': string;
+  'chat.upgrade.whyOut': string;
+  'chat.upgrade.pausedTitle': string;
+  'chat.upgrade.pausedMessage': string;
+  'chat.upgrade.pausedTeamTitle': string;
+  'chat.upgrade.pausedTeamMessage': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
   'chat.copyErrorDiagnostic': string;
@@ -2662,6 +3308,12 @@ export interface Dict {
   'chat.mode.plan.costNote': string;
   'chat.mode.design.cost': string;
   'chat.mode.design.costNote': string;
+  // Composer mode picker (#5517): trigger/clear aria copy. Mode names and
+  // descriptions reuse `chat.mode.*.label` / `chat.mode.*.summary`.
+  'chat.modePicker.choose': string;
+  'chat.modePicker.current': string;
+  'chat.modePicker.clear': string;
+  'chat.modePicker.mode': string;
   'chat.composerHint': string;
   'chat.cliSettingsTitle': string;
   'chat.cliSettingsAria': string;
@@ -3077,14 +3729,28 @@ export interface Dict {
   'chat.linkedFolderNotFound': string;
   'chat.linkedFolderAlready': string;
   'chat.linkedFolderPickError': string;
-  'chat.queuedHeader': string;
-  'chat.queuedToSend': string;
   'chat.queuedEditQueuedTaskAria': string;
   'chat.queuedSave': string;
   'chat.queuedCancel': string;
   'chat.queuedReorder': string;
   'chat.queuedEdit': string;
-  'chat.queuedMore': string;
+  'chat.queuedHeader': string;
+  /** B11: visible label on the queue row's third button. */
+  'chat.queuedSteer': string;
+  /**
+   * B11 hover copy: pressing that button interrupts the run in progress and
+   * sends this queued row straight away (OPEND-2602). Names the button first so
+   * the accessible name still contains the visible label.
+   */
+  'chat.queuedSteerInterrupts': string;
+  /** Why steering is unavailable: the current agent's CLI stops reading input mid-turn. */
+  'chat.queuedSteerUnsupported': string;
+  /** Steering was refused because the turn already stopped reading input. */
+  'chat.queuedSteerClosed': string;
+  /** Steering failed for any other reason (network / daemon). */
+  'chat.queuedSteerFailed': string;
+  /** This queued item carries attachments, which a mid-turn message cannot deliver. */
+  'chat.queuedSteerTextOnly': string;
   'chat.queuedFollowUpFallback': string;
   'chat.send': string;
   'chat.stop': string;
@@ -3201,6 +3867,10 @@ export interface Dict {
   'workspace.showChat': string;
   'workspace.closeTab': string;
   'workspace.deleteFileConfirm': string;
+  'workspace.readonlyNotice': string;
+  'workspace.readonlyNoticeBy': string;
+  'workspace.fileSyncDownloading': string;
+  'workspace.fileSyncUploading': string;
   'workspace.deleteSelectedFilesConfirm': string;
   'workspace.deleteSelectedFilesPartial': string;
   'workspace.openFromDesignFiles': string;
@@ -3209,6 +3879,8 @@ export interface Dict {
   'workspace.newTab': string;
   'workspace.searchFilesPlaceholder': string;
   'workspace.openTabs': string;
+  'workspace.searchTabs': string;
+  'workspace.noTabsFound': string;
   'workspace.openFile': string;
   'workspace.noFilesMatch': string;
   'workspace.allFiles': string;
@@ -3227,17 +3899,15 @@ export interface Dict {
   'workspace.terminalReconnecting': string;
   'workspace.terminalStartFailed': string;
   'workspace.terminalRestart': string;
-  'previewRunStatus.analyzing': string;
-  'previewRunStatus.generating': string;
-  'previewRunStatus.verifying': string;
-  'previewRunStatus.succeeded': string;
-  'previewRunStatus.failed': string;
-  'previewRunStatus.elapsed': string;
   'designFiles.title': string;
   'designFiles.upload': string;
   'designFiles.pasteText': string;
   'designFiles.newSketch': string;
+  'designFiles.newDocument': string;
+  'designFiles.newDocumentTitle': string;
   'designFiles.empty': string;
+  'designFiles.buildingPreview': string;
+  'designFiles.syncing': string;
   'designFiles.refresh': string;
   'designFiles.delete': string;
   'designFiles.searchPlaceholder': string;
@@ -3378,14 +4048,6 @@ export interface Dict {
   'quickSwitcher.navigate': string;
   'quickSwitcher.open': string;
   'quickSwitcher.close': string;
-  'pasteDialog.title': string;
-  'pasteDialog.hint': string;
-  'pasteDialog.fileNameLabel': string;
-  'pasteDialog.namePlaceholder': string;
-  'pasteDialog.contentLabel': string;
-  'pasteDialog.contentPlaceholder': string;
-  'pasteDialog.save': string;
-  'pasteDialog.cancel': string;
   'sketch.save': string;
   'sketch.cancel': string;
   'sketch.saving': string;
@@ -3414,6 +4076,7 @@ export interface Dict {
   'fileViewer.exportPptx': string;
   'fileViewer.openInNewTab': string;
   'fileViewer.copyPath': string;
+  'fileViewer.copyingLink': string;
   'fileViewer.copied': string;
   'fileViewer.share': string;
   'fileViewer.binaryMeta': string;
@@ -3467,11 +4130,25 @@ export interface Dict {
   'fileViewer.textAnnotationRemove': string;
   'fileViewer.screenshot': string;
   'fileViewer.versions.entry': string;
+  'fileViewer.versions.entryFull': string;
   'fileViewer.versions.title': string;
   'fileViewer.versions.countOne': string;
   'fileViewer.versions.countMany': string;
   'fileViewer.versions.current': string;
   'fileViewer.versions.sourceAi': string;
+  'collab.contentUpdate.available': string;
+  'collab.contentUpdate.updating': string;
+  'collab.contentUpdate.waitToEdit': string;
+  'collab.contentUpdate.askAgain': string;
+  'collab.contentUpdate.title': string;
+  'collab.contentUpdate.description': string;
+  'collab.contentUpdate.dontPrompt': string;
+  'collab.contentUpdate.later': string;
+  'collab.contentUpdate.replace': string;
+  'collab.contentUpdate.failed': string;
+  'collab.contentUpdate.busy': string;
+  'collab.contentUpdate.unsupported': string;
+  'fileViewer.versions.sourceSync': string;
   'fileViewer.versions.sourceManual': string;
   'fileViewer.versions.sourceRestore': string;
   'fileViewer.versions.restoredFrom': string;
@@ -3496,6 +4173,7 @@ export interface Dict {
   'fileViewer.versions.restoring': string;
   'fileViewer.versions.restoreFailed': string;
   'fileViewer.versions.restoreSuccess': string;
+  'fileViewer.editScreenshotToChat': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;
@@ -3537,19 +4215,62 @@ export interface Dict {
   'manualEdit.fontSize': string;
   'manualEdit.weight': string;
   'manualEdit.align': string;
+  'manualEdit.textAlignLeft': string;
+  'manualEdit.textAlignCenter': string;
+  'manualEdit.textAlignRight': string;
   'manualEdit.padding': string;
   'manualEdit.margin': string;
   'manualEdit.radius': string;
+  'manualEdit.referenceValues': string;
+  'manualEdit.referenceValuesEmpty': string;
+  'manualEdit.referenceValuesLoading': string;
+  'manualEdit.lineHeight': string;
+  'manualEdit.letterSpacing': string;
+  'manualEdit.borderStyle': string;
+  'manualEdit.borderStyleSolid': string;
+  'manualEdit.borderStyleDashed': string;
+  'manualEdit.borderStyleDotted': string;
+  'manualEdit.borderStyleDouble': string;
+  'manualEdit.borderStyleNone': string;
   'manualEdit.border': string;
   'manualEdit.width': string;
   'manualEdit.minHeight': string;
   'manualEdit.deleteElement': string;
   'manualEdit.deleteElementConfirm': string;
+  'manualEdit.alignCenter': string;
+  'manualEdit.opacity': string;
   'manualEdit.uploadImage': string;
   'manualEdit.uploadingImage': string;
   'manualEdit.uploadImageFailed': string;
   'manualEdit.focusSlides': string;
   'manualEdit.showPanels': string;
+  'manualEdit.parameters': string;
+  'manualEdit.fontFamily': string;
+  'manualEdit.borderColor': string;
+  'manualEdit.borderWidth': string;
+  'manualEdit.height': string;
+  'manualEdit.sideTop': string;
+  'manualEdit.sideBottom': string;
+  'manualEdit.sideLeft': string;
+  'manualEdit.sideRight': string;
+  'manualEdit.layoutDirection': string;
+  'manualEdit.distribution': string;
+  'manualEdit.gap': string;
+  'manualEdit.layoutUnavailable': string;
+  'manualEdit.directionRow': string;
+  'manualEdit.directionRowReverse': string;
+  'manualEdit.directionColumn': string;
+  'manualEdit.directionColumnReverse': string;
+  'manualEdit.justifyStart': string;
+  'manualEdit.justifyCenter': string;
+  'manualEdit.justifyEnd': string;
+  'manualEdit.justifyBetween': string;
+  'manualEdit.justifyAround': string;
+  'manualEdit.justifyEvenly': string;
+  'manualEdit.alignStart': string;
+  'manualEdit.alignEnd': string;
+  'manualEdit.alignStretch': string;
+  'manualEdit.alignBaseline': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
@@ -3573,11 +4294,16 @@ export interface Dict {
   'fileViewer.speakerNotesSaved': string;
   'fileViewer.speakerNotesSaveFailed': string;
   'fileViewer.speakerNotesPlaceholder': string;
+  'fileViewer.previewAssetBlockedTitle': string;
+  'fileViewer.previewAssetBlockedDetail': string;
   'fileViewer.presenterReset': string;
   'fileViewer.present': string;
   'fileViewer.presentInTab': string;
   'fileViewer.presentFullscreen': string;
   'fileViewer.presentNewTab': string;
+  'fileViewer.presentFromBeginning': string;
+  'fileViewer.presentFromCurrentSlide': string;
+  'fileViewer.presenterMode': string;
   'fileViewer.exitPresentation': string;
   'fileViewer.shareLabel': string;
   'fileViewer.shareMenuShareLink': string;
@@ -3586,7 +4312,91 @@ export interface Dict {
   'fileViewer.shareMenuPresentation': string;
   'fileViewer.shareMenuSourceFiles': string;
   'fileViewer.shareMenuSave': string;
+  'fileViewer.shareMenuPublishViaOd': string;
+  'fileViewer.unifiedShareAria': string;
+  'fileViewer.moreSharingOptions': string;
+  'fileViewer.unifiedShareTab': string;
+  'fileViewer.unifiedExportTab': string;
+  'fileViewer.unifiedSendTab': string;
+  'fileViewer.openFileForHistory': string;
+  'fileViewer.workspaceVisibilityTitle': string;
+  'fileViewer.workspaceShareTitle': string;
+  'fileViewer.workspaceSharePrivateDescription': string;
+  'fileViewer.workspaceShareWorkspaceDescription': string;
+  'fileViewer.workspaceAccessPrivate': string;
+  'fileViewer.workspaceAccessMembers': string;
+  'fileViewer.publishSingleFileTitle': string;
+  'fileViewer.generateAndCopyLink': string;
+  'fileViewer.linkAccessTitle': string;
+  'fileViewer.linkAccessDescription': string;
+  'fileViewer.publicLinkUnavailable': string;
+  'fileViewer.publishSingleFileDescription': string;
+  'fileViewer.openFileRequired': string;
+  'fileViewer.publishFile': string;
+  /** Shown on the publish button in place of `publishFile` while the publish
+   *  request is in flight (it takes several seconds server-side) — feedback
+   *  for the "no loading state, looks like nothing happened" report
+   *  (recvqae7v8yMlk). */
+  'fileViewer.publishingFile': string;
+  'fileViewer.uploadingFile': string;
+  /** Publish button label while resuming a stopped share (OD-3: was a
+   *  hard-coded Chinese string, `publicationStatus === 'stopped'` branch). */
+  'fileViewer.shareReopening': string;
+  'fileViewer.publishingContinuesOnClose': string;
+  'fileViewer.publishMakesProjectTeamVisible': string;
+  'fileViewer.unpublishFile': string;
+  /** @deprecated Orphaned (recvqgif6Xa7Wb): rendered the "no team to share
+   *  with yet" bridge card with its create-team CTA in the share panel.
+   *  Product ruled that card out entirely — it was never a designed surface,
+   *  just a stopgap added for recvqae3pK5hyx/recvq6W8GX8NaH to avoid a blank
+   *  tab. A personal workspace's share tab is now allowed to show only the
+   *  cards that legitimately apply (or nothing, if none do). */
+  'fileViewer.shareEmptyStateTitle': string;
+  /** @deprecated Orphaned (recvqgif6Xa7Wb): see `shareEmptyStateTitle`. */
+  'fileViewer.shareEmptyStateDescription': string;
+  /** @deprecated Orphaned (recvqgif6Xa7Wb): see `shareEmptyStateTitle`. */
+  'fileViewer.shareEmptyStateCreateTeam': string;
+  /** @deprecated Orphaned (recvqgif6Xa7Wb): see `shareEmptyStateTitle`. */
+  'fileViewer.shareTeamMissingTitle': string;
+  /** @deprecated Orphaned: the public-file gate is no longer team-scoped.
+   *  `fileViewer.publishFileRequiresWorkspace` replaced it. */
+  'fileViewer.publishFileRequiresTeam': string;
+  'fileViewer.publishFileRequiresWorkspace': string;
+  'fileViewer.publishFileFailed': string;
+  'fileViewer.publishFileConnectionFailed': string;
+  'fileViewer.publishFileSignInRequired': string;
+  'fileViewer.publishFileAccessDenied': string;
+  'fileViewer.publishFileServiceRejected': string;
+  'fileViewer.publishFileLocalSessionFailed': string;
+  'fileViewer.publishFileUnconfirmed': string;
+  'fileViewer.shareCheckLoading': string;
+  'fileViewer.shareCheckFailed': string;
+  'fileViewer.shareUpdateHint': string;
+  'fileViewer.shareUpdatingLink': string;
+  'fileViewer.shareUpdateLink': string;
+  'fileViewer.signInToUpdate': string;
+  'fileViewer.signInToShare': string;
+  'fileViewer.shareOutdatedSignInHint': string;
+  'fileViewer.signInToShareDescription': string;
+  'fileViewer.shareUpdateSuccess': string;
+  'fileViewer.shareUpdateFailed': string;
+  'fileViewer.shareUpdateUncertain': string;
+  'fileViewer.shareUpdateRetry': string;
+  'fileViewer.unpublishFileFailed': string;
+  'fileViewer.publishFileTooLarge': string;
+  'fileViewer.publishFileContentUnavailable': string;
+  'fileViewer.publishFileConflict': string;
+  'fileViewer.publishFileWorkspaceLocked': string;
+  'fileViewer.publishFileEntryIndexConflict': string;
+  'fileViewer.copyFixForAgent': string;
+  'fileViewer.copyFixForAgentFailed': string;
+  'fileViewer.workspaceShareSuccess': string;
+  'fileViewer.workspaceShareFailed': string;
+  'fileViewer.workspaceUnshareSuccess': string;
+  'fileViewer.workspaceUnshareFailed': string;
+  'fileViewer.readonlySharedNoExport': string;
   'fileViewer.copyShareLink': string;
+  'fileViewer.copyLinkManually': string;
   'fileViewer.openSharePage': string;
   'fileViewer.shareLinkRequiresDeploy': string;
   'fileViewer.shareLinkPublishGuide': string;
@@ -3603,6 +4413,7 @@ export interface Dict {
   'fileViewer.exportPptxBusy': string;
   'fileViewer.exportPptxHint': string;
   'fileViewer.exportPptxNa': string;
+  'fileViewer.exportDaemonUnreachable': string;
   'fileViewer.exportZip': string;
   'fileViewer.exportHtml': string;
   'fileViewer.exportMd': string;
@@ -3619,7 +4430,8 @@ export interface Dict {
   'fileViewer.exportSlideProgress': string;
   'fileViewer.exportingElapsed': string;
   'fileViewer.exportSlideEta': string;
-  'fileViewer.exportFailed': string;
+  'fileViewer.exportFailedTitle': string;
+  'fileViewer.exportFailedDescription': string;
   'fileViewer.exportDone': string;
   'fileViewer.exportImageFailed': string;
   'fileViewer.exportImageModalSubtitle': string;
@@ -3777,27 +4589,7 @@ export interface Dict {
   'questionForm.skip': string;
   'questionForm.locked': string;
 
-  // Conversations dropdown
-  'conv.switch': string;
-  'conv.label': string;
-  'conv.heading': string;
-  'conv.new': string;
-  'conv.empty': string;
-  'conv.untitled': string;
-  'conv.renameTooltip': string;
-  'conv.delete': string;
-  'conv.deleteConfirm': string;
 
-  // Agent picker (legacy / alt)
-  'agentPicker.label': string;
-  'agentPicker.modeChoose': string;
-  'agentPicker.localCli': string;
-  'agentPicker.daemonOff': string;
-  'agentPicker.byok': string;
-  'agentPicker.selectAgent': string;
-  'agentPicker.noAgents': string;
-  'agentPicker.notInstalled': string;
-  'agentPicker.rescan': string;
 
   // Tool cards (assistant action cards)
   'tool.openInTab': string;
@@ -3830,15 +4622,32 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  /** Run title while the last turn's question form is still unanswered (OPEND-2744). */
+  'assistant.awaitingReplyLabel': string;
+  'assistant.canceledLabel': string;
+  'assistant.canceledDetail': string;
   'assistant.copyMarkdown': string;
+  /**
+   * 回合动作行那颗按钮的名字。**必须和 `chat.newSession` 同字** —— 聊天面板内
+   * 只有一句「新会话」(产品裁决 2026-09-03),守卫在
+   * `tests/components/chat/w129-new-session-single-entry.test.tsx`。
+   */
   'assistant.forkConversation': string;
+  /** 上面那颗按钮的进行态。同一族词:名词「新会话」+ 动词「开始」。 */
   'assistant.forkingConversation': string;
+  /** 分叉分界线下面那行脚注 —— 告诉人 Fork 不是跳走,上文已经带过去了。 */
+  'assistant.forkNote': string;
   'assistant.shareToOpenDesign': string;
   'assistant.shareToOpenDesignBusy': string;
   'assistant.feedbackPrompt': string;
   'assistant.feedbackPositive': string;
   'assistant.feedbackNegative': string;
   'assistant.feedbackReasonTitle': string;
+  /** 点踩那一路的问句(交付稿第 40 格写的是「哪里不对?」);点赞仍用上面那条中性文案 */
+  'assistant.feedbackReasonTitleNegative': string;
+  /** 社区入口那一句。`{discord}` 会被替换成可点的 Discord 链接 */
+  'assistant.feedbackDiscordNegative': string;
+  'assistant.feedbackDiscordPositive': string;
   'assistant.feedbackReasonPositiveMatched': string;
   'assistant.feedbackReasonPositiveVisual': string;
   'assistant.feedbackReasonPositiveUseful': string;
@@ -3848,6 +4657,8 @@ export interface Dict {
   'assistant.feedbackReasonNegativeVisual': string;
   'assistant.feedbackReasonNegativeIncomplete': string;
   'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonNegativeCouldNotRun': string;
+  'assistant.feedbackReasonNegativeTooSlow': string;
   'assistant.feedbackReasonNegativeDesignSystem': string;
   'assistant.feedbackReasonOther': string;
   'assistant.feedbackReasonPlaceholder': string;
@@ -3855,15 +4666,43 @@ export interface Dict {
   'assistant.emptyResponseLabel': string;
   'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;
+  'assistant.unfinishedDetail': string;
   'assistant.unfinishedSummary': string;
   'assistant.unfinishedMore': string;
   'assistant.continueRemaining': string;
   'chat.resumeRunCta': string;
+  'chat.runError.contactSupportCta': string;
+  'chat.runError.exportLogsCta': string;
+  'chat.runError.switchModelCta': string;
+  'chat.runError.openSettingsCta': string;
+  /* 恢复动作被挡住时,卡面上那一句「为什么现在动不了」(OPEND-2821)。
+     四句对应 `runtime/chat/recovery-gating.ts` 的四档,不是四个新的门。 */
+  'chat.runError.title.readOnlyAccess': string;
+  'chat.runError.title.messagesUnavailable': string;
+  'chat.runError.actionBlocked.readOnly': string;
+  'chat.runError.actionBlocked.messagesUnavailable': string;
+  'chat.runError.actionBlocked.billing': string;
+  'chat.runError.actionBlocked.busy': string;
+  'chat.support.channel.feishu': string;
+  'chat.support.channel.discord': string;
+  'chat.amrBalanceOwner.title': string;
+  /** {name} = the workspace owner's display name. */
+  'chat.amrBalanceOwner.message': string;
+  /** Same sentence with the owner's role in place of their name (T57). */
+  'chat.amrBalanceOwner.messageNoOwnerName': string;
+  'chat.amrBalanceOwner.dismissCta': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;
   'assistant.openFile': string;
   'assistant.downloadFile': string;
+  'nextStep.imageContinue': string;
+  'nextStep.imageVariants': string;
+  'nextStep.imageStyle': string;
   'nextStep.title': string;
+  // Accessible name for the three agent-written follow-up rows under a
+  // delivered turn. The suggestions themselves are model-written in the
+  // conversation's own language and deliberately never enter the dictionary.
+  'nextStep.suggestionsLabel': string;
   'nextStep.more': string;
   'nextStep.share': string;
   'nextStep.download': string;
@@ -3905,8 +4744,7 @@ export interface Dict {
   'assistant.thinking': string;
   'assistant.thought': string;
   'assistant.thoughtFor': string;
-  'assistant.systemReminder': string;
-  'assistant.possiblePromptInjection': string;
+  'assistant.designSystemDirectionLocked': string;
   'assistant.waitingFirstOutput': string;
   'assistant.statusBootingAgent': string;
   'assistant.statusPreparing': string;
@@ -3914,6 +4752,7 @@ export interface Dict {
   'assistant.statusRequesting': string;
   'assistant.statusThinking': string;
   'assistant.statusStreaming': string;
+  'assistant.statusCompactingContext': string;
   'assistant.slowHint': string;
   'assistant.verbEditing': string;
   'assistant.verbWriting': string;
@@ -3926,10 +4765,60 @@ export interface Dict {
 
   // Question form labels
   'qf.answered': string;
+  'qf.unanswered': string;
+  'qf.unansweredContinued': string;
+  /** 「已回答」陈述块的标题(交付稿 `.answered .k`) */
+  'qf.answeredConfirmed': string;
+  /**
+   * 「已回答」陈述块里,被跳过那道题的值。提交出去的文本给它写的是 `(skipped)`,
+   * 这一行就是同一件事的人话版本 —— 不能整行吞掉,吞掉之后收口会退回
+   * 「答案已发送」那句兜底,而实际上一个答案都没发。
+   */
+  'qf.answeredSkipped': string;
+  'chat.att.cancelUpload': string;
+  'chat.att.retry': string;
+  'chat.attachments.preview': string;
+  'chat.attachments.scrollNext': string;
+  'chat.attachments.scrollPrev': string;
+  'chat.input.collapse': string;
+  'chat.input.expandFull': string;
+  'chat.input.viewAll': string;
+  'chat.artifact.export': string;
+  'chat.artifact.pending': string;
+  'chat.artifact.publish': string;
+  'chat.artifact.published': string;
+  'chat.artifact.shareStatusUnknown': string;
+  'chat.edge.paused': string;
+  'chat.edge.reconnectCta': string;
+  'chat.edge.reconnectDetail': string;
+  'chat.edge.reconnectFailed': string;
+  'chat.edge.reconnectFailedDescription': string;
+  'chat.edge.reconnecting': string;
+  'chat.edge.reconnectingDescription': string;
+  'chat.edge.retrying': string;
+  'chat.edge.retryingRateLimitedTitle': string;
+  'chat.edge.retryingRateLimitedDescription': string;
+  'qf.visualNext': string;
+  'qf.visualPrev': string;
+  'qf.visualRandom': string;
+  'qf.visualReshuffle': string;
+  'qf.visualViewFan': string;
+  'qf.visualViewGrid': string;
+  'qf.confirmed': string;
+  'qf.picked': string;
+  'qf.moreOptions': string;
+  'qf.colorPresets': string;
+  'qf.colorCustom': string;
+  'qf.colorPickerLabel': string;
+  'qf.colorHexLabel': string;
+  'qf.colorPreview': string;
+  'qf.colorInvalid': string;
   'qf.choose': string;
   'qf.customLabel': string;
   'qf.customPlaceholder': string;
   'qf.otherOption': string;
+  /** 「自己填」—— 选项列表最后一项的标签(交付稿 `.own-l`) */
+  'qf.ownAnswer': string;
   'qf.required': string;
   'qf.lockedSubmitted': string;
   'qf.lockedPrev': string;
@@ -3937,12 +4826,10 @@ export interface Dict {
   'qf.submitDefault': string;
   'qf.submitDisabledTitle': string;
   'qf.submitTitle': string;
-  'qf.cardSelected': string;
-  'qf.cardRefs': string;
-  'qf.cardSampleText': string;
   'questions.tabLabel': string;
   'questions.banner': string;
   'questions.bannerAnswered': string;
+  'questions.strategyBlockedNotice': string;
   'questions.continue': string;
   'questions.generating': string;
   'questions.skipAll': string;
@@ -3950,30 +4837,6 @@ export interface Dict {
   'questions.submitting': string;
 
   // Inline <od-card> memory cards (display-only siblings of question-form)
-  'artifact.odCardTaskBriefChip': string;
-  'artifact.odCardScorecardTitle': string;
-  'artifact.odCardScorecardStatusPass': string;
-  'artifact.odCardScorecardStatusPartial': string;
-  'artifact.odCardScorecardStatusFail': string;
-  'artifact.odCardRuleKicker': string;
-  'artifact.odCardRuleNameLabel': string;
-  'artifact.odCardRuleDescriptionLabel': string;
-  'artifact.odCardRuleAssertionLabel': string;
-  'artifact.odCardRuleCheckLabel': string;
-  'artifact.odCardRuleRationaleLabel': string;
-  'artifact.odCardRuleKeep': string;
-  'artifact.odCardRuleEdit': string;
-  'artifact.odCardRuleDone': string;
-  'artifact.odCardRuleDiscard': string;
-  'artifact.odCardRuleSaving': string;
-  'artifact.odCardRuleSaved': string;
-  'artifact.odCardRuleError': string;
-  'artifact.odCardBrandAssistDone': string;
-  'artifact.odCardBrandAssistKicker': string;
-  'artifact.odCardBrandAssistBody': string;
-  'artifact.odCardBrandAssistError': string;
-  'artifact.odCardBrandAssistWorking': string;
-  'artifact.odCardBrandAssistConfirm': string;
 
   // Pet (Codex-style floating companion)
   'pet.title': string;
@@ -4085,6 +4948,7 @@ export interface Dict {
   'pet.slashPopoverTitle': string;
   'pet.slashPopoverHint': string;
   'pet.slashPet': string;
+  'pet.slashMcp': string;
   'pet.slashPetWake': string;
   'pet.slashPetTuck': string;
   'pet.slashHatch': string;
@@ -4240,6 +5104,13 @@ export interface Dict {
   'settings.resetOnboarding': string;
   'settings.resetOnboardingDesc': string;
   'settings.resetOnboardingButton': string;
+  // Manual updater/launcher cache clear (disaster recovery, About pane).
+  'settings.clearUpdaterCacheTitle': string;
+  'settings.clearUpdaterCacheHint': string;
+  'settings.clearUpdaterCacheButton': string;
+  'settings.clearUpdaterCacheConfirmButton': string;
+  'settings.clearUpdaterCacheSuccess': string;
+  'settings.clearUpdaterCacheFailed': string;
   'onboarding.brandTitle': string;
   'onboarding.brandSubtitle': string;
   'onboarding.brandSkip': string;
@@ -4323,6 +5194,20 @@ export interface Dict {
   'dsCreate.previewTypeScale': string;
   'dsCreate.extractedTokens': string;
   // Brand reference picker — pick a brand to extract from
+  'brandPicker.categorySoftware': string;
+  'brandPicker.categoryFinance': string;
+  'brandPicker.categoryFashion': string;
+  'brandPicker.categoryActivewear': string;
+  'brandPicker.categoryBeauty': string;
+  'brandPicker.categoryWellness': string;
+  'brandPicker.categoryFood': string;
+  'brandPicker.categoryBeverage': string;
+  'brandPicker.categoryMedia': string;
+  'brandPicker.categoryEducation': string;
+  'brandPicker.categoryElectronics': string;
+  'brandPicker.categoryAutomotive': string;
+  'brandPicker.categoryHealthcare': string;
+  'brandPicker.categoryTravel': string;
   'brandPicker.heading': string;
   'brandPicker.subtext': string;
   'brandPicker.quickPicksLabel': string;
@@ -4355,4 +5240,671 @@ export interface Dict {
   'questions.uploadNeedsProject': string;
   'questions.uploadPartialFailed': string;
   'questions.uploadFailed': string;
+  'manualEdit.sectionImage': string;
+  'manualEdit.sectionContent': string;
+  'manualEdit.sectionPage': string;
+  'manualEdit.pageBackground': string;
+  'manualEdit.pageBaseSize': string;
+  'manualEdit.pageStylesHtmlOnly': string;
+  'pluginsView.createKindPlugin': string;
+  'pluginsView.createKindSkill': string;
+  'pluginsView.importUrlLabel': string;
+  'pluginsView.shareActionBadge': string;
+  'pluginsView.shareCloseAria': string;
+  'pluginsView.shareWhatStarts': string;
+  'pluginsView.shareSourcePlugin': string;
+  'pluginsView.shareFactPlugin': string;
+  'pluginsView.shareFactId': string;
+  'pluginsView.shareFactCopiedTo': string;
+  'pluginsView.shareFactTrust': string;
+  'pluginsView.shareActionPrompt': string;
+  'pluginsView.shareStarting': string;
+  'community.title': string;
+  'community.searchPlaceholder': string;
+  'community.searchAria': string;
+  'community.filtersAria': string;
+  'community.closePreview': string;
+  'community.typePrototype': string;
+  'community.typeLiveArtifact': string;
+  'community.typeSlides': string;
+  'community.typeDocument': string;
+  'community.typeImage': string;
+  'community.typeVideo': string;
+  'community.typeHyperFrames': string;
+  'community.typeAudio': string;
+  'community.typeWebGL': string;
+  'community.usePrompt': string;
+  /** Empty gallery tab; `{type}` is the tab's own label. */
+  'community.emptyTitle': string;
+  'community.emptyBody': string;
+  'marketplace.title': string;
+  'marketplace.filterTrusted': string;
+  'marketplace.filterRestricted': string;
+  'marketplace.emptyBefore': string;
+  'marketplace.emptyAfter': string;
+  'marketplace.trustPrefix': string;
+  'marketplace.catalogsTitle': string;
+  'marketplace.catalogsEmpty': string;
+  'marketplace.pluginCount': string;
+  'genui.continue': string;
+  'genui.authorize': string;
+  'genui.skip': string;
+  'genui.acceptAll': string;
+  'genui.rejectAll': string;
+  'genui.submit': string;
+  'genui.submitPartial': string;
+  'genui.patchNotesPlaceholder': string;
+  'inspect.close': string;
+  'inspect.colors': string;
+  'inspect.text': string;
+  'inspect.background': string;
+  'inspect.typography': string;
+  'inspect.size': string;
+  'inspect.weight': string;
+  'inspect.align': string;
+  'inspect.padding': string;
+  'inspect.radius': string;
+  'inspect.resetElement': string;
+  'library.title': string;
+  'library.headerHint': string;
+  'library.getClipper': string;
+  'library.searchPlaceholder': string;
+  'library.filterByKind': string;
+  'library.filterBySource': string;
+  'library.kindAll': string;
+  'library.kindImages': string;
+  'library.kindElements': string;
+  'library.kindDesignSystems': string;
+  'library.kindVideo': string;
+  'library.kindFonts': string;
+  'library.kindColors': string;
+  'library.kindText': string;
+  'library.kindLinks': string;
+  'library.sourceAll': string;
+  'library.sourceClipper': string;
+  'library.sourceAgent': string;
+  'library.sourceDesignSystem': string;
+  'library.sourceGenerated': string;
+  'library.viewMode': string;
+  'library.viewGrid': string;
+  'library.viewGridTooltip': string;
+  'library.viewTimeline': string;
+  'library.viewTimelineTooltip': string;
+  'library.refresh': string;
+  'library.refreshTooltip': string;
+  'library.sync': string;
+  'library.syncing': string;
+  'library.syncTooltip': string;
+  'library.upload': string;
+  'library.uploadTooltip': string;
+  'library.selectedCount': string;
+  'library.selectAll': string;
+  'library.clear': string;
+  'library.chatToDesign': string;
+  'library.chatToDesignTitle': string;
+  'library.working': string;
+  'library.useInDesignSystem': string;
+  'library.createDesignSystem': string;
+  'library.createDesignSystemSub': string;
+  'library.refineExisting': string;
+  'library.noEditableDesignSystems': string;
+  'library.addAssetsAndRefine': string;
+  'library.deleteCount': string;
+  'library.loading': string;
+  'library.emptyTitle': string;
+  'library.emptyHintBefore': string;
+  'library.emptyHintAfter': string;
+  'library.dropToUpload': string;
+  'library.confirmDeleteTitleOne': string;
+  'library.confirmDeleteTitleMany': string;
+  'library.confirmDeleteBodyOne': string;
+  'library.confirmDeleteBodyMany': string;
+  'library.cancel': string;
+  'library.today': string;
+  'library.yesterday': string;
+  'library.previewAsset': string;
+  'library.selectAsset': string;
+  'library.deselectAsset': string;
+  'library.openDesignSystem': string;
+  'library.openProject': string;
+  'library.opening': string;
+  'library.editAsPage': string;
+  'library.viewSource': string;
+  'library.remove': string;
+  'mcp.aboutTemplate': string;
+  'mcp.approvedRefresh': string;
+  'mcp.approveInBrowserHint': string;
+  'mcp.argsPlaceholder': string;
+  'mcp.authModeNone': string;
+  'mcp.authModeOAuth': string;
+  'mcp.browserDidntOpen': string;
+  'mcp.categoryDataViz': string;
+  'mcp.categoryDataVizHint': string;
+  'mcp.categoryDesignSystems': string;
+  'mcp.categoryDesignSystemsHint': string;
+  'mcp.categoryImageEditing': string;
+  'mcp.categoryImageEditingHint': string;
+  'mcp.categoryImageGeneration': string;
+  'mcp.categoryImageGenerationHint': string;
+  'mcp.categoryPublishing': string;
+  'mcp.categoryPublishingHint': string;
+  'mcp.categoryUiComponents': string;
+  'mcp.categoryUiComponentsHint': string;
+  'mcp.categoryUtilities': string;
+  'mcp.categoryUtilitiesHint': string;
+  'mcp.categoryWebCapture': string;
+  'mcp.categoryWebCaptureHint': string;
+  'mcp.checking': string;
+  'mcp.clickConnectHint': string;
+  'mcp.closePicker': string;
+  'mcp.collapse': string;
+  'mcp.collapseServerAria': string;
+  'mcp.commandPlaceholder': string;
+  'mcp.commandRequired': string;
+  'mcp.completedAuthTitle': string;
+  'mcp.connect': string;
+  'mcp.connected': string;
+  'mcp.connecting': string;
+  'mcp.customServer': string;
+  'mcp.customServerDesc': string;
+  'mcp.disabled': string;
+  'mcp.disconnect': string;
+  'mcp.disconnectFailed': string;
+  'mcp.disconnecting': string;
+  'mcp.displayNamePlaceholder': string;
+  'mcp.enabled': string;
+  'mcp.enableServerAria': string;
+  'mcp.expand': string;
+  'mcp.expandServerAria': string;
+  'mcp.expandToEdit': string;
+  'mcp.fieldArgs': string;
+  'mcp.fieldCommand': string;
+  'mcp.fieldEnv': string;
+  'mcp.fieldEnvShort': string;
+  'mcp.fieldHeaders': string;
+  'mcp.fieldId': string;
+  'mcp.fieldOAuthMode': string;
+  'mcp.fieldTransport': string;
+  'mcp.fieldUrl': string;
+  'mcp.homepage': string;
+  'mcp.idInvalid': string;
+  'mcp.jsonHelperExampleHead': string;
+  'mcp.jsonHelperHttpNote': string;
+  'mcp.jsonHelperToggle': string;
+  'mcp.moveDown': string;
+  'mcp.moveUp': string;
+  'mcp.noManagedOAuth': string;
+  'mcp.noManagedOAuthSaveDirect': string;
+  'mcp.noManagedOAuthUseAsConfigured': string;
+  'mcp.nonExpiringToken': string;
+  'mcp.notConnected': string;
+  'mcp.openAuthorizationPage': string;
+  'mcp.pickerFilterPlaceholder': string;
+  'mcp.pickerHint': string;
+  'mcp.pickerNoMatch': string;
+  'mcp.pickTemplate': string;
+  'mcp.reauthenticateTitle': string;
+  'mcp.recheckTokenTitle': string;
+  'mcp.reconnect': string;
+  'mcp.refresh': string;
+  'mcp.removeServer': string;
+  'mcp.saveFirstThenClick': string;
+  'mcp.starting': string;
+  'mcp.toGrantOAuthAccess': string;
+  'mcp.tokenExpires': string;
+  'mcp.transportAria': string;
+  'mcp.tryLabel': string;
+  'mcp.tryPromptTitle': string;
+  'mcp.unnamedServer': string;
+  'mcp.urlMalformed': string;
+  'mcp.urlProtocolInvalid': string;
+  'mcp.urlRequired': string;
+  'mcp.waitingForAuthorization': string;
+  'memory.connectorReadFailed': string;
+  'memory.connectorNoReadableContent': string;
+  'memory.providerLocalCli': string;
+  'memory.providerFallbackName': string;
+  'memory.extractionSourceConnector': string;
+  'memory.extractionSourceChat': string;
+  'memory.failureAuthExpiredTitle': string;
+  'memory.failureAuthActionCli': string;
+  'memory.failureAuthActionKey': string;
+  'memory.failureQuotaTitle': string;
+  'memory.failureQuotaAction': string;
+  'memory.failureRequestTitle': string;
+  'memory.failureRequestActionCli': string;
+  'memory.failureRequestActionProvider': string;
+  'memory.failureGenericTitle': string;
+  'memory.failureGenericActionCli': string;
+  'memory.failureGenericActionSettings': string;
+  'memory.noData': string;
+  'memory.attemptReadTitle': string;
+  'memory.attemptFailedTitle': string;
+  'memory.attemptSkippedTitle': string;
+  'memory.skipChatDisabled': string;
+  'memory.kindConnectedApps': string;
+  'memory.timeAgo': string;
+  'memory.scanRunningTitle': string;
+  'memory.scanFailedTitle': string;
+  'memory.scanSkippedTitle': string;
+  'memory.scanSavedOne': string;
+  'memory.scanSavedOther': string;
+  'memory.scanNoNewMemories': string;
+  'memory.scanTitle': string;
+  'memory.scanMetaChecking': string;
+  'memory.scanMetaNeedsAttention': string;
+  'memory.scanMetaFromConnectedApps': string;
+  'memory.scanMetaCheckedApps': string;
+  'memory.scanBusyLabel': string;
+  'memory.scanSelectPrompt': string;
+  'memory.scanSelectedApps': string;
+  'memory.connectorReadFailedRetry': string;
+  'memory.appCountOne': string;
+  'memory.appCountOther': string;
+  'memory.foundSuggestionsOne': string;
+  'memory.foundSuggestionsOther': string;
+  'memory.noSuggestionsFound': string;
+  'memory.checkedNoSuggestionsOne': string;
+  'memory.checkedNoSuggestionsOther': string;
+  'memory.savedFromConnectedAppsOne': string;
+  'memory.savedFromConnectedAppsOther': string;
+  'memory.savedPartial': string;
+  'memory.tabManual': string;
+  'memory.tabManualCaption': string;
+  'memory.tabConnected': string;
+  'memory.tabConnectedCaption': string;
+  'memory.storagePathAria': string;
+  'memory.flowOnboarding': string;
+  'memory.flowBrandContext': string;
+  'memory.flowChatSignals': string;
+  'memory.flowSavedMemory': string;
+  'memory.howCopy': string;
+  'memory.areasAria': string;
+  'memory.manualPanelHint': string;
+  'memory.connectedPanelHint': string;
+  'memory.loading': string;
+  'memory.connectedCount': string;
+  'memory.manage': string;
+  'memory.chooseSources': string;
+  'memory.chooseSourcesHint': string;
+  'memory.selectedCount': string;
+  'memory.connectorListAria': string;
+  'memory.readToolsCount': string;
+  'memory.checkingConnectionStatus': string;
+  'memory.finishAuthorization': string;
+  'memory.connectBeforeExtraction': string;
+  'memory.useConnectorAria': string;
+  'memory.selected': string;
+  'memory.select': string;
+  'memory.reconnectConnectorAria': string;
+  'memory.connectConnectorAria': string;
+  'memory.connectStateChecking': string;
+  'memory.connectStateWaiting': string;
+  'memory.connectStateConnecting': string;
+  'memory.reconnect': string;
+  'memory.selectedOfConnectedOne': string;
+  'memory.selectedOfConnectedOther': string;
+  'memory.suggestedMemories': string;
+  'memory.suggestedMemoriesHint': string;
+  'memory.saving': string;
+  'memory.saveSelected': string;
+  'memory.discard': string;
+  'memory.diagnosticsAria': string;
+  'memory.lastScan': string;
+  'memory.bytesRead': string;
+  'memory.recentScans': string;
+  'memory.runHistoryAria': string;
+  'memory.savedMemoryHint': string;
+  'memory.savedCount': string;
+  'memory.extractionCountOne': string;
+  'memory.extractionCountOther': string;
+  'memory.emptyHintBefore': string;
+  'memory.emptyHintAfter': string;
+  'memory.advancedHint': string;
+  'memory.memoryTree': string;
+  'memory.memoryTreeHint': string;
+  'memory.nodeCountOne': string;
+  'memory.nodeCountOther': string;
+  'dsCreate.addingSourceMaterial': string;
+  'dsCreate.browseFolder': string;
+  'dsCreate.confirmBody': string;
+  'dsCreate.confirmTitle': string;
+  'dsCreate.designMdPreviewFallbackName': string;
+  'dsCreate.dropZoneSelections': string;
+  'dsCreate.extractDesignSystem': string;
+  'dsCreate.extractionAlreadyStarting': string;
+  'dsCreate.figmaFileFallbackLabel': string;
+  'dsCreate.figmaUrlInvalid': string;
+  'dsCreate.githubAccessAutoBody': string;
+  'dsCreate.githubAccessAutoTitle': string;
+  'dsCreate.githubAccessMethodsAria': string;
+  'dsCreate.githubAuthorizeFailed': string;
+  'dsCreate.githubBadgeAutomatic': string;
+  'dsCreate.githubBadgeChecking': string;
+  'dsCreate.githubBadgeComingSoon': string;
+  'dsCreate.githubBadgeConnected': string;
+  'dsCreate.githubBadgeNeedsAttention': string;
+  'dsCreate.githubBadgeNotConfigured': string;
+  'dsCreate.githubBadgeOptional': string;
+  'dsCreate.githubBadgePending': string;
+  'dsCreate.githubComposioCheckingDesc': string;
+  'dsCreate.githubComposioConnectedAsDesc': string;
+  'dsCreate.githubComposioConnectedDesc': string;
+  'dsCreate.githubComposioDefaultDesc': string;
+  'dsCreate.githubComposioErrorDesc': string;
+  'dsCreate.githubComposioNotConfiguredDesc': string;
+  'dsCreate.githubComposioPendingDesc': string;
+  'dsCreate.githubConfigureComposio': string;
+  'dsCreate.githubConnecting': string;
+  'dsCreate.githubConnectorCheckFailed': string;
+  'dsCreate.githubConnectorCheckTimeout': string;
+  'dsCreate.githubConnectViaComposio': string;
+  'dsCreate.githubDisconnect': string;
+  'dsCreate.githubDisconnectFailed': string;
+  'dsCreate.githubDisconnecting': string;
+  'dsCreate.githubHideAccessMethods': string;
+  'dsCreate.githubMethodConnectorPlatform': string;
+  'dsCreate.githubMethodOdAccount': string;
+  'dsCreate.githubMethodOdAccountDesc': string;
+  'dsCreate.githubMethodThisDevice': string;
+  'dsCreate.githubMethodThisDeviceDesc': string;
+  'dsCreate.githubOpenAuthorization': string;
+  'dsCreate.githubShowAccessMethods': string;
+  'dsCreate.libraryPartiallyAdded': string;
+  'dsCreate.localCodeFilesSelected': string;
+  'dsCreate.prepareProjectFailed': string;
+  'dsCreate.removeFile': string;
+  'dsCreate.startingExtraction': string;
+  'dsFlow.activityDetailFailed': string;
+  'dsFlow.activityDetailReady': string;
+  'dsFlow.activityDetailRunning': string;
+  'dsFlow.activityFailedTitle': string;
+  'dsFlow.activityProgressAria': string;
+  'dsFlow.activityReadyTitle': string;
+  'dsFlow.activityRunningTitle': string;
+  'dsFlow.addBrandFonts': string;
+  'dsFlow.agentMsgCapturedDirection': string;
+  'dsFlow.agentMsgCreating': string;
+  'dsFlow.agentMsgReady': string;
+  'dsFlow.agentMsgRevision': string;
+  'dsFlow.agentMsgTokenRebuild': string;
+  'dsFlow.agentPushLayer': string;
+  'dsFlow.assetsLabel': string;
+  'dsFlow.auditNeedsRepair': string;
+  'dsFlow.brandFontsMissingBody': string;
+  'dsFlow.brandFontsMissingTitle': string;
+  'dsFlow.chatCreateRequest': string;
+  'dsFlow.chatSeedUpdateSystem': string;
+  'dsFlow.composerPlaceholder': string;
+  'dsFlow.conversationCreateFailed': string;
+  'dsFlow.evidenceFallbackTokens': string;
+  'dsFlow.evidenceFonts': string;
+  'dsFlow.evidenceIndexes': string;
+  'dsFlow.evidenceScannedFiles': string;
+  'dsFlow.evidenceSnippets': string;
+  'dsFlow.evidenceSourceTokens': string;
+  'dsFlow.fileDraftPreview': string;
+  'dsFlow.filesTouched': string;
+  'dsFlow.forceRebuild': string;
+  'dsFlow.generalRevision': string;
+  'dsFlow.generationCompleted': string;
+  'dsFlow.generationProgressAria': string;
+  'dsFlow.generationStopped': string;
+  'dsFlow.generationStoppedWithError': string;
+  'dsFlow.jobCompleted': string;
+  'dsFlow.jobDetailGeneration': string;
+  'dsFlow.jobDetailReady': string;
+  'dsFlow.jobDetailRevision': string;
+  'dsFlow.jobDetailTokenRebuild': string;
+  'dsFlow.jobNeedsAttention': string;
+  'dsFlow.jobNounGeneration': string;
+  'dsFlow.jobNounRevision': string;
+  'dsFlow.jobNounTokenRebuild': string;
+  'dsFlow.jobRebuildingTokens': string;
+  'dsFlow.jobRevising': string;
+  'dsFlow.jobStillWorking': string;
+  'dsFlow.loadingDesignSystem': string;
+  'dsFlow.metaEvidenceNotes': string;
+  'dsFlow.metaScannedInventory': string;
+  'dsFlow.metaSnippetIndex': string;
+  'dsFlow.metaTokenExtraction': string;
+  'dsFlow.metaTokenReport': string;
+  'dsFlow.movedBackToDraft': string;
+  'dsFlow.needsWorkSeed': string;
+  'dsFlow.no': string;
+  'dsFlow.openingDesignSystemWorkspace': string;
+  'dsFlow.openingWorkspace': string;
+  'dsFlow.packageFallbackMeta': string;
+  'dsFlow.packageLegacy': string;
+  'dsFlow.packageManifestMeta': string;
+  'dsFlow.packagePillFallback': string;
+  'dsFlow.packagePillReady': string;
+  'dsFlow.packageStructured': string;
+  'dsFlow.pendingRevision': string;
+  'dsFlow.pickLocalAgentFirst': string;
+  'dsFlow.previewPages': string;
+  'dsFlow.proposedChanges': string;
+  'dsFlow.publishCardReady': string;
+  'dsFlow.publishCardRevision': string;
+  'dsFlow.publishCardTokenRebuild': string;
+  'dsFlow.publishCardWorking': string;
+  'dsFlow.pullLayer': string;
+  'dsFlow.rebuildTokenContract': string;
+  'dsFlow.reviewDraftTitle': string;
+  'dsFlow.revisionAccept': string;
+  'dsFlow.revisionAccepted': string;
+  'dsFlow.revisionAcceptFailed': string;
+  'dsFlow.revisionHistory': string;
+  'dsFlow.revisionMsgAccepted': string;
+  'dsFlow.revisionMsgPending': string;
+  'dsFlow.revisionMsgRejected': string;
+  'dsFlow.revisionProgressUnavailable': string;
+  'dsFlow.revisionReady': string;
+  'dsFlow.revisionReject': string;
+  'dsFlow.revisionRejected': string;
+  'dsFlow.revisionRejectFailed': string;
+  'dsFlow.revisionStopped': string;
+  'dsFlow.revisionStoppedWithError': string;
+  'dsFlow.saveChangesFailed': string;
+  'dsFlow.savedDesignMd': string;
+  'dsFlow.sectionDraftBody': string;
+  'dsFlow.sectionFallbackTitle': string;
+  'dsFlow.sectionMarkedLooksGood': string;
+  'dsFlow.sectionNoContent': string;
+  'dsFlow.sectionNoDetails': string;
+  'dsFlow.setDefaultAction': string;
+  'dsFlow.setDefaultTitle': string;
+  'dsFlow.sourceEvidence': string;
+  'dsFlow.sourceTypeBundled': string;
+  'dsFlow.sourceTypeDefault': string;
+  'dsFlow.sourceTypeGithub': string;
+  'dsFlow.sourceTypeInstalled': string;
+  'dsFlow.sourceTypeLocal': string;
+  'dsFlow.sourceTypeUser': string;
+  'dsFlow.statusUpdateFailed': string;
+  'dsFlow.stepReadCurrentSystem': string;
+  'dsFlow.stepRefreshReview': string;
+  'dsFlow.stepUpdateDesignFiles': string;
+  'dsFlow.subtitleBrand': string;
+  'dsFlow.subtitleColor': string;
+  'dsFlow.subtitleComponents': string;
+  'dsFlow.subtitleDefault': string;
+  'dsFlow.subtitleSpacing': string;
+  'dsFlow.subtitleTypography': string;
+  'dsFlow.tabDesignFiles': string;
+  'dsFlow.tabDesignSystem': string;
+  'dsFlow.tokenContractLabel': string;
+  'dsFlow.tokenContractRebuildRecommended': string;
+  'dsFlow.tokenContractReportAvailable': string;
+  'dsFlow.tokenContractScore': string;
+  'dsFlow.tokenRebuildStarted': string;
+  'dsFlow.tokenRebuildStartFailed': string;
+  'dsFlow.workspaceOpenFailed': string;
+  'dsFlow.workspaceUpdatedReview': string;
+  'dsFlow.workspaceUpdatedSynced': string;
+  'dsFlow.workspaceUpdatedWithAudit': string;
+  'dsFlow.yes': string;
+  'pluginDetail.backToList': string;
+  'pluginDetail.quickCommands': string;
+  'pluginDetail.noQuickCommands': string;
+  'pluginDetail.dataConnections': string;
+  'pluginDetail.noDataConnections': string;
+  'pluginDetail.knowledgeSkills': string;
+  'pluginDetail.noKnowledgeSkills': string;
+  'pluginDetail.officialBadge': string;
+  'pluginDetail.loadFailed': string;
+  'pluginDetail.applyFailed': string;
+  'pluginDetail.examples': string;
+  'skillDetail.providedBy': string;
+  'skillDetail.markdownNotice': string;
+  'skillDetail.loadFailed': string;
+  'skillDetail.previewAria': string;
+  'common.dismiss': string;
+  'campaign.testReplay': string;
+  'campaign.deepseekV4Flash.headline': string;
+  'campaign.deepseekV4Flash.description': string;
+  'campaign.deepseekV4Flash.benefit': string;
+  'campaign.deepseekV4Flash.timing': string;
+  'campaign.deepseekV4Flash.ruleSummary': string;
+  'campaign.deepseekV4Flash.windowLabel': string;
+  'campaign.deepseekV4Flash.weekFreeSuffix': string;
+  'campaign.deepseekV4Flash.boundary': string;
+  'campaign.deepseekV4Flash.countdownLabel': string;
+  'campaign.deepseekV4Flash.countdownEnded': string;
+  'campaign.deepseekV4Flash.countdownRemaining': string;
+  'campaign.deepseekV4Flash.closeAria': string;
+  'campaign.deepseekV4Flash.unlocked': string;
+  'campaign.deepseekV4Flash.locked': string;
+  'campaign.deepseekV4Flash.later': string;
+  'campaign.deepseekV4Flash.paid.eyebrow': string;
+  'campaign.deepseekV4Flash.paid.status': string;
+  'campaign.deepseekV4Flash.paid.cta': string;
+  'campaign.deepseekV4Flash.paid.modelBadge': string;
+  'campaign.deepseekV4Flash.unpaid.eyebrow': string;
+  'campaign.deepseekV4Flash.unpaid.status': string;
+  'campaign.deepseekV4Flash.unpaid.cta': string;
+  'campaign.deepseekV4Flash.unpaid.modelBadge': string;
+  'campaign.deepseekV4Flash.unpaid.tooltip': string;
+  'campaign.deepseekV4Flash.restricted.modelBadge': string;
+  'campaign.deepseekV4Flash.restricted.tooltip': string;
+  'campaign.deepseekV4Flash.workbenchBadge': string;
+  'campaign.deepseekV4Flash.workbenchBadgeAria': string;
+
+  'experienceSurvey.tag': string;
+  'experienceSurvey.close': string;
+  'experienceSurvey.recommendation': string;
+  'experienceSurvey.recommendationLow': string;
+  'experienceSurvey.recommendationHigh': string;
+  'experienceSurvey.improvement': string;
+  'experienceSurvey.improvement.wrongOutput': string;
+  'experienceSurvey.improvement.falseDone': string;
+  'experienceSurvey.improvement.hardToUse': string;
+  'experienceSurvey.improvement.upgradePrompts': string;
+  'experienceSurvey.improvement.stuck': string;
+  'experienceSurvey.improvement.slow': string;
+  'experienceSurvey.improvement.looks': string;
+  'experienceSurvey.improvement.regression': string;
+  'experienceSurvey.improvement.other': string;
+  'experienceSurvey.otherPlaceholder': string;
+  'experienceSurvey.submit': string;
+  'experienceSurvey.skip': string;
+  'experienceSurvey.thanksTitle': string;
+  'experienceSurvey.thanksBody': string;
+
+  /* 执行记录(chat 重构):动词、状态词、计数。数值与措辞来自 wangchenglong 交付稿 */
+  'chat.record.verb.read': string;
+  'chat.record.verb.write': string;
+  'chat.record.verb.edit': string;
+  'chat.record.verb.search': string;
+  'chat.record.verb.exec': string;
+  'chat.record.failed': string;
+  'chat.record.hits': string;
+  /**
+   * S12「上游响应慢，已等 N 秒」。**2026-08-27 起没有调用点** —— 产品把这句文案从壳头
+   * 撤回了(裁决原文在 `components/chat/ExecutionShell.tsx` 的 `head` 注释里),
+   * 但明确要求「后续可能会用到,只不过用别的展现形式」。
+   *
+   * 键连同 19 份译文一起留着:一个没人调的键不花什么成本,而重新组织 19 种语言的翻译
+   * 要花的是真金白银。`scripts/i18n-check.ts` 只查「每个 locale 有没有 Dict 里的键」,
+   * 不查反向的「键有没有人用」,所以留着不会让任何检查变红(已核对)。
+   */
+  'chat.record.slowUpstream': string;
+  'chat.record.running': string;
+  'chat.record.thinking': string;
+  /** 思考行右边那个槽:「3.3k tokens」。`{count}` 已由 `formatThinkingTokens` 写好 */
+  'chat.record.thinkingTokens': string;
+  'chat.record.thoughts': string;
+  'chat.record.done': string;
+  'chat.record.turnElapsed': string;
+  'chat.record.elapsedSeconds': string;
+  'chat.record.elapsedMinutes': string;
+  'chat.record.turnStopped': string;
+  'chat.record.canceled': string;
+  'chat.record.pending': string;
+  /**
+   * 一条步骤**没跑完就结束了** —— 不知道它成没成(`closeRunningSegments`)。
+   * 两种来源:轮次被用户停掉,或者轮次跑完了但 agent 收尾时没再发一次清单。
+   * 所以不能写成「已取消」(succeeded 那一档没人取消过它),也不能写成
+   * 「未开始」(它起过步)—— OPEND-2626。
+   */
+  'chat.record.unfinished': string;
+  'chat.record.failedTurn': string;
+  'chat.record.plan': string;
+  /* Plan 卡收起态那枚药丸(设计稿第 71 格):N = 当前正在做第几步,M = 总步数 */
+  'chat.record.planStep': string;
+  'chat.record.imageBatch': string;
+  'chat.record.imageCount': string;
+  'chat.record.retry': string;
+  'chat.record.viewImage': string;
+  /**
+   * 缩略图条上那枚 26×34 的可见提示。稿子 `729fa43ce7` 的
+   * `docs/design/chat-panel/src/body-components.html:1041`:`data-tip="查看大图"` ——
+   * 和带序号的 `chat.record.viewImage`(读屏用的 `aria-label`)是两句话:
+   * 稿子 `src/components.css:2533-2534` 写死了理由「26×34 已经小到看不出内容了,
+   * tip 是它唯一能自报家门的方式」。
+   */
+  'chat.record.viewLarge': string;
+  'chat.record.imagePending': string;
+  /* OPEND-2625:音频 / 视频不是「插图」,三类各说各的话 */
+  'chat.record.audioBatch': string;
+  'chat.record.videoBatch': string;
+  'chat.record.audioCount': string;
+  'chat.record.videoCount': string;
+  'chat.record.audioPending': string;
+  'chat.record.videoPending': string;
+  'chat.record.viewAudio': string;
+  'chat.record.viewVideo': string;
+  /*
+   * 「设计系统工作区 · 自动创建」状态卡的两句文案。逐字取自稿子
+   * `729fa43ce7:docs/design/chat-panel/src/body-components.html:50-51`:
+   *   Creating design system workspace
+   *   Open Design is using the setup sources to generate this project.
+   * 和菜单项那句 `designFiles.createDesignSystemFromProject`(「基于此项目创建
+   * 设计系统」)是**两回事**:那一句说的是用户点了什么,这两句说的是系统正在做什么。
+   * 菜单项和首轮会话标题仍在用旧那枚,别顺手合并。
+   */
+  'chat.designSystemStatus.title': string;
+  'chat.designSystemStatus.description': string;
+  'labs.title': string;
+  'labs.itemAbout': string;
+  'labs.navHint': string;
+  'labs.pageDesc': string;
+  'labs.harnessName': string;
+  'labs.harnessHint': string;
+  'labs.harnessTooltip': string;
+  'labs.harnessScope': string;
+  'labs.envOverrideNotice': string;
+  'labs.loadFailedNotice': string;
+  'labs.optOutPrompt': string;
+  'labs.optOutWorseOutput': string;
+  'labs.optOutTooSlow': string;
+  'labs.optOutNotWhatIWanted': string;
+  'labs.optOutOther': string;
+  'labs.optOutSkip': string;
+  'labs.optOutOtherPlaceholder': string;
+  'labs.optOutSubmit': string;
+  'homeInvite.banner': string;
+  'homeInvite.invite': string;
+  'homeInvite.dismiss': string;
+  'homeInvite.sent': string;
 }

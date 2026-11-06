@@ -90,6 +90,44 @@ function lightThemeTextBase(input: string | undefined): string {
   return luminance(parseHex(hex)) <= 0.45 ? hex : "#000000";
 }
 
+/**
+ * A seed marks a dark-first brand only when it carries BOTH a confidently dark
+ * canvas AND a light foreground — the exact gate `neutralBases()` in seed.ts
+ * uses (dark bg + light fg → keep the dark canvas). Both must be checked here:
+ * the seed-override path (`rebuildSystem` → `sanitizeSeedOverrides`) can merge a
+ * background-only override such as `{ colorBgBase: "#050505" }` onto an
+ * otherwise light brand. Keying off `colorBgBase` alone would flip derivation to
+ * the dark ladder (forcing a white text base) while the seed still carried a
+ * dark `colorTextBase`, and `tokensToThemeJson(seed, defaultThemeAlgorithm(seed))`
+ * would then export `algorithm:"dark"` over that dark text — the very
+ * ConfigProvider mismatch this predicate exists to prevent. Thresholds mirror
+ * seed.ts (dark ≤ 0.3, light ≥ 0.6).
+ */
+function seedPrefersDark(seed: SeedToken): boolean {
+  return (
+    luminance(parseHex(seed.colorBgBase || "#ffffff")) <= 0.3 &&
+    luminance(parseHex(seed.colorTextBase || "#000000")) >= 0.6
+  );
+}
+
+/**
+ * The effective ConfigProvider algorithm for a seed's DEFAULT theme. A
+ * dark-first seed derives its default `tokens.default.json`, `variables.css`,
+ * and `kit.html` with dark palette + neutral math (see `deriveTokens` below),
+ * so the exported `theme.json` must carry `"dark"` to stay consistent with
+ * them — otherwise a ConfigProvider consumer applies the light algorithm to a
+ * dark canvas. Light and ambiguous seeds stay `"default"`. This is the single
+ * shared decision every `theme.json` producer must route through.
+ */
+export function defaultThemeAlgorithm(seed: SeedToken): ThemeAlgorithm {
+  return seedPrefersDark(seed) ? "dark" : "default";
+}
+
+function darkThemeTextBase(input: string | undefined): string {
+  const hex = input || "#ffffff";
+  return luminance(parseHex(hex)) >= 0.6 ? hex : "#ffffff";
+}
+
 // ─────────────────────────── color ladder mapping ───────────────────────────
 
 /** A semantic color's full interaction-state set, mapped off a 10-step ramp. */
@@ -225,35 +263,48 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   const isCompact = algorithm === "compact";
 
   // --- resolve the light/dark base canvas ------------------------------------
-  // Light and compact themes must stay visually light even when the source site
-  // is dark-native and the extractor records black as the observed background.
-  // Dark mode owns the near-black canvas; default/compact keep a light base and
-  // only preserve brand-provided neutral bases when they are already light/dark
-  // enough for readable light-mode contrast.
-  const textBaseHex = isDark ? "#ffffff" : lightThemeTextBase(seed.colorTextBase);
-  const bgBaseHex = isDark ? "#141414" : lightThemeBgBase(seed.colorBgBase);
+  // Default/compact stay visually light for ambiguous sources (a dark-native
+  // site whose extractor merely records black), but a seed that deliberately
+  // carries a dark canvas (dark-first brand, see seedPrefersDark) keeps it in
+  // every algorithm so the derived kit matches the brand. The dark algorithm
+  // owns the #141414 near-black only as the fallback for light-first brands.
+  const darkFirst = seedPrefersDark(seed);
+  const canvasDark = isDark || darkFirst;
+  const textBaseHex = canvasDark
+    ? darkThemeTextBase(darkFirst ? seed.colorTextBase : undefined)
+    : lightThemeTextBase(seed.colorTextBase);
+  const bgBaseHex = darkFirst
+    ? seed.colorBgBase
+    : isDark
+      ? "#141414"
+      : lightThemeBgBase(seed.colorBgBase);
   const textBase = parseHex(textBaseHex);
   const bgBase = parseHex(bgBaseHex);
 
-  const paletteOpts = isDark
+  // Color-state mapping and neutral alphas follow the canvas, not the
+  // algorithm label: a dark-first brand needs dark-legible states in its
+  // default theme too.
+  const stateAlgorithm: ThemeAlgorithm = canvasDark ? "dark" : algorithm;
+
+  const paletteOpts = canvasDark
     ? ({ theme: "dark", backgroundColor: bgBaseHex } as const)
     : undefined;
 
   // --- color palettes (primary + functional) ---------------------------------
   const primaryPalette = generate(seed.colorPrimary, paletteOpts);
-  const primary = statesFromPalette(primaryPalette, algorithm);
+  const primary = statesFromPalette(primaryPalette, stateAlgorithm);
 
-  const successStates = statesFromPalette(generate(seed.colorSuccess, paletteOpts), algorithm);
-  const warningStates = statesFromPalette(generate(seed.colorWarning, paletteOpts), algorithm);
-  const errorStates = statesFromPalette(generate(seed.colorError, paletteOpts), algorithm);
-  const infoStates = statesFromPalette(generate(seed.colorInfo, paletteOpts), algorithm);
+  const successStates = statesFromPalette(generate(seed.colorSuccess, paletteOpts), stateAlgorithm);
+  const warningStates = statesFromPalette(generate(seed.colorWarning, paletteOpts), stateAlgorithm);
+  const errorStates = statesFromPalette(generate(seed.colorError, paletteOpts), stateAlgorithm);
+  const infoStates = statesFromPalette(generate(seed.colorInfo, paletteOpts), stateAlgorithm);
 
   // colorLink falls back to colorInfo when empty (per SeedToken contract).
   const linkSeed = seed.colorLink && seed.colorLink.length > 0 ? seed.colorLink : seed.colorInfo;
-  const linkStates = statesFromPalette(generate(linkSeed, paletteOpts), algorithm);
+  const linkStates = statesFromPalette(generate(linkSeed, paletteOpts), stateAlgorithm);
 
   // --- neutral text / fill / bg / border via alpha over the base canvas -------
-  const na = neutralAlphas(algorithm);
+  const na = neutralAlphas(stateAlgorithm);
   const text = (a: number) => alphaOver(textBase, bgBase, a);
 
   const colorText = text(na.text[0]);
@@ -273,7 +324,7 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   // sit on the pure base. In dark mode elevated is lifted one notch lighter.
   const colorBgLayout = text(na.layout);
   const colorBgContainer = bgBaseHex;
-  const colorBgElevated = isDark ? alphaOver(textBase, bgBase, 0.08) : bgBaseHex;
+  const colorBgElevated = canvasDark ? alphaOver(textBase, bgBase, 0.08) : bgBaseHex;
 
   // --- typography -------------------------------------------------------------
   const fontSize = seed.fontSize;

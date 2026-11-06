@@ -166,6 +166,17 @@ export interface LexicalComposerInputProps {
   // Optional combobox a11y. When set, the ContentEditable announces the active
   // mention row (id lives in the portaled listbox) without moving DOM focus.
   comboboxAria?: { activeId: string | null; expanded: boolean };
+  // Backspace with the caret before every character in the editor. The host
+  // owns whatever leads the prompt text (HomeHero's template chip, which sits
+  // outside the editor) and returns true when it consumed the key by clearing
+  // it — the keyboard equivalent of that chip's ×, and what a token field does
+  // with the chip before the caret. Left unhandled, Backspace there is a no-op.
+  onBackspaceAtStart?: () => boolean;
+  // Read-only mode (team-shared project viewer). Makes the Lexical editor
+  // non-editable so the caret/typing is blocked, applies a muted read-only
+  // visual state, and hard-stops Enter from firing a send (belt-and-suspenders
+  // on top of the host's own send gating).
+  inputDisabled?: boolean;
   title?: string;
   // Test hook for the contenteditable host. Defaults to the project
   // composer's id; HomeHero overrides it so its own tests/selectors keep
@@ -351,10 +362,12 @@ function KeyboardPlugin({
   popoverOpen,
   onEnterSend,
   onPopoverKey,
+  inputDisabled,
 }: {
   popoverOpen: boolean;
   onEnterSend: () => void;
   onPopoverKey: LexicalComposerInputProps['onPopoverKey'];
+  inputDisabled: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   // Keep the latest callbacks/flag in refs so the command registrations are
@@ -365,15 +378,30 @@ function KeyboardPlugin({
   onEnterSendRef.current = onEnterSend;
   const onPopoverKeyRef = useRef(onPopoverKey);
   onPopoverKeyRef.current = onPopoverKey;
+  const inputDisabledRef = useRef(inputDisabled);
+  inputDisabledRef.current = inputDisabled;
   useEffect(() => {
     return mergeRegister(
       editor.registerCommand(
         KEY_ENTER_COMMAND,
         (e: KeyboardEvent | null) => {
+          // Read-only mode: swallow Enter so it never fires a send (double
+          // insurance — the host also gates send).
+          if (inputDisabledRef.current) {
+            e?.preventDefault();
+            return true;
+          }
           // IME confirm Enter — let Lexical commit the composition.
           if (editor.isComposing()) return false;
           if (e?.shiftKey) {
             editor.dispatchCommand(INSERT_LINE_BREAK_COMMAND, false);
+            e.preventDefault();
+            return true;
+          }
+          // A held Enter key produces repeated keydown events. Sending is a
+          // one-shot action, so only the initial keydown may submit or choose
+          // a popover item. Shift+Enter remains repeatable for line breaks.
+          if (e?.repeat) {
             e.preventDefault();
             return true;
           }
@@ -443,8 +471,29 @@ function KeyboardPlugin({
   return null;
 }
 
-function MentionAtomicNavigationPlugin() {
+// True when the collapsed caret sits before every character in the editor —
+// the point where Backspace has nothing of its own left to delete.
+function $caretAtEditorStart(selection: RangeSelection): boolean {
+  const { anchor } = selection;
+  if (anchor.offset !== 0) return false;
+  const first = $getRoot().getFirstDescendant();
+  // Empty editor: the anchor is the root or its lone empty paragraph.
+  if (first === null) return true;
+  const node = anchor.getNode();
+  // Text point on the first descendant, or an element point on its parent
+  // (Lexical anchors on the block when the caret precedes an atomic node).
+  return node.is(first) || node.is(first.getParent());
+}
+
+function MentionAtomicNavigationPlugin({
+  onBackspaceAtStart,
+}: {
+  onBackspaceAtStart?: () => boolean;
+}) {
   const [editor] = useLexicalComposerContext();
+  // Ref so the command registration below stays stable yet sees fresh state.
+  const onBackspaceAtStartRef = useRef(onBackspaceAtStart);
+  onBackspaceAtStartRef.current = onBackspaceAtStart;
   useEffect(() => {
     return mergeRegister(
       editor.registerCommand(
@@ -502,9 +551,20 @@ function MentionAtomicNavigationPlugin() {
           ) {
             return false;
           }
-          if (!removeMentionAtCaret(selection, true)) return false;
-          event.preventDefault();
-          return true;
+          if (removeMentionAtCaret(selection, true)) {
+            event.preventDefault();
+            return true;
+          }
+          // Nothing of the editor's own left to delete — offer the key to
+          // whatever the host renders ahead of the text.
+          if (
+            $caretAtEditorStart(selection) &&
+            onBackspaceAtStartRef.current?.() === true
+          ) {
+            event.preventDefault();
+            return true;
+          }
+          return false;
         },
         COMMAND_PRIORITY_HIGH,
       ),
@@ -642,6 +702,18 @@ function SeedingPlugin({
   return null;
 }
 
+// Reactively mirror the host `inputDisabled` flag onto the editor's editable
+// state. `initialConfig.editable` only seeds the first paint, so a later
+// viewerOnly flip (or an initially read-only mount) is applied here via
+// `editor.setEditable`.
+function EditablePlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    editor.setEditable(editable);
+  }, [editor, editable]);
+  return null;
+}
+
 export const LexicalComposerInput = forwardRef<
   LexicalComposerInputHandle,
   LexicalComposerInputProps & { draft: string }
@@ -653,9 +725,11 @@ export const LexicalComposerInput = forwardRef<
     onTrigger,
     onEnterSend,
     onPasteFiles,
+    onBackspaceAtStart,
     popoverOpen,
     onPopoverKey,
     comboboxAria,
+    inputDisabled = false,
     draft,
     title,
     testId = 'chat-composer-input',
@@ -669,7 +743,7 @@ export const LexicalComposerInput = forwardRef<
 
   const initialConfig: InitialConfigType = {
     namespace: 'chat-composer',
-    editable: true,
+    editable: !inputDisabled,
     nodes: [MentionNode],
     theme: EDITOR_THEME,
     onError(err) {
@@ -767,7 +841,14 @@ export const LexicalComposerInput = forwardRef<
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <div className="composer-input-editor">
+      <div
+        className={
+          inputDisabled
+            ? 'composer-input-editor composer-input--readonly'
+            : 'composer-input-editor'
+        }
+        aria-disabled={inputDisabled || undefined}
+      >
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
@@ -796,14 +877,16 @@ export const LexicalComposerInput = forwardRef<
       <EditorRefPlugin editorRef={editorRef} />
       <OnChangePlugin onChange={onChange} knownEntities={knownEntities} />
       <TriggerPlugin onTrigger={onTrigger} />
-      <MentionAtomicNavigationPlugin />
+      <MentionAtomicNavigationPlugin onBackspaceAtStart={onBackspaceAtStart} />
       <KeyboardPlugin
         popoverOpen={popoverOpen}
         onEnterSend={onEnterSend}
         onPopoverKey={onPopoverKey}
+        inputDisabled={inputDisabled}
       />
       <PastePlugin onPasteFiles={onPasteFiles} />
       <SeedingPlugin draft={draft} entities={knownEntities} />
+      <EditablePlugin editable={!inputDisabled} />
     </LexicalComposer>
   );
 });

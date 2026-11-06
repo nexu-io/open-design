@@ -7,11 +7,13 @@
 // when the panel calls onCreate and it completes (success path) or when the user
 // clicks the backdrop / Esc.
 
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { modalOverlay, modalContent } from '../motion';
+import { useT } from '../i18n';
 import type {
   DesignSystemSummary,
   MediaProviderCredentials,
@@ -89,6 +91,8 @@ function NewProjectModalBody({
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const t = useT();
+  const title = t('newproj.titleOther');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -98,13 +102,7 @@ function NewProjectModalBody({
     return () => document.removeEventListener('keydown', onKey);
   }, [creating, onClose]);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -133,7 +131,7 @@ function NewProjectModalBody({
       className="new-project-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="New project"
+      aria-label={title}
       data-testid="new-project-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget && !creating) onClose();
@@ -151,7 +149,7 @@ function NewProjectModalBody({
         exit="exit"
       >
         <header className="new-project-modal__head">
-          <h2 className="new-project-modal__title">New project</h2>
+          <h2 className="new-project-modal__title">{title}</h2>
           <button
             ref={closeRef}
             type="button"

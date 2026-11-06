@@ -22,14 +22,16 @@ export type TrackingChatPanelPageViewSource =
 // --- Onboarding page_view (welcome flow) ---
 //
 // CSV row "Onboarding / page_view". Fires once per step exposure inside the
-// welcome flow. The current first-run flow is Connect → About you →
-// Newsletter → Design system CTA. The legacy brand-extraction literal remains
-// in the contract for historical rows only.
+// welcome flow. The current first-run flow is Connect → Model source →
+// Runtime setup (Local/BYOK only). The legacy survey/design-system literals
+// remain in the contract for historical rows only.
 // Each step's `step_index` / `step_name` must match the enum pairs below.
 // `onboarding_session_id` is generated once per session so dashboards can
 // stitch the funnel.
 export type TrackingOnboardingArea =
   | 'runtime'
+  | 'model_source'
+  | 'runtime_setup'
   | 'about_you'
   | 'newsletter'
   | 'design_system'
@@ -43,6 +45,8 @@ export type TrackingOnboardingStepIndex = '1' | '2' | '3' | '4' | 'progress';
 
 export type TrackingOnboardingStepName =
   | 'connect'
+  | 'model_source'
+  | 'runtime_setup'
   | 'about_you'
   | 'newsletter'
   | 'design_system'
@@ -50,10 +54,9 @@ export type TrackingOnboardingStepName =
   | 'brand_extract'
   | 'generation';
 
-// How the user chose to connect to a model provider. `amr_cloud` is the
-// hosted offering the doc references; today the UI ships only
-// `local_cli` (Local Coding Agent) and `byok` (own model key). `none`
-// stamps the click events fired before any runtime was picked.
+// How the user chose to connect to a model provider: OpenDesign Hosted,
+// a local coding agent, or a user-supplied model key. `none` stamps click
+// events fired before any runtime was picked.
 // Onboarding's runtime pick is the same closed set as the global
 // `runtime_type` public param; alias to the single source of truth so the
 // two never drift.
@@ -311,4 +314,3 @@ export interface OnboardingCompletedProps {
   recommendation_id: string;
   completed_steps: TrackingOnboardingFirstLoopStep[];
 }
-

@@ -30,6 +30,13 @@ describe('GET /api/projects/:id/raw/* cache revalidation', () => {
     baseUrl = started.url;
     server = started.server;
 
+    const createResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Raw cache fixture' }),
+    });
+    expect(createResponse.status).toBe(200);
+
     projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
     const dir = path.join(projectsRoot, projectId);
     await mkdir(dir, { recursive: true });
@@ -51,6 +58,31 @@ describe('GET /api/projects/:id/raw/* cache revalidation', () => {
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
   const rawUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/raw/${name}`;
+
+  it.each(['video', 'interactive', 'ordinary'])('HEAD identifies actual %s HTML without changing the raw source', async (mode) => {
+    const html = `<!doctype html><html><head>${mode === 'ordinary' ? '' : `<meta name="od-motion-output" content="${mode}">`}</head><body>source</body></html>`;
+    const name = `cover-${mode}.html`;
+    await writeFile(path.join(projectsRoot, projectId, name), html);
+    const head = await fetch(rawUrl(name), { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('x-od-motion-output')).toBe(mode === 'video' ? 'video' : 'html');
+    expect(await head.text()).toBe('');
+    const raw = await fetch(rawUrl(name));
+    expect(await raw.text()).toBe(html);
+  });
+
+  it.each(['raw', 'powered'])('large video source remains identifiable through %s HEAD and streams unchanged', async (route) => {
+    const html = '<!doctype html><html><head><meta name="od-motion-output" content="video"></head><body>' + 'x'.repeat(2 * 1024 * 1024) + '</body></html>';
+    await writeFile(path.join(projectsRoot, projectId, 'large-motion.html'), html);
+    const url = `${baseUrl}/api/projects/${projectId}/${route}/large-motion.html`;
+    const head = await fetch(url, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('x-od-motion-output')).toBe('video');
+    expect(await head.text()).toBe('');
+    const raw = await fetch(url);
+    expect(raw.headers.get('accept-ranges')).toBe('bytes');
+    expect(await raw.text()).toBe(html);
+  });
 
   it('emits ETag, Last-Modified and Cache-Control: no-cache for a CSS asset', async () => {
     const res = await fetch(rawUrl('styles.css'));

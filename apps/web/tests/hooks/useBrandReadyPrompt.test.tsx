@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ProjectMetadata } from '@open-design/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -89,14 +89,7 @@ describe('useBrandReadyPrompt', () => {
   });
 
   it('keeps polling after a failed status so a same-brand retry can surface ready', async () => {
-    const realSetTimeout = window.setTimeout.bind(window);
-    vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number) => {
-      if (timeout === 5000 && typeof handler === 'function') {
-        void Promise.resolve().then(() => handler());
-        return 1;
-      }
-      return realSetTimeout(handler, timeout);
-    }) as typeof window.setTimeout);
+    vi.useFakeTimers();
     mockBrandsResponses(
       [
         {
@@ -125,11 +118,14 @@ describe('useBrandReadyPrompt', () => {
 
     const { result } = renderHook(() => useBrandReadyPrompt(BRAND_METADATA));
 
-    await waitFor(() => {
-      expect(result.current.ready).toEqual({
-        designSystemId: 'user:brand-1',
-        brandName: 'Nexu',
-      });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(result.current.ready).toEqual({
+      designSystemId: 'user:brand-1',
+      brandName: 'Nexu',
     });
     expect(result.current.status).toBe('ready');
     expect(result.current.prompt).toEqual({
@@ -140,23 +136,8 @@ describe('useBrandReadyPrompt', () => {
 
   it('resets the browser assist stall timer when a same-brand retry starts extracting', async () => {
     const initialNow = 1_000_000;
-    let now = initialNow;
-    vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const realSetTimeout = window.setTimeout.bind(window);
-    let pollTimers = 0;
-    vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number) => {
-      if (timeout === 5000 && typeof handler === 'function') {
-        pollTimers += 1;
-        if (pollTimers === 1) {
-          void Promise.resolve().then(() => {
-            now = initialNow + 31_000;
-            handler();
-          });
-        }
-        return pollTimers;
-      }
-      return realSetTimeout(handler, timeout);
-    }) as typeof window.setTimeout);
+    vi.useFakeTimers();
+    vi.setSystemTime(initialNow);
     mockBrandsResponses(
       [
         {
@@ -185,9 +166,13 @@ describe('useBrandReadyPrompt', () => {
 
     const { result } = renderHook(() => useBrandReadyPrompt(BRAND_METADATA));
 
-    await waitFor(() => {
-      expect(result.current.status).toBe('extracting');
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.setSystemTime(initialNow + 31_000);
+      await vi.advanceTimersByTimeAsync(5_000);
     });
+    expect(result.current.status).toBe('extracting');
     expect(result.current.browserAssist).toBeNull();
     expect(window.sessionStorage.getItem('od:brand-browser-assist:brand-1')).toBeNull();
   });

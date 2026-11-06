@@ -1,0 +1,293 @@
+/**
+ * @module analytics/events/workspace
+ * Incremental analytics contract for the Workspace information architecture.
+ *
+ * Workspace names, member emails, project titles, prompt/comment content and
+ * raw URLs/errors are deliberately absent. `workspace_key` is the opaque,
+ * stable workspace id used for PostHog group analytics.
+ */
+
+import type { TrackingProjectKind } from './shared-enums.js';
+
+export type TrackingWorkspaceType = 'personal' | 'team';
+export type TrackingWorkspaceRole = 'owner' | 'admin' | 'member';
+export type TrackingWorkspaceScope = 'official' | 'personal' | 'team' | 'unknown';
+export type TrackingWorkspacePage =
+  | 'home'
+  | 'community'
+  | 'drafts'
+  | 'all_projects'
+  | 'design_systems'
+  | 'plugins'
+  | 'workspace_settings'
+  | 'project';
+
+export interface TrackingWorkspaceDimensions {
+  /** Opaque workspace id. Never a display name. */
+  workspace_key?: string;
+  /** Authorized caller's membership, not the workspace creator's membership. */
+  workspace_member_id?: string;
+  workspace_type?: TrackingWorkspaceType;
+  workspace_role?: TrackingWorkspaceRole;
+  workspace_lifecycle?: string;
+  billing_state?: string;
+  plan_bucket?: 'free' | 'paid' | 'unknown';
+  provider_mode?: string;
+  seat_state?: 'available' | 'full' | 'unknown';
+  /** Associates the event to the PostHog workspace group. */
+  $groups?: { workspace: string };
+}
+
+export interface EntryNavigationClickProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingWorkspacePage;
+  area: 'entry_nav';
+  element:
+    | 'nav_item'
+    | 'search'
+    | 'account_menu_trigger'
+    | 'workspace_switcher_trigger'
+    | 'invite_teammates'
+    | 'create_team'
+    | 'workspace_settings';
+  target?: TrackingWorkspacePage | 'search' | 'account_menu' | 'workspace_switcher';
+  entry_from?: 'sidebar' | 'workspace_switcher';
+}
+
+export interface AccountMenuClickProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingWorkspacePage;
+  area: 'account_menu';
+  element:
+    | 'upgrade'
+    | 'credits'
+    // The account menu's 账单 row. Distinct from 'credits' (the balance row in
+    // the hover panel) even though both open B's console: they are two
+    // different rows on two different surfaces, and folding them into one
+    // element would make the menu's own usage unreadable.
+    | 'billing'
+    | 'settings'
+    | 'message_center'
+    | 'github_help'
+    | 'feature_request'
+    | 'github'
+    | 'discord'
+    | 'feishu'
+    | 'twitter'
+    | 'email'
+    | 'logout';
+  is_free_active?: boolean;
+}
+
+export interface WorkspaceSwitcherClickProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingWorkspacePage;
+  area: 'workspace_switcher';
+  element: 'workspace_option' | 'invite_teammates' | 'create_team';
+  target_workspace_type?: TrackingWorkspaceType;
+  is_current_workspace?: boolean;
+}
+
+export type WorkspaceInviteEntry = 'workspace_switcher' | 'all_projects' | 'onboarding' | 'home_banner' | 'home_header';
+
+export interface WorkspaceInviteRecipientDimensions {
+  /** Effective recipient roles in this batch, distinct from the inviter's workspace_role. */
+  requested_roles?: Array<'admin' | 'member'>;
+  requested_admin_count?: number;
+  requested_member_count?: number;
+}
+
+export interface WorkspaceInviteClickProps extends TrackingWorkspaceDimensions, WorkspaceInviteRecipientDimensions {
+  page_name: 'home' | 'all_projects' | 'onboarding';
+  area: 'workspace_invite_dialog' | 'onboarding_invite_step';
+  invite_surface_id?: string;
+  invite_batch_id?: string;
+  element:
+    | 'submit'
+    | 'add_recipient_row'
+    | 'remove_recipient_row'
+    | 'role_select'
+    | 'upgrade'
+    | 'close'
+    | 'skip_invite';
+  entry_from: WorkspaceInviteEntry;
+  invite_count_bucket?: TrackingCountBucket;
+}
+
+export type TrackingProjectCollectionPage = 'home' | 'drafts' | 'all_projects';
+export type TrackingCountBucket = '0' | '1' | '2_5' | '6_10' | '11_plus';
+export type TrackingProjectRelation = 'self' | 'other' | 'unknown';
+
+export interface ProjectCollectionClickProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingProjectCollectionPage;
+  area: 'project_collection';
+  element:
+    | 'project_open'
+    | 'more_menu'
+    | 'rename'
+    | 'duplicate'
+    | 'move_to_team'
+    | 'move_to_personal'
+    | 'delete'
+    | 'multi_select_toggle'
+    | 'bulk_move_to_team'
+    | 'bulk_move_to_personal'
+    | 'bulk_delete'
+    | 'filter'
+    | 'sort'
+    | 'view_toggle'
+    | 'invite_teammates';
+  project_key?: string;
+  project_relation?: TrackingProjectRelation;
+  selection_count_bucket?: TrackingCountBucket;
+  filter_type?: 'owner' | 'project_type';
+  filter_value?: string;
+  sort_value?: 'updated_desc' | 'updated_asc' | 'name_asc';
+  view_value?: 'grid' | 'list';
+}
+
+export interface CommunityTemplateClickProps extends TrackingWorkspaceDimensions {
+  page_name: 'community';
+  area: 'community_templates';
+  element: 'template_detail' | 'copy_prompt' | 'remix' | 'use_prompt' | 'filter';
+  template_key?: string;
+  template_type?: string;
+  resource_scope?: TrackingWorkspaceScope;
+  filter_type?: 'category' | 'subtype';
+  filter_value?: string;
+  /** use_prompt only: the surface whose Use control was clicked. */
+  use_source?: 'card' | 'detail_modal';
+  /** use_prompt only: plain Use, or Use that also loads the template prompt. */
+  use_action?: 'use' | 'use_with_query';
+}
+
+export interface ExtensionMarketplaceClickProps extends TrackingWorkspaceDimensions {
+  page_name: 'plugins';
+  area: 'extension_marketplace';
+  element: 'details' | 'use' | 'add' | 'create' | 'filter';
+  extension_key?: string;
+  extension_kind: 'expert_plugin' | 'skill';
+  resource_scope: TrackingWorkspaceScope;
+}
+
+export interface WorkspaceSurfaceViewProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingWorkspacePage;
+  area: 'account_menu' | 'workspace_switcher' | 'workspace_invite_dialog' | 'workspace_content';
+  surface_instance_id?: string;
+  entry_from?: WorkspaceInviteEntry;
+  invite_surface_id?: string;
+}
+
+export interface WorkspaceSwitchResultProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingWorkspacePage;
+  area: 'workspace_switcher';
+  result: 'success' | 'failed';
+  target_workspace_type?: TrackingWorkspaceType;
+  duration_ms: number;
+  error_code?: string;
+}
+
+export interface WorkspaceInviteResultProps extends TrackingWorkspaceDimensions, WorkspaceInviteRecipientDimensions {
+  page_name: 'home' | 'all_projects' | 'onboarding';
+  area: 'workspace_invite_dialog' | 'onboarding_invite_step';
+  invite_surface_id?: string;
+  invite_batch_id?: string;
+  /** Authoritative successful invitation IDs; no recipient emails or invite tokens. */
+  invite_ids?: string[];
+  entry_from: WorkspaceInviteEntry;
+  result: 'success' | 'partial_success' | 'failed' | 'unknown';
+  unknown_count?: number;
+  requested_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  duration_ms: number;
+  error_code?: string;
+}
+
+export interface WorkspaceProjectActionResultProps extends TrackingWorkspaceDimensions {
+  page_name: TrackingProjectCollectionPage;
+  area: 'project_collection';
+  action:
+    | 'duplicate'
+    | 'move_to_team'
+    | 'move_to_personal'
+    | 'delete'
+    | 'bulk_move_to_team'
+    | 'bulk_move_to_personal'
+    | 'bulk_delete';
+  result: 'success' | 'partial_success' | 'failed';
+  requested_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  duration_ms: number;
+  error_code?: string;
+}
+
+export interface WorkspaceSharedProjectOpenResultProps extends TrackingWorkspaceDimensions {
+  project_key: string;
+  page_name: 'all_projects' | 'drafts' | 'home';
+  area: 'project_collection';
+  result: 'success' | 'failed';
+  project_relation: TrackingProjectRelation;
+  materialization: 'warm' | 'required' | 'unknown';
+  duration_ms: number;
+  error_code?: string;
+}
+
+export interface WorkspaceResourceActionResultProps extends TrackingWorkspaceDimensions {
+  page_name: 'design_systems' | 'plugins';
+  area: 'workspace_resource';
+  resource_kind: 'design_system' | 'expert_plugin' | 'skill';
+  resource_scope: TrackingWorkspaceScope;
+  action:
+    | 'share_to_team'
+    | 'sync_to_team'
+    | 'remove_from_team'
+    | 'download_plugin'
+    | 'add';
+  result: 'success' | 'failed';
+  duration_ms: number;
+  error_code?: string;
+}
+
+export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimensions {
+  page_name: 'artifact';
+  area: 'comments';
+  result: 'success';
+  target_project_relation: TrackingProjectRelation;
+  comment_level: 'top_level' | 'reply';
+  /** Saved comment from the existing successful create result. */
+  comment_id?: string;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+}
+
+
+export interface WorkspaceJourneySurfaceProps extends TrackingWorkspaceDimensions {
+  page_name: 'home' | 'chat_panel';
+  area: 'home_invite_banner' | 'home_invite_header' | 'workspace_quota_popover'
+    | 'credit_exhausted_dialog' | 'concurrency_limit_dialog' | 'workspace_membership_removed';
+  surface_instance_id: string;
+  entry_from?: WorkspaceInviteEntry;
+  block_id?: string;
+  reason?: 'credit_exhausted' | 'concurrency_limit';
+  stage?: 'before_run' | 'mid_run' | 'unknown';
+  run_id?: string;
+}
+export interface WorkspaceJourneyClickProps extends WorkspaceJourneySurfaceProps {
+  element: 'invite_teammates' | 'close' | 'upgrade' | 'return_personal_workspace';
+}
+
+/** Funding admission recovered; this does not assert payment or a resumed run. */
+export interface WorkspaceFundingRecoveryResultProps extends WorkspaceJourneySurfaceProps {
+  result: 'recovered' | 'timeout';
+  recovery_method: 'funding_preflight';
+  duration_ms: number;
+  requires_manual_send: boolean;
+  project_key?: string;
+  conversation_id?: string;
+}
+export interface WorkspaceInvitePageViewProps extends TrackingWorkspaceDimensions {
+  page_name: 'onboarding';
+  area: 'onboarding_invite_step';
+  step_name: 'invite_teammates';
+  entry_from: 'onboarding';
+  invite_surface_id: string;
+}

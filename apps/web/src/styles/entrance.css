@@ -152,16 +152,8 @@
    Popovers & dropdowns
    ================================================================ */
 
-.conv-menu {
-  animation: od-popover-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
 .od-select-menu {
   animation: od-popover-in 140ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.entry-help-popover {
-  animation: od-popover-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 .chat-history-menu {
@@ -298,8 +290,7 @@
 
 /* Card press feedback */
 .design-card:active,
-.plugins-home__card:active,
-.recent-projects__card:active {
+.plugins-home__card:active {
   transform: translateY(0) scale(0.98);
   transition-duration: 80ms;
 }
@@ -308,14 +299,6 @@
    Comment card
    ================================================================ */
 
-
-/* ================================================================
-   Plugin action panel (right side)
-   ================================================================ */
-
-.plugin-action-panel {
-  animation: od-slide-left 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Empty states
@@ -415,14 +398,6 @@
    Mention / slash autocomplete items
    ================================================================ */
 
-
-/* ================================================================
-   Plugin hover card
-   ================================================================ */
-
-.home-hero__plugin-hover-card {
-  animation: od-popover-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
 
 /* ================================================================
    Code viewer

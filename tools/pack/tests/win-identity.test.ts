@@ -6,8 +6,12 @@ import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
-import { resolveWinInstallIdentity } from "../src/win/identity.js";
+import winCustomInstallerSource from "@/win/custom-installer.ts?raw";
+import {
+  createLauncherRuntimeSyncPowerShellScript,
+  createNsisQuotedCommandLiteral,
+} from "@/win/custom-installer.js";
+import { resolveWinInstallIdentity } from "@/win/identity.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -77,14 +81,54 @@ describe("resolveWinInstallIdentity", () => {
     });
   });
 
-  it("keeps the registry DisplayName free of the package version", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+  it("keeps the registry DisplayName free of the package version", () => {
+    const source = winCustomInstallerSource;
     expect(source).toContain('WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"');
     expect(source).not.toContain('"DisplayName" "${productName} \\${APP_VERSION}"');
   });
 
-  it("checks the silent install target directory for running instances before overwriting files", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+  it("emits a valid NSIS command literal for executable paths containing spaces", () => {
+    expect(createNsisQuotedCommandLiteral(["$INSTDIR\\Open Design.exe", "%1"])).toBe(
+      `'"$INSTDIR\\Open Design.exe" "%1"'`,
+    );
+    expect(createNsisQuotedCommandLiteral(["$INSTDIR\\Open Design.exe"])).toBe(
+      `'"$INSTDIR\\Open Design.exe"'`,
+    );
+  });
+
+  it("removes an Electron-refreshed invite protocol while this install still owns it", () => {
+    const source = winCustomInstallerSource;
+    expect(source).toContain('const inviteProtocolKey = "Software\\\\Classes\\\\opendesign"');
+    expect(source).toContain('WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""');
+    expect(source).toContain(
+      'WriteRegStr HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" "" ${inviteProtocolCommand}',
+    );
+    expect(source).toContain('$INSTDIR\\\\${exeName}');
+    expect(source).toContain(
+      'ReadRegStr $0 HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" ""',
+    );
+    expect(source).toContain(
+      "const inviteProtocolExecutablePrefix = createNsisQuotedCommandLiteral([`$INSTDIR\\\\${exeName}`])",
+    );
+    expect(source).toContain("StrCpy $1 ${inviteProtocolExecutablePrefix}");
+    expect(source).toContain("StrLen $2 $1");
+    expect(source).toContain("StrCpy $3 $0 $2");
+    expect(source).toContain("StrCmp $3 $1 0 preserve_invite_protocol");
+    expect(source).not.toContain(
+      "StrCmp $0 ${inviteProtocolCommand} 0 preserve_invite_protocol",
+    );
+    expect(source).toContain('DeleteRegKey HKCU "${inviteProtocolKey}"');
+    expect(source).toContain("preserve_invite_protocol:");
+    expect(source.indexOf("StrCmp $3 $1")).toBeLessThan(
+      source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"'),
+    );
+    expect(source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"')).toBeLessThan(
+      source.indexOf("preserve_invite_protocol:"),
+    );
+  });
+
+  it("checks the silent install target directory for running instances before overwriting files", () => {
+    const source = winCustomInstallerSource;
     const silentCheck = source.slice(source.indexOf("silent_check:"), source.indexOf("IfFileExists \"$INSTDIR\\\\${exeName}\" existing_install"));
     expect(silentCheck).toContain('IfFileExists "$INSTDIR\\\\${exeName}" 0 silent_detect_running_instances');
     expect(silentCheck).toContain('StrCpy $RunningInstancesInstallRoot "$INSTDIR"');
@@ -93,8 +137,8 @@ describe("resolveWinInstallIdentity", () => {
     );
   });
 
-  it("syncs launcher runtime metadata after a successful Windows install", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+  it("syncs launcher runtime metadata after a successful Windows install", () => {
+    const source = winCustomInstallerSource;
     expect(source).toContain("Function SyncLauncherRuntime");
     expect(source).toContain("sync-launcher-runtime.ps1");
     expect(source).toContain("-CleanupPath");
@@ -187,8 +231,8 @@ describe("resolveWinInstallIdentity", () => {
     }
   });
 
-  it("keeps installer diagnostic log events ASCII-only for silent overwrite", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+  it("keeps installer diagnostic log events ASCII-only for silent overwrite", () => {
+    const source = winCustomInstallerSource;
     expect(source).toContain('Push "existing installation found; silent install will overwrite it"');
     expect(source).not.toContain('Push "$(ExistingInstallSilentOverwrite)"');
   });

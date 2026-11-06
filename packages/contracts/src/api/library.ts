@@ -1,7 +1,7 @@
 // OD Library — global asset registry contracts.
 //
 // The library is the system-wide asset registration center: every asset that
-// enters Open Design (clipper capture, manual upload, agent-task upload or
+// enters OpenDesign (clipper capture, manual upload, agent-task upload or
 // generation, design-system staging) is indexed here through a single
 // `registerLibraryAsset` hook. Each logical asset is deduped by content hash
 // and may carry many source records (1 asset : N sources) so the same image

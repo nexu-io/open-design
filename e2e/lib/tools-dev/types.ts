@@ -52,6 +52,7 @@ export type ToolsDevSuiteSpec = {
   codexHomeDir: string;
   dataDir: string;
   namespace: string;
+  ownerPid?: number;
   root: string;
   toolsDevRoot: string;
 };

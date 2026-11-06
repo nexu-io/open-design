@@ -10,7 +10,7 @@
 //     the `## Active skill` slot.
 
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -18,6 +18,7 @@ import {
   applyPlugin,
   pickFirstLocalSkillPath,
 } from '../src/plugins/apply.js';
+import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { loadPluginLocalSkill } from '../src/plugins/local-skill.js';
 import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
 
@@ -64,6 +65,53 @@ const REGISTRY = {
   atoms: [],
 };
 
+describe('bundled od-default application', () => {
+  it('applies without a forced task-type stage or GenUI surface', async () => {
+    const pluginDir = path.resolve(
+      import.meta.dirname,
+      '../../../plugins/_official/scenarios/od-default',
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(pluginDir, 'open-design.json'), 'utf8'),
+    ) as PluginManifest;
+    const craftIds = manifest.od?.context?.craft ?? [];
+    const atomIds = [
+      ...new Set(
+        (manifest.od?.pipeline?.stages ?? []).flatMap((stage) => stage.atoms),
+      ),
+    ];
+    const computed = applyPlugin({
+      plugin: {
+        ...pluginRecord(pluginDir, manifest),
+        id: manifest.name,
+        title: manifest.title ?? manifest.name,
+        version: manifest.version,
+        sourceKind: 'bundled',
+      },
+      inputs: { prompt: 'Build a responsive analytics dashboard.' },
+      registry: {
+        skills: [],
+        designSystems: [],
+        craft: craftIds.map((id) => ({ id, title: id })),
+        atoms: atomIds.map((id) => ({ id, label: id })),
+      },
+    });
+
+    expect(computed.result.pipeline?.stages.map((stage) => stage.id)).toEqual([
+      'discovery',
+      'plan',
+      'generate',
+      'critique',
+    ]);
+    expect((computed.result.genuiSurfaces ?? []).map((surface) => surface.id)).not.toContain(
+      'task-type',
+    );
+    expect(
+      (computed.result.appliedPlugin.genuiSurfaces ?? []).map((surface) => surface.id),
+    ).not.toContain('task-type');
+  });
+});
+
 describe('plugin-local SKILL.md ref detection', () => {
   it('pickFirstLocalSkillPath returns the relative path for `./SKILL.md`', () => {
     const manifest = manifestWithSkills([{ path: './SKILL.md' }]);
@@ -100,20 +148,50 @@ describe('plugin-local SKILL.md ref detection', () => {
 });
 
 describe('loadPluginLocalSkill', () => {
-  it('reads SKILL.md, strips frontmatter, and returns body/name/dir', async () => {
+  it('loads the bundled od-default router from its real manifest', async () => {
+    const pluginDir = path.resolve(
+      import.meta.dirname,
+      '../../../plugins/_official/scenarios/od-default',
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(pluginDir, 'open-design.json'), 'utf8'),
+    ) as PluginManifest;
+    const local = await loadPluginLocalSkill(pluginRecord(pluginDir, manifest));
+
+    expect(local).not.toBeNull();
+    expect(local!.relpath).toBe('SKILL.md');
+    expect(local!.body).toContain('# od-default (hidden scenario)');
+    expect(local!.body).toContain('Route first; clarify only when needed');
+  });
+
+  it('reads SKILL.md, strips frontmatter, and advertises staged side files', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-plugin-local-skill-'));
     try {
       const skillPath = path.join(dir, 'SKILL.md');
+      await mkdir(path.join(dir, 'assets'), { recursive: true });
+      await writeFile(path.join(dir, 'assets', 'template.html'), '<main>seed</main>', 'utf8');
       await writeFile(
         skillPath,
-        ['---', 'name: fixture-plugin', 'mode: deck', '---', '', '# Body header', '', 'Body line.'].join('\n'),
+        [
+          '---',
+          'name: fixture-plugin',
+          'mode: deck',
+          '---',
+          '',
+          '# Body header',
+          '',
+          'Read assets/template.html before writing.',
+        ].join('\n'),
         'utf8',
       );
       const manifest = manifestWithSkills([{ path: './SKILL.md' }]);
       const local = await loadPluginLocalSkill(pluginRecord(dir, manifest));
       expect(local).not.toBeNull();
-      expect(local!.body.startsWith('# Body header')).toBe(true);
-      expect(local!.body).toContain('Body line.');
+      expect(local!.body).toContain(`.od-skills/${skillCwdAliasSegment(dir)}/`);
+      expect(local!.body).toContain('Known side files in this skill: `assets/template.html`.');
+      expect(local!.body).toContain('# Body header');
+      expect(local!.body).toContain('Read assets/template.html before writing.');
+      expect(local!.body).not.toContain('name: fixture-plugin');
       expect(local!.name).toBe('Fixture Plugin');
       expect(local!.dir).toBe(dir);
       expect(local!.relpath).toBe('SKILL.md');

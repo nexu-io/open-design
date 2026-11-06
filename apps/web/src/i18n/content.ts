@@ -377,6 +377,8 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   claude: 'Anthropics AI-Assistent. Warmer Terrakotta-Akzent, klares Editorial-Layout.',
   clay: 'Kreativagentur. Organische Formen, weiche Verläufe, art-directed Layout.',
   clickhouse: 'Schnelle Analytics-Datenbank. Gelb akzentuierter, technischer Dokumentationsstil.',
+  'cloudflare-kumo':
+    'Cloudflares Komponentensystem für moderne Web-Apps: semantische Hell-/Dunkel-Tokens, kompakte Inter-Typografie, geschichtete neutrale Flächen, barrierearme Controls und charttaugliche Farbregeln.',
   cohere: 'Enterprise-AI-Plattform. Lebendige Verläufe, datenreiche Dashboard-Ästhetik.',
   coinbase: 'Krypto-Börse. Klare blaue Identität, vertrauensfokussiert, institutionelles Gefühl.',
   composio: 'Tool-Integrationsplattform. Modern dunkel mit farbigen Integrationsicons.',

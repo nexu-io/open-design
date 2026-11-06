@@ -1,9 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { ProjectFileVersionPromptSource } from '@open-design/contracts';
+import type {
+  ArtifactOrigin,
+  ProjectFileVersion,
+  ProjectFileVersionPromptSource,
+} from '@open-design/contracts';
 
 import { ensureCurrentProjectFileVersion } from './project-file-versions.js';
+import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import type { RunArtifactDiff } from './run-artifact-fs.js';
 
 export interface AiHtmlVersionSnapshotInput {
@@ -13,12 +18,43 @@ export interface AiHtmlVersionSnapshotInput {
   diff: Pick<RunArtifactDiff, 'touchedPaths'>;
   prompt: string | null;
   promptSource?: ProjectFileVersionPromptSource;
+  origin?: ArtifactOrigin;
   metadata?: unknown;
 }
 
 export interface AiHtmlVersionSnapshotFailure {
   fileName: string;
   message: string;
+}
+
+export interface AiHtmlVersionSnapshot {
+  fileName: string;
+  version: ProjectFileVersion;
+}
+
+export interface AiHtmlVersionSnapshotResult {
+  snapshots: AiHtmlVersionSnapshot[];
+}
+
+export function artifactOriginForRun(input: {
+  runId: string;
+  externalPluginAnalytics?: Record<string, unknown> | null;
+}): ArtifactOrigin | undefined {
+  const analytics = input.externalPluginAnalytics;
+  if (
+    analytics?.entrySurface !== 'external_mcp'
+    || analytics.externalPluginId !== OPEN_DESIGN_PLUGIN_ID
+    || typeof analytics.pluginWorkflowId !== 'string'
+    || !analytics.pluginWorkflowId
+  ) {
+    return undefined;
+  }
+  return {
+    entrySurface: 'external_mcp',
+    externalPluginId: OPEN_DESIGN_PLUGIN_ID,
+    pluginWorkflowId: analytics.pluginWorkflowId,
+    runId: input.runId,
+  };
 }
 
 export class AiHtmlVersionSnapshotError extends Error {
@@ -43,8 +79,12 @@ function failureMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
-export async function snapshotAiHtmlVersionsForRun(input: AiHtmlVersionSnapshotInput): Promise<void> {
-  if (!input.projectId || input.diff.touchedPaths.length === 0) return;
+export async function snapshotAiHtmlVersionsForRun(
+  input: AiHtmlVersionSnapshotInput,
+): Promise<AiHtmlVersionSnapshotResult> {
+  if (!input.projectId || input.diff.touchedPaths.length === 0) {
+    return { snapshots: [] };
+  }
   const seen = new Set<string>();
   const work = input.diff.touchedPaths.flatMap((filePath) => {
     if (!/\.html?$/i.test(filePath)) return [];
@@ -55,11 +95,11 @@ export async function snapshotAiHtmlVersionsForRun(input: AiHtmlVersionSnapshotI
     seen.add(projectRelPath);
     return [{ filePath, projectRelPath }];
   });
-  if (work.length === 0) return;
+  if (work.length === 0) return { snapshots: [] };
 
   const results = await Promise.allSettled(work.map(async ({ filePath, projectRelPath }) => {
     const content = await fs.promises.readFile(filePath, 'utf8');
-    await ensureCurrentProjectFileVersion(
+    const version = await ensureCurrentProjectFileVersion(
       input.projectsRoot,
       input.projectId,
       projectRelPath,
@@ -68,9 +108,11 @@ export async function snapshotAiHtmlVersionsForRun(input: AiHtmlVersionSnapshotI
         source: 'ai',
         prompt: input.prompt,
         ...(input.promptSource ? { promptSource: input.promptSource } : {}),
+        ...(input.origin ? { origin: input.origin } : {}),
       },
       input.metadata,
     );
+    return version ? { fileName: projectRelPath, version } : null;
   }));
   const failures = results.flatMap((result, index) => {
     if (result.status === 'fulfilled') return [];
@@ -83,4 +125,9 @@ export async function snapshotAiHtmlVersionsForRun(input: AiHtmlVersionSnapshotI
   if (failures.length > 0) {
     throw new AiHtmlVersionSnapshotError(failures);
   }
+  return {
+    snapshots: results.flatMap((result) =>
+      result.status === 'fulfilled' && result.value ? [result.value] : [],
+    ),
+  };
 }

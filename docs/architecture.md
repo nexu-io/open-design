@@ -5,7 +5,7 @@
 This document describes the code-backed runtime topology and the boundaries
 between the web app, daemon, desktop/packaged shells, agent runtimes, and
 content registries. For repository ownership rules, the root and layer
-`AGENTS.md` files remain authoritative. For embedding Open Design behind
+`AGENTS.md` files remain authoritative. For embedding OpenDesign behind
 another control plane, see [`orchestrator-workspaces.md`](orchestrator-workspaces.md).
 
 > Historical note: the first architecture draft sketched a Vercel tunnel

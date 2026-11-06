@@ -70,7 +70,7 @@ export function ContextChipStrip(props: Props) {
         const inner = (
           <>
             <span className="context-chip-strip__icon" aria-hidden>
-              <Icon name={iconName} size={11} />
+              <Icon name={iconName} size={14} />
             </span>
             <span className="context-chip-strip__kind">{kindLabel}</span>
             <span className="context-chip-strip__label">{label}</span>

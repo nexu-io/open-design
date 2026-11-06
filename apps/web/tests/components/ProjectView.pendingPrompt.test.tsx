@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { Brand } from '@open-design/contracts';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,15 +14,26 @@ import type {
   Conversation,
   DesignSystemSummary,
   Project,
+  ProjectFile,
   SkillSummary,
 } from '../../src/types';
 import {
   createConversation,
   listConversations,
   listMessages,
+  loadTabs,
   saveMessage,
+  registerQueuedSubmission,
 } from '../../src/state/projects';
-import { fetchPreviewComments } from '../../src/providers/registry';
+import { fetchPreviewComments, fetchProjectFiles } from '../../src/providers/registry';
+import { useProjectFileEvents } from '../../src/providers/project-events';
+import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
+import {
+  beginHomeAttachmentUploads,
+  endHomeAttachmentUploads,
+  resetHomeAttachmentUploads,
+  settleHomeAttachmentUpload,
+} from '../../src/state/home-attachment-handoff';
 import {
   cancelBrandExtraction,
   continueBrandExtraction,
@@ -33,12 +44,25 @@ import {
 const brandBrowserBridgeMocks = vi.hoisted(() => ({
   getBrandBrowser: vi.fn(),
 }));
+const registryOriginals = vi.hoisted(() => ({
+  fetchProjectFiles: null as null | ((
+    projectId: string,
+    options?: {
+      signal?: AbortSignal;
+      workspaceContext?: import('@open-design/contracts').WorkspaceCollabContext | null;
+      fresh?: boolean;
+      requireAuthoritative?: boolean;
+    },
+  ) => Promise<ProjectFile[]>),
+}));
 
 const fileWorkspaceSpy = vi.hoisted(() => vi.fn());
 const chatPaneSpy = vi.hoisted(() => vi.fn());
+const chatPaneMounts = vi.hoisted(() => ({ count: 0 }));
 
 type MockChatPaneProps = {
   messages?: ChatMessage[];
+  sendDisabled?: boolean;
   activeConversationId?: string | null;
   initialDraft?: string;
   onBrandBrowserAssistConfirm?: (card: {
@@ -84,6 +108,19 @@ vi.mock('../../src/providers/project-events', () => ({
   useProjectFileEvents: vi.fn(),
 }));
 
+vi.mock('../../src/collab/useProjectWorkspaceScope', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/collab/useProjectWorkspaceScope')>()),
+  useProjectWorkspaceScope: (projectId: string) => ({
+    loading: false,
+    scope: {
+      kind: 'unbound',
+      projectId,
+      workspaceId: null,
+      context: null,
+    },
+  }),
+}));
+
 vi.mock('../../src/runtime/brands', async () => {
   const actual = await vi.importActual<typeof import('../../src/runtime/brands')>(
     '../../src/runtime/brands',
@@ -121,17 +158,41 @@ vi.mock('../../src/runtime/brand-browser-bridge', () => ({
   getBrandBrowser: brandBrowserBridgeMocks.getBrandBrowser,
 }));
 
+// ProjectView also mounts `useDesignMdState` (the Continue-in-CLI staleness
+// chip), which reads the same project file list through `fetchProjectFiles` so
+// the two share ONE request in the browser instead of opening two (W82). These
+// cases measure ProjectView's own file reads through the mocked reader, above
+// the layer where that sharing happens, so the hook is stubbed out here to keep
+// the mocked call sequence describing ProjectView alone. The hook's own
+// behaviour is covered by tests/hooks/useDesignMdState.test.tsx.
+vi.mock('../../src/hooks/useDesignMdState', () => ({
+  useDesignMdState: () => ({
+    exists: false,
+    generatedAt: null,
+    transcriptMessageCount: null,
+    designSystemId: null,
+    currentArtifact: null,
+    isStale: false,
+    staleReason: null,
+    loading: false,
+    error: null,
+    refresh: async () => {},
+  }),
+  computeStale: () => ({ isStale: false, staleReason: null }),
+}));
+
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
     '../../src/providers/registry',
   );
+  registryOriginals.fetchProjectFiles = actual.fetchProjectFiles;
   return {
     ...actual,
     deletePreviewComment: vi.fn(),
     fetchDesignSystem: vi.fn(),
     fetchLiveArtifacts: vi.fn().mockResolvedValue([]),
     fetchPreviewComments: vi.fn(),
-    fetchProjectFiles: vi.fn().mockResolvedValue([]),
+    fetchProjectFiles: vi.fn(actual.fetchProjectFiles),
     fetchSkill: vi.fn(),
     getTemplate: vi.fn(),
     patchPreviewCommentStatus: vi.fn(),
@@ -152,6 +213,9 @@ vi.mock('../../src/state/projects', async () => {
     loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
     patchConversation: vi.fn(),
     patchProject: vi.fn(),
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     saveMessage: vi.fn(),
     saveTabs: vi.fn(),
   };
@@ -175,6 +239,11 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     onBrandExtractionStopRequest?: () => void;
     designSystemEditable?: boolean;
     filesRefreshKey?: number;
+    filesGeneration?: number;
+    files?: ProjectFile[];
+    onRefreshFiles?: (options?: { fresh?: boolean }) => Promise<{
+      acceptedGeneration: number | null;
+    }>;
   }) => {
     fileWorkspaceSpy(props);
     return <div data-testid="file-workspace" />;
@@ -185,9 +254,14 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => <div data-testid="loader" />,
 }));
 
-vi.mock('../../src/components/ChatPane', () => ({
+vi.mock('../../src/components/ChatPane', async () => {
+  const { useEffect } = await vi.importActual<typeof import('react')>('react');
+  return {
   ChatPane: (props: MockChatPaneProps) => {
     chatPaneSpy(props);
+    useEffect(() => {
+      chatPaneMounts.count += 1;
+    }, []);
     return (
       <>
         <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
@@ -202,12 +276,15 @@ vi.mock('../../src/components/ChatPane', () => ({
       </>
     );
   },
-}));
+  };
+});
 
 const mockedListConversations = vi.mocked(listConversations);
 const mockedCreateConversation = vi.mocked(createConversation);
 const mockedListMessages = vi.mocked(listMessages);
 const mockedFetchPreviewComments = vi.mocked(fetchPreviewComments);
+const mockedFetchProjectFiles = vi.mocked(fetchProjectFiles);
+const mockedUseProjectFileEvents = vi.mocked(useProjectFileEvents);
 const mockedCancelBrandExtraction = vi.mocked(cancelBrandExtraction);
 const mockedContinueBrandExtraction = vi.mocked(continueBrandExtraction);
 const mockedExtractBrandFromHtml = vi.mocked(extractBrandFromHtml);
@@ -216,9 +293,10 @@ const mockedSaveMessage = vi.mocked(saveMessage);
 
 const config: AppConfig = {
   mode: 'api',
-  apiKey: '',
-  baseUrl: '',
-  model: '',
+  apiProtocol: 'openai',
+  apiKey: 'byok-test-key',
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'api-model',
   agentId: null,
   skillId: null,
   designSystemId: null,
@@ -242,12 +320,12 @@ const conversation = (projectId: string): Conversation => ({
   updatedAt: 1,
 });
 
-function renderProjectView(
+function projectViewElement(
   currentProject: Project,
   onClearPendingPrompt = vi.fn(),
   overrides: Partial<ComponentProps<typeof ProjectView>> = {},
 ) {
-  return render(
+  return (
     <ProjectView
       project={currentProject}
       routeFileName={null}
@@ -268,8 +346,16 @@ function renderProjectView(
       onProjectChange={vi.fn()}
       onProjectsRefresh={vi.fn()}
       {...overrides}
-    />,
+    />
   );
+}
+
+function renderProjectView(
+  currentProject: Project,
+  onClearPendingPrompt = vi.fn(),
+  overrides: Partial<ComponentProps<typeof ProjectView>> = {},
+) {
+  return render(projectViewElement(currentProject, onClearPendingPrompt, overrides));
 }
 
 describe('ProjectView pending prompt seeding', () => {
@@ -284,12 +370,16 @@ describe('ProjectView pending prompt seeding', () => {
     );
     mockedListMessages.mockResolvedValue([]);
     mockedFetchPreviewComments.mockResolvedValue([]);
+    mockedFetchProjectFiles.mockResolvedValue([]);
     mockedFetchBrands.mockResolvedValue([]);
     brandBrowserBridgeMocks.getBrandBrowser.mockReturnValue(null);
   });
 
   afterEach(() => {
     cleanup();
+    resetHomeAttachmentUploads();
+    resetSharedCancellableGet();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -302,6 +392,342 @@ describe('ProjectView pending prompt seeding', () => {
       expect(composerValue()).toBe('Use this prompt');
     });
     expect(onClearPendingPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('commits refreshed file metadata and its generation key atomically', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const newFile: ProjectFile = { ...oldFile, size: 120, mtime: 2_000 };
+    mockedFetchProjectFiles.mockResolvedValueOnce([oldFile]);
+
+    renderProjectView(project('atomic-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    let resolveRefresh!: (files: ProjectFile[]) => void;
+    mockedFetchProjectFiles.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'change' }) => void)
+      | undefined;
+    expect(handleProjectEvent).toBeTypeOf('function');
+    const callsBeforeEvent = fileWorkspaceSpy.mock.calls.length;
+
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'index.html', kind: 'change' });
+    });
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalledTimes(2));
+
+    const pendingCalls = fileWorkspaceSpy.mock.calls.slice(callsBeforeEvent);
+    expect(pendingCalls.some(([props]) => (
+      props.filesRefreshKey === 1 && props.files?.[0]?.mtime === oldFile.mtime
+    ))).toBe(false);
+
+    resolveRefresh([newFile]);
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.filesRefreshKey).toBe(1);
+      expect(props?.files).toEqual([newFile]);
+    });
+  });
+
+  it('advances the accepted file generation for a fresh same-key revalidation', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const recreatedFile: ProjectFile = { ...oldFile, size: 120, mtime: 2_000 };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([oldFile])
+      .mockResolvedValueOnce([recreatedFile]);
+
+    renderProjectView(project('same-key-generation'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+      expect(props?.filesGeneration).toBe(1);
+    });
+
+    const onRefreshFiles = fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.onRefreshFiles;
+    expect(onRefreshFiles).toBeTypeOf('function');
+    let refreshResult: { acceptedGeneration: number | null } | undefined;
+    await act(async () => {
+      refreshResult = await onRefreshFiles?.({ fresh: true });
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([recreatedFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+      expect(props?.filesGeneration).toBe(2);
+    });
+    expect(refreshResult).toEqual({ acceptedGeneration: 2 });
+    expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]?.fresh).toBe(true);
+  });
+
+  it('does not force a preview refresh when SSE-ready reconciliation finds the same files', async () => {
+    const file: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mockedFetchProjectFiles.mockResolvedValue([file]);
+
+    renderProjectView(project('sse-ready-same-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([file]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    const options = mockedUseProjectFileEvents.mock.calls.at(-1)?.[3];
+    await act(async () => {
+      options?.onReady?.();
+    });
+
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalledTimes(2));
+    const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+    expect(props?.files).toEqual([file]);
+    expect(props?.filesRefreshKey).toBe(0);
+    expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]).toMatchObject({
+      fresh: true,
+      requireAuthoritative: true,
+    });
+  });
+
+  it('refreshes the preview when SSE-ready reconciliation finds changed files', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const changedFile: ProjectFile = {
+      ...oldFile,
+      size: 120,
+      mtime: 2_000,
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([oldFile])
+      .mockResolvedValue([changedFile]);
+
+    renderProjectView(project('sse-ready-changed-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    const options = mockedUseProjectFileEvents.mock.calls.at(-1)?.[3];
+    await act(async () => {
+      options?.onReady?.();
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([changedFile]);
+      expect(props?.filesRefreshKey).toBe(1);
+    });
+  });
+
+  it('does not advance the file generation when a fresh revalidation fails', async () => {
+    const file: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([file])
+      .mockRejectedValueOnce(new Error('files unavailable'));
+
+    renderProjectView(project('failed-generation'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([file]);
+      expect(props?.filesGeneration).toBe(1);
+    });
+
+    const onRefreshFiles = fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.onRefreshFiles;
+    await expect(onRefreshFiles?.({ fresh: true })).resolves.toEqual({
+      acceptedGeneration: null,
+    });
+
+    const finalProps = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+    expect(finalProps?.files).toEqual([file]);
+    expect(finalProps?.filesRefreshKey).toBe(0);
+    expect(finalProps?.filesGeneration).toBe(1);
+    expect(mockedFetchProjectFiles.mock.calls.at(-1)?.[1]).toMatchObject({
+      fresh: true,
+      requireAuthoritative: true,
+    });
+  });
+
+  it('forces a fresh project-files read when a file event races an older in-flight read', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const newFile: ProjectFile = { ...oldFile, size: 120, mtime: 2_000 };
+    const actualFetchProjectFiles = registryOriginals.fetchProjectFiles;
+    if (!actualFetchProjectFiles) throw new Error('expected actual fetchProjectFiles');
+    mockedFetchProjectFiles.mockImplementation(actualFetchProjectFiles);
+    resetSharedCancellableGet();
+
+    let fileReads = 0;
+    let phase: 'initial' | 'older-inflight' | 'fresh' = 'initial';
+    let olderInflightReads = 0;
+    let resolveOlderRead!: () => void;
+    const olderRead = new Promise<void>((resolve) => {
+      resolveOlderRead = resolve;
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (!url.endsWith('/api/projects/inflight-files/files')) {
+        return new Response('', { status: 404 });
+      }
+      fileReads += 1;
+      if (phase === 'older-inflight') {
+        olderInflightReads += 1;
+        await olderRead;
+        return new Response(JSON.stringify({ files: [oldFile] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({
+        files: [phase === 'fresh' ? newFile : oldFile],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }));
+
+    renderProjectView(project('inflight-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+
+    resetSharedCancellableGet();
+    phase = 'older-inflight';
+    const onRefreshFiles = fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.onRefreshFiles;
+    expect(onRefreshFiles).toBeTypeOf('function');
+    const olderRefresh = onRefreshFiles?.();
+    await waitFor(() => expect(olderInflightReads).toBe(1));
+
+    phase = 'fresh';
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'change' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'index.html', kind: 'change' });
+    });
+
+    await waitFor(() => expect(fileReads).toBeGreaterThan(olderInflightReads + 1));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([newFile]);
+      expect(props?.filesRefreshKey).toBe(1);
+    });
+
+    resolveOlderRead();
+    await olderRefresh;
+    await Promise.resolve();
+    const finalProps = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+    expect(finalProps?.files).toEqual([newFile]);
+    expect(finalProps?.filesRefreshKey).toBe(1);
+  });
+
+  it('bypasses a settled project-files result still inside the shared one-second TTL', async () => {
+    const oldFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const newFile: ProjectFile = { ...oldFile, size: 120, mtime: 2_000 };
+    const actualFetchProjectFiles = registryOriginals.fetchProjectFiles;
+    if (!actualFetchProjectFiles) throw new Error('expected actual fetchProjectFiles');
+    mockedFetchProjectFiles.mockImplementation(actualFetchProjectFiles);
+    resetSharedCancellableGet();
+
+    let fileReads = 0;
+    let servedFiles = [oldFile];
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (!url.endsWith('/api/projects/settled-files/files')) {
+        return new Response('', { status: 404 });
+      }
+      fileReads += 1;
+      return new Response(JSON.stringify({ files: servedFiles }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }));
+
+    renderProjectView(project('settled-files'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([oldFile]);
+      expect(props?.filesRefreshKey).toBe(0);
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    const cachedReadCount = fileReads;
+    expect(cachedReadCount).toBeGreaterThan(0);
+
+    servedFiles = [newFile];
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'change' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'index.html', kind: 'change' });
+    });
+
+    await waitFor(() => expect(fileReads).toBeGreaterThan(cachedReadCount));
+    expect(mockedFetchProjectFiles.mock.calls.some(([, options]) => options?.fresh === true)).toBe(true);
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([newFile]);
+      expect(props?.filesRefreshKey).toBe(1);
+    });
   });
 
   it('auto-sends the Home-carried workspace context with the first user message', async () => {
@@ -336,6 +762,146 @@ describe('ProjectView pending prompt seeding', () => {
       runContext: {
         workspaceItems: [workspaceItem],
       },
+    }));
+  });
+
+  it('auto-sends the session-carried prompt when the project projection drops pendingPrompt', async () => {
+    const projectId = 'with-session-prompt';
+    const prompt = 'Create the artifact after the project list refreshes';
+    window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
+    window.sessionStorage.setItem(`od:auto-send-prompt:${projectId}`, prompt);
+
+    renderProjectView(project(projectId));
+
+    await waitFor(() => {
+      expect(mockedSaveMessage).toHaveBeenCalled();
+    });
+    const userMessageCall = mockedSaveMessage.mock.calls.find(
+      ([, , message]) => message.role === 'user',
+    );
+    expect(userMessageCall?.[2]).toEqual(expect.objectContaining({
+      role: 'user',
+      content: prompt,
+    }));
+    expect(window.sessionStorage.getItem(`od:auto-send-first:${projectId}`)).toBeNull();
+    expect(window.sessionStorage.getItem(`od:auto-send-prompt:${projectId}`)).toBeNull();
+  });
+
+  it('keeps the Home auto-send pending when preflight rejects transiently, then retries after recovery', async () => {
+    const projectId = 'auto-send-retry';
+    const currentProject = project(projectId, 'Create the artifact');
+    const onClearPendingPrompt = vi.fn();
+    const onOpenSettings = vi.fn();
+    window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
+
+    const view = renderProjectView(currentProject, onClearPendingPrompt, {
+      config: {
+        ...config,
+        apiKey: '',
+      },
+      onOpenSettings,
+    });
+
+    await waitFor(() => {
+      expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    });
+    expect(mockedSaveMessage).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(`od:auto-send-first:${projectId}`)).toBe('1');
+
+    view.rerender(projectViewElement(currentProject, onClearPendingPrompt, {
+      config,
+      onOpenSettings,
+    }));
+
+    await waitFor(() => {
+      expect(mockedSaveMessage).toHaveBeenCalled();
+    });
+    expect(window.sessionStorage.getItem(`od:auto-send-first:${projectId}`)).toBeNull();
+  });
+
+  it('records recency once at queue entry, not again when the queued send starts', async () => {
+    const projectId = 'queued-project-recency';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Queued request', [], [], { queueOnly: true });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject).toHaveBeenCalledWith(expect.any(Number));
+  });
+
+  it('OPEND-4047 does not register a queued automatic repair as a human submission', async () => {
+    const projectId = 'queued-system-repair';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Automatic repair', [], [], {
+        queueOnly: true, systemSubmission: true,
+      });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(registerQueuedSubmission).not.toHaveBeenCalled();
+    expect(onTouchProject).not.toHaveBeenCalled();
+  });
+
+  it('holds the Home auto-send until the picked batch finishes uploading', async () => {
+    // OPEND-2585. The project frame now opens while the Home batch is still
+    // going up, so the auto-send is the only thing left waiting on it. If it
+    // fired on the first frame the user's prompt would go out with none of the
+    // files they attached to it.
+    const projectId = 'auto-send-uploading-batch';
+    const prompt = '我上传了多少个文件';
+    window.sessionStorage.setItem(`od:auto-send-first:${projectId}`, '1');
+    window.sessionStorage.setItem(`od:auto-send-prompt:${projectId}`, prompt);
+    beginHomeAttachmentUploads(projectId, [
+      new File(['a'], 'shot-0.png', { type: 'image/png' }),
+      new File(['b'], 'shot-1.png', { type: 'image/png' }),
+    ]);
+
+    renderProjectView(project(projectId));
+
+    // The conversation has resolved and messages have loaded — everything the
+    // auto-send waits on EXCEPT the uploads. It must still not have fired.
+    await screen.findByText(`conv-${projectId}`);
+    await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+    expect(mockedSaveMessage).not.toHaveBeenCalled();
+    // The composer is reachable now, which it never was behind the old
+    // hand-off screen. A second prompt sent here would consume the turn the
+    // Home prompt is queued for, so the send waits with it.
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(true);
+
+    // The uploads answer, in the order the user picked the files.
+    window.sessionStorage.setItem(
+      `od:auto-send-attachments:${projectId}`,
+      JSON.stringify([
+        { path: 'attachments/shot-0.png', name: 'shot-0.png', kind: 'image', size: 1 },
+        { path: 'attachments/shot-1.png', name: 'shot-1.png', kind: 'image', size: 1 },
+      ]),
+    );
+    await act(async () => {
+      settleHomeAttachmentUpload(projectId, 0);
+      settleHomeAttachmentUpload(projectId, 1);
+      endHomeAttachmentUploads(projectId);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mockedSaveMessage).toHaveBeenCalled());
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0]?.sendDisabled).toBe(false);
+    const userMessageCall = mockedSaveMessage.mock.calls.find(
+      ([, , message]) => message.role === 'user',
+    );
+    expect(userMessageCall?.[2]).toEqual(expect.objectContaining({
+      role: 'user',
+      content: prompt,
+      // The paths the server gave back, not the local names the frame drew.
+      attachments: [
+        expect.objectContaining({ path: 'attachments/shot-0.png' }),
+        expect.objectContaining({ path: 'attachments/shot-1.png' }),
+      ],
     }));
   });
 
@@ -426,6 +992,91 @@ describe('ProjectView pending prompt seeding', () => {
         ),
       ).toBe(true);
     });
+  });
+
+  // recvqb6mfyqXLD: a design system materialized from a teammate's team share
+  // is only mutable by whoever can manage that share — the same server-side
+  // verdict (`canMutateUserDesignSystem`) mirrored onto the design system's
+  // `canMutate` field. This tab is a genuinely separate surface from
+  // `DesignSystemsTab`'s own team-tab pane (fixed earlier): `projectCollab
+  // .viewerOnly` does not catch it, because team-sharing a design system does
+  // not also register its backing project as team-shared at the project-
+  // collab/hub level, so `designSystemEditable` needs its own signal off the
+  // `designSystems` list this project's design-system tab already reads.
+  it('disables the in-project design system tab for a team-synced design system the caller may not manage', async () => {
+    renderProjectView(
+      {
+        ...project('teammate-ds-project'),
+        designSystemId: 'user:teammate-ds',
+        metadata: {
+          kind: 'other',
+          importedFrom: 'design-system',
+          entryFile: 'DESIGN.md',
+          sourceFileName: 'user:teammate-ds',
+        },
+      },
+      vi.fn(),
+      {
+        designSystems: [
+          {
+            id: 'user:teammate-ds',
+            title: 'Teammate DS',
+            category: 'Custom',
+            summary: '',
+            swatches: [],
+            surface: 'web',
+            body: '# Teammate DS',
+            source: 'user',
+            status: 'draft',
+            isEditable: true,
+            teamSynced: true,
+            canMutate: false,
+          } as DesignSystemSummary,
+        ],
+      },
+    );
+
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.length).toBeGreaterThan(0);
+    });
+    expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0].designSystemEditable).toBe(false);
+  });
+
+  it('keeps the in-project design system tab editable for the caller\'s own (non-team-synced) design system', async () => {
+    renderProjectView(
+      {
+        ...project('my-ds-project'),
+        designSystemId: 'user:my-ds',
+        metadata: {
+          kind: 'other',
+          importedFrom: 'design-system',
+          entryFile: 'DESIGN.md',
+          sourceFileName: 'user:my-ds',
+        },
+      },
+      vi.fn(),
+      {
+        designSystems: [
+          {
+            id: 'user:my-ds',
+            title: 'My DS',
+            category: 'Custom',
+            summary: '',
+            swatches: [],
+            surface: 'web',
+            body: '# My DS',
+            source: 'user',
+            status: 'draft',
+            isEditable: true,
+          } as DesignSystemSummary,
+        ],
+      },
+    );
+
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.length).toBeGreaterThan(0);
+    });
+    expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0].designSystemEditable).toBe(true);
   });
 
   it('stops a programmatic brand extraction and returns to the draft design system tab', async () => {
@@ -567,7 +1218,7 @@ describe('ProjectView pending prompt seeding', () => {
       expect(mockedContinueBrandExtraction).toHaveBeenCalledWith(projectId);
     });
     await waitFor(() => {
-      expect(mockedListMessages).toHaveBeenCalledWith(projectId, 'conv-brand-replacement');
+      expect(mockedListMessages).toHaveBeenCalledWith(projectId, 'conv-brand-replacement', null, expect.any(AbortSignal), expect.any(Function));
     });
     await waitFor(() => {
       expect(screen.getByTestId('active-conversation').textContent).toBe('conv-brand-replacement');
@@ -1170,3 +1821,118 @@ function latestChatPaneProps(): MockChatPaneProps {
   if (!latest) throw new Error('ChatPane was not rendered');
   return latest[0] as MockChatPaneProps;
 }
+
+describe('ProjectView mounted from a Home send before the create answers (OPEND-3334)', () => {
+  const pendingHandoff = {
+    prompt: 'Draft the onboarding flow',
+    files: [] as File[],
+    conversationId: 'conv-seed',
+    persisted: false,
+  };
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    chatPaneMounts.count = 0;
+    mockedListConversations.mockImplementation(async (projectId) => [
+      { ...conversation(projectId), id: 'conv-seed' },
+    ]);
+    mockedListMessages.mockResolvedValue([]);
+    mockedFetchPreviewComments.mockResolvedValue([]);
+    mockedFetchProjectFiles.mockResolvedValue([]);
+    mockedFetchBrands.mockResolvedValue([]);
+    brandBrowserBridgeMocks.getBrandBrowser.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetHomeAttachmentUploads();
+    resetSharedCancellableGet();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('holds every project read and draws the optimistic turn under the auto-send ids', async () => {
+    const fetchSpy = vi.fn(async (_input: string | URL | Request) => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    renderProjectView(project('p-new'), vi.fn(), { creationHandoff: pendingHandoff });
+
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages?.map((message) => message.content))
+        .toEqual(['Draft the onboarding flow', '']);
+    });
+    const ids = latestChatPaneProps().messages?.map((message) => message.id) ?? [];
+    expect(ids[0]).toMatch(/^home-auto-send-.+-user$/);
+    expect(ids[1]).toMatch(/^home-auto-send-.+-assistant$/);
+
+    // Give any stray mount effect a chance to fire before asserting silence.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(mockedListConversations).not.toHaveBeenCalled();
+    expect(mockedFetchProjectFiles).not.toHaveBeenCalled();
+    expect(vi.mocked(loadTabs)).not.toHaveBeenCalled();
+    const projectScoped = fetchSpy.mock.calls.filter(([input]) =>
+      String(input).includes('/api/projects/p-new'));
+    expect(projectScoped).toEqual([]);
+  });
+
+  it('keeps the optimistic turn when App releases its record while the Home uploads are still going up', async () => {
+    // QA on bd5fe20579: App's record has an 8s cleanup deadline after the
+    // create; uploads outliving it made the first turn and its Working row
+    // vanish until the uploads finished.
+    const brief = new File(['x'], 'brief.txt', { type: 'text/plain' });
+    beginHomeAttachmentUploads('p-new', [brief]);
+    const persisted = { ...pendingHandoff, files: [brief], persisted: true };
+    const view = renderProjectView(project('p-new'), vi.fn(), { creationHandoff: persisted });
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages?.map((message) => message.content))
+        .toEqual(['Draft the onboarding flow', '']);
+    });
+
+    view.rerender(projectViewElement(project('p-new'), vi.fn(), { creationHandoff: null }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(latestChatPaneProps().messages?.map((message) => message.content))
+      .toEqual(['Draft the onboarding flow', '']);
+    expect(chatPaneMounts.count).toBe(1);
+  });
+
+  it('retires the optimistic turn once the record is released and nothing is left to send', async () => {
+    const view = renderProjectView(project('p-new'), vi.fn(), {
+      creationHandoff: { ...pendingHandoff, persisted: true },
+    });
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages?.length).toBe(2);
+    });
+    // No upload in flight and no auto-send key: e.g. the working-directory
+    // hand-off failed after the create, so App never writes the keys.
+    view.rerender(projectViewElement(project('p-new'), vi.fn(), { creationHandoff: null }));
+    await waitFor(() => {
+      expect(latestChatPaneProps().messages ?? []).toEqual([]);
+    });
+  });
+
+  it('starts reading once the create answers, in the same pane, keyed by the seed conversation', async () => {
+    const view = renderProjectView(project('p-new'), vi.fn(), { creationHandoff: pendingHandoff });
+    await waitFor(() => expect(chatPaneMounts.count).toBe(1));
+    expect(mockedListConversations).not.toHaveBeenCalled();
+
+    view.rerender(projectViewElement(project('p-new'), vi.fn(), {
+      creationHandoff: { ...pendingHandoff, persisted: true },
+    }));
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getByTestId('active-conversation').textContent).toBe('conv-seed');
+    });
+    // The conversation list answering is the pane learning its id, not a
+    // conversation switch: the pane is never remounted.
+    expect(chatPaneMounts.count).toBe(1);
+    // The optimistic turn stays until a real one exists.
+    expect(latestChatPaneProps().messages?.map((message) => message.content))
+      .toEqual(['Draft the onboarding flow', '']);
+  });
+});

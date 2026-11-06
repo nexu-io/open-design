@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Dialog } from '@open-design/components';
@@ -10,15 +11,23 @@ import {
 } from '../i18n/content';
 import { fetchSkill } from '../providers/registry';
 import { Icon } from './Icon';
+import { useWorkspaceContext } from '../collab/useWorkspaceContext';
 
 interface Props {
   skillId: string;
   summary?: SkillSummary | null;
   onClose: () => void;
+  /**
+   * Runs the skill. Optional because most call sites open this modal purely to
+   * read a skill; only surfaces that can hand a skill to a composer pass it,
+   * and the footer action appears only for those.
+   */
+  onUse?: () => void;
 }
 
-export function SkillDetailsModal({ skillId, summary, onClose }: Props) {
+export function SkillDetailsModal({ skillId, summary, onClose, onUse }: Props) {
   const { locale, t } = useI18n();
+  const { context: workspaceContext } = useWorkspaceContext();
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const [detail, setDetail] = useState<SkillDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,7 +39,7 @@ export function SkillDetailsModal({ skillId, summary, onClose }: Props) {
     setLoading(true);
     setDetail(null);
     setLoadError(false);
-    void fetchSkill(skillId).then((next) => {
+    void fetchSkill(skillId, workspaceContext).then((next) => {
       if (cancelled) return;
       if (!next) {
         setLoadError(true);
@@ -43,19 +52,13 @@ export function SkillDetailsModal({ skillId, summary, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [skillId, reloadToken]);
+  }, [skillId, reloadToken, workspaceContext]);
 
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   const skill = loadError ? summary : detail ?? summary;
   const title = skill ? localizeSkillName(locale, skill) : skillId;
@@ -181,6 +184,16 @@ export function SkillDetailsModal({ skillId, summary, onClose }: Props) {
         >
           {t('common.close')}
         </button>
+        {onUse ? (
+          <button
+            type="button"
+            className="plugin-details-modal__primary"
+            onClick={onUse}
+            data-testid="skill-details-use"
+          >
+            {t('pluginsView.tryIt')}
+          </button>
+        ) : null}
       </footer>
     </Dialog>
   );

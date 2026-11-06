@@ -5,10 +5,16 @@ import { getCritiqueMetrics, register } from '../metrics/index.js';
 import { readConformanceHistory } from '../critique/conformance-history.js';
 import { evaluateRollout } from '../critique/ratchet.js';
 import { parseRolloutPhase } from '../critique/rollout.js';
+import {
+  AgentCompanionSetupError,
+  installDeepSeekHarnessCompanion,
+} from '../agent-companion-setup.js';
 
 export interface RegisterDaemonRoutesDeps {
   db: any;
   paths: {
+    PROJECT_ROOT: string;
+    RESOURCE_ROOT: string;
     RUNTIME_DATA_DIR: string;
   };
   http: {
@@ -89,6 +95,29 @@ export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDep
         ok: false,
         error: String(err),
       });
+    }
+  });
+
+  app.post('/api/agents/:agentId/companion/install', requireLocalDaemonRequest, async (req, res) => {
+    if (req.params.agentId !== 'deepseek-harness') {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'This agent has no OpenDesign connection component.');
+    }
+    try {
+      const result = await installDeepSeekHarnessCompanion({
+        projectRoot: paths.PROJECT_ROOT,
+        resourceRoot: paths.RESOURCE_ROOT,
+        runtimeDataDir: paths.RUNTIME_DATA_DIR,
+      });
+      return res.json(result);
+    } catch (error) {
+      if (error instanceof AgentCompanionSetupError) {
+        const status = error.code === 'AGENT_NOT_INSTALLED' ? 409 : 500;
+        return res.status(status).json({
+          error: { code: error.code, message: error.message },
+        });
+      }
+      console.warn('[agent-companion-setup] unexpected failure', error);
+      return sendApiError(res, 500, 'INTERNAL_ERROR', 'DeepSeek Harness connection setup failed.');
     }
   });
 

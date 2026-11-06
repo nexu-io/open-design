@@ -2,7 +2,7 @@
 
 ## Summary
 
-Open Design now has two related but different design-system states:
+OpenDesign now has two related but different design-system states:
 
 1. The bundled catalog already has Design System 1.0 structured fixtures: all
    150 bundled systems ship `tokens.css` and `components.html`, and the guard
@@ -111,9 +111,9 @@ inputs that already exist:
 - `tokens.css`
 - `components.html`
 
-This is not a claim that Open Design has re-crawled every original upstream
+This is not a claim that OpenDesign has re-crawled every original upstream
 brand repository. For bundled systems, provenance should be explicit: the
-derived package is based on the curated Open Design design-system fixture. That
+derived package is based on the curated OpenDesign design-system fixture. That
 keeps the audit trail honest while still making bundled systems match the same
 machine-readable package shape as new imports.
 

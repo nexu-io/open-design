@@ -3,9 +3,9 @@ name: open-design-landing-deck
 en_name: "Write a Brand-Story Deck like a Founder Storyteller"
 zh_name: "像会讲故事的创始人一样写品牌故事稿"
 description: |
-  Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.
+  OpenDesign's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.
 en_description: |
-  Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.
+  OpenDesign's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Built as a decision-grade marketing & GTM deck for partners, press, community.
 zh_description: |
   像会讲故事的创始人一样写品牌故事稿——一份可商业交付的市场增长 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -43,14 +43,14 @@ od:
       - pixel-discipline
   category: "marketing-gtm"
   scenario: "marketing"
-  example_prompt: "Create \"Write a Brand-Story Deck like a Founder Storyteller\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: Open Design's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Audience: partners, press, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
+  example_prompt: "Create \"Write a Brand-Story Deck like a Founder Storyteller\" as a decision-grade Marketing & GTM deck in this template's own visual system. Subject: OpenDesign's brand-story deck for partners and press: why it exists, what it believes, and where design is going. Audience: partners, press, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the plan connect creative choices to measurable growth."
 inputs:
   - id: brand
     label: Brand identity (shared across slides)
     schema_path: ./schema.ts#BrandBlock
   - id: deck_title
     label: Kicker shown in the per-slide top chrome
-    description: e.g. `'Open Design · Vol. 01 / Issue Nº 26'`.
+    description: e.g. `'OpenDesign · Vol. 01 / Issue Nº 26'`.
   - id: slides
     label: Ordered list of typed slides
     description: >

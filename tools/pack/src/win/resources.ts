@@ -1,9 +1,9 @@
 import { cp, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { hashJson, hashPath, ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
-import { copyBundledResourceTrees, winResources } from "../resources.js";
+import { hashJson, hashPath, ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { copyBundledResourceTrees, packBundledDshRuntime, winResources } from "../resources/index.js";
 import {
   copyOptionalVelaCliBinary,
   resolveOptionalVelaCliBinary,
@@ -11,9 +11,9 @@ import {
 } from "../vela-cli.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
-const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 6;
+const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 7;
 
-async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<string> {
+async function createResourceTreeCacheKey(config: ToolPackConfig, workspaceBuildKey: string): Promise<string> {
   const velaCliBin = await resolveOptionalVelaCliBinary({
     requireBundled: config.requireVelaCli,
   });
@@ -41,6 +41,7 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     velaOpenCodeCompanion: velaOpenCodeCompanion
       ? await hashPath(velaOpenCodeCompanion)
       : null,
+    workspaceBuildKey,
   });
 }
 
@@ -53,9 +54,10 @@ export async function prepareResourceTree(
   config: ToolPackConfig,
   paths: WinPaths,
   cache: ToolPackCache,
-  options: { materialize: boolean },
+  options: { bundleAgentRuntimes?: boolean; materialize: boolean },
+  workspaceBuildKey = "workspace-build-not-provided",
 ): Promise<ResourceTreeResult> {
-  const key = await createResourceTreeCacheKey(config);
+  const key = await createResourceTreeCacheKey(config, workspaceBuildKey);
   const node = {
     id: "win.resource-tree",
     key,
@@ -68,6 +70,12 @@ export async function prepareResourceTree(
         workspaceRoot: config.workspaceRoot,
         resourceRoot,
       });
+      if (options.bundleAgentRuntimes === true) {
+        await packBundledDshRuntime({
+          workspaceRoot: config.workspaceRoot,
+          resourceRoot,
+        });
+      }
       await mkdir(join(resourceRoot, "bin"), { recursive: true });
       await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
       await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));

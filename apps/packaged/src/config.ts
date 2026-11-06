@@ -1,5 +1,8 @@
+import { readLauncherHost } from "@open-design/launcher-proto";
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+
+import { type AmrEndpointBinding, parseAmrEndpointBinding } from "@open-design/contracts";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
 
@@ -12,17 +15,23 @@ async function loadElectronApp() {
   return electron.app;
 }
 
+/** The host's code resources may differ from its installed executable. */
+function packagedResourcesPath(): string { return readLauncherHost()?.running.resourcesPath ?? process.resourcesPath; }
+
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
+export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
 export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 
 export type PackagedWebOutputMode = "server" | "standalone";
-export type PackagedAmrProfile = "prod" | "test" | "local";
+export type PackagedAmrProfile = "prod" | "test" | "feature-test" | "local";
+export type PackagedVelaWebUrls = Partial<Record<PackagedAmrProfile, string>>;
 
 export type RawPackagedConfig = {
   amrProfile?: string;
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion?: string;
   daemonCliEntryRelative?: string;
   daemonSidecarEntryRelative?: string;
@@ -42,6 +51,14 @@ export type RawPackagedConfig = {
   // either this is absent or the user has declined Privacy → metrics.
   posthogKey?: string;
   posthogHost?: string;
+  // Origin of the vela web console this build's AMR backend serves, baked by
+  // tools/pack from OD_VELA_WEB_URL at packaging time. Forwarded to the daemon
+  // spawn env as OD_VELA_WEB_URL, where it both gates the workspace-team
+  // transports and supplies the workspace console links. Injected rather than
+  // checked in because the non-prod AMR environments are internal deployments
+  // and this repository is public; absent for prod and fork builds.
+  velaWebUrl?: string;
+  velaWebUrls?: Partial<Record<PackagedAmrProfile, string>>;
   webSidecarEntryRelative?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -49,6 +66,7 @@ export type RawPackagedConfig = {
 
 export type PackagedConfig = {
   amrProfile: PackagedAmrProfile | null;
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion: string | null;
   daemonCliEntry: string | null;
   daemonSidecarEntry: string | null;
@@ -60,6 +78,8 @@ export type PackagedConfig = {
   updateMetadataUrl: string | null;
   posthogKey: string | null;
   posthogHost: string | null;
+  velaWebUrl: string | null;
+  velaWebUrls?: PackagedVelaWebUrls;
   webSidecarEntry: string | null;
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
@@ -80,11 +100,14 @@ async function readJsonIfExists(filePath: string): Promise<RawPackagedConfig | n
 }
 
 function resolveDefaultConfigPath(): string {
-  return join(process.resourcesPath, "open-design-config.json");
+  return join(packagedResourcesPath(), "open-design-config.json");
 }
 
 async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
-  const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
+  // A tools-pack cold start may still name the installed outer's config.
+  // Hosted payload code must read its own version/resources, with only the
+  // namespace root frozen by the host.
+  const explicit = readLauncherHost()?.running.source === "payload" ? undefined : process.env[PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));
     if (config == null) throw new Error(`packaged config not found at ${explicit}`);
@@ -103,6 +126,16 @@ function resolveOptionalPath(value: string | undefined): string | undefined {
   return value == null || value.length === 0 ? undefined : resolve(value);
 }
 
+export function resolvePackagedNamespaceBaseRoot(
+  rawNamespaceBaseRoot: string | undefined,
+  electronUserDataRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return resolveOptionalPath(env[PACKAGED_NAMESPACE_BASE_ROOT_ENV])
+    ?? resolveOptionalPath(rawNamespaceBaseRoot)
+    ?? join(electronUserDataRoot, "namespaces");
+}
+
 // Config DTOs use null for optional scalar values consumed by runtime options;
 // optional paths use undefined so callers can distinguish "no path" from a resolved path string.
 function cleanOptionalString(value: string | undefined): string | null {
@@ -111,17 +144,30 @@ function cleanOptionalString(value: string | undefined): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+function cleanVelaWebUrls(
+  value: Partial<Record<PackagedAmrProfile, string>> | undefined,
+): PackagedVelaWebUrls {
+  const result: PackagedVelaWebUrls = {};
+  for (const profile of ['prod', 'test', 'feature-test', 'local'] as const) {
+    const origin = cleanOptionalString(value?.[profile]);
+    if (origin) result[profile] = origin.replace(/\/+$/, '');
+  }
+  return result;
+}
+
 function resolvePackagedWebOutputMode(value: string | undefined): PackagedWebOutputMode {
   if (value == null || value.length === 0) return "server";
   if (value === "server" || value === "standalone") return value;
   throw new Error(`unsupported packaged web output mode: ${value}`);
 }
 
-function resolvePackagedAmrProfile(value: string | undefined): PackagedAmrProfile | null {
+export function resolvePackagedAmrProfile(value: string | undefined): PackagedAmrProfile | null {
   const cleaned = cleanOptionalString(value);
   if (cleaned == null) return null;
-  if (cleaned === "prod" || cleaned === "test" || cleaned === "local") return cleaned;
-  throw new Error(`unsupported packaged AMR profile: ${value}`);
+  if (cleaned === "prod" || cleaned === "test" || cleaned === "feature-test" || cleaned === "local") {
+    return cleaned;
+  }
+  throw new Error(`unsupported packaged AMR profile; expected prod, test, feature-test, or local: ${value}`);
 }
 
 function isTruthyEnv(value: string | undefined): boolean {
@@ -135,13 +181,13 @@ function resolvePackagedWebStandaloneRoot(
   const configured = resolveOptionalPath(value);
   if (configured != null) return configured;
   if (webOutputMode !== "standalone") return null;
-  return join(process.resourcesPath, "open-design-web-standalone");
+  return join(packagedResourcesPath(), "open-design-web-standalone");
 }
 
 async function resolvePackagedRelativeEntry(value: string | undefined): Promise<string | null> {
   const cleaned = cleanOptionalString(value);
   if (cleaned == null) return null;
-  const entry = join(process.resourcesPath, cleaned);
+  const entry = join(packagedResourcesPath(), cleaned);
   if (!(await pathExists(entry))) {
     throw new Error(`configured packaged entry not found at ${entry}`);
   }
@@ -150,18 +196,21 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 
 export async function readPackagedConfig(): Promise<PackagedConfig> {
   const raw = await readRawPackagedConfig();
+  const amrEndpointBinding = parseAmrEndpointBinding(raw.amrEndpointBinding);
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
   const electronApp = await loadElectronApp();
-  const namespaceBaseRoot =
-    resolveOptionalPath(raw.namespaceBaseRoot) ?? join(electronApp.getPath("userData"), "namespaces");
-  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
+  const namespaceBaseRoot = readLauncherHost()?.namespaceBaseRoot ?? resolvePackagedNamespaceBaseRoot(
+    raw.namespaceBaseRoot,
+    electronApp.getPath("userData"),
+  );
+  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(packagedResourcesPath(), "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
       ? join("open-design", "bin", "node")
       : raw.nodeCommandRelative;
-  const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
+  const nodeCommandCandidate = join(packagedResourcesPath(), relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
   const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);
   const webOutputMode = resolvePackagedWebOutputMode(
@@ -180,7 +229,8 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
   const webSidecarEntry = await resolvePackagedRelativeEntry(raw.webSidecarEntryRelative);
 
   return {
-    amrProfile: resolvePackagedAmrProfile(raw.amrProfile),
+    amrEndpointBinding,
+    amrProfile: amrEndpointBinding?.profile ?? resolvePackagedAmrProfile(raw.amrProfile),
     appVersion: cleanOptionalString(raw.appVersion),
     daemonCliEntry,
     daemonSidecarEntry,
@@ -192,6 +242,11 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),
+    velaWebUrl: amrEndpointBinding?.webUrl ?? cleanOptionalString(raw.velaWebUrl),
+    velaWebUrls: {
+      ...cleanVelaWebUrls(raw.velaWebUrls),
+      ...(amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {}),
+    },
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

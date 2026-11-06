@@ -14,6 +14,7 @@ function analyticsStub(): AnalyticsService {
     capture: vi.fn(),
     captureSafety: vi.fn(async () => undefined),
     mergeAnonymousPerson: vi.fn(async () => undefined),
+    identifyGroup: vi.fn(async () => undefined),
     shutdown: vi.fn(async () => undefined),
   };
 }

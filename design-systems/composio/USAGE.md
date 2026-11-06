@@ -1,6 +1,6 @@
 # Composio Usage
 
-Design System 2.0 package guide for Open Design agents and reviewers.
+Design System 2.0 package guide for OpenDesign agents and reviewers.
 
 ## Read Order
 

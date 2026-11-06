@@ -8,6 +8,7 @@
 // surface.
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { inferPluginPreview } from '../../src/components/plugins-home/preview';
 
@@ -56,6 +57,40 @@ function make(args: MakeArgs): InstalledPluginRecord {
 }
 
 describe('inferPluginPreview', () => {
+  it('shows the bundled depth gallery cover before CDN previews exist, keeping details live', () => {
+    const manifest = JSON.parse(readFileSync(new URL(
+      '../../../../plugins/_official/examples/webgl-depth-gallery/open-design.json', import.meta.url,
+    ), 'utf8'));
+    const record = make({
+      id: manifest.name, preview: manifest.od.preview,
+    });
+    expect(inferPluginPreview(record, { preferBaked: true })).toMatchObject({
+      kind: 'media', mediaType: 'image', imageOnly: true,
+      poster: '/api/plugins/example-webgl-depth-gallery/asset/example.webp', videoUrl: null,
+    });
+    expect(inferPluginPreview(record)).toMatchObject({
+      kind: 'html', src: '/api/plugins/example-webgl-depth-gallery/preview',
+    });
+  });
+
+  it('keeps the homepage gallery on its rendered cover even with a stale loading-screen bake', () => {
+    const manifest = JSON.parse(readFileSync(new URL(
+      '../../../../plugins/_official/examples/open-design-homepage/open-design.json', import.meta.url,
+    ), 'utf8'));
+    const record = make({
+      id: manifest.name,
+      preview: manifest.od.preview,
+      bakedPreview: { poster: '/stale/loading.jpg', video: '/stale/loading.mp4', holdMs: 2500 },
+    });
+    expect(inferPluginPreview(record, { preferBaked: true })).toMatchObject({
+      kind: 'media', mediaType: 'image', imageOnly: true,
+      poster: '/api/plugins/example-open-design-homepage/asset/example.webp', videoUrl: null,
+    });
+    expect(inferPluginPreview(record)).toMatchObject({
+      kind: 'html', src: '/api/plugins/example-open-design-homepage/preview',
+    });
+  });
+
   it('classifies image-template plugins as media/image', () => {
     const out = inferPluginPreview(
       make({
@@ -116,10 +151,22 @@ describe('inferPluginPreview', () => {
     expect(out.label).toBe('example.html');
   });
 
+  it('uses a bundled HTML poster on cards before CDN previews exist, keeping details live', () => {
+    const record = make({
+      id: 'new-motion',
+      preview: { type: 'html', entry: './example.html', poster: './assets/cover.jpg' },
+    });
+    expect(inferPluginPreview(record).kind).toBe('html');
+    expect(inferPluginPreview(record, { preferBaked: true })).toMatchObject({
+      kind: 'media', mediaType: 'image', imageOnly: true,
+      poster: '/api/plugins/new-motion/asset/assets/cover.jpg', videoUrl: null,
+    });
+  });
+
   it('uses baked previews only when the gallery explicitly opts in', () => {
     const record = make({
       id: 'baked-html',
-      preview: { type: 'html', entry: './index.html' },
+      preview: { type: 'html', entry: './index.html', poster: './assets/cover.jpg' },
       bakedPreview: {
         poster: '/api/plugin-previews/baked-html/hash/poster.jpg',
         video: '/api/plugin-previews/baked-html/hash/preview.mp4',

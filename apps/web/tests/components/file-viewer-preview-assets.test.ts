@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectPreviewAssetPaths,
   htmlHasRootRelativeProjectAssetRefs,
   normalizeRootRelativeProjectAssetRefs,
   ownerRelativeAssetPath,
   resolveRelativeAssetPath,
   rewriteInlinedCssAssetRefs,
   rewriteInlinedScriptAssetRefs,
+  rewriteProjectAssetRefsToRawUrls,
   rootRelativeProjectAssetPath,
 } from '../../src/components/file-viewer-preview-assets';
 
@@ -87,6 +89,54 @@ describe('htmlHasRootRelativeProjectAssetRefs', () => {
     ).toBe(false);
     expect(htmlHasRootRelativeProjectAssetRefs('<img src="/not-here.png">', files)).toBe(false);
     expect(htmlHasRootRelativeProjectAssetRefs('<img src="images/hero.png">', files)).toBe(false);
+  });
+});
+
+describe('collectPreviewAssetPaths', () => {
+  const files = new Set(['images/hero.png', 'css/app.css', 'nested/card.png']);
+
+  it('collects unique relative and confirmed root-relative asset paths', () => {
+    const html = [
+      '<link rel="stylesheet" href="/css/app.css">',
+      '<img src="./images/hero.png" srcset="./images/hero.png 1x, ./nested/card.png 2x">',
+      '<style>.card { background: url("./nested/card.png"); }</style>',
+      '<a href="/css/app.css">download</a>',
+    ].join('\n');
+
+    expect(collectPreviewAssetPaths(html, 'index.html', files)).toEqual([
+      'images/hero.png',
+      'css/app.css',
+      'nested/card.png',
+    ]);
+  });
+
+  it('keeps unconfirmed root-relative candidates while the file list is loading', () => {
+    expect(collectPreviewAssetPaths('<img src="/maybe-later.png">', 'index.html', null)).toEqual([
+      'maybe-later.png',
+    ]);
+  });
+
+  it('does not reinterpret an already rewritten raw API URL as a project path', () => {
+    const html = [
+      '<style>',
+      '@font-face {',
+      '  src: url("/api/projects/project-1/raw/fonts/inter.woff2?workspaceId=ws-1");',
+      '}',
+      '</style>',
+    ].join('\n');
+
+    expect(collectPreviewAssetPaths(html, 'brand.html', null)).toEqual([]);
+  });
+
+  it('rejects external schemes, navigation links, and traversal refs', () => {
+    const html = [
+      '<img src="https://cdn.example.com/a.png">',
+      '<img src="data:image/png;base64,xx">',
+      '<img src="../escape.png">',
+      '<a href="images/hero.png">open</a>',
+    ].join('\n');
+
+    expect(collectPreviewAssetPaths(html, 'index.html', files)).toEqual([]);
   });
 });
 
@@ -171,6 +221,35 @@ describe('normalizeRootRelativeProjectAssetRefs', () => {
       '<link rel="stylesheet" href="/api/projects/p1/raw/reference-assets/main.css">',
     ].join('\n');
     expect(normalizeRootRelativeProjectAssetRefs(html, 'index.html', files)).toBe(html);
+  });
+});
+
+describe('rewriteProjectAssetRefsToRawUrls', () => {
+  it('keeps explicit Workspace scope on relative font and image requests from srcDoc', () => {
+    const files = new Set([
+      'fonts/inter-variable-400.woff2',
+      'system/images/poster.png',
+    ]);
+    const scopedRawUrl = (path: string) =>
+      `/api/projects/p1/raw/${path}?workspaceId=ws-1&workspaceMemberId=member-1`;
+    const html = [
+      '<style>@font-face { src: url("../../fonts/inter-variable-400.woff2"); }</style>',
+      '<img src="../images/poster.png?v=2">',
+    ].join('');
+
+    const rewritten = rewriteProjectAssetRefsToRawUrls(
+      html,
+      'system/artifacts/poster.html',
+      files,
+      scopedRawUrl,
+    );
+
+    expect(rewritten).toContain(
+      'url("/api/projects/p1/raw/fonts/inter-variable-400.woff2?workspaceId=ws-1&workspaceMemberId=member-1")',
+    );
+    expect(rewritten).toContain(
+      'src="/api/projects/p1/raw/system/images/poster.png?workspaceId=ws-1&workspaceMemberId=member-1&v=2"',
+    );
   });
 });
 

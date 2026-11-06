@@ -71,7 +71,7 @@ export function MissingBrandFontsBanner({
       <div className="ds-warning-card-actions">
         {onUploadAssets ? (
           <Button variant="ghost" className="compact" onClick={onUploadAssets}>
-            <Icon name="upload" size={13} />
+            <Icon name="upload" size={14} />
             Add brand font files
           </Button>
         ) : null}

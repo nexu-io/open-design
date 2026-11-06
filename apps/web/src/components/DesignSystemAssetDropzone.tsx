@@ -418,7 +418,7 @@ export function DesignSystemAssetDropzone({
             <div className={styles.lightboxFontScale}>
               <span style={{ fontSize: 13 }}>{FONT_PANGRAM}</span>
               <span style={{ fontSize: 18 }}>{FONT_PANGRAM}</span>
-              <span style={{ fontSize: 26 }}>{FONT_PANGRAM}</span>
+              <span style={{ fontSize: 28 }}>{FONT_PANGRAM}</span>
             </div>
           </div>
         );
@@ -516,7 +516,7 @@ export function DesignSystemAssetDropzone({
                   aria-label={`Remove ${file.name}`}
                   onClick={() => onRemove(file)}
                 >
-                  <Icon name="close" size={12} />
+                  <Icon name="close" size={14} />
                 </button>
                 <span className={styles.caption} title={file.name}>
                   {file.name}

@@ -15,4 +15,4 @@ The four remaining themes (`vance`, `bevel`, `world-dark`, `world-mint`) are ful
 2. Change `<body data-theme="helix">` to the theme you want
 3. Paste layouts from [`../references/layouts.md`](../references/layouts.md) that match the theme
 
-> **Note**: Numbers in these examples are synthetic, for illustration only. Real usage goes through the skill's workflow (question form → brief → honest metrics from the user).
+> **Note**: Numbers in these examples are synthetic, for illustration only. Real usage follows the skill's workflow (clarify material unknowns when needed → brief → honest metrics from the user).

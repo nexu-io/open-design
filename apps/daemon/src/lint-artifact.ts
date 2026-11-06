@@ -17,15 +17,15 @@
  * surface badges next to each saved artifact.
  */
 
-type LintSeverity = 'P0' | 'P1' | 'P2';
+import type { ArtifactLintFinding, ArtifactLintSeverity } from '@open-design/contracts';
 
-export type LintFinding = {
-  severity: LintSeverity;
-  id: string;
-  message: string;
-  fix: string;
-  snippet?: string;
-};
+// The shared wire contract in @open-design/contracts is the authority for
+// the finding shape; the legacy names alias it so existing importers keep
+// compiling while incompatible producer changes now fail compilation here
+// rather than drifting silently behind a consumer-side assertion.
+type LintSeverity = ArtifactLintSeverity;
+
+export type LintFinding = ArtifactLintFinding;
 
 type CssDeclaration = { prop: string; value: string };
 type CssTokenScope = {
@@ -114,7 +114,7 @@ const DISPLAY_SANS_RE =
  * findings. The checks are intentionally independent so adding a new
  * one only means appending to this function.
  *
- * @param {string} html
+ * @param {unknown} rawHtml
  * @returns {LintFinding[]}
  */
 export function lintArtifact(rawHtml: unknown): LintFinding[] {

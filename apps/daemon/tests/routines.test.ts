@@ -485,6 +485,46 @@ describe('RoutineService scheduled run idempotency', () => {
     });
   });
 
+  it('preserves persisted Workspace scope for execution without a membership re-check', async () => {
+    const persistence = new SharedRoutinePersistence([
+      fixtureRoutine({
+        context: {
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      }),
+    ]);
+    const service = new RoutineService(persistence);
+    const sideEffects = {
+      projects: 0,
+      conversations: 0,
+      agentRuns: 0,
+    };
+
+    service.setRunHandler(async ({ routine }) => {
+      expect(routine.context.workspaceScope).toEqual({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      });
+      sideEffects.projects += 1;
+      sideEffects.conversations += 1;
+      sideEffects.agentRuns += 1;
+      return handlerStart('agent-run-1');
+    });
+
+    await expect(service.runNow('routine-1')).resolves.toMatchObject({
+      agentRunId: 'agent-run-1',
+    });
+    expect(sideEffects).toEqual({
+      projects: 1,
+      conversations: 1,
+      agentRuns: 1,
+    });
+    expect(persistence.runs).toHaveLength(1);
+  });
+
   it('returns prepared IDs from successful manual runs', async () => {
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
     const service = new RoutineService(persistence);

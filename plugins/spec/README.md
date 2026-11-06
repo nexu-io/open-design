@@ -1,17 +1,17 @@
-# Open Design Plugin Spec Kit
+# OpenDesign Plugin Spec Kit
 
 Language: English | [简体中文](README.zh-CN.md)
 
-This folder is the shareable specification kit for Open Design plugin authors. It is meant to work for a human reading the repo and for an external coding agent such as Claude Code, Codex, Cursor, OpenClaw, Hermes Agent, or another Agent Skills compatible tool.
+This folder is the shareable specification kit for OpenDesign plugin authors. It is meant to work for a human reading the repo and for an external coding agent such as Claude Code, Codex, Cursor, OpenClaw, Hermes Agent, or another Agent Skills compatible tool.
 
-Open Design plugins follow the same portable shape as Agent Skills: a folder with `SKILL.md` plus optional assets, references, scripts, and examples. Open Design adds `open-design.json` as a sidecar so the same folder can appear in the OD plugin gallery, hydrate the home composer, declare inputs and GenUI surfaces, run an OD atom pipeline, and participate in publish or PR flows.
+OpenDesign plugins follow the same portable shape as Agent Skills: a folder with `SKILL.md` plus optional assets, references, scripts, and examples. OpenDesign adds `open-design.json` as a sidecar so the same folder can appear in the OD plugin gallery, hydrate the home composer, declare inputs and GenUI surfaces, run an OD atom pipeline, and participate in publish or PR flows.
 
 ## Folder Map
 
 - [`SPEC.md`](SPEC.md) - the portable plugin spec and taxonomy.
 - [`AGENT-DEVELOPMENT.md`](AGENT-DEVELOPMENT.md) - copy this into an external agent session to build and validate a plugin.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) - PR standards for plugins that follow this spec.
-- [`PUBLISHING-REGISTRIES.md`](PUBLISHING-REGISTRIES.md) - strategies for skills.sh, ClawHub, GitHub, and Open Design publishing.
+- [`PUBLISHING-REGISTRIES.md`](PUBLISHING-REGISTRIES.md) - strategies for skills.sh, ClawHub, GitHub, and OpenDesign publishing.
 - [`templates/`](templates/) - blank starter files.
 - [`examples/`](examples/) - complete example plugin folders and a sample marketplace index.
 
@@ -59,10 +59,10 @@ od plugin apply <plugin-id> --input key=value
 
 ## Compatibility Promise
 
-A folder with `SKILL.md` can be used as a plain skill in Agent Skills compatible clients. Adding `open-design.json` should never make the skill less portable; it only adds Open Design product behavior.
+A folder with `SKILL.md` can be used as a plain skill in Agent Skills compatible clients. Adding `open-design.json` should never make the skill less portable; it only adds OpenDesign product behavior.
 
 References:
 
 - Agent Skills overview: https://agentskills.io/home
 - Agent Skills specification: https://agentskills.io/specification
-- Open Design plugin spec: ../../docs/plugins-spec.md
+- OpenDesign plugin spec: ../../docs/plugins-spec.md

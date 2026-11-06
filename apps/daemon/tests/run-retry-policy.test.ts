@@ -5,11 +5,33 @@ import {
   MAX_RETRY_BACKOFF_DELAY_MS,
   RATE_LIMIT_RETRY_BASE_DELAY_MS,
   SAFE_RUN_RETRY_STRATEGY,
+  NATIVE_SESSION_CONTINUE_STRATEGY,
   TRANSIENT_RETRY_BASE_DELAY_MS,
   computeRetryBackoffMs,
+  decidePostToolResumeRecovery,
   decideSafeRunRetry,
   type RunRetryPolicyInput,
 } from '../src/run-retry-policy.js';
+
+function decidePostToolResume(
+  input: Partial<Parameters<typeof decidePostToolResumeRecovery>[0]> = {},
+) {
+  return decidePostToolResumeRecovery({
+    result: 'failed',
+    continuationAttemptCount: 0,
+    totalRetryAttemptCount: 0,
+    failure: {
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'post_tool_resume',
+      retryable: true,
+    },
+    sideEffects: { toolCallSeen: true },
+    supportsNativeSessionContinue: true,
+    hasNativeSession: true,
+    ...input,
+  });
+}
 
 function decide(input: Partial<RunRetryPolicyInput> = {}) {
   return decideSafeRunRetry({
@@ -94,6 +116,7 @@ describe('decideSafeRunRetry', () => {
       'agent_protocol_error',
       'qoder_stop_sequence',
       'session_resume_expired',
+      'credential_refresh_contention',
       'stream_error',
       'fatal_rpc_error',
     ] as const) {
@@ -113,6 +136,40 @@ describe('decideSafeRunRetry', () => {
     }
   });
 
+  // A lost credential-refresh lock is raised before any request is sent, so
+  // `session_init` is the only stage it can carry. `agent_protocol_error` is
+  // suppressed at exactly that stage, so pin the distinction: were the entry to
+  // inherit that stage rule it would be dead on arrival and never retry once.
+  it('retries a credential refresh contention at session_init', () => {
+    expect(
+      decide({
+        failure: {
+          failure_category: 'process_exit',
+          failure_detail: 'credential_refresh_contention',
+          failure_stage: 'session_init',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: true,
+      retryReason: 'transient_failure',
+    });
+
+    expect(
+      decide({
+        failure: {
+          failure_category: 'process_exit',
+          failure_detail: 'agent_protocol_error',
+          failure_stage: 'session_init',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'unsafe_failure_stage',
+    });
+  });
+
   it('keeps upstream client errors out of the transient retry allowlist', () => {
     expect(
       decide({
@@ -120,6 +177,30 @@ describe('decideSafeRunRetry', () => {
           failure_category: 'upstream_unavailable',
           failure_detail: 'upstream_client_error',
           failure_stage: 'first_token_wait',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'non_retryable_category',
+    });
+  });
+
+  it.each([
+    'request_too_large',
+    'attachment_media_type_unsupported',
+    'tool_schema_invalid',
+    'prompt_tokenization_failed',
+    'provider_resource_not_found',
+  ] as const)('keeps %s out of the transient retry allowlist', (failure_detail) => {
+    expect(
+      decide({
+        failure: {
+          failure_category: failure_detail === 'request_too_large'
+            ? 'prompt_too_large'
+            : 'upstream_unavailable',
+          failure_detail,
+          failure_stage: 'prompt_send',
           retryable: true,
         },
       }),
@@ -157,6 +238,22 @@ describe('decideSafeRunRetry', () => {
       shouldRetry: false,
       retrySuppressedReason: 'unsafe_failure_stage',
     });
+
+    for (const failure_stage of ['tool_outstanding', 'post_tool_resume'] as const) {
+      expect(
+        decide({
+          failure: {
+            failure_category: 'timeout',
+            failure_detail: 'inactivity_timeout',
+            failure_stage,
+            retryable: true,
+          },
+        }),
+      ).toMatchObject({
+        shouldRetry: false,
+        retrySuppressedReason: 'unsafe_failure_stage',
+      });
+    }
   });
 
   it('does not retry successful or cancelled terminal results', () => {
@@ -276,6 +373,25 @@ describe('decideSafeRunRetry', () => {
     });
   });
 
+  it('never auto-retries a cpu_unsupported crash even when marked retryable', () => {
+    // An AVX2-requiring binary on a CPU without AVX2 crashes deterministically;
+    // the process_exit allowlist must keep cpu_unsupported out even if an
+    // upstream retryable hint leaks in as true.
+    expect(
+      decide({
+        failure: {
+          failure_category: 'process_exit',
+          failure_detail: 'cpu_unsupported',
+          failure_stage: 'session_init',
+          retryable: true,
+        },
+      }),
+    ).toMatchObject({
+      shouldRetry: false,
+      retrySuppressedReason: 'non_retryable_category',
+    });
+  });
+
   it('never auto-retries process kills, crashes, or interruptions', () => {
     for (const failure_detail of [
       'signal_killed',
@@ -319,6 +435,70 @@ describe('decideSafeRunRetry', () => {
   });
 });
 
+describe('decidePostToolResumeRecovery', () => {
+  it('allows one native-session continuation after a completed tool result stalls', () => {
+    expect(decidePostToolResume()).toEqual({
+      shouldRetry: true,
+      retryAttemptIndex: 1,
+      retryMaxAttempts: DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS,
+      retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+      retryReason: 'post_tool_resume',
+      retryDelayMs: 0,
+    });
+  });
+
+  it('requires the exact post-tool timeout, a native session, and a committed tool call', () => {
+    expect(decidePostToolResume({
+      failure: {
+        failure_category: 'timeout',
+        failure_detail: 'inactivity_timeout',
+        failure_stage: 'tool_outstanding',
+        retryable: true,
+      },
+    })).toBeNull();
+    expect(decidePostToolResume({ supportsNativeSessionContinue: false })).toBeNull();
+    expect(decidePostToolResume({ hasNativeSession: false })).toBeNull();
+    expect(decidePostToolResume({ sideEffects: { toolCallSeen: false } })).toBeNull();
+  });
+
+  it.each([
+    'upstream_5xx',
+    'stream_disconnected',
+    'provider_high_demand',
+    'provider_routing_error',
+    'network_error',
+  ] as const)(
+    'continues the native session after a retryable post-tool %s failure',
+    (failureDetail) => {
+      expect(decidePostToolResume({
+        failure: {
+          failure_category: 'upstream_unavailable',
+          failure_detail: failureDetail,
+          failure_stage: 'post_tool_resume',
+          retryable: true,
+        },
+      })).toMatchObject({
+        shouldRetry: true,
+        retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+        retryReason: 'post_tool_resume',
+      });
+    },
+  );
+
+  it('does not loop after the single continuation attempt', () => {
+    expect(decidePostToolResume({ continuationAttemptCount: 1 })).toBeNull();
+  });
+
+  it('keeps the continuation budget independent from prior safe retries', () => {
+    expect(decidePostToolResume({ totalRetryAttemptCount: 1 })).toMatchObject({
+      shouldRetry: true,
+      retryAttemptIndex: 2,
+      retryMaxAttempts: 2,
+      retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+    });
+  });
+});
+
 describe('computeRetryBackoffMs', () => {
   it('grows exponentially by attempt index and applies equal jitter', () => {
     // random → 0 is the floor (delay/2), random → 1 is the ceiling (full delay).
@@ -350,5 +530,22 @@ describe('computeRetryBackoffMs', () => {
       expect(delay).toBeGreaterThanOrEqual(capped / 2);
       expect(delay).toBeLessThanOrEqual(capped);
     }
+  });
+});
+
+describe('verified AMR continuation', () => {
+  const failure = { failure_category: 'process_exit', failure_detail: 'continuation_incomplete',
+    failure_stage: 'post_tool_resume', retryable: false } as const;
+  it('uses the native path without authorizing prompt replay', () => {
+    expect(decidePostToolResume({ failure, hasVerifiedAmrContinuation: true })?.retryStrategy).toBe('native_session_continue');
+    expect(decide({ failure }).shouldRetry).toBe(false);
+  });
+  it.each([
+    { hasVerifiedAmrContinuation: false }, { hasNativeSession: false },
+    { supportsNativeSessionContinue: false }, { continuationAttemptCount: 1 },
+    { sideEffects: { toolCallSeen: true, cancelRequested: true } },
+    { failure: { ...failure, failure_stage: 'tool_outstanding' as const } },
+  ])('rejects unsafe or exhausted recovery: %j', (override) => {
+    expect(decidePostToolResume({ failure, hasVerifiedAmrContinuation: true, ...override })).toBeNull();
   });
 });

@@ -115,6 +115,29 @@ describe('native session recovery metadata', () => {
     expect(JSON.stringify(captured)).not.toContain(rawSessionId);
   });
 
+  it('describes profile-stdio capture and resume without calling it CLI resume', () => {
+    const metadata = initialNativeSessionRecoveryMetadata({
+      agent: {
+        id: 'deepseek-harness',
+        resumesSessionViaProfileStdio: true,
+        capturesSessionIdFromStream: true,
+      },
+      supportsSessionResume: true,
+      isResuming: true,
+      resumeSessionId: 'od-harness-session',
+      invalidationReason: null,
+      updatedAt: 375,
+    });
+
+    expect(metadata).toMatchObject({
+      state: 'resume_attempted',
+      acquisition: 'profile-session-frame',
+      continuation: 'profile-stdio-resume',
+      handle: { present: true, kind: 'profile-session-id', redacted: true },
+    });
+    expect(JSON.stringify(metadata)).not.toContain('od-harness-session');
+  });
+
   it('distinguishes skipped, captured, resumed, and auto-reseeded states', () => {
     const skipped = initialNativeSessionRecoveryMetadata({
       agent: { id: 'codex', resumesSessionViaCli: true, capturesSessionIdFromStream: true },

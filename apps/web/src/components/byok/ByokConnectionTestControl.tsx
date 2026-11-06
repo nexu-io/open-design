@@ -87,7 +87,7 @@ export function ByokConnectionTestControl({
             <>
               <Icon
                 name="spinner"
-                size={13}
+                size={14}
                 className="icon-spin"
               />
               <span>{labels.test}</span>
@@ -95,7 +95,7 @@ export function ByokConnectionTestControl({
           ) : providerTestState.status === 'done' &&
             !providerTestState.result.ok ? (
             <>
-              <Icon name="reload" size={13} />
+              <Icon name="reload" size={14} />
               <span>{labels.testRetry}</span>
             </>
           ) : (

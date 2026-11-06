@@ -63,6 +63,21 @@ describe('agent_sessions persistence', () => {
     expect(getAgentSession(db, 'conv-1', 'claude')).toBe('sess-C');
   });
 
+  it('persists bounded input usage for the next resumed prompt diagnostic', () => {
+    const db = seed();
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'amr',
+      sessionId: 'sess-A',
+      lastInputTokens: 123_456,
+    });
+
+    expect(getAgentSessionRecord(db, 'conv-1', 'amr')).toMatchObject({
+      sessionId: 'sess-A',
+      lastInputTokens: 123_456,
+    });
+  });
+
   it('clearAgentSession removes only the targeted row', () => {
     const db = seed();
     upsertAgentSession(db, { conversationId: 'conv-1', agentId: 'claude', sessionId: 'sess-A' });

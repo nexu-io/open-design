@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { createLiveArtifactsMcpTools, handleLiveArtifactsMcpRequest } from '../../src/mcp-live-artifacts-server.js';
-import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes } from './helpers/test-helpers.js';
+import { AGENT_DEFS, assert, buildLiveArtifactsMcpServersForAgent, hermes, kimi } from './helpers/test-helpers.js';
 
 test('live artifact MCP discovery is limited to mature ACP agents', () => {
   for (const agent of AGENT_DEFS) {
@@ -30,6 +30,19 @@ test('live artifact MCP discovery is limited to mature ACP agents', () => {
 
 test('live artifact MCP discovery is disabled when run-scoped tool auth is unavailable', () => {
   assert.deepEqual(buildLiveArtifactsMcpServersForAgent(hermes, { enabled: false }), []);
+});
+
+test('Kimi retains ACP live-artifacts and external MCP wiring', () => {
+  assert.equal(kimi.mcpDiscovery, 'mature-acp');
+  assert.equal(kimi.externalMcpInjection, 'acp-merge');
+  assert.deepEqual(buildLiveArtifactsMcpServersForAgent(kimi), [
+    {
+      name: 'open-design-live-artifacts',
+      command: 'od',
+      args: ['mcp', 'live-artifacts'],
+      env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }],
+    },
+  ]);
 });
 
 test('live artifact MCP discovery can use daemon-resolved CLI command', () => {
@@ -82,6 +95,7 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
   assert.deepEqual(Object.keys(createProperties).sort(), ['input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
+
 });
 
 test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {

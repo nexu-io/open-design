@@ -1,8 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { handleMcpToolCall } from '../src/mcp.js';
+import { _resetMcpWorkspaceContextCacheForTests } from '../src/mcp-workspace-context.js';
 
 const originalFetch = globalThis.fetch;
+
+// Non-vela directory: the bridge falls back to headerless behavior, which is
+// what this suite exercised before #6569.
+function withDirectory(
+  fn: (url: string, init?: RequestInit) => Promise<Response>,
+): (url: string, init?: RequestInit) => Promise<Response> {
+  return async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith('/api/workspace/directory')) {
+      return new Response(JSON.stringify({ items: [], activeWorkspaceId: null }), { status: 200 });
+    }
+    return fn(url, init);
+  };
+}
 
 function firstText(result: { content: Array<{ text: string }> }): string {
   const item = result.content[0];
@@ -12,6 +26,7 @@ function firstText(result: { content: Array<{ text: string }> }): string {
 
 describe('public MCP create_artifact', () => {
   afterEach(() => {
+    _resetMcpWorkspaceContextCacheForTests();
     vi.unstubAllGlobals();
     globalThis.fetch = originalFetch;
   });
@@ -31,7 +46,7 @@ describe('public MCP create_artifact', () => {
         { status: 200 },
       );
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_artifact', {
       project: 'Demo',
@@ -63,7 +78,7 @@ describe('public MCP create_artifact', () => {
       }
       return new Response(JSON.stringify({ file: { name: 'index.html' } }), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_artifact', {
       name: 'index.html',
@@ -83,7 +98,7 @@ describe('public MCP create_artifact', () => {
       }
       return new Response(JSON.stringify({ file: { name: 'index.html' } }), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
 
     const result = await handleMcpToolCall('http://127.0.0.1:17457', 'create_artifact', {
       project: 'custom-project-id',
@@ -102,7 +117,7 @@ describe('public MCP create_artifact', () => {
       }
       return new Response(JSON.stringify({ file: { name: 'unused.html' } }), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_artifact', {
       project: 'Demo',
@@ -121,7 +136,7 @@ describe('public MCP create_artifact', () => {
       }
       return new Response(JSON.stringify({ file: { name: 'unused.html' } }), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_artifact', {
       project: 'Demo',

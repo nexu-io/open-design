@@ -1,6 +1,6 @@
 // Browser service workers must be served as JavaScript files. This tiny
 // runtime exists only to display task-completion notifications and focus
-// the existing Open Design tab when the user clicks one.
+// the existing OpenDesign tab when the user clicks one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 

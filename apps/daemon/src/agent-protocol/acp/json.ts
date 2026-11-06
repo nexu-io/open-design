@@ -132,3 +132,16 @@ export function extractAcpUpdateText(update: JsonObject): string | null {
   }
   return null;
 }
+
+/**
+ * Pull a short human-readable status detail (`message` / `detail`) off an ACP
+ * `session/update`, so a status event can carry e.g. a "compacting context"
+ * reason. Returns `undefined` when neither field is a non-empty string.
+ */
+export function extractAcpStatusDetail(update: JsonObject): string | undefined {
+  for (const key of ['message', 'detail']) {
+    const value = update[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return undefined;
+}

@@ -9,14 +9,14 @@ import {
   resolveLauncherVersionPaths,
 } from "@open-design/launcher-proto";
 
-import { hashJson, hashPath, type ToolPackCache } from "../cache.js";
-import type { ToolPackConfig } from "../config.js";
-import { winResources } from "../resources.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { hashJson, hashPath, type ToolPackCache } from "../cache/index.js";
+import type { ToolPackConfig } from "../config/index.js";
+import { winResources } from "../resources/index.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
-} from "../launcher-layout.js";
+} from "../launcher/layout.js";
 import { readPackagedVersion } from "./manifest.js";
 import { WIN_PAYLOAD_SEVEN_Z_CREATE_ARGS, resolveWinNsisOverlayRequiredPaths } from "./custom-installer.js";
 import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";

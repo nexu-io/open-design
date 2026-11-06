@@ -12,6 +12,10 @@ import {
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
 import {
+  assertLauncherVersionFloorSatisfiable,
+  resolveLauncherVersionFloor,
+} from "./launcher-version-floor.ts";
+import {
   parseCountedReleaseVersion,
   parseReleaseBaseVersion,
   releaseChannelDescriptor,
@@ -76,6 +80,29 @@ const versionLockKey = optional(
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 
+// Operator-supplied installer-reinstall floor: one repo-vars pair per channel,
+// resolved with pair-level stable fallback by the shared channel-policy
+// resolver. Published as control.launcher.version.{min,url}; the desktop
+// updater compares min against the physically installed outer package version
+// and forces the installer route — including a same-version reinstall — when
+// the outer is below it.
+const launcherVersionFloor = resolveLauncherVersionFloor(releaseChannel);
+if (launcherVersionFloor != null) {
+  assertLauncherVersionFloorSatisfiable(launcherVersionFloor, releaseVersion);
+}
+const controlBlock = launcherVersionFloor == null
+  ? {}
+  : {
+      control: {
+        launcher: {
+          version: {
+            min: launcherVersionFloor.min,
+            ...(launcherVersionFloor.url == null ? {} : { url: launcherVersionFloor.url }),
+          },
+        },
+      },
+    };
+
 function readReleaseNoteMetadata(): ReturnType<typeof releaseNoteMetadataFromPublication> {
   if (releaseNoteManifestPath.length === 0) {
     if (releaseChannel === "stable") {
@@ -87,9 +114,10 @@ function readReleaseNoteMetadata(): ReturnType<typeof releaseNoteMetadataFromPub
   if (publication.channel !== releaseChannel || publication.releaseVersion !== releaseVersion) {
     throw new Error(`release note publication identity mismatch for ${releaseChannel} ${releaseVersion}`);
   }
-  if (releaseChannel === "stable" && publication.state === "absent") {
-    throw new Error("release note publication is required for stable metadata");
-  }
+  // An absent publication is a complete outcome, not a half-built one: the
+  // metadata simply omits its releaseNote block and verify-metadata asserts
+  // that same absence. prepare-release-note reports the editorial gap; blocking
+  // here would only move the stable hard-failure past the GitHub draft release.
   if (publication.state !== "absent") {
     const expectedState = publishSideEffectsEnabled ? "published" : "planned";
     if (publication.state !== expectedState) {
@@ -327,6 +355,7 @@ const releaseFields = releaseMetadataFields();
 const metadata = {
   ...releaseFields,
   channel: releaseChannel,
+  ...controlBlock,
   expectedPlatforms: expectedTargets,
   expectedTargets,
   failedPlatforms: failedTargets,

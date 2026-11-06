@@ -49,6 +49,9 @@ export function redactText(text: string, opts: RedactionOptions = {}): string {
   let out = text.replace(HTTP_AUTH_SCHEME_RE, (_match, scheme) => `${scheme} ${REDACTED}`);
   out = out.replace(URL_QUERY_SECRET_RE, (_match, sep, name, eq) => `${sep}${name}${eq}${REDACTED}`);
   out = out.replace(BARE_SECRET_RE, (_match, lead, name, sep) => `${lead}${name}${sep}${REDACTED}`);
+  // Structured fragments often follow a timestamp/prefix and cannot be parsed as whole JSON.
+  out = out.replace(/("[^"\n]*(?:token|password|secret|api[_-]?key|authorization|cookie|dsn)[^"\n]*"\s*:\s*)"(?:\\.|[^"\\])*"/gi,
+    (_match, prefix) => `${prefix}"${REDACTED}"`);
   const username = opts.username;
   if (username && username.length > 1) {
     const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

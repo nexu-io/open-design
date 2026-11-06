@@ -8,8 +8,15 @@ const homeHeroSource = read('../../src/components/HomeHero.tsx');
 const entryNavRailSource = read('../../src/components/EntryNavRail.tsx');
 const logoSvg = read('../../public/logo.svg');
 const brandIconSvg = read('../../public/brand-icon.svg');
+// #5517: the home hero header shows the full OpenDesign logotype instead of
+// the small glyph + name pair; the asset must ship with the app.
+const heroLogotypeSvg = read('../../public/logo-03.svg');
+// Round 7: the static logotype is now driven by the WebGL pixel-scan wordmark
+// (see home-hero/pixel-scan/engine.ts), which samples this SVG's alpha
+// channel as the glyph mask it assembles out of coloured blocks.
+const heroPixelScanSvg = read('../../public/logo-scan.svg');
 
-// The current Open Design brand glyph is the ink superellipse tile introduced
+// The current OpenDesign brand glyph is the ink superellipse tile introduced
 // with the landing-page rebrand (landing PR #3444): its outline starts with
 // this path command in every export of the mark.
 const CURRENT_GLYPH_PATH_PREFIX = 'M41 0.726562';
@@ -31,11 +38,28 @@ describe('Home logo assets', () => {
     expect(brandIconSvg).toContain('currentColor');
   });
 
-  it('renders the brand glyph on both Home entry surfaces', () => {
-    expect(homeHeroSource).toContain('od-brand-glyph');
+  it('renders the brand mark on the Home hero', () => {
+    // #5517: the hero renders the shipped logotype image (not the glyph pair).
+    expect(heroLogotypeSvg).toContain('<svg');
+    // The hero header is a plain headline now (per product): the animated
+    // pixel-scan wordmark came off it, so the hero mounts neither that
+    // component nor any of the retired logotype images. The assets themselves
+    // still ship — the rail, the tab chrome and the installers read them.
+    expect(heroPixelScanSvg).toContain('<svg');
+    expect(homeHeroSource).not.toContain('<PixelScanLogo');
+    // The headline still comes from `homeHero.title`; it just renders through
+    // the rotating-noun path now (a locale opts in by writing `{word}` into its
+    // own string, so the key stays the single source for the sentence).
+    expect(homeHeroSource).toContain("t('homeHero.title')");
+    expect(homeHeroSource).toContain('<RotatingTitleWord');
+    expect(homeHeroSource).not.toContain('src="/logo-03.svg"');
     expect(homeHeroSource).not.toContain('src="/app-icon.svg"');
 
-    expect(entryNavRailSource).toContain('od-brand-glyph');
+    // #6156 cut the rail's signed-out brand header entirely — with no cloud
+    // identity the rail now starts at the search box, and expand/collapse moved
+    // to the workspace tabs bar's pinned Home toggle. So the rail carries no
+    // brand mark at all; what still matters is that it never falls back to the
+    // retired raster app icon.
     expect(entryNavRailSource).not.toContain('src="/app-icon.svg"');
   });
 });

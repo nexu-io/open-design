@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────────────────
  * design-systems/_schema/manifest.schema.ts
  *
- * Canonical contract for an Open Design Design System Project.
+ * Canonical contract for an OpenDesign Design System Project.
  *
  * `DESIGN.md` remains the prose source that agents read. The project
  * manifest is the stable discovery layer around it: picker / daemon /

@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -13,7 +13,9 @@ import {
   it,
 } from 'vitest';
 
-import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { agentCliEnvForAgent, readAppConfig, readMetricsConsent, writeAppConfig } from '../src/app-config.js';
+import { spawnEnvForAgent } from '../src/runtimes/env.js';
+import { readOdNextRolloutPolicy } from '../src/strategies/od-next/rollout.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
@@ -36,6 +38,27 @@ describe('app-config', () => {
 
   afterEach(async () => {
     await rm(dataDir, { recursive: true, force: true });
+  });
+
+  describe('strict metrics consent', () => {
+    it('distinguishes a missing first-install config from damaged and unreadable preferences', async () => {
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'missing', metrics: true });
+      const file = path.join(dataDir, 'app-config.json');
+      await writeAppConfig(dataDir, { telemetry: { metrics: false, content: false } });
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'available', metrics: false });
+      for (const damaged of ['{"telemetry":{"metrics":false}', 'null', '[]', '42', '{"telemetry":null}', '{"telemetry":{"metrics":"true"}}']) {
+        await writeFile(file, damaged);
+        expect(await readMetricsConsent(dataDir)).toEqual({ status: 'unavailable', metrics: false });
+      }
+      await rm(file);
+      await mkdir(file);
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'unavailable', metrics: false });
+    });
+
+    it('preserves defaults on valid older configs without telemetry', async () => {
+      await writeFile(path.join(dataDir, 'app-config.json'), '{"onboardingCompleted":true}');
+      expect(await readMetricsConsent(dataDir)).toEqual({ status: 'available', metrics: true });
+    });
   });
 
   describe('readAppConfig', () => {
@@ -71,6 +94,60 @@ describe('app-config', () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '"hello"');
       const cfg = await readAppConfig(dataDir);
       expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
+    });
+
+    // A file that cannot be parsed at all resets every preference, including
+    // this one, and that stays true. Singling out `odNextStrategyMode` to
+    // survive a broken file would opt installations out of a rollout they never
+    // declined — a broken file is evidence of a broken file, not of an opt-out.
+    // What does survive is a mode we can see and cannot read; see below.
+    describe('OD Next opt-out when the mode itself cannot be read', () => {
+      const cases: Array<[string, unknown]> = [
+        ['a mode this build does not recognise', 'Off'],
+        ['a mode with a typo', 'acive'],
+        ['a non-string mode', 1],
+        ['an object where a mode belongs', { mode: 'off' }],
+      ];
+      for (const [label, value] of cases) {
+        it(`reads off, not the default, for ${label}`, async () => {
+          await writeFile(
+            path.join(dataDir, 'app-config.json'),
+            JSON.stringify({ odNextStrategyMode: value }),
+          );
+          expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe('off');
+        });
+      }
+
+      it('still reads as unconfigured when there is genuinely no config', async () => {
+        // The negative control that matters most for this rollout. Failing
+        // closed is only correct for a value we can see and cannot read; a
+        // fresh install has made no choice, and turning that into an opt-out
+        // would cancel the rollout instead of protecting it.
+        expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+      });
+
+      it('still reads as unconfigured when the whole file is unparseable', async () => {
+        await writeFile(path.join(dataDir, 'app-config.json'), '{not valid');
+        expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+      });
+
+      it('leaves an explicit null as the deliberate way back to the default', async () => {
+        await writeFile(
+          path.join(dataDir, 'app-config.json'),
+          JSON.stringify({ odNextStrategyMode: null }),
+        );
+        expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+      });
+
+      it('keeps every readable mode exactly as saved', async () => {
+        for (const mode of ['off', 'observe', 'active'] as const) {
+          await writeFile(
+            path.join(dataDir, 'app-config.json'),
+            JSON.stringify({ odNextStrategyMode: mode }),
+          );
+          expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe(mode);
+        }
+      });
     });
 
     it('filters out unknown keys from stored file', async () => {
@@ -159,6 +236,90 @@ describe('app-config', () => {
         time: '09:30',
       });
       expect(cfg.orbit).not.toHaveProperty('templateSkillId');
+    });
+
+    it('preserves only the minimal persisted Orbit Workspace identity', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          orbit: {
+            enabled: true,
+            time: '09:30',
+            workspaceScope: {
+              workspaceId: ' workspace-a ',
+              workspaceMemberId: ' member-a ',
+              role: 'owner',
+            },
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.orbit?.workspaceScope).toEqual({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      });
+    });
+
+    it('keeps scoped Orbit identity when an older client updates Orbit without that field', async () => {
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      });
+
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: false,
+          time: '10:15',
+        },
+      });
+
+      await expect(readAppConfig(dataDir)).resolves.toMatchObject({
+        orbit: {
+          enabled: false,
+          time: '10:15',
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      });
+    });
+
+    it('allows an explicit null to clear a persisted Orbit Workspace identity', async () => {
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: true,
+          time: '09:30',
+          workspaceScope: {
+            workspaceId: 'workspace-a',
+            workspaceMemberId: 'member-a',
+          },
+        },
+      });
+
+      await writeAppConfig(dataDir, {
+        orbit: {
+          enabled: false,
+          time: '10:15',
+          workspaceScope: null,
+        },
+      });
+
+      await expect(readAppConfig(dataDir)).resolves.toMatchObject({
+        orbit: {
+          enabled: false,
+          time: '10:15',
+          workspaceScope: null,
+        },
+      });
     });
 
     it('falls back to default orbit time for out-of-range stored values', async () => {
@@ -293,7 +454,7 @@ describe('app-config', () => {
     it('validates agentModels entries, dropping invalid shapes', async () => {
       await writeAppConfig(dataDir, {
         agentModels: {
-          validAgent: { model: 'gpt-4', reasoning: 'fast' },
+          validAgent: { model: 'gpt-4', reasoning: 'fast', serviceTier: 'priority' },
           invalidAgent: 'not-an-object',
           arrayAgent: [1, 2, 3],
           badKeys: { model: 'ok', extra: 42 },
@@ -301,7 +462,7 @@ describe('app-config', () => {
       });
       const cfg = await readAppConfig(dataDir);
       expect(cfg.agentModels).toEqual({
-        validAgent: { model: 'gpt-4', reasoning: 'fast' },
+        validAgent: { model: 'gpt-4', reasoning: 'fast', serviceTier: 'priority' },
       });
     });
 
@@ -361,12 +522,21 @@ describe('app-config', () => {
           },
           opencode: {
             OPENCODE_BIN: '  ~/bin/opencode  ',
+            TMPDIR: '  /custom/tmpdir  ',
+            TMP: '  /custom/tmp  ',
+            TEMP: '  /custom/temp  ',
+            HOME: 'should-not-persist',
           },
           'byok-opencode': {
             OPENCODE_BIN: '  ~/bin/byok-opencode  ',
           },
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
+          },
+          pi: {
+            PI_BIN: '  ~/bin/pi  ',
+            PI_CODING_AGENT_DIR: '  ~/.pi-isolated/agent  ',
+            PI_CODING_AGENT_SESSION_DIR: 'not part of the contract yet',
           },
           __proto__: {
             CLAUDE_CONFIG_DIR: 'bad',
@@ -385,11 +555,17 @@ describe('app-config', () => {
           OPEN_DESIGN_AMR_PROFILE: 'local',
           OPENCODE_TEST_HOME: '~/.open-design-amr-opencode',
         },
-        opencode: { OPENCODE_BIN: '~/bin/opencode' },
+        opencode: { OPENCODE_BIN: '~/bin/opencode', TMPDIR: '/custom/tmpdir', TMP: '/custom/tmp', TEMP: '/custom/temp' },
         'trae-cli': { TRAE_CLI_BIN: '~/bin/traecli-public' },
+        // pi's config-directory override survives the save (#8093); the
+        // neighbouring session-dir key is not in the contract and still does not.
+        pi: { PI_BIN: '~/bin/pi', PI_CODING_AGENT_DIR: '~/.pi-isolated/agent' },
       });
       expect(agentCliEnvForAgent(cfg.agentCliEnv, 'byok-opencode')).toEqual({
         OPENCODE_BIN: '~/bin/opencode',
+        TMPDIR: '/custom/tmpdir',
+        TMP: '/custom/tmp',
+        TEMP: '/custom/temp',
       });
     });
 
@@ -473,6 +649,30 @@ describe('app-config', () => {
 
       expect(cfg.agentCliEnv).toBeUndefined();
       expect(cfg.agentCliEnvIntent).toBeUndefined();
+    });
+
+    it('carries a saved PI_CODING_AGENT_DIR through a save cycle and into the pi launch env', async () => {
+      // #8093 end to end. Persistence alone is not the fix: the whole point of
+      // the key is that pi reads its config from the isolated directory, so
+      // the assertion follows the value from app-config.json to the env
+      // spawnEnvForAgent hands the process.
+      await writeAppConfig(dataDir, {
+        agentId: 'pi',
+        agentCliEnv: {
+          pi: {
+            PI_BIN: '/Users/test/bin/pi',
+            PI_CODING_AGENT_DIR: '/Users/test/.pi-isolated/agent',
+          },
+        },
+      });
+
+      const cfg = await readAppConfig(dataDir);
+      const configured = agentCliEnvForAgent(cfg.agentCliEnv, 'pi');
+      expect(configured.PI_CODING_AGENT_DIR).toBe('/Users/test/.pi-isolated/agent');
+
+      const env = spawnEnvForAgent('pi', { PATH: '/usr/bin' }, configured);
+      expect(env.PI_CODING_AGENT_DIR).toBe('/Users/test/.pi-isolated/agent');
+      expect(env.PI_BIN).toBe('/Users/test/bin/pi');
     });
 
     it('drops orphan CLI env intent entries when the agent env is empty', async () => {
@@ -1108,5 +1308,116 @@ describe('app-config origin guard', () => {
       },
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('app-config odNextStrategyMode', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-next-mode-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('is absent until the installation chooses', async () => {
+    expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+  });
+
+  it('persists each of the three modes', async () => {
+    for (const mode of ['active', 'observe', 'off'] as const) {
+      await writeAppConfig(dataDir, { odNextStrategyMode: mode });
+      expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe(mode);
+    }
+  });
+
+  it('refuses a write that is not a mode, and keeps the previous choice', async () => {
+    // A typo must not be able to switch the installation off while the CLI
+    // prints success. Every other preference here degrades to its default when
+    // it cannot store a value; this one decides whether OD Next runs, so a
+    // dropped value would be indistinguishable from an opt-out nobody asked
+    // for. It fails loudly instead.
+    await writeAppConfig(dataDir, { odNextStrategyMode: 'active' });
+    for (const bad of ['acive', '', 'ACTIVE', true, 1, [], {}]) {
+      await expect(writeAppConfig(dataDir, { odNextStrategyMode: bad } as never))
+        .rejects.toMatchObject({ code: 'INVALID_APP_CONFIG_VALUE' });
+      expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe('active');
+    }
+  });
+
+  it('does not reject the neighbouring keys of a refused write', async () => {
+    // The whole write is refused, so a rejected body must not half-apply.
+    await writeAppConfig(dataDir, { agentId: 'codex' });
+    await expect(writeAppConfig(dataDir, {
+      agentId: 'claude',
+      odNextStrategyMode: 'acive',
+    } as never)).rejects.toMatchObject({ code: 'INVALID_APP_CONFIG_VALUE' });
+    expect((await readAppConfig(dataDir)).agentId).toBe('codex');
+  });
+
+  it('reports an unreadable config as an error, not as an unconfigured one', async () => {
+    // The premise the rollout wiring depends on: `readAppConfig` answers `{}`
+    // only for the states that legitimately mean "nothing configured", and
+    // surfaces a real I/O fault instead of flattening it into the same answer.
+    // A directory where the file belongs is EISDIR for any user, unlike a
+    // chmod that a root test runner would walk straight through.
+    await mkdir(path.join(dataDir, 'app-config.json'), { recursive: true });
+    await expect(readAppConfig(dataDir)).rejects.toThrow();
+  });
+
+  it('reads a corrupted stored value as off rather than throwing', async () => {
+    // The read path stays fail-soft — a hand-edited or truncated file must not
+    // take the daemon down, and the rest of the config still comes through.
+    //
+    // Preserve legacy config normalization; rollout no longer uses this field.
+    await writeFile(
+      path.join(dataDir, 'app-config.json'),
+      JSON.stringify({ agentId: 'codex', odNextStrategyMode: 'acive' }),
+      'utf8',
+    );
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.odNextStrategyMode).toBe('off');
+    expect(cfg.agentId).toBe('codex');
+  });
+
+  it('ignores retired saved modes across the config-to-rollout boundary', async () => {
+    for (const mode of ['off', 'observe', 'active', 'OFF']) {
+      await writeFile(path.join(dataDir, 'app-config.json'),
+        JSON.stringify({ odNextStrategyMode: mode, agentId: 'codex' }), 'utf8');
+      const config = await readAppConfig(dataDir);
+      expect(config.agentId).toBe('codex');
+      expect(readOdNextRolloutPolicy({}, config))
+        .toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
+      expect(readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'off' }, config))
+        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'env' });
+    }
+  });
+
+  it('clears the retired key without changing the rollout default', async () => {
+    await writeAppConfig(dataDir, { odNextStrategyMode: 'active' });
+    await writeAppConfig(dataDir, { odNextStrategyMode: null });
+    expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+  });
+
+  it('survives a later write that does not mention it', async () => {
+    // The web pushes an explicit key list that has no reason to carry this
+    // one. Saving an unrelated Settings change must not silently opt the
+    // installation back out from under the person who configured it.
+    await writeAppConfig(dataDir, { odNextStrategyMode: 'active' });
+    await writeAppConfig(dataDir, { agentId: 'claude', designSystemId: 'stripe' });
+    expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe('active');
+  });
+
+  it('does not disturb neighbouring preferences', async () => {
+    await writeAppConfig(dataDir, { agentId: 'codex', onboardingCompleted: true });
+    await writeAppConfig(dataDir, { odNextStrategyMode: 'active' });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg).toMatchObject({
+      agentId: 'codex',
+      onboardingCompleted: true,
+      odNextStrategyMode: 'active',
+    });
   });
 });

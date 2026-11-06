@@ -26,6 +26,7 @@
 | PM-007 | 首页 designs 视图支持 grid/kanban 切换，并在刷新后保持 | `project-management-flows.test.ts` |
 | PM-008 | 首页搜索会过滤项目卡片，并支持从无结果态恢复 | `project-management-flows.test.ts` |
 | PM-009 | Change pet 可以打开宠物设置，并保存自定义 companion | `project-management-flows.test.ts` |
+| PM-010 | 项目绑定的 Design System 被设置禁用后，下一次 runtime run 不再携带该 designSystemId | `project-management-flows.test.ts` |
 
 ## 自动化候选
 

@@ -1,0 +1,1 @@
+{"source": "docs/design/chat-sim/recordings/opencode-todo.jsonl", "turn": 0, "runStatus": "failed", "events": [{"kind": "status", "label": "error", "detail": "Token refresh failed: 401"}, {"kind": "status", "label": "error", "detail": "Token refresh failed: 401"}]}

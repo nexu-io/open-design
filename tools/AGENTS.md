@@ -14,11 +14,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 ## Retired tools
 
-- `tools/pr` / `@open-design/tools-pr` / `pnpm tools-pr` has been retired from this repository. Maintainer PR-duty workflows now live outside the product workspace in `PerishCode/duty`; do not restore an Open Design-local PR-duty tool without a new explicit maintainer decision.
+- `tools/pr` / `@open-design/tools-pr` / `pnpm tools-pr` has been retired from this repository. Maintainer PR-duty workflows now live outside the product workspace in `PerishCode/duty`; do not restore an OpenDesign-local PR-duty tool without a new explicit maintainer decision.
 
 ## Packaging scope
 
-- Keep `tools-pack` focused on packaging/runtime control, release artifact preparation, and the packaged-updater acceptance harness. The updater product surface and launcher handoff live in `apps/desktop` and `apps/packaged`; do not duplicate that application logic in the tool.
+- Keep `tools-pack` focused on packaging/runtime control, release artifact preparation, and the packaged-updater acceptance harness. The updater product surface lives in `apps/desktop`; hosted process lifecycle belongs to `packages/launcher`, with contracts in `packages/launcher-proto`. `tools-pack` assembles their artifacts; historical launcher handoff stays in the apps. Do not duplicate runtime state decisions in the tool.
 - Pack-specific Electron builder resources belong under `tools/pack/resources/`; do not reference app/docs/download assets directly from pack logic.
 - Namespace controls packaged data/log/runtime/cache paths. Ports are transient transport details and must not participate in path decisions.
 - There is no root `pnpm build` aggregate. Use package-scoped builds for source packages and `pnpm tools-pack ...` for packaged artifact build/install/release flows.

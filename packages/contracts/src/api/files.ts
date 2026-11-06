@@ -56,8 +56,36 @@ export interface ProjectFilesResponse {
   files: ProjectFile[];
 }
 
-export type ProjectFileVersionSource = 'ai' | 'manual' | 'restore';
+export type ProjectFileVersionSource = 'ai' | 'manual' | 'restore' | 'sync';
 export type ProjectFileVersionPromptSource = 'message' | 'project' | 'manual' | 'restore';
+
+export type ArtifactOriginEntrySurface =
+  | 'open_design_ui'
+  | 'od_cli'
+  | 'external_mcp'
+  | 'unknown';
+
+/**
+ * Bounded provenance for the content lineage of an HTML file version.
+ *
+ * This is deliberately distinct from `ProjectFileVersion.source`: `source`
+ * records how this checkpoint was created, while `origin` records where the
+ * content lineage began. Prompts, file paths, account data, and credentials
+ * must never be stored here.
+ */
+export interface ArtifactOrigin {
+  entrySurface: ArtifactOriginEntrySurface;
+  externalPluginId?: string;
+  pluginWorkflowId?: string;
+  runId?: string;
+}
+
+export type ArtifactOriginStatus =
+  | 'matched'
+  | 'missing_version'
+  | 'digest_mismatch'
+  | 'invalid_origin'
+  | 'unknown';
 
 export interface ProjectFileVersion {
   id: string;
@@ -73,6 +101,9 @@ export interface ProjectFileVersion {
   mime: string;
   kind: ProjectFileKind;
   current: boolean;
+  contentDigest?: string;
+  parentVersionId?: string;
+  origin?: ArtifactOrigin;
 }
 
 export interface ProjectFileVersionsResponse {
@@ -89,6 +120,7 @@ export interface CreateProjectFileVersionRequest {
   prompt?: string | null;
   label?: string | null;
   source?: ProjectFileVersionSource;
+  parentVersionId?: string;
 }
 
 export interface CreateProjectFileVersionResponse {
@@ -157,6 +189,13 @@ export interface ProjectPreviewUrlResponse {
   csp: string;
   iframeSandbox: string;
   opaqueOrigin: true;
+  /** Unix epoch milliseconds when the bearer scope stops authorizing assets. */
+  expiresAt: number;
+}
+
+export interface ProjectPreviewScopeRenewResponse {
+  /** Unix epoch milliseconds after the authenticated host renewed the scope. */
+  expiresAt: number;
 }
 
 /**
@@ -166,15 +205,16 @@ export interface ProjectPreviewUrlResponse {
  * preview sandbox cannot provide.
  *
  * `baseOrigin` is the daemon's own directly-reachable http origin. The web
- * host loads the powered iframe from a host-swapped loopback variant of it.
- * That reserved browser origin is cross-origin to the app shell and is allowed
- * to read `/powered/` file bytes, but the daemon rejects its browser requests
- * to normal `/api/*` routes. `null` when the daemon cannot resolve a usable
+ * host derives a separate loopback hostname per project when `projectOrigins`
+ * is advertised. That reserved browser origin can only read that project's
+ * `/powered/` file bytes. `null` when the daemon cannot resolve a usable
  * origin (powered mode is then unavailable and previews stay on the opaque
  * sandbox).
  */
 export interface ProjectPreviewIsolationResponse {
   supported: boolean;
+  /** Advertises enforcement of project-scoped powered browser origins. */
+  projectOrigins?: boolean;
   baseOrigin: string | null;
   /** URL path segment for the powered file route (`.../:id/<pathPrefix>/<file>`). */
   pathPrefix: string;
@@ -182,6 +222,7 @@ export interface ProjectPreviewIsolationResponse {
 
 export interface ProjectFileResponse {
   file: ProjectFile;
+  version?: ProjectFileVersion | null;
   versionWarning?: ProjectFileVersionWarning;
 }
 

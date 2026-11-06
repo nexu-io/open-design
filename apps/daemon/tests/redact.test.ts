@@ -44,6 +44,13 @@ describe('redactSecrets', () => {
     ).toBe('GEMINI=[REDACTED:google_api_key]');
   });
 
+  it('redacts NVIDIA API keys even when they are not in a Bearer header', () => {
+    const providerKey = ['nvapi', 'A'.repeat(48)].join('-');
+    expect(redactSecrets(`NVIDIA_API_KEY=${providerKey}`)).toBe(
+      'NVIDIA_API_KEY=[REDACTED:nvidia_api_key]',
+    );
+  });
+
   it('redacts Slack and Stripe tokens', () => {
     expect(redactSecrets('SLACK=xoxb-12345-67890-abcdefghijKLMNOP')).toBe(
       'SLACK=[REDACTED:slack_token]',

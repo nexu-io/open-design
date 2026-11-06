@@ -10,9 +10,8 @@ describe('chat code styles', () => {
   it('keeps assistant chat code text free of filled backgrounds', () => {
     const css = readExpandedIndexCss();
 
+    // Ordinary assistant Markdown code keeps its existing background.
     expect(cssRule(css, '.prose-block .md-inline-code')).toContain('background: transparent');
     expect(cssRule(css, '.prose-block .md-code-block')).toContain('background: transparent');
-    expect(cssRule(css, '.live-code-pre')).toContain('background: transparent');
-    expect(cssRule(css, '.app .live-code-box')).toContain('background: transparent');
   });
 });

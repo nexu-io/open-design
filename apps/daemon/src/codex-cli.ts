@@ -9,6 +9,8 @@
 // is a thin spawn() wrapper with a 30s timeout.
 
 import { spawn } from 'node:child_process';
+import { createCommandInvocation, type CommandInvocation } from '@open-design/platform';
+import { resolveAgentBin } from './runtimes/resolution.js';
 
 export interface CodexRunnerResult {
   exitCode: number;
@@ -20,12 +22,36 @@ export interface CodexRunner {
   run(args: string[], opts?: { env?: Record<string, string> }): Promise<CodexRunnerResult>;
 }
 
+type CodexBinaryResolver = (
+  id: string,
+  configuredEnv?: Record<string, string>,
+) => string | null;
+
+// Resolve the same Codex executable used by the agent runtime before handing
+// it to the shared platform invocation builder. This is required on Windows:
+// npm installs Codex as `codex.cmd`, and Node's spawn() does not apply the
+// shell's PATH/PATHEXT shim handling to a bare `codex` command. Keeping the
+// fallback preserves the existing ENOENT signal when Codex is not installed.
+export function createCodexCliInvocation(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  configuredEnv: Record<string, string> = {},
+  resolveBin: CodexBinaryResolver = resolveAgentBin,
+): CommandInvocation {
+  const command = resolveBin('codex', configuredEnv) ?? 'codex';
+  return createCommandInvocation({ command, args, env });
+}
+
 const defaultCodexRunner: CodexRunner = {
   run(args, opts) {
     return new Promise<CodexRunnerResult>((resolve, reject) => {
-      const child = spawn('codex', args, {
-        env: { ...process.env, ...(opts?.env ?? {}) },
+      const configuredEnv = opts?.env ?? {};
+      const env = { ...process.env, ...configuredEnv };
+      const invocation = createCodexCliInvocation(args, env, configuredEnv);
+      const child = spawn(invocation.command, invocation.args, {
+        env,
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       let stdout = '';
       let stderr = '';
@@ -107,6 +133,60 @@ export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   if (result.exitCode !== 0) {
     throw new Error(`codex mcp add failed: ${failureDetail(result)}`);
   }
+}
+
+export interface CodexMcpRegistration {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+// Parses `codex mcp get <name> --json` for a stdio server; null for any other
+// transport or an unrecognized shape.
+export function parseCodexMcpRegistration(stdout: string): CodexMcpRegistration | null {
+  try {
+    const parsed = JSON.parse(stdout) as { transport?: { command?: unknown; args?: unknown; env?: unknown } };
+    const transport = parsed.transport;
+    if (transport == null || typeof transport.command !== 'string') return null;
+    const args = Array.isArray(transport.args) && transport.args.every((arg) => typeof arg === 'string')
+      ? transport.args as string[]
+      : [];
+    const env: Record<string, string> = {};
+    if (transport.env != null && typeof transport.env === 'object') {
+      for (const [key, value] of Object.entries(transport.env)) {
+        if (typeof value === 'string') env[key] = value;
+      }
+    }
+    return { command: transport.command, args, env };
+  } catch {
+    return null;
+  }
+}
+
+export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable' | 'foreign' | 'unreadable';
+
+// Rewrites an existing registration so it follows the runtime that is running
+// now, but only when `isOwned` proves the registration belongs to this
+// install: the registration name is global, so every other install's
+// registration must stay untouched. Never creates one: installing stays an
+// explicit user action.
+export async function refreshOwnedCodexMcp(
+  spec: CodexInstallSpec,
+  isOwned: (existing: CodexMcpRegistration) => boolean,
+): Promise<CodexRegistrationRefresh> {
+  let result: CodexRunnerResult;
+  try {
+    result = await activeRunner().run(['mcp', 'get', spec.name, '--json']);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return 'unavailable';
+    throw err;
+  }
+  if (result.exitCode !== 0) return 'absent';
+  const existing = parseCodexMcpRegistration(result.stdout);
+  if (existing == null) return 'unreadable';
+  if (!isOwned(existing)) return 'foreign';
+  await installCodexMcp(spec);
+  return 'refreshed';
 }
 
 export async function uninstallCodexMcp(name: string): Promise<void> {

@@ -30,6 +30,11 @@ vi.mock('../../src/runtimes/invocation.js', () => ({
 const { probeAgentAuthStatus } = await import('../../src/runtimes/auth.js');
 
 const HEALTHY_CLAUDE = '{"authenticated": true, "source": "claude.ai"}';
+const CLAUDE_AUTH_PROBE = {
+  id: 'claude',
+  name: 'Claude Code',
+  authProbe: { args: ['auth', 'status'] },
+};
 
 describe('probeAgentAuthStatus (#4456)', () => {
   beforeEach(() => {
@@ -79,6 +84,48 @@ describe('probeAgentAuthStatus (#4456)', () => {
         '/fake/bin/claude',
         {},
       );
+      expect(result?.status).toBe('missing');
+    });
+  });
+
+  describe('Case 3 — Claude enterprise-provider authentication', () => {
+    it.each([
+      'CLAUDE_CODE_USE_BEDROCK',
+      'CLAUDE_CODE_USE_VERTEX',
+    ])('short-circuits the Claude.ai auth probe when %s=1', async (providerFlag) => {
+      execAgentFileMock.mockResolvedValue({
+        stdout: '{"authenticated": false}',
+        stderr: '',
+      });
+
+      const result = await probeAgentAuthStatus(
+        CLAUDE_AUTH_PROBE,
+        '/fake/bin/claude',
+        { [providerFlag]: '1' },
+      );
+
+      expect(result).toEqual({ status: 'ok' });
+      expect(execAgentFileMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {},
+      { CLAUDE_CODE_USE_BEDROCK: '' },
+      { CLAUDE_CODE_USE_BEDROCK: 'true' },
+      { CLAUDE_CODE_USE_VERTEX: '0' },
+    ])('continues probing when no supported enterprise mode is explicitly enabled', async (env) => {
+      execAgentFileMock.mockResolvedValue({
+        stdout: '{"authenticated": false}',
+        stderr: '',
+      });
+
+      const result = await probeAgentAuthStatus(
+        CLAUDE_AUTH_PROBE,
+        '/fake/bin/claude',
+        env,
+      );
+
+      expect(execAgentFileMock).toHaveBeenCalledTimes(1);
       expect(result?.status).toBe('missing');
     });
   });

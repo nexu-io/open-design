@@ -1,6 +1,6 @@
 # Docker deployment
 
-This deployment ships Open Design as a single Alpine-based runtime image. The
+This deployment ships OpenDesign as a single Alpine-based runtime image. The
 daemon serves both the API and the built Next.js static export, so there is no
 separate nginx container.
 
@@ -34,6 +34,13 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
 `ghcr.io/nexu-io/od:<version>` to pin a supported release.
 
+Open `http://127.0.0.1:7456`. When Docker's bridge makes the browser appear as a
+non-loopback peer, the browser displays its native sign-in dialog. Enter
+`open-design` as the username and the `OD_API_TOKEN` value from `.env` as the
+password. The browser reuses those credentials for same-origin API requests;
+CLI clients and reverse proxies can continue to send
+`Authorization: Bearer <OD_API_TOKEN>`.
+
 The published `ghcr.io/nexu-io/od` package must be public for anonymous
 `docker pull`, Docker Compose, and Dokploy installs to work. If GHCR returns an
 authentication or access-denied error for this image, an organization maintainer
@@ -50,10 +57,11 @@ Defaults:
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 
-Do not publish the daemon directly on a public or shared LAN interface. The API is
-unauthenticated for non-browser clients, so remote deployments should keep Compose
-bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
-front of it.
+Do not publish the daemon directly on a public or shared LAN interface. The shared
+API token is single-tenant authentication, not user-level access control, and both
+Basic and Bearer credentials require TLS outside localhost. Remote deployments
+should keep Compose bound to localhost and put an authenticated TLS reverse proxy,
+SSH tunnel, or VPN in front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
 proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
@@ -111,22 +119,52 @@ docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-buil
 
 Common install paths:
 
-| CLI | Default path |
-|-----|-------------|
+| CLI | Install / default path |
+|-----|------------------------|
 | Claude Code | `~/.local/bin/claude` (symlink) + `~/.local/share/claude` (binaries) |
 | opencode | `~/.opencode/bin/opencode` |
 | Codex | `~/.local/bin/codex` |
+| Vela / AMR | npm package `@powerformer/vela-cli`; [Open Design AMR](https://open-design.ai/amr) is the browser account/wallet page |
 
-The daemon auto-detects any CLI that is visible in `PATH` at startup — no extra
-configuration needed. For a CLI installed in a non-standard path, add a volume
-and prepend its directory to `PATH` in `docker-compose.linux.yml`, then restart:
+Vela is published as the `@powerformer/vela-cli` npm package. The Open Design
+AMR URL above is not a shell installer. For Linux Docker, install Vela under a
+dedicated prefix so its launcher and platform package can be mounted together:
+
+```bash
+VELA_PREFIX="$HOME/.local/share/vela"
+npm install --global --prefix "$VELA_PREFIX" @powerformer/vela-cli
+export PATH="$VELA_PREFIX/bin:$PATH"
+which vela
+vela --version
+```
+
+Mount that complete prefix into the container, then expose its `bin` directory
+through `PATH` (or set `VELA_BIN` to the container-visible launcher):
 
 ```yaml
 environment:
-  PATH: /mnt/host-mycli:/mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+  PATH: /mnt/host-vela/bin:/mnt/host-local-bin:/mnt/host-opencode:/usr/local/bin:/usr/bin:/bin
+  VELA_BIN: /mnt/host-vela/bin/vela
 volumes:
-  - /opt/mycli/bin:/mnt/host-mycli:ro
+  - ${HOME}/.local/share/vela:/mnt/host-vela:ro
 ```
+
+Once the container is running, inspect both `PATH` discovery and any explicit
+Vela override:
+
+```bash
+docker compose exec open-design sh -lc 'which vela; echo "$VELA_BIN"'
+```
+
+Use either a `vela` launcher discoverable on `PATH` or a `VELA_BIN` path that
+exists inside the container. `VELA_BIN` is optional when `vela` is discoverable
+on `PATH`.
+
+The daemon auto-detects any CLI that is visible in `PATH` at startup — no extra
+configuration needed. For another CLI installed in a non-standard path, mount
+its complete install prefix read-only and prepend its binary directory to
+`PATH` in `docker-compose.linux.yml`, then restart. When a launcher is a symlink,
+mounting only the directory that contains the symlink may omit its target.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
@@ -238,34 +276,8 @@ custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 
 ### Docker Desktop on macOS
 
-When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
-
-`Authorization: Bearer <OD_API_TOKEN> required`
-
-Workaround:
-
-1. Enable host networking in Docker Desktop:
-   `Docker Desktop → Settings → Resources → Network → Enable host networking → Apply and restart`
-
-2. Use a local override to docker-compose.yml:
-
-   ```yaml
-   services:
-     open-design:
-       network_mode: host
-       ports: []
-   ```
-
-3. Recreate the container:
-
-   ```bash
-   docker compose down
-   docker compose up -d --force-recreate
-   ```
-
-4. Verify:
-
-   ```bash
-   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
-   # host
-   ```
+Docker Desktop bridge networking makes host-browser traffic appear to the daemon
+as a non-loopback peer. This is expected: keep the default bridge configuration
+and complete the browser's native sign-in prompt with username `open-design` and
+the `OD_API_TOKEN` value from `.env`. Host networking is no longer required for
+the web UI authentication path.

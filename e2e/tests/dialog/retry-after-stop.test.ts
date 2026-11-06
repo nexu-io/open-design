@@ -181,6 +181,9 @@ describe('dialog retry after stop', () => {
       expect(assistant2!.startedAt).toBe(t1);
       expect(assistant2!.startedAt!).toBeGreaterThan(stoppedAt);
       expect(assistant2!.endedAt).toBe(finishedAt);
+    }, {
+      // This fixture emits generic artifact output, not OD Next protocol blocks.
+      env: { OD_NEXT_STRATEGY_ROLLOUT: 'off' },
     });
   }, 180_000);
 });

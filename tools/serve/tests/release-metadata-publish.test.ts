@@ -140,6 +140,18 @@ describe("shared release metadata publisher", () => {
           STATE_SOURCE: "local-tools-serve",
           WIN_X64_RESULT: "success",
           ...(channel === "beta" ? { RELEASE_LATEST_CAS_REQUIRED: "true" } : {}),
+          // The launcher version floor rides through publish + verify on one
+          // channel via its channel-suffixed repo-vars pair; the others must
+          // publish without a control block (their pairs and the stable
+          // fallback pair stay unset).
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: "",
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: "",
+          ...(channel === "beta"
+            ? {
+                RELEASE_LAUNCHER_VERSION_MIN_BETA: "1.2.3-beta.4",
+                RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: "https://example.test/reinstall-help",
+              }
+            : {}),
         };
         await runNode(["--experimental-strip-types", "tools/release/src/release-note/prepare.ts"], {
           cwd: repoRoot,
@@ -164,6 +176,7 @@ describe("shared release metadata publisher", () => {
 
         const metadata = JSON.parse(await readFile(join(metadataDir, "metadata.json"), "utf8")) as {
           channel?: string;
+          control?: { launcher?: { version?: { min?: string; url?: string } } };
           releaseState?: string;
           releaseTargets?: {
             mac_arm64?: { artifacts?: { payload?: { url?: string } } };
@@ -198,6 +211,14 @@ describe("shared release metadata publisher", () => {
         if (channel === "stable") {
           expect(metadata.stableVersion).toBe("1.2.3");
         }
+        if (channel === "beta") {
+          expect(metadata.control?.launcher?.version).toEqual({
+            min: "1.2.3-beta.4",
+            url: "https://example.test/reinstall-help",
+          });
+        } else {
+          expect(metadata.control).toBeUndefined();
+        }
         expect(server.getObject(`${channel}/latest/metadata.json`)).not.toBeNull();
         expect(server.getObject(`${channel}/versions/${version}/release-notes/en.md`)?.toString("utf8")).toContain(
           `title: Open Design ${version}`,
@@ -222,6 +243,28 @@ describe("shared release metadata publisher", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("rejects a launcher version floor above the release version", async () => {
+    // A floor the published release cannot satisfy would make the updater's
+    // same-version reinstall offer nag forever; publication must refuse it.
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const root = await mkdtemp(join(tmpdir(), "od-release-metadata-floor-"));
+    await expect(runNode(["--experimental-strip-types", "tools/release/src/storage/publish-metadata.ts"], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        RELEASE_CHANNEL: "beta",
+        RELEASE_LAUNCHER_VERSION_MIN_BETA: "9.9.9",
+        RELEASE_MANIFEST_DIR: root,
+        RELEASE_METADATA_DIR: root,
+        RELEASE_OUTPUTS_PATH: join(root, "outputs.json"),
+        RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
+        RELEASE_VERSION: "1.2.3-beta.4",
+        STATE_SOURCE: "local-tools-serve",
+      },
+    })).rejects.toThrow(/exceeds release version/);
   });
 
   it("builds planned release-note and metadata artifacts without storage access in dry-run mode", async () => {
@@ -301,5 +344,98 @@ describe("shared release metadata publisher", () => {
     expect(publication.state).toBe("planned");
     expect(metadata.dryRun).toBe(true);
     expect(Object.keys(metadata.releaseNote?.content?.locales ?? {})).toEqual(["en", "zh-CN"]);
+  });
+
+  // Missing release notes must not stop a stable release. The whole chain has
+  // to agree that "no notes" is a complete outcome: an absent plan, an absent
+  // publication, metadata without a releaseNote block, and a verify pass.
+  it("publishes stable metadata when the release has no release notes at all", async () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const root = await mkdtemp(join(tmpdir(), "od-release-metadata-no-notes-"));
+    const version = "1.2.3";
+    const manifestDir = join(root, "manifests");
+    const metadataDir = join(root, "metadata");
+    const releaseNoteRoot = join(root, "CHANGELOG");
+    const releaseNotePlanPath = join(metadataDir, "release-note-plan.json");
+    const releaseNoteManifestPath = join(metadataDir, "release-note-publication.json");
+    const summaryPath = join(root, "step-summary.md");
+    await mkdir(manifestDir, { recursive: true });
+    await mkdir(releaseNoteRoot, { recursive: true });
+    await writeFile(summaryPath, "", "utf8");
+    await writeFile(
+      join(manifestDir, "mac_arm64.json"),
+      JSON.stringify({
+        artifacts: { payload: { url: "https://releases.example.test/mac-payload" } },
+        channel: "stable",
+        enabled: true,
+        github: { commit: "nonote1", runId: 78 },
+        legacyPlatformKey: "mac",
+        platformKey: "mac_arm64",
+        r2: { versionPrefix: `stable/versions/${version}` },
+        releaseTarget: "mac_arm64",
+        releaseVersion: version,
+        signed: true,
+        status: "published",
+      }),
+      "utf8",
+    );
+
+    const env = {
+      ...process.env,
+      BASE_VERSION: version,
+      ENABLE_LINUX_X64: "false",
+      ENABLE_MAC_ARM64: "true",
+      ENABLE_MAC_X64: "false",
+      ENABLE_WIN_X64: "false",
+      GITHUB_STEP_SUMMARY: summaryPath,
+      MAC_ARM64_RESULT: "success",
+      RELEASE_CHANNEL: "stable",
+      RELEASE_COMMIT: "nonote1",
+      RELEASE_DRY_RUN_MODE: "prepublish",
+      RELEASE_MANIFEST_DIR: manifestDir,
+      RELEASE_METADATA_DIR: metadataDir,
+      RELEASE_NOTE_MANIFEST_PATH: releaseNoteManifestPath,
+      RELEASE_NOTE_PLAN_PATH: releaseNotePlanPath,
+      RELEASE_NOTE_SOURCE_ROOT: releaseNoteRoot,
+      RELEASE_OUTPUTS_PATH: join(metadataDir, "outputs.json"),
+      RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+      RELEASE_PUBLISH_SIDE_EFFECTS: "false",
+      RELEASE_RUN_ID: "78",
+      RELEASE_SIGNED: "true",
+      RELEASE_VERSION: version,
+      STATE_SOURCE: "local-no-notes",
+      STABLE_VERSION: version,
+    };
+
+    for (const script of [
+      "tools/release/src/release-note/prepare.ts",
+      "tools/release/src/release-note/publish.ts",
+      "tools/release/src/release-note/verify.ts",
+      "tools/release/src/storage/publish-metadata.ts",
+    ]) {
+      await runNode(["--experimental-strip-types", script], { cwd: repoRoot, env });
+    }
+    await runNode(["--experimental-strip-types", "tools/release/src/storage/verify-metadata.ts"], {
+      cwd: repoRoot,
+      env: { ...env, RELEASE_METADATA_PATH: join(metadataDir, "metadata.json") },
+    });
+
+    const plan = JSON.parse(await readFile(releaseNotePlanPath, "utf8")) as { entries?: unknown[]; state?: string };
+    const publication = JSON.parse(await readFile(releaseNoteManifestPath, "utf8")) as {
+      entries?: unknown[];
+      state?: string;
+    };
+    const metadata = JSON.parse(await readFile(join(metadataDir, "metadata.json"), "utf8")) as {
+      releaseNote?: unknown;
+      releaseState?: string;
+    };
+    expect(plan.state).toBe("absent");
+    expect(plan.entries).toEqual([]);
+    expect(publication.state).toBe("absent");
+    expect(publication.entries).toEqual([]);
+    expect(metadata.releaseNote).toBeUndefined();
+    expect(metadata.releaseState).toBe("complete");
+    // The skipped note has to be visible on the run page, not silent.
+    expect(await readFile(summaryPath, "utf8")).toMatch(/release note/i);
   });
 });

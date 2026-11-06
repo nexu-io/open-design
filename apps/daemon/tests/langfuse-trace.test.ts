@@ -1,17 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { projectDeliverableSyntaxTelemetry } from '../src/langfuse-bridge.js';
 
 import {
   buildFeedbackPayload,
   buildTracePayload,
+  describeRunTelemetrySink,
   deriveLangfuseDeliveryState,
+  isContentToolName,
+  isPartialRedactToolName,
   readLangfuseConfig,
+  readRunTelemetrySinkConfig,
   readTelemetrySinkConfig,
   reportRunCompleted,
   reportRunFeedback,
+  shouldFullyRedactToolPayload,
+  toolPayloadRedactionPlaceholder,
   type FeedbackReportContext,
   type LangfuseConfig,
   type ReportContext,
   type TelemetrySinkConfig,
+  type VelaTelemetrySinkConfig,
 } from '../src/langfuse-trace.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 
@@ -90,6 +98,16 @@ function bodyOf(
 }
 
 describe('readLangfuseConfig', () => {
+  it('includes ID-only Discovery observations in the real trace payload with content disabled', () => {
+    const discovery = { skill_discovery_enabled: true, skill_discovery_policy_injected: true,
+      skill_ids_loaded: ['ppt'], deliverable_skill_ids: ['ppt', 'video'],
+      deliverable_skill_mapping: [{ id: 'slides', skillId: 'ppt' }, { id: 'clip', skillId: 'video' }],
+      skill_load_events: [{ skill_id: 'ppt', version: '1.0.0', tool_use_id: 'read-1', source: 'file_read', status: 'loaded' }],
+      skill_observation_status: 'complete' };
+    const trace = bodyOf(buildTracePayload(makeCtx({ skillDiscovery: discovery })), 'trace-create');
+    expect(trace.metadata).toMatchObject(discovery);
+    expect(trace.metadata.skill_load_events[0]).not.toHaveProperty('content');
+  });
   it('returns null when keys are missing', () => {
     expect(readLangfuseConfig({})).toBeNull();
     expect(readLangfuseConfig({ LANGFUSE_PUBLIC_KEY: 'pk' })).toBeNull();
@@ -157,7 +175,7 @@ describe('readLangfuseConfig', () => {
 });
 
 describe('readTelemetrySinkConfig', () => {
-  it('prefers the Open Design telemetry relay when configured', () => {
+  it('prefers the OpenDesign telemetry relay when configured', () => {
     const cfg = readTelemetrySinkConfig({
       OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse//',
       LANGFUSE_PUBLIC_KEY: 'pk',
@@ -186,6 +204,17 @@ describe('readTelemetrySinkConfig', () => {
     });
   });
 
+  it('migrates the legacy self-host test relay hostname', () => {
+    const cfg = readTelemetrySinkConfig({
+      OPEN_DESIGN_TELEMETRY_RELAY_URL:
+        'https://telemetry-selfhost.open-design.ai/api/langfuse',
+    });
+    expect(cfg).toMatchObject({
+      kind: 'relay',
+      relayUrl: 'https://telemetry-test.open-design.ai/api/langfuse',
+    });
+  });
+
   it('falls back to direct Langfuse config for local smoke tests', () => {
     const cfg = readTelemetrySinkConfig({
       LANGFUSE_PUBLIC_KEY: 'pk',
@@ -194,6 +223,104 @@ describe('readTelemetrySinkConfig', () => {
     expect(cfg).toMatchObject({
       kind: 'langfuse',
       baseUrl: 'https://us.cloud.langfuse.com',
+    });
+  });
+});
+
+describe('readRunTelemetrySinkConfig', () => {
+  it('uses Vela only for completed-run telemetry when a Control Key exists', () => {
+    const cfg = readRunTelemetrySinkConfig(
+      {
+        OPEN_DESIGN_TELEMETRY_RELAY_URL:
+          'https://telemetry.open-design.ai/api/langfuse',
+      },
+      {
+        VELA_CONTROL_KEY: 'ck_test',
+        VELA_API_URL: 'https://vela.example.test/',
+      },
+    );
+
+    expect(cfg).toEqual({
+      kind: 'vela',
+      apiUrl: 'https://vela.example.test',
+      controlKey: 'ck_test',
+      timeoutMs: 20_000,
+      retries: 1,
+    });
+  });
+
+  it('falls back to the anonymous resolver when Vela telemetry is disabled', () => {
+    const cfg = readRunTelemetrySinkConfig(
+      {
+        OPEN_DESIGN_VELA_TELEMETRY: 'off',
+        OPEN_DESIGN_TELEMETRY_RELAY_URL:
+          'https://telemetry.open-design.ai/api/langfuse',
+      },
+      { VELA_CONTROL_KEY: 'ck_test' },
+    );
+
+    expect(cfg).toMatchObject({
+      kind: 'relay',
+      relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
+    });
+  });
+
+  it('describes the effective priority winner without paths, queries, or credentials', () => {
+    const vela = readRunTelemetrySinkConfig(
+      {
+        OPEN_DESIGN_TELEMETRY_RELAY_URL:
+          'https://relay-user:relay-password@relay.example.test/private?token=relay-secret',
+        LANGFUSE_PUBLIC_KEY: 'pk-secret',
+        LANGFUSE_SECRET_KEY: 'sk-secret',
+      },
+      {
+        VELA_CONTROL_KEY: 'control-secret',
+        VELA_API_URL:
+          'https://vela-user:vela-password@vela.example.test/private?token=vela-secret',
+      },
+    );
+    const diagnostic = describeRunTelemetrySink(vela);
+
+    expect(diagnostic).toEqual({
+      kind: 'vela',
+      host: 'vela.example.test',
+      protocol: 'https',
+    });
+    const serialized = JSON.stringify(diagnostic);
+    expect(serialized).not.toContain('private');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('user');
+    expect(serialized).not.toContain('password');
+  });
+
+  it('describes relay, direct, and disabled sinks through the same allowlist', () => {
+    expect(describeRunTelemetrySink(readRunTelemetrySinkConfig({
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
+      OPEN_DESIGN_TELEMETRY_RELAY_URL:
+        'http://relay.example.test:8080/path?key=secret',
+    }))).toEqual({
+      kind: 'relay',
+      host: 'relay.example.test',
+      protocol: 'http',
+    });
+    expect(describeRunTelemetrySink(readRunTelemetrySinkConfig({
+      // Same opt-out the relay case above passes. Without it the vela branch is
+      // enabled by default and `readVelaControlApiContext` falls through to the
+      // developer's real `~/.amr/config.json`, so this asserted 'vela' on any
+      // machine with an AMR login and only passed on a CI runner without one.
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
+      LANGFUSE_PUBLIC_KEY: 'pk',
+      LANGFUSE_SECRET_KEY: 'sk',
+      LANGFUSE_BASE_URL: 'https://langfuse.example.test/private?key=secret',
+    }))).toEqual({
+      kind: 'langfuse',
+      host: 'langfuse.example.test',
+      protocol: 'https',
+    });
+    expect(describeRunTelemetrySink(null)).toEqual({
+      kind: 'none',
+      host: null,
+      protocol: null,
     });
   });
 });
@@ -251,7 +378,136 @@ describe('deriveLangfuseDeliveryState', () => {
   });
 });
 
+describe('run delivery identity', () => {
+  it('keeps ids stable within a purpose and distinct across registration and final delivery', () => {
+    const context = makeCtx({
+      prefs: { metrics: true, content: true, artifactManifest: false },
+    });
+    const firstFinal = buildTracePayload(context, 'final') as Array<{ id: string }>;
+    const secondFinal = buildTracePayload(context, 'final') as Array<{ id: string }>;
+    const firstRegistration = buildTracePayload(
+      context,
+      'object-registration',
+    ) as Array<{ id: string }>;
+    const secondRegistration = buildTracePayload(
+      context,
+      'object-registration',
+    ) as Array<{ id: string }>;
+
+    const finalIds = firstFinal.map((event) => event.id);
+    const registrationIds = firstRegistration.map((event) => event.id);
+    expect(finalIds).toEqual(secondFinal.map((event) => event.id));
+    expect(registrationIds).toEqual(secondRegistration.map((event) => event.id));
+    expect(registrationIds).not.toEqual(finalIds);
+    expect(registrationIds.every((id, index) => id !== finalIds[index])).toBe(true);
+    expect(finalIds.every((id) => /^od-[a-f0-9]{64}$/u.test(id))).toBe(true);
+    expect(registrationIds.every((id) => /^od-[a-f0-9]{64}$/u.test(id))).toBe(true);
+  });
+});
+
+describe('isContentToolName', () => {
+  it('matches Claude-shaped names case-insensitively', () => {
+    expect(isContentToolName('Read')).toBe(true);
+    expect(isContentToolName('read')).toBe(true);
+    expect(isContentToolName('WRITE')).toBe(true);
+    expect(isContentToolName('write')).toBe(true);
+    expect(isContentToolName('Edit')).toBe(true);
+    expect(isContentToolName('edit')).toBe(true);
+    expect(isContentToolName('grep')).toBe(true);
+    expect(isContentToolName('search')).toBe(true);
+    expect(isContentToolName('fetch')).toBe(true);
+    expect(isContentToolName('think')).toBe(true);
+    expect(isContentToolName('create_file')).toBe(true);
+    expect(isContentToolName('str_replace_edit')).toBe(true);
+  });
+
+  it('does not treat Bash as a content tool', () => {
+    expect(isContentToolName('Bash')).toBe(false);
+    expect(isContentToolName('bash')).toBe(false);
+    expect(isContentToolName('')).toBe(false);
+  });
+});
+
+describe('shouldFullyRedactToolPayload (fail-closed)', () => {
+  it('allows only bash-like execute tools to keep partial redaction', () => {
+    expect(isPartialRedactToolName('Bash')).toBe(true);
+    expect(isPartialRedactToolName('shell')).toBe(true);
+    expect(isPartialRedactToolName('execute')).toBe(true);
+    expect(isPartialRedactToolName('Terminal')).toBe(true);
+    expect(shouldFullyRedactToolPayload('Bash')).toBe(false);
+    expect(shouldFullyRedactToolPayload('shell')).toBe(false);
+  });
+
+  it('fully redacts known content tools and unknown/custom ACP names', () => {
+    expect(shouldFullyRedactToolPayload('Read')).toBe(true);
+    expect(shouldFullyRedactToolPayload('Write')).toBe(true);
+    // kind:other custom / MCP filesystem-style names must not leak raw I/O.
+    expect(shouldFullyRedactToolPayload('mcp__filesystem__read_file')).toBe(true);
+    expect(shouldFullyRedactToolPayload('my_special_tool')).toBe(true);
+    expect(shouldFullyRedactToolPayload('Other')).toBe(true);
+    expect(shouldFullyRedactToolPayload('')).toBe(true);
+    expect(shouldFullyRedactToolPayload('unknown')).toBe(true);
+  });
+
+  it('labels known content tools without embedding untrusted custom names', () => {
+    expect(toolPayloadRedactionPlaceholder('Read', 'output')).toBe(
+      '[REDACTED:tool_output:content_tool:Read]',
+    );
+    // Unknown/custom ACP names must not appear in the placeholder string.
+    expect(toolPayloadRedactionPlaceholder('mcp__filesystem__read_file', 'output')).toBe(
+      '[REDACTED:tool_output:unknown_tool]',
+    );
+    expect(toolPayloadRedactionPlaceholder('  ', 'input')).toBe(
+      '[REDACTED:tool_input:unknown_tool]',
+    );
+    expect(toolPayloadRedactionPlaceholder('/Users/alice/secret-tool', 'output')).toBe(
+      '[REDACTED:tool_output:unknown_tool]',
+    );
+    expect(toolPayloadRedactionPlaceholder('/Users/alice/secret-tool', 'output')).not.toContain(
+      '/Users/alice',
+    );
+  });
+});
+
 describe('buildTracePayload', () => {
+  it.each(['internal_error', 'check_incomplete'] as const)('emits a distinct ERROR observation only for engine defects: %s', (reason) => {
+    const syntax = projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        schema: 'open-design.deliverable-syntax-tool/v1', source: 'run_finalizer',
+        status: 'incomplete', reason: reason === 'internal_error' ? reason : 'checker_error', checkedAt: 1,
+        finalization: { action: 'warn', reason, summaryVersion: 1, initialStatus: 'incomplete',
+          repairEngine: 'host-safe-fixer@2', stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [] },
+      },
+    });
+    if (!syntax) throw new Error('Missing syntax projection');
+    const batch = buildTracePayload(makeCtx({ deliverableSyntax: syntax }));
+    const errors = (batch as Array<{ type: string; body: Record<string, any> }>).filter(
+      item => item.body.name === 'deliverable-syntax-internal-error',
+    );
+    expect(errors).toHaveLength(reason === 'internal_error' ? 1 : 0);
+    if (reason === 'internal_error') expect(errors[0]).toMatchObject({ type: 'event-create', body: {
+      level: 'ERROR', statusMessage: 'Syntax finalizer internal error',
+      metadata: { reason: 'internal_error', deliveryStatus: 'succeeded' },
+    } });
+    expect(bodyOf(batch, 'trace-create').metadata).toMatchObject({ success: true,
+      deliverable_syntax_finalization_reason: reason, deliverable_syntax_recovered_delivery_count: 0 });
+  });
+
+  it.each(['synthetic-test-syntax-replay', 'production'])(
+    'sets the native trace environment to the resolved telemetry environment %s',
+    (environment) => {
+      vi.stubEnv('OD_TELEMETRY_ENV', environment);
+      vi.stubEnv('OPEN_DESIGN_ENV', 'ignored-fallback');
+      try {
+        const trace = bodyOf(buildTracePayload(makeCtx()), 'trace-create');
+        expect(trace.environment).toBe(environment);
+        expect(trace.metadata.env).toBe(environment);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('emits a trace with nested agent + generation observations', () => {
     const batch = buildTracePayload(makeCtx());
     const types = (batch as Array<{ type: string }>).map((e) => e.type);
@@ -275,6 +531,136 @@ describe('buildTracePayload', () => {
     expect(bash.output).toBeUndefined();
     expect(bash.metadata.toolName).toBe('Bash');
     expect(write.parentObservationId).toBe('run-1-agent');
+  });
+
+  it('records adapter-based admission and silent pre-start fallback metadata', () => {
+    const activeTrace = (buildTracePayload(makeCtx({
+      strategyRolloutDecision: {
+        requestedMode: 'active',
+        effectiveMode: 'active',
+        primaryReasonCode: 'od_next_rollout_eligible',
+        reasonCodes: [],
+      },
+    }))[0] as any).body;
+    expect(activeTrace.metadata).toMatchObject({
+      strategy_rollout_requested_mode: 'active',
+      strategy_rollout_effective_mode: 'active',
+      strategy_rollout_compatibility_basis: 'runtime_adapter_family_fixture_evidence',
+      strategy_rollout_admission_stage: 'activation_admission',
+    });
+
+    const fallbackTrace = (buildTracePayload(makeCtx({
+      strategyRolloutDecision: {
+        requestedMode: 'active',
+        effectiveMode: 'observe',
+        primaryReasonCode: 'od_next_rollout_prestart_preparation_failed',
+        reasonCodes: ['od_next_rollout_prestart_preparation_failed'],
+      },
+    }))[0] as any).body;
+    expect(fallbackTrace.metadata).toMatchObject({
+      strategy_rollout_effective_mode: 'observe',
+      strategy_rollout_primary_reason_code: 'od_next_rollout_prestart_preparation_failed',
+      strategy_rollout_compatibility_basis: 'not_evaluated',
+      strategy_rollout_fallback_stage: 'activation_preparation',
+    });
+  });
+
+  it('exports content-free deliverable syntax timing and value counters as flat metadata', () => {
+    const trace = (buildTracePayload(makeCtx({
+      deliverableSyntax: {
+        schemaVersion: 'deliverable-syntax-telemetry-v1',
+        applicable: true,
+        status: 'pass',
+        source: 'run_finalizer',
+        checker: 'web-syntax@1',
+        checkedFileCount: 1,
+        checkCount: 3,
+        checkerDurationMs: 16,
+        repairWindowDurationMs: 650,
+        repairToDeliveryDurationMs: 900,
+        repairToTerminalDurationMs: 900,
+        terminalRunStatus: 'succeeded',
+        finalization: {
+          action: 'allow', summaryVersion: 1, initialStatus: 'repairable',
+          repairEngine: 'host-safe-fixer@2', stagedPatchCount: 2, committedPatchCount: 2,
+          committedRepairRules: ['normalize_mismatched_string_quote', 'normalize_html_attribute_quotes'],
+        },
+        safeFixProposalCount: 2,
+        safeFixProposalDurationMs: 6,
+        repairExecutor: 'host_safe_fixer',
+        repairDurationMs: 8,
+        appliedRepairRules: ['insert_missing_closing_delimiter'],
+        repairableCheckCount: 2,
+        initialDiagnosticCount: 1,
+        latestDiagnosticCount: 0,
+        repairTriggered: true,
+        repairAttempts: 2,
+        maxRepairAttempts: 3,
+        repairOutcome: 'repaired',
+        recoveredDeliveryCount: 1,
+        blockedBrokenDeliveryCount: 0,
+      },
+    }))[0] as any).body;
+
+    expect(trace.metadata).toMatchObject({
+      deliverable_syntax_schema_version: 'deliverable-syntax-telemetry-v1',
+      deliverable_syntax_applicable: true,
+      deliverable_syntax_status: 'pass',
+      deliverable_syntax_checker_duration_ms: 16,
+      deliverable_syntax_repair_window_duration_ms: 650,
+      deliverable_syntax_repair_to_delivery_duration_ms: 900,
+      deliverable_syntax_repair_to_terminal_duration_ms: 900,
+      deliverable_syntax_terminal_run_status: 'succeeded',
+      deliverable_syntax_finalization_action: 'allow',
+      deliverable_syntax_summary_version: 1,
+      deliverable_syntax_initial_status: 'repairable',
+      deliverable_syntax_repair_engine: 'host-safe-fixer@2',
+      deliverable_syntax_staged_patch_count: 2,
+      deliverable_syntax_committed_patch_count: 2,
+      deliverable_syntax_committed_repair_rules: 'normalize_mismatched_string_quote,normalize_html_attribute_quotes',
+      deliverable_syntax_safe_fix_proposal_count: 2,
+      deliverable_syntax_safe_fix_proposal_duration_ms: 6,
+      deliverable_syntax_repair_executor: 'host_safe_fixer',
+      deliverable_syntax_repair_duration_ms: 8,
+      deliverable_syntax_applied_repair_rules: 'insert_missing_closing_delimiter',
+      deliverable_syntax_check_count: 3,
+      deliverable_syntax_repair_outcome: 'repaired',
+      deliverable_syntax_recovered_delivery_count: 1,
+      deliverable_syntax_blocked_broken_delivery_count: 0,
+    });
+    expect(JSON.stringify(trace.metadata)).not.toContain('index.html');
+  });
+
+  it.each([0, 1, undefined] as const)('exports warning count %s without inventing a missing value', (count) => {
+    const trace = (buildTracePayload(makeCtx({
+      deliverableSyntax: {
+        schemaVersion: 'deliverable-syntax-telemetry-v1', applicable: true,
+        status: 'repairable', source: 'run_finalizer', checker: 'web-syntax@1',
+        checkedFileCount: 1, checkCount: 1, checkerDurationMs: 2,
+        repairWindowDurationMs: null, repairToDeliveryDurationMs: 5,
+        terminalRunStatus: 'succeeded',
+        finalization: {
+          action: 'warn', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error',
+          summaryVersion: 1, initialStatus: 'repairable', repairEngine: 'host-safe-fixer@2',
+          stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [],
+        },
+        repairableCheckCount: 1, initialDiagnosticCount: 1, latestDiagnosticCount: 1,
+        repairTriggered: true, repairAttempts: 0, maxRepairAttempts: 8,
+        repairOutcome: 'unresolved', recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+        ...(count !== undefined ? { deliveredWithSyntaxWarningCount: count } : {}),
+      },
+    }))[0] as any).body;
+    expect(trace.metadata).toMatchObject({
+      deliverable_syntax_finalization_action: 'warn',
+      deliverable_syntax_finalization_reason: 'no_safe_fix',
+      deliverable_syntax_finalization_refusal: 'unsupported_syntax_error',
+    });
+    const serialized = JSON.parse(JSON.stringify(trace.metadata));
+    if (count === undefined) {
+      expect(serialized).not.toHaveProperty('deliverable_syntax_delivered_with_syntax_warning_count');
+    } else {
+      expect(serialized.deliverable_syntax_delivered_with_syntax_warning_count).toBe(count);
+    }
   });
 
   it('omits prompt + output when content gate is off', () => {
@@ -315,6 +701,83 @@ describe('buildTracePayload', () => {
     expect(tool.output).toBe('total 0');
     expect(write.input).toBe('[REDACTED:tool_input:content_tool:Write]');
     expect(write.output).toBe('[REDACTED:tool_output:content_tool:Write]');
+  });
+
+  it('redacts Linux home paths in Bash tool inputs when content gate is on', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+        tools: [
+          {
+            id: 'bash-linux-1',
+            name: 'Bash',
+            startedAt: 1_700_000_001_000,
+            endedAt: 1_700_000_001_800,
+            input: '{"command":"cat /home/alice/.env"}',
+            output: 'KEY=value',
+          },
+        ],
+      }),
+    );
+    const bash = bodyOf(batch, 'span-create', 'tool:Bash');
+    expect(bash.input).toContain('[REDACTED:local_path]');
+    expect(bash.input).toContain('cat');
+    expect(bash.input).not.toContain('/home/alice');
+    expect(JSON.stringify(batch)).not.toContain('/home/alice/.env');
+  });
+
+  it('fail-closed redacts unknown/custom ACP tool payloads when content gate is on', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+        tools: [
+          {
+            id: 'custom-1',
+            name: 'mcp__filesystem__read_file',
+            startedAt: 1_700_000_001_000,
+            endedAt: 1_700_000_001_800,
+            input: '{"path":"/Users/alice/secrets.env"}',
+            output: 'API_KEY=super-secret\nPASSWORD=also-secret\n',
+          },
+        ],
+      }),
+    );
+    // Custom ACP/MCP names are canonicalized to the allowlisted `other` family
+    // for span labels and metadata — never shipped raw to Langfuse.
+    const custom = bodyOf(batch, 'span-create', 'tool:other');
+    expect(custom.metadata.toolName).toBe('other');
+    expect(custom.input).toBe('[REDACTED:tool_input:unknown_tool]');
+    expect(custom.output).toBe('[REDACTED:tool_output:unknown_tool]');
+    const payload = JSON.stringify(batch);
+    expect(payload).not.toContain('super-secret');
+    expect(payload).not.toContain('also-secret');
+    expect(payload).not.toContain('/Users/alice/secrets.env');
+    expect(payload).not.toContain('mcp__filesystem__read_file');
+  });
+
+  it('does not ship path-like custom tool names when content telemetry is off', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        prefs: { metrics: true, content: false, artifactManifest: false },
+        tools: [
+          {
+            id: 'path-tool-1',
+            name: '/Users/alice/.ssh/id_rsa',
+            startedAt: 1_700_000_001_000,
+            endedAt: 1_700_000_001_800,
+            input: 'ignored-when-content-off',
+            output: 'ignored-when-content-off',
+          },
+        ],
+      }),
+    );
+    const custom = bodyOf(batch, 'span-create', 'tool:other');
+    expect(custom.metadata.toolName).toBe('other');
+    expect(custom.input).toBeUndefined();
+    expect(custom.output).toBeUndefined();
+    const payload = JSON.stringify(batch);
+    expect(payload).not.toContain('/Users/alice');
+    expect(payload).not.toContain('id_rsa');
   });
 
   it('adds full prompt-stack content once on generation input and flat metadata elsewhere', () => {
@@ -809,6 +1272,44 @@ describe('buildTracePayload', () => {
     });
   });
 
+  it('keeps ACP usage on a failed run for post-run diagnostics', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-failed-with-usage',
+          status: 'failed',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          failure: {
+            failure_category: 'timeout',
+            failure_detail: 'timeout',
+            failure_stage: 'first_token_wait',
+            retryable: true,
+            user_action: 'retry',
+          },
+        },
+      }),
+    );
+    const trace = (batch[0] as any).body;
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+
+    expect(trace.metadata.tokens).toMatchObject({
+      input: 1234,
+      output: 567,
+      total: 2051,
+      cacheReadInput: 200,
+      cacheCreationInput: 50,
+    });
+    expect(generation.usage).toMatchObject({
+      input: 1484,
+      output: 567,
+      total: 2051,
+      unit: 'TOKENS',
+    });
+    expect(trace.metadata.failure_category).toBe('timeout');
+    expect(trace.metadata.failure_detail).toBe('timeout');
+  });
+
   it('uses conversationId as sessionId when within length limit', () => {
     const batch = buildTracePayload(makeCtx());
     expect((batch[0] as any).body.sessionId).toBe(
@@ -888,6 +1389,21 @@ describe('buildTracePayload', () => {
   it('mirrors runtime + turn fields into trace metadata for query / export', () => {
     const batch = buildTracePayload(
       makeCtx({
+        run: {
+          runId: 'run-1',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_004_500,
+          retryAttemptCount: 1,
+          retryFinalResult: 'success',
+          retryOriginalFailure: {
+            failure_category: 'upstream_unavailable',
+            failure_detail: 'stream_disconnected',
+            failure_stage: 'first_token_wait',
+            retryable: true,
+            user_action: 'retry',
+          },
+        },
         turn: { model: 'claude-sonnet-4-5', skillId: 'landing-page' },
         runtime: {
           os: 'linux',
@@ -897,10 +1413,14 @@ describe('buildTracePayload', () => {
           appChannel: 'beta',
           packaged: true,
           clientType: 'web',
+          agentCliVersion: 'claude 3.4.5',
+          runtimeCompanionName: 'opencode',
+          runtimeCompanionVersion: '1.2.3',
         },
       }),
     );
-    const m = (batch[0] as any).body.metadata;
+    const trace = (batch[0] as any).body;
+    const m = trace.metadata;
     expect(m.model).toBe('claude-sonnet-4-5');
     expect(m.skillId).toBe('landing-page');
     expect(m.os).toBe('linux');
@@ -910,8 +1430,20 @@ describe('buildTracePayload', () => {
     expect(m.appChannel).toBe('beta');
     expect(m.packaged).toBe(true);
     expect(m.clientType).toBe('web');
+    expect(m.agentCliVersion).toBe('claude 3.4.5');
+    expect(m.runtimeCompanionName).toBe('opencode');
+    expect(m.runtimeCompanionVersion).toBe('1.2.3');
+    expect(m.retryAttemptCount).toBe(1);
+    expect(m.retryFinalResult).toBe('success');
+    expect(m.retryOriginalFailureCategory).toBe('upstream_unavailable');
+    expect(m.retryOriginalFailureDetail).toBe('stream_disconnected');
+    expect(m.retryOriginalFailureStage).toBe('first_token_wait');
     expect(m.projectId).toBe('proj-1');
     expect(m.agent).toBe('claude');
+    expect(trace.release).toBe('0.5.0');
+    expect(trace.version).toBe('claude 3.4.5');
+    expect(bodyOf(batch, 'span-create', 'agent-run').version).toBe('claude 3.4.5');
+    expect(bodyOf(batch, 'generation-create', 'llm').version).toBe('claude 3.4.5');
   });
 
   it('marks generation.level=ERROR when run failed', () => {
@@ -935,6 +1467,36 @@ describe('buildTracePayload', () => {
     expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe('boom');
     expect((batch[0] as any).body.metadata.error).toBe('boom');
     expect((batch[0] as any).body.metadata.success).toBe(false);
+  });
+
+  it('redacts secrets from every failed-run error field sent to Langfuse', () => {
+    const providerToken = ['nvapi', 'A'.repeat(48)].join('-');
+    const rawError = `Header has invalid value: Bearer ${providerToken}`;
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-secret-error',
+          status: 'failed',
+          startedAt: 1,
+          endedAt: 2,
+          error: rawError,
+        },
+      }),
+    );
+    const redactedError =
+      'Header has invalid value: Bearer [REDACTED:nvidia_api_key]';
+
+    expect(bodyOf(batch, 'span-create', 'agent-run').statusMessage).toBe(
+      redactedError,
+    );
+    expect(bodyOf(batch, 'generation-create', 'llm').statusMessage).toBe(
+      redactedError,
+    );
+    expect(bodyOf(batch, 'event-create', 'run-error').statusMessage).toBe(
+      redactedError,
+    );
+    expect((batch[0] as any).body.metadata.error).toBe(redactedError);
+    expect(JSON.stringify(batch)).not.toContain(providerToken);
   });
 
   it('uses an agent-runtime span instead of an llm generation for session-init failures with no model usage', () => {
@@ -1060,6 +1622,79 @@ describe('buildTracePayload', () => {
     expect(metadata.time_to_first_token_ms).toBe(40);
     expect(metadata.tool_call_count).toBe(2);
     expect(metadata.total_duration_ms).toBe(100);
+  });
+
+  it('uses the response anchor for model-active on an ACP tool-first run', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-model-active-acp',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_030_000,
+          timingMarks: {
+            startChatRunStartedAt: 1_700_000_000_100,
+            stdinWriteEndAt: 1_700_000_000_500,
+            // ACP emits the canonical tool_use when the call is terminal, so
+            // the event arrived at 20s while the tool began at 4s. A tool-only
+            // turn never produces a text token at all.
+            firstModelResponseAt: 1_700_000_004_000,
+            firstModelEventAt: 1_700_000_020_000,
+            finalizeStartAt: 1_700_000_029_000,
+          },
+        },
+      }),
+    );
+
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    const measured =
+      generation.metadata.performance_diagnostics.semantic_phases.measured;
+
+    // `model_active_duration_ms` anchors on the earliest of the three marks,
+    // which is the response at 4s. Ignoring it here reports 10s against the
+    // analytics value of 26s for the same run -- on the exact runtime shape
+    // this change targets.
+    expect(measured['model-active']).toMatchObject({
+      duration_ms: 26_000,
+      status: 'measured',
+    });
+  });
+
+  it('measures model-active on the same boundaries as the analytics metric', () => {
+    const batch = buildTracePayload(
+      makeCtx({
+        run: {
+          runId: 'run-model-active',
+          status: 'succeeded',
+          startedAt: 1_700_000_000_000,
+          endedAt: 1_700_000_010_000,
+          timingMarks: {
+            startChatRunStartedAt: 1_700_000_000_100,
+            processSpawnedAt: 1_700_000_000_300,
+            stdinWriteEndAt: 1_700_000_000_500,
+            // Text-first: the server stamps first-token before the send() path
+            // records the model-event mark, so the two are not equal and the
+            // earlier one is the true start of the response.
+            firstTokenAt: 1_700_000_001_000,
+            firstModelEventAt: 1_700_000_001_200,
+            finalizeStartAt: 1_700_000_009_000,
+          },
+        },
+      }),
+    );
+
+    const generation = bodyOf(batch, 'generation-create', 'llm');
+    const measured =
+      generation.metadata.performance_diagnostics.semantic_phases.measured;
+
+    // `model_active_duration_ms` takes the earliest of the two marks and runs
+    // to run end. This entry exists to be compared against that number, so a
+    // different window here makes PostHog and Langfuse disagree on the same
+    // run.
+    expect(measured['model-active']).toMatchObject({
+      duration_ms: 9_000,
+      status: 'measured',
+    });
   });
 
   it('adds duration spans for run timing marks', () => {
@@ -1568,6 +2203,232 @@ describe('reportRunCompleted', () => {
   afterEach(() => {
     warnSpy.mockRestore();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('posts completed-run telemetry to the authenticated Vela endpoint', async () => {
+    const velaConfig: VelaTelemetrySinkConfig = {
+      kind: 'vela',
+      apiUrl: 'https://vela.example.test',
+      controlKey: 'ck_secret',
+      timeoutMs: 1_000,
+      retries: 0,
+    };
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
+
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      { config: velaConfig, fetchImpl: fetchSpy as any },
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('https://vela.example.test/api/v1/open-design/telemetry');
+    expect(init.headers.Authorization).toBe('Bearer ck_secret');
+    expect(init.headers['Idempotency-Key']).toMatch(/^[a-f0-9]{64}$/);
+    const envelope = JSON.parse(init.body);
+    expect(envelope.version).toBe(1);
+    expect(envelope.installationId).toBe('install-uuid-1');
+    expect(envelope.events.map((event: any) => event.kind)).toEqual([
+      'trace',
+      'span',
+      'generation',
+      'span',
+      'span',
+    ]);
+    expect(envelope.events.every((event: any) => event.kind !== 'score')).toBe(true);
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+  });
+
+  it('reuses one Vela idempotency key across transport retries', async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(new Response('', { status: 202 }));
+
+    await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: {
+          kind: 'vela',
+          apiUrl: 'https://vela.example.test',
+          controlKey: 'ck_secret',
+          timeoutMs: 1_000,
+          retries: 1,
+        },
+        fetchImpl: fetchSpy as any,
+      },
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls[0]![1].headers['Idempotency-Key']).toBe(
+      fetchSpy.mock.calls[1]![1].headers['Idempotency-Key'],
+    );
+  });
+
+  it('keeps the Vela key stable when the same completed run is rebuilt', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 202 }));
+    const context = makeCtx({
+      prefs: { metrics: true, content: true, artifactManifest: false },
+    });
+    const opts = {
+      config: {
+        kind: 'vela' as const,
+        apiUrl: 'https://vela.example.test',
+        controlKey: 'ck_secret',
+        timeoutMs: 1_000,
+        retries: 0,
+      },
+      fetchImpl: fetchSpy as any,
+    };
+
+    await reportRunCompleted(context, opts);
+    await reportRunCompleted(context, opts);
+
+    expect(fetchSpy.mock.calls[0]![1].headers['Idempotency-Key']).toBe(
+      fetchSpy.mock.calls[1]![1].headers['Idempotency-Key'],
+    );
+  });
+
+  it('falls back anonymously on an explicit Vela auth rejection', async () => {
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: {
+          kind: 'vela',
+          apiUrl: 'https://vela.example.test',
+          controlKey: 'ck_expired',
+          timeoutMs: 1_000,
+          retries: 0,
+        },
+        fetchImpl: fetchSpy as any,
+      },
+    );
+
+    expect(fetchSpy.mock.calls.map((call) => call[0])).toEqual([
+      'https://vela.example.test/api/v1/open-design/telemetry',
+      'https://telemetry.open-design.ai/api/langfuse',
+    ]);
+    expect(result.langfuse_delivery_status).toBe('accepted');
+  });
+
+  it.each([401, 403])(
+    'fails object registration closed when Vela rejects auth with %i',
+    async (status) => {
+      vi.stubEnv(
+        'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+        'https://telemetry.open-design.ai/api/langfuse',
+      );
+      const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status }));
+
+      const result = await reportRunCompleted(
+        makeCtx({
+          prefs: { metrics: true, content: true, artifactManifest: true },
+        }),
+        {
+          config: {
+            kind: 'vela',
+            apiUrl: 'https://vela.example.test',
+            controlKey: 'ck_expired',
+            timeoutMs: 1_000,
+            retries: 0,
+          },
+          deliveryPurpose: 'object-registration',
+          fetchImpl: fetchSpy as any,
+        },
+      );
+
+      expect(fetchSpy.mock.calls.map((call) => call[0])).toEqual([
+        'https://vela.example.test/api/v1/open-design/telemetry',
+      ]);
+      expect(result).toEqual({
+        langfuse_expected: true,
+        langfuse_delivery_status: 'failed',
+        langfuse_drop_reason: `vela_${status}`,
+      });
+    },
+  );
+
+  it('fails object registration closed when the Vela installation identity is missing', async () => {
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const result = await reportRunCompleted(
+      makeCtx({
+        installationId: null,
+        prefs: { metrics: true, content: true, artifactManifest: true },
+      }),
+      {
+        config: {
+          kind: 'vela',
+          apiUrl: 'https://vela.example.test',
+          controlKey: 'ck_secret',
+          timeoutMs: 1_000,
+          retries: 0,
+        },
+        deliveryPurpose: 'object-registration',
+        fetchImpl: fetchSpy as any,
+      },
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'missing_sink_config',
+    });
+  });
+
+  it('does not anonymously overwrite a throttled Vela delivery', async () => {
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 429 }));
+
+    const result = await reportRunCompleted(
+      makeCtx({
+        prefs: { metrics: true, content: true, artifactManifest: false },
+      }),
+      {
+        config: {
+          kind: 'vela',
+          apiUrl: 'https://vela.example.test',
+          controlKey: 'ck_secret',
+          timeoutMs: 1_000,
+          retries: 0,
+        },
+        fetchImpl: fetchSpy as any,
+      },
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'vela_429',
+    });
   });
 
   it('does nothing when metrics gate is off', async () => {
@@ -1731,7 +2592,7 @@ describe('reportRunCompleted', () => {
     expect(JSON.stringify(batch)).not.toContain('sk-raw');
   });
 
-  it('POSTs serialized ingestion batches to the Open Design telemetry relay', async () => {
+  it('POSTs serialized ingestion batches to the OpenDesign telemetry relay', async () => {
     const relayConfig: TelemetrySinkConfig = {
       kind: 'relay',
       relayUrl: 'https://telemetry.open-design.ai/api/langfuse',
@@ -1985,6 +2846,7 @@ describe('reportRunCompleted', () => {
       }),
       {
         config: { ...TEST_CONFIG, retries: 1 },
+        deliveryIdempotencyKey: 'od-run-telemetry-v1-fixture',
         fetchImpl: fetchSpy as any,
       },
     );
@@ -1993,6 +2855,8 @@ describe('reportRunCompleted', () => {
     expect(result).toEqual({
       langfuse_expected: true,
       langfuse_delivery_status: 'accepted',
+      langfuse_attempt_count: 2,
+      langfuse_idempotency_key: 'od-run-telemetry-v1-fixture',
     });
   });
 
@@ -2103,6 +2967,16 @@ function makeFeedbackCtx(
 }
 
 describe('buildFeedbackPayload', () => {
+  it('targets the owning Task while keeping physical Run score IDs stable', () => {
+    const batch = buildFeedbackPayload(makeFeedbackCtx({ traceId: 'strategy-task:task-1' })) as Array<{ body: Record<string, unknown> }>;
+    expect(batch[0]?.body).toMatchObject({
+      id: 'run-feedback-1-rating', traceId: 'strategy-task:task-1',
+      metadata: { runId: 'run-feedback-1' },
+    });
+    expect(batch[1]?.body).toMatchObject({
+      id: 'run-feedback-1-reason-matched_request', traceId: 'strategy-task:task-1',
+    });
+  });
   it('emits a numeric user_rating score plus per-reason categorical scores', () => {
     const batch = buildFeedbackPayload(
       makeFeedbackCtx({
@@ -2155,6 +3029,84 @@ describe('reportRunFeedback', () => {
 
   beforeEach(() => {
     vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('posts feedback scores to Vela when completed-run telemetry uses Vela', async () => {
+    // tests/setup.ts defaults OPEN_DESIGN_VELA_TELEMETRY to 'off' so unit
+    // tests never route through a developer's real Vela profile; this test
+    // exercises exactly that sink, so opt back in explicitly.
+    vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
+    vi.stubEnv('VELA_CONTROL_KEY', 'ck_secret');
+    vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        ok: true,
+        idempotencyKey: 'feedback-key',
+        receipt: {
+          clientTraceId: 'run-feedback-1',
+          scopedTraceId: 'scoped-run-feedback-1',
+        },
+      }),
+      { status: 202 },
+    ));
+
+    await reportRunFeedback(
+      makeFeedbackCtx({ reasonCodes: ['matched_request'] }),
+      { fetchImpl: fetchSpy as any },
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('https://vela.example.test/api/v1/open-design/telemetry');
+    expect(init.headers.Authorization).toBe('Bearer ck_secret');
+    const envelope = JSON.parse(init.body);
+    expect(envelope.installationId).toBe('install-uuid-1');
+    expect(envelope.events.map((event: { kind: string }) => event.kind)).toEqual([
+      'score',
+      'score',
+    ]);
+    expect(envelope.events[0].data).toMatchObject({
+      id: 'run-feedback-1-rating',
+      traceId: 'run-feedback-1',
+      name: 'user_rating',
+      value: 1,
+    });
+    expect(envelope.events[1].data).toMatchObject({
+      id: 'run-feedback-1-reason-matched_request',
+      traceId: 'run-feedback-1',
+      name: 'user_rating_reason',
+      value: 'matched_request',
+    });
+  });
+
+  it('does not fall back anonymously when Vela rejects feedback auth', async () => {
+    // Same opt-in as above: the setup default keeps the Vela sink off.
+    vi.stubEnv('OPEN_DESIGN_VELA_TELEMETRY', 'on');
+    vi.stubEnv('VELA_CONTROL_KEY', 'ck_expired');
+    vi.stubEnv('VELA_API_URL', 'https://vela.example.test');
+    vi.stubEnv(
+      'OPEN_DESIGN_TELEMETRY_RELAY_URL',
+      'https://telemetry.open-design.ai/api/langfuse',
+    );
+    const fetchSpy = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
+
+    await reportRunFeedback(
+      makeFeedbackCtx({ reasonCodes: ['matched_request'] }),
+      { fetchImpl: fetchSpy as any },
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0]![0]).toBe(
+      'https://vela.example.test/api/v1/open-design/telemetry',
+    );
   });
 
   it('skips when metrics consent is off', async () => {

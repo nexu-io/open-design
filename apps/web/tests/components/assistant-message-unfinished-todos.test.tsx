@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { AgentEvent, ChatMessage, ProjectFile } from '../../src/types';
@@ -76,7 +76,7 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(screen.queryByText('Modern minimal')).toBeNull();
   });
 
-  it('shows a soft no-output state instead of Done for empty API responses', () => {
+  it('no longer shows a turn-end status word for empty API responses (P0-24)', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -94,13 +94,14 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText('No output')).toBeTruthy();
+    expect(screen.queryByText('The task could not be completed')).toBeNull();
     expect(screen.getByText(/provider ended the request/i)).toBeTruthy();
-    expect(screen.queryByText('Done')).toBeNull();
+    // P0-24 Q6:「任务未能完成」也随回合末尾状态行一起去掉,状态只在壳头说
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
     expect(screen.queryByText('empty_response')).toBeNull();
   });
 
-  it('keeps Done for a completed latest TodoWrite fixture', () => {
+  it('lets the pinned Todo summary own completion status', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -119,79 +120,17 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText('Done')).toBeTruthy();
-    expect(screen.queryByText('Stopped with unfinished work')).toBeNull();
+    // 完成度由 composer 上方那张固定清单卡拥有,这条消息自己不再摆一个完成状态行
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
+    expect(screen.queryByText('Task not finished yet')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue remaining tasks' })).toBeNull();
   });
 
-  it('uses persisted usage duration for completed messages that do not have endedAt', () => {
+  it('hides answer-footer duration, token, and cost statistics', () => {
     render(
       <AssistantMessage
         message={{
-          id: 'assistant-duration',
-          role: 'assistant',
-          content: 'Done',
-          startedAt: 1_000,
-          runStatus: 'succeeded',
-          events: [{ kind: 'usage', outputTokens: 1439, durationMs: 32_000 }],
-        }}
-        streaming={false}
-        projectId="project-1"
-        isLast
-      />,
-    );
-
-    expect(screen.getByText(/32s/)).toBeTruthy();
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-  });
-
-  it('hides zero cost because it is not reliable billing data', () => {
-    render(
-      <AssistantMessage
-        message={{
-          id: 'assistant-zero-cost',
-          role: 'assistant',
-          content: 'Done',
-          startedAt: 1_000,
-          runStatus: 'succeeded',
-          events: [{ kind: 'usage', outputTokens: 1439, durationMs: 32_000, costUsd: 0 }],
-        }}
-        streaming={false}
-        projectId="project-1"
-        isLast
-      />,
-    );
-
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\$0\.0000/)).toBeNull();
-  });
-
-  it('hides costs that round to zero in the current display precision', () => {
-    render(
-      <AssistantMessage
-        message={{
-          id: 'assistant-rounded-zero-cost',
-          role: 'assistant',
-          content: 'Done',
-          startedAt: 1_000,
-          runStatus: 'succeeded',
-          events: [{ kind: 'usage', outputTokens: 1439, durationMs: 32_000, costUsd: 0.00001 }],
-        }}
-        streaming={false}
-        projectId="project-1"
-        isLast
-      />,
-    );
-
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\$0\.0000/)).toBeNull();
-  });
-
-  it('shows positive usage cost when billing data is present', () => {
-    render(
-      <AssistantMessage
-        message={{
-          id: 'assistant-positive-cost',
+          id: 'assistant-usage',
           role: 'assistant',
           content: 'Done',
           startedAt: 1_000,
@@ -204,32 +143,12 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText(/\$0\.0123/)).toBeTruthy();
+    expect(screen.queryByText(/32s/)).toBeNull();
+    expect(screen.queryByText(/1439 out/)).toBeNull();
+    expect(screen.queryByText(/\$0\.0123/)).toBeNull();
   });
 
-  it('does not synthesize a growing elapsed time for completed messages without endedAt', () => {
-    render(
-      <AssistantMessage
-        message={{
-          id: 'assistant-duration-missing',
-          role: 'assistant',
-          content: 'Done',
-          startedAt: 1_000,
-          runStatus: 'succeeded',
-          events: [{ kind: 'usage', outputTokens: 1439 }],
-        }}
-        streaming={false}
-        projectId="project-1"
-        isLast
-      />,
-    );
-
-    expect(screen.getByText(/1439 out/)).toBeTruthy();
-    expect(screen.queryByText(/\d+m \d{2}s/)).toBeNull();
-  });
-
-  it('shows unfinished state and passes unfinished todos to the continue callback', () => {
-    const onContinue = vi.fn();
+  it('no longer says at the turn end that this turn still owes work (P0-24)', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -255,30 +174,32 @@ describe('AssistantMessage unfinished todo state', () => {
         streaming={false}
         projectId="project-1"
         isLast
-        onContinueRemainingTasks={onContinue}
       />,
     );
 
-    expect(screen.getByText('Stopped with unfinished work')).toBeTruthy();
-    expect(screen.getByText('2 task(s) remain')).toBeTruthy();
-    const remainingList = screen.getByText('2 task(s) remain').closest('.unfinished-todos');
-    expect(remainingList).not.toBeNull();
-    expect(within(remainingList as HTMLElement).getByText('Building components')).toBeTruthy();
-    expect(within(remainingList as HTMLElement).getByText('Run QA')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Continue remaining tasks' }));
-
-    expect(onContinue).toHaveBeenCalledWith([
-      {
-        content: 'Build components',
-        status: 'in_progress',
-        activeForm: 'Building components',
-      },
-      { content: 'Run QA', status: 'pending', activeForm: undefined },
-    ]);
+    // P0-24 Q6:回合末尾的状态行已去掉,状态只在壳头说。
+    expect(screen.queryByText('Task not finished yet')).toBeNull();
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
   });
 
-  it('hides the continue button on older assistant turns', () => {
+  /*
+   * ⚠️ 这一条 2026-09-02 换过断言。
+   *
+   * 原来它要求**旧的**那一轮什么都不说,理由是「完成度归 composer 上方那张常驻
+   * TodoCard 管,消息自己再说一遍就是重复」。那张卡已经没了(`chat-panel-feedback.md`
+   * 的 T7),`hideRunStatus` 里的 `hasTodoSnapshot` 也跟着摘掉了 —— 于是每一轮都由
+   * **自己的**轮次状态行报自己的终态。
+   *
+   * 那么旧轮次该说什么?只能说实话。它当时确实停在还欠着活的状态上,把这一行
+   * 按 `isLast` 关掉,剩下的就只能是那枚绿勾「已完成」——**那是假的**。
+   *
+   * 所以这条改成钉住真正怕的两件事:
+   *   ① 不许**重复** —— 全文档只有一行状态词(原标题的本意);
+   *   ② 旧轮次不给**可点的出口** —— 〔继续剩余任务〕和「还剩几条」只属于最后一轮,
+   *      翻历史时点它会把早已做完的旧账重新塞回去。
+   */
+  // P0-24 Q6:回合末尾不再有状态词,① 收紧为「一行都没有」。
+  it('an older Todo turn shows no turn-end status word and offers no stale exit (P0-24)', () => {
     render(
       <AssistantMessage
         projectKind="prototype"
@@ -294,16 +215,20 @@ describe('AssistantMessage unfinished todo state', () => {
         streaming={false}
         projectId="project-1"
         isLast={false}
-        onContinueRemainingTasks={vi.fn()}
+        onContinueRemainingTasks={() => {}}
       />,
     );
 
-    expect(screen.getByText('Stopped with unfinished work')).toBeTruthy();
-    expect(screen.getByText('1 task(s) remain')).toBeTruthy();
+    // ① 页脚不再出状态词
+    expect(document.querySelectorAll('[data-testid="assistant-label"]')).toHaveLength(0);
+
+    // ② 出口只属于最后一轮
+    expect(screen.queryByText('1 task(s) remain')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue remaining tasks' })).toBeNull();
+    expect(document.querySelector('[data-testid="assistant-continue-remaining"]')).toBeNull();
   });
 
-  it('surfaces generated plugin next actions in the latest assistant turn', async () => {
+  it('does not surface retired plugin actions in the latest assistant turn', () => {
     const onOpen = vi.fn();
     const onPluginFolderAgentAction = vi.fn(async () => {});
     render(
@@ -338,18 +263,12 @@ describe('AssistantMessage unfinished todo state', () => {
       />,
     );
 
-    expect(screen.getByText('Plugin ready')).toBeTruthy();
-    expect(screen.getByTestId('assistant-plugin-install-generated-plugin')).toBeTruthy();
-    expect(screen.getByTestId('assistant-plugin-publish-generated-plugin')).toBeTruthy();
-    expect(screen.getByTestId('assistant-plugin-contribute-generated-plugin')).toBeTruthy();
+    expect(screen.queryByText('Plugin ready')).toBeNull();
+    for (const action of ['install', 'publish', 'contribute', 'open-manifest']) {
+      expect(screen.queryByTestId(`assistant-plugin-${action}-generated-plugin`)).toBeNull();
+    }
+    expect(onPluginFolderAgentAction).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId('assistant-plugin-contribute-generated-plugin'));
-    expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'contribute');
-    expect(
-      screen.queryByText('Sent to the agent. The CLI run will continue in chat.'),
-    ).toBeNull();
-
-    fireEvent.click(screen.getByTestId('assistant-plugin-open-manifest-generated-plugin'));
-    expect(onOpen).toHaveBeenCalledWith('generated-plugin/open-design.json');
   });
 });

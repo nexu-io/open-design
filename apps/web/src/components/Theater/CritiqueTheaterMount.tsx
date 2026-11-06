@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
+import {
+  projectWorkspaceContext,
+  useProjectWorkspaceScope,
+} from '../../collab/useProjectWorkspaceScope';
+import {
+  workspaceIdentityCacheKey,
+  workspaceProjectHeaders,
+} from '../../collab/workspace-identity';
 import { useCritiqueStream } from './hooks/useCritiqueStream';
 import { TheaterStage } from './TheaterStage';
 import type { CritiqueState } from './state/reducer';
@@ -27,6 +36,16 @@ interface Props {
    * wins. A warning surfaces in development; production stays silent.
    */
   fetchInterrupt?: (url: string, init: RequestInit) => Promise<Response>;
+  /**
+   * Exact project Workspace authority override. Production callers normally
+   * omit this and the mount resolves the persisted project binding itself.
+   * Explicit `null` selects the legacy/unbound compatibility path.
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
+  /** Caller identity used only to authorize the persisted-scope lookup. */
+  callerWorkspaceContext?: WorkspaceCollabContext | null;
+  /** Workspace id persisted on the project read model. */
+  persistedProjectWorkspaceId?: string | null;
 }
 
 /**
@@ -41,17 +60,102 @@ interface Props {
  * tears down its connection and the mount renders nothing, regardless
  * of any in-flight runs the user opened previously.
  */
-export function CritiqueTheaterMount({
+export function CritiqueTheaterMount(props: Props) {
+  if (!props.enabled || !props.projectId) return null;
+
+  const sharedProps = {
+    projectId: props.projectId,
+    ...(props.connectionFactory
+      ? { connectionFactory: props.connectionFactory }
+      : {}),
+    ...(props.fetchInterrupt ? { fetchInterrupt: props.fetchInterrupt } : {}),
+  };
+  if ('workspaceContext' in props) {
+    return (
+      <ResolvedCritiqueTheaterMount
+        {...sharedProps}
+        workspaceContext={props.workspaceContext ?? null}
+      />
+    );
+  }
+  return (
+    <PersistedScopeCritiqueTheaterMount
+      {...sharedProps}
+      callerWorkspaceContext={props.callerWorkspaceContext ?? null}
+      persistedProjectWorkspaceId={props.persistedProjectWorkspaceId}
+    />
+  );
+}
+
+type ResolvedProps = Pick<Props, 'connectionFactory' | 'fetchInterrupt'> & {
+  projectId: string;
+  workspaceContext: WorkspaceCollabContext | null;
+};
+
+function PersistedScopeCritiqueTheaterMount({
   projectId,
-  enabled,
   connectionFactory,
   fetchInterrupt,
-}: Props) {
-  const options = useMemo(
-    () => (connectionFactory ? { connectionFactory } : {}),
-    [connectionFactory],
+  callerWorkspaceContext,
+  persistedProjectWorkspaceId,
+}: Omit<ResolvedProps, 'workspaceContext'> & {
+  callerWorkspaceContext: WorkspaceCollabContext | null;
+  persistedProjectWorkspaceId?: string | null;
+}) {
+  const projectScope = useProjectWorkspaceScope(
+    projectId,
+    callerWorkspaceContext,
+    persistedProjectWorkspaceId,
   );
-  const { state, dispatch } = useCritiqueStream(projectId, enabled, options);
+  const resolvedContext = projectWorkspaceContext(projectScope.scope);
+  const pinnedRef = useRef<{
+    projectId: string;
+    context: WorkspaceCollabContext | null;
+    ready: boolean;
+  }>({
+    projectId,
+    context: null,
+    ready: false,
+  });
+
+  if (pinnedRef.current.projectId !== projectId) {
+    pinnedRef.current = { projectId, context: null, ready: false };
+  }
+  if (resolvedContext) {
+    pinnedRef.current = { projectId, context: resolvedContext, ready: true };
+  } else if (projectScope.scope?.kind === 'unbound') {
+    pinnedRef.current = { projectId, context: null, ready: true };
+  }
+
+  // Shell navigation broadcasts a context refresh. While the persisted
+  // project binding is revalidated, keep the last exact project identity:
+  // never borrow shell B and never reconnect an A-bound stream headerless.
+  // The daemon still authorizes the exact A identity on every request.
+  if (!pinnedRef.current.ready) return null;
+  return (
+    <ResolvedCritiqueTheaterMount
+      projectId={projectId}
+      {...(connectionFactory ? { connectionFactory } : {})}
+      {...(fetchInterrupt ? { fetchInterrupt } : {})}
+      workspaceContext={pinnedRef.current.context}
+    />
+  );
+}
+
+function ResolvedCritiqueTheaterMount({
+  projectId,
+  connectionFactory,
+  fetchInterrupt,
+  workspaceContext,
+}: ResolvedProps) {
+  const options = useMemo(
+    () => ({
+      ...(connectionFactory ? { connectionFactory } : {}),
+      workspaceContext,
+    }),
+    [connectionFactory, workspaceIdentityCacheKey(workspaceContext)],
+  );
+  const { state, dispatch } = useCritiqueStream(projectId, true, options);
   const [interruptPending, setInterruptPending] = useState(false);
 
   // Reset `interruptPending` whenever the runId changes so a fresh
@@ -70,8 +174,6 @@ export function CritiqueTheaterMount({
   const onInterrupt = useCallback(() => {
     if (interruptPending) return;
     if (state.phase !== 'running') return;
-    if (!projectId) return;
-
     // Snapshot at click time. The fetch is async; by the time it resolves
     // a fresh run could have started and `state.runId` could refer to a
     // different run. The dispatch must carry the runId / round / composite
@@ -93,7 +195,12 @@ export function CritiqueTheaterMount({
     // terminal event the daemon emits later still wins.
     const fetcher = fetchInterrupt ?? ((url, init) => fetch(url, init));
     const url = `/api/projects/${encodeURIComponent(projectId)}/critique/${encodeURIComponent(runId)}/interrupt`;
-    fetcher(url, { method: 'POST' }).then((res) => {
+    fetcher(url, {
+      method: 'POST',
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    }).then((res) => {
       if (res.ok) {
         dispatch({ type: 'interrupted', runId, bestRound, composite });
         return;
@@ -118,9 +225,15 @@ export function CritiqueTheaterMount({
         console.warn('[critique-theater] interrupt request failed', err);
       }
     });
-  }, [interruptPending, state, dispatch, projectId, fetchInterrupt]);
+  }, [
+    interruptPending,
+    state,
+    dispatch,
+    projectId,
+    fetchInterrupt,
+    workspaceIdentityCacheKey(workspaceContext),
+  ]);
 
-  if (!enabled) return null;
   if (state.phase === 'idle') return null;
 
   return (

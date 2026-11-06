@@ -2,13 +2,13 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { PRODUCT_NAME } from "../src/mac/constants.js";
+import { PRODUCT_NAME } from "@/mac/constants.js";
 import {
   macAppBundleName,
   macAppExecutablePath,
   resolveMacAppOutputDirectoryName,
   sanitizeNamespace,
-} from "../src/mac/paths.js";
+} from "@/mac/paths.js";
 
 describe("sanitizeNamespace", () => {
   it("keeps alphanumerics, dots, hyphens, and underscores", () => {

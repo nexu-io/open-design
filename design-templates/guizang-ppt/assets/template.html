@@ -565,7 +565,7 @@ function go(n){
   if(lock)return;
   idx=Math.max(0,Math.min(total-1,n));
   deck.style.transform=`translateX(${-idx*100}vw)`;
-  /* load-bearing: .slide.active is read by Open Design's host bridge
+  /* load-bearing: .slide.active is read by OpenDesign's host bridge
      (src/runtime/srcdoc.ts findActiveByClass) to drive the slide counter.
      No CSS targets it — do not remove. */
   slides.forEach((s,i)=>s.classList.toggle('active',i===idx));

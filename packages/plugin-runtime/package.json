@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "Pure-TS Open Design plugin runtime: manifest parsers, adapters, merger, ref resolver, validator, digest. No node:fs imports — daemon/web/CI inject loaders.",
+  "description": "Pure-TS OpenDesign plugin runtime: manifest parsers, adapters, merger, ref resolver, validator, digest. No node:fs imports — daemon/web/CI inject loaders.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
@@ -25,9 +25,9 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "20.19.39",
     "esbuild": "0.28.0",
-    "typescript": "5.9.3",
     "vitest": "4.1.6"
   },
   "engines": {

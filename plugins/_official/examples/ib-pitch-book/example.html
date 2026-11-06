@@ -89,15 +89,17 @@
     position: relative; overflow: hidden;
   }
   .slide-inner {
-    width: min(1320px, 92vw);
-    /* size against the slide (banner already subtracted), not the viewport */
-    height: min(820px, calc(100% - 36px));
-    margin: auto;
+    width: 1320px;
+    height: 820px;
+    margin: 0;
     padding: clamp(30px, 4.6vh, 56px) clamp(36px, 5vw, 64px) clamp(24px, 3.8vh, 48px);
     display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
     background: var(--paper);
     box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35), 0 6px 18px -8px rgba(0,0,0,0.25);
-    position: relative;
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%) scale(var(--slide-scale, 1));
+    transform-origin: center center;
     border-top: 6px solid var(--ink);
   }
   /* Magazine masthead */
@@ -570,7 +572,11 @@
     .stage { display: block; transform: none !important; transition: none; }
     .slide { page-break-after: always; height: 100vh; }
     .chrome, .agent-stamp, .demo-banner { display: none; }
-    .slide-inner { box-shadow: none; }
+    .slide-inner {
+      width: 100%; height: 100%;
+      position: relative; left: auto; top: auto;
+      transform: none; box-shadow: none;
+    }
   }
 </style>
 </head>
@@ -578,12 +584,12 @@
 
 <div class="agent-stamp">
   <span class="dot"></span>
-  Generated with <b>Open Design</b> · plugin: <b>ib-pitch-book</b>
+  Generated with <b>OpenDesign</b> · plugin: <b>ib-pitch-book</b>
 </div>
 
 <div class="deck" id="deck">
 <div class="demo-banner" role="note" aria-label="Sample deck disclaimer">
-  <strong>Open Design sample deck.</strong> A Series B fundraising-pitch template: headline OSS figures follow the project README (60K+ stars · 300+ contributors · 217+ plugins); round terms, ARR, and chart values marked demo are illustrative.
+  <strong>OpenDesign sample deck.</strong> A Series B fundraising-pitch template: headline OSS figures follow the project README (60K+ stars · 300+ contributors · 217+ plugins); round terms, ARR, and chart values marked demo are illustrative.
 </div>
 <div class="stage" id="stage">
 
@@ -613,7 +619,7 @@
     </div>
     <div class="marque">July 2026</div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>Page 1 / 10 · github.com/nexu-io/open-design</span>
     </footer>
   </div>
@@ -626,13 +632,13 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design</span><span>Series B Materials</span><span>02 / 10</span></div>
+      <div class="meta"><span>OpenDesign</span><span>Series B Materials</span><span>02 / 10</span></div>
     </header>
     <div class="body">
       <div>
         <span class="eyebrow">Contents</span>
         <h2 class="section">The case for investing, <em>argued</em> in eight chapters</h2>
-        <p class="lede">From open-source traction to the enterprise layer we're building next — the full growth-equity case for Open Design's Series B.</p>
+        <p class="lede">From open-source traction to the enterprise layer we're building next — the full growth-equity case for OpenDesign's Series B.</p>
       </div>
       <ol>
         <li><span class="t">Market pain</span><span class="pg">p.03</span><span class="sub">Enterprise AI design tools are closed, expensive, and lock in your data</span></li>
@@ -646,7 +652,7 @@
       </ol>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>02 / 10 · plugin: ib-pitch-book · github.com/nexu-io/open-design</span>
     </footer>
   </div>
@@ -659,7 +665,7 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §1</span><span>Market Pain</span><span>03 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §1</span><span>Market Pain</span><span>03 / 10</span></div>
     </header>
     <div class="body">
       <div>
@@ -671,12 +677,12 @@
         <div class="kpi"><span class="k">Enterprise design tool spend</span><span class="v num">$9.4<small>B</small></span><span class="delta up">+21% YoY</span></div>
         <div class="kpi"><span class="k">Teams citing data lock-in</span><span class="v num">61<small>%</small></span><span class="delta down">as a purchase blocker</span></div>
         <div class="kpi"><span class="k">Model lock-in</span><span class="v num">1<small> agent</small></span><span class="delta down">no agent choice</span></div>
-        <div class="kpi"><span class="k">Open Design cost</span><span class="v num">~$73<small>/mo</small></span><span class="delta up">−80%+ per seat</span></div>
+        <div class="kpi"><span class="k">OpenDesign cost</span><span class="v num">~$73<small>/mo</small></span><span class="delta up">−80%+ per seat</span></div>
       </div>
       <div class="market-cols">
         <div class="chartbox">
           <div class="title">
-            <h3>Open Design installs — cumulative growth (demo curve)</h3>
+            <h3>OpenDesign installs — cumulative growth (demo curve)</h3>
             <div class="src">Shape illustrative · headline: 60K+ stars</div>
           </div>
           <div class="chart">
@@ -706,7 +712,7 @@
         </div>
         <div style="display:grid;gap:18px;align-content:start;">
           <div class="pull">"Every enterprise design team we talk to says the same thing: the cloud AI design tools that finally work are the ones they're least allowed to use."</div>
-          <p class="body-text">Three constraints define the market we're selling into. (i) Cloud AI design platforms are locked to one model — no agent choice, no self-hosting, no BYOK — which is a hard no for regulated buyers. (ii) Design happens on the desktop: local files, Figma exports, and code repos need an agent with full terminal power, not a cloud sandbox that can't see them. (iii) The coding agents buyers already pay for — Claude Code, Codex, Cursor — sit unused for design because nothing wires them into a complete workflow. Open Design is the open alternative built for exactly that gap.</p>
+          <p class="body-text">Three constraints define the market we're selling into. (i) Cloud AI design platforms are locked to one model — no agent choice, no self-hosting, no BYOK — which is a hard no for regulated buyers. (ii) Design happens on the desktop: local files, Figma exports, and code repos need an agent with full terminal power, not a cloud sandbox that can't see them. (iii) The coding agents buyers already pay for — Claude Code, Codex, Cursor — sit unused for design because nothing wires them into a complete workflow. OpenDesign is the open alternative built for exactly that gap.</p>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;border-top:1px solid var(--rule);padding-top:12px;">
             <div><div class="kicker">License</div><div class="num" style="font-size:22px;">Apache-2.0</div></div>
             <div><div class="kicker">Where it runs</div><div class="num" style="font-size:22px;">Locally</div></div>
@@ -716,7 +722,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>03 / 10 · market sizing illustrative · headline figures from README</span>
     </footer>
   </div>
@@ -729,13 +735,13 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §2</span><span>The Solution</span><span>04 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §2</span><span>The Solution</span><span>04 / 10</span></div>
     </header>
     <div class="body">
       <div class="col-narrative">
         <span class="eyebrow">Section 2 · The solution</span>
         <h2 class="section">21+ coding agents, <em>zero</em> config.</h2>
-        <p class="body-text">Open Design doesn't rebuild agents — it plugs in the ones already on your machine. Installed CLIs are <strong>auto-detected from PATH</strong>, and any <strong>OpenAI / Azure / Google-compatible endpoint</strong> connects through BYOK. The agent gets full terminal power: local files, Figma exports, and code repos are directly readable. This is the product wedge the raise is built to scale.</p>
+        <p class="body-text">OpenDesign doesn't rebuild agents — it plugs in the ones already on your machine. Installed CLIs are <strong>auto-detected from PATH</strong>, and any <strong>OpenAI / Azure / Google-compatible endpoint</strong> connects through BYOK. The agent gets full terminal power: local files, Figma exports, and code repos are directly readable. This is the product wedge the raise is built to scale.</p>
         <div class="criteria">
           <div class="t">How agents connect</div>
           <ul>
@@ -774,7 +780,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>04 / 10 · 21 coding agents · auto-detected from PATH</span>
     </footer>
   </div>
@@ -787,7 +793,7 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §3</span><span>Traction</span><span>05 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §3</span><span>Traction</span><span>05 / 10</span></div>
     </header>
     <div class="body">
       <div>
@@ -814,7 +820,7 @@
       </table>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>05 / 10 · six artifact families in active pilot use · 217+ plugins</span>
     </footer>
   </div>
@@ -827,13 +833,13 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §4</span><span>The Wedge</span><span>06 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §4</span><span>The Wedge</span><span>06 / 10</span></div>
     </header>
     <div class="body">
       <div>
         <span class="eyebrow">Section 4 · The wedge</span>
         <h2 class="section">A flywheel that <em>compounds</em>.</h2>
-        <p class="body-text" style="margin-top:14px;">Six dimensions of the Open Design footprint, anchored on <b>60K+ GitHub stars</b> under Apache-2.0. Each dimension reinforces the next: more installs draw more plugin authors, more plugins draw more design systems, and more design systems raise the switching cost for every workspace that adopts one. Bars indicate relative ecosystem scale (demo); the figures on the right are the headline numbers from the project README.</p>
+        <p class="body-text" style="margin-top:14px;">Six dimensions of the OpenDesign footprint, anchored on <b>60K+ GitHub stars</b> under Apache-2.0. Each dimension reinforces the next: more installs draw more plugin authors, more plugins draw more design systems, and more design systems raise the switching cost for every workspace that adopts one. Bars indicate relative ecosystem scale (demo); the figures on the right are the headline numbers from the project README.</p>
         <div class="pull" style="margin-top:18px;">"This isn't a feature moat, it's a compounding one — every workspace that plugs in makes the next one cheaper to win."</div>
       </div>
       <div>
@@ -882,7 +888,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>06 / 10 · bar widths illustrative · figures from README</span>
     </footer>
 
@@ -896,16 +902,16 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §5</span><span>Unit Economics</span><span>07 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §5</span><span>Unit Economics</span><span>07 / 10</span></div>
     </header>
     <div class="body">
       <div>
         <span class="eyebrow">Section 5 · Unit economics</span>
         <h2 class="section">BYOK economics that <em>do the work</em>.</h2>
-        <p class="body-text" style="margin-top:14px;">With Open Design, teams bring their own keys — Anthropic, OpenAI, Azure, or Google — and pay providers directly, with no platform markup. Compared to a closed cloud AI design subscription, one pilot engineering team reported their monthly bill dropping from $500 to ~$73: over 80% less for the same design output, with zero infrastructure cost on our side to serve it.</p>
+        <p class="body-text" style="margin-top:14px;">With OpenDesign, teams bring their own keys — Anthropic, OpenAI, Azure, or Google — and pay providers directly, with no platform markup. Compared to a closed cloud AI design subscription, one pilot engineering team reported their monthly bill dropping from $500 to ~$73: over 80% less for the same design output, with zero infrastructure cost on our side to serve it.</p>
         <div class="dcf-asm" style="margin-top:18px;">
           <div class="row"><span class="k">Cloud AI design baseline</span><span class="v">$500 / mo</span></div>
-          <div class="row"><span class="k">Open Design + BYOK</span><span class="v">~$73 / mo</span></div>
+          <div class="row"><span class="k">OpenDesign + BYOK</span><span class="v">~$73 / mo</span></div>
           <div class="row"><span class="k">Monthly cost reduction</span><span class="v">−80%+</span></div>
           <div class="row"><span class="k">Platform fee</span><span class="v">$0</span></div>
           <div class="row"><span class="k">Sign-up required</span><span class="v">None</span></div>
@@ -950,7 +956,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>07 / 10 · reported case: $500 → ~$73 / mo · grid illustrative</span>
     </footer>
   </div>
@@ -963,7 +969,7 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §6</span><span>The Moat</span><span>08 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §6</span><span>The Moat</span><span>08 / 10</span></div>
     </header>
     <div class="body">
       <div>
@@ -992,7 +998,7 @@
 
         <div class="alt recommended">
           <div class="badge">Option B · Recommended</div>
-          <h3>Open Design — open, local, agent-driven</h3>
+          <h3>OpenDesign — open, local, agent-driven</h3>
           <div class="stat"><span class="v num">~$73</span><span class="k">Indicative / month</span></div>
           <div class="pc">
             <div class="col"><h4>For</h4><ul>
@@ -1043,7 +1049,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>08 / 10 · cost figures: reported case · others qualitative</span>
     </footer>
   </div>
@@ -1056,7 +1062,7 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · §7</span><span>The Ask</span><span>09 / 10</span></div>
+      <div class="meta"><span>OpenDesign · §7</span><span>The Ask</span><span>09 / 10</span></div>
     </header>
     <div class="body">
       <div>
@@ -1079,7 +1085,7 @@
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck</span>
+      <span class="conf">OpenDesign — sample deck</span>
       <span>09 / 10 · $28M Series B · $180M pre-money · illustrative terms</span>
     </footer>
   </div>
@@ -1092,7 +1098,7 @@
   <div class="slide-inner">
     <header class="mast">
       <div class="brand">Open <i>·</i> Design</div>
-      <div class="meta"><span>Open Design · Closing</span><span>Get In Touch</span><span>10 / 10</span></div>
+      <div class="meta"><span>OpenDesign · Closing</span><span>Get In Touch</span><span>10 / 10</span></div>
     </header>
     <div class="body">
       <div>
@@ -1103,7 +1109,7 @@
         <div>
           <h3>Why now, why this round</h3>
           <div class="body-text">
-            <p>Open Design is the open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow runs on the buyer's own machine, with the coding agents they already use.</p>
+            <p>OpenDesign is the open-source, local, agent-driven design platform. From idea to prototypes, web pages, slides, and HTML video — the full product-design workflow runs on the buyer's own machine, with the coding agents they already use.</p>
             <p><strong>Open.</strong> Apache-2.0 from the first commit: fork it, self-host it, build a business on it. 300+ contributors have shaped the platform, and a 217+ plugin ecosystem covers prototypes, slides, posters, dashboards, and more — a distribution engine no closed competitor can replicate at this cost.</p>
             <p><strong>Local.</strong> No sign-up, no upload. Local files, Figma exports, and code repos are directly readable in place, and API keys never leave the user's machine — full-stack BYOK across Anthropic, OpenAI, Azure, Google, and 14 media providers. This is why regulated enterprises can finally say yes.</p>
             <p><strong>Agent-native.</strong> 21 coding agents are auto-detected from PATH with zero config, and 129 design systems keep every artifact on brand. This raise turns that adoption into a durable, recurring enterprise business.</p>
@@ -1122,13 +1128,13 @@
           </div>
           <div class="stamp">
             <div class="lab">Generated with</div>
-            <div class="det" style="font-family:var(--mono);font-size:11px;">Open Design · plugin: ib-pitch-book · Apache-2.0 · runs locally · BYOK · no sign-up</div>
+            <div class="det" style="font-family:var(--mono);font-size:11px;">OpenDesign · plugin: ib-pitch-book · Apache-2.0 · runs locally · BYOK · no sign-up</div>
           </div>
         </div>
       </div>
     </div>
     <footer class="foot">
-      <span class="conf">Open Design — sample deck · End of document</span>
+      <span class="conf">OpenDesign — sample deck · End of document</span>
       <span>10 / 10 · github.com/nexu-io/open-design · Apache-2.0</span>
     </footer>
   </div>
@@ -1157,6 +1163,15 @@
   const slides = stage.querySelectorAll('.slide');
   const total  = slides.length;
   const now    = document.getElementById('now');
+  function fit(){
+    const slide = slides[0];
+    if (!slide) return;
+    const scale = Math.min(1, slide.clientWidth * 0.92 / 1320, Math.max(0, slide.clientHeight - 36) / 820);
+    stage.style.setProperty('--slide-scale', String(Math.max(0, scale)));
+  }
+  window.addEventListener('resize', fit);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(fit).observe(stage);
+  fit();
   document.getElementById('total').textContent = String(total).padStart(2,'0');
   let i = 0;
   function go(n){

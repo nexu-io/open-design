@@ -9,7 +9,11 @@ const AMR_MODELS_TIMEOUT_MS = 10_000;
 const AMR_MODELS_RETRY_DELAYS_MS = [250, 750] as const;
 export type VelaModelJsonSource = 'preset' | 'remote';
 
+// deepseek-v4.1-flash leads because it is the one chat model every plan
+// (including free) is entitled to; a list without per-caller `enabled` flags
+// (the preset seed) otherwise resolves `default` to a model the caller cannot use.
 const PREFERRED_AMR_CHAT_MODEL_ORDER = [
+  'deepseek-v4.1-flash',
   'deepseek-v4-flash',
   'deepseek-v4-pro',
 ] as const;
@@ -23,7 +27,7 @@ const OPENCODE_MODEL_PRICE_PROVIDER_PRIORITY = [
   'openrouter',
 ] as const;
 
-// AMR is the vela CLI's ACP stdio mode. `vela agent run --runtime opencode`
+// AMR is the vela CLI's ACP stdio mode. `vela agent run`
 // starts a private OpenCode server and forwards stream-json over ACP JSON-RPC.
 // Required env (set on the daemon process or via Settings → CLI env):
 //   VELA_RUNTIME_KEY  — OpenRouter (or compatible) API key
@@ -42,7 +46,7 @@ const OPENCODE_MODEL_PRICE_PROVIDER_PRIORITY = [
 //   2. Vela 0.0.1 exposes the current link-supported catalog through
 //      `vela models`, but that command prints public ids such as
 //      `public_model_deepseek_v3_2`. The ACP `session/set_model` call accepts
-//      the link-facing slug (`deepseek-v3.2` / `glm-5.1`), so Open Design
+//      the link-facing slug (`deepseek-v3.2` / `glm-5.1`), so OpenDesign
 //      normalizes those public ids at the daemon boundary until Vela exposes
 //      canonical ACP ids directly.
 export function normalizeVelaModelId(rawId: string): string | null {
@@ -98,12 +102,14 @@ function normalizeKnownVelaVersionId(rawId: string): string | null {
   return null;
 }
 
-function isVelaChatModelId(modelId: string): boolean {
+export function isVelaChatCapableModelId(modelId: string): boolean {
   // Temporary chat-surface guard: Vela already lists media-generation models,
-  // but Open Design's AMR runtime currently drives only chat completions.
+  // but OpenDesign's AMR runtime currently drives only chat completions.
   // Remove this filter when AMR grows first-class image/video execution.
-  const id = modelId.toLowerCase();
+  const id = (normalizeVelaModelId(modelId) ?? modelId.trim()).toLowerCase();
   if (id.startsWith('gpt-image-')) return false;
+  if (id.startsWith('nano-banana-')) return false;
+  if (id.startsWith('seedream-')) return false;
   if (id.startsWith('seedance-')) return false;
   if (id.startsWith('doubao-seedance-')) return false;
   if (id.startsWith('veo-')) return false;
@@ -120,7 +126,7 @@ export function parseVelaModels(stdout: string): RuntimeModelOption[] {
     const [rawId] = trimmed.split(/\s+/);
     if (!rawId) continue;
     const id = normalizeVelaModelId(rawId);
-    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    if (!id || seen.has(id) || !isVelaChatCapableModelId(id)) continue;
     seen.add(id);
     models.push({ id, label: id });
   }
@@ -155,7 +161,7 @@ export function parseVelaModelJson(
       ? (item as { id?: unknown }).id
       : null;
     const id = typeof rawId === 'string' ? (normalizeVelaModelId(rawId) ?? '') : '';
-    if (!id || seen.has(id) || !isVelaChatModelId(id)) continue;
+    if (!id || seen.has(id) || !isVelaChatCapableModelId(id)) continue;
     seen.add(id);
     models.push(withVelaModelPriceFields({ id, label: id }, item));
   }
@@ -198,11 +204,34 @@ function extractModelMetadata(item: unknown): ModelMetadata | null {
   const metadata = isRecord(item.metadata) ? item.metadata : item;
   const cost = parseModelCost(metadata.cost);
   const capability = parseModelCapability(metadata.capability);
-  if (!cost && !capability) return null;
+  const contextWindowTokens = firstPositiveInteger([
+    metadata.contextWindowTokens,
+    metadata.context_window_tokens,
+    item.contextWindowTokens,
+    item.context_window_tokens,
+    item.contextLength,
+    item.context_length,
+  ]);
+  if (!cost && !capability && !contextWindowTokens) return null;
   return {
     ...(cost ? { cost } : {}),
     ...(capability ? { capability } : {}),
+    ...(contextWindowTokens ? { contextWindowTokens } : {}),
   };
+}
+
+function firstPositiveInteger(values: unknown[]): number | null {
+  for (const value of values) {
+    if (
+      typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value > 0 &&
+      value <= 1_000_000_000
+    ) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function withPriceDerivedCostMetadata(
@@ -648,7 +677,7 @@ export const amrAgentDef = {
   // Fail closed when Vela's live catalog is unavailable. Stale static
   // fallbacks let users select models that link/opencode no longer accepts.
   fallbackModels: [] as RuntimeModelOption[],
-  buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
+  buildArgs: () => ['agent', 'run'],
   streamFormat: 'acp-json-rpc',
   // vela resumes the upstream OpenCode session via ACP session/load across
   // turns (the OpenCode session store persists per conversation), so the daemon
@@ -668,4 +697,9 @@ export const amrAgentDef = {
   // provider is still working. Keep the outer chat watchdog aligned with the
   // 30-minute ACP stage timeout so the daemon does not fail the run first.
   inactivityTimeoutMs: 30 * 60 * 1000,
+  // Once the ACP handshake has completed and session/prompt is waiting on the
+  // provider, transport/status heartbeats must not leave the UI in Preparing
+  // indefinitely. Two minutes leaves conservative provider-startup headroom
+  // while still bounding the user's wait and one safe same-run retry.
+  firstOutputTimeoutMs: 2 * 60 * 1000,
 } satisfies RuntimeAgentDef;

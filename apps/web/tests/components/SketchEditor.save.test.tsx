@@ -115,6 +115,9 @@ vi.mock('../../src/i18n', () => ({
     locale: 'zh-CN',
     t: (key: string) => key,
   }),
+  // Toast reaches for the t-only shorthand; a mock without it makes every
+  // render that surfaces a toast throw before the assertion runs.
+  useT: () => (key: string) => key,
 }));
 
 beforeAll(() => {
@@ -167,7 +170,7 @@ function saveButton(): HTMLButtonElement {
 }
 
 describe('SketchEditor save', () => {
-  it('renders Excalidraw with the current Open Design locale', () => {
+  it('renders Excalidraw with the current OpenDesign locale', () => {
     renderEditor({ dirty: true });
     expect(document.querySelector('[data-testid="excalidraw"]')?.getAttribute('data-lang')).toBe('zh-CN');
   });

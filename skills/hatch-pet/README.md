@@ -1,10 +1,10 @@
 # hatch-pet (vendored)
 
 This directory is a **vendored copy** of the Codex `hatch-pet` skill. It is
-checked into the Open Design repo (rather than pulled in as a Git submodule
+checked into the OpenDesign repo (rather than pulled in as a Git submodule
 or an npm package) so that:
 
-- Any Open Design agent can run the skill end-to-end without a network
+- Any OpenDesign agent can run the skill end-to-end without a network
   fetch, an extra install step, or an out-of-tree clone.
 - The packaged desktop build can ship the skill as inert static assets
   alongside the rest of `skills/`.
@@ -23,7 +23,7 @@ snapshot, not a live dependency.
   `upstream:` field — at vendoring time this pointed to the Codex curated
   `skills/.curated/hatch-pet` tree. That URL was not publicly resolvable
   at the time this README was written; treat the vendored snapshot in this
-  directory as the authoritative source-of-truth for Open Design and
+  directory as the authoritative source-of-truth for OpenDesign and
   re-confirm the upstream pointer the next time a re-sync is performed.
 - License: Apache License 2.0 (`LICENSE.txt` next to this README). The
   copyright line in the bundled `LICENSE.txt` is left unfilled because no
@@ -40,7 +40,7 @@ When the upstream skill changes:
    superseding location).
 2. Replace the contents of this directory with the upstream snapshot,
    preserving only this `README.md` and any Open-Design-specific notes
-   inside `SKILL.md`'s `> **Open Design integration.**` blockquote.
+   inside `SKILL.md`'s `> **OpenDesign integration.**` blockquote.
 3. Update the `upstream:` field in `SKILL.md` frontmatter with the exact
    commit SHA / tag of the snapshot.
 4. Update `LICENSE.txt` and add a `NOTICE` file if upstream now ships
@@ -53,4 +53,4 @@ The skill packages each pet under
 `spritesheet.{webp,png,gif}`. The daemon scans that directory in
 `apps/daemon/src/codex-pets.ts`; the web pet settings list and one-click
 adopt pets from there. See `docs/codex-pets.md` for the end-user setup
-flow (including how Open Design behaves when Codex is not installed).
+flow (including how OpenDesign behaves when Codex is not installed).

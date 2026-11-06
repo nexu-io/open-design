@@ -1,3 +1,4 @@
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
@@ -382,13 +383,7 @@ export function PreviewModal({
   }, [primaryMenuOpen]);
 
   // Lock body scroll while open.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   // Track the iframe stage size so we can render the document at a fixed
   // logical width and visually scale it down to fit. Without this, opening
@@ -612,7 +607,7 @@ export function PreviewModal({
                         ? { 'data-testid': `${primaryAction.testId}-menu` }
                         : {})}
                     >
-                      <Icon name="chevron-down" size={12} />
+                      <Icon name="chevron-down" size={14} />
                     </button>
                     {primaryMenuOpen ? (
                       <div
@@ -678,9 +673,9 @@ export function PreviewModal({
                     }}
                     disabled={!canOpenTemplateShareMenu}
                   >
-                    <Icon name="share" size={12} />
+                    <Icon name="share" size={14} />
                     <span>{t('preview.shareMenu')}</span>
-                    <Icon name="chevron-down" size={12} />
+                    <Icon name="chevron-down" size={14} />
                   </button>
                   {templateShareOpen ? (
                     <div className="share-menu-popover template-share-popover" role="menu">
@@ -838,10 +833,16 @@ export function PreviewModal({
                             type="button"
                             className="share-menu-item"
                             role="menuitem"
-                            onClick={() => {
+                            onClick={async () => {
                               onSharePopoverItemClick?.('zip');
                               setTemplateShareOpen(false);
-                              if (activeHtml) exportAsZip(activeHtml, exportTitle);
+                              if (!activeHtml) return;
+                              try {
+                                await exportAsZip(activeHtml, exportTitle);
+                              } catch (error) {
+                                console.warn('[PreviewModal] ZIP export failed:', error);
+                                alert(`${t('fileViewer.exportFailedTitle')}\n${t('fileViewer.exportFailedDescription')}`);
+                              }
                             }}
                           >
                             <span className="share-menu-icon">

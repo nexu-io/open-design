@@ -11,6 +11,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.{ts,tsx}'],
-    setupFiles: ['./tests/setup/jsdom-lexical.ts'],
+    // Keep this above the shared Testing Library asyncUtilTimeout so failed
+    // waits retain Testing Library's assertion/DOM diagnostics.
+    testTimeout: 5_000,
+    setupFiles: ['./tests/setup/jsdom-lexical.ts', './tests/setup/coalesced-get-reset.ts'],
   },
 });

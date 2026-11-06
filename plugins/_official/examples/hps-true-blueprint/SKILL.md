@@ -3,9 +3,9 @@ name: hps-true-blueprint
 en_name: "Present an Engineering Blueprint like a Principal Architect"
 zh_name: "像首席架构师一样讲工程蓝图"
 description: |
-  Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.
+  OpenDesign's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.
 en_description: |
-  Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.
+  OpenDesign's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Built as a decision-grade product management deck for engineering org.
 zh_description: |
   像首席架构师一样讲工程蓝图——一份可商业交付的产品管理 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -42,7 +42,7 @@ od:
     zh-CN: "用「工程蓝图」把我的架构评审做成一套像工程图纸的单文件 HTML 幻灯片。从种子 example.html 出发——完整保留锁定的 token 表、40px 绘图网格底、图框装置和导航脚本，只替换幻灯片内容，架构图用内联 SVG 简图绘制，使用真实内容，不要 lorem ipsum。"
   category: "product-management"
   scenario: "product"
-  example_prompt: "Create \"Present an Engineering Blueprint like a Principal Architect\" as a decision-grade Product management deck in this template's own visual system. Subject: Open Design's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Audience: engineering org. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
+  example_prompt: "Create \"Present an Engineering Blueprint like a Principal Architect\" as a decision-grade Product management deck in this template's own visual system. Subject: OpenDesign's engineering blueprint: how the sandbox, sidecar, and daemon fit — the system diagram and the invariants. Audience: engineering org. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can cross-functional reviewers agree on the next irreversible step."
 ---
 
 # True Blueprint（工程蓝图）

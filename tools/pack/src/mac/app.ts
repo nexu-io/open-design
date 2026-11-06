@@ -1,11 +1,18 @@
-import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { buildLauncherHostEnvironment } from "../launcher/artifacts.js";
+import { MAC_THIN_LAUNCHER_FILE } from "./thin-launcher.js";
+import { packagedAmrConfigFields, writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
+
+import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 
 import { rebuild, type RebuildOptions } from "@electron/rebuild";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import {
   MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
+  MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES,
   MAC_PREBUNDLE_ESBUILD_TARGET,
   MAC_PREBUNDLE_POLICIES,
   MAC_PREBUNDLE_RUNTIME_DEPENDENCIES,
@@ -16,10 +23,14 @@ import {
   renderMacPackagedMainEntry,
   shouldInstallInternalPackageForMacPrebundle,
   shouldUseMacStandalonePrebundle,
-} from "../mac-prebundle.js";
-import { copyBundledResourceTrees } from "../resources.js";
+} from "./prebundle.js";
+import {
+  prepareNodePtyRuntime,
+  resolveNodePtyRuntimeArch,
+} from "../node-pty-runtime.js";
+import { copyBundledResourceTrees, packBundledDshRuntime } from "../resources/index.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
-import { electronBuilderVersionForAppVersion } from "../versions.js";
+import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
 import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
@@ -35,8 +46,12 @@ function toPosixPath(value: string): string {
   return value.replaceAll("\\", "/");
 }
 
-function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): string {
-  const specifier = toPosixPath(relative(fromDirectory, targetPath));
+export async function toRelativeImportSpecifier(fromDirectory: string, targetPath: string): Promise<string> {
+  const [canonicalFrom, canonicalTarget] = await Promise.all([
+    realpath(fromDirectory),
+    realpath(targetPath),
+  ]);
+  const specifier = toPosixPath(relative(canonicalFrom, canonicalTarget));
   return specifier.startsWith(".") ? specifier : `./${specifier}`;
 }
 
@@ -60,7 +75,6 @@ async function buildPrebundledStandaloneRuntime(
     metafilePath: paths.packagedMainPrebundleMetaPath,
     policyName: "packagedMain",
   });
-
   await runEsbuild(config, [
     join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
     "--bundle",
@@ -80,7 +94,7 @@ async function buildPrebundledStandaloneRuntime(
   await writeFile(
     paths.daemonSidecarPrebundleEntrypointPath,
     `import ${JSON.stringify(
-      toRelativeImportSpecifier(
+      await toRelativeImportSpecifier(
         dirname(paths.daemonSidecarPrebundleEntrypointPath),
         join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
       ),
@@ -95,7 +109,7 @@ async function buildPrebundledStandaloneRuntime(
       "process.env.OD_BIN ??= selfPath;",
       "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
       `await import(${JSON.stringify(
-        toRelativeImportSpecifier(
+        await toRelativeImportSpecifier(
           dirname(paths.daemonCliPrebundleEntrypointPath),
           join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
         ),
@@ -138,6 +152,10 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });
+  await packBundledDshRuntime({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
+  });
   await copyOptionalVelaCliBinary({
     platform: "mac",
     requireBundled: config.requireVelaCli,
@@ -152,8 +170,9 @@ export function renderMacPackagedConfig(options: {
 }): string {
   return `${JSON.stringify(
     {
-      ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
+      ...packagedAmrConfigFields(options.config),
       appVersion: options.appVersion,
+      launcherHost: buildLauncherHostEnvironment({ platform: "darwin", arch: process.arch, electronVersion: options.config.electronVersion }),
       ...(options.usePrebundledStandaloneWeb ? { daemonCliEntryRelative: MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } : {}),
       ...(options.usePrebundledStandaloneWeb
         ? { daemonSidecarEntryRelative: MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH }
@@ -170,6 +189,33 @@ export function renderMacPackagedConfig(options: {
     null,
     2,
   )}\n`;
+}
+
+export async function copyMacPrebundleRuntimeDependencies(
+  config: ToolPackConfig,
+  appRoot: string,
+): Promise<void> {
+  const daemonRequire = createRequire(join(config.workspaceRoot, "apps", "daemon", "package.json"));
+  const chokidarRequire = createRequire(daemonRequire.resolve("chokidar/package.json"));
+  for (const [packageName, expectedVersion] of Object.entries(MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES)) {
+    const sourceManifestPath = chokidarRequire.resolve(`${packageName}/package.json`);
+    const sourceRoot = dirname(sourceManifestPath);
+    const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf8")) as { version?: unknown };
+    if (sourceManifest.version !== expectedVersion) {
+      throw new Error(
+        `mac prebundle runtime dependency ${packageName} expected ${expectedVersion}, found ${String(sourceManifest.version)}`,
+      );
+    }
+
+    const nativeBindingPath = join(sourceRoot, `${packageName}.node`);
+    if (!(await stat(nativeBindingPath)).isFile()) {
+      throw new Error(`mac prebundle runtime dependency native binding is missing: ${nativeBindingPath}`);
+    }
+
+    const targetRoot = join(appRoot, "node_modules", packageName);
+    await rm(targetRoot, { force: true, recursive: true });
+    await cp(sourceRoot, targetRoot, { dereference: true, recursive: true });
+  }
 }
 
 export function createMacElectronRebuildOptions(
@@ -300,6 +346,9 @@ export async function writeAssembledApp(
     ...internalDependencies,
     ...(usePrebundledStandaloneWeb ? MAC_PREBUNDLE_RUNTIME_DEPENDENCIES : {}),
   };
+  const optionalDependencies = usePrebundledStandaloneWeb
+    ? MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES
+    : undefined;
 
   await writeFile(
     paths.assembledPackageJsonPath,
@@ -309,6 +358,7 @@ export async function writeAssembledApp(
         description: "Open Design packaged runtime",
         main: "./main.cjs",
         name: "open-design-packaged-app",
+        ...(optionalDependencies == null ? {} : { optionalDependencies }),
         private: true,
         productName: identity.productName,
         version: packageVersion,
@@ -326,15 +376,28 @@ export async function writeAssembledApp(
     renderMacPackagedMainEntry(usePrebundledStandaloneWeb),
     "utf8",
   );
-  await writeFile(
+  await runEsbuild(config, [
+    join(config.workspaceRoot, "packages", "launcher", "src", "index.ts"),
+    "--bundle", "--platform=node", "--format=cjs", "--target=node24",
+    `--outfile=${join(dirname(paths.assembledMainEntryPath), MAC_THIN_LAUNCHER_FILE)}`,
+  ]);
+  await writePackagedConfigWithBinding(
     paths.packagedConfigPath,
     renderMacPackagedConfig({
       appVersion: packagedVersion,
       config,
       usePrebundledStandaloneWeb,
     }),
-    "utf8",
   );
   await runNpmInstall(paths.assembledAppRoot);
+  if (usePrebundledStandaloneWeb) {
+    await copyMacPrebundleRuntimeDependencies(config, paths.assembledAppRoot);
+  }
+  await prepareNodePtyRuntime({
+    appRoot: paths.assembledAppRoot,
+    arch: resolveNodePtyRuntimeArch(process.arch),
+    platform: "darwin",
+  });
   await runMacElectronRebuild(config, paths.assembledAppRoot);
+  await finalizeRuntimeManifest(paths.assembledAppRoot);
 }

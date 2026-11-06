@@ -1,4 +1,59 @@
-export type VisualStyleContext = 'deck' | 'prototype';
+/**
+ * ⚠️ **休眠件 —— 设计风格选择这一整套的说明书,后来人先读这一段。**
+ *
+ * 这份目录、`visual-style-deck.ts`、以及 `components/QuestionForm.tsx` 里的
+ * `VisualStylePicker` / `VisualDirectionStack` / `VisualDirectionCardView` /
+ * `VisualStylePreview` / `DirectionCardsPicker`,合起来是「看图选设计风格」那张卡。
+ * 代码全都**原样活着、随时能跑**,只是**没有上游会再触发它**。
+ *
+ * ── 为什么现在不可达(T69,2026-09-07)────────────────────────
+ *
+ * 产品裁决,逐字:
+ *
+ *   「选中态就是当前切换到的那个效果,或者你能否把提示词里让 agent 感知到
+ *     question-form 能出设计风格的那些提示词下掉?**不问了**,这些代码先讲提示词
+ *     干掉,**组件代码注释,后续可能要找回**」
+ *
+ * 于是断的是**源头**,不是渲染层:七条提示词路径里,让模型知道自己能出设计风格题
+ * 的话全部撤掉(`direction-cards` 这个类型 + 开场简报里那道 `tone`)。模型不再发,
+ * 这张卡自然不再出现。**渲染路径一行没删** —— 详见下面「安全网」。
+ *
+ * 这是**对交付稿的有意偏离**:交付稿 `729fa43ce7` 的 `cmp-clarify` 第 21 / 22 格
+ * 画的就是这张卡,状态标签逐字写着「选中一张 · 图上落绿勾,「下一步」才亮起」。
+ * 别当成漏做补回去。裁决全文见 `specs/current/chat-panel-decisions-sheet.md` 的 T69。
+ *
+ * ── 安全网:它为什么必须继续能渲染 ───────────────────────────
+ *
+ * 提示词撤了,不等于线上不会再来:缓存的旧提示词、旧版客户端、模型自己记住的旧
+ * 格式,都还可能发来一份 `direction-cards` 表单。渲染器因此**继续认这个类型**
+ * (`artifacts/question-form.ts` 的 `QuestionType` 联合类型里它还在),
+ * 否则那道题会变成一块只有标题的空白。
+ * 提示词与渲染器**故意不相等**这件事,判据写在
+ * `e2e/tests/question-form-type-parity.test.ts` 的 `DORMANT_TYPES`。
+ *
+ * 顺带:`prompts/directions.ts` 里**读答案**那半边也故意留着 —— 旧表单交上来的
+ * `value` / `foundation` / `guidance` 仍要读得懂。撤的是**发问**,不是**读答案**。
+ *
+ * ── 要找回来,动这几处就够 ───────────────────────────────────
+ *
+ * 1. 提示词七处放回去(六条 question-form 授权路径 + `direction-picker` atom):
+ *    类型清单里的 `direction-cards`、它的作者规则、以及开场简报示例里那道
+ *    `{ "id": "tone", "type": "radio", … }`。七处一起,少一处就只有部分路径会发。
+ * 2. `e2e/tests/question-form-type-parity.test.ts` 的 `DORMANT_TYPES` 清空,
+ *    判据从「渲染器 − 休眠集」变回集合相等。
+ * 3. `e2e/tests/question-form-visual-style-retired.test.ts` 整个删掉(它守的正是
+ *    "撤干净了"),`apps/daemon/tests/prompts/tone-single-select.test.ts` 翻回正向。
+ * 4. UI 侧**什么都不用改** —— 控件、目录、一批四张、换一批、网格切换、勾选圈
+ *    全都还在原地,连测试都还绿着(见下面「测试留着」)。
+ *
+ * ── 测试留着 ─────────────────────────────────────────────────
+ *
+ * `tests/runtime/visual-style-deck.test.ts`、`tests/components/QuestionForm.deck-batch.test.tsx`、
+ * `tests/components/QuestionForm.direction-cards-catalog.test.tsx`、
+ * `tests/components/chat/w75-visual-direction-card.test.tsx` 等一律**保留**:
+ * 它们测的是休眠件**本身**,是找回来那天的保障,不是这次断掉的那条接线。
+ */
+export type VisualStyleContext = 'deck' | 'prototype' | 'document' | 'image' | 'video';
 export type VisualStyleCategory = 'business' | 'editorial' | 'creative' | 'minimal';
 
 export type VisualStyleVariant =
@@ -10,8 +65,34 @@ export type VisualStyleVariant =
   | 'brutalist'
   | 'human';
 
+export type VisualStyleFoundationDirectionId =
+  | 'editorial-monocle'
+  | 'modern-minimal'
+  | 'human-approachable'
+  | 'tech-utility'
+  | 'brutalist-experimental';
+
+/**
+ * The image catalogue offers finer-grained visual bets than the five
+ * CSS-ready direction foundations available to agents. Keep the relationship
+ * explicit so a submitted card can carry both its stable Host id and the
+ * foundation id that `od tools directions --id …` can resolve.
+ */
+export function visualStyleFoundationDirectionId(
+  variant: VisualStyleVariant,
+): VisualStyleFoundationDirectionId {
+  if (variant === 'editorial') return 'editorial-monocle';
+  if (variant === 'minimal' || variant === 'luxury') return 'modern-minimal';
+  if (variant === 'utility') return 'tech-utility';
+  if (variant === 'brutalist') return 'brutalist-experimental';
+  return 'human-approachable';
+}
+
 export interface VisualStylePreviewAsset {
+  /** Full-size source kept as the stable catalogue identity and export fallback. */
   src: string;
+  /** Display-sized derivative for the inline direction picker. */
+  thumbnailSrc: string;
   alt: string;
 }
 
@@ -34,7 +115,22 @@ interface VisualStyleCatalogEntry {
   recommended?: boolean;
 }
 
-const STYLE_CATALOG_ASSET_BASE_URL = 'https://repo-assets.open-design.ai/style-catalog/v1';
+const STYLE_CATALOG_ASSET_ORIGIN = 'https://repo-assets.open-design.ai';
+const STYLE_CATALOG_ASSET_PATH = '/style-catalog/v1';
+const STYLE_CATALOG_ASSET_BASE_URL = `${STYLE_CATALOG_ASSET_ORIGIN}${STYLE_CATALOG_ASSET_PATH}`;
+/**
+ * The picker never draws a preview wider than a few hundred CSS pixels. Its
+ * source catalogue is uniformly 1600x1200, so decoding six originals would
+ * spend about 11.5 megapixels on a 200px card stack. Cloudflare's derivative
+ * keeps enough pixels for a 3x 200px display while cutting transfer and decode
+ * work; `format=auto` lets the browser take AVIF/WebP without changing the
+ * stable original URL exposed by `src`.
+ */
+const STYLE_CATALOG_THUMBNAIL_TRANSFORM = 'width=640,quality=75,format=auto';
+
+function styleCatalogThumbnailUrl(filename: string): string {
+  return `${STYLE_CATALOG_ASSET_ORIGIN}/cdn-cgi/image/${STYLE_CATALOG_THUMBNAIL_TRANSFORM}${STYLE_CATALOG_ASSET_PATH}/${filename}`;
+}
 
 const DECK_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
   {
@@ -191,6 +287,27 @@ const DECK_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
     description: 'Calm reusable modules with obvious grouping and rhythm.',
     variant: 'minimal',
     category: 'minimal',
+  },
+  {
+    slug: 'academic-research',
+    title: 'Academic research',
+    description: 'Evidence-led slides, disciplined figures, and rigorous explanatory flow.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'sketchbook',
+    title: 'Sketchbook',
+    description: 'Hand-drawn notes, marker diagrams, and tactile workshop energy.',
+    variant: 'human',
+    category: 'creative',
+  },
+  {
+    slug: 'education-lesson',
+    title: 'Education lesson',
+    description: 'Friendly concept sequences that make learning easy to follow.',
+    variant: 'playful',
+    category: 'creative',
   },
 ];
 
@@ -350,20 +467,387 @@ const PROTOTYPE_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
     variant: 'editorial',
     category: 'editorial',
   },
+  {
+    slug: 'y2k-chrome',
+    title: 'Y2K chrome',
+    description: 'Glossy chrome, translucent layers, and electric early-web optimism.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'paper-craft',
+    title: 'Paper craft',
+    description: 'Tactile cut-paper layers, warm shadows, and calm navigation.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'isometric',
+    title: 'Isometric',
+    description: 'Spatial system maps and dimensional cards for complex product flows.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'aurora-dark',
+    title: 'Aurora dark',
+    description: 'Near-black surfaces with quiet luminous gradients and premium depth.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
 ];
 
+const DOCUMENT_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
+  {
+    slug: 'docs-reference',
+    title: 'Docs reference',
+    description: 'Clear navigation, structured examples, and practical technical guidance.',
+    variant: 'utility',
+    category: 'business',
+    recommended: true,
+  },
+  {
+    slug: 'editorial-article',
+    title: 'Editorial article',
+    description: 'Magazine pacing, expressive imagery, and confident reading rhythm.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'creator-eguide',
+    title: 'Creator e-guide',
+    description: 'Warm, guided pages that make step-by-step learning approachable.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'formal-report',
+    title: 'Formal report',
+    description: 'Executive structure, credible analysis, and disciplined presentation.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'research-notebook',
+    title: 'Research notebook',
+    description: 'Evidence-led notes, annotations, and considered findings.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'data-briefing',
+    title: 'Data briefing',
+    description: 'Focused metrics, concise decisions, and clear visual evidence.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'swiss-minimal',
+    title: 'Swiss minimal',
+    description: 'Strict grid, sharp contrast, and deliberate whitespace.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
+  {
+    slug: 'monochrome-manual',
+    title: 'Monochrome manual',
+    description: 'Technical diagrams, precise steps, and robust documentation craft.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'legal-policy',
+    title: 'Legal policy',
+    description: 'Formal sections, clauses, and trustworthy scan-first hierarchy.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'academic-paper',
+    title: 'Academic paper',
+    description: 'Journal rigor, research figures, and evidence-led reading flow.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'lesson-workbook',
+    title: 'Lesson workbook',
+    description: 'Exercises, visual guidance, and generous space to learn by doing.',
+    variant: 'human',
+    category: 'editorial',
+  },
+];
+
+const IMAGE_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
+  {
+    slug: 'poster-editorial-newsprint',
+    title: 'Editorial newsprint',
+    description: 'Tactile paper, urban imagery, and confident print contrast.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'poster-swiss-minimal',
+    title: 'Swiss minimal poster',
+    description: 'Gallery-like typography, modular grids, and one decisive accent.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
+  {
+    slug: 'poster-bold-typography',
+    title: 'Bold typography poster',
+    description: 'High-contrast graphic forms with loud, kinetic visual energy.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'poster-cinematic-dark',
+    title: 'Cinematic dark poster',
+    description: 'Moody contrast, dramatic framing, and prestige-film atmosphere.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'poster-retro-pop',
+    title: 'Retro pop poster',
+    description: 'Playful color, printed texture, and upbeat cultural energy.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'poster-organic-natural',
+    title: 'Organic natural poster',
+    description: 'Botanical forms, earthy material cues, and a calmer rhythm.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'poster-neon-cyber',
+    title: 'Neon cyber poster',
+    description: 'Electric signal lines, controlled glitches, and dark-grid energy.',
+    variant: 'utility',
+    category: 'creative',
+  },
+  {
+    slug: 'poster-clay-3d',
+    title: 'Clay 3D poster',
+    description: 'Soft sculptural forms with playful depth and studio light.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'photo-editorial',
+    title: 'Editorial photo',
+    description: 'Art-directed photography, tactile still life, and quiet sophistication.',
+    variant: 'editorial',
+    category: 'editorial',
+    recommended: true,
+  },
+  {
+    slug: 'illustration-soft',
+    title: 'Soft illustration',
+    description: 'Gentle organic forms, friendly color, and reassuring warmth.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'image-cinematic',
+    title: 'Cinematic image',
+    description: 'Dramatic scale, luminous detail, and film-like atmosphere.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'image-surreal-collage',
+    title: 'Surreal collage',
+    description: 'Impossible spaces, cut-paper texture, and artful visual surprise.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'image-pixel-arcade',
+    title: 'Pixel arcade',
+    description: 'Intentional pixel craft, saturated glow, and playful game energy.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'image-organic-natural',
+    title: 'Organic natural image',
+    description: 'Botanical still life, natural material, and soft daylight.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'image-clay-3d',
+    title: 'Clay 3D image',
+    description: 'Tactile everyday forms, gentle shadows, and playful dimensionality.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'image-neo-brutalist',
+    title: 'Neo-brutalist image',
+    description: 'Raw texture, bold frames, and unapologetic graphic contrast.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'product-photography',
+    title: 'Product photography',
+    description: 'Studio still life that makes material, silhouette, and detail tangible.',
+    variant: 'luxury',
+    category: 'business',
+  },
+  {
+    slug: 'black-white-film',
+    title: 'Black & white film',
+    description: 'Grainy monochrome, timeless contrast, and observational texture.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'watercolor',
+    title: 'Watercolor',
+    description: 'Layered washes, paper fibers, and refined painterly softness.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'ink-line',
+    title: 'Ink line',
+    description: 'Confident black ink, sparse washes, and expressive editorial drawing.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'chrome-3d',
+    title: 'Chrome 3D',
+    description: 'Reflective liquid metal, controlled light, and futuristic studio polish.',
+    variant: 'luxury',
+    category: 'creative',
+  },
+  {
+    slug: 'risograph-print',
+    title: 'Risograph print',
+    description: 'Two-color overprint, halftone texture, and graphic imperfection.',
+    variant: 'playful',
+    category: 'creative',
+  },
+];
+
+const VIDEO_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
+  {
+    slug: 'swiss-pulse',
+    title: 'Swiss Pulse',
+    description: 'Precise modernist motion, bold forms, and controlled momentum.',
+    variant: 'minimal',
+    category: 'minimal',
+    recommended: true,
+  },
+  {
+    slug: 'velvet-standard',
+    title: 'Velvet Standard',
+    description: 'Luxurious pace, rich material, and cinematic golden light.',
+    variant: 'luxury',
+    category: 'business',
+  },
+  {
+    slug: 'deconstructed',
+    title: 'Deconstructed',
+    description: 'Fragmented collage, exposed grids, and energetic editorial cuts.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'maximalist-type',
+    title: 'Maximalist Type',
+    description: 'Saturated layered forms and exuberant kinetic composition.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'data-drift',
+    title: 'Data Drift',
+    description: 'Fluid information graphics that turn data into movement.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'soft-signal',
+    title: 'Soft Signal',
+    description: 'Translucent gradients, slow ripples, and calm contemporary motion.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
+  {
+    slug: 'folk-frequency',
+    title: 'Folk Frequency',
+    description: 'Handcrafted texture, rhythmic motifs, and warm visual storytelling.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'shadow-cut',
+    title: 'Shadow Cut',
+    description: 'Hard-edged silhouettes, theatrical contrast, and graphic depth.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'product-demo',
+    title: 'Product demo',
+    description: 'Crisp UI reveals and feature motion that explain value clearly.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'kinetic-type',
+    title: 'Kinetic type',
+    description: 'Rhythmic type-like forms and bold transitions that carry the message.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'paper-stopmotion',
+    title: 'Paper stop motion',
+    description: 'Hand-cut layers and physical frame-by-frame charm.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'chrome-3d',
+    title: 'Chrome 3D',
+    description: 'Liquid metal, studio reflections, and slow dimensional motion.',
+    variant: 'luxury',
+    category: 'creative',
+  },
+];
+
+const STYLE_CATALOGS: Readonly<Record<VisualStyleContext, VisualStyleCatalogEntry[]>> = {
+  deck: DECK_STYLE_CATALOG,
+  prototype: PROTOTYPE_STYLE_CATALOG,
+  document: DOCUMENT_STYLE_CATALOG,
+  image: IMAGE_STYLE_CATALOG,
+  video: VIDEO_STYLE_CATALOG,
+};
+
 export function visualStyleCardsForContext(context: VisualStyleContext): VisualStyleCard[] {
-  const catalog = context === 'deck' ? DECK_STYLE_CATALOG : PROTOTYPE_STYLE_CATALOG;
-  return catalog.map((style) => ({
-    value: `${context}-${style.slug}`,
-    title: style.title,
-    description: style.description,
-    variant: style.variant,
-    category: style.category,
-    preview: {
-      src: `${STYLE_CATALOG_ASSET_BASE_URL}/${context}-${style.slug}-v1.webp`,
-      alt: `${style.title} ${context} style preview.`,
-    },
-    recommended: style.recommended,
-  }));
+  const catalog = STYLE_CATALOGS[context];
+  return catalog.map((style) => {
+    const filename = `${context}-${style.slug}-v1.webp`;
+    return {
+      value: `${context}-${style.slug}`,
+      title: style.title,
+      description: style.description,
+      variant: style.variant,
+      category: style.category,
+      preview: {
+        src: `${STYLE_CATALOG_ASSET_BASE_URL}/${filename}`,
+        thumbnailSrc: styleCatalogThumbnailUrl(filename),
+        alt: `${style.title} ${context} style preview.`,
+      },
+      recommended: style.recommended,
+    };
+  });
 }

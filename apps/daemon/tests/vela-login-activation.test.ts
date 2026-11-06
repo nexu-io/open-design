@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseVelaLoginActivation } from '../src/integrations/vela.js';
+import {
+  parseVelaAuthAttemptId,
+  parseVelaLoginActivation,
+} from '../src/integrations/vela.js';
 
 // `vela login` is a device-authorization flow: it prints the activation URL and
 // user code to stdout BEFORE it best-effort opens the browser, and warns on
@@ -48,5 +51,16 @@ describe('parseVelaLoginActivation', () => {
     expect(activation.activationUrl).toBeNull();
     expect(activation.userCode).toBeNull();
     expect(activation.browserOpenFailed).toBe(false);
+  });
+});
+
+describe('parseVelaAuthAttemptId', () => {
+  it('accepts only lowercase canonical UUIDv4 values', () => {
+    expect(parseVelaAuthAttemptId({
+      authAttemptId: '936da01f-9abd-4d9d-80c7-02af85c822a8',
+    })).toBe('936da01f-9abd-4d9d-80c7-02af85c822a8');
+    expect(parseVelaAuthAttemptId({
+      authAttemptId: '936DA01F-9ABD-4D9D-80C7-02AF85C822A8',
+    })).toBeNull();
   });
 });

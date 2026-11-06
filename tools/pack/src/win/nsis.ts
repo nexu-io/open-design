@@ -3,7 +3,7 @@ import { appendFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/pro
 import { dirname, join, win32 } from "node:path";
 import { promisify } from "node:util";
 
-import type { ToolPackConfig } from "../config.js";
+import type { ToolPackConfig } from "../config/index.js";
 import { pathExists } from "./fs.js";
 import { resolveWinUninstallLocalDataRoot } from "./paths.js";
 import type { WinPaths } from "./types.js";

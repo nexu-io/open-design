@@ -62,7 +62,7 @@
 }
 
 .text {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -81,7 +81,7 @@
   color: var(--accent-contrast, #fff);
   font: inherit;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   transition:
     filter 140ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),

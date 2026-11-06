@@ -1,0 +1,74 @@
+import type { AmrBalanceGateScope } from '../runtime/amr-balance-gate';
+import type { AmrWalletSnapshot } from '@open-design/contracts';
+
+import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
+
+/**
+ * A Home gate for confirmed insufficient funding or sign-out. The dialog resolves the promise the submit handler is awaiting:
+ * 'retry' after sign-in re-runs authorization for the pending submit. Funding
+ * recovery only dismisses the block and returns the draft for a manual Send.
+ */
+export interface HomeAmrBalanceGateBlock {
+  reason: 'insufficient' | 'signed_out';
+  modelId?: string | null;
+  fundingScope?: AmrBalanceGateScope;
+  /**
+   * 哪一张弹窗 —— 身份的分支(规格 §6.V)。
+   *
+   * 这里曾经还挂着一条 `?? 'upgrade'` 的兜底,理由是「首页没有那张升级卡,
+   * 『Max · owner 不弹窗』那一支落到首页会变成一片空白」。T58 之后那一支
+   * 不存在了(owner 两格共用同一张会员转化弹窗),兜底随之删除 —— 它当时把
+   * Max 所有者兜成了**转化弹窗 + 套餐页链接**,等于让他买一个已经在用的套餐。
+   */
+  dialog: 'upgrade' | 'ask_owner';
+  /** 那张弹窗的主按钮去哪(T58);和 `dialog` 同一个 branch 快照算出来。 */
+  upgradeIntent: 'pricing' | 'auto_recharge';
+  snapshot: AmrWalletSnapshot;
+  resolve: (decision: 'retry' | 'dismiss') => void;
+}
+
+interface Props {
+  block: HomeAmrBalanceGateBlock | null;
+  /** Resolved daemon profile; explicit null waits instead of guessing production. */
+  runtimeProfile?: string | null;
+  consoleOrigin?: string | null;
+  metricsConsent: boolean;
+  installationId: string | null | undefined;
+}
+
+/**
+ * App owns this dialog both before navigation (a cached insufficient hint)
+ * and behind the pending project frame (the asynchronous sign-in gate).
+ * Dismissing a cached hint keeps the Home draft; dismissing a sign-in block
+ * rolls the optimistic hand-off back to Home.
+ */
+export function HomeAmrBalanceGateDialogs({ block, runtimeProfile, consoleOrigin, metricsConsent, installationId }: Props) {
+  if (!block) return null;
+  if (block.dialog === 'ask_owner') {
+    /*
+     * 没有账单权限的成员。原来这一档给的是 `AmrBalanceDialog`,而它的
+     * 主按钮取自 `workspaceUpgradeUrl` —— 对这类成员返回 `null`,于是
+     * 弹窗上只剩一颗「暂不需要」(§6.Y)。这张弹窗至少给得出一条路。
+     */
+    return <AmrOwnerTopUpDialog pageName="home" stage="before_run" onClose={() => block.resolve('dismiss')} />;
+  }
+  return (
+    <AmrBalanceDialog
+      reason={block.reason}
+      stage="before_run"
+      manualSendOnRecovery={block.reason === 'insufficient'}
+      modelId={block.modelId}
+      fundingScope={block.fundingScope}
+      balanceUsd={block.snapshot.balanceUsd}
+      profile={runtimeProfile !== undefined ? runtimeProfile : block.snapshot.profile}
+      consoleOrigin={consoleOrigin}
+      entrySource="home_balance_gate_upgrade"
+      upgradeIntent={block.upgradeIntent}
+      metricsConsent={metricsConsent}
+      installationId={installationId}
+      onClose={() => block.resolve('dismiss')}
+      onResolved={() => block.resolve(block.reason === 'signed_out' ? 'retry' : 'dismiss')}
+    />
+  );
+}

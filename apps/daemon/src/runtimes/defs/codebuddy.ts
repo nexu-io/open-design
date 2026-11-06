@@ -13,36 +13,30 @@ import type { RuntimeAgentDef } from '../types.js';
 // Key differences from the claude adapter:
 //   • Binary names: `codebuddy` / `cbc` (not `claude` / `openclaude`).
 //   • `--effort` flag for reasoning control (minimal/low/medium/high/xhigh/max).
-//   • Richer multi-provider model list (GLM, Kimi, MiniMax, Claude, GPT,
-//     Gemini, DeepSeek) exposed through `--model <id>`.
+//   • A multi-provider model list advertised in `--help` and selected through
+//     `--model <id>`.
 //   • `--mcp-config <fileOrString>` for MCP server injection (the daemon can
 //     also write `.mcp.json` to the project cwd, same as Claude Code).
 
-const CODEBUDDY_FALLBACK_MODELS = [
-  DEFAULT_MODEL_OPTION,
-  // GLM family (Zhipu AI)
-  { id: 'glm-5.1-ioa', label: 'glm-5.1-ioa' },
-  { id: 'glm-5v-turbo-ioa', label: 'glm-5v-turbo-ioa' },
-  // Claude family (via Codebuddy proxy)
-  { id: 'claude-opus-4.8-1m', label: 'claude-opus-4.8-1m' },
-  { id: 'claude-opus-4.8', label: 'claude-opus-4.8' },
-  { id: 'claude-sonnet-4.6-1m', label: 'claude-sonnet-4.6-1m' },
-  { id: 'claude-haiku-4.5', label: 'claude-haiku-4.5' },
-  // GPT family
-  { id: 'gpt-5.5', label: 'gpt-5.5' },
-  { id: 'gpt-5.4', label: 'gpt-5.4' },
-  { id: 'gpt-5.3-codex', label: 'gpt-5.3-codex' },
-  // Gemini family
-  { id: 'gemini-3.5-flash', label: 'gemini-3.5-flash' },
-  // DeepSeek family
-  { id: 'deepseek-v4-pro-ioa', label: 'deepseek-v4-pro-ioa' },
-  { id: 'deepseek-v4-flash-ioa', label: 'deepseek-v4-flash-ioa' },
-  // Kimi family
-  { id: 'kimi-k2.6-ioa', label: 'kimi-k2.6-ioa' },
-  // MiniMax family
-  { id: 'minimax-m3-ioa', label: 'minimax-m3-ioa' },
-  { id: 'minimax-m2.7-ioa', label: 'minimax-m2.7-ioa' },
-];
+function parseCodebuddyHelpModels(stdout: string) {
+  const advertised = stdout.match(
+    /--model <model>[\s\S]*?Currently supported:\s*\(([^)]*)\)/i,
+  )?.[1];
+  if (!advertised) return null;
+
+  const modelIds = [...new Set(
+    advertised
+      .split(',')
+      .map((modelId) => modelId.trim())
+      .filter((modelId) => modelId.length > 0 && modelId !== DEFAULT_MODEL_OPTION.id),
+  )];
+  if (modelIds.length === 0) return null;
+
+  return [
+    DEFAULT_MODEL_OPTION,
+    ...modelIds.map((modelId) => ({ id: modelId, label: modelId })),
+  ];
+}
 
 export const codebuddyAgentDef = {
     id: 'codebuddy',
@@ -59,10 +53,17 @@ export const codebuddyAgentDef = {
       '--include-partial-messages': 'partialMessages',
       '--add-dir': 'addDir',
     },
-    fallbackModels: CODEBUDDY_FALLBACK_MODELS,
-    // Codebuddy CLI does not ship a `models` subcommand; the supported model
-    // ids are advertised in `--help` output. Fallback list above covers the
-    // current set; users can type custom ids through the "Custom" input.
+    // Codebuddy has no `models` subcommand, but the installed build advertises
+    // its supported ids in root help. Parse that version-local catalog instead
+    // of surfacing a static list that drifts as Codebuddy updates.
+    listModels: {
+      args: ['--help'],
+      parse: parseCodebuddyHelpModels,
+      timeoutMs: 10_000,
+    },
+    // If an older build omits the catalog or help changes shape, fail closed to
+    // Codebuddy's configured default rather than offering unverified ids.
+    fallbackModels: [DEFAULT_MODEL_OPTION],
     // Codebuddy CLI --effort supports exactly 6 levels:
     //   minimal, low, medium, high, xhigh, max
     // We additionally expose a synthetic `default` sentinel as the FIRST

@@ -6,7 +6,7 @@ description: |
   SharedArrayBuffer, and renders to a canvas at 60fps. Produced as a single
   self-contained `index.html`. Use when the brief asks for a "web worker",
   "simulation", "particle system", "physics", "off-main-thread", "fractal",
-  "real-time compute", or "audio/data visualizer". Open Design serves this in
+  "real-time compute", or "audio/data visualizer". OpenDesign serves this in
   powered-preview mode so Workers and SharedArrayBuffer actually work.
 triggers:
   - "web worker"
@@ -42,7 +42,7 @@ Produce a single self-contained `index.html` that moves heavy per-frame compute 
 
 ## Why this is a powered artifact
 
-Open Design detects `new Worker(` / `SharedArrayBuffer` / `OffscreenCanvas` and renders this file in **powered preview** — a cross-origin-isolated iframe with `allow-same-origin`. That means external and blob Web Workers construct successfully, `SharedArrayBuffer` is defined (`crossOriginIsolated === true`), and `importScripts` works. In the old opaque sandbox all three failed; here they just work.
+OpenDesign detects `new Worker(` / `SharedArrayBuffer` / `OffscreenCanvas` and renders this file in **powered preview** — a cross-origin-isolated iframe with `allow-same-origin`. That means external and blob Web Workers construct successfully, `SharedArrayBuffer` is defined (`crossOriginIsolated === true`), and `importScripts` works. In the old opaque sandbox all three failed; here they just work.
 
 ## Resource map
 

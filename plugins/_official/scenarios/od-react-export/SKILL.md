@@ -1,6 +1,6 @@
 # Export To React
 
-Use this plugin when the user wants to hand an accepted Open Design artifact to a React app.
+Use this plugin when the user wants to hand an accepted OpenDesign artifact to a React app.
 
 ## Workflow
 

@@ -15,9 +15,17 @@
  * (timeouts, unreadable payloads, etc.). A structured `.code` on the error
  * (e.g. a future typed daemon error) always wins over message classification.
  */
+// The daemon's envelope codes are generic wrappers, not a classification, so
+// they must not win over message bucketing. Mirrors the deploy helper's guard.
+const GENERIC_EXPORT_ENVELOPE_CODES = new Set([
+  'BAD_REQUEST', 'FILE_NOT_FOUND', 'INTERNAL', 'INTERNAL_ERROR', 'UPSTREAM_UNAVAILABLE', 'UNKNOWN',
+]);
+
 export function exportErrorCode(err: unknown): string {
   const structured = (err as { code?: unknown } | null | undefined)?.code;
-  if (typeof structured === 'string' && structured.length > 0) return structured;
+  if (typeof structured === 'string' && structured.length > 0 && !GENERIC_EXPORT_ENVELOPE_CODES.has(structured)) {
+    return structured;
+  }
   if (!(err instanceof Error)) return 'UNKNOWN';
   const message = err.message ?? '';
   // The daemon rejected a desktop sidecar message it doesn't recognize — the
@@ -27,5 +35,43 @@ export function exportErrorCode(err: unknown): string {
   // so the raw text matches both patterns.
   if (/unknown \w+ sidecar message/i.test(message)) return 'DESKTOP_SIDECAR_UNKNOWN_MESSAGE';
   if (/renderer (?:is )?unavailable/i.test(message)) return 'DESKTOP_RENDERER_UNAVAILABLE';
-  return err.name || 'UNKNOWN';
+  // Capture-stage failures specific to export: the render produced nothing
+  // usable, so the request never even became an HTTP problem.
+  if (/\bnothing was captured\b|\bsnapshot is empty\b/i.test(message)) return 'EMPTY_CAPTURE';
+  if (/\bcanvas is not available\b/i.test(message)) return 'CANVAS_UNAVAILABLE';
+  if (/\bunreadable response\b/i.test(message)) return 'UNREADABLE_RESPONSE';
+  if (/\binvalid data url\b/i.test(message)) return 'INVALID_DATA_URL';
+  if (/\bdownload failed\b/i.test(message)) return 'DOWNLOAD_FAILED';
+  // Transport failures — a request that never got a response.
+  if (/\b(?:ENOTFOUND|ECONNREFUSED|ECONNRESET|EAI_AGAIN|ENETUNREACH|network error|failed to fetch|fetch failed)\b/i.test(message)) {
+    return 'NETWORK';
+  }
+  if (/\btimed?\s*out\b|\bETIMEDOUT\b/i.test(message)) return 'TIMEOUT';
+  if (/\brate.?limit/i.test(message) || /\b429\b/.test(message)) return 'RATE_LIMITED';
+  if (/\b(?:unauthori[sz]ed|forbidden|invalid (?:api )?(?:key|token|credential))\b/i.test(message)) {
+    return 'FORBIDDEN';
+  }
+  if (/\bnot found\b/i.test(message)) return 'NOT_FOUND';
+  // Same status regex (and the same false-positive guards) as the deploy helper.
+  const status = /\b([45]\d\d)\b/.exec(message)?.[1];
+  if (status) return `HTTP_${status}`;
+  // A numeric `status` carried on the error (set by the export runtime from
+  // the daemon response) is as good as one parsed out of the message.
+  const carriedStatus = (err as { status?: unknown }).status;
+  if (typeof carriedStatus === 'number' && carriedStatus >= 400) return `HTTP_${carriedStatus}`;
+  // Last resort, in descending order of how much the value actually tells you.
+  //
+  // `err.name` used to be returned unconditionally here. For a subclass
+  // (TypeError, RangeError, AbortError) that names a real failure mode and is
+  // worth keeping. For a plain `new Error(...)` — which is what the export
+  // path throws for every daemon-reported failure — it collapses to the
+  // literal "Error": the single largest bucket in `artifact_export_result`
+  // (148 events / 82 users over 14 days, 48% of image-export failures) and
+  // completely undiagnosable. So keep a meaningful name, drop the generic one.
+  if (err.name && err.name !== 'Error') return err.name;
+  // The daemon's generic envelope code (BAD_REQUEST, INTERNAL, ...) is coarse
+  // — that is why it does not win over message classification above — but it
+  // is a real classification and strictly better than nothing.
+  if (typeof structured === 'string' && structured.length > 0) return `ENVELOPE_${structured}`;
+  return 'UNCLASSIFIED';
 }

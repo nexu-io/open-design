@@ -17,7 +17,7 @@
 //      without the marker), we accept "any non-loading-shell child of
 //      <body> with > MIN_VISIBLE_TEXT visible text". This guards
 //      against the loading sentinel
-//      `<div class="od-loading-shell">Loading Open Design…</div>`
+//      `<div class="od-loading-shell">Loading OpenDesign…</div>`
 //      being mistaken for a mount (codex review on PR #2527).
 //
 // We do not try to discriminate between "still loading" and "white screen
@@ -46,6 +46,8 @@ export function installWhiteScreenDetector(): () => void {
     if (isAppMounted()) return;
     reportSafetyEvent('client_white_screen', {
       reason: 'app_not_mounted_after_timeout',
+      monitoring_kind: 'app_not_mounted',
+      metric_schema_version: 1,
       timeout_ms: APP_MOUNT_TIMEOUT_MS,
       ready_state: document.readyState,
       // Whether the user has navigated away from the tab — `hidden`

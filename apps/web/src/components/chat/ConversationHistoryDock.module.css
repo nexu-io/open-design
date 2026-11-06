@@ -1,0 +1,49 @@
+/* The project name yields room to the collapse and history controls. */
+.dock {
+  order: 1;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  /* The row gap is 8px and the 28px button is inset by 2px: leave 4px. */
+  margin-inline-end: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dock :global(.chat-session-switcher) {
+  margin: 0;
+  padding: 0;
+}
+.dock :global(.chat-history-menu) {
+  right: 0;
+  width: min(320px, 100%);
+  z-index: 150;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 8px 3px;
+}
+
+.searchRow :global(.chat-history-search) {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.searchRow :global(button.chat-session-trigger.chat-new-conversation) {
+  flex: 0 0 28px;
+  margin: 0;
+  background: transparent;
+}
+
+.searchRow :global(button.chat-session-trigger.chat-new-conversation:hover:not(:disabled)) {
+  background: var(--chat-bg-subtle);
+}
+
+.searchRow :global(button.chat-session-trigger.chat-new-conversation:disabled) {
+  cursor: default;
+  opacity: 0.55;
+}

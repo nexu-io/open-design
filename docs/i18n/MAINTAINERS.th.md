@@ -14,7 +14,7 @@
 |---|---|
 | **Contributor** | ใครก็ตามที่มี merged PR อย่างน้อย 1 รายการ. ไม่มีสิทธิ์พิเศษ. |
 | **External Maintainer** | Community contributor ที่ได้รับ promotion ตามกติกาด้านล่าง. Review, approve, close/reopen issues และ self-assign issues ได้. **กด merge button ไม่ได้** — สิทธินั้นอยู่กับ Core Team. |
-| **Core Team** | ทีมภายในของ Open Design. ถือ repository write access เต็มและเป็น final authority สำหรับ governance decisions. Roster maintain ภายใน. |
+| **Core Team** | ทีมภายในของ OpenDesign. ถือ repository write access เต็มและเป็น final authority สำหรับ governance decisions. Roster maintain ภายใน. |
 
 ส่วนที่เหลือของเอกสารนี้พูดถึง **External Maintainers** เว้นแต่ระบุไว้เป็นอย่างอื่น.
 

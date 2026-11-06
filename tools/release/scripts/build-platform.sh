@@ -346,6 +346,9 @@ else
       --to dmg
       --json
     )
+    if [ "${REQUIRE_VELA_CLI:-false}" = "true" ]; then
+      update_args+=(--require-vela-cli)
+    fi
     build_mac_update_fixture() {
       local update_output
       update_output="$(pnpm "${update_args[@]}")"

@@ -97,7 +97,11 @@ The skill accepts these parameters from the user:
 
 ## Workflow
 
-1. Ask the user for: primary color, agent name, greeting text, online/offline state, which social links to show, optional meeting URL
+1. Resolve primary color, agent name, greeting text, online/offline state,
+   social links, and optional meeting URL from the request and known context.
+   Use the documented defaults and omit empty optional links. Ask one
+   consolidated form only if a missing value would materially change the
+   requested widget and cannot be safely defaulted.
 2. Generate one HTML file with all provided values inlined as literals (no template engine, no `{{ }}` placeholders in the output)
 3. Open the widget panel by default on first paint so the preview is useful
 4. **Do not** add any `<script src="…">` pointing to third-party SDKs unless the user explicitly asks for backend integration. The output must run from disk with zero network calls beyond the Google Fonts CSS.

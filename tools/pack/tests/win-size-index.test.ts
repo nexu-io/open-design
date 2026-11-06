@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { PathSizeIndex } from "../src/win/fs.js";
+import { PathSizeIndex } from "@/win/fs.js";
 
 describe("PathSizeIndex", () => {
   it("indexes directory sizes and filtered file totals in a single tree", async () => {

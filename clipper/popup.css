@@ -1,6 +1,6 @@
 /* ============================================================
-   Open Design — Web Clipper popup
-   Brand-aligned with the Open Design product design system
+   OpenDesign — Web Clipper popup
+   Brand-aligned with the OpenDesign product design system
    (warm neutral surfaces, ember accent, near-black brand ink).
    ============================================================ */
 :root {
@@ -20,11 +20,11 @@
   --text-muted: #74716b;
   --text-soft: #989590;
 
-  /* Brand ink — the Open Design mark. */
+  /* Brand ink — the OpenDesign mark. */
   --brand-ink: #202020;
   --on-brand: #ffffff;
 
-  /* Ember accent — Open Design primary action color. */
+  /* Ember accent — OpenDesign primary action color. */
   --accent: #c96442;
   --accent-strong: #b45a3b;
   --on-accent: #ffffff;

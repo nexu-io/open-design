@@ -37,6 +37,23 @@ export const SIDECAR_ENV = Object.freeze({
   WEB_TSCONFIG_PATH: "OD_WEB_TSCONFIG_PATH",
 } as const);
 
+/**
+ * Shape of an MCP registration written by a daemon whose packaged outer manages
+ * the headless bootstrap. Only a managed outer appends `MANAGED_ARG` to the
+ * bootstrap argv, so registrations produced under an older outer keep today's
+ * shape and today's behavior.
+ */
+export const MCP_BOOTSTRAP_CONTRACT = Object.freeze({
+  /** Appended to OD_MCP_BOOTSTRAP_ARGS by a managed outer. */
+  MANAGED_ARG: "--od-mcp-managed",
+  /**
+   * JSON `{ daemon: string[]; desktop: string[] }` of absolute sidecar client
+   * endpoints for every mode of the registering namespace. They are resolved by
+   * the daemon because the MCP process may not share its TMPDIR.
+   */
+  DISCOVERY_ENV: "OD_MCP_DISCOVERY",
+} as const);
+
 export const SIDECAR_RUNTIME_ENV = Object.freeze({
   base: SIDECAR_ENV.BASE,
   ipcBase: SIDECAR_ENV.IPC_BASE,
@@ -88,6 +105,8 @@ export const SIDECAR_MESSAGES = Object.freeze({
   EXPORT_PDF: "export-pdf",
   MINT_IMPORT_TOKEN: "mint-import-token",
   REGISTER_DESKTOP_AUTH: "register-desktop-auth",
+  REGISTER_WEB_URL: "register-web-url",
+  RENDER_FRAMES: "render-frames",
   RENDER_SLIDES: "render-slides",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
@@ -98,6 +117,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
 
 export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   STATUS: "status",
@@ -114,9 +134,7 @@ export type DesktopUpdateMode = (typeof DESKTOP_UPDATE_MODES)[keyof typeof DESKT
 
 export const DESKTOP_UPDATE_CHANNELS = Object.freeze({
   BETA: RELEASE_CHANNELS.BETA,
-  BETAS: RELEASE_CHANNELS.BETAS,
   PRERELEASE: RELEASE_CHANNELS.PRERELEASE,
-  PREVIEW: RELEASE_CHANNELS.PREVIEW,
   STABLE: RELEASE_CHANNELS.STABLE,
 } as const);
 
@@ -185,7 +203,18 @@ export type WebStatusSnapshot = {
 export type DesktopRuntimeState = "idle" | "running" | "unknown";
 
 export type DesktopStatusSnapshot = {
+  executablePath?: string;
+  capabilities?: {
+    /** Hidden Electron Chromium can deterministically capture authored frame timelines. */
+    frameRenderer?: boolean;
+  };
   pid?: number | null;
+  /**
+   * True when this owner is a windowless headless runtime that restores its
+   * desktop window in place when it receives SHOW. A launcher that sees it
+   * sends SHOW instead of restarting the owner.
+   */
+  restorable?: boolean;
   state: DesktopRuntimeState;
   title?: string | null;
   update?: DesktopUpdateStatusSnapshot;
@@ -318,6 +347,41 @@ export type DesktopRenderSlidesResult = {
   width?: number;
 };
 
+/**
+ * Render a deterministic HTML timeline through the Electron Chromium already
+ * shipped with the desktop app. The document must expose
+ * `window.__odFrameRenderer = { ready(), seek(timeSeconds, frameIndex) }`.
+ * Desktop owns capture; daemon owns MP4 encoding and scratch cleanup.
+ */
+export type DesktopRenderFramesInput = {
+  baseHref?: string;
+  fps?: number;
+  height: number;
+  html: string;
+  outputDir: string;
+  width: number;
+};
+
+export type DesktopRenderFramesErrorCode =
+  | "AUDIO_UNSUPPORTED"
+  | "FRAME_RENDERER_NOT_READY"
+  | "INVALID_FRAME_METADATA"
+  | "RENDER_FAILED"
+  | "RENDER_TIMEOUT";
+
+export type DesktopRenderFramesResult = {
+  duration?: number;
+  error?: string;
+  errorCode?: DesktopRenderFramesErrorCode;
+  fps?: number;
+  frameCount?: number;
+  /** Absolute printf-style path, for example `/tmp/render/frame-%08d.png`. */
+  framePattern?: string;
+  height?: number;
+  ok: boolean;
+  width?: number;
+};
+
 export type DesktopExportArtifactFormat = "pdf" | "image";
 // Electron's `nativeImage` (the off-screen renderer the programmatic exporter
 // uses) can only encode PNG and JPEG. WebP is deliberately excluded so a caller
@@ -326,11 +390,57 @@ export type DesktopExportArtifactFormat = "pdf" | "image";
 // is unaffected by this list.)
 export type DesktopExportArtifactImageFormat = "png" | "jpeg";
 
+/**
+ * What the caller wants out of the renderer — stated, not inferred.
+ *
+ * `full_page_export` is the historical `od export` product: measure the
+ * document, grow the surface to its full scroll height, and hand back one tall
+ * image (or a paginated PDF). Its cost scales with page length, by design.
+ *
+ * `first_viewport_thumbnail` is the chat card's static cover: a fixed logical
+ * viewport, scrolled to the origin, motion frozen, captured once. It never
+ * measures `scrollHeight`, never grows the window, and never stitches — so its
+ * cost is independent of how long the page is.
+ *
+ * Before this enum the only way to ask for "fixed viewport, do not grow" was to
+ * claim the document was a deck, which also switched on deck-only DOM surgery.
+ */
+export const DESKTOP_ARTIFACT_CAPTURE_MODES = Object.freeze({
+  FIRST_VIEWPORT_THUMBNAIL: "first_viewport_thumbnail",
+  FULL_PAGE_EXPORT: "full_page_export",
+} as const);
+
+export type DesktopArtifactCaptureMode =
+  (typeof DESKTOP_ARTIFACT_CAPTURE_MODES)[keyof typeof DESKTOP_ARTIFACT_CAPTURE_MODES];
+
+/**
+ * Why a capture produced nothing usable.
+ *
+ * The chat card falls back to a live iframe whenever there is no snapshot, and
+ * it must never invent one. These codes let the daemon record *which* kind of
+ * miss happened (retryable render failure vs. a request that can never be
+ * served) instead of parsing free-text `error` strings.
+ */
+export const DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES = Object.freeze({
+  BLANK_CAPTURE: "capture_blank",
+  RENDER_TIMEOUT: "render_timeout",
+  UNSUPPORTED_CAPTURE_MODE: "unsupported_capture_mode",
+} as const);
+
+export type DesktopArtifactCaptureErrorCode =
+  (typeof DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES)[keyof typeof DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES];
+
 // Generic programmatic export (PDF / image). The desktop renderer writes
 // the result to a temporary file and returns its path; the daemon streams those
 // bytes to the HTTP caller (the `od export` CLI), then removes the temp file.
 export type DesktopExportArtifactInput = {
   baseHref?: string;
+  /**
+   * Omitted means `full_page_export`. Left optional and undefaulted on the wire
+   * so an older daemon that has never heard of capture modes keeps producing
+   * byte-identical exports.
+   */
+  captureMode?: DesktopArtifactCaptureMode;
   deck: boolean;
   format: DesktopExportArtifactFormat;
   html: string;
@@ -342,6 +452,8 @@ export type DesktopExportArtifactInput = {
 
 export type DesktopExportArtifactResult = {
   bytes?: number;
+  /** Set on failure when the reason is one the caller can act on. */
+  code?: DesktopArtifactCaptureErrorCode;
   error?: string;
   mime?: string;
   ok: boolean;
@@ -420,7 +532,7 @@ export type DesktopUpdateIncomingSnapshot = {
   version: string;
 };
 
-export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type DesktopUpdateReleaseLifecycleState =
   | "cleanup-deferred"
@@ -448,6 +560,30 @@ export type DesktopUpdateCacheSnapshot = {
   lifecycle?: DesktopUpdateCacheLifecycleSummary;
 };
 
+export const DESKTOP_UPDATE_REINSTALL_REASONS = Object.freeze({
+  LAUNCHER_SCHEMA: "launcher-schema",
+  OUTER_BELOW_MIN: "outer-below-min",
+  OUTER_VERSION_UNREADABLE: "outer-version-unreadable",
+} as const);
+
+export type DesktopUpdateReinstallReason =
+  (typeof DESKTOP_UPDATE_REINSTALL_REASONS)[keyof typeof DESKTOP_UPDATE_REINSTALL_REASONS];
+
+/**
+ * Present on a status snapshot when the release feed requires a full installer
+ * reinstall instead of an in-place payload update. `installedVersion` is the
+ * physically installed outer package version (not the running payload version);
+ * it is omitted when the outer bundle config could not be read. `url` is an
+ * optional operator-supplied explanation link from
+ * `control.launcher.version.url`.
+ */
+export type DesktopUpdateReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: DesktopUpdateReinstallReason;
+  url?: string;
+};
+
 export type DesktopUpdateStatusSnapshot = {
   active?: DesktopUpdateReleaseSnapshot;
   arch: string;
@@ -470,6 +606,7 @@ export type DesktopUpdateStatusSnapshot = {
   paths?: DesktopUpdatePathSnapshot;
   platform: string;
   progress?: DesktopUpdateProgressSnapshot;
+  reinstall?: DesktopUpdateReinstallSnapshot;
   state: DesktopUpdateState;
   supported: boolean;
 };
@@ -485,9 +622,13 @@ export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
-export type DesktopShowMessage = { type: typeof SIDECAR_MESSAGES.SHOW };
+export type DesktopShowInput = {
+  deeplinkUrl?: string;
+};
+export type DesktopShowMessage = { input?: DesktopShowInput; type: typeof SIDECAR_MESSAGES.SHOW };
 export type DesktopClickMessage = { input: DesktopClickInput; type: typeof SIDECAR_MESSAGES.CLICK };
 export type DesktopExportPdfMessage = { input: DesktopExportPdfInput; type: typeof SIDECAR_MESSAGES.EXPORT_PDF };
+export type DesktopRenderFramesMessage = { input: DesktopRenderFramesInput; type: typeof SIDECAR_MESSAGES.RENDER_FRAMES };
 export type DesktopRenderSlidesMessage = { input: DesktopRenderSlidesInput; type: typeof SIDECAR_MESSAGES.RENDER_SLIDES };
 export type DesktopExportArtifactMessage = { input: DesktopExportArtifactInput; type: typeof SIDECAR_MESSAGES.EXPORT_ARTIFACT };
 export type DesktopUpdateMessage = { input: DesktopUpdateInput; type: typeof SIDECAR_MESSAGES.UPDATE };
@@ -528,11 +669,30 @@ export type MintImportTokenResult =
   | { ok: false; code: "DESKTOP_AUTH_INACTIVE"; message: string; retryable: false }
   | { ok: false; code: "DESKTOP_AUTH_PENDING"; message: string; retryable: true };
 
+/**
+ * Registers the browser-facing URL after a packaged web sidecar has bound its
+ * dynamic port. The message travels over the namespace-scoped daemon IPC, so
+ * it cannot accidentally update another packaged runtime.
+ */
+export type RegisterWebUrlInput = {
+  url: string;
+};
+
+export type RegisterWebUrlMessage = {
+  input: RegisterWebUrlInput;
+  type: typeof SIDECAR_MESSAGES.REGISTER_WEB_URL;
+};
+
+export type RegisterWebUrlResult = {
+  accepted: true;
+};
+
 export type DaemonSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
   | RegisterDesktopAuthMessage
-  | MintImportTokenMessage;
+  | MintImportTokenMessage
+  | RegisterWebUrlMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -543,6 +703,7 @@ export type DesktopSidecarMessage =
   | DesktopShowMessage
   | DesktopClickMessage
   | DesktopExportPdfMessage
+  | DesktopRenderFramesMessage
   | DesktopRenderSlidesMessage
   | DesktopExportArtifactMessage
   | DesktopUpdateMessage;
@@ -551,7 +712,12 @@ export type ShutdownResult = {
   accepted: true;
 };
 
-export type SidecarStamp = {
+/**
+ * Legacy runtime-layout descriptor retained for the generic path/bootstrap
+ * contract. This is not sidecar process identity: `@open-design/sidecar` owns
+ * the authoritative five-field argv stamp, and IPC is private transport state.
+ */
+export type LegacySidecarRuntimeLayout = {
   app: AppKey;
   ipc: string;
   mode: SidecarMode;
@@ -559,8 +725,8 @@ export type SidecarStamp = {
   source: SidecarSource;
 };
 
-export type SidecarStampInput = Partial<Record<(typeof SIDECAR_STAMP_FIELDS)[number], unknown>>;
-export type SidecarStampCriteria = Partial<SidecarStamp>;
+type LegacySidecarRuntimeLayoutInput = Partial<Record<(typeof SIDECAR_STAMP_FIELDS)[number], unknown>>;
+type LegacySidecarRuntimeLayoutCriteria = Partial<LegacySidecarRuntimeLayout>;
 
 export type OpenDesignSidecarContract = {
   appKeys: typeof APP_KEYS;
@@ -572,8 +738,8 @@ export type OpenDesignSidecarContract = {
   normalizeApp: typeof normalizeAppKey;
   normalizeNamespace: typeof normalizeNamespace;
   normalizeSource: typeof normalizeSidecarSource;
-  normalizeStamp: typeof normalizeSidecarStamp;
-  normalizeStampCriteria: typeof normalizeSidecarStampCriteria;
+  normalizeStamp: typeof normalizeSidecarRuntimeLayout;
+  normalizeStampCriteria: typeof normalizeSidecarRuntimeLayoutCriteria;
   sources: typeof SIDECAR_SOURCES;
   stampFields: typeof SIDECAR_STAMP_FIELDS;
   stampFlags: typeof SIDECAR_STAMP_FLAGS;
@@ -667,7 +833,7 @@ function assertKnownStampKeys(value: Record<string, unknown>, label: string): vo
   assertKnownKeys(value, SIDECAR_STAMP_FIELDS, label);
 }
 
-export function normalizeSidecarStamp(input: unknown): SidecarStamp {
+export function normalizeSidecarRuntimeLayout(input: unknown): LegacySidecarRuntimeLayout {
   const value = assertObject(input, "sidecar stamp");
   assertKnownStampKeys(value, "sidecar stamp");
   return {
@@ -679,7 +845,7 @@ export function normalizeSidecarStamp(input: unknown): SidecarStamp {
   };
 }
 
-export function normalizeSidecarStampCriteria(input: unknown = {}): SidecarStampCriteria {
+export function normalizeSidecarRuntimeLayoutCriteria(input: unknown = {}): LegacySidecarRuntimeLayoutCriteria {
   const value = assertObject(input, "sidecar stamp criteria");
   assertKnownStampKeys(value, "sidecar stamp criteria");
   return {
@@ -691,8 +857,8 @@ export function normalizeSidecarStampCriteria(input: unknown = {}): SidecarStamp
   };
 }
 
-export function assertSidecarStamp(input: unknown): asserts input is SidecarStamp {
-  normalizeSidecarStamp(input);
+function assertSidecarRuntimeLayout(input: unknown): asserts input is LegacySidecarRuntimeLayout {
+  normalizeSidecarRuntimeLayout(input);
 }
 
 function normalizeDesktopEvalInput(input: unknown): DesktopEvalInput {
@@ -731,6 +897,39 @@ function normalizeMintImportTokenInput(input: unknown): MintImportTokenInput {
   const value = assertObject(input, "mint-import-token input");
   assertKnownKeys(value, ["baseDir"], "mint-import-token input");
   return { baseDir: normalizeNonEmptyString(value.baseDir, "mint-import-token baseDir") };
+}
+
+function normalizeRegisterWebUrlInput(input: unknown): RegisterWebUrlInput {
+  const value = assertObject(input, "register-web-url input");
+  assertKnownKeys(value, ["url"], "register-web-url input");
+  const raw = normalizeNonEmptyString(value.url, "register-web-url url");
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("register-web-url url must be an absolute URL");
+  }
+  if (parsed.protocol !== "http:") {
+    throw new Error("register-web-url url must use HTTP");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname !== "127.0.0.1" && hostname !== "localhost" && hostname !== "[::1]") {
+    throw new Error("register-web-url url must use a loopback host");
+  }
+  const port = Number(parsed.port);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error("register-web-url url must include a valid explicit port");
+  }
+  if (
+    parsed.username
+    || parsed.password
+    || parsed.pathname !== "/"
+    || parsed.search
+    || parsed.hash
+  ) {
+    throw new Error("register-web-url url must be a bare origin");
+  }
+  return { url: parsed.origin };
 }
 
 function normalizeBoolean(value: unknown, label: string): boolean {
@@ -795,6 +994,32 @@ function normalizeDesktopRenderSlidesInput(input: unknown): DesktopRenderSlidesI
   };
 }
 
+function normalizeDesktopRenderFramesInput(input: unknown): DesktopRenderFramesInput {
+  const value = assertObject(input, "desktop render frames input");
+  assertKnownKeys(value, ["baseHref", "fps", "height", "html", "outputDir", "width"], "desktop render frames input");
+  const outputDir = normalizeNonEmptyString(value.outputDir, "desktop render frames outputDir");
+  if (!/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(outputDir)) {
+    throw new Error("desktop render frames outputDir must be an absolute path");
+  }
+  const width = normalizeOptionalPositiveNumber(value.width, "desktop render frames width")!;
+  const height = normalizeOptionalPositiveNumber(value.height, "desktop render frames height")!;
+  if (width > 8192 || height > 8192) {
+    throw new Error("desktop render frames dimensions must not exceed 8192px");
+  }
+  const fps = normalizeOptionalPositiveNumber(value.fps, "desktop render frames fps");
+  if (fps != null && fps > 240) {
+    throw new Error("desktop render frames fps must not exceed 240");
+  }
+  return {
+    ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop render frames baseHref") }),
+    ...(fps == null ? {} : { fps }),
+    height,
+    html: normalizeNonEmptyString(value.html, "desktop render frames html"),
+    outputDir,
+    width,
+  };
+}
+
 function normalizeOptionalPositiveNumber(value: unknown, label: string): number | undefined {
   if (value == null) return undefined;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
@@ -803,20 +1028,38 @@ function normalizeOptionalPositiveNumber(value: unknown, label: string): number 
   return value;
 }
 
+const DESKTOP_ARTIFACT_CAPTURE_MODE_VALUES: readonly DesktopArtifactCaptureMode[] =
+  Object.values(DESKTOP_ARTIFACT_CAPTURE_MODES);
 const DESKTOP_EXPORT_ARTIFACT_FORMATS: readonly DesktopExportArtifactFormat[] = ["pdf", "image"];
 const DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS: readonly DesktopExportArtifactImageFormat[] = ["png", "jpeg"];
 
 function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtifactInput {
   const value = assertObject(input, "desktop artifact export input");
-  assertKnownKeys(value, ["baseHref", "deck", "format", "html", "imageFormat", "title", "width", "height"], "desktop artifact export input");
+  assertKnownKeys(value, ["baseHref", "captureMode", "deck", "format", "html", "imageFormat", "title", "width", "height"], "desktop artifact export input");
   if (!DESKTOP_EXPORT_ARTIFACT_FORMATS.includes(value.format as DesktopExportArtifactFormat)) {
     throw new Error(`unsupported artifact export format: ${String(value.format)}`);
+  }
+  if (value.captureMode != null && !DESKTOP_ARTIFACT_CAPTURE_MODE_VALUES.includes(value.captureMode as DesktopArtifactCaptureMode)) {
+    throw new Error(`unsupported artifact capture mode: ${String(value.captureMode)}`);
+  }
+  // A thumbnail is a raster cover for one screen. `printToPDF` paginates the
+  // whole document and has no first-viewport meaning, so the pair is rejected
+  // here rather than silently handing back a multi-page PDF the caller's card
+  // cannot draw.
+  if (
+    value.captureMode === DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL
+    && value.format !== "image"
+  ) {
+    throw new Error(
+      `${DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL} requires format "image", not "${String(value.format)}"`,
+    );
   }
   if (value.imageFormat != null && !DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS.includes(value.imageFormat as DesktopExportArtifactImageFormat)) {
     throw new Error(`unsupported artifact export image format: ${String(value.imageFormat)}`);
   }
   return {
     ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop artifact export baseHref") }),
+    ...(value.captureMode == null ? {} : { captureMode: value.captureMode as DesktopArtifactCaptureMode }),
     deck: normalizeBoolean(value.deck, "desktop artifact export deck"),
     format: value.format as DesktopExportArtifactFormat,
     html: normalizeNonEmptyString(value.html, "desktop artifact export html"),
@@ -827,7 +1070,7 @@ function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtif
   };
 }
 
-function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
+export function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
   return Object.values(DESKTOP_UPDATE_ACTIONS).includes(value as DesktopUpdateAction);
 }
 
@@ -838,6 +1081,17 @@ function normalizeDesktopUpdateInput(input: unknown): DesktopUpdateInput {
     throw new Error(`unsupported desktop update action: ${String(value.action)}`);
   }
   return { action: value.action };
+}
+
+function normalizeDesktopShowInput(input: unknown): DesktopShowInput {
+  const value = assertObject(input, "desktop show input");
+  assertKnownKeys(value, ["deeplinkUrl"], "desktop show input");
+  if (value.deeplinkUrl == null) return {};
+  const deeplinkUrl = normalizeNonEmptyString(value.deeplinkUrl, "desktop show deeplinkUrl");
+  if (!deeplinkUrl.startsWith("opendesign://")) {
+    throw new Error("desktop show deeplinkUrl must use the opendesign scheme");
+  }
+  return { deeplinkUrl };
 }
 
 function normalizeMessageType(value: unknown, label: string): string {
@@ -862,6 +1116,10 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
     assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
     return { input: normalizeMintImportTokenInput(value.input), type };
   }
+  if (type === SIDECAR_MESSAGES.REGISTER_WEB_URL) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    return { input: normalizeRegisterWebUrlInput(value.input), type };
+  }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }
 
@@ -882,9 +1140,13 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.STATUS:
     case SIDECAR_MESSAGES.SHUTDOWN:
     case SIDECAR_MESSAGES.CONSOLE:
-    case SIDECAR_MESSAGES.SHOW:
       assertKnownKeys(value, ["type"], "desktop sidecar message");
       return { type };
+    case SIDECAR_MESSAGES.SHOW:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return value.input == null
+        ? { type }
+        : { input: normalizeDesktopShowInput(value.input), type };
     case SIDECAR_MESSAGES.EVAL:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopEvalInput(value.input), type };
@@ -897,6 +1159,9 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.EXPORT_PDF:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopExportPdfInput(value.input), type };
+    case SIDECAR_MESSAGES.RENDER_FRAMES:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return { input: normalizeDesktopRenderFramesInput(value.input), type };
     case SIDECAR_MESSAGES.RENDER_SLIDES:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopRenderSlidesInput(value.input), type };
@@ -921,8 +1186,8 @@ export const OPEN_DESIGN_SIDECAR_CONTRACT = Object.freeze({
   normalizeApp: normalizeAppKey,
   normalizeNamespace,
   normalizeSource: normalizeSidecarSource,
-  normalizeStamp: normalizeSidecarStamp,
-  normalizeStampCriteria: normalizeSidecarStampCriteria,
+  normalizeStamp: normalizeSidecarRuntimeLayout,
+  normalizeStampCriteria: normalizeSidecarRuntimeLayoutCriteria,
   sources: SIDECAR_SOURCES,
   stampFields: SIDECAR_STAMP_FIELDS,
   stampFlags: SIDECAR_STAMP_FLAGS,

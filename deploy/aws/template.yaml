@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Open Design ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
+Description: 'OpenDesign ECS/Fargate Deployment (VPC, ALB, EFS, Private Access)'
 
 Parameters:
   CustomDomainName:
@@ -13,7 +13,7 @@ Parameters:
   DockerImage:
     Type: String
     MinLength: 1
-    Description: 'REQUIRED: The full repository URI and tag for the Open Design Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
+    Description: 'REQUIRED: The full repository URI and tag for the OpenDesign Docker image (e.g., your-registry/open-design:latest). You must provide an explicit image as the public Docker Hub baseline is currently unmaintained.'
   AllowedSourceIp:
     Type: String
     AllowedPattern: '^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(1[6-9]|2[0-9]|3[0-2])$'
@@ -34,7 +34,7 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 1
-    Description: 'REQUIRED: The secure API token used to authenticate requests to the Open Design backend. It is stored securely in AWS Secrets Manager.'
+    Description: 'REQUIRED: The secure API token used to authenticate requests to the OpenDesign backend. It is stored securely in AWS Secrets Manager.'
   VpcCidr:
     Type: String
     Default: '10.42.0.0/16'
@@ -59,7 +59,7 @@ Parameters:
     Type: String
     Default: small
     AllowedValues: [small, medium, large]
-    Description: 'The compute size for the Open Design application.'
+    Description: 'The compute size for the OpenDesign application.'
   TaskCpuArchitecture:
     Type: String
     Default: X86_64
@@ -531,7 +531,7 @@ Resources:
   ApiTokenSecret:
       Type: AWS::SecretsManager::Secret
       Properties:
-        Description: "API Token for Open Design"
+        Description: "API Token for OpenDesign"
         SecretString: !Ref ApiToken
 
 Outputs:

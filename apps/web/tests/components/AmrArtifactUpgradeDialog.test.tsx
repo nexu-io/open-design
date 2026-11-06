@@ -48,8 +48,33 @@ describe('AmrArtifactUpgradeDialog', () => {
     expect(plansCta.querySelector('svg')).toBeNull();
     fireEvent.click(plansCta);
 
+    const [url, target, features] = open.mock.calls[0] ?? [];
+    const plansUrl = new URL(String(url));
+    expect(`${plansUrl.origin}${plansUrl.pathname}`).toBe(
+      'https://open-design.ai/cloud/dashboard',
+    );
+    expect(plansUrl.searchParams.get('billing')).toBe('plan');
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+  });
+
+  it('opens the plans view for the supplied workspace', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <AmrArtifactUpgradeDialog
+        profile="prod"
+        workspaceId="workspace-artifact"
+        metricsConsent={false}
+        installationId={null}
+        onClose={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('amr-artifact-upgrade-plans'));
+
     expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('view=plans'),
+      expect.stringContaining('https://open-design.ai/cloud/dashboard?workspaceId=workspace-artifact&source=open_design&billing=plan&'),
       '_blank',
       'noopener,noreferrer',
     );
@@ -158,4 +183,9 @@ describe('AmrArtifactUpgradeDialog', () => {
     document.body.style.overflow = '';
     opener.remove();
   });
+});
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
 });

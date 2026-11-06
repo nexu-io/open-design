@@ -1,8 +1,8 @@
-# Open Design Manual Edit Mode Requirements
+# OpenDesign Manual Edit Mode Requirements
 
 ## Purpose
 
-This document records the accepted manual edit-mode model from `apps/edit-mode-demo` so it can be migrated into the main Open Design web app.
+This document records the accepted manual edit-mode model from `apps/edit-mode-demo` so it can be migrated into the main OpenDesign web app.
 
 The key product decision is:
 
@@ -95,7 +95,7 @@ Purpose: live artifact preview.
 Required behavior:
 
 - Render artifact in sandboxed iframe.
-- Preserve Open Design's existing preview model.
+- Preserve OpenDesign's existing preview model.
 - In edit mode, selectable elements show subtle outlines.
 - Hovered/selectable elements should feel discoverable without overwhelming the artifact.
 - Center toolbar includes:
@@ -411,7 +411,7 @@ The accepted design direction:
   - left layers
   - center canvas
   - right properties modal
-- Open Design-specific mode rail:
+- OpenDesign-specific mode rail:
   - Preview
   - Edit
   - Comment AI
@@ -443,7 +443,7 @@ Likely production destinations:
 - `apps/web/src/components/FileViewer.tsx`
 - `apps/web/src/index.css`
 
-Existing Open Design integration points:
+Existing OpenDesign integration points:
 
 - `FileViewer` already owns preview iframe and mode toolbar.
 - Existing comment mode already injects a preview bridge.
@@ -515,7 +515,14 @@ Exit criteria:
 
 ## Non-Goals for v1
 
-- Drag-and-drop layout editing.
+> v2 update: drag-based layout editing (free move with alignment guides, edge
+> resize), element duplication, image replace/crop, the floating typography
+> toolbar with range-level formatting, and visible undo/redo (+ keyboard
+> shortcuts) shipped as the direct-manipulation upgrade — see
+> `manual-edit-direct-manipulation.zh-CN.md`. The remaining bullets below still
+> hold.
+
+- Drag-and-drop layout editing (superseded by v2 — see note above).
 - Freeform vector editing.
 - Multi-user collaboration.
 - Auto-layout system.

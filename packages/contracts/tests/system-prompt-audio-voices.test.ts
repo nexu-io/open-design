@@ -55,6 +55,39 @@ describe('composeSystemPrompt — audio voice options', () => {
     expect(prompt).toContain('"value": "voice-50"');
     expect(prompt).not.toContain('showing the first 12');
     expect(prompt).toContain('selected value must be the exact `voice_id`');
+    expect(prompt).toContain('If the provider default can safely satisfy the brief');
+    expect(prompt).toContain(
+      'Only when voice selection would materially change the requested result',
+    );
+    expect(prompt).toContain(
+      'Conditional template — do not emit unless the voice-selection policy above requires clarification',
+    );
+  });
+
+  /**
+   * OPEND-2707,与 `apps/daemon/tests/system-prompt-template.test.ts` 同名用例
+   * 逐条对应。这份选音色表单是 daemon / contracts 两份**手抄件**;只改一边,
+   * API / BYOK 模式的用户就还会拿到一份带 `help` 的范例题。
+   */
+  it('把 Voice ID 那句话并进题面,提示词里不再出现 help 这个键', () => {
+    const prompt = composeSystemPrompt({
+      streamFormat: 'plain',
+      metadata: {
+        kind: 'audio',
+        audioKind: 'speech',
+        audioModel: 'elevenlabs-v3',
+        audioDuration: 10,
+      },
+      audioVoiceOptions: [
+        { name: 'Rachel', voiceId: '21m00Tcm4TlvDq8ikWAM', category: 'premade', labels: { accent: 'american' } },
+      ],
+    });
+
+    expect(prompt).toContain('"label": "Voice — the answer submits the matching Voice ID"');
+    expect(prompt).not.toContain('"help"');
+    expect(prompt).not.toContain('Select a voice description');
+    expect(prompt).toContain('the answer submits the matching Voice ID');
+    expect(prompt).toContain('"placeholder": "Choose a voice"');
   });
 
   it('surfaces ElevenLabs voice lookup failures in the prompt', () => {

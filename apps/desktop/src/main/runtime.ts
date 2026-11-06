@@ -1,12 +1,16 @@
+import { classifyProcessExit } from "@open-design/contracts/analytics";
+import { attachDisplayRefresh } from "./display-refresh.js";
+import { reportDesktopObservabilityEvent } from "./observability.js";
 import { execFile } from "node:child_process";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, screen, session, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, session, shell, webFrameMain } from "electron";
+import type { WebFrameMain } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -15,22 +19,73 @@ import {
   type DesktopExportArtifactResult,
   type DesktopExportPdfInput,
   type DesktopExportPdfResult,
+  type DesktopRenderFramesInput,
+  type DesktopRenderFramesResult,
   type DesktopRenderSlidesInput,
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { OpenDesignHostActionResult, OpenDesignHostCaptureResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
+import type {
+  OpenDesignHostActionResult,
+  OpenDesignHostCaptureResult,
+  OpenDesignHostPreviewNavigationFailure,
+  OpenDesignHostProjectImportInit,
+  OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterMenuLabels,
+  OpenDesignHostUpdaterOpenDialogRequest,
+} from "@open-design/host";
 
 import { renderDeckSlides } from "./deck-capture.js";
+import { renderDeterministicFrames } from "./frame-capture.js";
+import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
-import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
+import {
+  SPLASH_PIXEL_SCAN_MARKUP,
+  SPLASH_PIXEL_SCAN_STYLE,
+  splashPixelScanScript,
+} from "./splash-pixel-scan.js";
 import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
+import {
+  checkUpdateRestartSafety,
+  parseUpdateActionRequest,
+  updateRestartSafetyError,
+} from "./update-preflight.js";
 
 const execFileAsync = promisify(execFile);
+const PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL = "od:preview-navigation-failed";
+const ABORTED_NAVIGATION_ERROR_CODE = -3;
+let previewNavigationFailureEventSequence = 0;
+
+function isPreviewTransportNavigationUrl(url: string): boolean {
+  return url === "about:srcdoc" || url.startsWith("blob:od://app/");
+}
+
+export function previewNavigationFailureFromDidFailLoad(input: {
+  errorCode: number;
+  eventId: number;
+  frameName?: string;
+  isMainFrame: boolean;
+  occurredAtMs: number;
+  validatedUrl: string;
+}): OpenDesignHostPreviewNavigationFailure | null {
+  if (
+    input.isMainFrame
+    || input.errorCode !== ABORTED_NAVIGATION_ERROR_CODE
+    || !isPreviewTransportNavigationUrl(input.validatedUrl)
+  ) return null;
+  return {
+    errorCode: input.errorCode,
+    eventId: input.eventId,
+    ...(input.frameName ? { frameName: input.frameName } : {}),
+    occurredAtMs: input.occurredAtMs,
+    validatedUrl: input.validatedUrl,
+  };
+}
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -241,16 +296,16 @@ export function isRendererFailureHttpStatus(httpResponseCode: number): boolean {
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 // Minimum time the light splash window stays on screen before we reveal the main
-// window. It is sized to outlast the ~1.7s clip so the brand animation always
-// plays through. The splash is shown immediately and in parallel with the
-// daemon/web boot (see the packaged entry), so this time overlaps startup rather
-// than adding to it; the <video> holds on its final frame (it does not loop)
-// while the runtime finishes coming up. See `createSplashWindow`.
+// window. It is sized so the pixel-scan wordmark's first entrance sweep (2.6s,
+// see `splash-pixel-scan.ts`) is well under way before the hand-off. The splash
+// is shown immediately and in parallel with the daemon/web boot (see the
+// packaged entry), so this time overlaps startup rather than adding to it; the
+// sweep loops while the runtime finishes coming up. See `createSplashWindow`.
 const MIN_SPLASH_MS = 2000;
 // While the splash is up, the real web app loads in a hidden main window. We
 // reveal it only once the web bundle reports it has actually mounted (it sets
 // `data-od-app-mounted="1"` on first paint of the real UI), so the user never
-// sees the web's own "Loading Open Design…" shell flash between the splash and
+// sees the web's own "Loading OpenDesign…" shell flash between the splash and
 // the app. Poll cadence + a hard ceiling so a missing mount signal can never
 // strand the user on the splash forever.
 const WEB_MOUNT_POLL_MS = 80;
@@ -266,13 +321,16 @@ const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
 const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_OPEN_DIALOG_EVENT = "od:update:open-dialog";
 const DESIGN_BROWSER_PARTITION = "persist:open-design-design-browser";
 const UPDATER_IPC_CHANNELS = [
   "od:update:status",
   "od:update:check",
+  "od:update:clear-cache",
   "od:update:download",
   "od:update:install",
   "od:update:quit",
+  "od:update:set-menu-labels",
 ] as const;
 
 export type DesktopEvalInput = {
@@ -332,12 +390,15 @@ export type DesktopStatusSnapshot = {
 };
 
 export type DesktopRuntime = {
+  ownsWebContents(id: number): boolean;
   close(): Promise<void>;
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
   eval(input: DesktopEvalInput): Promise<DesktopEvalResult>;
   exportArtifact(input: DesktopExportArtifactInput): Promise<DesktopExportArtifactResult>;
   exportPdf(input: DesktopExportPdfInput): Promise<DesktopExportPdfResult>;
+  openUpdateDialog(request: OpenDesignHostUpdaterOpenDialogRequest): void;
+  renderFrames(input: DesktopRenderFramesInput): Promise<DesktopRenderFramesResult>;
   renderSlides(input: DesktopRenderSlidesInput): Promise<DesktopRenderSlidesResult>;
   screenshot(input: DesktopScreenshotInput): Promise<DesktopScreenshotResult>;
   show(): void;
@@ -345,6 +406,7 @@ export type DesktopRuntime = {
 };
 
 export type DesktopRuntimeOptions = {
+  telemetryContext?: { app_session_id: string; launch_attempt_id: string | null; app_version: string | null };
   // Per-process secret shared with the daemon at startup (over its
   // sidecar IPC) so the main process can mint HMAC tokens for the
   // `dialog:pick-and-import` flow. The secret stays in main-process
@@ -398,6 +460,7 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  onMainWindowReady?: () => void;
   /**
    * Optional pre-created splash window. The packaged entry creates the splash
    * BEFORE awaiting the daemon/web sidecars so the brand animation is on screen
@@ -424,9 +487,10 @@ export type DesktopRuntimeOptions = {
    * as having reached running for abnormal-exit detection.
    */
   onRevealed?: () => void;
+  onUpdateMenuLabels?: (labels: OpenDesignHostUpdaterMenuLabels) => void;
 };
 
-const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
+const DESKTOP_IMPORT_TOKEN_HEADER = "x-od-desktop-import-token";
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 
 export function mintImportToken(secret: Buffer, baseDir: string): string {
@@ -468,7 +532,7 @@ export type PickAndImportFolderDeps = {
   baseDir: string;
   desktopAuthSecret: Buffer;
   fetchImpl?: typeof globalThis.fetch;
-  init?: { name?: string; skillId?: string | null; designSystemId?: string | null };
+  init?: OpenDesignHostProjectImportInit;
   /** Round-5: lazy re-registration hook. Called once on 503. */
   registerDesktopAuth?: () => Promise<boolean>;
   /** Injected for tests; defaults to the production HMAC mint. */
@@ -500,6 +564,22 @@ export async function pickAndImportFolder(
         headers: {
           "Content-Type": "application/json",
           [DESKTOP_IMPORT_TOKEN_HEADER]: headerValue,
+          ...(deps.init?.workspaceContext
+            ? {
+                "x-od-workspace-id": deps.init.workspaceContext.workspaceId,
+                "x-od-workspace-type": deps.init.workspaceContext.workspaceType,
+                "x-od-workspace-member-id": deps.init.workspaceContext.workspaceMemberId,
+                "x-od-workspace-role": deps.init.workspaceContext.role,
+                "x-od-workspace-lifecycle-state": deps.init.workspaceContext.lifecycleState,
+                "x-od-workspace-member-status": deps.init.workspaceContext.memberStatus,
+                "x-od-workspace-can-share-projects": String(
+                  deps.init.workspaceContext.permissions.canShareProjects,
+                ),
+                "x-od-workspace-can-write-synced-files": String(
+                  deps.init.workspaceContext.permissions.canWriteSyncedFiles,
+                ),
+              }
+            : {}),
         },
         method: "POST",
       });
@@ -711,19 +791,48 @@ const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
         titleBarStyle: "hiddenInset" as const,
-        trafficLightPosition: { x: 12, y: 10 },
+        // y centers the 12px traffic-light circles on the tab strip's midline.
+        // Every real window wraps the tab bar in `.workspace-shell` (see
+        // App.tsx), so the rule that wins is `.workspace-shell
+        // .workspace-tabs-chrome.app-chrome-header` in apps/web
+        // viewer/routines.css — 44px since OPEND-3111 (6px above the 32px
+        // controls + 6px below), matching the base `.workspace-tabs-chrome
+        // .app-chrome-header` rule in shell.css and the `.workspace-shell`
+        // grid row. Midline is 44 / 2 = 22, so the circles' top edge is
+        // 22 - 6 = 16. Before changing this, measure the live header with
+        // getBoundingClientRect() against a desktop window — the CSS has
+        // carried a stale override before, and the offset must follow what
+        // actually renders. apps/web/tests/styles/top-chrome-height.test.ts
+        // pins the 44 on the web side; window-chrome.test.ts pins this 16.
+        trafficLightPosition: { x: 12, y: 16 },
+        // Frosted-glass window: the desktop wallpaper blurs through the whole
+        // window (NSVisualEffectView). The web shell keeps html/body
+        // transparent in desktop mode (see apps/web app-wash.css) so the
+        // vibrancy is actually visible; 'active' keeps the blur when the
+        // window loses focus instead of flattening to gray.
+        vibrancy: "under-window" as const,
+        visualEffectState: "active" as const,
+        backgroundColor: "#00000000",
       })
     : {};
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 96px !important;
-    --app-chrome-traffic-margin: 12px !important;
+    /* Windowed: the home pill sits 4px after the traffic lights (lights span
+       x:12 + 52px = 64px). Fullscreen (class synced from main below): the
+       lights are hidden, so the pill left-aligns with the nav-rail card's
+       10px inset instead. */
+    --app-chrome-traffic-space: 64px !important;
+    --app-chrome-traffic-margin: 4px !important;
     -webkit-app-region: drag;
   }
+  html.is-window-fullscreen .app-chrome-header {
+    --app-chrome-traffic-space: 10px !important;
+    --app-chrome-traffic-margin: 0px !important;
+  }
   .app-chrome-traffic-space {
-    flex: 0 0 96px !important;
-    width: 96px !important;
+    flex: 0 0 var(--app-chrome-traffic-space) !important;
+    width: var(--app-chrome-traffic-space) !important;
   }
   .app-chrome-header button,
   .app-chrome-header a,
@@ -831,10 +940,12 @@ const MAC_WINDOW_CHROME_CSS = `
   }
 `;
 
-// Light-background startup splash shown while the web runtime boots. It plays
-// the brand intro clip once and then holds on its final settled logo frame until
-// the main window is ready. The clip is embedded as a base64 data URL so it
-// renders identically in dev and in packaged builds (see `splash-video.ts`).
+// Light-background startup splash shown while the web runtime boots. It runs the
+// Home hero's pixel-scan wordmark — the same shader, ported to plain WebGL and
+// inlined (logo art included) because the splash is up before any HTTP origin
+// exists (see `splash-pixel-scan.ts`). The sweep LOOPS: boots vary from two
+// seconds to a cold minute, and a clip that plays once leaves the rest of that
+// wait on a frozen frame.
 function createPendingHtml(): string {
   const start = splashStagePayload("starting");
   const initialPct = Math.max(0, Math.min(100, Math.round((start.step / start.total) * 100)));
@@ -842,7 +953,7 @@ function createPendingHtml(): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>OpenDesign</title>
     <style>
       html,
       body {
@@ -856,13 +967,7 @@ function createPendingHtml(): string {
         display: flex;
         justify-content: center;
       }
-      video {
-        background: #f2f4f5;
-        height: auto;
-        max-height: 100%;
-        max-width: 100%;
-        width: auto;
-      }
+${SPLASH_PIXEL_SCAN_STYLE}
       .boot-stage {
         bottom: 56px;
         color: #7a838a;
@@ -915,14 +1020,7 @@ function createPendingHtml(): string {
     </style>
   </head>
   <body>
-    <video
-      id="splash"
-      autoplay
-      muted
-      playsinline
-      disablepictureinpicture
-      src="${SPLASH_VIDEO_DATA_URL}"
-    ></video>
+${SPLASH_PIXEL_SCAN_MARKUP}
     <div class="boot-progress" aria-hidden="true">
       <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
     </div>
@@ -930,17 +1028,7 @@ function createPendingHtml(): string {
       <span class="boot-stage-step" id="boot-stage-step">${start.step}/${start.total}</span><span id="boot-stage-text">${start.label}</span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
     </div>
     <script>
-      (function () {
-        var video = document.getElementById("splash");
-        if (!video) return;
-        var play = function () {
-          var attempt = video.play();
-          if (attempt && typeof attempt.catch === "function") attempt.catch(function () {});
-        };
-        video.addEventListener("loadedmetadata", function () { video.currentTime = 0; });
-        video.addEventListener("loadeddata", play);
-        play();
-      })();
+${splashPixelScanScript()}
       // Accepts the structured { step, total, label } payload (and tolerates a
       // bare label string for back-compat). The step counter + progress bar give
       // a slow cold boot a sense of how far along it is; the bar only ever grows
@@ -998,6 +1086,11 @@ interface RendererCrashScreenContext {
 
 const CRASH_REPORT_ISSUES_URL = "https://github.com/nexu-io/open-design/issues/new";
 const SUPPORT_EMAIL = "support@open-design.ai";
+// Every address the app is allowed to hand to the OS mail client. Keep this in
+// sync with the renderer's own contact affordances (`CONTACT_EMAIL_URL` in
+// `apps/web/src/components/EntryNavRail.tsx`); an address that is not listed
+// here silently does nothing when clicked in the packaged shell.
+const FIRST_PARTY_EMAILS = new Set([SUPPORT_EMAIL, "contact@open.design"]);
 
 // Narrow allowlist for the crash screen's "Email us" action: only a mailto
 // addressed to our own support address, carrying nothing but the crash-screen's
@@ -1009,10 +1102,24 @@ const SUPPORT_EMAIL = "support@open-design.ai";
 // renderer could otherwise launch the mail client with arbitrary recipients, so
 // reject any `to`/`cc`/`bcc`/unknown query key.
 export function isSupportMailtoUrl(url: string): boolean {
+  return isMailtoUrlAddressedTo(url, (address) => address === SUPPORT_EMAIL);
+}
+
+// Same allowlist discipline as `isSupportMailtoUrl`, widened to every address
+// this app owns. A `mailto:` the user clicks in the UI never reaches the OS on
+// its own: Electron raises `will-navigate` for it, and a handler that only
+// recognises http(s) leaves the navigation to be dropped, so the click reads as
+// dead. Routing first-party mailtos through `shell.openExternal` is what
+// actually opens the mail client.
+export function isFirstPartyMailtoUrl(url: string): boolean {
+  return isMailtoUrlAddressedTo(url, (address) => FIRST_PARTY_EMAILS.has(address));
+}
+
+function isMailtoUrlAddressedTo(url: string, allow: (address: string) => boolean): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "mailto:") return false;
-    if (parsed.pathname.toLowerCase() !== SUPPORT_EMAIL) return false;
+    if (!allow(parsed.pathname.toLowerCase())) return false;
     for (const [key, value] of parsed.searchParams) {
       if (key !== "subject" && key !== "body") return false;
       // Reject a decoded CR/LF in the value: `subject=ok%0D%0ABcc:attacker@…`
@@ -1050,7 +1157,7 @@ function buildCrashReportUrl(ctx: RendererCrashScreenContext): string {
   const title = `Desktop app keeps crashing (renderer ${ctx.reason})`;
   const body = [
     "**What happened**",
-    "The Open Design desktop window crashed several times in a row and showed the recovery screen.",
+    "The OpenDesign desktop window crashed several times in a row and showed the recovery screen.",
     "",
     "**What I was doing when it started** (please add any detail):",
     "",
@@ -1069,9 +1176,9 @@ function buildCrashReportUrl(ctx: RendererCrashScreenContext): string {
 // Prefilled mailto for the "Email us" action — same auto-filled diagnostics as
 // the issue, for users who'd rather email than open a GitHub account.
 function buildCrashMailtoUrl(ctx: RendererCrashScreenContext): string {
-  const subject = `Open Design keeps crashing (renderer ${ctx.reason})`;
+  const subject = `OpenDesign keeps crashing (renderer ${ctx.reason})`;
   const body = [
-    "The Open Design desktop app crashed several times in a row on my device.",
+    "The OpenDesign desktop app crashed several times in a row on my device.",
     "",
     "(If possible, attach the diagnostics file you saved with the “Save logs…” button.)",
     "",
@@ -1089,7 +1196,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Open Design</title>
+    <title>OpenDesign</title>
     <style>
       /* Palette mirrors the app's neutral design tokens (apps/web tokens.css):
          warm off-white + near-black, no accent color — matching the black/white
@@ -1185,7 +1292,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
   </head>
   <body>
     <div class="panel">
-      <p class="title">Open Design keeps closing on this device</p>
+      <p class="title">OpenDesign keeps closing on this device</p>
       <p class="body">The app window crashed several times in a row, so it has paused to avoid getting stuck reloading.</p>
       <p class="body">It will try to recover on its own in a few minutes.</p>
       <div class="actions">
@@ -1195,7 +1302,7 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
       <p class="hint" id="diag-note">Saved logs include a crash memory snapshot so we can find the cause. Nothing is sent unless you choose to share it.</p>
       <p class="status" id="status" aria-live="polite"></p>
       <p class="email" id="email-line">Prefer email? <a href="#" id="email">Contact ${SUPPORT_EMAIL}</a></p>
-      <p class="hint">If this keeps happening, quitting and reinstalling Open Design usually resolves it.</p>
+      <p class="hint">If this keeps happening, quitting and reinstalling OpenDesign usually resolves it.</p>
     </div>
     <script>
       (function () {
@@ -1283,7 +1390,7 @@ const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
 ];
 
 const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
-  starting: "Starting Open Design",
+  starting: "Starting OpenDesign",
   engine: "Starting the local engine",
   engineReady: "Local engine ready",
   interface: "Preparing the interface",
@@ -1386,6 +1493,22 @@ export type SplashWindowHandle = {
 };
 
 /**
+ * Pin Electron's native appearance to light.
+ *
+ * The app has one theme now, so `themeSource` is not a preference to sync — it
+ * is a constant. Leaving it at Electron's `system` default lets a dark-mode OS
+ * colour everything the web layer does not own: the macOS vibrancy glass
+ * (`vibrancy: "under-window"`), native menus and dialogs, and the renderer's
+ * own `prefers-color-scheme` before `data-theme` is stamped.
+ *
+ * Idempotent, so both the splash path and the `od:appearance:set-theme` handler
+ * can call it.
+ */
+export function pinNativeAppearanceToLight(): void {
+  nativeTheme.themeSource = "light";
+}
+
+/**
  * Create and immediately show the light brand-splash window. The packaged entry
  * calls this BEFORE awaiting the daemon/web sidecars so the animation masks the
  * whole cold boot (no black no-window gap); the desktop runtime then adopts it
@@ -1394,6 +1517,12 @@ export type SplashWindowHandle = {
  * + matching size so the reveal swap reads as a single window, never a flash.
  */
 export function createSplashWindow(): SplashWindowHandle {
+  // OpenDesign ships light-only (the theme setting was removed), so pin the
+  // native appearance before the first window exists. Electron defaults
+  // `themeSource` to `system`, which paints the macOS vibrancy glass and the
+  // native chrome dark on a dark-mode Mac — visible on the splash and again in
+  // the gap before the renderer's `od:appearance:set-theme` lands.
+  pinNativeAppearanceToLight();
   // Stamp creation time at the instant the window appears (see SplashWindowHandle).
   const startedAt = Date.now();
   const splash = new BrowserWindow({
@@ -1403,7 +1532,7 @@ export function createSplashWindow(): SplashWindowHandle {
     height: 900,
     resizable: false,
     show: true,
-    title: "Open Design",
+    title: "OpenDesign",
     width: 1280,
     webPreferences: {
       contextIsolation: true,
@@ -1527,7 +1656,25 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
     void applyWindowChromeCss(window).catch((error: unknown) => {
       console.error("desktop window chrome CSS injection failed", error);
     });
+    void syncWindowFullscreenClass(window);
   });
+  window.on("enter-full-screen", () => void syncWindowFullscreenClass(window));
+  window.on("leave-full-screen", () => void syncWindowFullscreenClass(window));
+}
+
+/** Mirrors the macOS fullscreen state onto <html> so the injected window
+ *  chrome CSS can reposition the tab-strip home pill (the traffic lights
+ *  disappear in fullscreen). */
+async function syncWindowFullscreenClass(window: BrowserWindow): Promise<void> {
+  if (process.platform !== "darwin" || window.isDestroyed()) return;
+  const flag = window.isFullScreen();
+  try {
+    await window.webContents.executeJavaScript(
+      `document.documentElement.classList.toggle('is-window-fullscreen', ${flag ? "true" : "false"});`,
+    );
+  } catch (error: unknown) {
+    console.error("desktop fullscreen class sync failed", error);
+  }
 }
 
 function desktopPetUrl(baseUrl: string): string {
@@ -1606,8 +1753,10 @@ function showWindowButtons(window: BrowserWindow): void {
 // window minimized or hidden even when constructed with show:true,
 // leaving users unable to locate the window. Cross-platform safe: only
 // acts when the window is actually minimized or hidden, preserving any
-// user-adjusted window state.
-function ensureWindowVisible(window: BrowserWindow): void {
+// user-adjusted window state. Also the revealed path of `DesktopRuntime.show()`
+// (deeplink hand-off / external show): restore-before-focus is what brings a
+// minimized client back, so exported for regression coverage.
+export function ensureWindowVisible(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   if (window.isMinimized()) window.restore();
   if (!window.isVisible()) window.show();
@@ -1723,12 +1872,20 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
   return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
-function attachDownloadSaveAsDialog(window: BrowserWindow): void {
-  window.webContents.session.on("will-download", (_event, item) => {
+export function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  const contents = window.webContents;
+  const session = contents.session;
+  const onDownload = (_event: Electron.Event, item: Electron.DownloadItem, source: Electron.WebContents) => {
+    if (source !== contents) return;
     const options = saveAsDialogOptionsForFilename(item.getFilename());
-    if (!options) return;
-    item.setSaveDialogOptions(options);
-  });
+    if (options) item.setSaveDialogOptions(options);
+    const url = item.getURL();
+    item.once("done", (_done, state) => {
+      if (!contents.isDestroyed()) contents.send("od:download-finished", { url, state });
+    });
+  };
+  session.on("will-download", onDownload);
+  window.once("closed", () => session.removeListener("will-download", onDownload));
 }
 
 function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
@@ -1824,22 +1981,13 @@ async function reportRendererCrash(
     // reachable from main-process Node fetch.
     const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
     if (!baseUrl) return;
-    const url = new URL("/api/observability/event", baseUrl).toString();
-    await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        event: "desktop_renderer_crash",
-        properties: {
-          reason: properties.reason,
-          exit_code: properties.exit_code,
-          // Marks the single crash that tripped the loop breaker, so a crash
-          // loop is one flagged event instead of thousands of anonymous ones.
-          loop_tripped: properties.loop_tripped ?? false,
-          // Present on the bounded recovery-attempt signal; null on real crashes.
-          recovery_attempt: properties.recovery_attempt ?? null,
-        },
-      }),
+    await reportDesktopObservabilityEvent(async () => baseUrl, "desktop_renderer_crash", {
+      ...options.telemetryContext,
+      event_id: randomUUID(), occurred_at: new Date().toISOString(),
+      reason: properties.reason, exit_reason: classifyProcessExit(properties.reason),
+      exit_code: properties.exit_code, loop_tripped: properties.loop_tripped ?? false,
+      recovery_suppressed: properties.loop_tripped ?? false,
+      recovery_attempt: properties.recovery_attempt ?? null,
     });
   } catch {
     // Best-effort. The user is already in a degraded state — failing to
@@ -1894,7 +2042,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     // http(s) as before, plus a mailto strictly to our support address (the
     // crash screen's "Email us"); no other scheme opens.
-    if (!isHttpUrl(url) && !isSupportMailtoUrl(url)) return false;
+    if (isSupportMailtoUrl(url)) return openFirstPartyMailto(url);
+    if (!isHttpUrl(url)) return false;
     try {
       await shell.openExternal(url);
       return true;
@@ -1918,7 +2067,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // import boundary while leaving web-only deployments untouched.
   ipcMain.handle(
     "dialog:pick-and-import",
-    async (event, init?: { name?: string; skillId?: string | null; designSystemId?: string | null }) => {
+    async (event, init?: OpenDesignHostProjectImportInit) => {
       // Defensive failsafe for non-production runtimes (test harnesses
       // that construct createDesktopRuntime without a secret). Round-5
       // production wiring in runDesktopMain ALWAYS passes the per-process
@@ -2099,7 +2248,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   const consoleEntries: DesktopConsoleEntry[] = [];
   const petWindow = createDesktopPetWindow(preloadPath, options.osLocale);
-  const windowTitle = options.windowTitle ?? "Open Design";
+  const windowTitle = options.windowTitle ?? "OpenDesign";
   const window = new BrowserWindow({
     height: 900,
     icon: resolveDesktopIconPath(),
@@ -2112,7 +2261,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // Starts hidden: the splash window is what the user sees while the real web
     // app loads in here. We reveal this window only once the app has actually
     // mounted (see `revealWhenReady` below), so there is never a flash of the
-    // web's own "Loading Open Design…" shell.
+    // web's own "Loading OpenDesign…" shell.
     show: false,
     title: windowTitle,
     autoHideMenuBar: true,
@@ -2128,9 +2277,57 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  const disposeDisplayRefresh = attachDisplayRefresh({
+    platform: process.platform,
+    screen,
+    powerMonitor,
+    getWindows: () => [window],
+    notify: (_window, refresh) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send("od:appearance:display-refreshed", {
+          ...refresh,
+          zoomFactor: window.webContents.getZoomFactor(),
+        });
+      }
+    },
+  });
+  const stopDisplayRefresh = () => {
+    disposeDisplayRefresh();
+    app.removeListener("before-quit", stopDisplayRefresh);
+  };
+  app.once("before-quit", stopDisplayRefresh);
+  window.once("closed", stopDisplayRefresh);
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+  const previewFrameNameByRoutingId = new Map<string, string>();
+  const previewFrameRoutingKey = (processId: number, routingId: number) =>
+    `${processId}:${routingId}`;
+  const rememberPreviewFrameName = (frame: WebFrameMain | null | undefined) => {
+    if (!frame?.name.startsWith("od-artifact-preview-srcdoc-")) return;
+    const key = previewFrameRoutingKey(frame.processId, frame.routingId);
+    previewFrameNameByRoutingId.set(key, frame.name);
+    // Routing IDs are unique for a frame lifetime, but this process can run
+    // for days. Keep the late-failure lookup bounded without retaining frame
+    // objects after Chromium destroys them.
+    if (previewFrameNameByRoutingId.size > 512) {
+      const oldestKey = previewFrameNameByRoutingId.keys().next().value;
+      if (oldestKey) previewFrameNameByRoutingId.delete(oldestKey);
+    }
+  };
+  window.webContents.on("frame-created", (_event, details) => {
+    const frame = details.frame;
+    if (!frame) return;
+    rememberPreviewFrameName(frame);
+    frame.on("dom-ready", () => rememberPreviewFrameName(frame));
+  });
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame || !isPreviewTransportNavigationUrl(details.url)) return;
+    // `did-fail-load` can arrive after Chromium has destroyed the frame, at
+    // which point webFrameMain.fromId() and frame-created/dom-ready are too
+    // late to recover its name. Snapshot the identity when navigation starts.
+    rememberPreviewFrameName(details.frame);
+  });
   window.on("page-title-updated", (event) => {
     event.preventDefault();
     window.setTitle(windowTitle);
@@ -2153,15 +2350,42 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       url: window.webContents.getURL(),
     });
   });
-  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+  window.webContents.on("did-fail-load", (
+    _event,
+    errorCode,
+    errorDescription,
+    validatedURL,
+    isMainFrame,
+    frameProcessId,
+    frameRoutingId,
+  ) => {
+    const failedFrame = isMainFrame
+      ? undefined
+      : webFrameMain.fromId(frameProcessId, frameRoutingId);
+    const cachedFrameName = isMainFrame
+      ? undefined
+      : previewFrameNameByRoutingId.get(previewFrameRoutingKey(frameProcessId, frameRoutingId));
+    const frameName = failedFrame?.name || cachedFrameName;
     console.error("[open-design desktop] main window did-fail-load", {
       errorCode,
       errorDescription,
+      frameName,
+      frameProcessId,
+      frameRoutingId,
       isMainFrame,
       pendingUrl,
       validatedURL,
       url: window.webContents.getURL(),
     });
+    const failure = previewNavigationFailureFromDidFailLoad({
+      errorCode,
+      eventId: ++previewNavigationFailureEventSequence,
+      ...(frameName ? { frameName } : {}),
+      isMainFrame,
+      occurredAtMs: Date.now(),
+      validatedUrl: validatedURL,
+    });
+    if (failure) window.webContents.send(PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL, failure);
   });
   window.on("unresponsive", () => {
     console.error("[open-design desktop] main window unresponsive", {
@@ -2266,8 +2490,22 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
   const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents) {
-      throw new Error("host IPC is only available to the main Open Design window");
+      throw new Error("host IPC is only available to the main OpenDesign window");
     }
+  };
+  const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
+    const daemonUrl = await options.discoverDaemonUrl?.();
+    const baseUrl = daemonUrl ?? await options.discoverUrl();
+    if (baseUrl == null) throw new Error("daemon URL is unavailable");
+    return baseUrl;
+  };
+  const guardedUpdaterStatus = async (rawOptions: unknown): Promise<DesktopUpdateStatusSnapshot | null> => {
+    const request = parseUpdateActionRequest(rawOptions);
+    if (request.force) return null;
+    const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+    if (safety.state === "clear") return null;
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    return { ...status, error: updateRestartSafetyError(safety) };
   };
   window.webContents.on("will-attach-webview", (event, webPreferences, params) => {
     const src = typeof params.src === "string" ? params.src : "";
@@ -2341,20 +2579,38 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     sendUpdaterStatus(status);
     return status;
   });
+  ipcMain.handle("od:update:clear-cache", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.clearCache() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
   ipcMain.handle("od:update:download", async (event) => {
     requireMainWindowSender(event);
     const status = await (options.updater?.downloadUpdate() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:install", async (event) => {
+  ipcMain.handle("od:update:install", async (event, updaterOptions: unknown) => {
     requireMainWindowSender(event);
+    const blocked = await guardedUpdaterStatus(updaterOptions);
+    if (blocked != null) {
+      // Preflight denials travel only on the IPC response. The updater store
+      // itself is still healthy, so broadcasting the synthetic error through
+      // the shared status channel would make unrelated subscribers observe a
+      // failure that never happened.
+      return blocked;
+    }
     const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
-  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+  ipcMain.handle("od:update:quit", async (event, updaterOptions: unknown): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
+    const blocked = await guardedUpdaterStatus(updaterOptions);
+    if (blocked?.error != null) {
+      return { details: blocked.error.details, ok: false, reason: blocked.error.code };
+    }
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
     if (status.installResult == null) {
       return { ok: false, reason: "installer has not been opened" };
@@ -2365,12 +2621,33 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     setTimeout(() => options.requestQuit?.(), 0);
     return { ok: true };
   });
+  ipcMain.handle("od:update:set-menu-labels", async (event, rawLabels: unknown): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const labels = parseDesktopUpdateMenuLabels(rawLabels);
+    if (labels == null) return { ok: false, reason: "invalid updater menu labels" };
+    options.onUpdateMenuLabels?.(labels);
+    return { ok: true };
+  });
 
   ipcMain.removeAllListeners("desktop-pet:set-visible");
   ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
     if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
     if (visible) petWindow.showInactive();
     else petWindow.hide();
+  });
+
+  ipcMain.removeAllListeners("od:appearance:set-theme");
+  ipcMain.on("od:appearance:set-theme", (event, theme: unknown) => {
+    if (window.isDestroyed() || event.sender !== window.webContents) return;
+    if (theme !== "light" && theme !== "dark" && theme !== "system") return;
+    // Pin the native appearance to the app theme. The macOS frosted window
+    // (vibrancy: under-window) draws its glass in the SYSTEM appearance by
+    // default, so a light app over a dark OS sat on dark glass and read as a
+    // muddy gray (#94); forcing the native theme keeps the glass material in
+    // step with the app's tokens. The host protocol still carries all three
+    // values as generic infrastructure, but the app ships light-only, so this
+    // is the same value `pinNativeAppearanceToLight` already set at startup.
+    nativeTheme.themeSource = theme;
   });
 
   ipcMain.removeHandler('od:print-pdf');
@@ -2421,10 +2698,22 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedChildWindowUrl(url)) return { action: "allow" };
     if (isHttpUrl(url)) void shell.openExternal(url);
+    else if (isFirstPartyMailtoUrl(url)) void openFirstPartyMailto(url);
     return { action: "deny" };
   });
 
   window.webContents.on("will-navigate", (event, url) => {
+    // A `mailto:` never belongs in this window. Hand it to the local mail
+    // client and cancel the navigation, otherwise Electron drops it and the
+    // user sees the page sit there unchanged. `openFirstPartyMailto` also
+    // covers the machine whose OS-level mailto handler is a web browser —
+    // recvpZzUroEPUT: `shell.openExternal(mailto:)` there just focuses the
+    // browser on its current page and no compose window ever opens.
+    if (isFirstPartyMailtoUrl(url)) {
+      event.preventDefault();
+      void openFirstPartyMailto(url);
+      return;
+    }
     if (!isHttpUrl(url) || url === currentUrl) return;
     const currentOrigin = currentUrl ? new URL(currentUrl).origin : null;
     const nextOrigin = new URL(url).origin;
@@ -2531,8 +2820,43 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     splashStartedAt = created.startedAt;
   }
 
+  let pendingUpdateDialogRequest: OpenDesignHostUpdaterOpenDialogRequest | null = null;
   let revealed = false;
   let revealing = false;
+
+  /**
+   * The runtime's canonical bring-to-front, shared by `show()` and the
+   * renderer's `od:window:show` request (a system-notification click).
+   */
+  const showMainWindow = (): void => {
+    if (window.isDestroyed()) return;
+    // Before the splash reveal gate has fired (revealWhenReady), the main
+    // window is still hidden and surfacing it here would show the half-loaded
+    // web shell and bypass the gate — reintroducing the startup flash this is
+    // meant to remove (e.g. a packaged second-instance focus arriving mid
+    // boot). Bring the splash forward instead; the main window is revealed on
+    // its own once the app has mounted.
+    if (!revealed) {
+      if (splash != null && !splash.isDestroyed()) {
+        splash.show();
+        splash.focus();
+      }
+      return;
+    }
+    // A minimized window must be restored before focus — `focus()` alone
+    // leaves it in the Dock, silently breaking the deeplink hand-off whose
+    // entire payload is this bring-to-front.
+    ensureWindowVisible(window);
+  };
+
+  // A click on a system notification the renderer raised must bring the
+  // window back even when it is minimized or hidden by the close button: the
+  // renderer's own `window.focus()` reaches neither (P0-24 N11).
+  ipcMain.removeAllListeners("od:window:show");
+  ipcMain.on("od:window:show", (event) => {
+    if (window.isDestroyed() || event.sender !== window.webContents) return;
+    showMainWindow();
+  });
 
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
@@ -2541,6 +2865,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     window.show();
     window.focus();
     ensureWindowVisible(window);
+    if (pendingUpdateDialogRequest != null) {
+      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, pendingUpdateDialogRequest);
+      pendingUpdateDialogRequest = null;
+    }
     if (splash != null && !splash.isDestroyed()) splash.close();
     // The app is now truly up (mounted + shown). Fire once — revealed guards
     // re-entry — so callers can mark "reached running".
@@ -2553,7 +2881,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
 
   // Hold the splash until BOTH (a) the web bundle reports it has mounted — it
   // sets `data-od-app-mounted="1"` on first paint of the real UI — so we never
-  // reveal the web's own dark "Loading Open Design…" shell, and (b) the splash
+  // reveal the web's own dark "Loading OpenDesign…" shell, and (b) the splash
   // has been up at least MIN_SPLASH_MS so the brand clip plays through. A hard
   // ceiling guarantees the user is never stranded on the splash if the mount
   // signal never arrives.
@@ -2563,9 +2891,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // The web bundle is loading in the hidden main window from here on; let
     // the splash status line reflect that final phase while we poll for mount.
     setSplashStage(splash, "workspace");
+    let mounted = false;
     const deadline = Date.now() + WEB_MOUNT_REVEAL_TIMEOUT_MS;
     while (!stopped && !window.isDestroyed() && Date.now() < deadline) {
-      const mounted = await window.webContents
+      mounted = await window.webContents
         .executeJavaScript(`document.documentElement.getAttribute("data-od-app-mounted") === "1"`, true)
         .catch(() => false);
       if (mounted === true) break;
@@ -2579,6 +2908,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
     if (remaining > 0) await delay(remaining);
     revealMainWindow();
+    // A timeout/crash fallback can also reveal a window. Only a mounted,
+    // healthy app is a successful updater desktop observation.
+    if (mounted && !rendererFailed && revealed && !window.isDestroyed()) {
+      try { options.onMainWindowReady?.(); } catch {}
+    }
   };
 
   const schedule = (delayMs: number) => {
@@ -2721,6 +3055,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   void tick();
 
   return {
+    ownsWebContents(id: number): boolean { return !window.isDestroyed() && window.webContents.id === id; },
     async click(input) {
       if (window.isDestroyed()) return { clicked: false, found: false };
       const selector = JSON.stringify(input.selector);
@@ -2735,6 +3070,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       );
     },
     async close() {
+      stopDisplayRefresh();
       stopped = true;
       if (timer != null) {
         clearTimeout(timer);
@@ -2742,6 +3078,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       }
       unsubscribeUpdater();
       ipcMain.removeAllListeners("desktop-pet:set-visible");
+      ipcMain.removeAllListeners("od:appearance:set-theme");
+      ipcMain.removeAllListeners("od:window:show");
       for (const channel of UPDATER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
@@ -2786,6 +3124,19 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     exportPdf(input) {
       return exportPdfFromHtml(input);
     },
+    openUpdateDialog(request) {
+      if (window.isDestroyed()) return;
+      if (!revealed) {
+        pendingUpdateDialogRequest = request;
+        return;
+      }
+      window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
+      window.show();
+      window.focus();
+    },
+    renderFrames(input) {
+      return renderDeterministicFrames(input);
+    },
     renderSlides(input) {
       return renderDeckSlides(input);
     },
@@ -2798,22 +3149,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { path: outputPath };
     },
     show() {
-      if (window.isDestroyed()) return;
-      // Before the splash reveal gate has fired (revealWhenReady), the main
-      // window is still hidden and surfacing it here would show the half-loaded
-      // web shell and bypass the gate — reintroducing the startup flash this is
-      // meant to remove (e.g. a packaged second-instance focus arriving mid
-      // boot). Bring the splash forward instead; the main window is revealed on
-      // its own once the app has mounted.
-      if (!revealed) {
-        if (splash != null && !splash.isDestroyed()) {
-          splash.show();
-          splash.focus();
-        }
-        return;
-      }
-      window.show();
-      window.focus();
+      showMainWindow();
     },
     status() {
       return {

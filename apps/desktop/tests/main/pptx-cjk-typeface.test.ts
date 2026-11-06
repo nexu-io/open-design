@@ -37,7 +37,7 @@ describe('cjkPromotedFontFamily', () => {
   });
 
   test('mixed Latin + CJK text still promotes (the CJK run must be correct)', () => {
-    const promoted = cjkPromotedFontFamily(SANS, 'Open Design 设计工具');
+    const promoted = cjkPromotedFontFamily(SANS, 'OpenDesign 设计工具');
     expect(promoted!.split(',')[0].trim()).toBe('"Noto Sans SC"');
   });
 
@@ -48,7 +48,7 @@ describe('cjkPromotedFontFamily', () => {
     expect(cjkPromotedFontFamily(SANS, 'Product Launch产品发布')!.split(',')[0].trim()).toBe(
       '"Noto Sans SC"',
     );
-    expect(cjkPromotedFontFamily(SANS, 'Welcome to Open Design 欢迎')!.split(',')[0].trim()).toBe(
+    expect(cjkPromotedFontFamily(SANS, 'Welcome to OpenDesign 欢迎')!.split(',')[0].trim()).toBe(
       '"Noto Sans SC"',
     );
   });

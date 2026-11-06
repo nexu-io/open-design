@@ -12,7 +12,14 @@ export interface DesignSystemRenameArgs {
   title: string;
 }
 
-const STRING_FLAGS_WITH_VALUE = new Set(['daemon-url', 'query', 'tag', 'title']);
+const STRING_FLAGS_WITH_VALUE = new Set([
+  'daemon-url',
+  'query',
+  'tag',
+  'title',
+  'workspace',
+  'workspace-member',
+]);
 
 // A separate flag value must be a real token, not the next flag. Without this
 // guard, `--title --json` would read "--json" as the title and rename the

@@ -4,7 +4,8 @@
   "events": [
     {
       "type": "status",
-      "label": "running"
+      "label": "running",
+      "sessionId": "<normalized>"
     },
     {
       "type": "tool_use",

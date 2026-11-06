@@ -3,7 +3,7 @@
 // Regression test for "PostHog session replay is enabled but privacy-masked".
 //
 // Session replay was previously off (`disable_session_recording: true`)
-// because Open Design's DOM is full of sensitive content — prompts, generated
+// because OpenDesign's DOM is full of sensitive content — prompts, generated
 // artifacts, and BYOK provider keys. Turning replay on without masking would
 // violate the no-prompt-content rule.
 //

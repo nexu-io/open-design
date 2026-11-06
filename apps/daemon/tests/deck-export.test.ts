@@ -12,6 +12,7 @@ import {
   buildDeckRenderInput,
   decodeSlideDataUrls,
   readSlideFiles,
+  resolvePptxConstructor,
 } from '../src/deck-export.js';
 
 // 1x1 transparent PNG.
@@ -45,6 +46,34 @@ describe('decodeSlideDataUrls', () => {
 
   it('rejects a value that is not a data URL', () => {
     expect(() => decodeSlideDataUrls(['not-a-data-url'])).toThrow();
+  });
+});
+
+describe('resolvePptxConstructor', () => {
+  // Stands in for the real class; only the module shape matters here.
+  class FakePptxGenJS {}
+
+  it('resolves the bare CJS shape where the namespace itself is the constructor', () => {
+    expect(resolvePptxConstructor(FakePptxGenJS)).toBe(FakePptxGenJS);
+  });
+
+  it('resolves the pure ESM shape where default is the constructor', () => {
+    expect(resolvePptxConstructor({ default: FakePptxGenJS })).toBe(FakePptxGenJS);
+  });
+
+  it('resolves the tsx CJS-interop shape where default is double-wrapped', () => {
+    // tsx (the tools-dev daemon runtime) loads pptxgenjs's CJS build and wraps
+    // it so the namespace's `.default` is an object whose own `.default` is the
+    // class. Reaching only one level — as the old
+    // `PptxGenJSModule.default as ...` did — constructs a plain Object and
+    // fails with "PptxGenJS is not a constructor" on every PPTX export.
+    expect(resolvePptxConstructor({ default: { default: FakePptxGenJS } })).toBe(FakePptxGenJS);
+  });
+
+  it('throws on shapes with no reachable constructor', () => {
+    expect(() => resolvePptxConstructor({})).toThrow(/unable to resolve/);
+    expect(() => resolvePptxConstructor({ default: {} })).toThrow(/unable to resolve/);
+    expect(() => resolvePptxConstructor(null)).toThrow(/unable to resolve/);
   });
 });
 
@@ -120,7 +149,8 @@ describe('buildDeckRenderInput', () => {
 
       expect(request.input.html).toContain('data-od-deck-stage-fallback');
       expect(request.input.html).toContain("window.customElements.define('deck-stage'");
-      expect(request.input.html).toContain("type: 'od:slide-state'");
+      expect(request.input.html).toContain('type: "od:slide-state"');
+      expect(request.input.html).toContain('protocolVersion: 1');
     } finally {
       rmSync(projectsRoot, { recursive: true, force: true });
     }

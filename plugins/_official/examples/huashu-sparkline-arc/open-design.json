@@ -10,9 +10,9 @@
   },
   "version": "1.0.0",
   "publishedAt": "2026-06-16T09:32:15Z",
-  "description": "Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.",
+  "description": "OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.",
   "description_i18n": {
-    "en": "Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.",
+    "en": "OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Built as a decision-grade data & finance deck for board, finance leadership.",
     "zh-CN": "像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。",
     "zh-TW": "像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。"
   },
@@ -70,8 +70,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create \"Write a Revenue-Driver Story like a Board-Level Finance Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Audience: board, finance leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
-        "zh-CN": "像董事会级财务伙伴一样写收入驱动分析。像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：Open Design's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+        "en": "Create \"Write a Revenue-Driver Story like a Board-Level Finance Partner\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. Audience: board, finance leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it.",
+        "zh-CN": "像董事会级财务伙伴一样写收入驱动分析。像董事会级财务伙伴一样写收入驱动分析——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。 主题：OpenDesign's revenue-driver narrative: what actually moves ARR, the leverage points, and the forecast. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
       },
       "exampleOutputs": [
         {

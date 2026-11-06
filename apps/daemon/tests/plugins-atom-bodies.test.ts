@@ -15,7 +15,7 @@ import Database from 'better-sqlite3';
 import { migratePlugins } from '../src/plugins/persistence.js';
 import { registerBundledPlugins } from '../src/plugins/bundled.js';
 import { loadAtomBodies } from '../src/plugins/atom-bodies.js';
-import { renderActiveStageBlock } from '@open-design/contracts';
+import { renderActiveStageBlock, renderActiveStageBlocks } from '@open-design/contracts';
 
 const SAMPLE_MANIFEST = (id: string) =>
   JSON.stringify({
@@ -90,5 +90,35 @@ describe('renderActiveStageBlock + loadAtomBodies (end-to-end stage block)', () 
     expect(block).toContain('Ask the user about audience.');
     expect(block).toContain('### todo-write');
     expect(block).toContain('Commit a numbered plan.');
+  });
+});
+
+describe('renderActiveStageBlocks + loadAtomBodies (issue #6238 cross-stage dedup)', () => {
+  it('inlines an atom shared by two stages exactly once, mirroring the server composer loop', async () => {
+    // Same shape as the `activeStageBlocks` build in server.ts and the
+    // od-default pipeline: `discovery-question-form` declared by both
+    // `task-type` and `discovery`.
+    const stages = [
+      { id: 'task-type', atoms: ['discovery-question-form'] },
+      { id: 'discovery', atoms: ['discovery-question-form', 'todo-write'] },
+    ];
+    const stageViews = [];
+    for (const stage of stages) {
+      stageViews.push({ stageId: stage.id, bodies: await loadAtomBodies(db, stage.atoms) });
+    }
+    const blocks = renderActiveStageBlocks(stageViews);
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toContain('## Active stage: task-type');
+    expect(blocks[1]).toContain('## Active stage: discovery');
+    // Full body once, under the first stage only.
+    const joined = blocks.join('\n');
+    expect(joined.split('Ask the user about audience.').length - 1).toBe(1);
+    expect(blocks[0]).toContain('Ask the user about audience.');
+    // Second stage keeps the subsection but points back instead of repeating.
+    expect(blocks[1]).toContain('### discovery-question-form');
+    expect(blocks[1]).toContain('already included');
+    // Unshared atoms are unaffected.
+    expect(blocks[1]).toContain('Commit a numbered plan.');
   });
 });

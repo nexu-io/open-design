@@ -40,4 +40,90 @@ describe('createBufferedTextUpdates pending text accounting', () => {
 
     buf.cancel();
   });
+
+  it('coalesces adjacent thinking deltas into one frame update', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+
+    let msg = { events: [] } as unknown as ChatMessage;
+    let updates = 0;
+    const buf = createBufferedTextUpdates({
+      updateMessage: (u) => {
+        msg = u(msg);
+        updates += 1;
+      },
+      persistSoon: () => {},
+    });
+
+    for (let index = 0; index < 1_500; index += 1) {
+      buf.appendEvent({ kind: 'thinking', text: 'x' });
+    }
+
+    expect(msg.events).toEqual([]);
+    buf.flush();
+    expect(msg.events).toEqual([{ kind: 'thinking', text: 'x'.repeat(1_500) }]);
+    expect(updates).toBe(1);
+    buf.cancel();
+  });
+
+  it('drops an identical snapshot burst without losing a later state change', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+
+    let msg = { events: [] } as unknown as ChatMessage;
+    let updates = 0;
+    let persists = 0;
+    const buf = createBufferedTextUpdates({
+      updateMessage: (u) => {
+        msg = u(msg);
+        updates += 1;
+      },
+      persistSoon: () => {
+        persists += 1;
+      },
+    });
+    const pendingTodo = {
+      kind: 'tool_use' as const,
+      id: 'todo-1',
+      name: 'TodoWrite',
+      input: { todos: [{ content: 'Audit history', status: 'pending' }] },
+    };
+    const completedTodo = {
+      ...pendingTodo,
+      input: { todos: [{ content: 'Audit history', status: 'completed' }] },
+    };
+
+    for (let index = 0; index < 2_000; index += 1) {
+      buf.appendEvent({
+        ...pendingTodo,
+        input: { todos: [{ content: 'Audit history', status: 'pending' }] },
+      });
+    }
+    buf.appendTextEvent('<question-form>{"questions":[]}</question-form>');
+    buf.flush();
+    // Text is an event boundary. An equal snapshot after it is not a retry of
+    // the earlier occurrence and must remain in the historical timeline.
+    buf.appendEvent(pendingTodo);
+    buf.appendEvent(completedTodo);
+    const repeatedCommand = {
+      kind: 'tool_use' as const,
+      id: 'bash-1',
+      name: 'Bash',
+      input: { command: 'pwd' },
+    };
+    buf.appendEvent(repeatedCommand);
+    buf.appendEvent({ ...repeatedCommand, input: { command: 'pwd' } });
+
+    expect(msg.events).toEqual([
+      pendingTodo,
+      { kind: 'text', text: '<question-form>{"questions":[]}</question-form>' },
+      pendingTodo,
+      completedTodo,
+      repeatedCommand,
+      repeatedCommand,
+    ]);
+    expect(updates).toBe(6);
+    expect(persists).toBe(6);
+    buf.cancel();
+  });
 });

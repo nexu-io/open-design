@@ -1,4 +1,6 @@
+import { isOpenDesignHostAvailable, showHostWindow } from '@open-design/host';
 import type { Dict } from '../i18n/types';
+import type { NotificationsConfig } from '../types';
 
 export type SoundId = string;
 
@@ -31,6 +33,7 @@ type NotificationOptionsWithBrowserExtensions = NotificationOptions & {
 let ctx: AudioContext | null = null;
 const activeNotifications = new Set<Notification>();
 const SERVICE_WORKER_URL = '/od-notifications-sw.js';
+const COMPLETION_FEEDBACK_GESTURE_EVENT = 'od:completion-feedback-gesture';
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -146,6 +149,15 @@ export function playSound(id: SoundId): void {
   }
 }
 
+/**
+ * Create/resume the shared AudioContext from a trusted user gesture without
+ * playing a preview. Later task-completion sounds can then run after the
+ * gesture has ended without being rejected by browser autoplay policy.
+ */
+export function prepareCompletionSound(): void {
+  getCtx();
+}
+
 export function previewSuccess(id: SoundId): void {
   playSound(id);
 }
@@ -173,10 +185,80 @@ export async function requestNotificationPermission(): Promise<
   }
 }
 
+export interface CompletionFeedbackActivationResult {
+  desktopPermission: NotificationPermission | 'unsupported' | null;
+}
+
+/**
+ * Arm completion feedback until the first real task submission. The submit
+ * surfaces dispatch the event synchronously from their click/keyboard handler,
+ * preserving the trusted gesture required by browser permission/autoplay APIs
+ * without prompting on unrelated app interactions.
+ */
+export function armCompletionFeedbackOnFirstGesture(
+  config: NotificationsConfig,
+  onResult: (result: CompletionFeedbackActivationResult) => void,
+  permissionAlreadyHandled = false,
+): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  let armed = true;
+  let permissionRequested = permissionAlreadyHandled;
+  let preparationTimer: number | null = null;
+  function dispose() {
+    if (!armed) return;
+    armed = false;
+    window.removeEventListener(COMPLETION_FEEDBACK_GESTURE_EVENT, activate);
+  }
+  function activate() {
+    if (!armed) return;
+    // AudioContext construction can stall the first Send click. The browser
+    // retains this real user activation briefly, so let the send feedback
+    // paint first while also supporting a backgrounded window (no rAF).
+    // A rejected/background-throttled resume is retried on the next real
+    // Send gesture; permission is still requested at most once.
+    if (config.soundEnabled && ctx?.state === 'suspended') {
+      // A later trusted Send can retry a browser-rejected resume immediately.
+      // Constructing a new context is the expensive operation deferred below.
+      void ctx.resume().catch(() => undefined);
+    } else if (config.soundEnabled && !ctx) {
+      // If a background tab throttled the previous timer, a later real Send
+      // gets a new attempt instead of remaining stuck behind that old timer.
+      if (preparationTimer !== null) window.clearTimeout(preparationTimer);
+      preparationTimer = window.setTimeout(() => {
+        preparationTimer = null;
+        prepareCompletionSound();
+      }, 300);
+    }
+    if (permissionRequested) return;
+    permissionRequested = true;
+    if (!config.desktopEnabled) {
+      onResult({ desktopPermission: null });
+      return;
+    }
+    void requestNotificationPermission().then((desktopPermission) => {
+      onResult({ desktopPermission });
+    });
+  }
+  window.addEventListener(COMPLETION_FEEDBACK_GESTURE_EVENT, activate);
+  return dispose;
+}
+
+/** Signal a real task submission while still inside its trusted user gesture. */
+export function notifyCompletionFeedbackGesture(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new window.Event(COMPLETION_FEEDBACK_GESTURE_EVENT));
+}
+
 export interface CompletionNotificationOpts {
   status: 'succeeded' | 'failed';
   title: string;
   body: string;
+  /**
+   * Notification identity. The default is one per status, so a second turn of
+   * the same kind replaces the first; the global feed passes one per run so
+   * two projects finishing back to back both stay in the center (P0-24 N10).
+   */
+  tag?: string;
   onClick?: () => void;
 }
 
@@ -189,7 +271,7 @@ export type CompletionNotificationResult =
 function notificationOptionsFor(
   opts: CompletionNotificationOpts,
 ): NotificationOptionsWithBrowserExtensions {
-  const tag = `od-task-${opts.status}`;
+  const tag = opts.tag ?? `od-task-${opts.status}`;
   return {
     body: opts.body,
     tag,
@@ -229,11 +311,7 @@ function showViaConstructor(opts: CompletionNotificationOpts): CompletionNotific
       activeNotifications.delete(note);
     };
     note.onclick = () => {
-      try {
-        if (typeof window !== 'undefined') window.focus();
-      } catch {
-        /* ignore */
-      }
+      bringAppToFront();
       opts.onClick?.();
       try {
         note.close();
@@ -249,10 +327,30 @@ function showViaConstructor(opts: CompletionNotificationOpts): CompletionNotific
   }
 }
 
+/**
+ * Bring the app to the front for a notification click (P0-24 N11). The
+ * desktop host restores a minimized or close-button-hidden window, which the
+ * renderer's own `window.focus()` cannot; web keeps `window.focus()`.
+ */
+function bringAppToFront(): void {
+  if (showHostWindow().ok) return;
+  try {
+    if (typeof window !== 'undefined') window.focus();
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function showCompletionNotification(
   opts: CompletionNotificationOpts,
 ): Promise<CompletionNotificationResult> {
   if (typeof Notification === 'undefined') return 'unsupported';
   if (Notification.permission !== 'granted') return 'permission-denied';
+  // The desktop client (Electron) accepts a service-worker notification and
+  // resolves, but never delivers it — measured on macOS: none reached
+  // Notification Center while constructor notifications did. So the desktop
+  // goes straight to the constructor, whose click handler can also bring the
+  // window back. Web keeps the service worker first.
+  if (isOpenDesignHostAvailable()) return showViaConstructor(opts);
   return (await showViaServiceWorker(opts)) ?? showViaConstructor(opts);
 }

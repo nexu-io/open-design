@@ -209,7 +209,7 @@ export function PluginMediaDetail({
               className="plugin-media-sidebar__prompt-copy"
               onClick={handleCopy}
             >
-              <Icon name={copied ? 'check' : 'copy'} size={12} />
+              <Icon name={copied ? 'check' : 'copy'} size={14} />
               {copied
                 ? t('promptTemplates.copyDone')
                 : t('promptTemplates.copyPrompt')}

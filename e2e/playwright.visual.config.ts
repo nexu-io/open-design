@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
+import { initializePlaywrightRunNamespace } from './lib/playwright/runtime-identity.ts';
+
+initializePlaywrightRunNamespace();
+
 function parseWorkerCount(value: string | undefined): number {
   if (value == null || value.length === 0) return 3;
   const parsed = Number(value);
@@ -25,8 +29,8 @@ export default defineConfig({
     : [['list'], ['json', { outputFile: './ui/reports/visual-results.json' }]],
   use: {
     ...devices['Desktop Chrome'],
-    trace: 'off',
-    screenshot: 'off',
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
   },

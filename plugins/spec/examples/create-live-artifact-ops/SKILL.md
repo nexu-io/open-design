@@ -3,7 +3,7 @@ name: create-live-artifact-ops
 description: Create a refreshable live operations artifact for customer success, support, or launch review workflows.
 license: MIT
 metadata:
-  author: Open Design Spec Examples
+  author: OpenDesign Spec Examples
   version: "0.1.0"
 ---
 

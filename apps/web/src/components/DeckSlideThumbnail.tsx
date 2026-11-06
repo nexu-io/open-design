@@ -27,7 +27,7 @@ const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffec
 // - `.overlay/.tapzones`: template decks (`deck-stage.js`) name their nav this
 //   way — belt-and-suspenders on top of DECK_CHROME_HIDE_CSS.
 const THUMB_OVERRIDE_CSS = `[data-od-thumb-wrap]{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;margin:0!important;padding:0!important;transform:none!important;box-shadow:none!important;visibility:visible!important;opacity:1!important;}
-[data-od-thumb-slide]{display:block!important;position:absolute!important;inset:0!important;margin:0!important;visibility:visible!important;opacity:1!important;pointer-events:none!important;}
+[data-od-thumb-slide]{position:absolute!important;inset:0!important;margin:0!important;visibility:visible!important;opacity:1!important;pointer-events:none!important;}
 .overlay,.tapzones{display:none!important;visibility:hidden!important;pointer-events:none!important;}`;
 
 interface DeckCssEntry {

@@ -39,7 +39,7 @@ export function isSupportedNodeRuntime(nodeVersion = process.version): boolean {
 
 export function formatUnsupportedNodeRuntimeMessage(runtime: NodeRuntimeDiagnosticInput = currentNodeRuntime()): string {
   return [
-    `tools-dev must run with ${SUPPORTED_NODE_RANGE} before starting Open Design.`,
+    `tools-dev must run with ${SUPPORTED_NODE_RANGE} before starting OpenDesign.`,
     `Current runtime: Node ${runtime.nodeVersion} (NODE_MODULE_VERSION ${runtime.nodeModuleVersion}).`,
     "Switch to Node 24 first, then refresh native dependencies if this worktree was installed under another Node:",
     "  nvm use 24",
@@ -54,7 +54,7 @@ export function createUnsupportedNodeRuntimeError(runtime?: NodeRuntimeDiagnosti
 
 function formatNativeAddonAbiMismatchRecommendation(runtime: NodeRuntimeDiagnosticInput): string {
   const base = [
-    "Open Design's dev stack must run with Node ~24.",
+    "OpenDesign's dev stack must run with Node ~24.",
     `Current tools-dev runtime: Node ${runtime.nodeVersion} (NODE_MODULE_VERSION ${runtime.nodeModuleVersion}).`,
   ];
 

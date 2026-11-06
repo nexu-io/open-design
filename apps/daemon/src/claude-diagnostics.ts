@@ -174,9 +174,9 @@ export function diagnoseClaudeCliFailure(
     }
     const configHint = hasConfigDir
       ? 'The configured Claude config directory may contain stale or expired auth state.'
-      : 'If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so Open Design spawns the same profile that works in your terminal.';
+      : 'If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so OpenDesign spawns the same profile that works in your terminal.';
     return withContext(
-      'Claude Code could not authenticate. Run `claude`, use `/login`, then retry the Open Design request.',
+      'Claude Code could not authenticate. Run `claude`, use `/login`, then retry the OpenDesign request.',
       `The spawned Claude Code process exited before producing a response. ${configHint}`,
       input,
     );
@@ -202,7 +202,7 @@ export function diagnoseClaudeCliFailure(
   if (windowsCredentialMismatch) {
     return withContext(
       'Claude Code appears to be using credentials from a different local environment.',
-      'Re-authenticate Claude Code in the same Windows, WSL, or shell environment that Open Design uses. On native Windows, check Windows Credential Manager if `/login` does not repair the session.',
+      'Re-authenticate Claude Code in the same Windows, WSL, or shell environment that OpenDesign uses. On native Windows, check Windows Credential Manager if `/login` does not repair the session.',
       input,
     );
   }
@@ -215,7 +215,7 @@ export function diagnoseClaudeCliFailure(
       ? 'Claude Code failed while using the configured Claude profile.'
       : 'Claude Code may be using a different or stale local profile than your terminal.';
     const detail = hasConfigDir
-      ? 'Re-run `claude` and `/login` for that profile, then retry Open Design.'
+      ? 'Re-run `claude` and `/login` for that profile, then retry OpenDesign.'
       : 'Run `claude` and `/login`, or set CLAUDE_CONFIG_DIR in Settings when you use multiple Claude profiles.';
     return withContext(message, detail, input);
   }
@@ -240,8 +240,8 @@ export function diagnoseClaudeCliFailure(
       ? 'Claude Code exited before producing diagnostics while using the configured Claude profile.'
       : 'Claude Code exited before producing diagnostics.';
     const detail = hasConfigDir
-      ? 'Re-run `claude` and `/login` for that profile, then retry Open Design.'
-      : 'Run `claude`, use `/login`, and retry. If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so Open Design uses the same profile as your terminal.';
+      ? 'Re-run `claude` and `/login` for that profile, then retry OpenDesign.'
+      : 'Run `claude`, use `/login`, and retry. If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so OpenDesign uses the same profile as your terminal.';
     return withContext(
       message,
       detail,

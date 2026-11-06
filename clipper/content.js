@@ -1,10 +1,10 @@
-// Open Design web clipper on-page UI.
+// OpenDesign web clipper on-page UI.
 //
 // Three on-page surfaces, all isolated in their own Shadow DOM so page CSS
 // can't bleed in (and the extension's own nodes are excluded from captures):
 //
 //   1. A floating launcher toolbar (page / design system / figma / shot / images / element),
-//      led by the Open Design brand mark. HIDDEN by default — turned on from
+//      led by the OpenDesign brand mark. HIDDEN by default — turned on from
 //      the popup; the preference is remembered. A grip handle on its leading
 //      edge drags it anywhere on the page, and the resting spot is remembered.
 //   2. A DevTools-style element picker: hover to highlight, click to capture
@@ -33,7 +33,7 @@
   // content script's isolated world, because we share the host page's DOM and
   // its CSP governs every DOM sink. That throw used to abort this whole script
   // right after the injection guard was set, leaving the page flagged but with
-  // no message listener: the popup then reported "Open Design hasn't attached to
+  // no message listener: the popup then reported "OpenDesign hasn't attached to
   // this page yet" and neither a reload nor the popup's "Refresh page" could
   // recover it. DOMParser is NOT a Trusted Types sink, so parse the markup in a
   // detached document and move the nodes in. `<style>` lands in <head> and the
@@ -824,7 +824,7 @@
         sourceTitle: document.title,
       });
     } catch (err) {
-      console.warn('[Open Design] element capture failed', err);
+      console.warn('[OpenDesign] element capture failed', err);
       stopBusy();
       toast(t('extensionErrorReload'));
       return;

@@ -1,9 +1,11 @@
 import type http from 'node:http';
+import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { chmod, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -13,18 +15,23 @@ import {
   startServer,
 } from '../src/server.js';
 
+type StartedImportServer = {
+  url: string;
+  server: http.Server;
+  shutdown: () => Promise<void> | void;
+};
+
 describe('POST /api/import/folder', () => {
   let server: http.Server;
   let baseUrl: string;
+  let shutdown: () => Promise<void> | void;
   const tempDirs: string[] = [];
 
   beforeAll(async () => {
-    const started = (await startServer({ port: 0, returnServer: true })) as {
-      url: string;
-      server: http.Server;
-    };
+    const started = (await startServer({ port: 0, returnServer: true })) as StartedImportServer;
     baseUrl = started.url;
     server = started.server;
+    shutdown = started.shutdown;
   });
 
   afterEach(() => {
@@ -34,8 +41,11 @@ describe('POST /api/import/folder', () => {
     }
   });
 
-  afterAll(() => {
-    return new Promise<void>((resolve) => server.close(() => resolve()));
+  afterAll(async () => {
+    await shutdown();
+    if (server.listening) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   function makeFolder(): string {
@@ -50,6 +60,22 @@ describe('POST /api/import/folder', () => {
       headers: { 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
+  }
+
+  function workspaceHeaders(
+    workspaceId: string,
+    workspaceMemberId: string,
+  ): Record<string, string> {
+    return {
+      'x-od-workspace-id': workspaceId,
+      'x-od-workspace-type': 'team',
+      'x-od-workspace-member-id': workspaceMemberId,
+      'x-od-workspace-role': 'member',
+      'x-od-workspace-lifecycle-state': 'active',
+      'x-od-workspace-member-status': 'active',
+      'x-od-workspace-can-share-projects': 'true',
+      'x-od-workspace-can-write-synced-files': 'true',
+    };
   }
 
   async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {
@@ -103,6 +129,113 @@ describe('POST /api/import/folder', () => {
     };
     expect(tabs).toMatchObject({ tabs: [], active: null, hasSavedState: true });
     expect(typeof tabs.updatedAt).toBe('number');
+  });
+
+  it('atomically binds a folder import to the exact request workspace and not workspace B', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    const headersA = workspaceHeaders('workspace-folder-a', 'member-folder-a');
+
+    const resp = await importFolder({ baseDir: folder }, headersA);
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project: { id: string } };
+
+    const detail = await fetch(
+      `${baseUrl}/api/projects/${body.project.id}`,
+      { headers: headersA },
+    );
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      project: {
+        id: body.project.id,
+        workspaceId: 'workspace-folder-a',
+      },
+    });
+
+    const workspaceA = await fetch(
+      `${baseUrl}/api/workspaces/workspace-folder-a/projects?view=drafts`,
+      { headers: headersA },
+    );
+    expect(workspaceA.status).toBe(200);
+    const projectsA = (await workspaceA.json()) as {
+      projects: Array<{ project: { id: string } }>;
+    };
+    expect(projectsA.projects.map((item) => item.project.id)).toContain(body.project.id);
+
+    const headersB = workspaceHeaders('workspace-folder-b', 'member-folder-b');
+    const workspaceB = await fetch(
+      `${baseUrl}/api/workspaces/workspace-folder-b/projects?view=drafts`,
+      { headers: headersB },
+    );
+    expect(workspaceB.status).toBe(200);
+    const projectsB = (await workspaceB.json()) as {
+      projects: Array<{ project: { id: string } }>;
+    };
+    expect(projectsB.projects.map((item) => item.project.id)).not.toContain(body.project.id);
+  });
+
+  it('validates an imported project skill inside the exact request workspace before inserting rows', async () => {
+    const folder = makeFolder();
+    await writeFile(path.join(folder, 'index.html'), '<!doctype html>');
+    const headers = workspaceHeaders('workspace-folder-skill', 'member-folder-skill');
+    const beforeResponse = await fetch(
+      `${baseUrl}/api/workspaces/workspace-folder-skill/projects?view=drafts`,
+      { headers },
+    );
+    const before = (await beforeResponse.json()) as {
+      projects: Array<{ project: { id: string } }>;
+    };
+
+    const response = await importFolder(
+      { baseDir: folder, skillId: 'skill-that-does-not-exist' },
+      headers,
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'SKILL_NOT_FOUND' },
+    });
+    const afterResponse = await fetch(
+      `${baseUrl}/api/workspaces/workspace-folder-skill/projects?view=drafts`,
+      { headers },
+    );
+    const after = (await afterResponse.json()) as {
+      projects: Array<{ project: { id: string } }>;
+    };
+    expect(after.projects).toEqual(before.projects);
+  });
+
+  it('atomically binds a Claude Design import to the exact request workspace', async () => {
+    const zip = new JSZip();
+    zip.file('index.html', '<!doctype html><title>Claude import</title>');
+    const archive = await zip.generateAsync({ type: 'uint8array' });
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([archive], { type: 'application/zip' }),
+      'claude-workspace.zip',
+    );
+    const headers = workspaceHeaders('workspace-claude-a', 'member-claude-a');
+
+    const resp = await fetch(`${baseUrl}/api/import/claude-design`, {
+      method: 'POST',
+      headers,
+      body: form,
+    });
+    expect(resp.status).toBe(200);
+    const body = (await resp.json()) as { project: { id: string } };
+
+    const detail = await fetch(
+      `${baseUrl}/api/projects/${body.project.id}`,
+      { headers },
+    );
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      project: {
+        id: body.project.id,
+        workspaceId: 'workspace-claude-a',
+      },
+    });
   });
 
   it('rejects folder imports in sandbox mode', async () => {
@@ -361,6 +494,56 @@ describe('POST /api/import/folder', () => {
     expect(replaceResp.status).toBe(400);
     const body = (await replaceResp.json()) as { error?: { message?: string } };
     expect(body.error?.message).toMatch(/unsupported field: source_reference/i);
+  });
+
+  it('requires the exact explicit Workspace member before replacing a bound project working directory', async () => {
+    const originalFolder = makeFolder();
+    await writeFile(path.join(originalFolder, 'index.html'), '<!doctype html><title>original</title>');
+    const ownerHeaders = workspaceHeaders('workspace-working-dir', 'member-working-dir-owner');
+    const importResp = await importFolder({ baseDir: originalFolder }, ownerHeaders);
+    expect(importResp.status).toBe(200);
+    const { project } = (await importResp.json()) as {
+      project: { id: string; metadata?: { baseDir?: string } };
+    };
+
+    const unauthorizedFolder = makeFolder();
+    await writeFile(path.join(unauthorizedFolder, 'index.html'), '<!doctype html><title>denied</title>');
+    const deniedResp = await fetch(`${baseUrl}/api/projects/${project.id}/working-dir`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...workspaceHeaders('workspace-working-dir', 'member-working-dir-teammate'),
+      },
+      body: JSON.stringify({ baseDir: unauthorizedFolder }),
+    });
+    expect(deniedResp.status).toBe(403);
+    await expect(deniedResp.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED' },
+    });
+
+    const afterDenied = await fetch(
+      `${baseUrl}/api/projects/${project.id}`,
+      { headers: ownerHeaders },
+    );
+    expect(afterDenied.status).toBe(200);
+    await expect(afterDenied.json()).resolves.toMatchObject({
+      project: {
+        id: project.id,
+        metadata: { baseDir: project.metadata?.baseDir },
+      },
+    });
+
+    const ownerFolder = makeFolder();
+    await writeFile(path.join(ownerFolder, 'index.html'), '<!doctype html><title>owner</title>');
+    const allowedResp = await fetch(`${baseUrl}/api/projects/${project.id}/working-dir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...ownerHeaders },
+      body: JSON.stringify({ baseDir: ownerFolder }),
+    });
+    expect(allowedResp.status).toBe(200);
+    await expect(allowedResp.json()).resolves.toMatchObject({
+      project: { id: project.id, metadata: { baseDir: await realpath(ownerFolder) } },
+    });
   });
 
   it('clears scratch provenance when replacing a working directory without new provenance', async () => {
@@ -807,6 +990,25 @@ describe('POST /api/import/folder', () => {
     expect(archive.status).toBe(400);
   });
 
+  it('does not follow descendant file symlinks while streaming an imported-folder archive', async () => {
+    const real = makeFolder();
+    const outside = makeFolder();
+    await writeFile(path.join(real, 'index.html'), '<!doctype html>');
+    await writeFile(path.join(outside, 'secret.txt'), 'must not enter archive');
+    try {
+      symlinkSync(path.join(outside, 'secret.txt'), path.join(real, 'secret-link.txt'));
+    } catch {
+      return;
+    }
+    const importResp = await importFolder({ baseDir: real });
+    const { project } = (await importResp.json()) as { project: { id: string } };
+    const archive = await fetch(`${baseUrl}/api/projects/${project.id}/archive`);
+
+    expect(archive.status).toBe(200);
+    const zip = await JSZip.loadAsync(await archive.arrayBuffer());
+    expect(Object.keys(zip.files)).not.toContain('secret-link.txt');
+  });
+
   // Regression for the patch-metadata wipe. updateProject() replaces
   // metadata wholesale, so a normal UI patch that omits baseDir would
   // silently detach the project from its imported folder. Verify the
@@ -919,4 +1121,98 @@ describe('POST /api/import/folder', () => {
     const body = (await resp.json()) as { error?: { message?: string } };
     expect(body.error?.message).toMatch(/data directory/i);
   });
+});
+
+describe('Workspace-scoped imports with Vela membership authority', () => {
+  it.each(['unavailable', 'unknown'] as const)(
+    'rejects both import entry points before creating data when membership is %s',
+    async (mode) => {
+      const folder = mkdtempSync(path.join(tmpdir(), 'od-import-authority-'));
+      const authority = createServer((req, res) => {
+        if (req.url !== '/api/v1/workspaces') {
+          res.writeHead(404).end();
+          return;
+        }
+        res.writeHead(mode === 'unavailable' ? 503 : 200, {
+          'content-type': 'application/json',
+        }).end(JSON.stringify({ items: [] }));
+      });
+      const managedEnv = {
+        OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
+        OD_COLLAB_TRANSPORT: 'off',
+        OD_RESOURCE_TRANSPORT: 'off',
+        OD_TEAM_PROJECTS_TRANSPORT: 'off',
+        VELA_CONTROL_KEY: 'import-authority-fixture-key',
+        VELA_API_URL: '',
+      };
+      const savedEnv = new Map(
+        Object.keys(managedEnv).map((key) => [key, process.env[key]]),
+      );
+      let daemon: StartedImportServer | null = null;
+      try {
+        await new Promise<void>((resolve) => authority.listen(0, '127.0.0.1', resolve));
+        const address = authority.address();
+        if (!address || typeof address === 'string') throw new Error('authority did not bind');
+        Object.assign(process.env, {
+          ...managedEnv,
+          VELA_API_URL: `http://127.0.0.1:${address.port}`,
+        });
+        daemon = await startServer({ port: 0, returnServer: true }) as StartedImportServer;
+        const headers = {
+          'x-od-workspace-id': 'workspace-import-unverified',
+          'x-od-workspace-member-id': 'member-import-unverified',
+          'x-od-workspace-type': 'team',
+          'x-od-workspace-role': 'owner',
+          'x-od-workspace-member-status': 'active',
+          'x-od-workspace-lifecycle-state': 'active',
+        };
+        const before = await fetch(`${daemon.url}/api/projects`);
+        expect(before.status).toBe(200);
+        const beforeProjects = await before.json();
+        const archive = new FormData();
+        archive.append('file', new Blob(['unread-before-authority-check']), 'unverified.zip');
+        const responses = [
+          await fetch(`${daemon.url}/api/import/folder`, {
+            method: 'POST',
+            headers: { ...headers, 'content-type': 'application/json' },
+            body: JSON.stringify({ baseDir: folder }),
+          }),
+          await fetch(`${daemon.url}/api/import/claude-design`, {
+            method: 'POST',
+            headers,
+            body: archive,
+          }),
+        ];
+        for (const response of responses) {
+          expect(response.status).toBe(mode === 'unavailable' ? 503 : 403);
+          await expect(response.json()).resolves.toMatchObject({
+            error: {
+              code: mode === 'unavailable'
+                ? 'WORKSPACE_AUTHORITY_UNAVAILABLE'
+                : 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+            },
+          });
+        }
+        const after = await fetch(`${daemon.url}/api/projects`);
+        expect(after.status).toBe(200);
+        expect(await after.json()).toEqual(beforeProjects);
+      } finally {
+        if (daemon) {
+          await daemon.shutdown();
+          if (daemon.server.listening) {
+            await new Promise<void>((resolve) => daemon!.server.close(() => resolve()));
+          }
+        }
+        authority.closeAllConnections();
+        if (authority.listening) {
+          await new Promise<void>((resolve) => authority.close(() => resolve()));
+        }
+        for (const [key, value] of savedEnv) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+        rmSync(folder, { recursive: true, force: true });
+      }
+    },
+  );
 });

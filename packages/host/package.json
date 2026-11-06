@@ -1,9 +1,9 @@
 {
   "name": "@open-design/host",
-  "version": "0.15.1",
+  "version": "0.25.1",
   "private": true,
   "type": "module",
-  "description": "Open Design renderer host bridge protocol.",
+  "description": "OpenDesign renderer host bridge protocol.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
@@ -32,9 +32,9 @@
     "@open-design/release": "workspace:*"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
-    "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
   "engines": {

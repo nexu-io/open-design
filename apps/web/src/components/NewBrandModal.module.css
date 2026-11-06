@@ -6,7 +6,9 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(26, 25, 22, 0.32);
+  background: var(--scrim-tint);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
   animation: backdropIn var(--dur-enter) var(--ease-out);
 }
 
@@ -64,7 +66,7 @@
 .title {
   margin: 0;
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-strong);
 }
 
@@ -114,7 +116,6 @@
 .input:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .input:disabled {

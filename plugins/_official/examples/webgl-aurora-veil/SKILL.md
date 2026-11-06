@@ -25,7 +25,7 @@ Produce a single self-contained `index.html` — A self-contained WebGL2 hero: l
 
 ## Why this is a powered artifact
 
-Open Design detects `getContext('webgl2')` / heavy WebGL and renders this file in **powered preview** (a cross-origin-isolated iframe). The full GPU + scroll pipeline runs; no opaque-sandbox workarounds are needed.
+OpenDesign detects `getContext('webgl2')` / heavy WebGL and renders this file in **powered preview** (a cross-origin-isolated iframe). The full GPU + scroll pipeline runs; no opaque-sandbox workarounds are needed.
 
 ## Resource map
 

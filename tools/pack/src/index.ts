@@ -1,7 +1,7 @@
 import { cac } from "cac";
 import type { CAC } from "cac";
 
-import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
+import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config/index.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
@@ -73,7 +73,7 @@ function addSharedOptions(command: CacCommand) {
     .option("--path <path>", "desktop inspect screenshot path")
     .option("--status-poll-count <count>", "inspect: poll desktop/daemon/web STATUS this many times")
     .option("--status-poll-interval-ms <ms>", "inspect: delay between STATUS poll samples")
-    .option("--update-action <action>", "desktop update action: status|check|download|install");
+    .option("--update-action <action>", "desktop update action: status|check|clear-cache|download|install");
 }
 
 // Per-platform `--to` help text mirroring resolveToolPackBuildOutput in
@@ -113,6 +113,17 @@ function addWinLifecycleOptions(command: CacCommand) {
 }
 
 const cli = cac("tools-pack");
+
+cli.command('verify-runtime', 'Verify installed prerelease Vela/OpenCode identity against a release manifest')
+  .option('--resources <path>', 'installed package Resources directory')
+  .option('--manifest <path>', 'release platform manifest JSON')
+  .option('--expected-vela <version>', 'exact Vela version from the reviewed dependency pin')
+  .option('--expected-opencode <version>', 'exact OpenCode version from the reviewed Vela release')
+  .option('--json', 'print JSON evidence (also the default)')
+  .action(async (options: { resources: string; manifest: string; expectedVela: string; expectedOpencode: string }) => {
+    const { verifyPackagedRuntime } = await import('./resources/runtime-verification.js');
+    printJson(await verifyPackagedRuntime({ ...options, expectedOpenCode: options.expectedOpencode }));
+  });
 
 addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect"))).action(
   async (action: string, options: CliOptions) => {

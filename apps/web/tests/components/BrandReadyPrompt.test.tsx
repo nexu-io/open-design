@@ -28,7 +28,7 @@ describe('BrandReadyPrompt', () => {
     render(
       <I18nProvider initial="zh-CN">
         <BrandReadyPrompt
-          brandName="Open Design"
+          brandName="OpenDesign"
           onPreview={vi.fn()}
           onDismiss={onDismiss}
         />
@@ -51,7 +51,7 @@ describe('BrandReadyPrompt', () => {
     render(
       <I18nProvider initial="en">
         <BrandReadyPrompt
-          brandName="Open Design"
+          brandName="OpenDesign"
           onPreview={vi.fn()}
           onDismiss={onDismiss}
         />

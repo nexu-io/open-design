@@ -4,11 +4,11 @@
 
 - Execution mode 页面
 - Memory 页面
-- Automations / Orbit 页面
+- Orbit 内部组件契约（当前无产品入口）
 - Language 页面
 - Pets 页面
 - Integrations 的 Skills 标签页
-- Settings 的 Design systems 页面
+- Design systems 内部组件契约（当前无 Settings 入口）
 - API protocol 迁移与切换回归
 - 国际化内容注册完整性
 
@@ -17,7 +17,6 @@
 - `e2e/ui/settings-api-protocol.test.ts`
 - `e2e/ui/settings-media-providers.test.ts`
 - `e2e/ui/settings-memory-routines.test.ts`
-- `e2e/ui/settings-design-systems.test.ts`
 - `e2e/tests/localized-content.test.ts`
 - `apps/web/tests/components/App.connectors.test.tsx`
 - `apps/web/tests/components/App.mediaProviders.test.tsx`
@@ -74,6 +73,7 @@
 | SET-039 | MCP server 页面切换不同 client 后，会联动更新安装方式说明和 snippet 内容 | `SettingsDialog.execution.test.tsx` |
 | SET-040 | MCP server 页面支持复制当前 snippet 到剪贴板，并展示 `Copied` 反馈 | `SettingsDialog.execution.test.tsx` |
 | SET-041 | MCP server 页面在 daemon 无法返回 install info 时，会展示错误提示和降级 snippet 文案 | `SettingsDialog.execution.test.tsx` |
+| SET-091 | External MCP 的 managed OAuth 支持启动授权、打开 authorize URL、接收 callback postMessage 更新 Connected 状态，并可 Disconnect | `settings-mcp-snippet-chip.test.ts` |
 | SET-042 | 在 Settings 里保存 Connectors key 后，Entry 页 connectors gate 会立即解锁，且本地只保存尾号标记 | `entry-configuration-flows.test.ts` |
 | SET-043 | Language 页面展开下拉后，会渲染完整 locale 列表，并正确标记当前已选语言 | `SettingsDialog.execution.test.tsx` |
 | SET-044 | 在 Language 页面切换语言后，触发器文案会立即更新，同时把 locale 写入 `localStorage` 并同步 `html[lang]` | `SettingsDialog.execution.test.tsx` |
@@ -81,7 +81,7 @@
 | SET-046 | Language 页面不依赖全局保存按钮；语言切换即时生效，关闭 Settings 也不会回滚已应用 locale | `SettingsDialog.execution.test.tsx` |
 | SET-047 | 多语言内容资源可通过翻译字典或英文 fallback 渲染为非空 skill、design system、prompt template 展示内容 | `localized-content.test.ts` |
 | SET-048 | Design system category、prompt template category 和 tag 在缺少 locale 字典项时回退到源值，已有字典项仍可本地化 | `localized-content.test.ts` |
-| SET-049 | Notifications 默认以 `offline` 展示；开启 completion sound 后才会显示成功/失败音选择器，并立即试听默认成功音 | `SettingsDialog.execution.test.tsx` |
+| SET-049 | Notifications 默认启用 completion sound 和桌面通知，并直接展示成功/失败音选择器；用户仍可分别关闭两个开关 | `SettingsDialog.execution.test.tsx` |
 | SET-050 | Notifications 支持切换 success / failure sound，并把声音选择保存到通知配置 | `SettingsDialog.execution.test.tsx` |
 | SET-051 | Desktop notification 在授权成功后会切为 `active`，支持发送测试通知并展示发送结果文案 | `SettingsDialog.execution.test.tsx` |
 | SET-052 | Desktop notification 在权限被拒绝时，会保持禁用并展示浏览器阻止提示，不显示测试按钮 | `SettingsDialog.execution.test.tsx` |
@@ -97,7 +97,7 @@
 | SET-062 | Community 标签页的 hatch prompt 会带上当前 concept，支持复制到剪贴板并展示 `Copied!` 反馈 | `SettingsDialog.execution.test.tsx` |
 | SET-063 | Integrations 的 Skills 标签页展示 functional skills，支持按 type/category 筛选并结合搜索缩小结果 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
 | SET-064 | Integrations 的 Skills 标签页支持展开详情，并可通过 toggle 把 skill 加入 `disabledSkills` 保存 | `SettingsDialog.execution.test.tsx`, `SkillsSection.test.tsx` |
-| SET-065 | Settings 的独立 Design systems 页面支持按 category 筛选、展开详情，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx`, `DesignSystemsSection.test.tsx` |
+| SET-065 | 无 Settings 入口的 Design systems 内部组件支持按 category 筛选、展开详情，并保存 `disabledDesignSystems` | `SettingsDialog.execution.test.tsx`, `DesignSystemsSection.test.tsx` |
 | SET-066 | Integrations 的 Skills 标签页在筛选或搜索无匹配时展示空结果提示 | `SettingsDialog.execution.test.tsx` |
 | SET-067 | About 页面会正确展示 `Version / Channel / Runtime / Platform / Architecture` 五项只读版本信息 | `SettingsDialog.execution.test.tsx` |
 | SET-068 | About 页面在 `appVersionInfo` 缺失时，会展示版本信息不可用的降级空态 | `SettingsDialog.execution.test.tsx` |
@@ -106,34 +106,31 @@
 | SET-071 | BYOK 页面 `Test` 按钮只有必填字段可用后才允许测试，并会展示 provider 连接测试结果 | `SettingsDialog.execution.test.tsx` |
 | SET-072 | Local CLI 页面 `Test` 按钮会使用当前选中的已安装 agent 发起连接测试，并展示 agent 响应结果 | `SettingsDialog.execution.test.tsx` |
 | SET-073 | Appearance 支持 preset accent color 和自定义色值，切换时实时预览并自动保存 `accentColor` | `SettingsDialog.execution.test.tsx` |
-| SET-074 | Orbit 页面在没有可用 connector 时锁定 Run / 开关 / 时间 / 模板控件，并通过 gate CTA 跳转到 Connectors | `SettingsDialog.orbit.test.tsx` |
-| SET-075 | Orbit 页面在 connector 可用后支持切换 daily summary、修改 run time、切换 prompt template，并自动保存 schedule 配置 | `SettingsDialog.orbit.test.tsx` |
-| SET-076 | Orbit 页面展示最近一次运行收据、统计计数、live artifact 入口，并支持复制 markdown 结果 | `SettingsDialog.orbit.test.tsx` |
+| SET-074 | 无产品入口的 Orbit 内部组件在没有可用 connector 时锁定 Run / 开关 / 时间 / 模板控件，并通过 gate CTA 跳转到 Connectors | `SettingsDialog.orbit.test.tsx` |
+| SET-075 | 无产品入口的 Orbit 内部组件在 connector 可用后支持切换 daily summary、修改 run time、切换 prompt template，并自动保存 schedule 配置 | `SettingsDialog.orbit.test.tsx` |
+| SET-076 | 无产品入口的 Orbit 内部组件展示最近一次运行收据、统计计数、live artifact 入口，并支持复制 markdown 结果 | `SettingsDialog.orbit.test.tsx` |
 | SET-077 | Memory 页面默认展示新的三分区 source tabs：`Add manually / Learn from chats / Import from apps`，并保留手动新增入口 | `settings-memory-routines.test.ts` |
 | SET-078 | Memory 页面会展示 `Saved memory` 统计、type filters、extractions 管理按钮和 `Memory tree` 结构摘要 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-079 | 手动新建 memory 后，条目会立即出现，并在关闭后重开设置时继续可见 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-080 | 关闭 memory injection 后，会展示 disabled banner，并在重开设置时保持关闭状态 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-081 | `Learn from chats` 开关会持久化 `chatExtractionEnabled`，重开 Memory 页面后保持一致 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-082 | 手动创建 memory 失败时，编辑器保持打开，用户已输入内容不会丢失 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
-| SET-083 | Automations 主页面支持创建 automation、Run now，并在列表内展示最近一次运行入口 | `settings-memory-routines.test.ts` |
-| SET-084 | Automations 创建失败时，modal 保持打开并回显错误，不会误写入列表 | `settings-memory-routines.test.ts` |
 | SET-085 | `Import from apps` 页面支持通过 `Manage` 跳到 `Connectors`，并在重开后保留 connector authorization pending 状态 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-086 | `Import from apps` 支持 connected app 的选择、扫描、失败诊断、`Suggested memories` 保存，以及 `Saved memory` extraction 的 `Refresh / Clear` 管理 | `settings-memory-routines.test.ts`, `MemorySection.test.tsx` |
 | SET-087 | `Import from apps` 支持 connector OAuth 完成后的回流：pending app 会在授权回调后变成 connected，并可立即继续扫描生成 suggested memories | `settings-memory-routines.test.ts` |
 | SET-088 | `Import from apps` 在 mixed connector state 下保持稳定：已连接、刚完成 OAuth、仍未连接的 app 会正确更新 `connected / selected` 计数，且扫描只提交已选中的 connected apps | `settings-memory-routines.test.ts` |
 | SET-089 | `Import from apps` 会在 connected app 断连/重连后自动收敛已选集合：失联 app 被移出 selected，恢复连接后不会误自动重新选中，扫描 payload 只包含当前仍选中的 connected apps | `settings-memory-routines.test.ts` |
+| SET-092 | `theme=system` 时不写入显式 `html[data-theme]`，并在浏览器 OS color scheme 从 light 切到 dark 后实时更新页面 `--bg` token，同时保留 `system` 配置 | `settings-hover-contrast.test.ts` |
+| SET-093 | Pets 自定义精灵上传后显示帧数/FPS 控件；移除精灵后恢复 emoji 模式并清除动画控件 | `settings-memory-routines.test.ts` |
 
 ## 自动化候选
 
 | ID | 场景 | 原因 |
 | --- | --- | --- |
-| SET-C03 | Media providers 配置被下游视频/音频生成请求实际消费的端到端回归 | 图片生成请求链路已由 `settings-media-providers.test.ts` 覆盖；视频/音频仍可在对应生成入口稳定后补 |
 | SET-C05 | MCP server 的 Cursor deeplink / 多平台路径差异（macOS/Linux/Windows） | 适合自动化，但需要更细的环境 mock 或浏览器 scheme 行为校验，适合后续补 |
 | SET-C06 | Notifications 在 ProjectView 中收到真实任务完成事件后，是否按 success/failure 正确播放声音和发送桌面通知 | 适合自动化，但需要结合流式消息完成态和窗口焦点状态做更完整联动断言 |
-| SET-C07 | `theme=system` 时在系统亮/暗偏好切换下，页面是否通过 `matchMedia` 或宿主环境同步实时跟随 | 适合自动化，但要先确认当前实现是否真的监听系统主题变化 |
 | SET-C08 | Pets 页面上传 sprite、导入 Codex atlas、裁剪单行或保留 full atlas 的文件处理链路 | 适合自动化，但依赖文件输入、图片读取、canvas 裁剪和 atlas 预处理，维护成本更高 |
 | SET-C09 | Built-in / Community 宠物的一键领养路径：下载 spritesheet、准备 atlas、写入 custom slot 并在 overlay 中真实生效 | 适合自动化，但需要补齐 fetch/blob/image 级 mock 或浏览器级联动验证 |
-| SET-C10 | Skills / Design Systems 在 ProjectView / runtime 生成流中被真实消费：禁用项不会进入可用内容库或生成上下文 | Entry 创建入口已由 `settings-design-systems.test.ts` 覆盖；ProjectView / runtime 生成上下文仍可后续补 |
 | SET-C11 | Memory 的 `Import from apps` 真实多步授权回流：外部浏览器完成 OAuth 后通过宿主/弹窗回调返回，再次打开 Settings 时是否能正确恢复到最新 connected 状态 | 现在 E2E 已覆盖页面内 callback、mixed state、断连/重连收敛，但还没覆盖更接近真实宿主环境的跨窗口回流 |
 
 ## 手工保留

@@ -1,0 +1,185 @@
+name: cache-maintenance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - .github/actions/setup-workspace/action.yml
+      - .github/workflows/cache-maintenance.yml
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pack_cache_run_id:
+        description: Optional same-ref release run whose Windows cache snapshot should be saved
+        type: string
+        default: ''
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  seed-pnpm-windows:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.pack_cache_run_id == '')
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+
+      - name: Seed Windows pnpm cache
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
+
+
+  # GHA actions/cache is repo-scoped and shared across hosted + every Nexu
+  # size (small/medium/large). One Linux seed under the pinned home store path
+  # is enough for the whole fleet; no per-size matrix required.
+  seed-pnpm-linux:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.pack_cache_run_id == '')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+
+      - name: Seed Linux pnpm cache
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
+
+  clean-closed-pr-buildkit:
+    if: github.event_name == 'pull_request_target' && github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Delete closed PR BuildKit caches
+        env:
+          CACHE_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cache_rows="$(
+            gh cache list \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$CACHE_REF" \
+              --limit 10000 \
+              --json id,key,sizeInBytes \
+              --jq '.[] | select((.key | startswith("buildkit-blob-")) or (.key | startswith("index-buildkit-"))) | [.id, .key, .sizeInBytes] | @tsv'
+          )"
+
+          if [ -z "$cache_rows" ]; then
+            echo "No closed-PR BuildKit caches found for $CACHE_REF"
+            exit 0
+          fi
+
+          count=0
+          bytes=0
+          while IFS=$'\t' read -r cache_id cache_key cache_size; do
+            [ -n "$cache_id" ] || continue
+            echo "Deleting cache id=$cache_id key=$cache_key bytes=$cache_size ref=$CACHE_REF"
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY"
+            count=$((count + 1))
+            bytes=$((bytes + cache_size))
+          done <<< "$cache_rows"
+
+          echo "Deleted $count closed-PR BuildKit caches ($bytes bytes) for $CACHE_REF"
+
+  save-windows-pack:
+    if: github.event_name == 'workflow_dispatch' && inputs.pack_cache_run_id != ''
+    runs-on: windows-latest
+    timeout-minutes: 20
+    concurrency:
+      group: pack-cache-save-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Validate source run
+        id: source
+        uses: actions/github-script@v8
+        env:
+          SOURCE_RUN_ID: ${{ inputs.pack_cache_run_id }}
+        with:
+          script: |
+            const id = process.env.SOURCE_RUN_ID;
+            if (!/^[1-9][0-9]*$/.test(id)) throw new Error('Invalid source run id');
+            const { data: run } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: Number(id) });
+            if (!['push', 'schedule', 'workflow_dispatch', 'release'].includes(run.event)
+                || run.head_repository.full_name !== `${context.repo.owner}/${context.repo.repo}`
+                || run.head_branch !== context.ref.replace(/^refs\/(heads|tags)\//, '')) {
+              throw new Error('Cache handoff must come from a trusted same-repository, same-ref run');
+            }
+            // A release can finish after another commit advances its branch.
+            // Admit only ancestors; never consume a diverged or future history.
+            if (run.head_sha !== context.sha) {
+              const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+                ...context.repo, basehead: `${run.head_sha}...${context.sha}`,
+              });
+              if (!['ahead', 'identical'].includes(comparison.status)) {
+                throw new Error('Cache source commit is not in the current ref history');
+              }
+            }
+            core.setOutput('head_sha', run.head_sha);
+            core.setOutput('source_is_current', run.head_sha === context.sha ? 'true' : 'false');
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Resolve cache handoff name
+        id: handoff
+        shell: pwsh
+        run: |
+          $name = python .github/scripts/handoff.py artifact-name pack-cache windows
+          if ($LASTEXITCODE -ne 0) { throw "Invalid artifact name" }
+          "name=$name" >> $env:GITHUB_OUTPUT
+      - name: Download bounded cache snapshot
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.handoff.outputs.name }}
+          path: ${{ runner.temp }}/pack-cache-handoff
+          run-id: ${{ inputs.pack_cache_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and extract cache snapshot
+        id: cache
+        shell: pwsh
+        env:
+          SOURCE_RUN_ID: ${{ inputs.pack_cache_run_id }}
+          SOURCE_HEAD_SHA: ${{ steps.source.outputs.head_sha }}
+        run: |
+          $entry = Join-Path $env:RUNNER_TEMP "pack-cache-handoff"
+          $raw = python .github/scripts/handoff.py validate pack-cache $entry
+          if ($LASTEXITCODE -ne 0) { throw "Invalid cache handoff" }
+          $data = $raw | ConvertFrom-Json
+          if ([string]$data.run_id -ne $env:SOURCE_RUN_ID -or $data.head_sha -ne $env:SOURCE_HEAD_SHA -or $data.ref -ne $env:GITHUB_REF -or $data.repository -ne $env:GITHUB_REPOSITORY) {
+            throw "Cache handoff provenance mismatch"
+          }
+          $root = Join-Path $env:RUNNER_TEMP "tools-pack-cache"
+          New-Item -ItemType Directory -Force $root | Out-Null
+          tar -xzf (Join-Path $entry "cache.tar.gz") -C $root
+          if ($LASTEXITCODE -ne 0) { throw "Cache extraction failed" }
+          "key=$($data.key)" >> $env:GITHUB_OUTPUT
+          "prefix=$($data.prefix)" >> $env:GITHUB_OUTPUT
+      - name: Save Windows tools-pack cache
+        id: save
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.cache.outputs.key }}
+      - name: Retain newest cache for this ref and channel
+        if: steps.source.outputs.source_is_current == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_PREFIX: ${{ steps.cache.outputs.prefix }}
+        run: |
+          $caches = @(gh cache list --repo $env:GITHUB_REPOSITORY --ref $env:GITHUB_REF --key $env:CACHE_PREFIX --sort created_at --order desc --limit 100 --json id,key | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { throw "Could not list caches" }
+          foreach ($cache in @($caches | Select-Object -Skip 1)) {
+            gh cache delete $cache.id --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw "Could not delete stale cache" }
+          }

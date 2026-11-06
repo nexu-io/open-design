@@ -473,6 +473,18 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     baseUrl = started.url;
     server = started.server;
 
+    const createProject = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Standalone export integration fixture',
+        metadata: { kind: 'prototype', entryFile: 'index.html' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(createProject.status).toBe(200);
+
     projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
     const dir = path.join(projectsRoot, projectId);
     const pages = path.join(dir, 'pages');
@@ -740,5 +752,156 @@ describe('GET /api/projects/:id/export/*?inline=1 route', () => {
     const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe('BAD_REQUEST');
     expect(body.error.message).toContain('invalid project id');
+  });
+});
+
+describe('POST /api/projects/:id/export/html route', () => {
+  let server: http.Server;
+  let baseUrl: string;
+  let projectsRoot: string;
+  const projectId = 'proj-standalone-html-test';
+
+  beforeAll(async () => {
+    const started = (await startServer({ port: 0, returnServer: true })) as {
+      url: string;
+      server: http.Server;
+    };
+    baseUrl = started.url;
+    server = started.server;
+    const created = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Standalone HTML route fixture',
+        metadata: { kind: 'prototype', entryFile: 'pages/index.html' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(created.status).toBe(200);
+
+    projectsRoot = path.join(process.env.OD_DATA_DIR!, 'projects');
+    const root = path.join(projectsRoot, projectId);
+    await Promise.all([
+      mkdir(path.join(root, 'pages'), { recursive: true }),
+      mkdir(path.join(root, 'styles'), { recursive: true }),
+      mkdir(path.join(root, 'scripts'), { recursive: true }),
+      mkdir(path.join(root, 'assets'), { recursive: true }),
+    ]);
+    await mkdir(path.join(root, 'pages', 'dist', 'index.html'), { recursive: true });
+    await writeFile(
+      path.join(root, 'pages', 'index.html'),
+      '<!doctype html><html><head>' +
+        '<link rel="stylesheet" href="../styles/site.css">' +
+        '</head><body><img src="../assets/hero.png?rev=1" ' +
+        'srcset="/assets/hero.png 1x, ../assets/hero@2x.png#crop 2x">' +
+        '<script type="module" src="../scripts/main.js"></script></body></html>',
+    );
+    await writeFile(
+      path.join(root, 'styles', 'site.css'),
+      '@import "./theme.css"; .hero{background:url("../assets/bg.svg#shape")}',
+    );
+    await writeFile(path.join(root, 'styles', 'theme.css'), '@font-face{font-family:x;src:url("../assets/font.woff2")}');
+    await writeFile(
+      path.join(root, 'scripts', 'main.js'),
+      'import { start } from "./motion.js"; const icon = new URL("../assets/icon.svg", import.meta.url); start(icon);',
+    );
+    await writeFile(path.join(root, 'scripts', 'motion.js'), 'export const start = (icon) => document.body.dataset.motion = icon.href;');
+    await writeFile(
+      path.join(root, 'scripts', 'invalid.tsx'),
+      'const label: string = "offline"; document.body.append(<div>{label}</div>);',
+    );
+    await writeFile(path.join(root, 'assets', 'hero.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await writeFile(path.join(root, 'assets', 'hero@2x.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x32]));
+    await writeFile(path.join(root, 'assets', 'bg.svg'), '<svg id="shape"/>');
+    await writeFile(path.join(root, 'assets', 'icon.svg'), '<svg/>');
+    await writeFile(path.join(root, 'assets', 'font.woff2'), Buffer.from([1, 2, 3, 4]));
+    await writeFile(
+      path.join(root, 'pages', 'missing.html'),
+      '<!doctype html><img src="../assets/does-not-exist.png">',
+    );
+    await writeFile(
+      path.join(root, 'pages', 'invalid-source.html'),
+      '<!doctype html><script type="module" src="../scripts/invalid.tsx"></script>',
+    );
+    await writeFile(
+      path.join(root, 'pages', 'vite-dist-read-error.html'),
+      '<!doctype html><script type="module" src="/src/main.tsx"></script>',
+    );
+  });
+
+  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  const postExport = (body: Record<string, unknown>) => fetch(
+    `${baseUrl}/api/projects/${projectId}/export/html`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+
+  it('embeds nested HTML, CSS, image, font, and module dependencies into one file', async () => {
+    const response = await postExport({ fileName: 'pages/index.html', title: 'Offline Demo' });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('content-disposition')).toContain('Offline-Demo.html');
+    expect(response.headers.get('content-security-policy')).toBe('sandbox allow-scripts');
+    const html = await response.text();
+    expect(html).toContain('data:image/png;base64,');
+    expect(html).toContain('data:image/svg+xml;base64,');
+    expect(html).toContain('data:font/woff2;base64,');
+    expect(html).toContain(Buffer.from(
+      'export const start = (icon) => document.body.dataset.motion = icon.href;',
+    ).toString('base64'));
+    expect(html).toContain('type="importmap"');
+    expect(html).not.toContain('../assets/hero.png');
+    expect(html).not.toContain('../assets/bg.svg');
+    expect(html).not.toContain('../assets/font.woff2');
+    expect(html).not.toContain('../scripts/main.js');
+  });
+
+  it('returns a structured dependency chain instead of a successful broken file', async () => {
+    const response = await postExport({ fileName: 'pages/missing.html' });
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as {
+      error: { code: string; details: { kind: string; dependency: string; chain: string[] } };
+    };
+    expect(body.error.code).toBe('VALIDATION_FAILED');
+    expect(body.error.details).toEqual({
+      kind: 'missing-local-dependency',
+      dependency: 'assets/does-not-exist.png',
+      chain: ['pages/missing.html', 'assets/does-not-exist.png'],
+    });
+  });
+
+  it('returns 422 for TypeScript or JSX that cannot execute directly in a browser', async () => {
+    const response = await postExport({ fileName: 'pages/invalid-source.html' });
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as {
+      error: { code: string; details: { kind: string; dependency: string; chain: string[] } };
+    };
+    expect(body.error.code).toBe('VALIDATION_FAILED');
+    expect(body.error.details).toEqual({
+      kind: 'invalid-source',
+      dependency: 'scripts/invalid.tsx',
+      chain: ['pages/invalid-source.html', 'scripts/invalid.tsx'],
+    });
+  });
+
+  it('reports a Vite dist read failure instead of silently falling back to dev HTML', async () => {
+    const response = await postExport({ fileName: 'pages/vite-dist-read-error.html' });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('BAD_REQUEST');
+    expect(body.error.message).toContain('EISDIR');
+  });
+
+  it('rejects historical entries until their dependency graph is versioned', async () => {
+    const response = await postExport({ fileName: 'pages/index.html', versionId: 'v1' });
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { error: { code: string; details: { kind: string } } };
+    expect(body.error.code).toBe('CONFLICT');
+    expect(body.error.details.kind).toBe('historical-dependency-snapshot-unavailable');
   });
 });

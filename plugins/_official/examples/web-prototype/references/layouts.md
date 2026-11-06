@@ -13,7 +13,7 @@
 
 ## Class inventory (must exist in `template.html`)
 
-> `section` `container` `hero` `hero-center` `hero-split` `hero-cta` `eyebrow` `lead` `h1` `h2` `h3` `meta` `num` `btn` `btn-primary` `btn-secondary` `btn-ghost` `btn-arrow` `card` `card-flat` `card-rule` `feature` `feature-mark` `stat` `stat-num` `stat-label` `stat-unit` `quote` `quote-mark` `quote-author` `pill` `tag` `field` `input` `textarea` `ds-table` `num-col` `ph-img` `square` `portrait` `wide` `rule` `rule-strong` `grid-2` `grid-3` `grid-4` `grid-2-1` `grid-1-2` `row` `row-between` `stack` `log-row` `pull` `topnav` `pagefoot`
+> `section` `container` `hero` `hero-center` `hero-split` `hero-cta` `eyebrow` `lead` `h1` `h2` `h3` `meta` `num` `btn` `btn-primary` `btn-secondary` `btn-ghost` `btn-arrow` `card` `card-flat` `card-rule` `feature` `feature-mark` `stat` `stat-num` `stat-label` `stat-unit` `quote` `quote-mark` `quote-author` `pill` `tag` `field` `input` `textarea` `ds-table` `num-col` `ph-img` `content-img` `square` `portrait` `wide` `rule` `rule-strong` `grid-2` `grid-3` `grid-4` `grid-2-1` `grid-1-2` `row` `row-between` `stack` `log-row` `pull` `topnav` `pagefoot`
 
 If you reach for a class not on this list, define it in `<style>` first or use `style="…"` inline. Never invent a global class on a `<section>` that isn't backed by CSS.
 
@@ -39,7 +39,7 @@ Use when the page leads with a thesis sentence (most landings, most marketing pa
 
 ## Layout 2 — Hero, split (text + visual)
 
-Use when there is a real product visual (product UI, screenshot, photograph). Left half copy, right half a `ph-img` placeholder the user replaces.
+Use when there is a real product visual (product UI, screenshot, photograph). Left half copy, right half a `ph-img` scaffold. During Step 3, replace the entire scaffold with an acquired image embedded as a data URI using `<img class="content-img" width="[intrinsic width]" height="[intrinsic height]">`. Do not transfer the scaffold's `wide` class or 16:9 ratio to the real image. Retain the scaffold only as a labeled fallback when acquisition or embedding genuinely fails.
 
 ```html
 <section class="section" data-od-id="hero-split">

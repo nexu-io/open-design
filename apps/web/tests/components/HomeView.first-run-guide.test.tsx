@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { pickHomeTemplate } from '../helpers/home-template-picker';
 
 // First-run guidance trail (home-hero/firstRunGuide.ts).
 //
 // A brand-new user (no projects, fresh storage) gets a sheen pulse on the
-// Prototype type chip; picking any type chip advances the persisted stage
-// so the first example card can pulse next, and the trail never replays.
+// Prototype type chip when no type can be selected automatically; a default
+// type skips that redundant beat so the first example card can pulse next,
+// and the trail never replays.
 // Users with existing projects have the trail completed silently.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +49,6 @@ function renderHome(projects: unknown[] = []) {
         projects={projects as never}
         onSubmit={() => undefined}
         onOpenProject={() => undefined}
-        onViewAllProjects={() => undefined}
       />
     </I18nProvider>,
   );
@@ -60,22 +61,13 @@ afterEach(() => {
 });
 
 describe('Home first-run guide trail', () => {
-  it('pulses the Prototype chip for a fresh user and advances on chip pick', async () => {
+  it('arms beat 1 for a fresh user and advances when a template is picked', async () => {
     stubPluginsFetch();
     renderHome([]);
 
     expect(readHomeGuideStage()).toBe('chip');
-    const chip = await screen.findByTestId('home-hero-rail-prototype');
-    await waitFor(
-      () => {
-        expect(chip.className).toContain('home-hero__attention-sheen');
-      },
-      { timeout: 3000 },
-    );
-
-    fireEvent.click(chip);
+    await pickHomeTemplate('prototype');
     expect(readHomeGuideStage()).not.toBe('chip');
-    expect(chip.className).not.toContain('home-hero__attention-sheen');
   });
 
   it('completes the trail silently for users who already have projects', async () => {
@@ -86,8 +78,7 @@ describe('Home first-run guide trail', () => {
     await waitFor(() => {
       expect(readHomeGuideStage()).toBe('done');
     });
-    const chip = screen.queryByTestId('home-hero-rail-prototype');
-    expect(chip?.className ?? '').not.toContain('home-hero__attention-sheen');
+    expect(document.querySelector('.home-hero__attention-sheen')).toBeNull();
   });
 
   it('stays inert while projects are still loading', async () => {
@@ -99,17 +90,14 @@ describe('Home first-run guide trail', () => {
           projectsLoading
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
 
-    const chip = await screen.findByTestId('home-hero-rail-prototype');
+    await screen.findByTestId('home-hero-input');
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    // Unknown projects state: no pulse, and crucially the stage is NOT
-    // silently completed — a brand-new user still gets the trail once
-    // loading resolves.
-    expect(chip.className).not.toContain('home-hero__attention-sheen');
+    // Unknown projects state: the stage is NOT silently completed — a
+    // brand-new user still gets the trail once loading resolves.
     expect(readHomeGuideStage()).toBe('chip');
   });
 
@@ -122,14 +110,13 @@ describe('Home first-run guide trail', () => {
           projectsLoading
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
 
     // The user clicks a chip while projects are still loading — the stage
     // moves to 'card' before we know whether they are new.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await pickHomeTemplate('prototype');
     expect(readHomeGuideStage()).toBe('card');
 
     // Loading resolves: existing user. The stage must close so no chip's
@@ -141,7 +128,6 @@ describe('Home first-run guide trail', () => {
           projectsLoading={false}
           onSubmit={() => undefined}
           onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
         />
       </I18nProvider>,
     );
@@ -150,7 +136,7 @@ describe('Home first-run guide trail', () => {
     });
   });
 
-  it('carries beat 2 through the static prompt-example fallback', async () => {
+  it('carries a default prototype straight to beat 2 through the static prompt-example fallback', async () => {
     // The chip's default plugin exists (so the chip binds) but nothing
     // matches the example filter — the chip renders static prompt-example
     // cards, and the guide's beat 2 must land on the first of those.
@@ -184,9 +170,9 @@ describe('Home first-run guide trail', () => {
     }));
     renderHome([]);
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
-    expect(readHomeGuideStage()).toBe('card');
-
+    // Home no longer seeds a default type; beat 1 is the pick itself, and beat
+    // 2 then lands on the first static prompt-example card under it.
+    await pickHomeTemplate('prototype');
     const exampleCards = await screen.findAllByTestId('home-hero-prompt-example');
     await waitFor(
       () => {
@@ -202,8 +188,9 @@ describe('Home first-run guide trail', () => {
     stubPluginsFetch();
     renderHome([]);
 
-    const chip = await screen.findByTestId('home-hero-rail-prototype');
+    await screen.findByTestId('home-hero-input');
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    expect(chip.className).not.toContain('home-hero__attention-sheen');
+    expect(readHomeGuideStage()).toBe('done');
+    expect(document.querySelector('.home-hero__attention-sheen')).toBeNull();
   });
 });

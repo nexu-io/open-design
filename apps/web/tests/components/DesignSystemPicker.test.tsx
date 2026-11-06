@@ -97,7 +97,7 @@ describe('DesignSystemPicker', () => {
     expect(screen.getByTestId('project-ds-picker-option-noir-check')).toBeTruthy();
 
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('noir');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('noir', null);
     });
     expect(await screen.findByTestId('project-ds-picker-preview-kit-view')).toBeTruthy();
     expect(screen.getByText('High-contrast editorial system.')).toBeTruthy();
@@ -112,7 +112,7 @@ describe('DesignSystemPicker', () => {
 
     fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay', null);
     });
     expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
 
@@ -151,6 +151,52 @@ describe('DesignSystemPicker', () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
+  it('only clears the selected home design system from its close action', async () => {
+    const onChange = vi.fn();
+    renderPicker({ variant: 'home', onChange });
+
+    const trigger = screen.getByTestId('home-hero-design-system-trigger');
+    expect(trigger.className).toContain('is-selected');
+    expect(trigger.getAttribute('aria-label')).toBe('Editorial Noir');
+    expect(trigger.querySelector('.home-hero__ds-row-trigger-icon-default')).toBeTruthy();
+    expect(trigger.querySelector('.home-hero__ds-row-clear')).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('project-ds-picker-popover')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '清除: Editorial Noir' }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(null);
+    expect(screen.queryByTestId('project-ds-picker-popover')).toBeNull();
+  });
+
+  // The palette trigger and the "+" trigger share one row on Home. The "+"
+  // shows the app's own `od-tooltip` bubble; the palette used to show the
+  // browser's native `title`, so the two controls hovered in two styles.
+  it('names the unselected home trigger through the app tooltip, not a native title', () => {
+    renderPicker({ variant: 'home', selectedId: null }, 'en');
+
+    const trigger = screen.getByTestId('home-hero-design-system-trigger');
+    expect(trigger.className).toContain('is-icon-only');
+    expect(trigger.className).toContain('od-tooltip');
+    expect(trigger.getAttribute('data-tooltip')).toBe('Design system');
+    expect(trigger.getAttribute('aria-label')).toBe('Design system');
+    expect(trigger.hasAttribute('title')).toBe(false);
+  });
+
+  it('drops the tooltip once the picked system is named on the pill', () => {
+    renderPicker({ variant: 'home' }, 'en');
+
+    const trigger = screen.getByTestId('home-hero-design-system-trigger');
+    expect(trigger.className).toContain('is-selected');
+    expect(trigger.className).not.toContain('od-tooltip');
+    expect(trigger.hasAttribute('data-tooltip')).toBe(false);
+    expect(trigger.hasAttribute('title')).toBe(false);
+    expect(trigger.textContent).toContain('Editorial Noir');
+  });
+
   it('uses localized picker copy', async () => {
     renderPicker({}, 'fr');
 
@@ -160,5 +206,87 @@ describe('DesignSystemPicker', () => {
     // surrounding picker copy needs to localize.
     expect(screen.getByPlaceholderText('Rechercher des systèmes de design')).toBeTruthy();
     expect(screen.getByText('Aucun système de design')).toBeTruthy();
+  });
+
+  it('places team systems between personal systems and official presets', async () => {
+    const personalSystem: DesignSystemSummary = {
+      id: 'user:personal-brand',
+      title: 'Personal Brand',
+      summary: 'Owned by the current member.',
+      category: 'Custom',
+      swatches: [],
+      source: 'user',
+      isEditable: true,
+    };
+    const teamSystem: DesignSystemSummary = {
+      id: 'user:team-brand',
+      title: 'Team Brand',
+      summary: 'Shared by the current member.',
+      category: 'Custom',
+      swatches: [],
+      source: 'user',
+      isEditable: true,
+      teamShared: true,
+    };
+    const teammateSystem: DesignSystemSummary = {
+      id: 'user:teammate-brand',
+      title: 'Teammate Brand',
+      summary: 'Pulled from a teammate.',
+      category: 'Custom',
+      swatches: [],
+      source: 'user',
+      isEditable: false,
+      teamSynced: true,
+    };
+    const officialSystem: DesignSystemSummary = {
+      id: 'official-brand',
+      title: 'Official Brand',
+      summary: 'Bundled preset.',
+      category: 'Product',
+      swatches: [],
+      source: 'built-in',
+      isEditable: false,
+    };
+    renderPicker({
+      designSystems: [officialSystem, teamSystem, teammateSystem, personalSystem],
+      selectedId: null,
+    });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+
+    const listText = [...screen.getByRole('listbox').children]
+      .map((element) => element.textContent?.trim())
+      .filter(Boolean);
+    expect(listText).toEqual([
+      '不指定设计系统',
+      '你的体系',
+      'Personal Brand',
+      '团队',
+      'Team Brand',
+      'Teammate Brand',
+      '官方预设',
+      'Official Brand',
+    ]);
+  });
+
+  it('omits empty personal and team group headings', async () => {
+    renderPicker({
+      designSystems: [{
+        id: 'official-only',
+        title: 'Official Only',
+        summary: 'Bundled preset.',
+        category: 'Product',
+        swatches: [],
+        source: 'built-in',
+        isEditable: false,
+      }],
+      selectedId: null,
+    });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+
+    expect(screen.queryByTestId('project-ds-picker-group-mine')).toBeNull();
+    expect(screen.queryByTestId('project-ds-picker-group-team')).toBeNull();
+    expect(screen.getByTestId('project-ds-picker-group-official')).toBeTruthy();
   });
 });

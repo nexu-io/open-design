@@ -33,6 +33,11 @@ export type SmokeSuite = {
   finalize: (result: SmokeSuiteFinalizeInput) => Promise<string>;
 };
 
+export type SmokeSuiteOptions = {
+  /** Reuse one explicit daemon data root across process-restart witnesses. */
+  dataDir?: string;
+};
+
 export type SmokeSuiteFinalizeInput = {
   diagnostics?: unknown;
   error?: unknown;
@@ -75,16 +80,31 @@ export type ToolsDevSuiteOptions = {
   skipFatalLogCheck?: boolean;
 };
 
+export function resolveVitestToolsDevEnv(
+  env: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
+  return {
+    // The hermetic Codex fixture emits the legacy `exec --json` stream. Pin
+    // its matching transport here; app-server protocol coverage lives in the
+    // daemon transport/parity suites, not in these fake-CLI smoke tests.
+    OD_CODEX_TRANSPORT: 'exec-json',
+    ...env,
+  };
+}
+
 const workspaceRoot = resolveE2eWorkspaceRoot();
 
-export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
+export async function createSmokeSuite(
+  name: string,
+  options: SmokeSuiteOptions = {},
+): Promise<SmokeSuite> {
   const namespace = `e2e-${sanitizeSegment(name)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const root = join(workspaceRoot, '.tmp', 'e2e', namespace);
   const reportDir = join(root, 'report');
   const scratchDir = join(root, 'scratch');
   const codexHomeDir = join(scratchDir, 'codex-home');
   const toolsDevRoot = join(scratchDir, 'tools-dev');
-  const dataDir = join(scratchDir, 'data');
+  const dataDir = options.dataDir ?? join(scratchDir, 'data');
   const [amrApiPort, amrLinkPort] = await allocateDistinctPorts(2);
 
   await mkdir(reportDir, { recursive: true });
@@ -182,6 +202,17 @@ export function resolvePackagedSmokeNamespace(
   if (env.OD_PACKAGED_E2E_NAMESPACE != null && env.OD_PACKAGED_E2E_NAMESPACE.trim() !== '') {
     return env.OD_PACKAGED_E2E_NAMESPACE;
   }
+  const channel = env.OD_PACKAGED_E2E_RELEASE_CHANNEL;
+  if (channel === 'prerelease' || channel === 'preview') {
+    switch (platform) {
+      case 'linux':
+        return `release-${channel}-linux`;
+      case 'mac':
+        return `release-${channel}`;
+      case 'win':
+        return `release-${channel}-win`;
+    }
+  }
   switch (platform) {
     case 'linux':
       return 'ci-pr-linux';
@@ -233,6 +264,7 @@ async function runToolsDevSuite(
   run: (context: ToolsDevSuiteContext) => Promise<void>,
   options: ToolsDevSuiteOptions = {},
 ): Promise<string> {
+  const runtimeEnv = resolveVitestToolsDevEnv(options.env);
   const toolsDev = createToolsDevSuite({
     codexHomeDir: suite.codexHomeDir,
     dataDir: suite.dataDir,
@@ -246,16 +278,16 @@ async function runToolsDevSuite(
   let success = false;
 
   try {
-    const start = await toolsDev.startWeb(options.env);
+    const start = await toolsDev.startWeb(runtimeEnv);
     const runtime = toolsDev.portAllocation;
     if (runtime == null) throw new Error('tools-dev did not expose its allocated ports');
     const webUrl = assertRuntimeUrl(start.web?.status.url, 'web');
-    const status = await toolsDev.status(options.env);
+    const status = await toolsDev.status(runtimeEnv);
     assertToolsDevStatus(suite, status);
 
     context = {
-      check: () => toolsDev.check(options.env),
-      logs: () => toolsDev.logs(options.env),
+      check: () => toolsDev.check(runtimeEnv),
+      logs: () => toolsDev.logs(runtimeEnv),
       runtime,
       start,
       status,
@@ -269,7 +301,7 @@ async function runToolsDevSuite(
     success = true;
   } catch (error) {
     caughtError = error;
-    diagnostics = await toolsDev.check(options.env).catch((diagnosticError: unknown) => ({
+    diagnostics = await toolsDev.check(runtimeEnv).catch((diagnosticError: unknown) => ({
       error: diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError),
     }));
     await options.onFailure?.({ context, error, suite }).catch((failureHookError: unknown) => {
@@ -285,7 +317,7 @@ async function runToolsDevSuite(
     // next smoke run on a shared CI runner.
     let stopError: unknown = null;
     try {
-      await toolsDev.stopWeb(options.env);
+      await toolsDev.stopWeb(runtimeEnv);
     } catch (error) {
       stopError = error;
     }

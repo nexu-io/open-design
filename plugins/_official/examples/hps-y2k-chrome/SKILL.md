@@ -3,9 +3,9 @@ name: hps-y2k-chrome
 en_name: "Write a KPI Decision Brief like a CFO-Ready Analytics Lead"
 zh_name: "像能让 CFO 读懂的分析负责人一样写 KPI 决策简报"
 description: |
-  Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Built as a decision-grade data & finance deck for CRO, RevOps, leadership.
+  OpenDesign's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Built as a decision-grade data & finance deck for CRO, RevOps, leadership.
 en_description: |
-  Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Built as a decision-grade data & finance deck for CRO, RevOps, leadership.
+  OpenDesign's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Built as a decision-grade data & finance deck for CRO, RevOps, leadership.
 zh_description: |
   像能让 CFO 读懂的分析负责人一样写 KPI 决策简报——一份可商业交付的数据财务 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -42,7 +42,7 @@ od:
     zh-CN: "用千禧银铬把我的内容做成单文件 HTML 幻灯片。先确认主题、观众和页数，然后从种子 example.html 出发——完整保留它的银铬 token 表、磨砂玻璃卡、slide 骨架和键盘运行时，只替换幻灯片内容，使用真实内容，不要 lorem ipsum。"
   category: "data-finance"
   scenario: "finance"
-  example_prompt: "Create \"Write a KPI Decision Brief like a CFO-Ready Analytics Lead\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: Open Design's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Audience: CRO, RevOps, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
+  example_prompt: "Create \"Write a KPI Decision Brief like a CFO-Ready Analytics Lead\" as a decision-grade Data, KPI & finance deck in this template's own visual system. Subject: OpenDesign's KPI decision brief: activation and retention drivers, what's working, and the one metric to move next. Audience: CRO, RevOps, leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does every chart have a decision above it."
 ---
 
 # Y2K Chrome (hps-y2k-chrome)

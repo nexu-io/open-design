@@ -161,7 +161,7 @@ column at ~720px max width with the rest as `--gray-light` rails.
     it collapsed (just the chevron + label).
 
 11. **Closing callout** — second callout at the bottom acting as a CTA:
-    `🚀 在 Open Design 里继续处理 →` linked back to the OD project.
+    `🚀 在 OpenDesign 里继续处理 →` linked back to the OD project.
 
 ## Block formatting rules
 

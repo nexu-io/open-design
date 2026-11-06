@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/shell-updater-v3.schema.json",
+  "title": "Shell updater snapshot v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "shellType", "state", "actions", "blockedBy"],
+  "properties": {
+    "schemaVersion": {"const": 3},
+    "revision": {"type": "integer", "minimum": 0},
+    "shellType": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$"},
+    "candidateId": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+    "installAttemptId": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+    "state": {"enum": ["idle", "checking", "available", "downloading", "ready", "applying", "handed-off", "installed", "failed"]},
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed", "total"],
+      "properties": {"completed": {"type": "integer", "minimum": 0}, "total": {"type": "integer", "minimum": 1}}
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "emphasis"],
+        "properties": {
+          "id": {"enum": ["check", "download", "install", "later", "force-stop-and-install", "abandon"]},
+          "emphasis": {"enum": ["primary", "secondary", "danger"]}
+        }
+      }
+    },
+    "blockedBy": {"type": "array"},
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interaction", "releaseVersion", "target", "artifact", "shell"],
+      "properties": {
+        "interaction": {"const": "restart-and-install"},
+        "releaseVersion": {"type": "string"},
+        "target": {"type": "string"},
+        "shell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "version", "buildHash"],
+          "properties": {
+            "type": {"type": "string"},
+            "version": {"type": "string"},
+            "buildHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "size", "mediaType"],
+          "properties": {
+            "path": {"type": "string"},
+            "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "size": {"type": "integer", "minimum": 1},
+            "mediaType": {"type": "string"}
+          }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {"code": {"type": "string"}, "message": {"type": "string"}}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"enum": ["available", "downloading", "ready", "applying", "handed-off", "installed"]}}},
+      "then": {"required": ["candidateId"]}
+    },
+    {
+      "if": {"properties": {"state": {"enum": ["applying", "handed-off", "installed"]}}},
+      "then": {"required": ["installAttemptId"]}
+    },
+    {
+      "if": {"properties": {"state": {"enum": ["ready", "applying", "handed-off", "installed"]}}},
+      "then": {"required": ["handoff"]}
+    }
+  ]
+}

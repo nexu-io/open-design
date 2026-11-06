@@ -10,6 +10,7 @@ import {
   clearHostBrowserData,
   checkHostUpdater,
   detectOpenDesignHostClientType,
+  getLatestHostPreviewNavigationFailure,
   getHostUpdaterStatus,
   getOpenDesignHost,
   installHostUpdater,
@@ -21,8 +22,11 @@ import {
   printHostPdf,
   openHostProjectPath,
   quitHostAfterUpdaterInstallerOpen,
+  setHostUpdaterMenuLabels,
   setHostPetVisible,
+  subscribeHostUpdaterOpenDialog,
   subscribeHostUpdater,
+  subscribeHostPreviewNavigationFailure,
 } from "../src/index.js";
 import { createMockOpenDesignHost, installMockOpenDesignHost } from "../src/testing.js";
 
@@ -82,6 +86,11 @@ describe("open-design host contract", () => {
     expect(isOpenDesignHostBridge({
       ...createMockOpenDesignHost(),
       updater: { status: async () => createMockOpenDesignHost().updater.status() },
+    })).toBe(false);
+    const { "clear-cache": _clearCache, ...updaterWithoutClearCache } = createMockOpenDesignHost().updater;
+    expect(isOpenDesignHostBridge({
+      ...createMockOpenDesignHost(),
+      updater: updaterWithoutClearCache,
     })).toBe(false);
   });
 
@@ -258,9 +267,12 @@ describe("open-design host contract", () => {
     const statusFn = vi.fn(async () => status);
     const unsubscribe = vi.fn();
     const subscribe = vi.fn(() => unsubscribe);
+    const unsubscribeOpenDialog = vi.fn();
+    const subscribeOpenDialog = vi.fn(() => unsubscribeOpenDialog);
+    const setMenuLabels = vi.fn(async () => ({ ok: true as const }));
     const scope: Record<string, unknown> = {};
     scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
-      updater: { check, install, quit, status: statusFn, subscribe },
+      updater: { check, install, quit, setMenuLabels, status: statusFn, subscribe, subscribeOpenDialog },
     });
 
     await expect(getHostUpdaterStatus({ payload: { source: "mount" } }, scope)).resolves.toEqual({
@@ -281,11 +293,48 @@ describe("open-design host contract", () => {
 
     const listener = vi.fn();
     expect(subscribeHostUpdater(listener, scope)).toBe(unsubscribe);
+    const openDialogListener = vi.fn();
+    expect(subscribeHostUpdaterOpenDialog(openDialogListener, scope)).toBe(unsubscribeOpenDialog);
+    await expect(setHostUpdaterMenuLabels({
+      check: "Check for Updates…",
+      checking: "Checking for Updates…",
+      downloading: "Downloading Update…",
+      install: "Install Update…",
+      installing: "Installing Update…",
+      restart: "Restart to Update OpenDesign…",
+    }, scope)).resolves.toEqual({ ok: true });
     expect(statusFn).toHaveBeenCalledWith({ payload: { source: "mount" } });
     expect(check).toHaveBeenCalledWith({ payload: { source: "button" } });
     expect(install).toHaveBeenCalledWith({ payload: { source: "popup" } });
     expect(quit).toHaveBeenCalledWith({ payload: { source: "opened-popup" } });
     expect(subscribe).toHaveBeenCalledWith(listener);
+    expect(subscribeOpenDialog).toHaveBeenCalledWith(openDialogListener);
+    expect(setMenuLabels).toHaveBeenCalledOnce();
+  });
+
+  it("routes optional preview navigation failure subscriptions", () => {
+    const failure = {
+      errorCode: -3,
+      eventId: 1,
+      frameName: "od-artifact-preview-srcdoc-preview-host-1",
+      occurredAtMs: 1234,
+      validatedUrl: "about:srcdoc",
+    };
+    const unsubscribe = vi.fn();
+    const subscribeNavigationFailure = vi.fn(() => unsubscribe);
+    const getLatestNavigationFailure = vi.fn(() => failure);
+    const scope: Record<string, unknown> = {};
+    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      preview: { getLatestNavigationFailure, subscribeNavigationFailure },
+    });
+    const listener = vi.fn();
+
+    expect(getLatestHostPreviewNavigationFailure(scope)).toBe(failure);
+    expect(getLatestNavigationFailure).toHaveBeenCalledOnce();
+    expect(subscribeHostPreviewNavigationFailure(listener, scope)).toBe(unsubscribe);
+    expect(subscribeNavigationFailure).toHaveBeenCalledWith(listener);
+    expect(getLatestHostPreviewNavigationFailure({})).toBeNull();
+    expect(subscribeHostPreviewNavigationFailure(listener, {})).toEqual(expect.any(Function));
   });
 
   it("wraps updater action throws into structured failures", async () => {

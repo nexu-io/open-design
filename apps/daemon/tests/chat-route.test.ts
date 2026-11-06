@@ -10,37 +10,38 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { delimiter, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
-  bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
-  resolveGrantedCodexImagegenOverride,
-  resolveCodexGeneratedImagesDir,
   resolveChatExtraAllowedDirs,
   resolveEffectiveDesignSystemSelection,
   resolveResearchCommandContract,
   startServer,
-  validateCodexGeneratedImagesDir,
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
+import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
+import { resetLiveModelsForTests } from '../src/runtimes/models.js';
 import { getAgentDef } from '../src/agents.js';
+import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
-import { upsertMessage } from '../src/db.js';
-import { renderCodexImagegenOverride } from '../src/prompts/system.js';
+import {
+  ensureWorkspaceProject,
+  ensureWorkspaceResource,
+  getProject,
+  upsertMessage,
+} from '../src/db.js';
+import { teamResourceWorkspaceRoot } from '../src/collab/team-resource-materialization.js';
+import { workspaceTeamDesignSystemBindingResourceId } from '../src/design-systems/workspace-team-binding.js';
 
 const FAKE_VELA_FIXTURE = resolve(process.cwd(), 'tests', 'fixtures', 'fake-vela.mjs');
-
-function symlinkDir(target: string, link: string): void {
-  symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
-}
 
 async function withFakeAgent<T>(
   binName: string,
@@ -71,6 +72,17 @@ async function withFakeAgent<T>(
   }
 }
 
+async function withCodexExecJson<T>(run: () => Promise<T>): Promise<T> {
+  const previous = process.env.OD_CODEX_TRANSPORT;
+  process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  try {
+    return await run();
+  } finally {
+    if (previous == null) delete process.env.OD_CODEX_TRANSPORT;
+    else process.env.OD_CODEX_TRANSPORT = previous;
+  }
+}
+
 function killProcessesUsingPath(pathFragment: string): void {
   if (process.platform === 'win32') return;
   let output = '';
@@ -94,9 +106,135 @@ describe('/api/chat', () => {
   let server: http.Server;
   let baseUrl: string;
   let originalMemoryConfig: Awaited<ReturnType<typeof readMemoryConfig>> | null = null;
+  const originalStrategyMode = process.env.OD_NEXT_STRATEGY_ROLLOUT;
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
+
+  async function createPersonalWorkspaceBoundProjectFixture(label: string) {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for AMR Workspace scope tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const workspaceId = `personal-ws-${randomUUID()}`;
+    const workspaceMemberId = `personal-member-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: label }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    try {
+      ensureWorkspaceProject(sqlite as never, {
+        projectId,
+        workspaceId,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: workspaceMemberId,
+      });
+    } finally {
+      sqlite.close();
+    }
+
+    return {
+      projectId,
+      headers: {
+        'x-od-workspace-id': workspaceId,
+        'x-od-workspace-member-id': workspaceMemberId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-role': 'owner',
+      },
+    };
+  }
+
+  async function runAmrModelRequest(model: string, extraEnv: Record<string, string> = {}): Promise<{
+    body: string;
+    invocations: string[];
+    responseOk: boolean;
+  }> {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for AMR model capability tests');
+    }
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const previousInvocationLog = process.env.FAKE_VELA_INVOCATION_LOG;
+    const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
+    const previousLogPrompt = process.env.FAKE_VELA_LOG_PROMPT;
+    const invocationLog = join(tmpdir(), `od-amr-model-request-${randomUUID()}.jsonl`);
+    const previousExtraEnv = Object.fromEntries(Object.keys(extraEnv).map((key) => [key, process.env[key]]));
+    try {
+      Object.assign(process.env, extraEnv);
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
+      process.env.FAKE_VELA_LOG_SET_MODEL = '1';
+      process.env.FAKE_VELA_LOG_PROMPT = '1';
+      const workspaceFixture = await createPersonalWorkspaceBoundProjectFixture(
+        `AMR model request ${randomUUID()}`,
+      );
+      let body = '';
+      let responseOk = false;
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'amr',
+              projectId: workspaceFixture.projectId,
+              message: 'Exercise the resolved AMR model.',
+              model,
+            }),
+          });
+          responseOk = response.ok;
+          body = await response.text();
+        },
+      );
+
+      const invocations = existsSync(invocationLog)
+        ? readFileSync(invocationLog, 'utf8')
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (JSON.parse(line) as { method: string }).method)
+        : [];
+      return { body, invocations, responseOk };
+    } finally {
+      rmSync(invocationLog, { force: true });
+      for (const [key, value] of Object.entries(previousExtraEnv)) {
+        if (value == null) delete process.env[key];
+        else process.env[key] = value;
+      }
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+      if (previousInvocationLog == null) delete process.env.FAKE_VELA_INVOCATION_LOG;
+      else process.env.FAKE_VELA_INVOCATION_LOG = previousInvocationLog;
+      if (previousLogSetModel == null) delete process.env.FAKE_VELA_LOG_SET_MODEL;
+      else process.env.FAKE_VELA_LOG_SET_MODEL = previousLogSetModel;
+      if (previousLogPrompt == null) delete process.env.FAKE_VELA_LOG_PROMPT;
+      else process.env.FAKE_VELA_LOG_PROMPT = previousLogPrompt;
+    }
+  }
 
   async function createPluginFixture(args: {
     pluginId: string;
@@ -132,6 +270,8 @@ describe('/api/chat', () => {
   }
 
   beforeAll(async () => {
+    // These direct-chat fixtures exercise legacy runtime transport, not Task orchestration.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     if (process.env.OD_DATA_DIR) {
       originalMemoryConfig = await readMemoryConfig(process.env.OD_DATA_DIR);
       await writeMemoryConfig(process.env.OD_DATA_DIR, {
@@ -139,7 +279,10 @@ describe('/api/chat', () => {
         extraction: null,
       });
     }
-    const started = await startServer({ port: 0, returnServer: true }) as {
+    const started = await startServer({
+      port: 0,
+      returnServer: true,
+    }) as {
       url: string;
       server: http.Server;
     };
@@ -161,6 +304,8 @@ describe('/api/chat', () => {
   });
 
   afterAll(async () => {
+    if (originalStrategyMode == null) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    else process.env.OD_NEXT_STRATEGY_ROLLOUT = originalStrategyMode;
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -196,7 +341,15 @@ describe('/api/chat', () => {
     expect(body).toContain('AGENT_UNAVAILABLE');
   });
 
-  it('keeps serving when delivered-session persistence has no conversation row', async () => {
+  it.each([false, true])('keeps serving without a conversation row (project bound: %s)', async (projectBound) => {
+    const projectId = projectBound ? `unbound_chat_${randomUUID()}` : undefined;
+    if (projectId) {
+      const created = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Unpersisted legacy chat' }),
+      });
+      expect(created.status).toBe(200);
+    }
     const conversationId = `missing-conversation-${randomUUID()}`;
 
     await withFakeAgent(
@@ -218,11 +371,11 @@ process.exit(0);
           body: JSON.stringify({
             agentId: 'opencode',
             conversationId,
+            ...(projectId ? { projectId } : {}),
             message: 'ask for clarification',
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('<question-form');
         expect(body).toContain('"status":"succeeded"');
@@ -280,7 +433,9 @@ process.exit(0);
     );
   });
 
-  it('marks OpenCode tool-only runs failed when no assistant output is produced', async () => {
+  // P0-24 Q6 / P7: a clean exit with no reply is a normal end. A tool already
+  // ran, so the retry policy does not re-run it; the gap is kept as a diagnostic.
+  it('ends OpenCode tool-only runs normally when no assistant output is produced', async () => {
     const conversationId = `conv-${randomUUID()}`;
 
     await withFakeAgent(
@@ -318,10 +473,9 @@ process.exit(0);
         expect(response.ok).toBe(true);
         expect(body).toContain('"type":"tool_use"');
         expect(body).toContain('"type":"tool_result"');
-        expect(body).toContain('AGENT_EXECUTION_FAILED');
-        expect(body).toContain('Agent completed without producing any output');
-        expect(body).toContain('"status":"failed"');
-        expect(body).not.toContain('"status":"succeeded"');
+        expect(body).not.toContain('event: error');
+        expect(body).toContain('empty_reply_ended_normally');
+        expect(body).toContain('"status":"succeeded"');
 
         const runsResponse = await fetch(
           `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
@@ -333,8 +487,137 @@ process.exit(0);
         expect(runsBody.runs).toHaveLength(1);
         expect(runsBody.runs[0]).toMatchObject({
           conversationId,
-          status: 'failed',
+          status: 'succeeded',
           exitCode: 0,
+        });
+      },
+    );
+  });
+
+  /*
+   * 「问完就交棒」的一整条链路,从假 CLI 的字节一路到 run 的终态。
+   *
+   * 真机 run 441ff961-bd66-4c4a-91e7-812f1d489668(打包版 beta 0.21.1-beta.7):
+   * agent 先写下四条待办(1 条 in_progress + 3 条 pending),再发一个可渲染的
+   * `<question-form>` 交棒给用户,进程 exit 0、无 signal、无 error。
+   * 它被 stamp 成 endedWithUnfinishedWork,项目卡与 Pet 任务中心于是画成
+   * `incomplete`,聊天页脚说「已停止,仍有未完成任务」—— 而没有任何东西停过它。
+   *
+   * 这条用例走真实的 emitAgentEvent 收口(`captureRunWorkCompletenessSignals`
+   * 在那里把 text_delta 攒进 run.askUserScanText),所以它同时钉住了信号的采集
+   * 和 finish() 的判定;runs.test.ts 那几条只钉后者。
+   */
+  it('does not stamp unfinished work on a turn that ended by asking the user', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-ask-user-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-ask-user-session',
+  part: {
+    tool: 'todowrite',
+    callID: 'call-todo-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ todos: [
+        { content: 'Collect the brand brief', status: 'in_progress' },
+        { content: 'Decide the imagery strategy', status: 'pending' },
+        { content: 'Fill inputs.json', status: 'pending' },
+        { content: 'Render the landing page', status: 'pending' },
+      ] }),
+      output: 'ok',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'text', part: { text: '开始之前先确认几件事。\\n<question-form id="brand-brief" title="Brand brief">\\n{"questions":[{"id":"brand_name","label":"Brand name","type":"text"}]}\\n</question-form>' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: '帮我做个落地页。',
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('<question-form');
+        expect(body).toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; endedWithUnfinishedWork: boolean }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'succeeded',
+          endedWithUnfinishedWork: false,
+        });
+      },
+    );
+  });
+
+  // 量法能看见缺陷:同一份待办、同一条链路,只把可渲染的表单换成被引用的裸标记,
+  // 这一轮就必须重新报「有未完成的活」。产物 HTML / 代码示例里出现这段文本的回合
+  // 不许因此被静音。
+  it('still stamps unfinished work when the form markup was only quoted', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-quoted-form-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-quoted-form-session',
+  part: {
+    tool: 'todowrite',
+    callID: 'call-todo-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ todos: [
+        { content: 'Collect the brand brief', status: 'in_progress' },
+        { content: 'Render the landing page', status: 'pending' },
+      ] }),
+      output: 'ok',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'text', part: { text: '顺带演示一下 <question-form> 这个标记怎么写,我先接着做。' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: '帮我做个落地页。',
+          }),
+        });
+        expect((await response.text())).toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; endedWithUnfinishedWork: boolean }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'succeeded',
+          endedWithUnfinishedWork: true,
         });
       },
     );
@@ -411,6 +694,165 @@ process.stdin.on('end', () => {
     );
   });
 
+  it.each([
+    { agentId: 'opencode', configuredTemp: false },
+    { agentId: 'opencode', configuredTemp: true },
+    { agentId: 'byok-opencode', configuredTemp: true },
+  ])('allows the system temp directory for $agentId (configured: $configuredTemp)', async ({ agentId, configuredTemp }) => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode temp permission tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-tmp-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'OpenCode temp permission fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      if (configuredTemp) await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentCliEnv: {
+          ...previousConfig.agentCliEnv,
+          opencode: { TMPDIR: markerDir, TMP: markerDir, TEMP: markerDir },
+        },
+      });
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({ config: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}'), tmpdir: require('node:os').tmpdir() }));
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'tmp-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId, projectId, message: 'hello',
+              ...(agentId === 'byok-opencode' ? {
+                model: 'test-model',
+                byokProvider: {
+                  protocol: 'openai', apiKey: 'sk-test', baseUrl: 'https://example.com/v1',
+                  model: 'test-model', requiresApiKey: true,
+                },
+              } : {}),
+            }),
+          });
+          expect(response.ok).toBe(true);
+          expect(await response.text()).toContain('tmp-permission-ok');
+
+          const parsed = JSON.parse(await fsp.readFile(envFile, 'utf8')) as {
+            config: { permission?: { external_directory?: Record<string, string> } };
+            tmpdir: string;
+          };
+          const externalDirectory = parsed.config.permission?.external_directory ?? {};
+          expect(parsed.tmpdir).toBe(configuredTemp ? markerDir : tmpdir());
+          const expectedRoots = [parsed.tmpdir, ...(process.platform === 'win32' ? [] : ['/tmp'])];
+          for (const root of expectedRoots) {
+            expect(externalDirectory[root]).toBe('allow');
+            expect(externalDirectory[`${root}/**`]).toBe('allow');
+          }
+        },
+      );
+    } finally {
+      await writeAppConfig(process.env.OD_DATA_DIR, { agentCliEnv: previousConfig.agentCliEnv ?? null });
+    }
+  });
+
+  it('allowlists the active skill root that lives outside the repository skills dir', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for OpenCode skill permission tests');
+    }
+
+    // #8173: the skill preamble advertises the skill's absolute root as its
+    // fallback path, but the allowlist was built from the repository `skills/`
+    // tree alone. A skill installed under the daemon data dir — the same shape
+    // as the bundled plugin folder in the report — landed outside it, so
+    // OpenCode asked for `external_directory` approval on a file OD itself told
+    // the agent to open.
+    const skillId = `od-skill-root-${randomUUID().slice(0, 8)}`;
+    const userSkillDir = join(process.env.OD_DATA_DIR, 'skills', skillId);
+    mkdirSync(join(userSkillDir, 'references'), { recursive: true });
+    writeFileSync(
+      join(userSkillDir, 'SKILL.md'),
+      `---\nname: ${skillId}\ndescription: External directory allowlist fixture.\n---\n`
+        + '# Fixture\n\nRead `references/layouts.md` before writing anything.\n',
+    );
+    writeFileSync(join(userSkillDir, 'references', 'layouts.md'), '# Layouts\n');
+    tempDirs.push(userSkillDir);
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-opencode-skill-dir-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-config-content.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'OpenCode skill root permission fixture',
+        skillId,
+      }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, process.env.OPENCODE_CONFIG_CONTENT || '');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'skill-permission-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            skillId,
+            message: 'hello',
+          }),
+        });
+        expect(response.ok).toBe(true);
+        expect(await response.text()).toContain('skill-permission-ok');
+
+        const parsed = JSON.parse(readFileSync(envFile, 'utf8')) as {
+          permission?: { external_directory?: Record<string, string> };
+        };
+        const externalDirectory = parsed.permission?.external_directory ?? {};
+        const roots = new Set([userSkillDir, realpathSync(userSkillDir)]);
+        const allowedRoot = [...roots].find(
+          (root) =>
+            externalDirectory[root] === 'allow' &&
+            externalDirectory[`${root}/**`] === 'allow',
+        );
+
+        expect(allowedRoot).toBeTruthy();
+      },
+    );
+  });
+
   it('passes BYOK provider config to the daemon-backed OpenCode runtime', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
@@ -458,11 +900,12 @@ process.stdin.on('end', () => {
               protocol: 'senseaudio',
               apiKey: 'sk-test-byok',
               baseUrl: 'https://api.senseaudio.cn',
+              model: 'deepseek-v4-flash',
+              requiresApiKey: true,
             },
           }),
         });
         const body = await response.text();
-
         expect(response.ok).toBe(true);
         expect(body).toContain('byok-opencode-ok');
 
@@ -471,6 +914,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -491,6 +936,7 @@ process.stdin.on('end', () => {
         });
         expect(provider?.models?.['deepseek-v4-flash']).toEqual({
           name: 'deepseek-v4-flash',
+          modalities: { input: ['text', 'image'], output: ['text'] },
           limit: {
             context: 128_000,
             output: 16_384,
@@ -548,6 +994,7 @@ process.stdin.on('end', () => {
               protocol: 'openai',
               apiKey: '',
               baseUrl: 'http://127.0.0.1:8000/v1',
+              model: 'model',
               requiresApiKey: false,
             },
           }),
@@ -562,6 +1009,8 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
+          '--dir',
+          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);
@@ -575,7 +1024,7 @@ process.stdin.on('end', () => {
         };
         const provider = parsed.provider?.['open-design-byok'];
         expect(provider).toMatchObject({
-          npm: '@ai-sdk/openai',
+          npm: '@ai-sdk/openai-compatible',
           options: {
             baseURL: 'http://127.0.0.1:8000/v1',
           },
@@ -586,7 +1035,7 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not pass forged BYOK provider config to other local runtimes', async () => {
+  it('does not pass BYOK provider config to other local runtimes', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
     }
@@ -639,8 +1088,9 @@ process.stdin.on('end', () => {
         expect(response.ok).toBe(true);
         expect(body).toContain('opencode-ok');
         expect(await fsp.readFile(keyFile, 'utf8')).toBe('');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('open-design-byok');
-        expect(await fsp.readFile(envFile, 'utf8')).not.toContain('sk-test-byok');
+        const rawConfig = await fsp.readFile(envFile, 'utf8');
+        expect(rawConfig).not.toContain('open-design-byok');
+        expect(rawConfig).not.toContain('sk-test-byok');
       },
     );
   });
@@ -859,6 +1309,52 @@ process.exit(1);
     );
   });
 
+  it('rejects a requested media-only model before AMR ACP launch', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('nano-banana-2');
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([]);
+    expect(body).toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('model_not_chat_capable');
+    expect(body).toContain('"status":"failed"');
+    expect(body).not.toContain('Hello from fake vela.');
+  });
+
+  it('forwards an unknown custom-provider chat slug when the AMR catalog is stale', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest(
+      'custom-provider/future-chat-2027',
+    );
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([
+      'new',
+      'set_model:custom-provider/future-chat-2027',
+      'prompt',
+    ]);
+    expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+    expect(body).toContain('"type":"text_delta","delta":"vela."');
+    expect(body).toContain('"status":"succeeded"');
+  });
+
+  // AMR 0.24.1, 10/5-10/7: 9 runs from 7 users failed with "session/set_model
+  // modelId is not available" because the saved model had left the AMR catalog.
+  it('switches to the AMR catalog default when vela rejects a delisted model', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('claude-opus-4.8', {
+      FAKE_VELA_SET_MODEL_UNAVAILABLE: 'claude-opus-4.8',
+    });
+
+    expect(responseOk).toBe(true);
+    expect(invocations[0]).toBe('new');
+    expect(invocations[1]).toBe('set_model_rejected:claude-opus-4.8');
+    expect(invocations[2]).toMatch(/^set_model:(deepseek-v4-flash|deepseek-v3\.2)$/);
+    expect(invocations[3]).toBe('prompt');
+    expect(body).toContain('"label":"model_fallback"');
+    expect(body).toContain('claude-opus-4.8 is no longer available in AMR.');
+    expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('"status":"succeeded"');
+  });
+
   it('survives transient AMR Link catalog failures without aborting the run', async () => {
     // The run preflight resolves the AMR catalog through the shared
     // AmrModelLoadingCache, which degrades to the offline `vela model preset`
@@ -873,6 +1369,8 @@ process.exit(1);
       // Unique key so the shared model cache key is unique per test run.
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('Transient AMR catalog fixture');
 
       await withFakeAgent(
         'vela',
@@ -905,9 +1403,13 @@ child.on('exit', (code, signal) => {
         async () => {
           const response = await fetch(`${baseUrl}/api/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
             body: JSON.stringify({
               agentId: 'amr',
+              projectId: workspaceFixture.projectId,
               message: 'hello',
               model: 'deepseek-v3.2',
             }),
@@ -919,6 +1421,7 @@ child.on('exit', (code, signal) => {
           expect(body).toContain('"type":"text_delta","delta":"vela."');
           expect(body).not.toContain('model_catalog_unavailable');
           expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+          expect(body).not.toContain('AMR_WORKSPACE_SCOPE_REQUIRED');
           // The catalog probe runs at least once (remote attempted, then the
           // run proceeds from the preset seed). We no longer assert an exact
           // synchronous retry count: the remote retry/backoff now happens in
@@ -956,6 +1459,8 @@ child.on('exit', (code, signal) => {
       // cached remote catalog.
       process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
       process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('Cached AMR catalog fixture');
 
       await withFakeAgent(
         'vela',
@@ -983,9 +1488,13 @@ child.on('exit', (code, signal) => {
         async () => {
           const response = await fetch(`${baseUrl}/api/chat`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
             body: JSON.stringify({
               agentId: 'amr',
+              projectId: workspaceFixture.projectId,
               message: 'hello',
               // Present in the preset seed (DEFAULT_MODEL_PRESET_JSON) but the
               // live `model list` is unavailable, so only the preset path can
@@ -1000,6 +1509,7 @@ child.on('exit', (code, signal) => {
           expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
           expect(body).not.toContain('model_catalog_unavailable');
           expect(body).not.toContain('is not available from Vela');
+          expect(body).not.toContain('AMR_WORKSPACE_SCOPE_REQUIRED');
           // It must actually proceed into the ACP run and stream assistant text.
           expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
           expect(body).toContain('"type":"text_delta","delta":"vela."');
@@ -1010,6 +1520,301 @@ child.on('exit', (code, signal) => {
       else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
       if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
       else process.env.VELA_LINK_URL = previousLinkUrl;
+    }
+  });
+
+  it('persists exact AMR prompt budget context across new and resumed sessions', async () => {
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const previousPreset = process.env.FAKE_VELA_MODEL_PRESET_JSON;
+    const previousList = process.env.FAKE_VELA_MODEL_LIST_JSON;
+    const model = 'claude-observability-5';
+    try {
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = JSON.stringify({
+        source: 'preset',
+        data: [{
+          id: model,
+          enabled: true,
+          default: true,
+          metadata: { contextWindowTokens: 200_000 },
+        }],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+        source: 'remote',
+        data: [{
+          id: model,
+          enabled: true,
+          default: true,
+          metadata: { contextWindowTokens: 200_000 },
+        }],
+      });
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('AMR prompt budget fixture');
+      const conversationsResponse = await fetch(
+        `${baseUrl}/api/projects/${workspaceFixture.projectId}/conversations`,
+      );
+      const conversationsBody = await conversationsResponse.json() as {
+        conversations: Array<{ id: string }>;
+      };
+      const conversationId = conversationsBody.conversations[0]?.id;
+      expect(conversationId).toBeTruthy();
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const runTurn = async (message: string) => {
+            const createResponse = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...workspaceFixture.headers,
+              },
+              body: JSON.stringify({
+                agentId: 'amr',
+                projectId: workspaceFixture.projectId,
+                conversationId,
+                model,
+                message,
+                currentPrompt: message,
+              }),
+            });
+            expect(createResponse.status).toBe(202);
+            const { runId } = await createResponse.json() as { runId: string };
+            const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+            const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+            const statusBody = await waitForRunStatus(baseUrl, runId);
+            expect(statusBody.status).toBe('succeeded');
+            return eventsBody;
+          };
+
+          const first = await runTurn('first exact-frame turn');
+          expect(first).toContain('"name":"prompt_budget_v1"');
+          expect(first).toContain('"sessionMode":"new"');
+          expect(first).toContain('"contextWindowSource":"model_metadata"');
+          expect(first).toContain('"contextWindowTokens":200000');
+          expect(first).toContain('"priorSessionUsageSource":"unknown"');
+
+          const second = await runTurn('second resumed turn');
+          expect(second).toContain('"name":"prompt_budget_v1"');
+          expect(second).toContain('"sessionMode":"resume"');
+          expect(second).toContain('"contextWindowSource":"model_metadata"');
+          expect(second).toContain('"priorSessionUsageSource":"agent_session"');
+          expect(second).toContain('"priorSessionInputTokens":12');
+        },
+      );
+    } finally {
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+      if (previousPreset == null) delete process.env.FAKE_VELA_MODEL_PRESET_JSON;
+      else process.env.FAKE_VELA_MODEL_PRESET_JSON = previousPreset;
+      if (previousList == null) delete process.env.FAKE_VELA_MODEL_LIST_JSON;
+      else process.env.FAKE_VELA_MODEL_LIST_JSON = previousList;
+    }
+  });
+
+  it('resolves an AMR default model from the caller catalog, not the shared preset seed', async () => {
+    // A free-tier caller: the bundled preset lists deepseek-v4-flash first, but
+    // the per-user catalog only allows deepseek-v4.1-flash. A run started before
+    // that catalog arrives must not turn `default` into a model vela rejects.
+    const saved = Object.fromEntries([
+      'VELA_RUNTIME_KEY', 'VELA_LINK_URL', 'FAKE_VELA_MODEL_PRESET_JSON', 'FAKE_VELA_MODEL_LIST_JSON',
+      'FAKE_VELA_MODEL_LIST_DELAY_MS', 'FAKE_VELA_ALLOWED_MODELS', 'FAKE_VELA_LOG_SET_MODEL_REQUEST', 'FAKE_VELA_INVOCATION_LOG',
+    ].map((key) => [key, process.env[key]]));
+    const invocationLog = join(mkdtempSync(join(tmpdir(), 'od-amr-default-model-')), 'vela.log');
+    try {
+      amrModelLoadingCache.resetForTests();
+      resetLiveModelsForTests();
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_MODEL_PRESET_JSON = JSON.stringify({
+        source: 'preset',
+        data: [{ id: 'deepseek-v4-flash' }, { id: 'deepseek-v4-pro' }],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
+        source: 'remote',
+        data: [
+          { id: 'deepseek-v4.1-flash', enabled: true, default: true },
+          { id: 'deepseek-v4-flash', enabled: false },
+          { id: 'deepseek-v4-pro', enabled: false },
+        ],
+      });
+      process.env.FAKE_VELA_MODEL_LIST_DELAY_MS = '1500';
+      process.env.FAKE_VELA_ALLOWED_MODELS = 'deepseek-v4.1-flash';
+      process.env.FAKE_VELA_LOG_SET_MODEL_REQUEST = '1';
+      process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
+      const workspaceFixture =
+        await createPersonalWorkspaceBoundProjectFixture('AMR default model fixture');
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...workspaceFixture.headers },
+            body: JSON.stringify({
+              agentId: 'amr',
+              projectId: workspaceFixture.projectId,
+              model: 'default',
+              message: 'hello',
+              currentPrompt: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+          const requested = readFileSync(invocationLog, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (JSON.parse(line) as { method: string }).method)
+            .filter((method) => method.startsWith('set_model_request:'));
+          expect(requested).toEqual(['set_model_request:deepseek-v4.1-flash']);
+          expect(statusBody.status).toBe('succeeded');
+        },
+      );
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value == null) delete process.env[key];
+        else process.env[key] = value;
+      }
+      amrModelLoadingCache.resetForTests();
+      resetLiveModelsForTests();
+    }
+  });
+
+  it('keeps service tier overrides when /api/runs omits model but settings has one', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: { codex: { model: 'gpt-5.5' } },
+      });
+      await withCodexExecJson(() => withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      ));
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
+    }
+  });
+
+  it('keeps service tier overrides when /api/runs omits model and settings has none', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for service tier settings tests');
+    }
+    const argsPath = join(tmpdir(), `od-codex-args-${randomUUID()}.json`);
+    const previousConfig = await readAppConfig(process.env.OD_DATA_DIR);
+    try {
+      await writeAppConfig(process.env.OD_DATA_DIR, { agentModels: null });
+      await withCodexExecJson(() => withFakeAgent(
+        'codex',
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'debug' && args[1] === 'models') {
+  console.log(JSON.stringify([{ id: 'gpt-5.5', name: 'gpt-5.5', service_tiers: [{ id: 'priority', label: 'Fast' }] }]));
+  process.exit(0);
+}
+if (args[0] === 'login' && args[1] === 'status') {
+  console.log('Logged in');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] }));
+process.exit(0);
+`,
+        async () => {
+          await fetch(`${baseUrl}/api/agents`);
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'codex',
+              message: 'hello',
+              serviceTier: 'priority',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          await waitForRunStatus(baseUrl, runId);
+
+          const args = JSON.parse(readFileSync(argsPath, 'utf8')) as string[];
+          expect(args).toContain('--model');
+          expect(args).toContain('gpt-5.5');
+          expect(args).toContain('service_tier="priority"');
+        },
+      ));
+    } finally {
+      rmSync(argsPath, { force: true });
+      await writeAppConfig(process.env.OD_DATA_DIR, {
+        agentModels: previousConfig.agentModels ?? null,
+      });
     }
   });
 
@@ -1047,7 +1852,7 @@ process.stdin.on('end', () => {
   fs.writeFileSync(path.join(pluginDir, 'open-design.json'), JSON.stringify({ name: 'generated-plugin' }, null, 2));
   fs.writeFileSync(path.join(pluginDir, 'SKILL.md'), '# Generated plugin\\n');
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 OpenDesign 插件脚手架。先读取文档规范，再生成插件文件。' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -1061,7 +1866,7 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             pluginId: 'od-plugin-authoring',
-            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 OpenDesign 插件脚手架。',
           }),
         });
         expect(createResponse.status).toBe(202);
@@ -1083,7 +1888,10 @@ process.stdin.on('end', () => {
     );
   });
 
-  it('does not report plugin authoring as succeeded when the agent only emits planning text without artifacts', async () => {
+  // P0-24 N9: what a run produced never decides its status. A plugin-authoring
+  // run that exits cleanly without the generated-plugin files ended normally;
+  // the gap is kept as a diagnostic for the record, not a failure.
+  it('ends plugin authoring normally, with a diagnostic, when the agent emits only planning text', async () => {
     const projectId = `proj-plugin-authoring-${randomUUID()}`;
 
     const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
@@ -1111,7 +1919,7 @@ process.stdin.on('end', () => {
 process.stdin.resume();
 process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'step_start' }));
-  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 Open Design 插件脚手架。先读取文档规范，再生成插件文件。' } }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '我来帮你创建一个通用的 OpenDesign 插件脚手架。先读取文档规范，再生成插件文件。' } }));
   console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
   process.exit(0);
 });
@@ -1125,7 +1933,7 @@ process.stdin.on('end', () => {
             projectId,
             conversationId,
             pluginId: 'od-plugin-authoring',
-            message: '请创建一个可刷新、可审计、由 API 驱动的 Open Design 插件脚手架。',
+            message: '请创建一个可刷新、可审计、由 API 驱动的 OpenDesign 插件脚手架。',
           }),
         });
         expect(createResponse.status).toBe(202);
@@ -1146,12 +1954,63 @@ process.stdin.on('end', () => {
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
         expect(eventsBody).toContain('先读取文档规范，再生成插件文件');
-        expect(statusBody.status).not.toBe('succeeded');
+        expect(eventsBody).toContain('plugin_authoring_artifacts_missing');
+        expect(eventsBody).not.toContain('AGENT_EXECUTION_FAILED');
+        expect(statusBody.status).toBe('succeeded');
 
         const filesResponse = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
         expect(filesResponse.status).toBe(200);
         const filesBody = await filesResponse.json() as { files: Array<{ name: string }> };
         expect(filesBody.files.some((file) => file.name.startsWith('generated-plugin/'))).toBe(false);
+      },
+    );
+  });
+  // P0-24 N9: a version snapshot that cannot be written does not fail a run
+  // whose agent finished normally.
+  it('ends a run normally, with a diagnostic, when its HTML version snapshot cannot be written', async () => {
+    const projectId = `proj-snapshot-failure-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Snapshot failure fixture', skillId: null, designSystemId: null }),
+    });
+    expect(createProjectResponse.status).toBe(200);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    const conversationsBody = await conversationsResponse.json() as { conversations: Array<{ id: string }> };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+const path = require('node:path');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<html><body>page</body></html>');
+  // A plain file where the version store's directory belongs blocks the snapshot.
+  fs.writeFileSync(path.join(process.cwd(), '.file-versions'), 'blocked');
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: '页面已写好。' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'opencode', projectId, conversationId, message: '做一个页面' }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('html_version_snapshot_failed');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -1283,7 +2142,9 @@ process.stdin.on('end', () => {
       },
     );
   });
-  it('still fails plugin authoring when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
+  // P0-24 N9: the carve-out now only decides whether the missing-artifact
+  // diagnostic is recorded; the run ends normally either way.
+  it('still records missing plugin artifacts when a question-form tag wraps a non-renderable (non-JSON) body', async () => {
     // The clarification carve-out must match the web parser's renderable-form
     // contract (JSON body with a `questions` array), not just the opening
     // tag. A `<question-form>` whose body is not valid form JSON renders as
@@ -1342,7 +2203,7 @@ process.stdin.on('end', () => {
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
         expect(eventsBody).toContain('ended before generating the required generated-plugin artifacts');
-        expect(statusBody.status).not.toBe('succeeded');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -2072,7 +2933,7 @@ process.stdin.on('end', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             agentId: 'opencode',
-            message: 'build the Open Design landing page',
+            message: 'build the OpenDesign landing page',
             skillId: 'editorial-collage',
             skillIds: ['open-design-landing'],
           }),
@@ -2332,137 +3193,164 @@ process.exit(1);
     );
   });
 
-  it('suppresses Antigravity auth stdout and emits AGENT_AUTH_REQUIRED without an event: stdout delta', async () => {
-    await withFakeAgent(
-      'agy',
-      `
+  // OPEND-3495. The fake `agy` enforces the real CLI's prompt contract
+  // instead of echoing whatever it is handed:
+  //   - `-p/--print <text>` ignores stdin entirely (agy 1.1.1 changelog: "no
+  //     longer reading stdin when a prompt is provided via a flag"), so a
+  //     daemon that puts a pointer in `-p` and the prompt on stdin gets a reply
+  //     that never saw the prompt;
+  //   - `--input-format stream-json` (requires `--output-format stream-json`)
+  //     reads NDJSON `{"event":"user","message":{"content":…}}` messages from
+  //     stdin and answers with agy's stream-json events (see
+  //     tests/fixtures/antigravity-stream-json).
+  // The reply reports what actually arrived, so the test can only pass when
+  // the composed prompt reaches agy through the channel agy reads.
+  const FAKE_AGY_CONTRACT = `
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.107.0-test');
+  console.log('1.3.1');
   process.exit(0);
 }
-// Simulate agy chat - printing the OAuth prompt and exiting 0
-process.stdout.write('Authentication required. Please visit the URL to log in: https://accounts.google.com/o/oauth2/auth?client_id=12345&redirect_uri=antigravity-redirect\\n');
-process.stdout.write('Waiting for authentication (timeout 30s)...\\n');
-process.stdout.write('Error: authentication timed out.\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+if (args.includes('-p') || args.includes('--print') || args.includes('--prompt')) {
+  process.stdout.write('I do not see any instructions in your message.\\n');
+  process.exit(0);
+}
+const inputIndex = args.indexOf('--input-format');
+const outputIndex = args.indexOf('--output-format');
+if (inputIndex === -1 || args[inputIndex + 1] !== 'stream-json' || outputIndex === -1 || args[outputIndex + 1] !== 'stream-json') {
+  process.stderr.write('Error: no prompt provided\\n');
+  process.exit(2);
+}
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  const emit = (event) => process.stdout.write(JSON.stringify(event) + '\\n');
+  const conversation_id = 'agy-fake-1';
+  emit({ event: 'init', conversation_id, init: { cwd: process.cwd(), tools: ['run_command'], permission_mode: 'request-review' } });
+  const messages = stdin.split('\\n').filter((line) => line.trim()).map((line) => JSON.parse(line));
+  if (messages.length !== 1 || messages[0].event !== 'user' || typeof messages[0].message?.content !== 'string') {
+    process.stderr.write('error: stream input "user" message has no content\\n');
+    emit({ event: 'result', result: { conversation_id, status: 'ERROR', response: '', error: 'stream input "user" message has no content', duration_seconds: 0, num_turns: 0 } });
+    process.exit(1);
+  }
+  const content = messages[0].message.content;
+  emit({ event: 'step_update', step_update: { conversation_id, step_index: 0, state: 'DONE', step_type: 'user_input' } });
+  const reply = 'RECEIVED ' + content.length + ' chars ending ' + JSON.stringify(content.slice(-40));
+  emit({ event: 'step_update', step_update: { conversation_id, step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: reply, duration_seconds: 0.5, usage: { input_tokens: 9, output_tokens: 3, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 12 } } });
+  emit({ event: 'result', result: { conversation_id, status: 'SUCCESS', response: reply, duration_seconds: 0.6, num_turns: 1, usage: { input_tokens: 9, output_tokens: 3, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 12 } } });
+  process.exit(0);
+});
+`;
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
-
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
-        expect(eventsBody).not.toContain('event: stdout');
-        expect(eventsBody).not.toContain('accounts.google.com');
-        expect(statusBody.status).toBe('failed');
-      },
-    );
-  });
-
-  it('parses successful Antigravity Gemini JSONL output instead of forwarding raw stdout', async () => {
-    await withFakeAgent(
-      'agy',
-      `
+  function fakeAgyReplaying(name: string, exitCode: number): string {
+    const fixtures = fileURLToPath(new URL('./fixtures/antigravity-stream-json/', import.meta.url));
+    const stdout = readFileSync(join(fixtures, `${name}.stdout.ndjson`), 'utf8');
+    const stderr = readFileSync(join(fixtures, `${name}.stderr.txt`), 'utf8');
+    return `
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.107.0-test');
+  console.log('1.3.1');
   process.exit(0);
 }
-process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5, cached: 0, duration_ms: 25 } }) + '\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+process.stdin.resume();
+process.stdin.on('end', () => {
+  process.stdout.write(${JSON.stringify(stdout)});
+  process.stderr.write(${JSON.stringify(stderr)});
+  process.exit(${exitCode});
+});
+`;
+  }
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+  it('delivers the whole composed prompt to Antigravity through agy stream-json stdin', async () => {
+    const marker = 'OPEND_3495_END_OF_USER_REQUEST';
+    await withFakeAgent('agy', FAKE_AGY_CONTRACT, async () => {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'antigravity',
+          message: `${'Pad the composed prompt past the Windows command-line cap. '.repeat(700)}${marker}`,
+        }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = await createResponse.json() as { runId: string };
 
-        expect(eventsBody).toContain('event: agent');
-        expect(eventsBody).toContain('"type":"text_delta","delta":"Hello from Antigravity."');
-        expect(eventsBody).toContain('"type":"usage"');
-        expect(eventsBody).not.toContain('event: stdout');
-        expect(eventsBody).not.toContain('"role":"assistant"');
-        expect(statusBody.status).toBe('succeeded');
-      },
-    );
+      const eventsController = new AbortController();
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        signal: eventsController.signal,
+      });
+      const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+      eventsController.abort();
+      const statusBody = await waitForRunStatus(baseUrl, runId);
+
+      expect(eventsBody).toContain('"type":"text_delta","delta":"RECEIVED ');
+      expect(eventsBody).toContain(marker);
+      expect(eventsBody).not.toContain('I do not see any instructions');
+      expect(eventsBody).not.toContain('event: stdout');
+      expect(eventsBody).toContain('"type":"usage"');
+      expect(statusBody.status).toBe('succeeded');
+    });
   });
 
-  it('forwards Antigravity plain stdout JSONL when it lacks the Gemini init marker', async () => {
-    await withFakeAgent(
-      'agy',
-      `
-const args = process.argv.slice(2);
-if (args[0] === '--version') {
-  console.log('1.107.0-test');
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify({ type: 'error', message: 'requested JSONL output' }) + '\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'return JSONL',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+  it('reports a signed-out Antigravity CLI as AGENT_AUTH_REQUIRED', async () => {
+    await withFakeAgent('agy', fakeAgyReplaying('signed-out', 1), async () => {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'antigravity', message: 'hello' }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = await createResponse.json() as { runId: string };
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'event: final');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+      const eventsController = new AbortController();
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        signal: eventsController.signal,
+      });
+      const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+      eventsController.abort();
+      const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: stdout');
-        expect(eventsBody).toContain('requested JSONL output');
-        expect(eventsBody).not.toContain('event: error');
-        expect(statusBody.status).toBe('succeeded');
-      },
-    );
+      expect(eventsBody).toContain('event: error');
+      expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+      expect(eventsBody).toContain('open a terminal and run `agy` once');
+      expect(eventsBody).not.toContain('event: stdout');
+      expect(statusBody.status).toBe('failed');
+    });
   });
 
-  it('fails plain-stream runs when stdout artifact persistence fails', async () => {
+  it('reports an exhausted Antigravity quota as RATE_LIMITED', async () => {
+    await withFakeAgent('agy', fakeAgyReplaying('quota-exhausted', 3), async () => {
+      const createResponse = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'antigravity', message: 'hello' }),
+      });
+      expect(createResponse.status).toBe(202);
+      const { runId } = await createResponse.json() as { runId: string };
+
+      const eventsController = new AbortController();
+      const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+        signal: eventsController.signal,
+      });
+      const eventsBody = await readSseUntil(eventsResponse, 'event: final');
+      eventsController.abort();
+      const statusBody = await waitForRunStatus(baseUrl, runId);
+
+      expect(eventsBody).toContain('event: error');
+      expect(eventsBody).toContain('RATE_LIMITED');
+      expect(eventsBody).toContain('Individual quota reached');
+      expect(eventsBody).toContain('Switch Model picker');
+      expect(eventsBody).not.toContain('event: stdout');
+      expect(statusBody.status).toBe('failed');
+    });
+  });
+
+  // P0-24 N9: failing to save the page does not fail a run whose agent
+  // finished normally; the reason stays as a diagnostic.
+  it('ends plain-stream runs normally, with a diagnostic, when stdout artifact persistence fails', async () => {
     await withFakeAgent(
-      'agy',
+      'qwen',
       `
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
@@ -2485,7 +3373,7 @@ process.exit(0);
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            agentId: 'antigravity',
+            agentId: 'qwen',
             projectId,
             message: 'emit blocked artifact',
           }),
@@ -2501,102 +3389,11 @@ process.exit(0);
         eventsController.abort();
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('plain-stream artifact');
-        expect(statusBody.status).toBe('failed');
+        expect(eventsBody).toContain('plain_stream_artifacts_persist_failed');
+        expect(eventsBody).not.toContain('event: error');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
-  });
-
-  it('fails Antigravity Gemini JSONL output with no visible assistant content', async () => {
-    await withFakeAgent(
-      'agy',
-      `
-const args = process.argv.slice(2);
-if (args[0] === '--version') {
-  console.log('1.107.0-test');
-  process.exit(0);
-}
-process.stdout.write(JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0, cached: 0, duration_ms: 25 } }) + '\\n');
-process.exit(0);
-`,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'antigravity',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
-
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'Agent completed without producing any output');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
-
-        expect(eventsBody).toContain('event: agent');
-        expect(eventsBody).toContain('"type":"usage"');
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
-        expect(eventsBody).not.toContain('event: stdout');
-        expect(statusBody.status).toBe('failed');
-      },
-    );
-  });
-
-  it('preserves the first buffered stdout timestamp for Antigravity Gemini assistant text', () => {
-    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
-      [{
-        receivedAt: 1_234,
-        text: [
-          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
-          JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }),
-          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } }),
-        ].join('\n'),
-      }],
-    );
-
-    expect(timestamp).toBe(1_234);
-  });
-
-  it('stamps Antigravity Gemini assistant text from the chunk that completes the first assistant message', () => {
-    const timestamp = bufferedAntigravityGeminiFirstTokenAt([
-      {
-        receivedAt: 1_234,
-        text: `${JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' })}\n`,
-      },
-      {
-        receivedAt: 5_678,
-        text: `${JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true })}\n`,
-      },
-      {
-        receivedAt: 9_999,
-        text: `${JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 5 } })}\n`,
-      },
-    ]);
-
-    expect(timestamp).toBe(5_678);
-  });
-
-  it('does not stamp a first token timestamp for Antigravity Gemini streams without assistant text', () => {
-    const timestamp = bufferedAntigravityGeminiFirstTokenAt(
-      [{
-        receivedAt: 1_234,
-        text: [
-          JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }),
-          JSON.stringify({ type: 'result', status: 'success', stats: { input_tokens: 4, output_tokens: 0 } }),
-        ].join('\n'),
-      }],
-    );
-
-    expect(timestamp).toBeNull();
   });
 
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {
@@ -2636,7 +3433,8 @@ process.exit(0);
     );
   });
 
-  it('marks reasoning-only stream runs failed when no assistant output is produced', async () => {
+  // P0-24 Q6: reasoning without a reply is still a normal end.
+  it('ends reasoning-only stream runs normally when no assistant output is produced', async () => {
     const reasoningLine = JSON.stringify({
       type: 'assistant',
       message: {
@@ -2677,18 +3475,49 @@ process.exit(0);
         const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
           signal: eventsController.signal,
         });
-        const eventsBody = await readSseUntil(
-          eventsResponse,
-          'Agent completed without producing any output',
-        );
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
         eventsController.abort();
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
         expect(eventsBody).toContain('"type":"thinking_delta"');
-        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
-        expect(eventsBody).toContain('Agent completed without producing any output');
-        expect(eventsBody).not.toContain('"status":"succeeded"');
-        expect(statusBody.status).toBe('failed');
+        expect(eventsBody).toContain('empty_reply_ended_normally');
+        expect(eventsBody).not.toContain('event: error');
+        expect(statusBody.status).toBe('succeeded');
+      },
+    );
+  });
+
+  // P0-24 Q6: an empty reply still gets the automatic retry a transient empty
+  // response used to get; only an attempt that is not retried ends normally.
+  it('retries a completely empty reply, then ends it normally', async () => {
+    const resultLine = JSON.stringify({
+      type: 'result',
+      is_error: false,
+      usage: { input_tokens: 1, output_tokens: 0 },
+    });
+
+    await withFakeAgent(
+      'qodercli',
+      `
+console.log(${JSON.stringify(resultLine)});
+process.exit(0);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'qoder', message: 'answer nothing' }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`);
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+
+        expect(eventsBody).toContain('run_retry_attempted');
+        expect(eventsBody).toContain('empty_reply_ended_normally');
+        expect(statusBody.status).toBe('succeeded');
       },
     );
   });
@@ -2873,6 +3702,108 @@ process.exit(1);
     );
   });
 
+  it('prefers a terminal Claude prompt-length error over auth-shaped stderr (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.error(JSON.stringify({ apiKeySource: 'none' }));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'Prompt is too long',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+        const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+        const statusBody = await statusResponse.json() as {
+          status: string;
+          failureCategory: string | null;
+          failureDetail: string | null;
+        };
+
+        expect(eventsBody).toContain('AGENT_PROMPT_TOO_LARGE');
+        expect(eventsBody).toContain('Prompt is too long');
+        expect(eventsBody).toContain('"retryable":false');
+        expect(eventsBody).not.toContain('could not authenticate');
+        expect(statusBody).toMatchObject({
+          status: 'failed',
+          failureCategory: 'prompt_too_large',
+          failureDetail: 'prompt_too_large',
+        });
+      },
+    );
+  });
+
+  it('does not treat prompt-length text in an assistant payload as the terminal cause (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: {
+    id: 'msg-prompt-text',
+    content: [{ type: 'text', text: 'The upstream phrase was: Prompt is too long.' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'A different terminal failure',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('A different terminal failure');
+        expect(eventsBody).not.toContain('AGENT_PROMPT_TOO_LARGE');
+      },
+    );
+  });
+
   it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
@@ -3010,8 +3941,15 @@ process.stdin.on('end', () => {
           const transcriptIdx = prompt.indexOf('## Full conversation transcript');
           expect(transitionIdx).toBeGreaterThan(-1);
           expect(transcriptIdx).toBeGreaterThan(transitionIdx);
-          expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
-          expect(prompt).toContain('Continue with RULE 2 / RULE 3 now.');
+          expect(prompt).toContain(
+            'The user has answered the discovery form. Do not re-emit the answered form or repeat fields it already answered.',
+          );
+          expect(prompt).toContain(
+            'Apply the submitted answers and continue with RULE 2 / RULE 3 or the matching active workflow.',
+          );
+          expect(prompt).toContain(
+            'Only if a new, materially blocking requirement remains unresolved',
+          );
           expect(prompt).toContain(formAnswers);
         },
       );
@@ -3217,6 +4155,393 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('does not compose another member Personal design system from a persisted project id', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Workspace design-system prompt tests');
+    }
+    const workspaceFixture =
+      await createPersonalWorkspaceBoundProjectFixture('Foreign Personal DS prompt fixture');
+    const workspaceId = workspaceFixture.headers['x-od-workspace-id'];
+    const foreignMemberId = `foreign-member-${randomUUID()}`;
+    const dirId = `foreign-prompt-${randomUUID()}`;
+    const designSystemId = `user:${dirId}`;
+    const secretMarker = `FOREIGN_PERSONAL_DS_${randomUUID()}`;
+    const designSystemDir = resolve(process.env.OD_DATA_DIR, 'design-systems', dirId);
+    await fsp.mkdir(designSystemDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(designSystemDir, 'DESIGN.md'),
+      `# Foreign Personal design system\n\n${secretMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Foreign Personal design system',
+        status: 'published',
+        workspaceId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    try {
+      ensureWorkspaceResource(
+        sqlite as never,
+        'design_system',
+        workspaceId,
+        designSystemId,
+        {
+          visibility: 'personal',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: foreignMemberId,
+          updatedByWorkspaceMemberId: foreignMemberId,
+        },
+      );
+      sqlite.prepare('UPDATE projects SET design_system_id = ? WHERE id = ?')
+        .run(designSystemId, workspaceFixture.projectId);
+    } finally {
+      sqlite.close();
+    }
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('end', () => {
+  const result = prompt.includes(${JSON.stringify(secretMarker)})
+    ? 'foreign-personal-design-system-leaked'
+    : 'foreign-personal-design-system-blocked';
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId: workspaceFixture.projectId,
+              message: 'draft without reading another member private brand',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('foreign-personal-design-system-blocked');
+          expect(body).not.toContain('foreign-personal-design-system-leaked');
+        },
+      );
+    } finally {
+      await fsp.rm(designSystemDir, { recursive: true, force: true });
+    }
+  });
+
+  it('composes the project creator Personal design system', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Workspace design-system prompt tests');
+    }
+    const workspaceFixture =
+      await createPersonalWorkspaceBoundProjectFixture('Own Personal DS prompt fixture');
+    const workspaceId = workspaceFixture.headers['x-od-workspace-id'];
+    const workspaceMemberId = workspaceFixture.headers['x-od-workspace-member-id'];
+    const dirId = `own-personal-prompt-${randomUUID()}`;
+    const designSystemId = `user:${dirId}`;
+    const personalMarker = `OWN_PERSONAL_DS_${randomUUID()}`;
+    const designSystemDir = resolve(process.env.OD_DATA_DIR, 'design-systems', dirId);
+    await fsp.mkdir(designSystemDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(designSystemDir, 'DESIGN.md'),
+      `# Own Personal design system\n\n${personalMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Own Personal design system',
+        status: 'published',
+        workspaceId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    try {
+      ensureWorkspaceResource(
+        sqlite as never,
+        'design_system',
+        workspaceId,
+        designSystemId,
+        {
+          visibility: 'personal',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: workspaceMemberId,
+          updatedByWorkspaceMemberId: workspaceMemberId,
+        },
+      );
+      sqlite.prepare('UPDATE projects SET design_system_id = ? WHERE id = ?')
+        .run(designSystemId, workspaceFixture.projectId);
+    } finally {
+      sqlite.close();
+    }
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('end', () => {
+  const result = prompt.includes(${JSON.stringify(personalMarker)})
+    ? 'own-personal-design-system-visible'
+    : 'own-personal-design-system-missing';
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId: workspaceFixture.projectId,
+              message: 'draft with my Personal brand',
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('own-personal-design-system-visible');
+          expect(body).not.toContain('own-personal-design-system-missing');
+        },
+      );
+    } finally {
+      await fsp.rm(designSystemDir, { recursive: true, force: true });
+    }
+  });
+
+  it('composes a Team design system without touching same-slug Personal or foreign projects', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for Workspace design-system prompt tests');
+    }
+    const projectId = `proj-${randomUUID()}`;
+    const workspaceId = `team-ws-${randomUUID()}`;
+    const workspaceMemberId = `team-member-${randomUUID()}`;
+    const personalBackingProjectId = `personal-ds-project-${randomUUID()}`;
+    const foreignProjectId = `foreign-project-${randomUUID()}`;
+    for (const [id, name] of [
+      [projectId, 'Team DS prompt fixture'],
+      [personalBackingProjectId, 'Personal DS backing project'],
+      [foreignProjectId, 'Foreign project'],
+    ]) {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      });
+      expect(createProjectResponse.ok).toBe(true);
+    }
+
+    const dirId = `team-prompt-${randomUUID()}`;
+    const designSystemId = `user:${dirId}`;
+    const teamMarker = `TEAM_DS_${randomUUID()}`;
+    const teamTokensMarker = `TEAM_TOKENS_${randomUUID()}`;
+    const globalMarker = `GLOBAL_DS_${randomUUID()}`;
+    const globalTokensMarker = `GLOBAL_TOKENS_${randomUUID()}`;
+    const foreignProjectMarker = `FOREIGN_PROJECT_DS_${randomUUID()}`;
+    const designSystemsRoot = resolve(process.env.OD_DATA_DIR, 'design-systems');
+    const designSystemDir = resolve(
+      teamResourceWorkspaceRoot(designSystemsRoot, workspaceId),
+      dirId,
+    );
+    const globalDesignSystemDir = resolve(designSystemsRoot, dirId);
+    await fsp.mkdir(designSystemDir, { recursive: true });
+    await fsp.mkdir(globalDesignSystemDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(designSystemDir, 'DESIGN.md'),
+      `# Team design system\n\n${teamMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'tokens.css'),
+      `:root { --team-marker: ${teamTokensMarker}; }\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(designSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Team design system',
+        status: 'published',
+        teamSynced: true,
+        workspaceId,
+        projectId: foreignProjectId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(globalDesignSystemDir, 'DESIGN.md'),
+      `# Global design system\n\n${globalMarker}\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(globalDesignSystemDir, 'tokens.css'),
+      `:root { --global-marker: ${globalTokensMarker}; }\n`,
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(globalDesignSystemDir, 'metadata.json'),
+      `${JSON.stringify({
+        title: 'Global design system',
+        status: 'published',
+        projectId: personalBackingProjectId,
+      }, null, 2)}\n`,
+      'utf8',
+    );
+
+    const projectsRoot = resolve(process.env.OD_DATA_DIR, 'projects');
+    await Promise.all([
+      fsp.mkdir(resolve(projectsRoot, personalBackingProjectId), { recursive: true }),
+      fsp.mkdir(resolve(projectsRoot, foreignProjectId), { recursive: true }),
+    ]);
+    await fsp.writeFile(
+      resolve(projectsRoot, personalBackingProjectId, 'DESIGN.md'),
+      '# Personal backing project\n\nMust remain untouched by a Team run.\n',
+      'utf8',
+    );
+    await fsp.writeFile(
+      resolve(projectsRoot, foreignProjectId, 'DESIGN.md'),
+      `# Foreign project\n\n${foreignProjectMarker}\n`,
+      'utf8',
+    );
+
+    const sqlite = new Database(resolve(process.env.OD_DATA_DIR, 'app.sqlite'));
+    let personalBackingProjectBefore: ReturnType<typeof getProject>;
+    let projectCountBefore = 0;
+    try {
+      ensureWorkspaceProject(sqlite as never, {
+        projectId,
+        workspaceId,
+        visibility: 'team',
+        createdByWorkspaceMemberId: workspaceMemberId,
+      });
+      ensureWorkspaceProject(sqlite as never, {
+        projectId: personalBackingProjectId,
+        workspaceId: `personal-ws-${randomUUID()}`,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: `personal-member-${randomUUID()}`,
+      });
+      ensureWorkspaceProject(sqlite as never, {
+        projectId: foreignProjectId,
+        workspaceId: `foreign-ws-${randomUUID()}`,
+        visibility: 'personal',
+        createdByWorkspaceMemberId: `foreign-member-${randomUUID()}`,
+      });
+      ensureWorkspaceResource(
+        sqlite as never,
+        'design_system',
+        workspaceId,
+        workspaceTeamDesignSystemBindingResourceId(workspaceId, designSystemId),
+        {
+          visibility: 'team',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: workspaceMemberId,
+          updatedByWorkspaceMemberId: workspaceMemberId,
+        },
+      );
+      sqlite.prepare('UPDATE projects SET design_system_id = ? WHERE id = ?')
+        .run(designSystemId, projectId);
+      personalBackingProjectBefore = getProject(
+        sqlite as never,
+        personalBackingProjectId,
+      );
+      projectCountBefore = (
+        sqlite.prepare('SELECT COUNT(*) AS count FROM projects').get() as { count: number }
+      ).count;
+    } finally {
+      sqlite.close();
+    }
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('end', () => {
+  const result = prompt.includes(${JSON.stringify(teamMarker)})
+    && prompt.includes(${JSON.stringify(teamTokensMarker)})
+    && !prompt.includes(${JSON.stringify(globalMarker)})
+    && !prompt.includes(${JSON.stringify(globalTokensMarker)})
+    && !prompt.includes(${JSON.stringify(foreignProjectMarker)})
+    ? 'team-design-system-visible'
+    : 'team-design-system-missing';
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-od-workspace-id': workspaceId,
+              'x-od-workspace-member-id': workspaceMemberId,
+              'x-od-workspace-type': 'team',
+              'x-od-workspace-role': 'owner',
+            },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              message: 'draft with the Team brand',
+            }),
+          });
+          const body = await response.text();
+
+          const verificationDb = new Database(
+            resolve(process.env.OD_DATA_DIR as string, 'app.sqlite'),
+          );
+          try {
+            expect.soft(
+              getProject(verificationDb as never, personalBackingProjectId),
+            ).toEqual(personalBackingProjectBefore);
+            expect.soft(
+              (verificationDb.prepare('SELECT COUNT(*) AS count FROM projects').get() as {
+                count: number;
+              }).count,
+            ).toBe(projectCountBefore);
+          } finally {
+            verificationDb.close();
+          }
+
+          expect.soft(response.ok).toBe(true);
+          expect.soft(body).toContain('team-design-system-visible');
+          expect.soft(body).not.toContain('team-design-system-missing');
+        },
+      );
+    } finally {
+      await fsp.rm(designSystemDir, { recursive: true, force: true });
+      await fsp.rm(globalDesignSystemDir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps requested design systems separate from missing injected design systems', async () => {
     const missingDesignSystemId = `missing-ds-${randomUUID()}`;
     const projectId = `project-missing-ds-${randomUUID()}`;
@@ -3377,12 +4702,8 @@ async function waitForRunStatus(
 }
 
 describe('chat prompt helpers', () => {
-  it('appends the validated Codex override after the client system prompt and removes earlier duplicates', () => {
-    const override = renderCodexImagegenOverride('codex', {
-      kind: 'image',
-      imageModel: 'gpt-image-2',
-      imageAspect: '1:1',
-    });
+  it('appends a final prompt override after the client system prompt and removes earlier duplicates', () => {
+    const override = '## Final runtime policy\nUse the shared media dispatcher.';
     const clientMediaContract =
       '## Media generation contract\nclient contract wins unless a later override says otherwise';
 
@@ -3394,47 +4715,10 @@ describe('chat prompt helpers', () => {
     });
 
     const clientIdx = prompt.indexOf(clientMediaContract);
-    const overrideIdx = prompt.indexOf('## Codex built-in imagegen override');
+    const overrideIdx = prompt.indexOf('## Final runtime policy');
     expect(clientIdx).toBeGreaterThan(-1);
     expect(overrideIdx).toBeGreaterThan(clientIdx);
-    expect(prompt.match(/## Codex built-in imagegen override/g)).toHaveLength(1);
-  });
-
-  it('omits the Codex final imagegen override when run media policy blocks execution', () => {
-    const metadata = {
-      kind: 'image',
-      imageModel: 'gpt-image-2',
-      imageAspect: '1:1',
-    };
-    const mediaExecution = {
-      mode: 'disabled',
-      allowedSurfaces: ['image'],
-    };
-    const generatedImagesDir = resolveCodexGeneratedImagesDir(
-      'codex',
-      metadata,
-      { CODEX_HOME: '/tmp/custom-codex-home' },
-      '/home/tester',
-      mediaExecution,
-    );
-    const otherwiseGrantedDir = resolve('/tmp/custom-codex-home/generated_images');
-    const override = resolveGrantedCodexImagegenOverride({
-      agentId: 'codex',
-      metadata,
-      codexGeneratedImagesDir: otherwiseGrantedDir,
-      extraAllowedDirs: [otherwiseGrantedDir],
-      mediaExecution,
-    });
-    const prompt = composeLiveInstructionPrompt({
-      daemonSystemPrompt: 'daemon media policy prompt',
-      runtimeToolPrompt: 'runtime tools',
-      clientSystemPrompt: 'client instructions',
-      finalPromptOverride: override,
-    });
-
-    expect(generatedImagesDir).toBeNull();
-    expect(override).toBeNull();
-    expect(prompt).not.toContain('## Codex built-in imagegen override');
+    expect(prompt.match(/## Final runtime policy/g)).toHaveLength(1);
   });
 
   it('defaults enabled research without an explicit query to the current message', () => {
@@ -3446,88 +4730,13 @@ describe('chat prompt helpers', () => {
     expect(prompt).toContain('Canonical query for this run:');
     expect(prompt).toContain('EV market 2025 trends');
     expect(prompt).toContain('the first tool action must be the research command');
-  });
 
-  it('resolves only the narrow Codex generated_images allowlist for known gpt-image image projects', () => {
-    expect(
-      resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: '/tmp/custom-codex-home' },
-        '/home/tester',
-      ),
-    ).toBe(resolve('/tmp/custom-codex-home/generated_images'));
-
-    expect(
-      resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2-preview' },
-        { CODEX_HOME: '/tmp/custom-codex-home' },
-        '/home/tester',
-      ),
-    ).toBeNull();
-
-    expect(
-      resolveCodexGeneratedImagesDir(
-        'claude',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: '/tmp/custom-codex-home' },
-        '/home/tester',
-      ),
-    ).toBeNull();
-  });
-
-  it('rejects a generated_images final-component symlink', () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-symlink-'));
-    try {
-      const codexHome = join(root, 'codex-home');
-      const symlinkTarget = join(root, 'actual-generated-images');
-      mkdirSync(codexHome, { recursive: true });
-      mkdirSync(symlinkTarget, { recursive: true });
-      symlinkDir(symlinkTarget, join(codexHome, 'generated_images'));
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: codexHome },
-        '/home/tester',
-      );
-
-      expect(
-        validateCodexGeneratedImagesDir(generatedImagesDir, {
-          warn: () => undefined,
-        }),
-      ).toBeNull();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects a generated_images dir whose canonical path is inside a protected root', () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-protected-'));
-    try {
-      const protectedRoot = join(root, 'skills');
-      const protectedGeneratedImages = join(protectedRoot, 'generated_images');
-      mkdirSync(protectedGeneratedImages, { recursive: true });
-      const codexHome = join(root, 'codex-home');
-      symlinkDir(protectedRoot, codexHome);
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: codexHome },
-        '/home/tester',
-      );
-
-      expect(
-        validateCodexGeneratedImagesDir(generatedImagesDir, {
-          protectedDirs: [protectedRoot],
-          warn: () => undefined,
-        }),
-      ).toBeNull();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    const explicit = resolveResearchCommandContract(
+      { enabled: true, query: 'explicit canonical query' },
+      'legacy full transcript must not replace it',
+    );
+    expect(explicit).toContain('explicit canonical query');
+    expect(explicit).not.toContain('legacy full transcript must not replace it');
   });
 
   it('resolves design-system selection precedence for run prompt composition', () => {
@@ -3548,6 +4757,13 @@ describe('chat prompt helpers', () => {
       projectDesignSystemId: 'project-ds',
       appDefaultDesignSystemId: 'default-ds',
     })).toEqual({ id: 'project-ds', source: 'project' });
+
+    expect(resolveEffectiveDesignSystemSelection({
+      requestDesignSystemId: null,
+      projectDesignSystemId: 'project-ds',
+      disabledDesignSystemIds: ['project-ds'],
+      allowAppDefault: false,
+    })).toEqual({ id: null, source: 'none' });
 
     expect(resolveEffectiveDesignSystemSelection({
       appDefaultDesignSystemId: 'default-ds',
@@ -3590,6 +4806,7 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-a',
       hit: false,
       missReason: 'new-session',
+      changedSections: null,
     });
 
     expect(describeStablePromptCache({
@@ -3600,6 +4817,7 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-a',
       hit: true,
       missReason: null,
+      changedSections: null,
     });
 
     expect(describeStablePromptCache({
@@ -3610,99 +4828,81 @@ describe('chat prompt helpers', () => {
       stablePromptHash: 'hash-b',
       hit: false,
       missReason: 'stable-prompt-changed',
+      // No section map supplied: report no attribution rather than invent one.
+      changedSections: null,
     });
   });
 
-  it('grants Codex the canonical validated generated_images dir', () => {
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-canonical-'));
-    try {
-      const actualCodexHome = join(root, 'actual-codex-home');
-      const symlinkCodexHome = join(root, 'codex-home-link');
-      mkdirSync(actualCodexHome, { recursive: true });
-      symlinkDir(actualCodexHome, symlinkCodexHome);
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        { kind: 'image', imageModel: 'gpt-image-2' },
-        { CODEX_HOME: symlinkCodexHome },
-        '/home/tester',
-      );
-      const validatedDir = validateCodexGeneratedImagesDir(
-        generatedImagesDir,
-        { warn: () => undefined },
-      );
-      const canonicalGeneratedImagesDir = join(
-        realpathSync.native(actualCodexHome),
-        'generated_images',
-      );
-      const extraAllowedDirs = resolveChatExtraAllowedDirs({
-        agentId: 'codex',
-        skillsDir: '/repo/skills',
-        designSystemsDir: '/repo/design-systems',
-        linkedDirs: ['/linked/reference'],
-        codexGeneratedImagesDir: validatedDir,
-        existsSync: () => true,
-      });
-      const codex = getAgentDef('codex');
-      if (!codex) throw new Error('Codex agent definition missing');
-      const args = codex.buildArgs('', [], extraAllowedDirs, {}, {
-        cwd: '/tmp/od-project',
-      });
-
-      expect(generatedImagesDir).not.toBe(canonicalGeneratedImagesDir);
-      expect(validatedDir).toBe(canonicalGeneratedImagesDir);
-      expect(extraAllowedDirs).toEqual([canonicalGeneratedImagesDir]);
-      expect(
-        args.filter(
-          (arg, index) =>
-            arg === '--add-dir' || args[index - 1] === '--add-dir',
-        ),
-      ).toEqual(['--add-dir', canonicalGeneratedImagesDir]);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+  it('names the drifted sections when a section map is supplied', () => {
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+      storedStableSections: { memory: 'm1', skill: 's1' },
+      currentStableSections: { memory: 'm2', skill: 's1' },
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'stable-prompt-changed',
+      changedSections: ['memory'],
+    });
   });
 
-  it('limits Codex extra allowed dirs to the generated_images output dir', () => {
-    const generatedImagesDir = '/home/tester/.codex/generated_images';
+  it('reports unattributed drift when the prefix moved but no tracked section did', () => {
+    // The hash is the source of truth, so this is a real miss; an empty list
+    // would read as a drift with no cause instead of the coverage gap it is.
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: 'hash-a',
+      currentStableHash: 'hash-b',
+      storedStableSections: { memory: 'm1' },
+      currentStableSections: { memory: 'm1' },
+    })).toMatchObject({
+      missReason: 'stable-prompt-changed',
+      changedSections: ['unattributed'],
+    });
+  });
+
+  it('does not attribute sections for a missing stored hash', () => {
+    // A legacy/reseeded row has no baseline to diff, so every section would
+    // read as "changed" and drown the signal real drift carries.
+    expect(describeStablePromptCache({
+      isResuming: true,
+      storedStablePromptHash: null,
+      currentStableHash: 'hash-b',
+      storedStableSections: null,
+      currentStableSections: { memory: 'm1' },
+    })).toEqual({
+      stablePromptHash: 'hash-b',
+      hit: false,
+      missReason: 'missing-stored-hash',
+      changedSections: null,
+    });
+  });
+
+  it('does not grant media-specific extra directories to Codex', () => {
     const dirs = resolveChatExtraAllowedDirs({
       agentId: '  CoDeX  ',
       skillsDir: '/repo/skills',
       designSystemsDir: '/repo/design-systems',
       linkedDirs: ['/linked/reference'],
-      codexGeneratedImagesDir: generatedImagesDir,
       existsSync: () => true,
     });
 
-    expect(dirs).toEqual([generatedImagesDir]);
-
-    const codex = getAgentDef('codex');
-    if (!codex) throw new Error('Codex agent definition missing');
-    const args = codex.buildArgs('', [], dirs, {}, { cwd: '/tmp/od-project' });
-    expect(
-      args.filter(
-        (arg, index) =>
-          arg === '--add-dir' || args[index - 1] === '--add-dir',
-      ),
-    ).toEqual(['--add-dir', generatedImagesDir]);
-    expect(args).not.toContain('/repo/skills');
-    expect(args).not.toContain('/repo/design-systems');
-    expect(args).not.toContain('/linked/reference');
+    expect(dirs).toEqual([]);
   });
 
-  it('keeps resource and linked dirs for non-Codex agents without the Codex output dir', () => {
+  it('keeps resource and linked dirs for non-Codex agents', () => {
     const existingDirs = new Set([
       '/repo/skills',
       '/repo/design-systems',
       '/linked/reference',
-      '/home/tester/.codex/generated_images',
     ]);
     const dirs = resolveChatExtraAllowedDirs({
       agentId: 'claude',
       skillsDir: '/repo/skills',
       designSystemsDir: '/repo/design-systems',
       linkedDirs: ['/linked/reference'],
-      codexGeneratedImagesDir: '/home/tester/.codex/generated_images',
       existsSync: (dir: string) => existingDirs.has(dir),
     });
 
@@ -3713,79 +4913,4 @@ describe('chat prompt helpers', () => {
     ]);
   });
 
-  it('does not add resource dirs for Codex when imagegen is not whitelisted', () => {
-    const dirs = resolveChatExtraAllowedDirs({
-      agentId: 'codex',
-      skillsDir: '/repo/skills',
-      designSystemsDir: '/repo/design-systems',
-      linkedDirs: ['/linked/reference'],
-      codexGeneratedImagesDir: null,
-      existsSync: () => true,
-    });
-
-    expect(dirs).toEqual([]);
-  });
-
-  it('omits the Codex override when validation fails or the dir is not granted', () => {
-    const metadata = { kind: 'image', imageModel: 'gpt-image-2' };
-    const root = mkdtempSync(join(tmpdir(), 'od-codex-generated-prompt-'));
-    try {
-      const codexHome = join(root, 'codex-home');
-      const symlinkTarget = join(root, 'actual-generated-images');
-      mkdirSync(codexHome, { recursive: true });
-      mkdirSync(symlinkTarget, { recursive: true });
-      symlinkDir(symlinkTarget, join(codexHome, 'generated_images'));
-
-      const generatedImagesDir = resolveCodexGeneratedImagesDir(
-        'codex',
-        metadata,
-        { CODEX_HOME: codexHome },
-        '/home/tester',
-      );
-      const validatedDir = validateCodexGeneratedImagesDir(
-        generatedImagesDir,
-        { warn: () => undefined },
-      );
-      const extraAllowedDirs = resolveChatExtraAllowedDirs({
-        agentId: 'codex',
-        skillsDir: '/repo/skills',
-        designSystemsDir: '/repo/design-systems',
-        linkedDirs: ['/linked/reference'],
-        codexGeneratedImagesDir: validatedDir,
-        existsSync: () => true,
-      });
-      const validationFailedOverride = resolveGrantedCodexImagegenOverride({
-        agentId: 'codex',
-        metadata,
-        codexGeneratedImagesDir: validatedDir,
-        extraAllowedDirs,
-      });
-      const validationFailedPrompt = composeLiveInstructionPrompt({
-        daemonSystemPrompt: 'daemon prompt',
-        runtimeToolPrompt: 'runtime tools',
-        clientSystemPrompt: 'client media contract',
-        finalPromptOverride: validationFailedOverride,
-      });
-
-      expect(validatedDir).toBeNull();
-      expect(extraAllowedDirs).toEqual([]);
-      expect(validationFailedOverride).toBeNull();
-      expect(validationFailedPrompt).not.toContain(
-        '## Codex built-in imagegen override',
-      );
-
-      const validDir = join(root, 'safe-codex-home', 'generated_images');
-      mkdirSync(validDir, { recursive: true });
-      const notGrantedOverride = resolveGrantedCodexImagegenOverride({
-        agentId: 'codex',
-        metadata,
-        codexGeneratedImagesDir: validDir,
-        extraAllowedDirs: [],
-      });
-
-      expect(notGrantedOverride).toBeNull();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
 });

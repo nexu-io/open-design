@@ -78,6 +78,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     cacheTabsLocally: vi.fn((_projectId: string, state: { tabs: string[]; active: string | null }) => state),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
@@ -181,11 +184,13 @@ function renderProjectView(props?: {
   project?: Project;
   designSystems?: DesignSystemSummary[];
   routeFileName?: string | null;
+  routeConversationId?: string | null;
 }) {
   return render(
     <ProjectView
       project={props?.project ?? project}
       routeFileName={props?.routeFileName ?? null}
+      routeConversationId={props?.routeConversationId ?? null}
       config={config}
       agents={[] as AgentInfo[]}
       skills={[] as SkillSummary[]}
@@ -303,6 +308,7 @@ describe('ProjectView tab URL hydration', () => {
     expect(mockedCacheTabsLocally.mock.calls.at(-1)).toEqual([
       project.id,
       { tabs: ['brand.html'], active: 'brand.html' },
+      null,
     ]);
   });
 
@@ -339,16 +345,13 @@ describe('ProjectView tab URL hydration', () => {
     );
   });
 
-  it('re-pushes /conversations/:cid when activeConversationId hydrates after the active tab has already synced (lefarcen P1 on PR #1508)', async () => {
+  it('preserves a restarted deep-linked conversation while its DB conversation list hydrates', async () => {
     // Race shape: `loadTabs` resolves and sets the active tab BEFORE
-    // `listConversations` resolves and sets `activeConversationId`.
-    // The first navigate fires with `conversationId: null` because
-    // the conversation hasn't loaded yet; the second navigate must
-    // fire with `conversationId: 'conv-1'` even though the active
-    // tab is identical. A ref guard that keys only on the file
-    // target skips the second call and the URL never gains the
-    // `/conversations/:cid` segment. The composite-key guard
-    // (`${activeConversationId}:${target}`) catches it.
+    // `listConversations` resolves and restores `activeConversationId`. The
+    // route already identifies the persisted DB conversation, so the interim
+    // tab sync must retain it instead of replacing
+    // `/projects/:id/conversations/:cid/files/...` with `/projects/:id/files/...`.
+    // Once the list resolves, the same id becomes active and remains canonical.
     let resolveConversations: (value: Conversation[]) => void = () => {};
     const conversationsPromise = new Promise<Conversation[]>((resolve) => {
       resolveConversations = resolve;
@@ -356,24 +359,28 @@ describe('ProjectView tab URL hydration', () => {
     mockedListConversations.mockReturnValue(conversationsPromise);
     mockedLoadTabs.mockResolvedValue({ tabs: ['index.html'], active: 'index.html' });
 
-    renderProjectView();
+    renderProjectView({ routeConversationId: conversation.id });
 
-    // First navigate: active tab synced, conversation still loading.
+    // First navigate: active tab synced, conversation still loading. The
+    // existing route is the only conversation authority available.
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith(
         {
           kind: 'project',
           projectId: project.id,
-          conversationId: null,
+          conversationId: conversation.id,
           fileName: 'index.html',
         },
         { replace: true },
       );
     });
+    expect(mockedNavigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: null }),
+      { replace: true },
+    );
 
-    // Now resolve the conversation list. The active tab is unchanged
-    // but `activeConversationId` flips from `null` to `'conv-1'`, so
-    // a second navigate must fire.
+    // Now resolve the conversation list. The routed conversation is present in
+    // DB and becomes the active conversation without an intermediate route loss.
     resolveConversations([conversation]);
 
     await waitFor(() => {
@@ -418,17 +425,63 @@ describe('ProjectView tab URL hydration', () => {
     // Tab state persists synchronously through cacheTabsLocally (the daemon PUT
     // is debounced via persistTabsToDaemonNow); assert on the synchronous cache
     // write so the test stays deterministic without driving the debounce timer.
-    expect(mockedCacheTabsLocally).toHaveBeenCalledWith(project.id, { tabs: ['index.html'], active: 'index.html' });
+    expect(mockedCacheTabsLocally).toHaveBeenCalledWith(
+      project.id,
+      { tabs: ['index.html'], active: 'index.html' },
+      null,
+    );
 
     fireEvent.click(screen.getByTestId('close-all-tabs'));
 
     await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent).toBe(''));
     await waitFor(() => {
-      expect(mockedCacheTabsLocally.mock.calls.at(-1)).toEqual([project.id, { tabs: [], active: null }]);
+      expect(mockedCacheTabsLocally.mock.calls.at(-1)).toEqual([
+        project.id,
+        { tabs: [], active: null },
+        null,
+      ]);
     });
     // Exactly two writes — the initial primary open and the close-all — proving
     // the primary file is not silently reopened after the last tab closes.
     expect(mockedCacheTabsLocally).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { tabs: ['restore-me.png'], active: '__design_files__' },
+    { tabs: [], active: null },
+  ])('keeps a locally restored selection over the default primary file: $active', async (selection) => {
+    const actual = await vi.importActual<typeof import('../../src/state/projects')>(
+      '../../src/state/projects',
+    );
+    const cachedProjectId = `local-restoration-${selection.active ?? 'empty'}`;
+    const cacheKey = `open-design:project-tabs:v1:${cachedProjectId}`;
+    window.localStorage.setItem(cacheKey, JSON.stringify({ ...selection, updatedAt: 2 }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({
+      tabs: [], active: null, hasSavedState: false,
+    }));
+    let restored;
+    try {
+      restored = await actual.loadTabs(cachedProjectId, null, {
+        reconcileNewerCacheToDaemon: false,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      window.localStorage.removeItem(cacheKey);
+    }
+    mockedLoadTabs.mockResolvedValue(restored);
+    mockedFetchProjectFiles.mockResolvedValue([{
+      name: 'restore-me.png', path: 'restore-me.png', type: 'file',
+      size: 1, mtime: 1, mime: 'image/png', kind: 'image',
+    }]);
+
+    renderProjectView({ project: { ...project, id: cachedProjectId } });
+
+    await waitFor(() => expect(mockedFetchProjectFiles).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('workspace-active-tab').textContent)
+      .toBe(selection.active ?? ''));
+    expect(mockedCacheTabsLocally).not.toHaveBeenCalledWith(
+      cachedProjectId, expect.objectContaining({ active: 'restore-me.png' }), null,
+    );
   });
 
   it('does not auto-open the primary file when saved tabs were explicitly empty', async () => {

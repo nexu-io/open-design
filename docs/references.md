@@ -8,23 +8,18 @@ Every external project this spec leans on. Three questions per entry: what is it
 
 ## Primary references
 
-### [Anthropic Claude Design][cd]
-- **URL:** [claude.ai/design][cd] · [release announcement](https://www.infoq.cn/article/TH0QVHpvVGZ7VP3hAEmm) · [ifanr review](https://www.ifanr.com/1662860)
+### [Claude Design](https://claude.ai/design) (Anthropic)
 
-[cd]: https://x.com/claudeai/status/2045156267690213649
-- **What it is:** Anthropic's closed-source AI design product. Released 2026-04-17. Powered by Opus 4.7. Web-only (claude.ai). Generates prototypes, wireframes, decks, marketing pages, complex prototypes with voice/video/3D/shaders.
-- **Why it matters to us:** Defines the category. Its viral moment (~60M X impressions week 1) proves the market.
-- **What we borrow:** The high-level value prop — "natural language → editable visual design." Feature inspiration for modes (prototype, deck, marketing). UI ideas around inline editing and custom sliders.
-- **What we don't:** Closed source. Anthropic-only models. No self-hosting. Paid tiers (Pro/Max/Team/Enterprise) only. We are not trying to be a drop-in clone; we are an **open substrate** for the same category.
+- **Role:** Historical UX reference for natural-language editing of visual artifacts, inline editing, and adjustment controls.
 
 ### [Open CoDesign][ocod] (OpenCoworkAI)
 - **Repo:** [github.com/OpenCoworkAI/open-codesign][ocod]
 - **Site:** [opencoworkai.github.io/open-codesign](https://opencoworkai.github.io/open-codesign/)
-- **What it is:** The main open-source Claude Design alternative. MIT-licensed. Electron desktop app. React 19 + Vite + Tailwind v4. [`@mariozechner/pi-ai`][piai] for multi-provider. SQLite for version history. 12 built-in design skill modules. HTML/JSX sandboxed iframe preview. Exports HTML/PDF/PPTX/ZIP/MD. 15 templates. Comment mode + slider controls + multi-frame preview.
+- **What it is:** An open-source design workspace. MIT-licensed. Electron desktop app. React 19 + Vite + Tailwind v4. [`@mariozechner/pi-ai`][piai] for multi-provider. SQLite for version history. 12 built-in design skill modules. HTML/JSX sandboxed iframe preview. Exports HTML/PDF/PPTX/ZIP/MD. 15 templates. Comment mode + slider controls + multi-frame preview.
 
 [ocod]: https://github.com/OpenCoworkAI/open-codesign
 [piai]: https://github.com/badlogic/pi-mono/tree/main/packages/ai
-- **Why it matters:** Direct competitor; most overlap with what we're building.
+- **Why it matters:** Reference for interactive artifact review and export workflows.
 - **What we borrow:**
   - UI concepts: **comment mode** (click-to-pin element edits), **tweak sliders** (agent-emitted parameters), **multi-frame preview** (desktop/tablet/phone).
   - Sandboxed iframe preview (`<iframe sandbox="allow-scripts">` with vendored React 18 + Babel standalone for JSX).
@@ -130,7 +125,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 - **What we don't:**
   - Treating one upstream list as the current catalogue boundary. The bundled
     catalogue now contains 151 packages drawn from multiple attributed sources
-    and Open Design-authored systems.
+    and OpenDesign-authored systems.
   - Their Discord / community layer — not our product.
 
 ### [guizang-ppt-skill][guizang] (op7418)
@@ -140,7 +135,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 - **What it is:** A Claude Code skill producing magazine-style, horizontal-swipe web decks. Structure: `SKILL.md` + `assets/template.html` + `references/{components,layouts,themes,checklist}.md`. 6-step workflow. Single-file HTML output with embedded CSS/WebGL. Keyboard/scroll/touch navigation.
 - **Why it matters:** Reference implementation of a high-quality Claude skill and the source of our bundled guizang deck template.
 - **What we borrow:**
-  - The workflow and assets are bundled under [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/) with the upstream license preserved and Open Design metadata/file-handoff integration applied.
+  - The workflow and assets are bundled under [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/) with the upstream license preserved and OpenDesign metadata/file-handoff integration applied.
   - Skill directory convention (`assets/` + `references/` + `SKILL.md`) as the pattern we document for skill authors.
   - The "6-step workflow + quality-checklist rubric" pattern for authoring new skills.
 - **What we don't:** We do not require the retired `od skill add` flow; the rendering template ships in the catalogue and can still be consumed as a portable `SKILL.md` bundle.
@@ -152,7 +147,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 | Project | Relevance |
 |---|---|
 | [Claude Code skills docs](https://docs.anthropic.com/) | Source of the `SKILL.md` format we adopt |
-| [Cursor rules](https://docs.cursor.com/) | Historical format inspiration only; the current Cursor Agent adapter receives Open Design's composed prompt over stdin and uses the same CWD-local resource staging as other runtimes |
+| [Cursor rules](https://docs.cursor.com/) | Historical format inspiration only; the current Cursor Agent adapter receives OpenDesign's composed prompt over stdin and uses the same CWD-local resource staging as other runtimes |
 | [Reveal.js](https://revealjs.com/) / [Marp](https://marp.app/) | Reference for deck HTML navigation patterns |
 | [Shadcn/ui](https://ui.shadcn.com/) | Component and registry reference; the product shell now uses repository-owned primitives from `@open-design/components` |
 | [Vercel AI SDK](https://sdk.vercel.ai/) | Historical API-fallback exploration; current BYOK providers run through the OpenCode adapter rather than a direct SDK adapter |
@@ -162,29 +157,9 @@ Every external project this spec leans on. Three questions per entry: what is it
 
 ---
 
-## Compatibility & differentiation matrix
-
-| Dimension | [Claude Design][cd] | [Open CoDesign][ocod] | [multica][multica] | [cc-switch][ccsw] | **OD** |
-|---|---|---|---|---|---|
-| Open source | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Primary form factor | Web (hosted) | Electron | Web + Go daemon | Tauri | **Next.js web + Node daemon** |
-| Vercel-deployable | ❌ | ❌ | ❌ | ❌ | **✅** |
-| Runs local-only | ❌ | ✅ | ✅ | ✅ | **✅** |
-| Generates design artifacts | ✅ | ✅ | ❌ (general coding) | ❌ | **✅** |
-| Uses existing code agent | — (owns it) | ❌ | ✅ | ✅ | **✅** |
-| Supports Claude Code skills (`SKILL.md`) | — | ❌ | ✅ | ✅ | **✅** |
-| `DESIGN.md` as first-class | ❌ | ❌ | — | — | **✅** |
-| Deck mode / PPTX export | ✅ | ✅ | ❌ | ❌ | **✅ (via skill)** |
-| Template gallery | ✅ | ✅ (15) | ❌ | ❌ | **✅** |
-| Design-system authoring mode | ❌ | ❌ | ❌ | ❌ | **✅** |
-
-The two empty-column crossings where OD lights up and others don't: **Vercel-deployable + design-system authoring**, and **uses existing code agent + first-class DESIGN.md**. That's the niche.
-
----
-
 ## What we explicitly don't borrow (and why)
 
-- **Electron as a separate product architecture.** Open Design now ships thin
+- **Electron as a separate product architecture.** OpenDesign now ships thin
   desktop and packaged Electron hosts, including signing/update work, but the
   product UI remains the same Next.js web app and daemon rather than a second
   desktop-only implementation.

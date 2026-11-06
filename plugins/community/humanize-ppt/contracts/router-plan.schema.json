@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Humanize PPT Router Plan",
+  "type": "object",
+  "required": ["version", "generated_at", "title", "source", "primary_renderer", "routes"],
+  "properties": {
+    "version": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "title": {"type": "string"},
+    "source": {"type": "string"},
+    "primary_renderer": {"type": "string"},
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "stage", "purpose", "reason", "command_file", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "stage": {"type": "string", "enum": ["outline", "produce", "complete", "control"]},
+          "purpose": {"type": "string"},
+          "reason": {"type": "string"},
+          "command_file": {"type": "string"},
+          "status": {"type": "string"},
+          "display_name": {"type": "string"},
+          "skill_name": {"type": "string"},
+          "expected_inputs": {"type": "array", "items": {"type": "string"}},
+          "expected_outputs": {"type": "array", "items": {"type": "string"}},
+          "actual_output": {"type": "string"}
+        }
+      }
+    }
+  }
+}

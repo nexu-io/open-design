@@ -7,7 +7,7 @@
   "description": "A portable community plugin used to verify folder, zip, GitHub subpath, and marketplace import flows.",
   "license": "MIT",
   "author": {
-    "name": "Open Design Community",
+    "name": "OpenDesign Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/import-smoke-test",

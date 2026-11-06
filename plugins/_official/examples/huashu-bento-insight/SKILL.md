@@ -3,9 +3,9 @@ name: huashu-bento-insight
 en_name: "Write a Competitive Displacement Deck like a Top Sales Engineer"
 zh_name: "像顶级售前一样写竞品替换方案"
 description: |
-  Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.
+  OpenDesign vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.
 en_description: |
-  Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.
+  OpenDesign vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Built as a decision-grade B2B sales deck for evaluation committee.
 zh_description: |
   像顶级售前一样写竞品替换方案——一份可商业交付的B2B 销售 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -39,7 +39,7 @@ od:
     zh-CN: "用「便当格洞见」模板把我的季度汇报做成 Apple Keynote 风格的 HTML 幻灯片：1920×1080 固定画布、#F5F5F7 浅灰与奶白底、不等高圆角便当卡（1px 细描边 + 微阴影）、每卡只装一个洞见（巨型等宽数字 / 线性 SVG 图标 / SVG sparkline）、超大 display 标题强字重对比。从 example.html 出发只换内容，不要重写设计。"
   category: "b2b-sales"
   scenario: "sales"
-  example_prompt: "Create \"Write a Competitive Displacement Deck like a Top Sales Engineer\" as a decision-grade B2B sales deck in this template's own visual system. Subject: Open Design vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Audience: evaluation committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
+  example_prompt: "Create \"Write a Competitive Displacement Deck like a Top Sales Engineer\" as a decision-grade B2B sales deck in this template's own visual system. Subject: OpenDesign vs closed cloud design tools: a side-by-side displacement case on control, cost (BYOK), and lock-in. Audience: evaluation committee. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can the champion forward this internally without rewriting it."
 ---
 
 # Bento Insight Grid · 便当格洞见

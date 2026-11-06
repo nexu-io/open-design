@@ -1,15 +1,18 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   createProjectFileVersion,
   ensureCurrentProjectFileVersion,
+  getProjectFileVersionRootStats,
   isProjectFileVersionPath,
   listProjectFileVersions,
   markProjectFileVersionStoreDeleted,
   readProjectFileVersion,
   renameProjectFileVersionStore,
+  resolveProjectFileVersionContentMatch,
 } from '../src/project-file-versions.js';
 import { ensureProject } from '../src/projects.js';
 
@@ -154,6 +157,210 @@ describe('project file versions', () => {
       const versions = await listProjectFileVersions(projectsRoot, projectId, 'brand.html');
       expect(versions).toHaveLength(2);
       expect(versions.map((version) => version.current)).toEqual([false, true]);
+    });
+  });
+
+  it('writes a v2 manifest with an exact UTF-8 digest, explicit current id, and bounded artifact origin', async () => {
+    await withProject(async (projectsRoot, projectId) => {
+      const content = '<html><body>你好 OpenDesign</body></html>';
+      const contentDigest = createHash('sha256').update(Buffer.from(content, 'utf8')).digest('hex');
+      const version = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        content,
+        {
+          source: 'ai',
+          promptSource: 'message',
+          origin: {
+            entrySurface: 'external_mcp',
+            externalPluginId: 'open-design',
+            pluginWorkflowId: '018f6f2e-2222-7222-8222-222222222222',
+            runId: 'run-1',
+          },
+        },
+      );
+
+      expect(version).toMatchObject({
+        current: true,
+        contentDigest,
+        origin: {
+          entrySurface: 'external_mcp',
+          externalPluginId: 'open-design',
+          pluginWorkflowId: '018f6f2e-2222-7222-8222-222222222222',
+          runId: 'run-1',
+        },
+      });
+
+      const stats = await getProjectFileVersionRootStats(projectsRoot, projectId, 'brand.html');
+      const manifest = JSON.parse(await readFile(path.join(stats.root, 'manifest.json'), 'utf8')) as {
+        schemaVersion?: number;
+        currentVersionId?: string;
+        entries?: Array<{ contentDigest?: string; origin?: unknown }>;
+      };
+      expect(manifest).toMatchObject({
+        schemaVersion: 2,
+        currentVersionId: version.id,
+        entries: [{
+          contentDigest,
+          origin: version.origin,
+        }],
+      });
+    });
+  });
+
+  it('inherits origin only through a valid explicit current parent and through restore', async () => {
+    await withProject(async (projectsRoot, projectId) => {
+      const origin = {
+        entrySurface: 'external_mcp' as const,
+        externalPluginId: 'open-design',
+        pluginWorkflowId: 'workflow-1',
+        runId: 'run-1',
+      };
+      const first = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        '<html><body>generated</body></html>',
+        { source: 'ai', origin },
+      );
+      const manual = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        '<html><body>edited</body></html>',
+        { source: 'manual', parentVersionId: first.id },
+      );
+      expect(manual).toMatchObject({
+        parentVersionId: first.id,
+        origin,
+      });
+
+      const staleParent = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        '<html><body>edited again</body></html>',
+        { source: 'manual', parentVersionId: first.id },
+      );
+      expect(staleParent.parentVersionId).toBeUndefined();
+      expect(staleParent.origin).toBeUndefined();
+
+      const restored = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        '<html><body>edited</body></html>',
+        {
+          source: 'restore',
+          restoreFromVersionId: manual.id,
+        },
+      );
+      expect(restored).toMatchObject({
+        parentVersionId: manual.id,
+        restoreFromVersionId: manual.id,
+        origin,
+      });
+    });
+  });
+
+  it('matches current and historical versions only when the exact UTF-8 digest agrees', async () => {
+    await withProject(async (projectsRoot, projectId) => {
+      const firstContent = '<html><body>first</body></html>';
+      const secondContent = '<html><body>second</body></html>';
+      const first = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        firstContent,
+        { source: 'ai' },
+      );
+      const second = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        secondContent,
+        { source: 'manual', parentVersionId: first.id },
+      );
+
+      await expect(resolveProjectFileVersionContentMatch(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        secondContent,
+      )).resolves.toMatchObject({
+        status: 'matched',
+        version: { id: second.id, current: true },
+      });
+      await expect(resolveProjectFileVersionContentMatch(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        firstContent,
+        first.id,
+      )).resolves.toMatchObject({
+        status: 'matched',
+        version: { id: first.id, current: false },
+      });
+      await expect(resolveProjectFileVersionContentMatch(
+        projectsRoot,
+        projectId,
+        'brand.html',
+        '<html><body>external drift</body></html>',
+      )).resolves.toMatchObject({
+        status: 'digest_mismatch',
+        version: { id: second.id },
+      });
+    });
+  });
+
+  it('reads v1 history as current-compatible but leaves digest and origin unknown', async () => {
+    await withProject(async (projectsRoot, projectId) => {
+      const version = await createProjectFileVersion(
+        projectsRoot,
+        projectId,
+        'legacy.html',
+        '<html><body>legacy</body></html>',
+        {
+          source: 'ai',
+          origin: {
+            entrySurface: 'external_mcp',
+            externalPluginId: 'open-design',
+            pluginWorkflowId: 'workflow-legacy',
+            runId: 'run-legacy',
+          },
+        },
+      );
+      const stats = await getProjectFileVersionRootStats(projectsRoot, projectId, 'legacy.html');
+      const manifestPath = path.join(stats.root, 'manifest.json');
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+        schemaVersion?: number;
+        currentVersionId?: string;
+        entries: Array<Record<string, unknown>>;
+      };
+      manifest.schemaVersion = 1;
+      delete manifest.currentVersionId;
+      for (const entry of manifest.entries) {
+        delete entry.contentDigest;
+        delete entry.parentVersionId;
+        delete entry.origin;
+      }
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+
+      const [legacy] = await listProjectFileVersions(projectsRoot, projectId, 'legacy.html');
+      expect(legacy).toMatchObject({ id: version.id, current: true });
+      expect(legacy?.contentDigest).toBeUndefined();
+      expect(legacy?.parentVersionId).toBeUndefined();
+      expect(legacy?.origin).toBeUndefined();
+      await expect(resolveProjectFileVersionContentMatch(
+        projectsRoot,
+        projectId,
+        'legacy.html',
+        '<html><body>legacy</body></html>',
+      )).resolves.toMatchObject({
+        status: 'unknown',
+        version: { id: version.id, current: true },
+      });
     });
   });
 

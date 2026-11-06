@@ -7,6 +7,36 @@ export interface ManualEditRect {
   height: number;
 }
 
+export interface ManualEditComputedSummary {
+  display: string;
+  position: string;
+  fontFamily: string;
+  fontSize: string;
+  fontWeight: string;
+  lineHeight: string;
+  letterSpacing: string;
+  color: string;
+  backgroundColor: string;
+  borderColor: string;
+  borderRadius: string;
+  padding: string;
+  margin: string;
+}
+
+export interface ManualEditMeasurement {
+  label: string;
+  value: number;
+  orientation: 'horizontal' | 'vertical';
+  from: ManualEditRect;
+  to: ManualEditRect;
+}
+
+export interface ManualEditAlignmentGuide {
+  orientation: 'horizontal' | 'vertical';
+  position: number;
+  label: string;
+}
+
 export interface ManualEditFields {
   text?: string;
   href?: string;
@@ -49,6 +79,11 @@ export interface ManualEditStyles {
   borderStyle: string;
   borderColor: string;
   borderRadius: string;
+  /* Free drag-to-reposition writes a translate() here (on top of the element's
+     own layout position), persisted like any other inline style. `display` is
+     bumped to inline-block for inline elements so the translate takes effect. */
+  transform: string;
+  display: string;
 }
 
 export interface ManualEditTarget {
@@ -62,6 +97,11 @@ export interface ManualEditTarget {
   fields: ManualEditFields;
   attributes: Record<string, string>;
   styles: ManualEditStyles;
+  computedSummary?: ManualEditComputedSummary;
+  parentRect?: ManualEditRect;
+  siblingRects?: ManualEditRect[];
+  measurements?: ManualEditMeasurement[];
+  alignmentGuides?: ManualEditAlignmentGuide[];
   isLayoutContainer: boolean;
   isHidden?: boolean;
   outerHtml: string;
@@ -102,6 +142,16 @@ export interface ManualEditHoverMessage {
   target: ManualEditTarget;
 }
 
+export interface ManualEditInspectHoverMessage {
+  type: 'od-edit-inspect-hover';
+  target: ManualEditTarget;
+}
+
+export interface ManualEditInspectSelectMessage {
+  type: 'od-edit-inspect-select';
+  target: ManualEditTarget;
+}
+
 export interface ManualEditBackgroundMessage {
   type: 'od-edit-background';
 }
@@ -128,14 +178,28 @@ export interface ManualEditTextSessionMessage {
   committed?: boolean;
 }
 
+/** Free drag-to-reposition finished: the element's new translate() value, to
+ *  be committed as a pending style so the panel's Save persists it. */
+export interface ManualEditDragCommitMessage {
+  type: 'od-edit-drag-commit';
+  id: string;
+  transform: string;
+  /** Set when an inline element was bumped to inline-block so the translate
+   *  applies; persisted alongside the transform. */
+  display?: string;
+}
+
 export type ManualEditBridgeMessage =
   | ManualEditTargetMessage
   | ManualEditSelectMessage
   | ManualEditHoverMessage
+  | ManualEditInspectHoverMessage
+  | ManualEditInspectSelectMessage
   | ManualEditBackgroundMessage
   | ManualEditPreviewAppliedMessage
   | ManualEditTextCommitMessage
-  | ManualEditTextSessionMessage;
+  | ManualEditTextSessionMessage
+  | ManualEditDragCommitMessage;
 
 export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'fontFamily', 'fontSize', 'fontWeight', 'color', 'textAlign', 'lineHeight', 'letterSpacing',
@@ -146,6 +210,7 @@ export const MANUAL_EDIT_STYLE_PROPS: readonly (keyof ManualEditStyles)[] = [
   'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
   'border', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'borderStyle', 'borderColor', 'borderRadius',
+  'transform', 'display',
 ];
 
 export function emptyManualEditStyles(): ManualEditStyles {

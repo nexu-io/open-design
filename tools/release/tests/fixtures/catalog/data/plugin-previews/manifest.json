@@ -1,0 +1,10 @@
+{
+  "previews": {
+    "example-demo-plugin": {
+      "video": "example-demo-plugin/clip.mp4",
+      "poster": "example-demo-plugin/poster.webp",
+      "holdMs": 2500,
+      "durationMs": 5000
+    }
+  }
+}

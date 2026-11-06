@@ -20,16 +20,16 @@ full split.
   `/api/skills/:id/assets/*`) intentionally span both registries — the
   example HTML rewrites to `/api/skills/<id>/...` regardless of which
   root owns the folder, so URLs keep resolving after the split.
-- Surfaced in the EntryView Templates tab and in the New-project panel
-  as the rendering catalogue.
+- Surfaced in the New-project panel's per-mode "Start from" rail as the
+  rendering catalogue; the redesigned home has no top-level Templates tab.
 
 ## Adding a design template
 
 1. Create `design-templates/<my-template>/SKILL.md` with `name`,
    `description`, `triggers`, and an explicit `od.mode` (one of
    `prototype`, `deck`, `template`, `image`, `video`, `audio`).
-2. Ship a baked `example.html` (and any side files) so the EntryView
-   gallery has something to preview.
+2. Ship a baked `example.html` (and any side files) so the shared example and
+   asset routes have preview content to serve.
 3. Optionally drop additional baked samples under `examples/<key>.html`
    to surface them as derived `<parent>:<key>` cards.
 
@@ -53,7 +53,7 @@ ship a tiny local runtime with the same minimum behavior.
   every navigation path, and mark it with `aria-current="true"`.
 - **Active slide state:** keep the visible slide marked with
   `.slide.active`; adding `.is-active` as a compatibility alias is fine.
-  Open Design's preview bridge reads this state for the host slide counter,
+  OpenDesign's preview bridge reads this state for the host slide counter,
   so it must stay in sync with keyboard, wheel, touch, and dot navigation.
 - **Iframe safety:** focus the deck on load / pointer interaction so keyboard
   navigation works after the gallery preview appears. Avoid

@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-ui-morph",
+  "title": "One-Shape UI Motion",
+  "title_i18n": {
+    "en": "One-Shape UI Motion",
+    "id": "Motion UI Satu Bentuk",
+    "de": "UI-Motion aus einer Form",
+    "zh-CN": "纯代码 UI 动效",
+    "zh-TW": "純程式碼 UI 動效",
+    "pt-BR": "Motion de UI em uma forma",
+    "es-ES": "Motion de UI con una sola forma",
+    "ru": "UI-моушн из одной формы",
+    "fa": "موشن رابط کاربری با یک شکل",
+    "ar": "موشن واجهة بشكل واحد",
+    "ja": "ワンシェイプ UI モーション",
+    "ko": "원 셰이프 UI 모션",
+    "pl": "UI motion z jednego kształtu",
+    "hu": "Egyformás UI motion",
+    "fr": "Motion d’UI en une seule forme",
+    "uk": "UI-моушн з однієї форми",
+    "tr": "Tek şekilli UI motion",
+    "th": "UI โมชันจากรูปทรงเดียว",
+    "it": "UI motion da una sola forma"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-09T00:00:00Z",
+  "description": "A 14-second code-only UI motion piece, rebuilt from the viral original: one shape morphs from a button into a loader, player, slider, toggle, tabs, chart, command palette and toast, driven by a cursor at 120 BPM.",
+  "description_i18n": {
+    "en": "A 14-second code-only UI motion piece, rebuilt from the viral original: one shape morphs from a button into a loader, player, slider, toggle, tabs, chart, command palette and toast, driven by a cursor at 120 BPM.",
+    "id": "Karya motion UI 14 detik murni kode, dibuat ulang dari versi viral aslinya: satu bentuk bermorf dari tombol menjadi loader, pemutar musik, slider, toggle, tab, grafik, command palette, dan toast, digerakkan kursor pada 120 BPM.",
+    "de": "Ein 14-sekündiges UI-Motion-Stück nur aus Code, nachgebaut nach dem viralen Original: Eine Form morpht vom Button zu Loader, Player, Slider, Toggle, Tabs, Chart, Command-Palette und Toast, gesteuert von einem Cursor bei 120 BPM.",
+    "zh-CN": "按爆款原片复刻的 14 秒纯代码 UI 动效：一个形状从按钮一路变成加载、播放器、滑块、开关、标签页、图表、命令面板和提示，全程由光标操作驱动，120 BPM。",
+    "zh-TW": "按爆款原片復刻的 14 秒純程式碼 UI 動效：一個形狀從按鈕一路變成載入、播放器、滑桿、開關、分頁、圖表、指令面板和提示，全程由游標操作驅動，120 BPM。",
+    "pt-BR": "Uma peça de motion de UI de 14 segundos feita só com código, recriada a partir do original viral: uma forma se transforma de botão em loader, player, slider, toggle, abas, gráfico, command palette e toast, guiada por um cursor a 120 BPM.",
+    "es-ES": "Una pieza de motion de UI de 14 segundos hecha solo con código, recreada a partir del original viral: una forma pasa de botón a loader, reproductor, slider, interruptor, pestañas, gráfico, paleta de comandos y toast, guiada por un cursor a 120 BPM.",
+    "ru": "14-секундный UI-моушн только на коде, воссозданный по вирусному оригиналу: одна форма превращается из кнопки в лоадер, плеер, слайдер, переключатель, вкладки, график, командную палитру и тост под управлением курсора, 120 BPM.",
+    "fa": "یک قطعهٔ موشن رابط کاربری ۱۴ ثانیه‌ای فقط با کد که از روی نسخهٔ اصلی پربازدید بازسازی شده: یک شکل از دکمه به لودر، پخش‌کننده، اسلایدر، سوئیچ، تب‌ها، نمودار، پالت فرمان و اعلان تبدیل می‌شود و نشانگر ماوس آن را هدایت می‌کند، ۱۲۰ BPM.",
+    "ar": "عمل موشن لواجهة مستخدم مدته 14 ثانية مكتوب بالكود فقط، أُعيد بناؤه من الأصل الفيروسي: شكل واحد يتحول من زر إلى مؤشر تحميل ومشغل وشريط تمرير ومفتاح وتبويبات ورسم بياني ولوحة أوامر وإشعار، يقوده مؤشر الفأرة على إيقاع 120 BPM.",
+    "ja": "バズった原作を再現した、コードだけで作る 14 秒の UI モーション。ひとつの図形がボタンからローダー、プレーヤー、スライダー、トグル、タブ、チャート、コマンドパレット、トーストへと変わり、カーソル操作で進む。120 BPM。",
+    "ko": "바이럴 원본을 재현한 14초 코드 전용 UI 모션: 하나의 도형이 버튼에서 로더, 플레이어, 슬라이더, 토글, 탭, 차트, 커맨드 팔레트, 토스트로 변하며 커서가 모든 변화를 이끈다. 120 BPM.",
+    "pl": "14-sekundowy UI motion wyłącznie z kodu, odtworzony z wiralowego oryginału: jeden kształt zmienia się z przycisku w loader, odtwarzacz, suwak, przełącznik, zakładki, wykres, paletę poleceń i toast, prowadzony kursorem w tempie 120 BPM.",
+    "hu": "14 másodperces, csak kódból készült UI motion a virális eredeti alapján újraépítve: egyetlen forma alakul gombból töltésjelzővé, lejátszóvá, csúszkává, kapcsolóvá, fülekké, diagrammá, parancspalettává és értesítéssé, kurzorral vezérelve, 120 BPM.",
+    "fr": "Une pièce de motion d’UI de 14 secondes uniquement en code, reconstruite d’après l’original viral : une seule forme passe d’un bouton à un loader, un lecteur, un curseur, un interrupteur, des onglets, un graphique, une palette de commandes et un toast, pilotée par un curseur à 120 BPM.",
+    "uk": "14-секундний UI-моушн лише на коді, відтворений за вірусним оригіналом: одна форма перетворюється з кнопки на лоадер, плеєр, повзунок, перемикач, вкладки, графік, командну палітру й тост під керуванням курсора, 120 BPM.",
+    "tr": "Viral orijinalden yeniden kurulan, yalnızca kodla yapılmış 14 saniyelik UI motion: tek bir şekil butondan yükleyiciye, oynatıcıya, kaydırıcıya, anahtara, sekmelere, grafiğe, komut paletine ve bildirime dönüşür; her değişimi imleç yönetir, 120 BPM.",
+    "th": "งาน UI โมชันยาว 14 วินาทีที่เขียนด้วยโค้ดล้วน สร้างใหม่ตามต้นฉบับไวรัล: รูปทรงเดียวเปลี่ยนจากปุ่มเป็นตัวโหลด เครื่องเล่นเพลง สไลเดอร์ สวิตช์ แท็บ กราฟ คอมมานด์พาเลตต์ และ toast โดยมีเคอร์เซอร์ขับเคลื่อน 120 BPM",
+    "it": "Un pezzo di UI motion di 14 secondi fatto solo di codice, ricostruito dall’originale virale: una sola forma si trasforma da pulsante in loader, player, slider, interruttore, tab, grafico, command palette e toast, guidata da un cursore a 120 BPM."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "ui-animation",
+    "interaction",
+    "product",
+    "viral-remake"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a 14-second Dribbble-level UI motion piece at 120 BPM, 7 bars, something happening on every beat. One shape, never cut: it morphs from a Generate button into a loader, a check, a dynamic island, a music player with a play/pause morph, a scrubbed progress bar, a volume slider that stretches when dragged past max, a toggle, a liquid tab indicator, a chart that draws itself with a hover tooltip, a ⌘K palette you type into, a toast, and back to the button. A cursor drives every change with real clicks and drags. Light warm-gray canvas, black and white components, one clean UI font (Geist). Springs everywhere, a tiny overshoot at most. The last frame is the first frame, so it loops.",
+        "id": "Buat karya motion UI 14 detik setara Dribbble pada 120 BPM, 7 bar, ada sesuatu di setiap ketukan. Satu bentuk tanpa potongan: berubah dari tombol Generate menjadi loader, centang, dynamic island, pemutar musik dengan morf play/pause, progress bar yang digeser, slider volume yang meregang saat ditarik melewati maksimum, toggle, indikator tab cair, grafik yang menggambar dirinya dengan tooltip saat hover, palet ⌘K yang diketik, toast, lalu kembali ke tombol. Kursor menggerakkan setiap perubahan dengan klik dan seret nyata. Kanvas abu-abu hangat terang, komponen hitam putih, satu font UI bersih (Geist). Spring di mana-mana, overshoot sangat kecil. Frame terakhir sama dengan frame pertama agar berulang mulus.",
+        "de": "Erstelle ein 14-sekündiges UI-Motion-Stück auf Dribbble-Niveau bei 120 BPM, 7 Takte, auf jedem Beat passiert etwas. Eine Form, kein Schnitt: Sie morpht vom Generate-Button zu Loader, Häkchen, Dynamic Island, Musikplayer mit Play/Pause-Morph, gescrubbtem Fortschrittsbalken, Lautstärkeregler, der sich über das Maximum hinaus dehnt, Toggle, flüssigem Tab-Indikator, einem sich selbst zeichnenden Chart mit Hover-Tooltip, einer ⌘K-Palette mit Eingabe, einem Toast und zurück zum Button. Ein Cursor steuert jede Änderung mit echten Klicks und Drags. Heller warmgrauer Hintergrund, schwarze und weiße Komponenten, eine klare UI-Schrift (Geist). Überall Federn, höchstens minimales Überschwingen. Das letzte Bild ist das erste, damit es loopt.",
+        "zh-CN": "做一段 14 秒、Dribbble 水准的 UI 动效，120 BPM，7 小节，每一拍都有变化。全程只有一个形状、不切镜：从 Generate 按钮依次变成加载、对勾、灵动岛、带播放/暂停变形的音乐播放器、被拖动的进度条、拖过最大值会被拉长的音量滑块、开关、液态标签指示器、自动绘制并带悬停提示的图表、可以输入的 ⌘K 命令面板、提示条，最后回到按钮。所有变化都由光标真实的点击和拖拽驱动。浅暖灰背景、黑白组件、一款干净的界面字体（Geist）。全程弹簧动画，最多一点点回弹。最后一帧和第一帧相同，可以无缝循环。",
+        "zh-TW": "做一段 14 秒、Dribbble 水準的 UI 動效，120 BPM，7 小節，每一拍都有變化。全程只有一個形狀、不切鏡：從 Generate 按鈕依序變成載入、勾號、動態島、帶播放/暫停變形的音樂播放器、被拖動的進度條、拖過最大值會被拉長的音量滑桿、開關、液態分頁指示器、自動繪製並帶懸停提示的圖表、可以輸入的 ⌘K 指令面板、提示條，最後回到按鈕。所有變化都由游標真實的點擊和拖曳驅動。淺暖灰背景、黑白元件、一款乾淨的介面字體（Geist）。全程彈簧動畫，最多一點點回彈。最後一格和第一格相同，可以無縫循環。",
+        "pt-BR": "Crie uma peça de motion de UI de 14 segundos no nível do Dribbble, a 120 BPM, 7 compassos, algo acontecendo em cada batida. Uma forma, sem cortes: ela vira de um botão Generate para um loader, um check, uma dynamic island, um player de música com morph de play/pause, uma barra de progresso arrastada, um slider de volume que estica ao passar do máximo, um toggle, um indicador de abas líquido, um gráfico que se desenha com tooltip no hover, uma paleta ⌘K em que se digita, um toast e de volta ao botão. Um cursor conduz cada mudança com cliques e arrastes reais. Fundo cinza-quente claro, componentes em preto e branco, uma fonte de UI limpa (Geist). Molas em tudo, no máximo um overshoot mínimo. O último frame é igual ao primeiro, para fazer loop.",
+        "es-ES": "Crea una pieza de motion de UI de 14 segundos al nivel de Dribbble, a 120 BPM, 7 compases, algo en cada tiempo. Una sola forma, sin cortes: pasa de un botón Generate a un loader, un check, una dynamic island, un reproductor con morph de play/pausa, una barra de progreso arrastrada, un slider de volumen que se estira al pasar del máximo, un interruptor, un indicador de pestañas líquido, un gráfico que se dibuja solo con tooltip al pasar el cursor, una paleta ⌘K en la que se escribe, un toast y vuelta al botón. Un cursor provoca cada cambio con clics y arrastres reales. Fondo gris cálido claro, componentes en blanco y negro, una fuente de UI limpia (Geist). Muelles en todo, como mucho un rebote mínimo. El último fotograma es el primero, para que haga bucle.",
+        "ru": "Сделай 14-секундный UI-моушн уровня Dribbble, 120 BPM, 7 тактов, на каждую долю что-то происходит. Одна форма без склеек: она превращается из кнопки Generate в лоадер, галочку, dynamic island, плеер с морфингом play/pause, прокручиваемый прогресс-бар, слайдер громкости, который растягивается при перетягивании за максимум, переключатель, «жидкий» индикатор вкладок, график, рисующий себя с тултипом при наведении, палитру ⌘K с вводом текста, тост — и обратно в кнопку. Каждое изменение запускает курсор настоящими кликами и перетаскиванием. Светлый тёплый серый фон, чёрно-белые компоненты, один чистый UI-шрифт (Geist). Пружины везде, максимум крошечный перелёт. Последний кадр совпадает с первым, чтобы зацикливалось.",
+        "fa": "یک قطعهٔ موشن رابط کاربری ۱۴ ثانیه‌ای در سطح Dribbble بساز، ۱۲۰ BPM، ۷ میزان، روی هر ضرب اتفاقی بیفتد. فقط یک شکل، بدون برش: از دکمهٔ Generate به لودر، تیک، dynamic island، پخش‌کنندهٔ موسیقی با دگردیسی play/pause، نوار پیشرفتی که کشیده می‌شود، اسلایدر صدایی که وقتی از حداکثر بیشتر کشیده شود کش می‌آید، سوئیچ، نشانگر سیال تب، نموداری که خودش رسم می‌شود با راهنمای هاور، پالت ⌘K که در آن تایپ می‌شود، اعلان و دوباره دکمه تبدیل می‌شود. نشانگر ماوس هر تغییر را با کلیک و کشیدن واقعی انجام می‌دهد. پس‌زمینهٔ خاکستری گرم روشن، اجزای سیاه و سفید، یک فونت رابط کاربری تمیز (Geist). همه‌جا فنری، حداکثر کمی برگشت. فریم آخر همان فریم اول است تا حلقه شود.",
+        "ar": "اصنع عمل موشن لواجهة مستخدم مدته 14 ثانية بمستوى Dribbble، على إيقاع 120 BPM، 7 مازورات، وحدث في كل نبضة. شكل واحد دون قطع: يتحول من زر Generate إلى مؤشر تحميل، علامة صح، dynamic island، مشغل موسيقى مع تحول تشغيل/إيقاف، شريط تقدم يُسحب، شريط صوت يتمدد عند سحبه بعد الحد الأقصى، مفتاح تبديل، مؤشر تبويبات سائل، رسم بياني يرسم نفسه مع تلميح عند المرور، لوحة ⌘K يُكتب فيها، إشعار، ثم يعود إلى الزر. يقود مؤشر الفأرة كل تغيير بنقرات وسحب حقيقي. خلفية رمادية دافئة فاتحة، مكونات بالأبيض والأسود، خط واجهة نظيف واحد (Geist). نوابض في كل مكان، وارتداد ضئيل على الأكثر. الإطار الأخير هو الأول ليتكرر بسلاسة.",
+        "ja": "Dribbble レベルの 14 秒の UI モーションを作って。120 BPM、7 小節、毎拍なにかが起きる。ひとつの図形をカットなしで、Generate ボタン → ローダー → チェック → ダイナミックアイランド → 再生/一時停止がモーフする音楽プレーヤー → ドラッグされるプログレスバー → 最大を超えて引っ張ると伸びる音量スライダー → トグル → 液体のようなタブインジケーター → ホバーでツールチップが出る自動描画チャート → 入力できる ⌘K パレット → トースト → ボタンへ戻る。すべての変化はカーソルの実際のクリックとドラッグで起こす。明るいウォームグレーの背景、白黒のコンポーネント、クリーンな UI フォント 1 種（Geist）。全部スプリングで、オーバーシュートはごくわずか。最後のフレームを最初のフレームと同じにしてループさせる。",
+        "ko": "Dribbble 수준의 14초 UI 모션을 만들어 줘. 120 BPM, 7마디, 매 박자마다 무언가 일어나야 해. 하나의 도형을 컷 없이: Generate 버튼에서 로더, 체크, 다이내믹 아일랜드, 재생/일시정지가 모핑되는 뮤직 플레이어, 드래그되는 진행 바, 최대치를 넘겨 끌면 늘어나는 볼륨 슬라이더, 토글, 액체 같은 탭 인디케이터, 호버 툴팁이 있는 스스로 그려지는 차트, 입력하는 ⌘K 팔레트, 토스트를 거쳐 다시 버튼으로. 모든 변화는 커서의 실제 클릭과 드래그로 일어나. 밝은 웜 그레이 배경, 흑백 컴포넌트, 깔끔한 UI 폰트 하나(Geist). 전부 스프링, 오버슈트는 아주 살짝만. 마지막 프레임이 첫 프레임과 같아 루프되게.",
+        "pl": "Stwórz 14-sekundowy UI motion na poziomie Dribbble, 120 BPM, 7 taktów, coś dzieje się na każdym uderzeniu. Jeden kształt, bez cięć: zmienia się z przycisku Generate w loader, ptaszek, dynamic island, odtwarzacz muzyki z morfem play/pause, przewijany pasek postępu, suwak głośności rozciągający się po przeciągnięciu za maksimum, przełącznik, płynny wskaźnik zakładek, wykres rysujący się sam z tooltipem po najechaniu, paletę ⌘K z wpisywaniem, toast i z powrotem w przycisk. Kursor wywołuje każdą zmianę prawdziwymi kliknięciami i przeciągnięciami. Jasne, ciepłoszare tło, czarno-białe komponenty, jedna czysta czcionka UI (Geist). Wszędzie sprężyny, najwyżej minimalne przestrzelenie. Ostatnia klatka jest pierwszą, żeby się zapętlało.",
+        "hu": "Készíts egy 14 másodperces, Dribbble-szintű UI motiont, 120 BPM, 7 ütem, minden ütemre történik valami. Egyetlen forma vágás nélkül: Generate gombból töltésjelző, pipa, dynamic island, lejátszás/szünet morfos zenelejátszó, húzott folyamatjelző, maximumon túlhúzva megnyúló hangerőcsúszka, kapcsoló, folyékony fülindikátor, önmagát kirajzoló diagram hover-tooltippel, gépelhető ⌘K paletta, értesítés, majd vissza a gombba. Minden változást a kurzor valódi kattintásai és húzásai indítanak. Világos meleg szürke háttér, fekete-fehér komponensek, egy tiszta UI-betűtípus (Geist). Mindenhol rugó, legfeljebb minimális túllendülés. Az utolsó képkocka megegyezik az elsővel, hogy ismétlődjön.",
+        "fr": "Crée une pièce de motion d’UI de 14 secondes au niveau Dribbble, à 120 BPM, 7 mesures, il se passe quelque chose à chaque temps. Une seule forme, sans coupe : elle passe d’un bouton Generate à un loader, une coche, une dynamic island, un lecteur audio avec morph lecture/pause, une barre de progression qu’on fait défiler, un curseur de volume qui s’étire au-delà du maximum, un interrupteur, un indicateur d’onglets liquide, un graphique qui se dessine avec une info-bulle au survol, une palette ⌘K où l’on tape, un toast, puis retour au bouton. Un curseur déclenche chaque changement par de vrais clics et glisser-déposer. Fond gris chaud clair, composants noir et blanc, une seule police d’UI nette (Geist). Des ressorts partout, au plus un minuscule dépassement. La dernière image est la première, pour que ça boucle.",
+        "uk": "Зроби 14-секундний UI-моушн рівня Dribbble, 120 BPM, 7 тактів, на кожну долю щось відбувається. Одна форма без склейок: вона перетворюється з кнопки Generate на лоадер, галочку, dynamic island, плеєр із морфінгом play/pause, прогрес-бар, який перемотують, повзунок гучності, що розтягується при перетягуванні за максимум, перемикач, «рідкий» індикатор вкладок, графік, що малює себе з підказкою при наведенні, палітру ⌘K з введенням тексту, тост — і назад у кнопку. Кожну зміну запускає курсор справжніми кліками й перетягуванням. Світлий теплий сірий фон, чорно-білі компоненти, один чистий UI-шрифт (Geist). Пружини всюди, максимум крихітний переліт. Останній кадр збігається з першим, щоб зациклювалося.",
+        "tr": "Dribbble seviyesinde, 120 BPM’de, 7 ölçü, her vuruşta bir şey olan 14 saniyelik bir UI motion yap. Tek bir şekil, kesme yok: Generate butonundan yükleyiciye, onay işaretine, dynamic island’a, play/pause dönüşümlü müzik çalara, kaydırılan ilerleme çubuğuna, maksimumun ötesine çekilince uzayan ses kaydırıcısına, anahtara, sıvı sekme göstergesine, hover’da ipucu gösteren kendini çizen grafiğe, içine yazılan ⌘K paletine, bildirime ve tekrar butona dönüşür. Her değişimi imleç gerçek tıklama ve sürüklemelerle yönetir. Açık sıcak gri zemin, siyah beyaz bileşenler, tek bir temiz UI fontu (Geist). Her yerde yay hareketi, en fazla minicik bir aşma. Son kare ilk kareyle aynı, döngü olsun.",
+        "th": "สร้าง UI โมชันระดับ Dribbble ยาว 14 วินาที 120 BPM 7 ห้อง มีอะไรเกิดขึ้นทุกจังหวะ ใช้รูปทรงเดียวไม่มีการตัด: เปลี่ยนจากปุ่ม Generate เป็นตัวโหลด เครื่องหมายถูก dynamic island เครื่องเล่นเพลงที่มอร์ฟปุ่มเล่น/หยุด แถบความคืบหน้าที่ถูกลาก สไลเดอร์เสียงที่ยืดออกเมื่อลากเกินสุด สวิตช์ ตัวบอกแท็บแบบของเหลว กราฟที่วาดตัวเองพร้อมทูลทิปเมื่อชี้ พาเลตต์ ⌘K ที่พิมพ์ได้ toast แล้วกลับมาเป็นปุ่ม เคอร์เซอร์เป็นตัวสั่งทุกการเปลี่ยนแปลงด้วยการคลิกและลากจริง พื้นหลังเทาอุ่นอ่อน คอมโพเนนต์ขาวดำ ฟอนต์ UI สะอาดหนึ่งแบบ (Geist) ใช้สปริงทั้งหมด เด้งเกินได้นิดเดียว เฟรมสุดท้ายเหมือนเฟรมแรกเพื่อให้วนลูป",
+        "it": "Crea un pezzo di UI motion di 14 secondi da Dribbble, a 120 BPM, 7 battute, succede qualcosa a ogni battito. Una sola forma, senza tagli: passa da un pulsante Generate a un loader, una spunta, una dynamic island, un player musicale con morph play/pausa, una barra di avanzamento trascinata, uno slider del volume che si allunga oltre il massimo, un interruttore, un indicatore di tab liquido, un grafico che si disegna da solo con tooltip al passaggio, una palette ⌘K in cui si scrive, un toast e di nuovo il pulsante. Un cursore guida ogni cambiamento con clic e trascinamenti reali. Sfondo grigio caldo chiaro, componenti in bianco e nero, un solo font UI pulito (Geist). Molle ovunque, al massimo un minimo overshoot. L’ultimo fotogramma è il primo, così va in loop."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "One-Shape UI Motion"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

@@ -36,12 +36,20 @@ describe('mention popover styles', () => {
     expect(ruleValue(results, 'overflow-y')).toBe('auto');
   });
 
-  it('wraps category tabs inside the panel without clipping labels', () => {
+  it('scrolls category tabs on one line inside the panel without clipping labels', () => {
     const tabs = cssBlock('.mention-tabs');
     const tab = cssBlock('.mention-tab');
+    const tabInStrip = cssBlock('.mention-tabs > .mention-tab');
 
-    expect(ruleValue(tabs, 'flex-wrap')).toBe('wrap');
-    expect(ruleValue(tabs, 'overflow')).toBe('hidden');
+    // The strip keeps every filter tab on a single line and scrolls the
+    // overflow horizontally (scrollbar hidden) rather than wrapping to a
+    // second row.
+    expect(ruleValue(tabs, 'flex-wrap')).toBe('nowrap');
+    expect(ruleValue(tabs, 'overflow-x')).toBe('auto');
+    expect(ruleValue(tabs, 'scrollbar-width')).toBe('none');
+    // The no-clipping half of the contract: pills hold their natural width so
+    // the strip scrolls instead of ellipsizing the labels.
+    expect(ruleValue(tabInStrip, 'flex')).toBe('0 0 auto');
     expect(ruleValue(tab, 'flex')).toBe('0 0 auto');
     expect(ruleValue(tab, 'white-space')).toBe('nowrap');
   });

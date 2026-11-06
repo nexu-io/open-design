@@ -4,11 +4,12 @@
   "events": [
     {
       "type": "status",
-      "label": "initializing"
+      "label": "initializing",
+      "sessionId": "<normalized>"
     },
     {
       "type": "status",
-      "label": "running"
+      "label": "thinking"
     },
     {
       "type": "tool_use",

@@ -277,7 +277,7 @@ const PickerCard = memo(function PickerCard({ asset, selected, onToggle }: Picke
           </span>
           {selected ? (
             <span className={styles.check} aria-hidden>
-              <Icon name="check" size={12} />
+              <Icon name="check" size={14} />
             </span>
           ) : null}
         </span>
