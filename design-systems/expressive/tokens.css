@@ -1,0 +1,63 @@
+/* design-systems/expressive/tokens.css
+ * Structured token bindings for Expressive.
+ * expressive design language with vibrant accents, roomy sections, and characterful cards.
+ */
+
+:root {
+  --bg: #fbf8ff;
+  --surface: #ffffff;
+  --surface-warm: #efe8ff;
+  --fg: #1f1730;
+  --fg-2: #4d425f;
+  --muted: #776b88;
+  --meta: #7c3aed;
+  --border: #ded4ee;
+  --border-soft: #efe8f7;
+  --accent: #7c3aed;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.52;
+  --leading-tight: 1.06;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 22px 58px rgba(87, 49, 139, 0.13);
+  --focus-ring: 0 0 0 4px rgba(124, 58, 237, 0.24);
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

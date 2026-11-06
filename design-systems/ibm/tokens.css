@@ -1,0 +1,64 @@
+/* design-systems/ibm/tokens.css
+ *
+ * Structured token bindings for IBM.
+ * white Carbon surfaces, square geometry, IBM Plex typography, and a single engineered blue signal.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f4f4f4;
+  --surface-warm: #edf5ff;
+  --fg: #161616;
+  --fg-2: #525252;
+  --muted: #6f6f6f;
+  --meta: #8d8d8d;
+  --border: #c6c6c6;
+  --border-soft: #e0e0e0;
+  --accent: #0f62fe;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #24a148;
+  --warn: #f1c21b;
+  --danger: #da1e28;
+  --font-display: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 32px;
+  --text-3xl: 42px;
+  --text-4xl: 60px;
+  --leading-body: 1.5;
+  --leading-tight: 1.17;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 48px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 6px rgba(0, 0, 0, 0.12);
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #0f62fe;
+  --motion-fast: 110ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --container-max: 1312px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

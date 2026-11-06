@@ -1,0 +1,214 @@
+import type { RecoveryActionBlockReason } from '../../runtime/chat/recovery-gating';
+import { useT } from '../../i18n';
+import { Icon } from '../Icon';
+import { ChatPane } from '../ChatPane';
+import type {
+  AgentInfo,
+  AppConfig,
+  ChatAttachment,
+  ChatCommentAttachment,
+  ChatMessage,
+  ChatMessageFeedbackChange,
+  Conversation,
+  ProjectFile,
+} from '../../types';
+import type { ChatSessionMode, WorkspaceCollabContext } from '@open-design/contracts';
+import type { ChatSendMeta } from '../ChatComposer';
+import { useConversationChat } from './useConversationChat';
+import styles from './SideChatTab.module.css';
+
+export interface ActiveConversationChatState {
+  conversationId: string;
+  messages: ChatMessage[];
+  streaming: boolean;
+  loading?: boolean;
+  sendDisabled?: boolean;
+  queuedItems?: Array<{
+    id: string;
+    prompt: string;
+    attachments?: ChatAttachment[];
+    commentAttachments?: ChatCommentAttachment[];
+  }>;
+  error: string | null;
+  errorSourceAssistantId?: string | null;
+  onSend: (
+    prompt: string,
+    attachments: ChatAttachment[],
+    commentAttachments: ChatCommentAttachment[],
+    meta?: ChatSendMeta,
+  ) => void;
+  onRetry?: (assistantMessage: ChatMessage) => void;
+  recoveryActionsBlockedReason?: RecoveryActionBlockReason | null;
+  retryPendingAssistantId?: string | null;
+  supersededErrorAssistantIds?: readonly string[];
+  onStop: () => void;
+  onRemoveQueuedSend?: (id: string) => void;
+  // Editing a queued send replaces its full payload (prompt + attachments +
+  // comment attachments + meta), matching ChatPane's QueuedSendUpdate, not just
+  // the prompt string. Structural shape kept inline so this tab stays decoupled
+  // from ChatPane's private interface.
+  onUpdateQueuedSend?: (
+    id: string,
+    update: {
+      prompt: string;
+      attachments: ChatAttachment[];
+      commentAttachments: ChatCommentAttachment[];
+      meta?: ChatSendMeta;
+    },
+  ) => void;
+  onReorderQueuedSends?: (orderedIds: string[]) => void;
+  /** B11 「引导对话」: send this queued item now, stopping the turn in flight
+   *  first when there is one. One button, one handler (ruling 2026-09-08). */
+  onSendQueuedNow?: (id: string) => void;
+  steerBlockedReason?: string | null;
+  onAssistantFeedback?: (
+    assistantMessage: ChatMessage,
+    change: ChatMessageFeedbackChange,
+  ) => void;
+}
+
+interface Props {
+  projectId: string;
+  /** The conversation this side chat is bound to (the `chat:<id>` tab id). */
+  conversationId: string;
+  /** Live app config + agent map + locale, threaded from ProjectView so the
+   *  side chat runs against the same agent selection as the primary chat. */
+  config: AppConfig;
+  agentsById: Map<string, AgentInfo>;
+  locale: string;
+  /** The caller's current workspace identity, forwarded to `streamViaDaemon`
+   *  so a side-chat send carries the same `x-od-workspace-*` headers the
+   *  primary chat loop sends — otherwise a team-bound project's side chat
+   *  401s against the daemon's workspace mutation gate. */
+  workspaceContext?: WorkspaceCollabContext | null;
+  /** Project files for the composer's @-mention picker and produced-file chips. */
+  projectFiles: ProjectFile[];
+  projectFileNames?: Set<string>;
+  /** Daemon-resolved on-disk working directory of the project — positive-proof
+   *  anchor for chat file-link routing (see AssistantMessage). */
+  projectResolvedDir?: string | null;
+  /** Conversation list + selection callbacks, shared with the header menu so a
+   *  side chat is just another conversation the user can browse/switch. */
+  conversations: Conversation[];
+  onSelectConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
+  onRenameConversation?: (id: string, title: string) => void;
+  onSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
+  onNewConversation?: () => void;
+  /** Live ProjectView state for the primary conversation when this tab mirrors it. */
+  activeConversationChat?: ActiveConversationChatState;
+  onSwitchConversationToCloud?: (conversationId: string, message: ChatMessage) => void;
+  recoveryActionsBlockedReason?: RecoveryActionBlockReason | null;
+  /** Forward produced-file / tool-card open requests to the workspace. */
+  onRequestOpenFile?: (name: string) => void;
+  onTouchProject?: (sentAt: number) => void;
+}
+
+// A ChatPane mounted as a workspace tab, bound to a single (usually
+// context-seeded) conversation. Keyed by `${projectId}:${conversationId}` at
+// the call site so switching the bound conversation fully resets composer and
+// scroll state.
+export function SideChatTab({
+  projectId,
+  conversationId,
+  config,
+  agentsById,
+  locale,
+  workspaceContext,
+  projectFiles,
+  projectFileNames,
+  projectResolvedDir,
+  conversations,
+  onSelectConversation,
+  onDeleteConversation,
+  onRenameConversation,
+  onSessionModeChange,
+  onNewConversation,
+  activeConversationChat,
+  onSwitchConversationToCloud,
+  recoveryActionsBlockedReason = null,
+  onRequestOpenFile,
+  onTouchProject,
+}: Props) {
+  const t = useT();
+  const sessionMode =
+    conversations.find((conversation) => conversation.id === conversationId)?.sessionMode
+    ?? 'design';
+  const chat = useConversationChat(projectId, conversationId, {
+    config,
+    agentsById,
+    locale,
+    sessionMode,
+    workspaceContext,
+    onTouchProject,
+  });
+  const controlledChat =
+    activeConversationChat?.conversationId === conversationId
+      ? activeConversationChat
+      : null;
+  const recoveryBlock = controlledChat?.recoveryActionsBlockedReason
+    ?? recoveryActionsBlockedReason
+    ?? ((controlledChat?.loading ?? chat.loading)
+      || (controlledChat?.sendDisabled ?? chat.sendDisabled)
+      || (controlledChat?.streaming ?? chat.streaming)
+      ? 'conversation-busy' : null);
+
+  return (
+    <div className={styles.sideChat} data-testid="side-chat-tab">
+      <div className={styles.banner} data-testid="side-chat-context-banner">
+        <span className={styles.bannerIcon} aria-hidden>
+          <Icon name="comment" size={14} />
+        </span>
+        <span>{t('workspace.sideChatContextBanner')}</span>
+      </div>
+      <div className={styles.pane}>
+        <ChatPane
+          messages={controlledChat?.messages ?? chat.messages}
+          streaming={controlledChat?.streaming ?? chat.streaming}
+          loading={controlledChat?.loading ?? chat.loading}
+          sendDisabled={controlledChat?.sendDisabled ?? chat.sendDisabled}
+          queuedItems={controlledChat?.queuedItems}
+          onRemoveQueuedSend={controlledChat?.onRemoveQueuedSend}
+          onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
+          onReorderQueuedSends={controlledChat?.onReorderQueuedSends}
+          onSendQueuedNow={controlledChat?.onSendQueuedNow}
+          steerBlockedReason={controlledChat?.steerBlockedReason ?? null}
+          error={controlledChat ? controlledChat.error : chat.error}
+          errorSourceAssistantId={controlledChat?.errorSourceAssistantId}
+          projectId={projectId}
+          sessionMode={sessionMode}
+          onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}
+          projectFiles={projectFiles}
+          projectFileNames={projectFileNames}
+          projectResolvedDir={projectResolvedDir}
+          onEnsureProject={async () => projectId}
+          onSend={controlledChat?.onSend ?? chat.onSend}
+          onRetry={controlledChat?.onRetry ?? chat.onRetry}
+          recoveryActionsBlockedReason={recoveryBlock}
+          retryPendingAssistantId={controlledChat?.retryPendingAssistantId}
+          supersededErrorAssistantIds={controlledChat?.supersededErrorAssistantIds}
+          onSwitchToAmrAndRetry={onSwitchConversationToCloud
+            ? (failedAssistant) => {
+                if (recoveryBlock !== null) return;
+                onSwitchConversationToCloud(conversationId, failedAssistant);
+              }
+            : undefined}
+          onStop={controlledChat?.onStop ?? chat.onStop}
+          onAssistantFeedback={controlledChat?.onAssistantFeedback}
+          onRequestOpenFile={onRequestOpenFile}
+          conversations={conversations}
+          activeConversationId={conversationId}
+          // Intentionally omit `messagesConversationId`: `useConversationChat`
+          // resets `messages` to [] while a conversation loads, so trusting the
+          // live length here would flash a phantom "0 msg". Falling back to the
+          // persisted `conversation.messageCount` keeps the list count stable.
+          onSelectConversation={onSelectConversation}
+          onDeleteConversation={onDeleteConversation}
+          onNewConversation={onNewConversation}
+          researchAvailable={config.mode === 'daemon'}
+          config={config}
+        />
+      </div>
+    </div>
+  );
+}

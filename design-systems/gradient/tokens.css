@@ -1,0 +1,63 @@
+/* design-systems/gradient/tokens.css
+ * Structured token bindings for Gradient.
+ * gradient-first visual system with saturated color fields, dark text contrast, and radiant CTA states.
+ */
+
+:root {
+  --bg: #f7f3ff;
+  --surface: #ffffff;
+  --surface-warm: #efe7ff;
+  --fg: #191225;
+  --fg-2: #443856;
+  --muted: #746985;
+  --meta: #7c3aed;
+  --border: #ddd2f2;
+  --border-soft: #eee6fb;
+  --accent: #7c3aed;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 26px;
+  --text-2xl: 40px;
+  --text-3xl: 62px;
+  --text-4xl: 86px;
+  --leading-body: 1.52;
+  --leading-tight: 1.02;
+  --tracking-display: -0.03em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 52px;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 32px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 72px rgba(124, 58, 237, 0.20);
+  --focus-ring: 0 0 0 4px rgba(124, 58, 237, 0.26);
+  --motion-fast: 160ms;
+  --motion-base: 260ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

@@ -1,0 +1,14 @@
+/* theme: arctic-cool — 冷色调 蓝/青/石板灰 */
+:root{
+  --bg:#f2f6fb;--bg-soft:#e7eef7;--surface:#ffffff;--surface-2:#edf3fa;
+  --border:rgba(40,70,110,.12);--border-strong:rgba(40,70,110,.24);
+  --text-1:#0e1f33;--text-2:#3a5778;--text-3:#6b819b;
+  --accent:#1e6fb0;--accent-2:#17b1b1;--accent-3:#6f8aa6;
+  --good:#1aaf84;--warn:#d19030;--bad:#c5485a;
+  --grad:linear-gradient(135deg,#1e6fb0,#17b1b1 60%,#5fb9d6);
+  --grad-soft:linear-gradient(135deg,#e7eef7,#dff3f3);
+  --radius:14px;--radius-sm:10px;--radius-lg:22px;
+  --shadow:0 10px 28px rgba(40,70,110,.12);
+  --shadow-lg:0 24px 60px rgba(40,70,110,.18);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+}

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-stencil-tablet",
+  "title": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+  "title_i18n": {
+    "en": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+    "zh-CN": "像资深监管者一样做工作场所安全合规评审",
+    "zh-TW": "像资深监管者一样做工作场所安全合规评审"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Built as a decision-grade policy briefing deck for regulator, plant leadership.",
+  "description_i18n": {
+    "en": "A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Built as a decision-grade policy briefing deck for regulator, plant leadership.",
+    "zh-CN": "像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-stencil-tablet",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "stencil-tablet",
+    "zhangzara-stencil-tablet",
+    "archival",
+    "earthy",
+    "weighty",
+    "considered",
+    "museum-cultural-institution",
+    "art-architecture-brand",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-stencil-tablet",
+    "government-policy",
+    "policy-briefing-deck",
+    "policy",
+    "regulatory",
+    "risk-review",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "policy",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Present a Workplace-Safety Compliance Review like a Senior Regulator\" as a decision-grade Government & policy deck in this template's own visual system. Subject: A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. Audience: regulator, plant leadership. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck reduce approval risk rather than create rhetorical heat.",
+        "zh-CN": "像资深监管者一样做工作场所安全合规评审。像资深监管者一样做工作场所安全合规评审——一份可商业交付的政策简报 Deck，围绕真实主题、证据链与决策目标组织。 主题：A workplace-safety compliance review for a manufacturing regulator — findings, the evidence chain, and the corrective mandate. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+          "title_i18n": {
+            "en": "Present a Workplace-Safety Compliance Review like a Senior Regulator",
+            "zh-CN": "像资深监管者一样做工作场所安全合规评审",
+            "zh-TW": "像资深监管者一样做工作场所安全合规评审"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/deck-stage.js"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "government-policy"
+  }
+}

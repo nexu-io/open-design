@@ -1,0 +1,210 @@
+import {
+  CRITIQUE_SSE_EVENT_NAMES,
+  isPanelEvent,
+  type CritiqueSseEvent,
+  type CritiqueSseEventName,
+  type PanelEvent,
+} from '@open-design/contracts/critique';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+
+import type { CritiqueAction } from './reducer';
+import { workspaceResourceUrl } from '../../../collab/workspace-identity';
+import { BackoffController } from '../../../lib/backoff';
+import { bindStreamVisibility } from '../../../lib/stream-visibility';
+
+export interface CritiqueEventsConnection {
+  close(): void;
+}
+
+export interface CritiqueEventsConnectionOptions {
+  /** Test seam: substitute a mock EventSource constructor. */
+  EventSourceCtor?: typeof EventSource;
+  /** Initial backoff in ms. Defaults to 1000. */
+  initialBackoffMs?: number;
+  /** Max backoff in ms. Defaults to 30000. */
+  maxBackoffMs?: number;
+  /** Test seam: setTimeout substitutes for fake timers. */
+  setTimeoutFn?: typeof setTimeout;
+  clearTimeoutFn?: typeof clearTimeout;
+  /** Test seam: deterministic jitter source for the reconnect backoff. */
+  randomFn?: () => number;
+  /** Persisted project authority encoded into the EventSource URL. */
+  workspaceContext?: WorkspaceCollabContext | null;
+}
+
+const DEFAULT_INITIAL_BACKOFF = 1000;
+const DEFAULT_MAX_BACKOFF = 30_000;
+
+export function critiqueEventsUrl(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/projects/${encodeURIComponent(projectId)}/events`,
+    workspaceContext,
+  );
+}
+
+/** Browser-owned artifact navigation cannot attach project authority headers. */
+export function critiqueArtifactUrl(
+  projectId: string,
+  runId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/projects/${encodeURIComponent(projectId)}`
+      + `/critique/${encodeURIComponent(runId)}/artifact`,
+    workspaceContext,
+  );
+}
+
+/**
+ * Lift an SSE-wire `CritiqueSseEvent` back into the flat `PanelEvent` shape
+ * the reducer consumes. The daemon emits one channel per event name with
+ * the payload (sans `type`) as JSON; this is the inverse of
+ * `panelEventToSse` in the contracts package.
+ *
+ * Two defensive moves matter here:
+ *
+ *   1. The SSE channel name is authoritative for `type`. A payload-provided
+ *      `type` (malformed or compromised frame) must NOT override the
+ *      channel-derived value, so we spread `data` first and pin `type`
+ *      last. Otherwise a daemon bug or a man-in-the-middle could route a
+ *      `critique.run_started` channel into a `ship` action shape.
+ *
+ *   2. The result has to pass `isPanelEvent` before it leaves this
+ *      function. `isPanelEvent` is the contract-level strict guard: it
+ *      validates header fields, every variant's required fields, closed-
+ *      enum membership against PANELIST_ROLES / SHIP_STATUSES /
+ *      DEGRADED_REASONS / FAILED_CAUSES / PARSER_WARNING_KINDS /
+ *      ROUND_DECISIONS, and rejects non-finite numerics. A frame missing
+ *      `runId`, carrying an unknown `status`, or holding a NaN composite
+ *      is dropped here so the reducer never sees it.
+ *
+ * No wire-layer shadow guard sits on top of `isPanelEvent`: an earlier
+ * revision of this file kept a `hasValidVariantShape` second pass with
+ * docstring claims that have since drifted (PerishCode follow-up on
+ * PR #1315). The shadow was strictly weaker than `isPanelEvent` and so
+ * could never reject a frame the contract guard already let through.
+ * `sse.test.ts` keeps a small set of regression cases here so a future
+ * accidental weakening of either layer fails loudly.
+ */
+export function sseToPanelEvent(eventName: CritiqueSseEventName, data: unknown): PanelEvent | null {
+  if (data === null || typeof data !== 'object') return null;
+  const type = eventName.slice('critique.'.length);
+  const candidate = { ...(data as Record<string, unknown>), type };
+  return isPanelEvent(candidate) ? candidate : null;
+}
+
+/**
+ * Pure connection manager for a project's critique SSE channels. Mirrors the
+ * shape of `createProjectEventsConnection` in `apps/web/src/providers/
+ * project-events.ts` so tests can drive it under a node environment without
+ * React + JSDOM. The two managers run side-by-side on the same
+ * `/api/projects/:id/events` endpoint, each listening for its own event
+ * names.
+ *
+ * Reconnects with exponential backoff (default 1s -> 30s cap). A successful
+ * `ready` event resets the backoff so a flaky network doesn't permanently
+ * stretch the gap between events. Malformed payloads are dropped with a dev
+ * warning so a single bad frame doesn't tear the stream.
+ */
+export function createCritiqueEventsConnection(
+  projectId: string,
+  onEvent: (action: CritiqueAction) => void,
+  options: CritiqueEventsConnectionOptions = {},
+): CritiqueEventsConnection {
+  const Ctor = options.EventSourceCtor
+    ?? (typeof EventSource === 'undefined' ? null : EventSource);
+  if (!Ctor) return { close() { /* noop */ } };
+
+  const setT = options.setTimeoutFn ?? setTimeout;
+  const clearT = options.clearTimeoutFn ?? clearTimeout;
+  const backoff = new BackoffController({
+    initialMs: options.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF,
+    maxMs: options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF,
+    factor: 2,
+    jitter: true,
+    random: options.randomFn,
+  });
+
+  let cancelled = false;
+  let source: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Set while the socket is deliberately given back to a parked tab.
+  let releasedWhileHidden = false;
+
+  const handleCritiqueFrame = (eventName: CritiqueSseEventName) => (raw: Event) => {
+    try {
+      const parsed = JSON.parse((raw as MessageEvent).data) as CritiqueSseEvent['data'];
+      const action = sseToPanelEvent(eventName, parsed);
+      if (action) onEvent(action);
+    } catch (err) {
+      if (
+        typeof process !== 'undefined'
+        && process.env?.NODE_ENV === 'development'
+      ) {
+        // eslint-disable-next-line no-console
+        console.warn(`[critique-events] malformed payload on ${eventName}`, err);
+      }
+    }
+  };
+
+  const connect = (): void => {
+    if (cancelled) return;
+    if (source) return;
+    const es = new Ctor(critiqueEventsUrl(projectId, options.workspaceContext));
+    source = es;
+    es.addEventListener('ready', () => {
+      backoff.reset();
+    });
+    for (const name of CRITIQUE_SSE_EVENT_NAMES) {
+      es.addEventListener(name, handleCritiqueFrame(name));
+    }
+    es.addEventListener('error', () => {
+      if (cancelled) return;
+      es.close();
+      if (source === es) source = null;
+      // Same guard as `providers/project-events.ts`: a socket handed back to a
+      // parked tab must not reconnect itself while nobody is looking.
+      if (releasedWhileHidden) return;
+      reconnectTimer = setT(connect, backoff.nextDelay()) as ReturnType<typeof setTimeout>;
+    });
+  };
+
+  // A theater left open in a parked tab must not keep one of the origin's six
+  // sockets — see `lib/stream-visibility.ts`.
+  const visibility = bindStreamVisibility({
+    onHidden: () => {
+      if (cancelled) return;
+      releasedWhileHidden = true;
+      if (reconnectTimer) {
+        clearT(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (source) {
+        source.close();
+        source = null;
+      }
+    },
+    onVisible: () => {
+      if (cancelled) return;
+      releasedWhileHidden = false;
+      backoff.reset();
+      connect();
+    },
+    ...(options.setTimeoutFn ? { setTimeoutFn: options.setTimeoutFn } : {}),
+    ...(options.clearTimeoutFn ? { clearTimeoutFn: options.clearTimeoutFn } : {}),
+  });
+
+  connect();
+
+  return {
+    close(): void {
+      cancelled = true;
+      visibility.dispose();
+      if (reconnectTimer) clearT(reconnectTimer);
+      if (source) source.close();
+    },
+  };
+}

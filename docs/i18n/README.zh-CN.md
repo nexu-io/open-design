@@ -1,0 +1,700 @@
+<h1 align="center">OpenDesign：首个协作式 AI 设计 Agent 工作台</h1>
+
+> ✨ **[庆祝 GitHub 100K Star，OpenDesign Go 额度翻倍](https://open-design.ai/pricing/)**。**首月仅需 8 美元，指定 Design Plan 模型每月最高可享 120 美元使用额度**，可用于 GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X、MiMo V2.6 Flash 等 10 多款模型。 所有个人套餐均提供 API 接入，可用于 Codex、Claude Code、DSH、OpenCode 等工具。
+
+<p align="center">
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：首个协作式 AI 设计 Agent 工作台" width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://open-design.ai/">官网</a> ·
+  <a href="https://open-design.ai/">下载</a> ·
+  <a href="https://open-design.ai/cloud/">OpenDesign Cloud</a> ·
+  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
+  <a href="https://x.com/OpenDesignHQ">关注 @OpenDesignHQ</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
+  <a href="../../LICENSE"><img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
+  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="QUICKSTART.zh-CN.md"><img alt="quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
+</p>
+
+<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <b>简体中文</b> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.th.md">ภาษาไทย</a></p>
+
+---
+
+## 什么是 OpenDesign
+
+OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出发，使用你熟悉的编程 Agent 或 OpenDesign Cloud，创建符合设计系统的原型。与团队分享并收集反馈，再让 Agent 在同一个项目中继续完善。
+
+这套工作流开放且可扩展。OpenDesign 采用 Apache 2.0 许可证；团队可以查看并按自己的流程调整技能、设计模板、设计系统和插件。
+
+
+---
+
+## 产品速览
+
+### 核心页面
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — 从需求描述或示例开始。" width="500" /></a><br/>
+<sub><b>Home</b> — 从需求描述或示例开始。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — 重新打开设计系统、媒体和原型项目。" width="500" /></a><br/>
+<sub><b>All projects</b> — 重新打开设计系统、媒体和原型项目。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — 查看品牌素材，并与 Agent 一起完善。" width="500" /></a><br/>
+<sub><b>Design Systems</b> — 查看品牌素材，并与 Agent 一起完善。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — 查找技能，通过 Try it 启动。" width="500" /></a><br/>
+<sub><b>Plugins</b> — 查找技能，通过 Try it 启动。</sub>
+</td>
+</tr>
+</table>
+
+### Studio——在同一个项目中创作和完善
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — 与 Agent 一起构建和迭代交互式网页，并实时预览。" /><br/>
+<sub><b>Prototype</b> — 与 Agent 一起构建和迭代交互式网页，并实时预览。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — 制作演示文稿、查看幻灯片和演讲者备注，完成后导出。" /><br/>
+<sub><b>Slides</b> — 制作演示文稿、查看幻灯片和演讲者备注，完成后导出。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — 从对话中生成视觉素材，查看结果，再下载或打开。" /><br/>
+<sub><b>Image</b> — 从对话中生成视觉素材，查看结果，再下载或打开。</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — 与 Agent 一起制作动态图形并导出 MP4。" /></a><br/>
+<sub><b>HyperFrames</b> — 与 Agent 一起制作动态图形并导出 MP4。 <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">观看视频</a>.</sub>
+</td>
+</tr>
+</table>
+
+---
+
+## 平台兼容性
+
+> OpenDesign 通过两种方式连接主流编码 Agent：可由 Agent 调用的**技能、CLI 和 MCP**，以及由 OD 直接启动 Agent 的**原生运行时适配器**。DeepSeek Harness 通过官方 `dsh` CLI 作为一等原生运行时，支持结构化流式输出、模型发现、取消与会话恢复。
+
+| 编码 Agent / 平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 状态 &nbsp;&nbsp; | 快速接入 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+|---|:---:|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 支持 | `od mcp install claude` |
+| [Claude Desktop](https://claude.ai/download) | ✅ 支持¹ | `od mcp install claude-desktop` |
+| [Codex CLI](https://github.com/openai/codex) | ✅ 支持 | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 支持 | `od mcp install reasonix` |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ✅ 原生运行时 | `od agent setup deepseek-harness` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ 支持 | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ 支持 | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 支持 | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 支持 | `od mcp install copilot` |
+| [OpenCode](https://opencode.ai/) | ✅ 支持 | `od mcp install opencode` |
+| [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 支持 | `od mcp install openclaw` |
+| [Antigravity](https://antigravity.google) | ✅ 支持 | `od mcp install antigravity` |
+| [Cline](https://github.com/cline/cline) | ✅ 支持 | `od mcp install cline` |
+| [Trae](https://www.trae.ai/) | ✅ 支持 | `od mcp install trae` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ 支持 | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ 支持 | `od mcp install kiro` |
+| [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 支持 | `od mcp install pi` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
+| [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
+
+使用 DeepSeek Harness 时，请先安装官方 `dsh` CLI，再在 OpenDesign 中选择它，或运行 `od agent setup deepseek-harness` 安装/修复 OD 连接组件。MCP 集成可用 `od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
+
+¹ Claude Desktop 的自动 MCP 配置目前仅在 macOS 和 Windows 上支持。
+
+<p align="center">
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="OpenDesign 支持的 26 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+</p>
+
+**未安装任何 CLI？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理提供同样的循环（无需 spawn 进程）——粘贴 `baseUrl` + `apiKey` + `model`，支持 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM 或任何 OpenAI 兼容端点。每个目标的 SSRF 防护在守护进程边缘拦截内网 IP / link-local / CGNAT。
+
+运行时定义位于 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/)，并在 `runtimes/registry.ts` 注册；只有新的 wire format 才需要增加 parser——参见 [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+
+---
+
+## 演示
+
+四大核心产品类别，全部由笔记本电脑上运行的编码 Agent 渲染。点击缩略图查看实际示例。
+
+### 1 · 原型——Web · 桌面 · 移动端
+
+默认输出面。读取你的 `DESIGN.md` 并在沙箱 iframe 中渲染的单页 HTML 工件。
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/dating-web.png" alt="Web 原型 dating-web" /><br/>
+<sub><b>Web 原型</b>——带滚动条、KPI、图表的编辑类仪表盘。直接从 <code>design-templates/dating-web/</code> 渲染。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/gamified-app.png" alt="游戏化应用" /><br/>
+<sub><b>移动端应用原型</b>——三屏游戏化流程，含 XP 绶带和任务详情。可直接交付给 Cursor / Codex / Claude Code 转为 React/Next/Vue。</sub>
+</td>
+</tr>
+</table>
+
+### 2 · 实时工件与仪表盘
+
+实时仪表盘、决策室、KPI 大屏——单页工件通过调参面板拉取数据，原地可编辑。
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/live-dashboard.png" alt="实时仪表盘" /><br/>
+<sub><b>实时仪表盘</b>——可编辑的 KPI 大屏，调参面板暴露值得调整的参数。Agent 输出一份 manifest，iframe 无需刷新即可重新渲染。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/research-decision-room.png" alt="决策室" /><br/>
+<sub><b>决策室</b>——面向产品 / 研究 / 运营会议的多源简报工件。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/github-dashboard.png" alt="GitHub 仪表盘" /><br/>
+<sub><b>GitHub 风格仪表盘</b>——以实时工件形式展示仓库指标。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/flowai-live-dashboard-template.png" alt="Flow 实时仪表盘" /><br/>
+<sub><b>Flow 实时仪表盘模板</b>——领域专属 KPI 模板，通过当前激活的 <code>DESIGN.md</code> 品牌化。</sub>
+</td>
+</tr>
+</table>
+
+### 3 · 演示文稿——杂志 Deck、周报、路演
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/07-magazine-deck.png" alt="杂志 Deck (guizang-ppt)" /><br/>
+<sub><b>Deck 模式 (guizang-ppt)</b>——杂志版式、WebGL 主视觉、P0/P1/P2 清单。从 <a href="https://github.com/op7418/guizang-ppt-skill"><code>op7418/guizang-ppt-skill</code></a> 完整打包，保留原始许可证。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/deck-swiss-international.png" alt="瑞士 Deck" /><br/>
+<sub><b>瑞士国际风格 Deck</b>——网格锚定、单色强调。<b>15 套 Deck 模板</b>和 <b>36 个主题</b>之一，位于 <code>design-templates/html-ppt-*/</code>。</sub>
+</td>
+</tr>
+</table>
+
+每套 Deck 均可导出为 **HTML**（单文件，内联资源）、**PDF**（浏览器打印，Deck 感知）、**PPTX**（Agent 驱动的技能）、**ZIP**（归档）或 **Markdown**。
+
+### 4 · 图片——`gpt-image-2`、ImageRouter、自定义 API
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="城市美食地图插画" /><br/><sub><b>城市美食地图插画</b><br/>手绘编辑风格旅行海报</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="电影级电梯场景" /><br/><sub><b>电影级电梯场景</b><br/>单帧编辑级静态画面</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="赛博朋克动漫肖像" /><br/><sub><b>赛博朋克肖像</b><br/>个人头像——霓虹面部文字</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="3D 石质阶梯演变" /><br/><sub><b>3D 石质阶梯</b><br/>石刻信息图</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="魅力人像" /><br/><sub><b>魅力人像</b><br/>编辑级棚拍</sub></td>
+</tr>
+</table>
+
+**93 个可复刻提示词**位于 [`prompt-templates/`](../../prompt-templates/)——预览缩略图、完整提示词、目标模型、宽高比和来源归属。一键将需求放入编辑器。
+
+### 5 · 视频与 HyperFrames——Agent 原生动态图形
+
+**[HyperFrames][hyperframes]** 是 HeyGen 的开源 Agent 原生视频框架，在 OpenDesign 中作为一等公民集成。Agent 编写 HTML + CSS + GSAP，HyperFrames 通过 headless Chrome + FFmpeg 渲染为确定性 MP4。搭配 **Seedance 2.0** 实现影视级 t2v / i2v，**Veo 3 / Sora 2 / Kling 2** 提供路由模型变体，**Suno v5 / Lyria 2** 提供音频底座。
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="SaaS 宣传片" /></a><br/><sub><b>30 秒 SaaS 产品宣传片</b> · 16:9 · UI 3D 展示</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok 卡拉OK" /></a><br/><sub><b>TikTok 卡拉OK 真人出镜</b> · 9:16 · TTS + 逐字字幕</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="品牌精彩集锦" /></a><br/><sub><b>30 秒品牌精彩集锦</b> · 16:9 · 音频驱动动态字体</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="柱状图竞赛" /></a><br/><sub><b>柱状图竞赛</b> · 16:9 · NYT 风格数据信息图</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="航线图" /></a><br/><sub><b>航线图</b> · 16:9 · Apple 风格路线展示</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Logo 片尾" /></a><br/><sub><b>4 秒电影级 Logo 片尾</b> · 16:9 · 逐块拼合 + 光晕</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="金额计数器" /></a><br/><sub><b>$0 → $10K 金额计数器</b> · 9:16 · Apple 风格高燃</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="网站转视频" /></a><br/><sub><b>网站转视频</b> · 16:9 · 三视口截取网站</sub></td>
+</tr>
+</table>
+
+11 个 HyperFrames 模板 + 39 个 Seedance 提示词随仓库一起发布。目录缩略图 © HeyGen，框架 Apache-2.0。OD 专属渲染流程（合成缓存、sandbox-exec 变通方案、MP4-as-chip）详见 [`design-templates/hyperframes/`](../../design-templates/hyperframes/)。
+
+[hyperframes]: https://github.com/heygen-com/hyperframes
+
+---
+
+## 为什么选择 OpenDesign
+
+- 🤖 **Agent 原生，不绑定模型。** 我们不发布 Agent。你 `PATH` 上已有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是设计引擎。一键切换。
+- 🧠 **默认品牌级。** 每次渲染都把当前包的 `DESIGN.md` 作为核心品牌契约读取。仓库随附 151 个设计系统包；旧包可以仅含 `DESIGN.md`，新包还可加入 `manifest.json`、`tokens.css`、组件、资产和来源信息。放入文件夹，选择器自动识别。
+- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先。产品分析和会话回放需经用户同意；经清理的安全与可靠性遥测始终开启。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
+- 🌍 **四个平面上可组合。** **插件**承载可运行的工作流 · 功能**技能**承载 Agent 行为 · **设计模板**承载渲染蓝图 · **设计系统**承载品牌。四者都采用可移植、可版本控制的目录，任何人都可以编写和发布。
+- 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。
+- 🔒 **隐私信条。** 项目可在本地或自行部署的环境中运行。使用云端模型或 OpenDesign Cloud 时，相关请求会发送至相应服务。BYOK 代理包含 SSRF 防护。
+
+---
+
+## 快速开始
+
+### 🖥️ 下载桌面应用（推荐——零配置）
+
+使用 OpenDesign 最快的方式。无需 Node、pnpm 或克隆仓库。
+
+- **macOS**（Apple Silicon · Intel x64）→ [**open-design.ai**](https://open-design.ai/) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+- **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+- **Linux**（AppImage，可选通道）→ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+
+安装后：应用自动检测 `PATH` 上的所有编码 Agent CLI，加载 100+ 功能技能、独立渲染模板目录和 151 个设计系统包，打开后即可在入口视图中输入需求。
+
+### 🤖 安装到你的编码 Agent（无 UI）
+
+你可以在完全不打开 GUI 的情况下使用 OpenDesign——在 Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi 等中作为技能、插件或 MCP 服务器调用。
+
+```bash
+# 一行命令安装到你正在使用的 Agent：
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+```
+
+然后在 Agent 内：
+
+```
+> Use open-design to generate a landing page with the Linear design system
+```
+
+在有文件系统的本地 CLI 运行中，Agent 会将选中的功能技能或设计模板与 `DESIGN.md` 组合，写入规范项目文件，OpenDesign 直接预览这些文件。没有文件系统工具的 BYOK/纯 API 运行则返回一个完整的 `<artifact>` 块。
+
+### 🐳 使用 Docker 运行
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design/deploy
+cp .env.example .env
+echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up -d
+# 打开 http://localhost:7456
+```
+
+### 🚀 部署到 Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Sealos App Store 模板会运行已发布的 OpenDesign Docker 镜像，提供持久化工作区存储，并在公网代理层启用 Basic Auth。自定义公开或共享 Docker 部署请遵循 [`deploy/README.md`](../../deploy/README.md#local-compose) 中的反向代理和 `OPEN_DESIGN_ALLOWED_ORIGINS` 指引。
+
+### 🧑‍💻 从源码运行
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design
+corepack enable && pnpm install
+pnpm tools-dev run web
+```
+
+打开 `tools-dev` 打印的 URL；除非显式传入端口参数，开发端口会动态分配。
+
+Node `~24`，pnpm `10.33.x`。Windows 用户请参见 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)。完整的快速开始指南、环境变量和打包构建流程 → [`QUICKSTART.zh-CN.md`](QUICKSTART.zh-CN.md)。
+
+### 一个完整的工作流——从需求到工件
+
+`需求 → 插件 → 方向 → 设计系统 → 工件 → 交付 → 记忆`
+
+1. **PM 提交需求。** 插件选择器提供落地页 · 路演 Deck · 仪表盘 · 社交媒体帖 · PM 规范 · OKR 记分卡……
+2. **设计师（或 Agent）锁定方向。** 没有品牌？从 5 个精选方向中选择。有品牌？放入截图 / URL → Agent 连接 GitHub、编纂可复用的 `DESIGN.md`。
+3. **Agent 创建首个交付物。** 插件 + 功能技能或设计模板 + `DESIGN.md` 已绑定。有文件系统的 CLI 运行写入规范项目文件，预览随文件更新；没有文件工具的 BYOK/纯 API 运行返回一个完整的 `<artifact>` 块。
+4. **交付给工程团队。** 工件是真实的 HTML/CSS——放入 Cursor、Codex 或 Claude Code 中继续作为代码开发。或直接导出 PPTX / PDF / MP4 交给营销团队。
+5. **OpenDesign 越用越聪明。** 你的截图、字体、色板和已确认的工件会累积为下次会话的默认值。更少的重复劳动，更少的偏差。
+
+---
+
+## 从你的编码 Agent 使用 OpenDesign
+
+OpenDesign 提供 **stdio MCP 服务器**和逐 Agent 的**安装脚本**。任何位于其他仓库的 MCP 兼容 Agent 都可以直接读取你本地 OpenDesign 项目的文件——token CSS、JSX 组件、入口 HTML——作为按名称查询的结构化 API。Agent 始终看到实时文件，而非过期的导出。
+
+```bash
+# 一行命令安装（支持 16+ CLI）：
+od mcp install <agent>
+
+# 然后，Agent 可以：
+od project list --json
+od files list <project-id> --json
+od files read <project-id> <relative-path>
+od plugin list --json
+od skills list --json
+```
+
+**为什么选择 MCP？** 每次迭代都导出并重新附加 zip 会打断流程。MCP 直接暴露设计源文件——Agent 始终看到实时文件。
+
+**对于从零开始的 Agent**，安装器会放置 `~/.config/<agent>/open-design.json`（或平台等效路径）以及可复制粘贴的 MCP 代码片段。Cursor 获得一键深层链接；Claude Code 获得 `claude mcp add-json` 一行命令；其他所有 Agent 获得其配置所需 schema 格式的 JSON。完整的逐 Agent 流程 → 桌面应用中的**设置 → MCP 服务器**，或 [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+
+**安全模型。** 默认只读，守护进程绑定到 `127.0.0.1`，SSRF 在代理边缘拦截。局域网暴露需要 `OD_BIND_HOST` 显式启用加 `OD_ALLOWED_ORIGINS`。连接器凭证和实时工件预览路由无论如何都保持仅本地回环。
+
+---
+
+## 技能与设计模板
+
+**100+ 个功能技能位于 [`skills/`](../../skills/)**。它们遵循 Agent Skills [`SKILL.md`][skill] 约定，提供可复用的 Agent 行为、参考资料或工具。可渲染的启动模板单独位于 [`design-templates/`](../../design-templates/)；它们也可以使用 `SKILL.md`，但进入设计模板目录，而不是功能技能注册中心。
+
+两种**模式**构成设计模板目录主线：`prototype`（Web/移动端/桌面单页工件）和 `deck`（横向滑动演示文稿）。其他模板覆盖 `image`、`video`、`audio` 与 utility 表面。**`scenario`** 字段按受众分组：`design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`。
+
+| 设计模板 | 模式 | 场景 | 产出物 |
+|---|---|---|---|
+| [`web-prototype`](../../design-templates/web-prototype/) | prototype | design | 默认落地页 / 主视觉 |
+| [`saas-landing`](../../design-templates/saas-landing/) | prototype | marketing | 主视觉 / 功能 / 定价 / CTA |
+| [`dashboard`](../../design-templates/dashboard/) | prototype | operation | 管理后台 / 数据分析（带侧边栏） |
+| [`mobile-app`](../../design-templates/mobile-app/) | prototype | design | iPhone 15 Pro / Pixel 外框应用 |
+| [`mobile-onboarding`](../../design-templates/mobile-onboarding/) | prototype | design | 启动页 · 价值主张 · 登录流程 |
+| [`social-carousel`](../../design-templates/social-carousel/) | prototype | marketing | 3 卡 1080×1080 轮播图 |
+| [`email-marketing`](../../design-templates/email-marketing/) | prototype | marketing | 表格降级安全的品牌邮件 |
+| [`magazine-poster`](../../design-templates/magazine-poster/) | prototype | marketing | 单页杂志版面 |
+| [`motion-frames`](../../design-templates/motion-frames/) | prototype | marketing | 循环 CSS 动效主视觉 |
+| [`sprite-animation`](../../design-templates/sprite-animation/) | prototype | marketing | 8-bit 像素动画讲解 |
+| [`pm-spec`](../../design-templates/pm-spec/) | prototype | product | PM 规范文档（含目录 + 决策日志） |
+| [`team-okrs`](../../design-templates/team-okrs/) | prototype | product | OKR 记分表 |
+| [`eng-runbook`](../../design-templates/eng-runbook/) | prototype | engineering | 事故应急手册 |
+| [`finance-report`](../../design-templates/finance-report/) | prototype | finance | 高管财务摘要 |
+| [`hr-onboarding`](../../design-templates/hr-onboarding/) | prototype | hr | 角色入职计划 |
+| [`guizang-ppt`](../../design-templates/guizang-ppt/) | deck | marketing | 杂志风格 Web PPT（deck 默认） |
+| [`html-ppt-*`](../../design-templates/) | deck | marketing | 15 套 Deck 模板 × 36 个主题（主模板在 [`design-templates/html-ppt/`](../../design-templates/html-ppt/)） |
+| [`hyperframes`](../../design-templates/hyperframes/) | video | marketing | HTML → MP4 动态图形（HeyGen OSS 框架） |
+| [`critique`](../../design-templates/critique/) | utility | design | 五维自评记分表 |
+| [`tweaks`](../../design-templates/tweaks/) | utility | design | AI 输出的调参面板 manifest |
+
+完整协议与目录分工 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。注册端点：功能技能使用 `GET /api/skills`，渲染模板使用 `GET /api/design-templates`。
+
+---
+
+## 设计系统
+
+**151 个以 `DESIGN.md` 为核心的品牌级设计系统包**随仓库发布。旧包可以只有这份 Markdown 契约；新包还可包含 `manifest.json`、编译后的 `tokens.css`、组件样例、资源和来源证据。目录同时包含基于上游整理的系统与项目自有补充；[`design-systems/README.md`](../../design-systems/README.md) 记录了包结构与来源。切换系统 → 下次渲染即使用新 token。
+
+<details>
+<summary><b>完整目录（点击展开）</b></summary>
+
+**AI 与 LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
+
+**开发者工具** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
+
+**生产力** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+
+**金融科技** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
+
+**电商** — `shopify` · `airbnb` · `uber` · `nike` · `starbucks` · `pinterest`
+
+**媒体** — `spotify` · `playstation` · `wired` · `theverge` · `meta`
+
+**汽车** — `tesla` · `bmw` · `ferrari` · `lamborghini` · `bugatti` · `renault`
+
+**其他** — `apple` · `ibm` · `nvidia` · `vodafone` · `resend` · `spacex`
+
+**入门模板** — `default`（中性现代）· `warm-editorial`
+
+</details>
+
+通过 [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts) 重新导入库。添加自有品牌 → 将 `DESIGN.md` 放入 `design-systems/<brand>/`。完整指南 → [`design-systems/README.md`](../../design-systems/README.md)。
+
+[acd2]: https://github.com/VoltAgent/awesome-design-md
+
+---
+
+## 插件
+
+**277 个官方插件和 183 个可混搭参考示例**位于 [`plugins/_official/`](../../plugins/_official/)。每个条目都是以 `open-design.json` 为核心的可移植插件目录，并带有类型所需的载荷，例如 Agent 工作流的 `SKILL.md`、媒体模板的 `template.json`，或设计系统条目的 `DESIGN.md`。直接跳转到分类浏览：
+
+| 分类 | 数量 | 内容 |
+|---|---|---|
+| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | 完整设计方案——[`od-default`](../../plugins/_official/scenarios/od-default/)、[`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/)、[`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/)、[`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/)、[`od-react-export`](../../plugins/_official/scenarios/od-react-export/)、[`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/)、[`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/)、[`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/)、[`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/)、[`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/)、[`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`image-templates/`](../../plugins/_official/image-templates/) | 45 | 一次性图片提示词——编辑、电影、产品、人像 |
+| [`video-templates/`](../../plugins/_official/video-templates/) | 63 | HyperFrames / Seedance / Veo 动态模板 |
+| [`design-systems/`](../../plugins/_official/design-systems/) | 143 | 品牌 `DESIGN.md` 包装为插件 |
+| [`atoms/`](../../plugins/_official/atoms/) | 13 | 可复用 UI 片段（按钮、主视觉、KPI 卡片） |
+| [`examples/`](../../plugins/_official/examples/) | 183 | 可混搭的参考输出 |
+
+另有 [`plugins/community/`](../../plugins/community/) 社区插件和 [`plugins/registry/`](../../plugins/registry/) 注册发布流程。
+
+### 插件能做什么
+
+- 🤖 **在任何编码 Agent 中运行**——[Claude Code](../../docs/agent-adapters.md)、Codex、Cursor、Copilot、[OpenClaw](https://github.com/openclaw/openclaw)、[Antigravity](https://antigravity.google)、Hermes、Kimi……通过 Agent 已知的同一套技能协议。
+- 🔁 **迁移 Figma / Pencil 工作流** → React、Next.js 或 Vue 源码。参见 [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/)。
+- 🛠️ **将现有代码库刷新到品牌规范**——将插件指向 `git` 仓库 + `DESIGN.md`，获得一个 PR。参见 [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/)。
+- 💾 **持久化自定义工作流**——你团队的可复用模板与发布的模板并列。
+
+### 使用插件
+
+插件在 **Web UI** 和 **`od` CLI** 两条路上完全对等——同一套 `/api/plugins` 端点，挑顺手的用。
+
+**在桌面 / Web 应用里**：打开 **Plugin** 页浏览 marketplace，点 **Install**；进入项目 Studio 后，插件以 composer chip 的形式出现，点击即应用（带上它声明的输入参数）。
+
+**在命令行里**（不打开 UI 也能跑，外部 Agent 走的就是这条）：
+
+```bash
+od plugin list                       # 列出已安装插件（--task-kind / --mode / --tag 过滤）
+od plugin search "landing page"      # 按关键词搜
+od plugin info od-default            # 看某个插件的元数据、输入、权限
+od plugin install od-default        # 从注册中心装；也支持 ./本地文件夹 或 https://… 直链
+od plugin apply od-default --input brief="给我们的种子轮做一页 pitch"
+od plugin upgrade od-default         # 升级
+od plugin uninstall od-default       # 卸载
+```
+
+所有命令都支持 `--json`，方便用 `jq` / `xargs` 串进自动化脚本。
+
+### 构建插件
+
+OpenDesign 插件必须包含 `open-design.json` 以及其类型所需的载荷。工作流技能或场景还包含 `SKILL.md`；仅 manifest 的模板与设计系统条目则使用各自的载荷：
+
+```
+my-plugin/
+├── open-design.json    ← 必需：marketplace 元数据 + 输入 + 流水线 + 权限
+├── SKILL.md            ← Agent Skill/场景条目必需；其他插件类型可省略
+├── README.md           ← 可选：用法、安装、注册中心链接
+├── preview/            ← 可选：index.html / poster.png（视觉类强烈建议）
+└── examples/           ← 可选：具体用例
+```
+
+`open-design.json` 的核心字段：`specVersion`（当前 `1.0.0`）、`name`（稳定 ID）、`version`（semver）、可选的 `compat.agentSkills[].path`（条目公开 Agent Skill 时指向 `./SKILL.md`）、`od.kind`（`skill` / `scenario` / `atom` / `bundle`）、`od.taskKind`（`new-generation` / `figma-migration` / `code-migration` / `tune-collab`）、`od.mode`（输出表面，如 `prototype` / `deck` / `live-artifact` / `image` / `video` / `hyperframes` / `audio` / `design-system` / `scenario`）、`od.capabilities[]`（**按最小权限声明**，默认受限安装只给 `prompt:inject`）、`od.inputs[]`（应用时的参数）。
+
+脚手架 + 本地验证：
+
+```bash
+od plugin scaffold --id my-plugin --title "My Plugin"   # 生成骨架
+od plugin validate ./my-plugin                          # 校验 manifest / 文件布局
+pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+```
+
+字段全集与运行时契约 → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md)；用编码 Agent 自动开发插件 → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md)；可复制的最小模板 → [`plugins/spec/examples/`](../../plugins/spec/examples/)。
+
+### 贡献插件
+
+1. 把插件文件夹放到 [`plugins/community/`](../../plugins/community/)（第三方插件），或——若想随 OpenDesign 一起内置——放到对应 tier 的 [`plugins/_official/`](../../plugins/_official/)。
+2. 跑通校验：`od plugin validate`、`pnpm guard`、`pnpm --filter @open-design/plugin-runtime typecheck`。
+3. 按 [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) 的模板填 PR（ID、版本、lane、mode、权限、触发示例，视觉类附截图 / 预览）。
+4. 想发布到外部注册中心（skills.sh / ClawHub / 独立 GitHub）→ [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md)。
+
+插件注册端点：`GET /api/plugins`。目录概览 → [`plugins/README.md`](../../plugins/README.md)（[简体中文](../../plugins/README.zh-CN.md)）。
+
+---
+
+## 架构
+
+```
+┌────────────────────── 浏览器 (Next.js 16) / Electron 外壳 ──────────────┐
+│  聊天 · 文件工作区 · iframe 预览 · 设置 · 导入 · MCP                      │
+└──────────────┬─────────────────────────────────────┬─────────────────────┘
+               │ /api/*                              │
+               ▼                                     ▼
+   ┌─────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
+   │  本地守护进程 (Express+SQLite)    │   ─→ 任何 OpenAI 兼容 BYOK,
+   │                                  │       SSRF 防护在边缘
+   │  /api/skills    /api/design-templates    /api/plugins    │
+   │  /api/design-systems            │
+   │  /api/chat (SSE)   /api/proxy/* │
+   │  /api/projects/:id/files/...    │
+   │  /api/artifacts/{save,lint}     │
+   │  /api/import/claude-design      │
+   │  MCP stdio 服务器                │
+   └─────────┬───────────────────────┘
+             │ spawn(cli, [...], { cwd: managed project cwd })
+             ▼
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │  Local runtime definitions come from runtimes/registry.ts;                 │
+   │  the base registry has 27 definitions (including byok-opencode),           │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
+   │  the OpenCode executable. See docs/agent-adapters.md.                     │
+   │  组合功能技能或设计模板 + DESIGN.md，并将规范文件写入磁盘                   │
+   └──────────────────────────────────────────────────────────────────────┘
+```
+
+| 层 | 技术栈 |
+|---|---|
+| 前端 | Next.js 16 App Router + React 18 + TypeScript |
+| 守护进程 | Node 24 · Express · SSE 流式传输 · `better-sqlite3` |
+| 存储 | 在修改或记录 daemon 存储路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。本 README 不得复述该契约。 |
+| 预览 | 文件系统运行渲染规范项目文件；BYOK/纯 API 运行将一个完整 `<artifact>` 块解析到沙箱 `srcdoc` iframe |
+| 导出 | HTML（内联）· PDF（浏览器打印）· PPTX（Agent 驱动）· ZIP · Markdown · MP4（HyperFrames） |
+| 桌面 | Electron 外壳 + 沙箱渲染进程 + sidecar IPC（STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN） |
+| 生命周期 | 统一入口：`pnpm tools-dev`（start / stop / run / status / logs / inspect / check） |
+
+完整架构说明 → [`docs/architecture.md`](../../docs/architecture.md)。技能协议 → [`docs/skills-protocol.md`](../../docs/skills-protocol.md)。Agent 适配器契约 → [`docs/agent-adapters.md`](../../docs/agent-adapters.md)。
+
+---
+
+## 路线图
+
+- [x] 守护进程 + 26 个不同 CLI 可执行程序上的 27 个 runtime 定义 + 技能/设计模板注册中心 + 设计系统目录
+- [x] Web 应用 + 聊天 + 问题表单 + 5 方向选择器 + 待办进度 + 沙箱预览
+- [x] 100+ 功能技能 · 独立渲染模板目录 · 151 个设计系统包 · 5 视觉方向 · 5 设备外框
+- [x] SQLite 支撑的项目 · 会话 · 消息 · 标签页 · 模板
+- [x] 多供应商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防护
+- [x] Claude Design ZIP 导入（`/api/import/claude-design`）
+- [x] Sidecar 协议 + Electron 桌面 + IPC 自动化
+- [x] 工件 Lint API + 五维自评预输出门控
+- [x] **0.8.0**——插件市场基础设施（261 个官方插件、manifest 规范、逐 Agent 安装脚本）
+- [x] **0.9.0**——OpenDesign Cloud（应用内置的官方模型服务：零配置，一键登录）
+- [x] **0.10.0**——一体化设计工作区：一个窗口内完成完整创作闭环（参考 → 素材 → 交互编辑 → 动效 → 交付）
+- [x] **0.11.0**——_The Bazaar_：在开放中构建——人人都可以挑选和贡献的插件与设计系统社区市场
+- [x] **0.12.0**——_品牌设计系统_：把你已经拥有的品牌变成可复用、可移植的 `DESIGN.md` 系统
+- [x] **0.13.0**——_Stay in Flow_：原生会话恢复、更快的模型选择、直接导出截图支撑的 PPTX / PDF
+- [x] 打包 Electron 构建——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（可选通道）
+- [ ] 评论模式精确编辑——部分已发布，可靠的定向补丁进行中
+- [ ] AI 输出的调参面板 UX——尚未实现
+- [ ] `npx od init` 脚手架创建带 `DESIGN.md` 的项目
+- [ ] 插件 SDK + `od plugin {add,list,remove,test,publish}` CLI
+- [ ] Figma / Pencil → React / Next / Vue 迁移插件（alpha）
+- [ ] 刷新现有代码库插件（指向 git 仓库 + `DESIGN.md`）
+
+分阶段交付 → [`docs/roadmap.md`](../../docs/roadmap.md)。
+
+---
+
+## 社区
+
+每个渠道背后都是真实的人。
+
+- 💬 **Discord**——日常聊天、插件分享、提问 → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
+- 🐦 **X / Twitter**——发版说明、里程碑、幕后 → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
+- 🗣️ **GitHub Discussions**——深度问答、RFC、"展示你的作品" → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
+- 🐛 **GitHub Issues**——Bug 报告、功能请求 → [**Issues**](https://github.com/nexu-io/open-design/issues)
+
+[`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 和 [`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) 标签是最简单的入门方式。
+
+---
+
+## 贡献
+
+OpenDesign 之所以持续前进，是因为贡献者——设计师、工程师、提示词作者——不断出现。许多最常用的技能、设计系统和插件都由核心团队以外的人编写。
+
+### 🎯 从哪里开始（最大杠杆，最小改动）
+
+| 想要交付…… | 怎么做 | 在哪里 |
+|---|---|---|
+| 一个新的**技能** | 放入包含 `SKILL.md` + `assets/` + `references/` 的文件夹 | [`skills/`](../../skills/) · 规范在 [`docs/skills-protocol.md`](../../docs/skills-protocol.md) |
+| 一个新的**设计系统** | 放入以 `DESIGN.md` 为核心的包；按需添加 `manifest.json`、`tokens.css`、组件、资产或来源信息 | [`design-systems/<brand>/`](../../design-systems/) |
+| 一个新的**插件** | 在分类文件夹下放入 `open-design.json` + 对应类型的载荷 | [`plugins/community/`](../../plugins/community/) · 规范在 [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md) · Agent 开发指南在 [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md) |
+| 支持新的**编码 Agent CLI** | 一个运行时定义 + 注册项；仅新 wire format 需要 parser | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) |
+| 修复 Bug 或打磨 UI | 浏览 [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) 标签 | [Issues →](https://github.com/nexu-io/open-design/issues) |
+| 翻译文档 | 更新 `README.<lang>.md` 文件 | [`TRANSLATIONS.md`](../../TRANSLATIONS.md) |
+
+### 🤖 作为 Agent 贡献
+
+如果*你就是正在阅读这段文字的 Agent*，最快的路径是：
+
+```bash
+# 1. 本地启动
+git clone https://github.com/nexu-io/open-design.git
+cd open-design && corepack enable && pnpm install
+pnpm tools-dev run web
+
+# 2. 找到一个 good-first-issue 并分配给自己
+gh issue list --label "good first issue" --state open --limit 20
+gh issue develop <number>   # 创建分支和 worktree
+
+# 3. 做出改动，运行检查
+pnpm guard && pnpm typecheck
+pnpm --filter @open-design/<package> test
+
+# 4. 提交 PR
+gh pr create --fill
+```
+
+完整的 Agent 友好贡献流程、代码风格和 PR 标准 → [English](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)）。
+
+### 🏅 OpenDesign Fellow 计划
+
+我们正在全球招募 **OpenDesign Fellow**——付费维护者，$1,000 / MR 免费 LLM 额度，官方授权在你所在地区推动增长，以及核心团队审查通道。详情 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 和 [Discord](https://discord.gg/mHAjSMV6gz) 上的公告。
+
+---
+
+## 维护者
+
+他们在日常维护、review 和社区支持里撑起了很多关键工作。
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/Nagendhra-web">
+        <img src="https://github.com/Nagendhra-web.png" width="96" alt="@Nagendhra-web" /><br/>
+        <sub><b>@Nagendhra-web</b></sub>
+      </a><br/>
+      <sub>Maintainer</sub>
+    </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/Sid-Qin">
+        <img src="https://github.com/Sid-Qin.png" width="96" alt="@Sid-Qin" /><br/>
+        <sub><b>@Sid-Qin</b></sub>
+      </a><br/>
+      <sub>Maintainer</sub>
+    </td>
+  </tr>
+</table>
+
+维护者规则、晋升标准和退出协议 → [`MAINTAINERS.md`](../../MAINTAINERS.md)（另有 [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [Português](MAINTAINERS.pt-BR.md)）。
+
+## 贡献者
+
+感谢每一位参与者——代码、文档、反馈、一个精准的 Issue、一个新技能、一个新设计系统。
+
+<a href="https://github.com/nexu-io/open-design/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="OpenDesign 贡献者" />
+</a>
+
+---
+
+## 仓库活跃度
+
+<picture>
+  <img alt="OpenDesign——仓库指标" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+</picture>
+
+上方 SVG 由 [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) 使用 [`lowlighter/metrics`](https://github.com/lowlighter/metrics) 每日重新生成。
+
+---
+
+## 给我们 Star
+
+<p align="center">
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="在 GitHub 上给 OpenDesign 一个 Star — github.com/nexu-io/open-design" width="100%" /></a>
+</p>
+
+如果这为你节省了三十分钟，请给一个 ★。Star 不能当饭吃——但它告诉下一位设计师、Agent 和贡献者，这个实验值得他们关注。一次点击，三秒钟，真实的信号。
+
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign Star 历史" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+  </picture>
+</a>
+
+---
+
+## 参考与渊源
+
+| 项目 | 角色 |
+|---|---|
+| [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | 设计哲学指南针——初级设计师工作流、品牌资产协议、反 AI 泛滥清单、五维评审。 |
+| [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 杂志风格 Web PPT 技能，完整打包在 [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 下。Deck 模式默认技能。 |
+| [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio 系列——15 套 Deck 模板，36 个主题，31 种页面布局，动画运行时，磁力卡片演示模式。 |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 我们借鉴的 UX 模式（流式工件循环、沙箱 iframe、实时 Agent 面板）。 |
+| [`multica-ai/multica`](https://github.com/multica-ai/multica) | 守护进程 + 适配器架构——PATH 扫描 Agent 检测、本地守护进程作为唯一特权进程。 |
+| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 最初 9 节 `DESIGN.md` schema 和 70 个上游衍生系统的历史来源；当前包可在此基础上扩展。 |
+| [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 下新增的 57 个设计技能的来源。 |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 动态图形框架，在 OpenDesign 中作为 `hyperframes-html` 一等公民集成。 |
+| [Claude Code skills][skill] | 我们原样采用的 `SKILL.md` 约定。 |
+
+详细溯源 → [`docs/references.md`](../../docs/references.md)。
+
+[skill]: https://docs.anthropic.com/en/docs/claude-code/skills
+
+## 许可证
+
+Apache-2.0。打包的 `design-templates/guizang-ppt/` 保留其原始 [LICENSE](../../design-templates/guizang-ppt/LICENSE)（MIT，[@op7418](https://github.com/op7418)）。打包的 `design-templates/html-ppt/` 保留其原始 [LICENSE](../../design-templates/html-ppt/LICENSE)（MIT，[@lewislulu](https://github.com/lewislulu)）。打包的 `skills/web-clone/` 保留其原始 [LICENSE](../../skills/web-clone/LICENSE)（MIT，[@Jane-xiaoer](https://github.com/Jane-xiaoer)）。

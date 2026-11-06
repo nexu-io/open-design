@@ -1,0 +1,818 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import express from 'express';
+import type { NextFunction, Request, Response } from 'express';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  allowedBrowserPorts,
+  configuredAllowedInternalHosts,
+  configuredAllowedOrigins,
+  isAllowedBrowserOrigin,
+  isLocalSameOrigin,
+  isZeroConfigClipperLibraryRequest,
+} from '../src/origin-validation.js';
+
+type TestRequestOptions = {
+  origin?: string;
+  headers?: http.OutgoingHttpHeaders;
+};
+
+type TestResponse = {
+  status: number | undefined;
+  body: string;
+  headers: http.IncomingHttpHeaders;
+};
+
+function getListeningPort(server: http.Server): number {
+  const address = server.address();
+  if (address == null || typeof address === 'string') {
+    throw new Error('Expected HTTP server to listen on a TCP port');
+  }
+  return (address as AddressInfo).port;
+}
+
+function nearbyValidPort(basePort: number): number {
+  return basePort < 64000 ? basePort + 1000 : basePort - 1000;
+}
+
+function differentValidPort(basePort: number): number {
+  return basePort < 63000 ? basePort + 2000 : basePort - 2000;
+}
+
+function closeServer(server: http.Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error != null) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function createOriginMiddleware(resolvedPort: number, host = '127.0.0.1') {
+  const _NULL_ORIGIN_SAFE_GET_RE =
+    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
+  return (req: Request, res: Response, next: NextFunction) => {
+    // Mirror the real /api middleware: the zero-config clipper bypass runs
+    // first, using the same predicate server.ts uses. `req.path` is
+    // mount-relative here (the `/api` prefix is stripped by app.use('/api')).
+    if (isZeroConfigClipperLibraryRequest(req.method, req.path, req.headers.origin)) {
+      return next();
+    }
+    const origin = req.headers.origin;
+    if (origin == null || origin === '') return next();
+    if (origin === 'null') {
+      const isSafeReadOnly =
+        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
+      if (!isSafeReadOnly) {
+        return res.status(403).json({ error: 'Origin: null not allowed for this route' });
+      }
+      return next();
+    }
+    if (!resolvedPort) {
+      return res.status(403).json({ error: 'Server initializing' });
+    }
+    const ports = allowedBrowserPorts(resolvedPort);
+    const extraAllowedOrigins = configuredAllowedOrigins();
+    if (!isAllowedBrowserOrigin(origin, req.headers.host, ports, host, extraAllowedOrigins)) {
+      return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
+    }
+    next();
+  };
+}
+
+function makeTestApp(port: number, host = '127.0.0.1') {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', createOriginMiddleware(port, host));
+  app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  app.get('/api/projects', (_req, res) => res.json({ projects: [] }));
+  app.post('/api/active', (req, res) => {
+    if (!isLocalSameOrigin(req, port)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    res.json({ active: true });
+  });
+  app.get('/api/projects/:id/raw/:name', (req, res) => {
+    // Mimics the real raw-file route that sets CORS for Origin: null
+    if (req.headers.origin === 'null') {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+    res.json({ file: req.params.name });
+  });
+  app.post('/api/projects', (req, res) => res.json({ project: req.body }));
+  app.post('/api/library/ingest', (req, res) => res.json({ ingested: true }));
+  app.get('/api/library/clipper-probe', (_req, res) => res.json({ ok: true }));
+  app.get('/api/library/assets', (_req, res) => res.json({ assets: [] }));
+  app.get('/api/library/assets/:id/raw', (req, res) => res.type('text/plain').send(req.params.id));
+  app.delete('/api/projects/:id', (req, res) => res.json({ ok: true }));
+  app.get('/api/codex-pets/:id/spritesheet', (req, res) => {
+    // Mimics the real spritesheet route that sets CORS for Origin: null
+    if (req.headers.origin === 'null') {
+      res.header('Access-Control-Allow-Origin', 'null');
+    }
+    res.type('image/png').send(Buffer.from('fake-sprite'));
+  });
+  app.get('/api/asset-cache', (_req, res) => {
+    res.type('image/png').send(Buffer.from('fake-asset'));
+  });
+  return app;
+}
+
+function request(
+  port: number,
+  method: string,
+  path: string,
+  { origin, headers = {} }: TestRequestOptions = {},
+): Promise<TestResponse> {
+  return new Promise((resolve, reject) => {
+    const opts: http.RequestOptions = {
+      hostname: '127.0.0.1',
+      port,
+      path,
+      method,
+      headers: {
+        ...headers,
+        ...(origin !== undefined ? { origin } : {}),
+      },
+    };
+    const req = http.request(opts, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => (body += chunk));
+      res.on('end', () => resolve({ status: res.statusCode, body, headers: res.headers }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+describe('daemon origin validation middleware', () => {
+  let server: http.Server;
+  let port: number;
+
+  beforeAll(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        // Start on port 0 to get a dynamic port, then rebuild with real port
+        const tempApp = makeTestApp(0);
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = getListeningPort(tempServer);
+          tempServer.close(() => {
+            const realApp = makeTestApp(port);
+            server = realApp.listen(port, '127.0.0.1', (err?: Error) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+      }),
+  );
+
+  afterAll(
+    () => closeServer(server),
+  );
+
+  // --- Non-browser clients (no Origin) ---
+
+  it('allows requests without Origin header (curl, CLI)', async () => {
+    const res = await request(port, 'GET', '/api/health');
+    expect(res.status).toBe(200);
+  });
+
+  // --- Same-origin (localhost) ---
+
+  it('allows same-origin requests from http://127.0.0.1', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows same-origin requests from http://localhost', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://localhost:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows same-origin requests via HTTPS', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `https://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows same-origin requests from a private LAN address', async () => {
+    const lanHost = `192.168.18.16:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    '10.0.5.12',
+    '172.16.0.1',
+    '172.31.255.254',
+    '169.254.10.20',
+  ])('allows same-origin requests from private LAN range %s', async (host) => {
+    const lanHost = `${host}:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    '172.15.255.255',
+    '172.32.0.1',
+    '192.168.1.256',
+  ])('blocks non-private or malformed LAN-like address %s', async (host) => {
+    const lanHost = `${host}:${port}`;
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows local guarded routes from a matching private LAN origin', async () => {
+    const lanHost = `192.168.18.16:${port}`;
+    const res = await request(port, 'POST', '/api/active', {
+      origin: `http://${lanHost}`,
+      headers: {
+        Host: lanHost,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks private LAN origins when the request host differs', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: `http://192.168.18.16:${port}`,
+      headers: {
+        Host: `192.168.18.17:${port}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks local guarded routes when the private LAN host differs', async () => {
+    const res = await request(port, 'POST', '/api/active', {
+      origin: `http://192.168.18.16:${port}`,
+      headers: {
+        Host: `192.168.18.17:${port}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks local guarded routes without Origin when Host only matches a configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  it('allows local guarded routes from a matching configured deployment origin', async () => {
+    process.env.OD_ALLOWED_ORIGINS = 'https://od.example.com';
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        origin: 'https://od.example.com',
+        headers: {
+          Host: 'od.example.com',
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  it('allows local guarded routes without Origin when Host matches a configured non-loopback IP origin', async () => {
+    const lanHost = `100.86.154.169:${port}`;
+    process.env.OD_ALLOWED_ORIGINS = `http://${lanHost}`;
+    try {
+      const res = await request(port, 'POST', '/api/active', {
+        headers: {
+          Host: lanHost,
+          'content-type': 'application/json',
+        },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  // --- Origin: null (sandboxed iframe previews) ---
+
+  it('allows Origin: null for GET raw-file preview routes', async () => {
+    const res = await request(port, 'GET', '/api/projects/abc/raw/design.html', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('allows Origin: null for GET codex-pet spritesheet routes', async () => {
+    const res = await request(port, 'GET', '/api/codex-pets/my-pet/spritesheet', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('null');
+  });
+
+  it('allows Origin: null for GET asset-cache routes', async () => {
+    const res = await request(port, 'GET', '/api/asset-cache?url=https%3A%2F%2Fcdn.example.com%2Fhero.webp', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects Origin: null on POST to state-changing endpoints', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: 'null',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Origin: null not allowed for this route' });
+  });
+
+  it('rejects Origin: null on DELETE endpoints', async () => {
+    const res = await request(port, 'DELETE', '/api/projects/abc', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects Origin: null on non-raw-file GET routes', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'null',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows explicitly configured deployment origins', async () => {
+    process.env.OD_ALLOWED_ORIGINS = `https://od.example.com,http://203.0.113.10:${port}`;
+    try {
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: 'https://od.example.com',
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_ALLOWED_ORIGINS;
+    }
+  });
+
+  // --- Cross-origin rejection ---
+
+  it('blocks cross-origin requests from external domains', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: 'http://evil.com',
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Cross-origin requests are not allowed' });
+  });
+
+  it('blocks cross-origin requests from other local ports', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:9999`,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks cross-origin POST to state-changing endpoints', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: 'http://attacker.local',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  // --- OD_WEB_PORT (split-port proxy) ---
+
+  it('allows requests from OD_WEB_PORT (web proxy port)', async () => {
+    const webPort = nearbyValidPort(port);
+    process.env.OD_WEB_PORT = String(webPort);
+    try {
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: `http://127.0.0.1:${webPort}`,
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      delete process.env.OD_WEB_PORT;
+    }
+  });
+
+  it('blocks requests from unknown ports even with OD_WEB_PORT set', async () => {
+    const webPort = nearbyValidPort(port);
+    process.env.OD_WEB_PORT = String(webPort);
+    try {
+      const unknownPort = differentValidPort(port);
+      const res = await request(port, 'GET', '/api/projects', {
+        origin: `http://127.0.0.1:${unknownPort}`,
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      delete process.env.OD_WEB_PORT;
+    }
+  });
+
+  // --- Zero-config OD Clipper bypass for the OD Clipper probe + ingest routes ---
+  //
+  // Regression guard: the bypass predicate runs inside app.use('/api', …),
+  // where Express strips the `/api` mount prefix, so it must match
+  // `/library/...` (NOT `/api/library/...`). If the prefix were wrong, a
+  // first-contact (unpaired) extension hitting /api/library/ingest would fall
+  // through to the global origin validator and get 403 — breaking the
+  // fresh-install capture/import flow.
+
+  it('lets an unpaired browser-extension origin reach /api/library/ingest', async () => {
+    const res = await request(port, 'POST', '/api/library/ingest', {
+      origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ingested: true });
+  });
+
+  it('lets a Firefox extension origin reach /api/library/ingest', async () => {
+    const res = await request(port, 'POST', '/api/library/ingest', {
+      origin: 'moz-extension://11111111-2222-3333-4444-555555555555',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('still blocks an unrelated cross-origin web page from /api/library/ingest', async () => {
+    const res = await request(port, 'POST', '/api/library/ingest', {
+      origin: 'http://evil.com',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toEqual({ error: 'Cross-origin requests are not allowed' });
+  });
+
+  it('does not extend the extension bypass to non-library routes', async () => {
+    const res = await request(port, 'POST', '/api/projects', {
+      origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('lets an unpaired browser-extension origin reach the dedicated clipper probe', async () => {
+    const res = await request(port, 'GET', '/api/library/clipper-probe', {
+      origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop',
+    });
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ok: true });
+  });
+
+  it('still blocks extension origins from library read endpoints', async () => {
+    const origin = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
+    const list = await request(port, 'GET', '/api/library/assets?limit=1', { origin });
+    const raw = await request(port, 'GET', '/api/library/assets/asset-1/raw', { origin });
+
+    expect(list.status).toBe(403);
+    expect(raw.status).toBe(403);
+  });
+
+  // Note: fail-closed coverage when port=0 is tested in the dedicated
+  // describe block below ("fail-closed before port resolution").
+});
+
+describe('isZeroConfigClipperLibraryRequest predicate', () => {
+  // The middleware sees a mount-relative path: GET /api/library/ingest arrives
+  // as /library/ingest. These cases lock in that contract.
+  it('accepts a chrome extension origin on a mount-relative library path', () => {
+    expect(
+      isZeroConfigClipperLibraryRequest('POST', '/library/ingest', 'chrome-extension://abc'),
+    ).toBe(true);
+  });
+
+  it('accepts a moz extension origin on the dedicated probe path', () => {
+    expect(
+      isZeroConfigClipperLibraryRequest('GET', '/library/clipper-probe', 'moz-extension://abc'),
+    ).toBe(true);
+  });
+
+  it('rejects the full /api-prefixed path (prefix is already stripped by the mount)', () => {
+    expect(
+      isZeroConfigClipperLibraryRequest('POST', '/api/library/ingest', 'chrome-extension://abc'),
+    ).toBe(false);
+  });
+
+  it('rejects a non-extension origin even on a library path', () => {
+    expect(isZeroConfigClipperLibraryRequest('POST', '/library/ingest', 'http://evil.com')).toBe(false);
+    expect(isZeroConfigClipperLibraryRequest('POST', '/library/ingest', undefined)).toBe(false);
+  });
+
+  it('rejects an extension origin on a non-library path', () => {
+    expect(isZeroConfigClipperLibraryRequest('POST', '/projects', 'chrome-extension://abc')).toBe(false);
+  });
+
+  it('rejects extension origins on library read paths', () => {
+    expect(isZeroConfigClipperLibraryRequest('GET', '/library/assets', 'chrome-extension://abc')).toBe(false);
+    expect(isZeroConfigClipperLibraryRequest('GET', '/library/assets/a/raw', 'chrome-extension://abc')).toBe(false);
+  });
+});
+
+describe('origin validation: fail-closed before port resolution', () => {
+  let server: http.Server;
+  let port: number;
+
+  beforeAll(
+    () =>
+      new Promise<void>((resolve) => {
+        const app = makeTestApp(0); // port=0 → not resolved
+        server = app.listen(0, '127.0.0.1', () => {
+          port = getListeningPort(server);
+          resolve();
+        });
+      }),
+  );
+
+  afterAll(
+    () => closeServer(server),
+  );
+
+  it('blocks browser origins when port is not resolved (fail-closed)', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('still allows non-browser clients when port is not resolved', async () => {
+    const res = await request(port, 'GET', '/api/health');
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('origin validation: non-loopback bind host', () => {
+  let server: http.Server;
+  let port: number;
+  const nonLoopbackHost = '100.64.1.2'; // Tailscale-like address
+
+  beforeAll(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        // Start on port 0 to get a dynamic port, then rebuild with real port
+        const tempApp = makeTestApp(0, nonLoopbackHost);
+        const tempServer = tempApp.listen(0, '127.0.0.1', () => {
+          port = getListeningPort(tempServer);
+          tempServer.close(() => {
+            const realApp = makeTestApp(port, nonLoopbackHost);
+            server = realApp.listen(port, '127.0.0.1', (err?: Error) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+      }),
+  );
+
+  afterAll(
+    () => closeServer(server),
+  );
+
+  it('allows browser requests from the non-loopback bind host', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://${nonLoopbackHost}:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('still allows localhost origins alongside non-loopback host', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://127.0.0.1:${port}`,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('blocks unknown external origins even with non-loopback host', async () => {
+    const res = await request(port, 'GET', '/api/projects', {
+      origin: `http://evil.com:${port}`,
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+// Regression coverage for #1868. When the daemon runs behind a reverse
+// proxy (Nginx, Caddy, Traefik, …), the Host header the daemon observes
+// is the proxy upstream's address, not the browser-visible origin. The
+// host check inside isLocalSameOrigin therefore rejects requests whose
+// browser origin is explicitly listed in OD_ALLOWED_ORIGINS, because
+// the Host header doesn't carry that origin's host. Trusting the Origin
+// header when it matches an explicit allow-list entry restores the
+// documented escape-hatch behavior of OD_ALLOWED_ORIGINS.
+describe('isLocalSameOrigin: OD_ALLOWED_ORIGINS bypass for reverse-proxy deployments', () => {
+  const ALLOWED = 'http://192.168.8.168:7457';
+  const previousAllowedOrigins = process.env.OD_ALLOWED_ORIGINS;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OD_ALLOWED_ORIGINS: ALLOWED,
+    OD_BIND_HOST: '0.0.0.0',
+  };
+
+  beforeAll(() => {
+    process.env.OD_ALLOWED_ORIGINS = ALLOWED;
+  });
+  afterAll(() => {
+    if (previousAllowedOrigins === undefined) delete process.env.OD_ALLOWED_ORIGINS;
+    else process.env.OD_ALLOWED_ORIGINS = previousAllowedOrigins;
+  });
+
+  it('accepts a request whose Origin matches OD_ALLOWED_ORIGINS even when the Host header is the proxy upstream', () => {
+    const req = {
+      headers: {
+        host: '172.18.0.5:7457', // typical Nginx → daemon upstream (container IP)
+        origin: ALLOWED,
+      },
+    };
+    expect(isLocalSameOrigin(req, 7457, env)).toBe(true);
+  });
+
+  it('still rejects a request whose Origin is not in OD_ALLOWED_ORIGINS', () => {
+    const req = {
+      headers: {
+        host: '172.18.0.5:7457',
+        origin: 'http://evil.example.com',
+      },
+    };
+    expect(isLocalSameOrigin(req, 7457, env)).toBe(false);
+  });
+
+  it('preserves the no-Origin behavior — falls back to loopback host validation', () => {
+    const reqLoopback = {
+      headers: { host: '127.0.0.1:7457' },
+    };
+    expect(isLocalSameOrigin(reqLoopback, 7457, env)).toBe(true);
+
+    const reqNonLoopback = {
+      headers: { host: '172.18.0.5:7457' },
+    };
+    // 172.18.0.0/16 is private, so it actually passes isLoopbackOrPrivateLanHost;
+    // demonstrate the more important invariant: an entirely external host fails.
+    const reqExternal = {
+      headers: { host: 'evil.example.com:7457' },
+    };
+    expect(isLocalSameOrigin(reqExternal, 7457, env)).toBe(false);
+  });
+
+  it('does not accept a partial match (origin must be exact)', () => {
+    const req = {
+      headers: {
+        host: '172.18.0.5:7457',
+        // Same hostname/port but trailing slash → not an exact match for the
+        // allow-list entry, which the URL parser canonicalizes without one.
+        origin: `${ALLOWED}/`,
+      },
+    };
+    expect(isLocalSameOrigin(req, 7457, env)).toBe(false);
+  });
+});
+
+// Firefox and Chrome omit the Origin header on same-origin GET requests per
+// the Fetch spec. When the daemon runs behind a remote-access proxy whose
+// public hostname is listed in OD_ALLOWED_ORIGINS, those legitimate
+// same-origin GETs (e.g. /api/app-config) get rejected by the no-Origin
+// host check because hostname entries in OD_ALLOWED_ORIGINS are only
+// honored via the IP-literal subset in that branch. Sec-Fetch-Site is set
+// by the browser and cannot be modified by JavaScript, so a value of
+// "same-origin" is a trustworthy substitute for the missing Origin header.
+describe('isLocalSameOrigin: Sec-Fetch-Site fallback for no-Origin same-origin GETs', () => {
+  const ALLOWED = 'https://nas.example.ts.net';
+  const previousAllowedOrigins = process.env.OD_ALLOWED_ORIGINS;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    OD_ALLOWED_ORIGINS: ALLOWED,
+    OD_BIND_HOST: '127.0.0.1',
+  };
+
+  beforeAll(() => {
+    process.env.OD_ALLOWED_ORIGINS = ALLOWED;
+  });
+  afterAll(() => {
+    if (previousAllowedOrigins === undefined) delete process.env.OD_ALLOWED_ORIGINS;
+    else process.env.OD_ALLOWED_ORIGINS = previousAllowedOrigins;
+  });
+
+  it('accepts a no-Origin request whose Host matches OD_ALLOWED_ORIGINS when Sec-Fetch-Site is same-origin', () => {
+    const req = {
+      headers: {
+        host: 'nas.example.ts.net',
+        'sec-fetch-site': 'same-origin',
+      },
+    };
+    expect(isLocalSameOrigin(req, 7456, env)).toBe(true);
+  });
+
+  it('still rejects a no-Origin request whose Host matches the allow-list but Sec-Fetch-Site is cross-site', () => {
+    const req = {
+      headers: {
+        host: 'nas.example.ts.net',
+        'sec-fetch-site': 'cross-site',
+      },
+    };
+    expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+
+  it('still rejects a no-Origin request whose Host matches the allow-list but Sec-Fetch-Site is same-site', () => {
+    const req = {
+      headers: {
+        host: 'nas.example.ts.net',
+        'sec-fetch-site': 'same-site',
+      },
+    };
+    expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+
+  it('still rejects a no-Origin request whose Host is foreign even with Sec-Fetch-Site: same-origin (Host alone is forgeable)', () => {
+    const req = {
+      headers: {
+        host: 'evil.example.com',
+        'sec-fetch-site': 'same-origin',
+      },
+    };
+    expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+
+  it('preserves no-Sec-Fetch-Site rejection (older / non-browser clients fall back to host-only check)', () => {
+    const req = {
+      headers: {
+        host: 'nas.example.ts.net',
+      },
+    };
+    expect(isLocalSameOrigin(req, 7456, env)).toBe(false);
+  });
+});
+
+describe('configuredAllowedInternalHosts: OD_ALLOWED_INTERNAL_HOSTS parsing (issue #3225)', () => {
+  it('returns [] when the env var is unset or blank', () => {
+    expect(configuredAllowedInternalHosts({})).toEqual([]);
+    expect(configuredAllowedInternalHosts({ OD_ALLOWED_INTERNAL_HOSTS: '   ' })).toEqual([]);
+  });
+
+  it('splits on commas and whitespace and keeps only the hostname', () => {
+    const env = {
+      OD_ALLOWED_INTERNAL_HOSTS: '10.0.0.5, litellm.internal:4000  https://gw.corp/v1',
+    };
+    expect(configuredAllowedInternalHosts(env)).toEqual([
+      '10.0.0.5',
+      'litellm.internal',
+      'gw.corp',
+    ]);
+  });
+
+  it('lowercases and strips brackets from IPv6 literal entries', () => {
+    const env = { OD_ALLOWED_INTERNAL_HOSTS: '[FD00::1]:4000' };
+    expect(configuredAllowedInternalHosts(env)).toEqual(['fd00::1']);
+  });
+
+  it('warns and skips a malformed entry instead of silently trusting it', () => {
+    const warnings: string[] = [];
+    const env = { OD_ALLOWED_INTERNAL_HOSTS: '10.0.0.5, http://, good.internal' };
+    const hosts = configuredAllowedInternalHosts(env, (m) => warnings.push(m));
+    expect(hosts).toEqual(['10.0.0.5', 'good.internal']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/OD_ALLOWED_INTERNAL_HOSTS/);
+  });
+
+  it('warns and skips a CIDR entry rather than silently narrowing it to one host', () => {
+    const warnings: string[] = [];
+    const env = { OD_ALLOWED_INTERNAL_HOSTS: '10.0.0.0/24, 10.0.0.5' };
+    const hosts = configuredAllowedInternalHosts(env, (m) => warnings.push(m));
+    expect(hosts).toEqual(['10.0.0.5']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/CIDR/i);
+  });
+});

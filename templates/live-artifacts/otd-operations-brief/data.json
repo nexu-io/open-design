@@ -1,0 +1,74 @@
+{
+  "page": {
+    "title": "On-Time Delivery Dashboard",
+    "filters": [
+      { "label": "Date = August 2021" },
+      { "label": "Exchange Rate[From Currency] = \"EUR\"" }
+    ]
+  },
+  "kpis": [
+    {
+      "label": "OTD % (LINES)",
+      "value": "70.0%",
+      "numberClass": "kpi__number",
+      "caption": "August 2021 · EUR"
+    },
+    {
+      "label": "OTD % (LINES) PY",
+      "value": "73.9%",
+      "numberClass": "kpi__number",
+      "caption": "August 2020 · EUR"
+    },
+    {
+      "label": "YOY Δ (PTS)",
+      "value": "-3.9 pts",
+      "numberClass": "kpi__number kpi__number--negative",
+      "caption": "Current – Prior year"
+    },
+    {
+      "label": "OTD (LINES)",
+      "value": "205 698",
+      "numberClass": "kpi__number",
+      "caption": "+5 457 vs PY (200 241)"
+    }
+  ],
+  "byKeyAccount": {
+    "title": "OTD % (LINES) BY KEY ACCOUNT",
+    "rows": [
+      { "name": "Antarctic Corporation", "barFillPct": 83.9, "priorTickPct": 73.9, "valueLabel": "83.9% (PY 73.9%)" },
+      { "name": "Government Contract", "barFillPct": 70.8, "priorTickPct": 75.2, "valueLabel": "70.8% (PY 75.2%)" },
+      { "name": "Pioneering Systems", "barFillPct": 70.2, "priorTickPct": 75.1, "valueLabel": "70.2% (PY 75.1%)" },
+      { "name": "Black Flag Spaceships", "barFillPct": 69.2, "priorTickPct": 75.2, "valueLabel": "69.2% (PY 75.2%)" },
+      { "name": "Macrohard Systems", "barFillPct": 69.0, "priorTickPct": 73.7, "valueLabel": "69.0% (PY 73.7%)" },
+      { "name": "Sigil Interstellar", "barFillPct": 68.7, "priorTickPct": 74.5, "valueLabel": "68.7% (PY 74.5%)" },
+      { "name": "Private Contract", "barFillPct": 68.5, "priorTickPct": 73.0, "valueLabel": "68.5% (PY 73.0%)" },
+      { "name": "No Key Account", "barFillPct": 68.3, "priorTickPct": 73.1, "valueLabel": "68.3% (PY 73.1%)" },
+      { "name": "Aminu Kano Navy", "barFillPct": 68.2, "priorTickPct": 74.1, "valueLabel": "68.2% (PY 74.1%)" },
+      { "name": "Andromeda Shipyards", "barFillPct": 67.5, "priorTickPct": 74.0, "valueLabel": "67.5% (PY 74.0%)" },
+      { "name": "Miller Space", "barFillPct": 67.3, "priorTickPct": 72.3, "valueLabel": "67.3% (PY 72.3%)" },
+      { "name": "Wel Walla Ship Repair", "barFillPct": 67.0, "priorTickPct": 72.6, "valueLabel": "67.0% (PY 72.6%)" },
+      { "name": "Elysium Aerospace", "barFillPct": 66.8, "priorTickPct": 73.0, "valueLabel": "66.8% (PY 73.0%)" },
+      { "name": "Supernova Spaceparts", "barFillPct": 66.1, "priorTickPct": 72.9, "valueLabel": "66.1% (PY 72.9%)" }
+    ],
+    "legend": {
+      "bar": "OTD % (Lines) — Aug 2021",
+      "tick": "Prior year (Aug 2020)",
+      "tierLow": "0-60%",
+      "tierMid": "60-80%",
+      "tierHigh": "80-100%"
+    }
+  },
+  "lowestAccounts": {
+    "title": "LOWEST OTD % ACCOUNTS (≥10 LINES)",
+    "rows": [
+      { "rank": "1", "name": "Błażej Kamieniarz",      "otdLabel": "35.9%", "barFillPct": 59.83, "lines": "14" },
+      { "rank": "2", "name": "Danielle Bailly",        "otdLabel": "40.7%", "barFillPct": 67.83, "lines": "11" },
+      { "rank": "3", "name": "The Ruby Black Hole",    "otdLabel": "43.5%", "barFillPct": 72.50, "lines": "10" },
+      { "rank": "4", "name": "Hagalbar's Carriers",    "otdLabel": "44.4%", "barFillPct": 74.00, "lines": "12" },
+      { "rank": "5", "name": "Rosalinda's Reparations","otdLabel": "44.8%", "barFillPct": 74.67, "lines": "13" },
+      { "rank": "6", "name": "Black Exports",          "otdLabel": "45.2%", "barFillPct": 75.33, "lines": "14" },
+      { "rank": "7", "name": "The Emerald Prospector", "otdLabel": "46.5%", "barFillPct": 77.50, "lines": "20" },
+      { "rank": "8", "name": "Kelly's Planets",        "otdLabel": "47.6%", "barFillPct": 79.33, "lines": "10" }
+    ]
+  }
+}

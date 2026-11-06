@@ -1,0 +1,645 @@
+import {
+  APP_KEYS,
+  SIDECAR_MESSAGES,
+  SIDECAR_MODES,
+  SIDECAR_SOURCES,
+  type SidecarSource,
+} from "@open-design/sidecar-proto";
+import {
+  readLauncherHost,
+  parseLauncherAfterQuitArgs,
+  parseLauncherDelegatedArgs,
+  parseLauncherHandoffResumeArgs,
+} from "@open-design/launcher-proto";
+import {
+  adoptSidecarProcess,
+  bootstrapSidecarProcess,
+  isCurrentSidecarLauncher,
+  readCurrentSidecarStamp,
+  registerSidecarProcess,
+  resolveSidecarLauncherExitCode,
+  SidecarFactory,
+  type SidecarClient,
+  type SidecarRuntimeContext,
+  type SidecarStamp,
+} from "@open-design/sidecar";
+import {
+  recordIncomingUpdateLifecycle,
+  applyLoopbackConnectionLimitSwitch,
+  applyOsLocaleSwitch,
+  createSplashWindow,
+  setSplashStage,
+  createDesktopStartupTiming,
+  type StartupTiming,
+  type DesktopMainHandle,
+} from "@open-design/desktop/main";
+import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
+import { join } from "node:path";
+import { app, dialog } from "electron";
+
+import { readPackagedConfig } from "./config.js";
+import {
+  claimPackagedDownloadAttribution,
+  discoverPackagedDownloadAttribution,
+} from "./download-attribution.js";
+import {
+  parsePackagedHeadlessRequest,
+  resolvePackagedMcpBootstrapLaunch,
+  runPackagedMcpActionAgainstExistingDaemon,
+} from "./headless-runtime.js";
+import { PackagedPathAccessError } from "./errors.js";
+import {
+  exitPackagedLauncherForExistingDesktop,
+  findExistingPackagedDesktopOwner,
+  inspectExistingDesktopForLauncher,
+  waitForLauncherAfterQuit,
+} from "./launcher-after-quit.js";
+import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
+import {
+  applyPackagedElectronPathOverrides,
+  claimPackagedSingleInstanceLock,
+  createPackagedSecondInstanceHandoff,
+  ensurePackagedNamespacePaths,
+  stabilizePackagedWorkingDirectory,
+} from "./launch.js";
+import {
+  attachPackagedDesktopProcessLogging,
+  createPackagedDesktopLogger,
+  type PackagedDesktopLogger,
+} from "./logging.js";
+import { resolvePackagedNamespacePaths } from "./paths.js";
+import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
+import {
+  createDeferredDesktopController,
+  isPackagedManagedLaunch,
+  isPackagedPayloadDelegation,
+  markPackagedManagedOuter,
+  supportsDeferredHeadlessDesktop,
+  watchUserDesktopIntent,
+} from "./managed-headless.js";
+import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
+import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
+import { resolvePackagedElectronNodeCommand, startPackagedSidecars } from "./sidecars.js";
+import { classifyStartupFailure, reportLaunchEvent, reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
+import { resolvePackagedWindowTitle } from "./window-title.js";
+import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
+
+let packagedLogger: PackagedDesktopLogger | null = null;
+let packagedStartupTiming: StartupTiming | null = null;
+const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
+
+// Telemetry context for the fatal-exit path. Populated once config + launcher
+// runtime are resolved so the `main().catch` below can report a startup failure
+// even though the daemon (the PostHog host) never came up. Null until then —
+// failures earlier than config resolution simply skip telemetry. See
+// `startup-telemetry.ts` for the zero-startup-side-effect contract.
+let startupTelemetryContext:
+  | {
+      posthogKey: string | null;
+      posthogHost: string | null;
+      appVersion: string | null;
+      namespace: string;
+      source: string;
+      installationRoot: string;
+      nativeModulePath: string | null;
+      channel: string;
+      dataRoot: string;
+    }
+  | null = null;
+
+async function reportPackagedLaunch(event: Parameters<typeof reportLaunchEvent>[0]["event"], properties: Record<string, unknown>) {
+  if (startupTelemetryContext) await reportLaunchEvent({ ...startupTelemetryContext, event, properties });
+}
+
+function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
+  if (updateMetadataUrl == null) return;
+  if (process.env.OD_UPDATE_METADATA_URL != null && process.env.OD_UPDATE_METADATA_URL.length > 0) return;
+  process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
+}
+
+async function main(): Promise<void> {
+  const config = await readPackagedConfig();
+  const headlessRequest = parsePackagedHeadlessRequest(process.argv.slice(1));
+
+  // Must run BEFORE `app.whenReady()` below, because Chromium consumes
+  // `--lang` at session bootstrap. Doing it here lets the packaged
+  // renderer's `navigator.language` follow the OS instead of Chromium's
+  // en-US default. runDesktopMain (called later) calls the same helper
+  // again to recover the resolved locale string for the BrowserWindow.
+  applyOsLocaleSwitch(app);
+  // Must also land before whenReady — see the helper's docblock for the
+  // connection-pool deadlock it prevents (electron/electron#47097).
+  applyLoopbackConnectionLimitSwitch(app);
+  // Belt-and-braces duplicate of the helper above: the packaged outer
+  // shell can outlive auto-updates that only refresh inner resources, so
+  // the deadlock fix must not depend on which desktop build the shell
+  // happens to bundle. appendSwitch is idempotent for the same key.
+  app.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+  // 关掉内层滚动容器的橡皮筋回弹(产品裁决 2026-09-07:「直接关掉」)。
+  //
+  // ## 为什么
+  //
+  // Electron 40 → 41 把 Chromium 从 144 跳到 **146,整个跳过了 145**,而
+  // `kOverscrollEffectOnNonRootScrollers` 的默认值正好在 145 从 DISABLED 翻成
+  // ENABLED(已拉 branch-heads/7559 与 7680 的 `cc/base/features.cc` 逐字核实)。
+  // 它管的是「非根滚动容器撞到滚动边界时怎么表现」——145 之前只有整页会弹,
+  // 之后聊天区这类内层容器也会弹。
+  //
+  // 我们在追的缺陷是:聊天区的滚动范围被**永久冻**在某个早期内容高度上,
+  // 布局全对、JS 程序性滚动能到底,但**滚轮和键盘都到不了**(scroll unification
+  // 之后两者都走合成器)。位置(滚动边界)、平台(macOS 弹性 overscroll)、
+  // 版本窗口三样都对得上。
+  //
+  // ⚠️ **这是缓解不是根治**:合成页面 89 个用例没能复现,因果链没有建立。
+  // 判据仍然是 `client_chat_scroll_frozen` 的事件量 —— 带着这一行还在报,
+  // 说明这条线错了,该把这两个 feature 放回去再找别的。
+  //
+  // ## 代价
+  //
+  // macOS 上所有内层滚动区失去橡皮筋回弹(整页仍然弹)。产品知情并选择了它 ——
+  // 相对「滚不动」这个代价可以接受。
+  //
+  // 必须在 whenReady 之前:Chromium 在会话初始化时就消费这些开关。
+  app.commandLine.appendSwitch(
+    "disable-features",
+    "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
+  );
+
+  const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
+  const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
+  const delegated = parseLauncherDelegatedArgs(process.argv.slice(1));
+  const convergedArgvStamp = (() => {
+    try { return readCurrentSidecarStamp(); } catch { return null; }
+  })();
+  const namespace = convergedArgvStamp?.namespace ?? config.namespace;
+  const namespaceConfig = namespace === config.namespace ? config : { ...config, namespace };
+  const initialPaths = resolvePackagedNamespacePaths(namespaceConfig, namespace, process.env);
+  const launchStamp: SidecarStamp = {
+    app: APP_KEYS.DESKTOP,
+    channel: convergedArgvStamp?.channel
+      ?? releaseChannelFromVersion(namespaceConfig.appVersion)
+      ?? releaseChannelFromNamespace(namespace, "default")
+      ?? "stable",
+    mode: headlessRequest.headless ? "headless" : SIDECAR_MODES.RUNTIME,
+    namespace,
+    source: convergedArgvStamp?.source ?? SIDECAR_SOURCES.PACKAGED,
+  };
+  if (await runPackagedMcpActionAgainstExistingDaemon(headlessRequest, launchStamp)) {
+    app.exit(0);
+    return;
+  }
+  if (headlessRequest.mcpInstallAgent != null) {
+    const existingOwner = await findExistingPackagedDesktopOwner(launchStamp, {
+      modes: [SIDECAR_MODES.RUNTIME, "headless"],
+    });
+    if (existingOwner != null) {
+      throw new Error(
+        `Cannot install MCP while the existing ${existingOwner.stamp.mode} desktop runtime has no healthy daemon. Quit Open Design and retry.`,
+      );
+    }
+  }
+  // An updater successor must outlive its predecessor before discovering or
+  // bootstrapping a desktop in the same namespace. Otherwise it can focus
+  // the quitting predecessor and exit as an ordinary duplicate launch.
+  const incomingObservation = { root: initialPaths.installerObservationRoot, namespace,
+    channel: launchStamp.channel, version: namespaceConfig.appVersion };
+  if (!headlessRequest.headless && afterQuit != null) {
+    await recordIncomingUpdateLifecycle(incomingObservation, { stage: "predecessor_wait_started", outcome: "started" });
+  }
+  if (!headlessRequest.headless && !await waitForLauncherAfterQuit(afterQuit, initialPaths, console, {},
+    afterQuit == null ? undefined : (event) => recordIncomingUpdateLifecycle(incomingObservation, event))) {
+    app.exit(1);
+    return;
+  }
+  const oppositeDesktop = await inspectExistingDesktopForLauncher(launchStamp, {
+    deeplinkUrl: findPackagedDeeplinkArg(process.argv),
+    logger: console,
+    modes: [
+      headlessRequest.headless ? SIDECAR_MODES.RUNTIME : "headless",
+      ...(
+        convergedArgvStamp == null || isCurrentSidecarLauncher()
+          ? [launchStamp.mode]
+          : []
+      ),
+    ],
+    paths: initialPaths,
+  });
+  if (exitPackagedLauncherForExistingDesktop(oppositeDesktop, (code) => app.exit(code))) {
+    return;
+  }
+  const launcherHost = readLauncherHost();
+  const generationResources = {
+    dataRoot: initialPaths.dataRoot,
+    ownerPid: null,
+    port: 0,
+    runtimeRoot: initialPaths.runtimeRoot,
+  };
+  // A launcher-hosted process IS the app for the whole session: adopt it
+  // as the generation target instead of spawning a second process. A deferred
+  // headless (MCP) runtime is adopted too, so restoring its window later happens
+  // in this same LaunchServices process.
+  if (launcherHost != null && (!headlessRequest.headless || supportsDeferredHeadlessDesktop(headlessRequest))) {
+    const command = await resolvePackagedElectronNodeCommand();
+    if (command === process.execPath) throw new Error("hosted launcher requires a background Electron helper");
+    await adoptSidecarProcess(launchStamp, generationResources, { command });
+  } else if (await bootstrapSidecarProcess(launchStamp, generationResources)) {
+    app.exit(0);
+    return;
+  }
+  const existingDesktop = await inspectExistingDesktopForLauncher(launchStamp, {
+    deeplinkUrl: findPackagedDeeplinkArg(process.argv),
+    incomingVersion: namespaceConfig.appVersion,
+    logger: console,
+    paths: initialPaths,
+  });
+  if (exitPackagedLauncherForExistingDesktop(existingDesktop, (code) => app.exit(code))) {
+    return;
+  }
+  // On macOS a headless runtime runs the full desktop path with its window
+  // deferred, so the same process can become the desktop when the user opens
+  // the app (see managed-headless.ts). Elsewhere headless keeps its own entry.
+  const deferredHeadless = supportsDeferredHeadlessDesktop(headlessRequest);
+  if (headlessRequest.headless && !deferredHeadless) {
+    const { runPackagedHeadless } = await import("./headless-runtime.js");
+    await runPackagedHeadless(config, headlessRequest);
+    return;
+  }
+  const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths, {
+    // A hosting launcher's selection is authoritative for this process.
+    host: launcherHost,
+    delegated,
+    resume: handoffResume,
+  });
+  if (isPackagedPayloadDelegation(launcherRuntime)) markPackagedManagedOuter();
+  if (await launchPackagedPayloadDesktop(launcherRuntime, deferredHeadless ? { extraArgs: ["--headless"] } : {})) {
+    app.exit(0);
+    return;
+  }
+  const activeConfig = launcherRuntime.config;
+  const paths = launcherRuntime.paths;
+  const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
+    installedLaunchPath: launcherRuntime.installedLaunchPath,
+    managed: launcherHost != null || isPackagedManagedLaunch(launcherRuntime),
+  });
+
+  // Arm fatal-exit telemetry now that we know the channel key/version. The
+  // startPackagedSidecars call below is THE failure this covers (daemon/web
+  // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
+  startupTelemetryContext = {
+    dataRoot: paths.dataRoot,
+    channel: launchStamp.channel,
+    posthogKey: activeConfig.posthogKey,
+    posthogHost: activeConfig.posthogHost,
+    appVersion: activeConfig.appVersion,
+    namespace,
+    source: convergedArgvStamp?.source ?? SIDECAR_SOURCES.PACKAGED,
+    // Pass installationRoot explicitly: OD_INSTALLATION_DIR is only set in the
+    // daemon child env, not this parent process (see startup-telemetry.ts).
+    installationRoot: paths.installationRoot,
+    // Absolute path where the daemon's better-sqlite3 binding ships in the
+    // packaged bundle (`Contents/Resources/app/node_modules/...` — layout
+    // verified against the shipped 0.13.0 DMG). The fatal-exit report probes
+    // this to record whether the .node actually exists on the crashing machine.
+    nativeModulePath: join(
+      app.getAppPath(),
+      "node_modules",
+      "better-sqlite3",
+      "build",
+      "Release",
+      "better_sqlite3.node",
+    ),
+  };
+
+  // Helper/delegating/headless-only processes are excluded. Node's origin
+  // includes ESM/config work in this process, but not an earlier OS click or
+  // a separate installed launcher process. Early events wait for identity.
+  if (!deferredHeadless) {
+    packagedStartupTiming = createDesktopStartupTiming({ appVersion: activeConfig.appVersion, startupType: "cold" });
+    packagedStartupTiming.mark("runtime_resolved");
+  }
+
+  await ensurePackagedNamespacePaths(paths);
+  const convergedStamp = launchStamp;
+  registerSidecarProcess(convergedStamp, {
+    dataRoot: paths.dataRoot,
+    ownerPid: null,
+    port: 0,
+    runtimeRoot: paths.runtimeRoot,
+  });
+  stabilizePackagedWorkingDirectory(paths);
+  const downloadAttribution = await discoverPackagedDownloadAttribution(paths, console).catch((error: unknown) => {
+    console.warn("[attribution] failed to discover packaged download attribution", error);
+    return null;
+  });
+  packagedLogger = createPackagedDesktopLogger(paths);
+  attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp: convergedStamp });
+  const retireObsoleteInstalledOuter = createObsoleteInstalledOuterRetirement({
+    currentExecutablePath: process.execPath,
+    currentPid: process.pid,
+    installedLaunchPath: launcherRuntime.installedLaunchPath,
+    logger: packagedLogger,
+    payloadDesktopProcess: launcherRuntime.payloadDesktopProcess,
+    payloadExecutablePath: launcherRuntime.desktopExecutablePath,
+    platform: process.platform,
+  });
+  applyPackagedElectronPathOverrides(paths);
+  // The shared beta feed can replace the entire outer with an unbound build.
+  // Use the existing updater gate for this fixed-environment dogfood package.
+  if (activeConfig.amrEndpointBinding) process.env.OD_UPDATE_ENABLED = "0";
+  applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
+  let pendingDesktopIntent = false;
+  let restoreDeferredDesktop: (() => void) | null = null;
+  const requestDeferredDesktop = () => {
+    if (restoreDeferredDesktop == null) pendingDesktopIntent = true;
+    else restoreDeferredDesktop();
+  };
+  if (launcherHost != null) {
+    launcherHost.onSecondInstance(argv => {
+      secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
+      if (deferredHeadless && !argv.includes("--headless")) requestDeferredDesktop();
+    });
+  } else if (!claimPackagedSingleInstanceLock(app, (argv) => {
+    secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
+  })) {
+    return;
+  }
+  await app.whenReady();
+const electronReadyAtMs = performance.now();
+  packagedStartupTiming?.mark("electron_ready");
+  // Preserve a user's Dock/Finder open while daemon/web startup is pending.
+  if (deferredHeadless && launcherHost != null) watchUserDesktopIntent(app, requestDeferredDesktop);
+
+  // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
+  // below. Cold boot otherwise leaves the user staring at no window at all for
+  // the few seconds the sidecars take to come up; putting the animation on
+  // screen in parallel masks that gap, and the runtime keeps it up until the
+  // real app has mounted (see createDesktopRuntime). The handle carries the
+  // creation timestamp so the runtime's minimum-hold timer counts from here —
+  // BEFORE the sidecar boot below — rather than re-adding the delay afterwards.
+  // A deferred headless runtime shows nothing until the user opens the app.
+  let splash: ReturnType<typeof createSplashWindow> | null = deferredHeadless ? null : createSplashWindow();
+
+  const runtime = {
+    app: APP_KEYS.DESKTOP,
+    base: paths.runtimeRoot,
+    mode: SIDECAR_MODES.RUNTIME,
+    namespace,
+    source: convergedStamp.source as SidecarSource,
+  } satisfies SidecarRuntimeContext<SidecarStamp>;
+  // The daemon/web peers belong to this process's generation, whose mode is
+  // `headless` for a deferred headless runtime: launchers inspect the peers in
+  // the owner's mode, and MCP registrations address them by that mode.
+  const sidecarRuntime: SidecarRuntimeContext<SidecarStamp> = { ...runtime, mode: convergedStamp.mode };
+
+  const sidecars = await startPackagedSidecars(sidecarRuntime, paths, {
+    launchContext: packagedStartupTiming?.context(),
+    appVersion: activeConfig.appVersion,
+    amrProfile: activeConfig.amrProfile,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
+    daemonCliEntry: activeConfig.daemonCliEntry,
+    daemonSidecarEntry: activeConfig.daemonSidecarEntry,
+    electronNodeCommand: launcherRuntime.electronNodeCommand,
+    mcpBootstrapArgs: mcpBootstrap.args,
+    mcpBootstrapCommand: mcpBootstrap.command,
+    nodeCommand: activeConfig.nodeCommand,
+    telemetryRelayUrl: activeConfig.telemetryRelayUrl,
+    posthogKey: activeConfig.posthogKey,
+    posthogHost: activeConfig.posthogHost,
+    velaWebUrl: activeConfig.velaWebUrl,
+    velaWebUrls: activeConfig.velaWebUrls,
+    // PR #974 round-5 (lefarcen P2): the Electron entry runs desktop
+    // main alongside the daemon, so the import-folder gate must be
+    // pinned ON from request 0. See `apps/packaged/src/headless-runtime.ts`
+    // for the windowless counterpart that passes `false`. A deferred
+    // headless runtime has no desktop bridge until it is restored; the
+    // gate then activates when desktop main registers its secret.
+    requireDesktopAuth: !deferredHeadless,
+    webSidecarEntry: activeConfig.webSidecarEntry,
+    webStandaloneRoot: activeConfig.webStandaloneRoot,
+    webOutputMode: activeConfig.webOutputMode,
+    // Surface each sidecar boot phase on the splash status line so a slow
+    // cold start (Defender scans, native module loads) never reads as a hang.
+    // Both the "spawning" and "ready" edges are mapped so the step counter
+    // advances the instant each long native wait clears.
+    onPhase(phase) {
+      // Launch events stay buffered on the tracker until desktop main arms the
+      // daemon-backed reporter, so attempt/ready/result share one delivery path
+      // and one installation identity (OPEND-4220). The direct packaged
+      // reporter is reserved for the fatal path below, where no daemon exists.
+      packagedStartupTiming?.mark(phase === "daemon-spawning" ? "daemon_spawning"
+        : phase === "daemon-ready" ? "daemon_ready" : phase === "web-spawning" ? "web_spawning" : "web_ready");
+      const stage =
+        phase === "daemon-spawning"
+          ? "engine"
+          : phase === "daemon-ready"
+            ? "engineReady"
+            : phase === "web-spawning"
+              ? "interface"
+              : "interfaceReady";
+      setSplashStage(splash?.window ?? null, stage);
+    },
+  });
+  if (sidecars.daemon.url) {
+    void claimPackagedDownloadAttribution({
+      attribution: downloadAttribution,
+      daemonUrl: sidecars.daemon.url,
+      installerObservationRoot: paths.installerObservationRoot,
+      logger: packagedLogger,
+    });
+  }
+  // Sidecars are up; the remaining wait is the hidden main window loading and
+  // mounting the web bundle (the runtime re-asserts this stage at its reveal
+  // gate, which is a no-op when the label is already current).
+  setSplashStage(splash?.window ?? null, "workspace");
+  // Resolve the web sidecar address per request instead of freezing it here.
+  // The restart supervisor may bind a fresh ephemeral port, while a temporary
+  // lack of a target should surface as the protocol layer's structured 503.
+  const odProtocol = registerOdProtocol(() => sidecars.currentWebUrl());
+
+  const { runDesktopMain } = await import("@open-design/desktop/main");
+  let desktopHandle: DesktopMainHandle | null = null;
+  const invokeDesktop = async (action: string, input: unknown) => {
+    if (desktopHandle == null) throw new Error("packaged desktop sidecar is not running");
+    return await desktopHandle.invoke(action, input);
+  };
+  const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
+    electronReadyAtMs,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
+    startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
+    splashWindow: splash?.window,
+    splashStartedAt: splash?.startedAt,
+    async beforeShutdown(record) {
+      try {
+        await retireObsoleteInstalledOuter();
+      } finally {
+        await sidecars.close(record);
+      }
+    },
+    quiesceRendererTransport() {
+      odProtocol.quiesce();
+    },
+    async discoverWebUrl() {
+      return packagedEntryUrl();
+    },
+    // Round-7 (lefarcen P2 @ runtime.ts:336): packaged main-process
+    // fetch targets the daemon sidecar's real http URL — never the
+    // od://app/ renderer URL, which Node/undici cannot resolve through
+    // Electron's protocol handler.
+    async discoverDaemonUrl() {
+      return sidecars.daemon.url;
+    },
+    registerDesktopAuth: async (secret) => {
+      try {
+        const result = await client.invoke<{ accepted: true }>(
+          APP_KEYS.DAEMON,
+          "register-desktop-auth",
+          { secret: secret.toString("base64") },
+          { timeoutMs: 800 },
+        );
+        return result.accepted === true;
+      } catch {
+        return false;
+      }
+    },
+    windowTitle: resolvePackagedWindowTitle(activeConfig),
+    inviteProtocolClientPath:
+      process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
+    async onExternalShow() {
+      await retireObsoleteInstalledOuter();
+    },
+    onDesktopReady(controls) {
+      void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+        packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+      });
+      void syncWindowsUninstallDisplayVersion({
+        namespace,
+        version: launcherRuntime.config.appVersion,
+      }).catch((error: unknown) => {
+        packagedLogger?.warn("failed to sync Windows uninstall registry version", { error });
+      });
+      secondInstanceHandoff.attach({
+        dispatchDeeplink: controls.dispatchInviteDeeplink,
+        show: controls.show,
+      });
+    },
+    preloadPath: join(app.getAppPath(), "preload.cjs"),
+    update: {
+      currentVersion: activeConfig.appVersion,
+      downloadRoot: paths.updateRoot,
+      installerObservationRoot: paths.installerObservationRoot,
+      launcherLaunchPath: launcherRuntime.installedLaunchPath,
+      launcherRoot: launcherRuntime.launcherPaths.root,
+      launcherPayloadExtractorPath: activeConfig.resourceRoot == null ? null : join(activeConfig.resourceRoot, "bin", "7z.exe"),
+      launcherRuntimePath: launcherRuntime.launcherPaths.runtimePath,
+    },
+  });
+  const deferredDesktop = deferredHeadless
+    ? createDeferredDesktopController({
+      headlessStatus: () => ({
+        pid: process.pid,
+        state: "running",
+        updatedAt: new Date().toISOString(),
+        url: sidecars.currentWebUrl(),
+      }),
+      launch: async () => {
+        splash = createSplashWindow();
+        return await launchDesktop();
+      },
+      onRestoreFailed: (error) => {
+        packagedLogger?.error("failed to restore desktop from headless runtime", { error });
+        if (splash != null && !splash.window.isDestroyed()) splash.window.destroy();
+        splash = null;
+        dialog.showErrorBox(
+          "Open Design",
+          "Open Design could not open its window. Quit Open Design from the Dock and open it again.",
+        );
+      },
+      stopHeadless: async () => { await sidecars.close(); },
+    })
+    : null;
+  let client!: SidecarClient<DesktopMainHandle>;
+  client = SidecarFactory.create<DesktopMainHandle>({
+    handlers: Object.fromEntries([
+      SIDECAR_MESSAGES.CLICK,
+      SIDECAR_MESSAGES.CONSOLE,
+      SIDECAR_MESSAGES.EVAL,
+      SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+      SIDECAR_MESSAGES.EXPORT_PDF,
+      SIDECAR_MESSAGES.RENDER_FRAMES,
+      SIDECAR_MESSAGES.RENDER_SLIDES,
+      SIDECAR_MESSAGES.SCREENSHOT,
+      SIDECAR_MESSAGES.SHOW,
+      SIDECAR_MESSAGES.UPDATE,
+    ].map((action) => [action, (input: unknown) => invokeDesktop(action, input)])),
+    lifecycle: {
+      async start() {
+        const started = deferredDesktop ?? await launchDesktop();
+        desktopHandle = started;
+        return started;
+      },
+      status: (started) => started.status(),
+      async stop(started) {
+        await started.stop();
+        desktopHandle = null;
+      },
+    },
+  });
+  await client.start();
+
+  if (deferredDesktop != null) {
+    restoreDeferredDesktop = () => { void deferredDesktop.restore().catch(() => undefined); };
+    launcherHost?.onSecondInstance(argv => {
+      if (argv.includes("--headless")) return;
+      secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
+      void deferredDesktop.restore().catch(() => undefined);
+    });
+    // A deferred headless runtime is a successful launch of this generation.
+    void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
+      packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
+    });
+    if (launcherHost == null) {
+      watchUserDesktopIntent(app, restoreDeferredDesktop);
+    } else if (pendingDesktopIntent) restoreDeferredDesktop();
+  }
+}
+
+void main().catch(async (error: unknown) => {
+  const isPathAccess = error instanceof PackagedPathAccessError;
+  if (packagedStartupTiming != null) {
+    packagedStartupTiming.setReporter(reportPackagedLaunch);
+    packagedStartupTiming.finish("failed", classifyStartupFailure(error, isPathAccess).failureKind);
+  }
+  if (isPathAccess) {
+    try {
+      dialog.showErrorBox(error.title, error.message);
+    } catch {
+      // Fall through to console logging + process exit.
+    }
+  }
+  packagedLogger?.error("packaged runtime failed", { error });
+  console.error("packaged runtime failed", error);
+  // Best-effort crash telemetry on the way out. This is the ONLY new behavior
+  // on the failure path; the happy path never reaches here. reportStartupFailure
+  // self-caps its runtime (Promise.race timeout) and swallows all errors, so it
+  // can neither block nor crash the exit. No-op when telemetry isn't armed yet
+  // or the build has no PostHog key.
+  if (startupTelemetryContext) {
+    await reportStartupFailure({
+      error,
+      isPathAccess,
+      dataRoot: startupTelemetryContext.dataRoot,
+      launchContext: packagedStartupTiming?.context(),
+      posthogKey: startupTelemetryContext.posthogKey,
+      posthogHost: startupTelemetryContext.posthogHost,
+      distinctId: resolveStartupDistinctId(
+        startupTelemetryContext.namespace,
+        startupTelemetryContext.installationRoot,
+      ),
+      appVersion: startupTelemetryContext.appVersion,
+      namespace: startupTelemetryContext.namespace,
+      source: startupTelemetryContext.source,
+      nativeModulePath: startupTelemetryContext.nativeModulePath,
+    });
+  }
+  process.exit(resolveSidecarLauncherExitCode(error));
+});

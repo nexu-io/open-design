@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Acme Landing — Annotated Wireframe (Redline)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f7f7f8;
+      --card: #ffffff;
+      --block: #e3e3e6;
+      --block-dk: #d4d4d9;
+      --rule: #c9c9cf;
+      --ink: #1c1b1a;
+      --pencil: #6b6a70;
+      --accent: #d8482b;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 14px/1.5 var(--sans);
+    }
+    .page { padding: 28px 32px 44px; max-width: 1320px; margin: 0 auto; }
+
+    /* ---- header ---- */
+    .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); margin-bottom: 22px; flex-wrap: wrap; }
+    .head h1 { font: 700 22px/1.1 var(--sans); margin: 0; letter-spacing: -0.01em; }
+    .head .tag { display: inline-flex; align-items: center; gap: 7px; font: 600 11px/1 var(--mono); padding: 6px 10px; border: 1.5px solid var(--accent); color: var(--accent); letter-spacing: 0.16em; border-radius: 4px; }
+    .head .tag .sq { width: 7px; height: 7px; background: var(--accent); transform: rotate(45deg); }
+    .head .meta { font: 11px/1.4 var(--mono); color: var(--pencil); letter-spacing: 0.12em; text-transform: uppercase; text-align: right; }
+    .head .meta b { color: var(--ink); }
+
+    /* ---- two-column shell ---- */
+    .shell { display: grid; grid-template-columns: 1fr 280px; gap: 24px; align-items: start; }
+
+    /* ---- browser chrome + canvas ---- */
+    .browser { border: 2px solid var(--ink); border-radius: 10px; overflow: hidden; background: var(--card); box-shadow: 4px 6px 0 -2px rgba(28,27,26,0.12); }
+    .chrome { display: flex; align-items: center; gap: 12px; padding: 9px 14px; background: var(--block); border-bottom: 2px solid var(--ink); }
+    .chrome .dots { display: flex; gap: 6px; }
+    .chrome .dots span { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink); background: var(--card); }
+    .chrome .url { flex: 1; height: 22px; border: 1.5px solid var(--rule); border-radius: 999px; background: var(--card); display: flex; align-items: center; padding: 0 12px; font: 12px/1 var(--mono); color: var(--pencil); }
+
+    .canvas { padding: 0; background: var(--card); }
+
+    /* greybox primitives */
+    .bar { height: 12px; background: var(--block); border: 1px solid var(--block-dk); border-radius: 3px; }
+    .bar.dk { background: var(--block-dk); }
+    .btn-block { height: 34px; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--block); }
+    .btn-block.ghost { background: var(--card); }
+
+    .block { position: relative; padding: 22px 26px; border-bottom: 1.5px dashed var(--rule); }
+    .block:last-child { border-bottom: 0; }
+
+    /* numbered pin */
+    .pin { position: absolute; top: 10px; left: 10px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font: 600 13px/24px var(--mono); text-align: center; z-index: 5; box-shadow: 0 1px 3px rgba(28,27,26,0.3); }
+
+    /* nav */
+    .nav-row { display: flex; align-items: center; gap: 18px; }
+    .logo { width: 86px; height: 22px; background: var(--block-dk); border: 1.5px solid var(--ink); border-radius: 4px; }
+    .nav-links { display: flex; gap: 16px; flex: 1; }
+    .nav-links .bar { width: 52px; }
+    .nav-btn { width: 96px; height: 34px; border: 1.5px solid var(--ink); border-radius: 6px; background: var(--block); }
+
+    /* hero */
+    .hero { display: grid; grid-template-columns: 1fr 0.85fr; gap: 28px; align-items: center; }
+    .hero .h-bars { display: flex; flex-direction: column; gap: 12px; }
+    .hero .h-bars .bar.h1 { height: 26px; width: 92%; }
+    .hero .h-bars .bar.h1.b { width: 70%; }
+    .hero .h-bars .bar.sub { height: 10px; width: 80%; }
+    .hero .h-bars .bar.sub.b { width: 64%; }
+    .hero .cta { display: flex; gap: 12px; margin-top: 8px; }
+    .hero .cta .btn-block { width: 132px; }
+    .hero .img-ph { position: relative; min-height: 188px; border: 2px solid var(--ink); border-radius: 8px; background: var(--block); overflow: hidden; }
+    .hero .img-ph svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* logo strip */
+    .logos { display: flex; gap: 18px; justify-content: space-between; }
+    .logos .lg { flex: 1; height: 30px; background: var(--block); border: 1.5px solid var(--block-dk); border-radius: 5px; }
+
+    /* feature grid */
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .feat { border: 1.5px solid var(--rule); border-radius: 8px; padding: 16px; background: var(--bg); display: flex; flex-direction: column; gap: 10px; }
+    .feat .icon { width: 38px; height: 38px; border: 1.5px solid var(--ink); border-radius: 8px; background: var(--block-dk); }
+    .feat .title { height: 14px; width: 66%; background: var(--block-dk); border-radius: 3px; }
+    .feat .bar { width: 100%; }
+    .feat .bar.short { width: 78%; }
+
+    /* footer */
+    .footer { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; background: var(--block); }
+    .footer .col { display: flex; flex-direction: column; gap: 9px; }
+    .footer .col .head-bar { height: 12px; width: 60%; background: var(--block-dk); border: 1px solid var(--rule); border-radius: 3px; margin-bottom: 4px; }
+    .footer .col .bar { height: 8px; width: 78%; background: var(--card); }
+    .footer .col .bar:nth-child(3) { width: 64%; }
+    .footer .col .bar:nth-child(4) { width: 70%; }
+
+    /* ---- spec panel ---- */
+    .spec { position: sticky; top: 20px; border: 2px solid var(--ink); border-radius: 10px; background: var(--card); box-shadow: 4px 6px 0 -2px rgba(28,27,26,0.12); }
+    .spec h2 { font: 600 12px/1 var(--mono); letter-spacing: 0.18em; text-transform: uppercase; margin: 0; padding: 14px 16px; border-bottom: 2px solid var(--ink); color: var(--ink); background: var(--block); border-radius: 8px 8px 0 0; }
+    .spec .rows { padding: 6px 0; }
+    .spec-row { display: flex; gap: 11px; padding: 11px 16px; border-bottom: 1px solid var(--rule); align-items: flex-start; }
+    .spec-row:last-child { border-bottom: 0; }
+    .spec-row .n { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); font: 600 12px/20px var(--mono); text-align: center; }
+    .spec-row .note { font: 12px/1.45 var(--mono); color: var(--ink); }
+    .spec-row .note b { color: var(--pencil); font-weight: 500; display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
+    .spec .legend { padding: 12px 16px; border-top: 2px solid var(--ink); font: 11px/1.5 var(--mono); color: var(--pencil); display: flex; align-items: center; gap: 8px; }
+    .spec .legend .swatch { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+    @media (max-width: 1000px) {
+      .shell { grid-template-columns: 1fr; }
+      .spec { position: static; }
+      .hero { grid-template-columns: 1fr; }
+      .features { grid-template-columns: 1fr; }
+      .footer { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="head" data-od-id="head">
+      <div>
+        <h1>Acme · Marketing Landing</h1>
+      </div>
+      <span class="tag"><span class="sq"></span>WIREFRAME · REDLINE</span>
+      <div class="meta"><b>DEVICE</b> DESKTOP 1280 · <b>FIDELITY</b> LOW · <b>REV</b> A</div>
+    </div>
+
+    <div class="shell">
+      <!-- LEFT: wireframe canvas -->
+      <div class="browser" data-od-id="browser-chrome">
+        <div class="chrome">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <div class="url">acme.example / home</div>
+        </div>
+
+        <div class="canvas">
+          <!-- ① nav -->
+          <section class="block" data-od-id="nav">
+            <span class="pin">①</span>
+            <div class="nav-row">
+              <div class="logo"></div>
+              <div class="nav-links">
+                <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+              </div>
+              <div class="nav-btn"></div>
+            </div>
+          </section>
+
+          <!-- ② hero -->
+          <section class="block" data-od-id="hero">
+            <span class="pin">②</span>
+            <div class="hero">
+              <div class="h-bars">
+                <div class="bar h1"></div>
+                <div class="bar h1 b"></div>
+                <div class="bar sub"></div>
+                <div class="bar sub b"></div>
+                <div class="cta">
+                  <div class="btn-block"></div>
+                  <div class="btn-block ghost"></div>
+                </div>
+              </div>
+              <div class="img-ph">
+                <svg viewBox="0 0 200 120" preserveAspectRatio="none" aria-hidden="true">
+                  <line x1="0" y1="0" x2="200" y2="120" stroke="#1c1b1a" stroke-width="1.4"/>
+                  <line x1="200" y1="0" x2="0" y2="120" stroke="#1c1b1a" stroke-width="1.4"/>
+                </svg>
+              </div>
+            </div>
+          </section>
+
+          <!-- ③ logo strip -->
+          <section class="block" data-od-id="logos">
+            <span class="pin">③</span>
+            <div class="logos">
+              <div class="lg"></div><div class="lg"></div><div class="lg"></div><div class="lg"></div><div class="lg"></div>
+            </div>
+          </section>
+
+          <!-- ④ feature grid -->
+          <section class="block" data-od-id="features">
+            <span class="pin">④</span>
+            <div class="features">
+              <div class="feat">
+                <div class="icon"></div>
+                <div class="title"></div>
+                <div class="bar"></div>
+                <div class="bar short"></div>
+              </div>
+              <div class="feat">
+                <div class="icon"></div>
+                <div class="title"></div>
+                <div class="bar"></div>
+                <div class="bar short"></div>
+              </div>
+              <div class="feat">
+                <div class="icon"></div>
+                <div class="title"></div>
+                <div class="bar"></div>
+                <div class="bar short"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ⑤ footer -->
+          <section class="block footer" data-od-id="footer">
+            <span class="pin">⑤</span>
+            <div class="col"><div class="head-bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+            <div class="col"><div class="head-bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+            <div class="col"><div class="head-bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+            <div class="col"><div class="head-bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- RIGHT: annotation / spec panel -->
+      <aside class="spec" data-od-id="spec-panel">
+        <h2>Annotations / Spec</h2>
+        <div class="rows">
+          <div class="spec-row" data-od-id="spec-row-1">
+            <span class="n">①</span>
+            <span class="note"><b>Top nav</b>Sticky nav, 64px tall, condenses on scroll. Primary CTA right-aligned.</span>
+          </div>
+          <div class="spec-row" data-od-id="spec-row-2">
+            <span class="n">②</span>
+            <span class="note"><b>Hero</b>H1 48/56, subhead 18/28. CTA pair: primary + ghost. Image right, 16:9.</span>
+          </div>
+          <div class="spec-row" data-od-id="spec-row-3">
+            <span class="n">③</span>
+            <span class="note"><b>Social proof</b>5 partner logos, greyscale, equal width. Hides on mobile.</span>
+          </div>
+          <div class="spec-row" data-od-id="spec-row-4">
+            <span class="n">④</span>
+            <span class="note"><b>Feature grid</b>3-up at ≥960px → 1-up on mobile. Icon 38px, 8px gap.</span>
+          </div>
+          <div class="spec-row" data-od-id="spec-row-5">
+            <span class="n">⑤</span>
+            <span class="note"><b>Footer</b>4-column link grid + legal row. Collapses to 2-col under 1000px.</span>
+          </div>
+        </div>
+        <div class="legend"><span class="swatch"></span>Pins map 1:1 to spec rows. Accent = annotation only.</div>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

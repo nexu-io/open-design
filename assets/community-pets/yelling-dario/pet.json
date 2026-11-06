@@ -1,0 +1,14 @@
+{
+  "id": "yelling-dario",
+  "displayName": "Yelling Dario",
+  "description": "A tiny angry yelling Dario Amodei digital pet with tie.",
+  "spritesheetPath": "spritesheet.webp",
+  "author": "alireza7612",
+  "tags": [
+    "celeb",
+    "cute",
+    "chaotic"
+  ],
+  "source": "codex-pet-share",
+  "sourceUrl": "https://codex-pet-share.pages.dev/#/pets/yelling-dario"
+}

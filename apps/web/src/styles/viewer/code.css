@@ -1,0 +1,1748 @@
+/* Code viewer with line numbers */
+.code-viewer {
+  background: var(--bg-panel);
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 100%;
+}
+.code-viewer .gutter {
+  background: var(--bg);
+  color: var(--text-faint);
+  text-align: right;
+  padding: 16px 12px 16px 16px;
+  user-select: none;
+  border-right: 1px solid var(--border-soft);
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+.code-viewer .lines {
+  padding: 16px 16px 16px 18px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+}
+
+.viewer-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+/* Compact horizontal variant for the upload-failure banner: the message
+   sits inline next to a dismiss button so the user can clear the stale
+   notice without changing tabs. Issue #786. */
+.viewer-empty.viewer-empty-dismissible {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: left;
+}
+.document-preview {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 40px 56px;
+  color: var(--text);
+}
+.document-preview h2 {
+  margin: 0 0 24px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.document-preview section {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.document-preview h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.document-preview p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+.markdown-rendered {
+  --markdown-code-bg: var(--code-body-bg);
+  --markdown-code-bar: var(--code-header-bg);
+  --markdown-code-border: var(--border-soft);
+  --markdown-code-text: var(--text);
+  --markdown-code-muted: var(--text-muted);
+  --markdown-code-control: var(--bg-fill-tertiary);
+  --markdown-code-control-hover: var(--bg-fill-secondary);
+  --markdown-inline-code-bg: color-mix(in oklab, var(--accent) 9%, var(--bg-panel));
+  --markdown-inline-code-border: color-mix(in oklab, var(--accent) 18%, var(--border-soft));
+  --markdown-inline-code-text: color-mix(in oklab, var(--accent-strong) 72%, var(--text));
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 42px 42px 72px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--prose-font-size);
+  line-height: 1.78;
+  white-space: normal;
+  text-rendering: optimizeLegibility;
+}
+.markdown-rendered > :first-child { margin-top: 0; }
+.markdown-rendered > :last-child { margin-bottom: 0; }
+[data-theme="dark"] .markdown-rendered {
+  --markdown-code-bg: var(--code-body-bg);
+  --markdown-code-bar: var(--code-header-bg);
+  --markdown-code-border: var(--border-soft);
+  --markdown-code-text: var(--text);
+  --markdown-code-muted: var(--text-muted);
+  --markdown-inline-code-bg: color-mix(in oklab, var(--accent) 16%, transparent);
+  --markdown-inline-code-border: color-mix(in oklab, var(--accent) 24%, var(--border-soft));
+  --markdown-inline-code-text: color-mix(in oklab, var(--accent-strong) 72%, var(--text-strong));
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .markdown-rendered {
+    --markdown-code-bg: var(--code-body-bg);
+    --markdown-code-bar: var(--code-header-bg);
+    --markdown-code-border: var(--border-soft);
+    --markdown-code-text: var(--text);
+    --markdown-code-muted: var(--text-muted);
+    --markdown-inline-code-bg: color-mix(in oklab, var(--accent) 16%, transparent);
+    --markdown-inline-code-border: color-mix(in oklab, var(--accent) 24%, var(--border-soft));
+    --markdown-inline-code-text: color-mix(in oklab, var(--accent-strong) 72%, var(--text-strong));
+  }
+}
+.markdown-status {
+  margin: 12px auto 0;
+  max-width: 900px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.markdown-status-error {
+  border-color: color-mix(in oklab, var(--danger, #d04b4b) 45%, var(--border-soft));
+  color: var(--danger, #d04b4b);
+}
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6 {
+  margin: 32px 0 12px;
+  color: var(--text-strong);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+.markdown-rendered h1 {
+  margin-bottom: 24px;
+  font-size: 34px;
+  line-height: 1.08;
+}
+.markdown-rendered h2 {
+  margin-top: 36px;
+  font-size: 25px;
+}
+.markdown-rendered h3 { font-size: 19px; }
+.markdown-rendered h4 { font-size: 16px; }
+.markdown-rendered h5,
+.markdown-rendered h6 {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.markdown-rendered p { margin: 12px 0; }
+.markdown-rendered strong { color: var(--text-strong); }
+.markdown-rendered hr {
+  height: 1px;
+  margin: 28px 0;
+  border: 0;
+  background: var(--border-soft);
+}
+.markdown-rendered img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 22px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-sm);
+}
+.markdown-rendered ul,
+.markdown-rendered ol {
+  margin: 12px 0 18px;
+  padding-left: 1.35em;
+}
+.markdown-rendered li { padding-left: 0.15em; }
+.markdown-rendered li + li { margin-top: 6px; }
+.markdown-rendered li::marker {
+  color: color-mix(in oklab, var(--accent) 72%, var(--text-muted));
+}
+.markdown-rendered blockquote {
+  margin: 18px 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--text-muted);
+  background: color-mix(in oklab, var(--accent) 7%, var(--bg-panel));
+}
+.markdown-code-block {
+  position: relative;
+  overflow: hidden;
+  margin: 20px 0 24px;
+  border: 1px solid var(--markdown-code-border);
+  border-radius: var(--radius);
+  background: var(--markdown-code-bg);
+  box-shadow: var(--shadow-sm);
+}
+.markdown-code-block::before {
+  content: attr(data-code-language);
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 82px 0 46px;
+  border-bottom: 1px solid var(--markdown-code-border);
+  background: var(--markdown-code-bar);
+  color: var(--markdown-code-muted);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.markdown-code-block::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 18px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--accent) 72%, var(--markdown-code-muted));
+}
+.markdown-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 1;
+  height: 24px;
+  border: 1px solid var(--markdown-code-border);
+  border-radius: var(--radius-sm);
+  background: var(--markdown-code-control);
+  color: var(--markdown-code-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0 9px;
+  cursor: pointer;
+  opacity: 0.72;
+  transform: none;
+  transition:
+    opacity 120ms var(--ease-out),
+    transform 120ms var(--ease-out),
+    color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    background 120ms var(--ease-out);
+}
+.markdown-code-block:hover .markdown-code-copy,
+.markdown-code-block:focus-within .markdown-code-copy {
+  opacity: 1;
+}
+@media (hover: none) {
+  .markdown-code-copy {
+    opacity: 1;
+  }
+}
+.markdown-code-copy:hover,
+.markdown-code-copy:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--markdown-code-control-hover);
+}
+.markdown-code-toast {
+  position: absolute;
+  top: 6px;
+  right: 72px;
+  z-index: 1;
+  border-radius: var(--radius-pill);
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-border);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px 10px;
+  box-shadow: var(--shadow-sm);
+}
+.markdown-rendered pre {
+  margin: 0;
+  background: var(--markdown-code-bg);
+  border: none;
+  border-radius: 0;
+  padding: 16px 18px 18px;
+  overflow: auto;
+}
+.markdown-rendered code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.markdown-rendered .markdown-code-block code {
+  display: block;
+  min-width: max-content;
+  color: var(--markdown-code-text);
+  line-height: var(--code-line-height);
+  tab-size: 2;
+}
+.markdown-rendered .markdown-code-block .markdown-shiki {
+  background: transparent !important;
+}
+.markdown-rendered .markdown-code-block .markdown-shiki code {
+  color: inherit;
+}
+.markdown-rendered .markdown-code-block .shiki,
+.markdown-rendered .markdown-code-block .shiki code,
+.markdown-rendered .markdown-code-block .shiki span {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: var(--code-line-height);
+}
+.markdown-rendered .markdown-code-block pre::-webkit-scrollbar {
+  height: 10px;
+}
+.markdown-rendered .markdown-code-block pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+.markdown-rendered .markdown-code-block pre::-webkit-scrollbar-thumb {
+  border: 3px solid var(--markdown-code-bg);
+  border-radius: var(--radius-pill);
+  background: rgba(148, 163, 184, 0.34);
+}
+.markdown-rendered :where(p, li, blockquote, th, td, h1, h2, h3, h4, h5, h6) > code {
+  padding: 0.13em 0.38em;
+  border: 1px solid var(--markdown-inline-code-border);
+  border-radius: var(--radius-xs);
+  background: var(--markdown-inline-code-bg);
+  color: var(--markdown-inline-code-text);
+  font-size: 0.86em;
+  white-space: break-spaces;
+}
+.markdown-rendered kbd {
+  padding: 0.12em 0.42em;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elevated);
+  box-shadow: inset 0 -1px 0 var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.84em;
+}
+.markdown-rendered a { color: var(--accent); }
+.markdown-mode-tabs {
+  margin-left: 8px;
+}
+/* Passive auto-save status that replaces the old manual Save button. */
+.markdown-autosave {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.markdown-autosave svg {
+  flex-shrink: 0;
+}
+.markdown-autosave-saved {
+  color: var(--green);
+}
+.markdown-autosave-saving {
+  color: var(--text-muted);
+}
+.markdown-autosave-idle {
+  color: var(--text-faint);
+}
+.markdown-autosave-error {
+  color: var(--danger, #d04b4b);
+}
+
+/* Split-view column headers. They only appear in split mode, where it is
+   otherwise ambiguous which pane accepts edits; the editor header is
+   accent-tinted to signal the typeable side. */
+.markdown-workbench {
+  display: grid;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  background: var(--bg);
+}
+.markdown-workbench-split {
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+}
+.markdown-workbench-edit,
+.markdown-workbench-preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+.markdown-editor-pane,
+.markdown-preview-pane-wrap {
+  min-width: 0;
+  min-height: 0;
+}
+.markdown-preview-pane-wrap {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--bg) 88%, var(--bg-panel));
+}
+.markdown-preview-pane {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+.markdown-editor-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--border-soft);
+  background: color-mix(in oklab, var(--bg-panel) 62%, var(--bg));
+}
+.markdown-workbench-edit .markdown-editor-pane {
+  border-right: none;
+}
+.markdown-editor {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: 500 13px/1.7 var(--mono);
+  padding: 24px 28px 40px;
+  tab-size: 2;
+}
+.markdown-editor::selection {
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
+}
+.markdown-editor::placeholder {
+  color: var(--text-faint);
+}
+.markdown-preview-pane {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-panel) 58%, var(--bg)) 0, color-mix(in oklab, var(--bg) 88%, var(--bg-panel)) 320px),
+    color-mix(in oklab, var(--bg) 88%, var(--bg-panel));
+}
+@media (max-width: 860px) {
+  .markdown-workbench-split {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 1fr) minmax(240px, 1fr);
+  }
+  .markdown-editor-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .markdown-rendered {
+    padding: 30px 22px 52px;
+  }
+  .markdown-rendered h1 {
+    font-size: 28px;
+  }
+  .markdown-rendered h2 {
+    font-size: 22px;
+  }
+}
+.image-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.image-body img {
+  /* Keep the hairline inside the 100% fit box. Without border-box, a large
+     artifact consumes the full content box first and its 1px border extends
+     past the preview viewport, so the edge against the clipped side vanishes. */
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.sketch-preview svg,
+.sketch-preview-svg-inner,
+.sketch-preview-svg-inner svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sketch-preview svg,
+.sketch-preview-svg-inner {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.sketch-preview.loading {
+  background:
+    radial-gradient(circle at 8px 8px, #d7d4ce 1px, transparent 1px),
+    #f7f5f1;
+  background-size: 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sketch-preview-empty-mark path {
+  stroke: #bfbcb6;
+  stroke-width: 6;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* Sketch editor */
+.sketch-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+.sketch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-wrap: wrap;
+}
+.sketch-tool {
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1;
+  min-width: 32px;
+}
+.sketch-tool:hover { background: var(--bg-subtle); }
+.sketch-tool.active { background: var(--accent); color: white; border-color: var(--accent); }
+.sketch-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.sketch-color { width: 32px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.sketch-size { width: 80px; background: transparent; border: none; }
+.sketch-spacer { flex: 1; }
+.sketch-canvas-wrap { flex: 1; min-height: 0; position: relative; background: var(--bg); }
+.sketch-canvas-wrap canvas { display: block; cursor: crosshair; }
+.sketch-excalidraw-wrap {
+  overflow: hidden;
+  background: var(--bg);
+}
+.sketch-excalidraw-wrap .excalidraw {
+  width: 100%;
+  height: 100%;
+  --color-primary: var(--accent);
+  --color-primary-darker: var(--accent-strong);
+}
+
+/* Sketch is a lightweight AI-consumption surface, not a full Excalidraw
+   workspace. Hide the library surfaces entirely while leaving the rest of the
+   canvas shell intact. */
+.sketch-excalidraw-wrap .default-sidebar-trigger,
+.sketch-excalidraw-wrap .sidebar-trigger[data-testid="default-sidebar-trigger"],
+.sketch-excalidraw-wrap [data-testid="default-sidebar-trigger"],
+.sketch-excalidraw-wrap .sidebar-tab-trigger[id$="-trigger-library"],
+.sketch-excalidraw-wrap [id$="-content-library"],
+.sketch-excalidraw-wrap .layer-ui__library {
+  display: none !important;
+}
+
+/* Size the save-state slot to its content. Excalidraw re-enables pointer events
+   on every top-right child, so a fixed/viewport width here (the old
+   `min(440px, 32vw)`) turned the whole strip into an invisible click-blocking
+   dead zone over the canvas — worst on wide displays. Shrinking to content keeps
+   the clickable area to just the small pill, so it stays responsive everywhere. */
+.sketch-excalidraw-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  pointer-events: auto;
+}
+/* The save state is passive status, not an action — keep it a small, muted
+   caption that recedes into the toolbar rather than a heavy pill. The 32px
+   height matches the toolbar row so it stays vertically aligned with it. */
+.sketch-save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.sketch-save-state svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.sketch-save-state span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sketch-save-state.is-saved {
+  /* "Saved" is the resting state — the quieter it is, the better. */
+  color: var(--text-muted);
+}
+.sketch-save-state.is-dirty {
+  /* Unsaved changes still deserve a glance, so lift it slightly above saved. */
+  color: var(--amber);
+  opacity: 0.9;
+}
+.sketch-save-state.is-saving {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+.sketch-excalidraw-wrap .od-sketch-context-popover,
+.od-sketch-context-popover {
+  z-index: 30;
+}
+.sketch-excalidraw-wrap .od-sketch-context-menu,
+.od-sketch-context-menu {
+  min-width: 168px;
+  /* Widen enough for the longest localized row ("复制为 PNG 到剪贴板" plus its
+     Shift+Option shortcut) and never expose a horizontal scrollbar — the old
+     240px cap clipped that row and `overflow: auto` turned the clip into an ugly
+     sideways scroll. Vertical scroll stays available for safety. */
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: min(240px, calc(100vh - 24px));
+  padding: 5px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, black);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 30%);
+}
+.sketch-excalidraw-wrap .od-sketch-context-menu .context-menu-item,
+.od-sketch-context-menu .context-menu-item {
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.sketch-excalidraw-wrap .od-sketch-context-menu .context-menu-item__shortcut,
+.od-sketch-context-menu .context-menu-item__shortcut {
+  margin-left: 18px;
+  opacity: 0.58;
+  font-size: 11px;
+}
+.sketch-name {
+  flex: 1 1 0;
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+@media (max-width: 1280px) {
+  .sketch-excalidraw-actions {
+    width: auto;
+    max-width: 240px;
+  }
+}
+
+.od-sketch-modal .Modal__content {
+  position: relative;
+  color: var(--text);
+}
+.od-sketch-modal .Modal {
+  overflow: hidden;
+}
+.od-sketch-modal.od-sketch-help-modal .Modal {
+  max-height: none;
+}
+/* The card (.Modal__content) is both the rounded surface and the scroll
+   container, so its native scrollbar runs straight past the top-right rounded
+   corner and pokes out (see the help dialog). Let the card clip to its corners
+   and move the scroll onto the inner Island — the card then rounds off the
+   inner scrollbar's ends cleanly at both corners. */
+.od-sketch-modal.od-sketch-help-modal .Modal__content {
+  max-height: min(82vh, calc(100vh - 80px));
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+.od-sketch-modal.od-sketch-help-modal .Modal__content .Island {
+  max-height: min(82vh, calc(100vh - 80px));
+  overflow-y: auto;
+  padding-right: 48px;
+  scrollbar-gutter: stable;
+}
+.od-sketch-modal .HelpDialog__header {
+  display: none !important;
+}
+.od-sketch-dialog-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.od-sketch-dialog-close:hover {
+  background: var(--bg-fill-secondary);
+  color: var(--text-strong);
+}
+.od-sketch-dialog-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.od-sketch-dialog-close::before,
+.od-sketch-dialog-close::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.od-sketch-dialog-close::before {
+  transform: rotate(45deg);
+}
+.od-sketch-dialog-close::after {
+  transform: rotate(-45deg);
+}
+
+/* ===========================================================
+   Streaming chat: assistant message header, prose, thinking,
+   tool cards, status pills, grouped action card.
+   =========================================================== */
+.chat-empty-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px 8px;
+  min-height: 100%;
+}
+.chat-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  max-width: 44ch;
+}
+.chat-empty-title { font-weight: 600; color: var(--text-strong); font-size: 15px; }
+.chat-empty-hint { line-height: 1.6; }
+
+.chat-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.chat-example {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-fill-tertiary);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  overflow: hidden;
+  transition:
+    background 160ms var(--ease-out);
+  opacity: 0;
+  animation: chat-example-in 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.chat-example::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: none;
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+  pointer-events: none;
+}
+.chat-example:hover {
+  background: var(--bg-fill-secondary);
+}
+.chat-example:hover::before {
+  opacity: 0;
+}
+.chat-example:active {
+  transform: translateY(0);
+}
+.chat-example:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chat-example-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-fill-secondary);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: none;
+}
+.chat-example-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-example-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chat-example-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.chat-example-tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-fill-tertiary);
+  border: none;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.chat-example-prompt {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.chat-example-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-soft);
+  font-size: 13px;
+  transition: color 160ms var(--ease-out);
+}
+/* No hover state on the ↵ glyph: these cards FILL the composer (they don't
+   send), so an accent-filled circle on hover over-promises the action. The
+   card's own hover carries the affordance. */
+
+/* Connect-your-repo CTA in the empty chat state. Shares the example cards'
+   sizing and accent system but stands apart with a tinted fill so it reads as
+   guidance rather than another starter prompt. */
+.chat-connect-repo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  padding: 14px 16px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  animation: chat-example-in 380ms cubic-bezier(0.22, 1, 0.36, 1) 220ms forwards;
+}
+.chat-connect-repo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #fff;
+}
+.chat-connect-repo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.chat-connect-repo-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.chat-connect-repo-text {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.chat-connect-repo button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@keyframes chat-example-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.assistant-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.assistant-header .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.assistant-header .dot[data-active="true"] {
+  background: var(--green);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.assistant-label { font-weight: 500; color: var(--text-muted); font-size: 11px; }
+
+/* 一轮**内部**那一档间距。稿子 `docs/design/chat-panel/src/scene-shell.css`:
+   `.flow { … gap: 12px }` —— 「同一个人连着说的几块之间是 12」。
+   轮次**之间**的 24 不在这里,在 `routines.css` 的 `.chat-log` 那一段。 */
+.assistant-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.prose-block {
+  line-height: var(--prose-line-height, 1.7);
+  color: var(--text-strong);
+  font-size: var(--prose-font-size, 13px);
+  letter-spacing: normal;
+}
+.prose-block .md-p { margin: 0; }
+.prose-block strong { font-weight: 600; }
+.prose-block .md-p + .md-p { margin-top: 14px; }
+.prose-block .md-h {
+  margin: 24px 0 10px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text-strong, var(--text));
+  letter-spacing: -0.02em;
+}
+.prose-block .md-h:first-child { margin-top: 2px; }
+.prose-block .md-h1 { font-size: 24px; }
+.prose-block .md-h2 { font-size: 19px; }
+.prose-block .md-h3 { font-size: 16px; }
+.prose-block .md-h4 { font-size: 14.5px; text-transform: none; }
+.prose-block .md-ul, .prose-block .md-ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+.prose-block .md-ul li, .prose-block .md-ol li {
+  margin: 6px 0;
+  line-height: 1.65;
+}
+.prose-block .md-ul li::marker {
+  color: var(--text-faint);
+}
+.prose-block .md-ol li::marker {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* GFM task list — checkbox glyph replaces the bullet marker. */
+.prose-block .md-task-list {
+  list-style: none;
+  padding-left: 4px;
+}
+.prose-block .md-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.prose-block .md-task-item::marker { content: none; }
+.prose-block .md-task-check {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border-radius: var(--radius-xs);
+  border: 1.5px solid var(--border-soft);
+  background: var(--bg-panel);
+  color: #fff;
+}
+.prose-block .md-task-item[data-checked="true"] .md-task-check {
+  background: var(--green);
+  border-color: var(--green);
+}
+.prose-block .md-task-item[data-checked="true"] > span:last-child {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-faint);
+}
+/* Blockquote — left accent rule, muted text, Lobe-style. */
+.prose-block .md-quote {
+  margin: 14px 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--border-soft);
+  color: var(--text-muted);
+}
+.prose-block .md-inline-code {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--text);
+  font-weight: 600;
+}
+.prose-block .md-code-block {
+  position: relative;
+  margin: 16px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: transparent;
+  overflow: hidden;
+  box-shadow: none;
+}
+.prose-block .md-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px 5px 14px;
+  border-bottom: 1px solid var(--bg-fill-secondary);
+  background: transparent;
+}
+.prose-block .md-code-lang {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.prose-block .md-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.prose-block .md-code-action {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
+}
+.prose-block .md-code-action-icon { padding: 4px; }
+.prose-block .md-code-action:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.prose-block .md-code-body {
+  position: relative;
+}
+.prose-block .md-code-block[data-collapsed="true"] .md-code-body {
+  max-height: 7em;
+  overflow: hidden;
+}
+.prose-block .md-code-block[data-collapsed="true"] .md-code-body::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3.2em;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+.prose-block .md-color-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  vertical-align: -0.08em;
+  white-space: nowrap;
+}
+.prose-block .md-color-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.85em;
+  height: 0.85em;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+[data-theme="dark"] .prose-block .md-color-swatch {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+.prose-block .md-code {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 16px 18px;
+  margin: 0;
+  overflow-x: auto;
+  font-size: var(--code-font-size, 13px);
+  line-height: var(--code-line-height, 1.65);
+}
+.prose-block .md-code code {
+  font-family: var(--mono);
+  tab-size: 2;
+}
+.prose-block .md-code-highlighted {
+  overflow-x: auto;
+}
+.prose-block .md-code-highlighted pre {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none;
+}
+.prose-block .md-code-highlighted code {
+  font-family: var(--mono);
+  tab-size: 2;
+  font-size: var(--code-font-size, 13px);
+  line-height: var(--code-line-height, 1.65);
+}
+.prose-block .md-code-highlighted .shiki {
+  background: transparent !important;
+}
+.prose-block .md-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.prose-block .md-link:hover {
+  border-bottom-color: var(--accent);
+  color: var(--accent-strong);
+}
+.prose-block .md-link-bare {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+.prose-block .md-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+.prose-block .md-image {
+  margin: 14px 0;
+  border-radius: var(--radius-md);
+}
+.prose-block .md-code-comment {
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.prose-block .md-code-comment-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.prose-block .md-code-comment-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+.prose-block .md-code-comment-priority {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.prose-block .md-code-comment-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.prose-block .md-code-comment-file {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+/* GFM pipe tables. Rules are intentionally unscoped so both the chat path
+   (`.prose-block`) and the artifact preview (`.markdown-rendered`) get
+   the same treatment. Horizontal scroll lives on the wrapper so the
+   inner <table> can keep `display: table; width: 100%` and distribute
+   column widths across the container instead of collapsing to content. */
+.md-table-wrap {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 18px 0 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-xs);
+}
+.md-table,
+.markdown-rendered table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  line-height: 1.52;
+}
+.markdown-rendered > table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 18px 0 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-xs);
+}
+.md-table th,
+.md-table td,
+.markdown-rendered th,
+.markdown-rendered td {
+  padding: 11px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border-soft);
+}
+.md-table th + th,
+.md-table td + td,
+.markdown-rendered th + th,
+.markdown-rendered td + td {
+  border-left: 1px solid var(--border-soft);
+}
+.md-table thead th,
+.markdown-rendered thead th {
+  background: color-mix(in oklab, var(--bg-muted) 55%, var(--bg-panel));
+  color: var(--text-strong);
+  font-weight: 600;
+  border-bottom-color: var(--border);
+}
+.md-table tbody tr:last-child td,
+.markdown-rendered tbody tr:last-child td {
+  border-bottom: none;
+}
+.md-table tbody tr:nth-child(even) td,
+.markdown-rendered tbody tr:nth-child(even) td {
+  background: color-mix(in oklab, var(--bg-panel) 56%, transparent);
+}
+.md-table tbody tr:hover td,
+.markdown-rendered tbody tr:hover td {
+  background: color-mix(in oklab, var(--selected) 7%, var(--bg-panel));
+}
+.op-waiting {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Thinking blocks */
+.thinking-block {
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.thinking-toggle:hover { background: var(--bg-fill-tertiary); }
+.thinking-status {
+  width: 24px; height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.thinking-status.op-status-running { color: var(--purple); border-color: var(--purple); background: none; }
+.thinking-status-active { color: var(--purple); }
+.thinking-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.thinking-chev {
+  color: var(--text-faint);
+  font-size: 10px;
+  margin-left: auto;
+  transition: transform 120ms var(--ease-out);
+}
+.thinking-body {
+  margin: 0;
+  padding: 4px 8px 8px 32px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  max-height: min(40vh, 320px);
+  overflow-y: auto;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 8px, black calc(100% - 16px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 8px, black calc(100% - 16px), transparent 100%);
+}
+.thinking-body .md-p + .md-p,
+.thinking-body .md-p + .md-h1,
+.thinking-body .md-p + .md-h2,
+.thinking-body .md-p + .md-h3,
+.thinking-body .md-h1,
+.thinking-body .md-h2,
+.thinking-body .md-h3 {
+  margin-top: 10px;
+}
+.thinking-body .md-h1,
+.thinking-body .md-h2,
+.thinking-body .md-h3,
+.thinking-body strong {
+  color: var(--text-soft);
+  font-weight: 600;
+}
+.thinking-body .md-h1,
+.thinking-body .md-h2,
+.thinking-body .md-h3 {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Shimmer animation — a legible "light-sweep" (扫光) over in-progress labels
+   like "思考中". The text keeps a solid muted base so it's always readable;
+   a brighter band travels across it left→right to signal live work. */
+@keyframes shimmer {
+  from { background-position: 100% center; }
+  to { background-position: -100% center; }
+}
+.shimmer-text {
+  color: var(--text-muted);
+  background: linear-gradient(100deg,
+    var(--text-muted) 38%,
+    var(--text-strong) 50%,
+    var(--text-muted) 62%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 2.4s linear infinite;
+}
+/* The streaming "Preparing…" / "思考中" status label sweeps a touch slower so
+   it reads as a calm wait, but keeps the same bright, legible band. */
+.shimmer-text.shimmer-prepare {
+  background-image: linear-gradient(100deg,
+    var(--text-muted) 38%,
+    var(--text-strong) 50%,
+    var(--text-muted) 62%
+  );
+  background-size: 200% 100%;
+  animation-duration: 2.8s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    -webkit-text-fill-color: var(--text-muted);
+  }
+}
+
+/* Status pills */
+.status-pill {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.status-label { letter-spacing: 0.02em; font-weight: 600; }
+.status-detail {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+/* Warning status — fabricated role markers (#3247), audit warnings, etc. */
+.status-pill.is-warning {
+  background: color-mix(in srgb, var(--amber, #b26200) 12%, transparent);
+  color: var(--amber, #b26200);
+  border-color: color-mix(in srgb, var(--amber, #b26200) 32%, transparent);
+}
+.status-pill.is-warning .status-detail {
+  color: color-mix(in srgb, var(--amber, #b26200) 85%, var(--text));
+}
+/* Error status — agent failures, tool errors, etc. Aligned with the unified
+   run-error card: neutral surface + a small red dot before the label, instead
+   of a flooded red pill, so a column of failed history turns stays calm. */
+.status-pill.is-error {
+  background: none;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+.status-pill.is-error .status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-pill.is-error .status-label::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--red, #dc2626);
+}
+.status-pill.is-error .status-detail {
+  color: var(--text);
+}
+
+/* Grouped tool / action card */
+.action-card {
+  display: flex;
+  flex-direction: column;
+  border: none;
+  border-radius: 0;
+  background: none;
+  overflow: hidden;
+  box-shadow: none;
+}
+.action-card:hover {
+  background: none;
+}
+.action-card-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background 120ms var(--ease-out);
+}
+.action-card-toggle:hover { background: var(--bg-fill-tertiary); }
+.action-card-status {
+  width: 24px; height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.action-card-status.op-status-running { color: var(--purple); }
+.action-card-status.op-status-ok { color: var(--green); }
+.action-card-status.op-status-error { color: var(--red); }
+.action-card-toggle .summary {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-muted);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.task-activity .action-card-toggle {
+  width: fit-content;
+  padding: 4px 0;
+  gap: 5px;
+}
+.task-activity .action-card-toggle:hover {
+  background: transparent;
+}
+.task-activity .action-card-toggle .summary {
+  flex: 0 1 auto;
+  font-weight: 600;
+}
+.task-activity-elapsed {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.task-activity .action-card-body {
+  position: relative;
+  padding: 8px 0;
+  gap: 6px;
+}
+.task-activity .action-card-body::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  top: 20px;
+  bottom: 20px;
+  left: 15.5px;
+  width: 1px;
+  background: var(--border-soft);
+}
+.task-activity .action-card-body > * {
+  position: relative;
+  z-index: 1;
+}
+.task-activity .action-card-toggle .chev {
+  transform: rotate(0deg);
+  transition: transform 200ms var(--ease-out);
+}
+.task-activity.is-open .action-card-toggle .chev {
+  transform: rotate(180deg);
+}
+.action-card-toggle .chev { color: var(--text-faint); font-size: 10px; flex-shrink: 0; transition: transform 120ms var(--ease-out); }
+.action-card-body {
+  padding: 8px 0 8px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: none;
+}
+.action-card-body > .op-card { border-color: transparent; box-shadow: none; padding: 4px 0; }
+.action-card-body > .op-card .op-card-head { padding: 6px 0; }
+
+/* Tool / operation cards — single, ungrouped */
+.op-card {
+  border: none;
+  border-radius: 0;
+  background: none;
+  overflow: hidden;
+  box-shadow: none;
+  min-width: 0;
+  max-width: 100%;
+  transition: background 160ms var(--ease-out);
+}
+.op-card:hover {
+  background: none;
+}
+.op-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  font-size: 13px;
+  flex-wrap: nowrap;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background 120ms var(--ease-out);
+  font-family: inherit;
+}
+.op-card-head:hover { background: var(--bg-fill-tertiary); }
+.op-card-head--static {
+  cursor: default;
+}
+.op-card-head--static:hover {
+  background: transparent;
+}
+.op-card-detail {
+  padding: 8px 4px 8px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.op-card-detail .op-path {
+  max-width: 100%;
+}
+.op-card-file-detail {
+  flex-direction: row;
+  align-items: center;
+}
+.op-card-file-detail .op-path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.op-card-file-detail .op-open {
+  flex: 0 0 auto;
+}
+.op-card-read-detail {
+  flex-direction: column;
+  align-items: stretch;
+}
+.op-card-file-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.op-card-file-path-row .op-path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.op-card-detail .op-command {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.op-card-detail .op-output {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-soft);
+  font-family: var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.op-expand-chev {
+  color: var(--text-faint);
+  font-size: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: transform 120ms var(--ease-out);
+}
+.op-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.op-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}

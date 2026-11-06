@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Raycast — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/raycast. Every visible value
+        comes from tokens.css. Raycast's signature moves: near-black blue-tinted
+        canvas, Inter with calt+kern+liga+ss03 and +0.2px body tracking, weight
+        500 baseline, macOS double-ring elevation, Raycast Red as scarce
+        punctuation, Raycast Blue for focus and interaction."
+    />
+
+    <style>
+      :root {
+        --bg:           #07080a;
+        --surface:      #101111;
+        --surface-warm: var(--surface);
+
+        --fg:    #f9f9f9;
+        --fg-2:  #cecece;
+        --muted: #9c9c9d;
+        --meta:  #6a6b6c;
+
+        --border:      rgba(255, 255, 255, 0.06);
+        --border-soft: rgba(255, 255, 255, 0.04);
+
+        --accent:        #FF6363;
+        --accent-on:     #ffffff;
+        --accent-hover:  #ff7777;
+        --accent-active: #e85757;
+
+        --success: hsl(151, 59%, 59%);
+        --warn:    hsl(43, 100%, 60%);
+        --danger:  hsl(0, 100%, 69%);
+
+        --font-display: "Inter", "Inter Fallback", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+        --font-body:    "Inter", "Inter Fallback", "SF Pro Text", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+        --font-mono:    "GeistMono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs:   12px;
+        --text-sm:   14px;
+        --text-base: 16px;
+        --text-lg:   18px;
+        --text-xl:   20px;
+        --text-2xl:  24px;
+        --text-3xl:  40px;
+        --text-4xl:  64px;
+
+        --leading-body:     1.6;
+        --leading-tight:    1.1;
+        --tracking-display: 0px;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet:  64px;
+        --section-y-phone:   40px;
+
+        --radius-sm:   6px;
+        --radius-md:   12px;
+        --radius-lg:   16px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   rgb(27, 28, 30) 0px 0px 0px 1px, rgb(7, 8, 10) 0px 0px 0px 1px inset;
+        --elev-raised:
+          rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset,
+          rgba(0, 0, 0, 0.28) 0px 1.189px 2.377px,
+          0 0 0 1px rgba(255, 255, 255, 0.06);
+
+        --focus-ring: 0 0 0 3px hsla(202, 100%, 67%, 0.35);
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max:            1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet:  16px;
+        --container-gutter-phone:   12px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg-2);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        line-height: var(--leading-body);
+        letter-spacing: 0.2px;
+        /* Raycast's signature OpenType stack — applied globally on Inter. */
+        font-feature-settings: "calt", "kern", "liga", "ss03";
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ────────────────────────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        margin: 0;
+        color: var(--fg);
+        font-feature-settings: "calt", "kern", "liga", "ss03";
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        font-weight: 600;
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+        /* DESIGN.md §3: hero disables ligatures, enables ss02 + ss08. */
+        font-feature-settings: "liga" 0, "ss02", "ss08";
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        font-weight: 400;
+        line-height: 1.17;
+        letter-spacing: 0.2px;
+      }
+      h3 {
+        font-size: var(--text-xl);
+        font-weight: 500;
+        line-height: 1.6;
+        letter-spacing: 0.2px;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        line-height: 1.6;
+        color: var(--fg-2);
+        font-weight: 400;
+        letter-spacing: 0.2px;
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); color: var(--muted); }
+      .eyebrow {
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--meta);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ───────────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px 18px;
+        border-radius: var(--radius-pill);
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: 600;
+        font-feature-settings: "calt", "kern", "liga", "ss03";
+        line-height: 1.15;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: opacity var(--motion-fast) var(--ease-standard),
+                    background-color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      /* Raycast's CTA: translucent white pill on dark, near-black text. */
+      .btn-primary {
+        background: hsla(0, 0%, 100%, 0.815);
+        color: #18191a;
+        box-shadow:
+          rgba(255, 255, 255, 0.1) 0px 1px 0px 0px inset,
+          rgba(0, 0, 0, 0.25) 0px 1px 2px;
+      }
+      .btn-primary:hover { background: #ffffff; opacity: 1; }
+      .btn-primary:active { background: #ffffff; opacity: 0.92; }
+      /* Secondary: transparent with hairline border + macOS inset highlight. */
+      .btn-secondary {
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow:
+          rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset,
+          rgba(0, 0, 0, 0.2) 0px -1px 0px 0px inset;
+      }
+      .btn-secondary:hover { opacity: 0.6; }
+
+      /* ─── Keyboard key caps ─────────────────────────────────────── */
+      /* DESIGN.md §4 Keyboard Keys: gradient #121212→#0d0d0d, heavy
+         multi-layer shadow for realistic physical depth. */
+      .kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        padding: 2px 6px;
+        background: linear-gradient(to bottom, #121212, #0d0d0d);
+        color: var(--fg-2);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        border-radius: 5px;
+        box-shadow:
+          rgba(255, 255, 255, 0.1) 0px 1px 0px 0px inset,
+          rgba(0, 0, 0, 0.4) 0px 1.5px 0.5px 1.5px,
+          rgba(0, 0, 0, 0.6) 0px 2px 4px;
+        line-height: 1.4;
+      }
+      .kbd-row { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+      /* ─── Cards ─────────────────────────────────────────────────── */
+      .card {
+        position: relative;
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+        /* macOS double-ring elevation — outer card-tone + inset deep-bg. */
+        box-shadow: var(--elev-ring);
+        transition: box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .card:hover {
+        box-shadow:
+          rgb(27, 28, 30) 0px 0px 0px 1px,
+          rgb(7, 8, 10) 0px 0px 0px 1px inset,
+          rgba(215, 201, 175, 0.05) 0px 0px 20px 5px;
+      }
+      .card-title {
+        color: var(--fg);
+        font-size: var(--text-xl);
+        font-weight: 500;
+        line-height: 1.15;
+        letter-spacing: 0.2px;
+        margin: 0;
+      }
+
+      /* ─── Inputs ────────────────────────────────────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--muted);
+        letter-spacing: 0.2px;
+      }
+      .field input {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        letter-spacing: 0.2px;
+        font-feature-settings: "calt", "kern", "liga", "ss03";
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus {
+        border-color: hsl(202, 100%, 67%);
+        box-shadow: var(--focus-ring);
+      }
+
+      /* ─── Pills / badges ────────────────────────────────────────── */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        color: var(--fg-2);
+        background: #1b1c1e;
+        letter-spacing: 0.2px;
+      }
+      .pill-accent {
+        color: var(--accent);
+        background: hsla(0, 100%, 69%, 0.12);
+        border: 1px solid hsla(0, 100%, 69%, 0.25);
+      }
+      .pill-info {
+        color: hsl(202, 100%, 67%);
+        background: hsla(202, 100%, 67%, 0.12);
+        border: 1px solid hsla(202, 100%, 67%, 0.25);
+      }
+
+      /* ─── Hero stripe decoration — Raycast Red diagonal lines ──── */
+      .hero-stripes {
+        position: relative;
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        padding: var(--space-8);
+        box-shadow: var(--elev-ring);
+        overflow: hidden;
+        min-height: 280px;
+        display: flex;
+        align-items: flex-end;
+      }
+      .hero-stripes::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: repeating-linear-gradient(
+          135deg,
+          var(--accent) 0px,
+          var(--accent) 10px,
+          transparent 10px,
+          transparent 28px
+        );
+        opacity: 0.85;
+        mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.25) 70%, rgba(0, 0, 0, 0) 100%);
+        -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.25) 70%, rgba(0, 0, 0, 0) 100%);
+      }
+      .hero-stripes .palette {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        background: linear-gradient(to bottom, rgba(16, 17, 17, 0.8), rgba(7, 8, 10, 0.95));
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: var(--radius-md);
+        padding: var(--space-3) var(--space-4);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--fg-2);
+      }
+
+      /* ─── Layout ────────────────────────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+      }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; } }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-4);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); flex-wrap: wrap; }
+      .feature-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-sm);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--fg);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · raycast</p>
+            <h1>Your shortcut to everything.</h1>
+            <p class="lead" style="max-width:52ch">
+              A blazingly fast, totally extendable launcher. Raycast lets you
+              complete tasks, calculate, share common links, and much more.
+              Every value on this page comes from <span style="font-family:var(--font-mono);font-size:var(--text-sm);color:var(--fg)">tokens.css</span>
+              — the void, the rings, the +0.2px tracking, the red stripe.
+            </p>
+            <div class="kbd-row" style="margin-block-start:var(--space-2)">
+              <span class="body-sm">Open with</span>
+              <span class="kbd">⌘</span>
+              <span class="kbd">Space</span>
+            </div>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">Download for Mac</a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the spec</a>
+            </div>
+          </div>
+
+          <aside class="hero-stripes" aria-label="Raycast brand stripe with command palette preview">
+            <div class="palette">
+              <span style="display:inline-flex;align-items:center;gap:var(--space-3)">
+                <span style="width:18px;height:18px;border-radius:4px;background:var(--accent);display:inline-block;flex-shrink:0"></span>
+                <span style="color:var(--fg)">Search apps, commands, snippets…</span>
+              </span>
+              <span class="kbd">↵</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width:30ch">A precision instrument carved from obsidian.</h2>
+        </div>
+
+        <div class="features-grid" style="margin-block-start:var(--space-8)">
+          <article class="card stack-3">
+            <span class="feature-icon">⌘</span>
+            <h3 class="card-title">Blazingly fast</h3>
+            <p class="body-sm">
+              Built natively for macOS with multi-layer inset shadows, the
+              double-ring containment, and 150–200ms transitions on the
+              standard ease curve. No web bloat — instant response.
+            </p>
+            <span class="pill pill-info">Native</span>
+          </article>
+
+          <article class="card stack-3">
+            <span class="feature-icon">⊕</span>
+            <h3 class="card-title">Totally extendable</h3>
+            <p class="body-sm">
+              Hundreds of community Extensions. Inter with calt+kern+liga+ss03
+              on every label keeps the dense product UI legible against the
+              blue-tinted near-black canvas.
+            </p>
+            <span class="pill">Store</span>
+          </article>
+
+          <article class="card stack-3">
+            <span class="feature-icon">!</span>
+            <h3 class="card-title">Scarce by design</h3>
+            <p class="body-sm">
+              Raycast Red appears as punctuation — hero stripes, destructive
+              actions, alert glows. Interactive feedback uses Raycast Blue
+              so the red retains its weight.
+            </p>
+            <span class="pill pill-accent">Danger only</span>
+          </article>
+        </div>
+      </section>
+
+      <!-- FORM -->
+      <section data-od-id="form">
+        <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:var(--space-12);align-items:start">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs on the void.</h2>
+            <p class="lead" style="max-width:46ch">
+              Fields sit on the page background (<span style="font-family:var(--font-mono);font-size:var(--text-sm);color:var(--fg)">#07080a</span>)
+              with a barely-there 8% white border. Focus brightens the
+              edge to Raycast Blue and lifts a translucent 35%-blue ring —
+              never the brand red.
+            </p>
+          </div>
+          <form
+            style="display:flex;flex-direction:column;gap:var(--space-4);max-width:420px;background:var(--surface);padding:var(--space-6);border-radius:var(--radius-lg);box-shadow:var(--elev-ring)"
+            onsubmit="event.preventDefault()"
+          >
+            <div class="field">
+              <label for="email">Work email</label>
+              <input id="email" type="email" placeholder="you@company.com" />
+            </div>
+            <div class="field">
+              <label for="team">Team name</label>
+              <input id="team" type="text" placeholder="Acme Productivity" />
+            </div>
+            <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2);flex-wrap:wrap">
+              <button type="submit" class="btn btn-primary">Get started</button>
+              <button type="button" class="btn btn-secondary">View extensions</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

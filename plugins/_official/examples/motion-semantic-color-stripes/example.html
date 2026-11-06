@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id": "terms", "type": "string", "label": "配色词语（每行一个）", "default": "tomato\ntomato on a vine\nneon\nneon tokyo\n80s\n80s disco\n80s pop\nretro\nbrowser\nbowser\nmario\nluigi\nwario\ncanada\nlondon\nlondon bus\nlondon pub\nroyalty\nindigo\nblue screen of death\nmatrix\nthe matrix\nbeach\nbeach sunset\nsunlight\nsunlight over the fields\nsunlight over the beach\nstormclouds", "maxLength": 500}]'>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="od-motion-output" content="video"><title>Semantic Color Stripes</title>
+<style>
+@font-face{font-family:"Noto Sans Mono";src:url("assets/NotoSansMono-variable.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:block}
+:root{--od-font-heading:"Noto Sans Mono","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--od-font-body:"Noto Sans Mono","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fdfefd}body{font-family:var(--od-font-body)}.od-heading{font-family:var(--od-font-heading)}#main{width:100vw;height:100vh;display:grid;place-items:center}canvas{display:block;width:100%;height:100%;object-fit:contain}#controls{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:10px 14px;background:#fdfefde8;border:1px solid #ddd;opacity:0;transition:opacity .2s;font-size:12px}#controls:hover,#controls:focus-within{opacity:1}button{font-family:var(--od-font-body);background:none;border:0;cursor:pointer}input{width:240px}html.od-export #controls{display:none}html.od-export #main{display:block;width:100%;height:100%}
+</style><script src="assets/gsap.min.js"></script><script src="assets/motion-data.js"></script><style data-od-font-synthesis>html{font-synthesis:none}</style>
+<style data-od-preview-chrome>
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);box-sizing:border-box;padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent,#3b6cf6);color:#fff;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px;white-space:nowrap}
+#controls input[type=range]{flex:1;width:auto;min-width:0;accent-color:var(--accent,#3b6cf6)}
+#controls span,#controls output{white-space:nowrap;font-variant-numeric:tabular-nums}
+html.od-export #controls{display:none!important}
+</style>
+</head>
+<body><main id="main" data-od-id="palette-composition" data-composition-id="main" data-od-motion-layout="stage" data-start="0" data-duration="65.283333" data-width="1018" data-height="720"><canvas id="film" width="1018" height="720" data-od-id="semantic-palette" aria-label="词语输入与语义色带"></canvas></main>
+<div id="controls"><button id="play">PLAY</button><input id="scrub" type="range" min="0" step="0.01" value="0"><span id="time">0.00 / 65.28</span></div>
+<script>
+const VARS=(window.__hyperframes && window.__hyperframes.getVariables?.()) || {};
+const CFG = {
+  "duration": 65.283333,
+  "terms": "tomato\ntomato on a vine\nneon\nneon tokyo\n80s\n80s disco\n80s pop\nretro\nbrowser\nbowser\nmario\nluigi\nwario\ncanada\nlondon\nlondon bus\nlondon pub\nroyalty\nindigo\nblue screen of death\nmatrix\nthe matrix\nbeach\nbeach sunset\nsunlight\nsunlight over the fields\nsunlight over the beach\nstormclouds",
+  "scenes": [
+    {
+      "id": "tomato",
+      "name": "番茄与藤蔓",
+      "dur": 4.583333,
+      "minDur": 4.583333,
+      "maxDur": 6.874999
+    },
+    {
+      "id": "neon",
+      "name": "霓虹东京",
+      "dur": 3.366667,
+      "minDur": 3.366667,
+      "maxDur": 5.050001
+    },
+    {
+      "id": "eighties",
+      "name": "八十年代迪斯科与流行",
+      "dur": 4.0,
+      "minDur": 4.0,
+      "maxDur": 6.0
+    },
+    {
+      "id": "retro",
+      "name": "复古色谱",
+      "dur": 2.283333,
+      "minDur": 2.283333,
+      "maxDur": 3.425
+    },
+    {
+      "id": "browser",
+      "name": "browser 修正为 bowser",
+      "dur": 4.616667,
+      "minDur": 4.616667,
+      "maxDur": 6.925001
+    },
+    {
+      "id": "mario",
+      "name": "mario",
+      "dur": 1.4,
+      "minDur": 1.4,
+      "maxDur": 2.1
+    },
+    {
+      "id": "luigi",
+      "name": "luigi",
+      "dur": 2.316667,
+      "minDur": 2.316667,
+      "maxDur": 3.475
+    },
+    {
+      "id": "wario",
+      "name": "wario",
+      "dur": 2.55,
+      "minDur": 2.55,
+      "maxDur": 3.825
+    },
+    {
+      "id": "canada",
+      "name": "加拿大",
+      "dur": 2.266666,
+      "minDur": 2.266666,
+      "maxDur": 3.399999
+    },
+    {
+      "id": "london",
+      "name": "伦敦、巴士与酒馆",
+      "dur": 6.933334,
+      "minDur": 6.933334,
+      "maxDur": 10.400001
+    },
+    {
+      "id": "royalty",
+      "name": "皇室紫",
+      "dur": 2.8,
+      "minDur": 2.8,
+      "maxDur": 4.2
+    },
+    {
+      "id": "indigo",
+      "name": "靛蓝",
+      "dur": 2.233333,
+      "minDur": 2.233333,
+      "maxDur": 3.35
+    },
+    {
+      "id": "blue-screen",
+      "name": "蓝屏",
+      "dur": 4.966667,
+      "minDur": 4.966667,
+      "maxDur": 7.450001
+    },
+    {
+      "id": "matrix",
+      "name": "matrix 与 the matrix",
+      "dur": 4.583333,
+      "minDur": 4.583333,
+      "maxDur": 6.874999
+    },
+    {
+      "id": "beach",
+      "name": "沙滩与落日",
+      "dur": 3.55,
+      "minDur": 3.55,
+      "maxDur": 5.325
+    },
+    {
+      "id": "sunlight",
+      "name": "阳光、田野与海滩",
+      "dur": 8.316667,
+      "minDur": 8.316667,
+      "maxDur": 12.475
+    },
+    {
+      "id": "stormclouds",
+      "name": "乌云",
+      "dur": 4.516666,
+      "minDur": 4.516666,
+      "maxDur": 6.774999
+    }
+  ],
+  "cues": [
+    {
+      "id": "tomato-typing",
+      "scene": "tomato",
+      "at": 0
+    },
+    {
+      "id": "tomato-palette",
+      "scene": "tomato",
+      "at": 0
+    },
+    {
+      "id": "tomato-out",
+      "scene": "tomato",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "neon-typing",
+      "scene": "neon",
+      "at": 0
+    },
+    {
+      "id": "neon-palette",
+      "scene": "neon",
+      "at": 0.65
+    },
+    {
+      "id": "neon-out",
+      "scene": "neon",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "eighties-typing",
+      "scene": "eighties",
+      "at": 0
+    },
+    {
+      "id": "eighties-palette",
+      "scene": "eighties",
+      "at": 0.683333
+    },
+    {
+      "id": "eighties-out",
+      "scene": "eighties",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "retro-typing",
+      "scene": "retro",
+      "at": 0
+    },
+    {
+      "id": "retro-palette",
+      "scene": "retro",
+      "at": 1.033333
+    },
+    {
+      "id": "retro-out",
+      "scene": "retro",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "browser-typing",
+      "scene": "browser",
+      "at": 0
+    },
+    {
+      "id": "browser-palette",
+      "scene": "browser",
+      "at": 1.816667
+    },
+    {
+      "id": "browser-out",
+      "scene": "browser",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "mario-typing",
+      "scene": "mario",
+      "at": 0
+    },
+    {
+      "id": "mario-palette",
+      "scene": "mario",
+      "at": 0.733333
+    },
+    {
+      "id": "mario-out",
+      "scene": "mario",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "luigi-typing",
+      "scene": "luigi",
+      "at": 0
+    },
+    {
+      "id": "luigi-palette",
+      "scene": "luigi",
+      "at": 0.633333
+    },
+    {
+      "id": "luigi-out",
+      "scene": "luigi",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "wario-typing",
+      "scene": "wario",
+      "at": 0
+    },
+    {
+      "id": "wario-palette",
+      "scene": "wario",
+      "at": 0.9
+    },
+    {
+      "id": "wario-out",
+      "scene": "wario",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "canada-typing",
+      "scene": "canada",
+      "at": 0
+    },
+    {
+      "id": "canada-palette",
+      "scene": "canada",
+      "at": 1.016666
+    },
+    {
+      "id": "canada-out",
+      "scene": "canada",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "london-typing",
+      "scene": "london",
+      "at": 0
+    },
+    {
+      "id": "london-palette",
+      "scene": "london",
+      "at": 0.883334
+    },
+    {
+      "id": "london-out",
+      "scene": "london",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "royalty-typing",
+      "scene": "royalty",
+      "at": 0
+    },
+    {
+      "id": "royalty-palette",
+      "scene": "royalty",
+      "at": 1.0
+    },
+    {
+      "id": "royalty-out",
+      "scene": "royalty",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "indigo-typing",
+      "scene": "indigo",
+      "at": 0
+    },
+    {
+      "id": "indigo-palette",
+      "scene": "indigo",
+      "at": 0.966666
+    },
+    {
+      "id": "indigo-out",
+      "scene": "indigo",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "blue-screen-typing",
+      "scene": "blue-screen",
+      "at": 0
+    },
+    {
+      "id": "blue-screen-palette",
+      "scene": "blue-screen",
+      "at": 1.466667
+    },
+    {
+      "id": "blue-screen-out",
+      "scene": "blue-screen",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "matrix-typing",
+      "scene": "matrix",
+      "at": 0
+    },
+    {
+      "id": "matrix-palette",
+      "scene": "matrix",
+      "at": 0.833333
+    },
+    {
+      "id": "matrix-out",
+      "scene": "matrix",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "beach-typing",
+      "scene": "beach",
+      "at": 0
+    },
+    {
+      "id": "beach-palette",
+      "scene": "beach",
+      "at": 0.633333
+    },
+    {
+      "id": "beach-out",
+      "scene": "beach",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "sunlight-typing",
+      "scene": "sunlight",
+      "at": 0
+    },
+    {
+      "id": "sunlight-palette",
+      "scene": "sunlight",
+      "at": 1.083333
+    },
+    {
+      "id": "sunlight-out",
+      "scene": "sunlight",
+      "at": 0,
+      "from": "end"
+    },
+    {
+      "id": "stormclouds-typing",
+      "scene": "stormclouds",
+      "at": 0
+    },
+    {
+      "id": "stormclouds-palette",
+      "scene": "stormclouds",
+      "at": 1.483333
+    },
+    {
+      "id": "stormclouds-out",
+      "scene": "stormclouds",
+      "at": 0,
+      "from": "end"
+    }
+  ]
+,
+  ...VARS
+};
+CFG.motion=window.COLOR_MOTION;
+// Compensate the measured RGB → YUV420 → RGB export conversion.
+CFG.palette=["#c60207", "#f4d20a", "#0bac29", "#0979ed", "#f36fc6", "#939493", "#000000", "#2e33cc", "#6f05aa", "#eb6f07", "#904c03", "#e3ddcc", "#054a52", "#fdfefd", "#11d599", "#f3a4fa"];
+CFG.defaultTerms=["tomato", "tomato on a vine", "neon", "neon tokyo", "80s", "80s disco", "80s pop", "retro", "browser", "bowser", "mario", "luigi", "wario", "canada", "london", "london bus", "london pub", "royalty", "indigo", "blue screen of death", "matrix", "the matrix", "beach", "beach sunset", "sunlight", "sunlight over the fields", "sunlight over the beach", "stormclouds"];
+const SCENE_START={};CFG.scenes.reduce((t,s)=>(SCENE_START[s.id]=t,t+s.dur),0);
+const cueTime=id=>{const c=CFG.cues.find(c=>c.id===id),s=CFG.scenes.find(s=>s.id===c.scene);return SCENE_START[c.scene]+(c.from==='end'?s.dur-c.at:c.at)};
+const ACTIONS={"tomato":{typing:cueTime("tomato-typing"),palette:cueTime("tomato-palette"),out:cueTime("tomato-out")},
+"neon":{typing:cueTime("neon-typing"),palette:cueTime("neon-palette"),out:cueTime("neon-out")},
+"eighties":{typing:cueTime("eighties-typing"),palette:cueTime("eighties-palette"),out:cueTime("eighties-out")},
+"retro":{typing:cueTime("retro-typing"),palette:cueTime("retro-palette"),out:cueTime("retro-out")},
+"browser":{typing:cueTime("browser-typing"),palette:cueTime("browser-palette"),out:cueTime("browser-out")},
+"mario":{typing:cueTime("mario-typing"),palette:cueTime("mario-palette"),out:cueTime("mario-out")},
+"luigi":{typing:cueTime("luigi-typing"),palette:cueTime("luigi-palette"),out:cueTime("luigi-out")},
+"wario":{typing:cueTime("wario-typing"),palette:cueTime("wario-palette"),out:cueTime("wario-out")},
+"canada":{typing:cueTime("canada-typing"),palette:cueTime("canada-palette"),out:cueTime("canada-out")},
+"london":{typing:cueTime("london-typing"),palette:cueTime("london-palette"),out:cueTime("london-out")},
+"royalty":{typing:cueTime("royalty-typing"),palette:cueTime("royalty-palette"),out:cueTime("royalty-out")},
+"indigo":{typing:cueTime("indigo-typing"),palette:cueTime("indigo-palette"),out:cueTime("indigo-out")},
+"blue-screen":{typing:cueTime("blue-screen-typing"),palette:cueTime("blue-screen-palette"),out:cueTime("blue-screen-out")},
+"matrix":{typing:cueTime("matrix-typing"),palette:cueTime("matrix-palette"),out:cueTime("matrix-out")},
+"beach":{typing:cueTime("beach-typing"),palette:cueTime("beach-palette"),out:cueTime("beach-out")},
+"sunlight":{typing:cueTime("sunlight-typing"),palette:cueTime("sunlight-palette"),out:cueTime("sunlight-out")},
+"stormclouds":{typing:cueTime("stormclouds-typing"),palette:cueTime("stormclouds-palette"),out:cueTime("stormclouds-out")}};
+const canvas=document.getElementById('film'),ctx=canvas.getContext('2d');
+const heading=getComputedStyle(document.documentElement).getPropertyValue('--od-font-heading').trim();
+const main=document.getElementById('main');main.dataset.duration=CFG.duration;
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const terms=CFG.terms.split('\n');
+const findIndex=(arr,t)=>{let lo=0,hi=arr.length-1;while(lo<hi){let m=Math.ceil((lo+hi)/2);if(arr[m][0]<=t+0.00001)lo=m;else hi=m-1}return lo};
+function textAt(data,t){return data.text[findIndex(data.text,t)][1]}
+function replacedText(original){
+ if(CFG.terms===CFG.defaultTerms.join('\n'))return original;
+ let i=CFG.defaultTerms.indexOf(original);
+ if(i>=0)return (terms[i]||terms[terms.length-1]||'').slice(0,29);
+ i=CFG.defaultTerms.findIndex(x=>x.startsWith(original));
+ if(i<0)return original;
+ const replacement=terms[i]||terms[terms.length-1]||'';
+ return replacement.slice(0,Math.round(original.length/CFG.defaultTerms[i].length*replacement.length)).slice(0,29);
+}
+function drawBands(data,t,extra){
+ const a=data.palette[findIndex(data.palette,t)],b=data.palette[Math.min(data.palette.length-1,findIndex(data.palette,t)+1)];
+ const same=a.length===b.length&&a.every((x,i)=>i%2===0||i===0||x===b[i]);
+ const mix=same&&b[0]>a[0]?clamp((t-a[0])/(b[0]-a[0]),0,1):0;
+ let left=0;ctx.fillStyle='#fdfefd';ctx.fillRect(0,362,1018,357);
+ for(let i=1;i<a.length;i+=2){
+  let right=same?a[i+1]+(b[i+1]-a[i+1])*mix:a[i+1];
+  // Retimed holds continue the spatial performance without changing the measured demo.
+  if(extra>0&&i<a.length-2)right+=Math.sin(extra*1.25+i*.3)*Math.min(extra*18,20);
+  right=clamp(right,left,1018);ctx.fillStyle=CFG.palette[a[i]];ctx.fillRect(left,362,right-left+.15,357);left=right;
+ }
+ ctx.fillStyle='#252525';ctx.fillRect(0,719,1018,1);
+}
+function drawPointer(data,t){
+ if(!data.pointer)return;
+ const p=data.pointer[findIndex(data.pointer,t)];
+ if(!p[1])return;
+ ctx.save();ctx.translate(p[2],p[3]);
+ ctx.beginPath();
+ if(p[1]==='arrow'){
+  ctx.moveTo(0,-.6);ctx.lineTo(0,14);ctx.lineTo(3.2,10.5);
+  ctx.lineTo(6,16);ctx.lineTo(8.5,14.8);ctx.lineTo(5.5,9);ctx.lineTo(10.5,9);ctx.closePath();
+  ctx.shadowColor='#00000055';ctx.shadowBlur=1.5;ctx.shadowOffsetY=1;
+  ctx.lineJoin='round';ctx.strokeStyle='#ffffff';ctx.lineWidth=2.2;ctx.stroke();
+  ctx.shadowColor='transparent';ctx.fillStyle='#080808';ctx.fill();
+ }else{
+  ctx.moveTo(0,0);ctx.quadraticCurveTo(3.5,0,3.5,3);
+  ctx.lineTo(3.5,16);ctx.quadraticCurveTo(3.5,19,0,19);
+  ctx.moveTo(7,0);ctx.quadraticCurveTo(3.5,0,3.5,3);
+  ctx.moveTo(3.5,16);ctx.quadraticCurveTo(3.5,19,7,19);
+  ctx.strokeStyle='#ffffff';ctx.lineWidth=2.5;ctx.stroke();
+  ctx.strokeStyle='#181818';ctx.lineWidth=1.55;ctx.stroke();
+ }
+ ctx.restore();
+}
+function render(t){
+ t=clamp(t,0,CFG.duration);let si=CFG.scenes.findIndex(s=>t<ACTIONS[s.id].out);if(si<0)si=CFG.scenes.length-1;
+ const scene=CFG.scenes[si],data=CFG.motion[scene.id],act=ACTIONS[scene.id],local=t-act.typing;
+ const extra=Math.max(0,local-data.originalDur),sample=Math.min(Math.ceil((local-0.000001)*60)/60,data.originalDur-1/60);
+ ctx.fillStyle='#fdfefd';ctx.fillRect(0,0,1018,720);
+ drawBands(data,sample-(act.palette-act.typing),extra);
+ const text=replacedText(textAt(data,sample));ctx.font='400 30.85px '+heading;ctx.textAlign='center';ctx.textBaseline='alphabetic';
+ const input=data.input[findIndex(data.input,sample)],sel=input[2];
+ if(sel.length){ctx.fillStyle='#b4d5fa';ctx.fillRect(sel[0],159,sel[1]-sel[0],37)}
+ ctx.fillStyle='#080808';ctx.fillText(text,508.5,187.5);
+ let caret=input[1];
+ if(extra>0)caret=Math.sin(local*6.5)>0?508.5+ctx.measureText(text).width/2:-1;
+ if(CFG.terms!==CFG.defaultTerms.join('\n'))caret=caret<0?-1:508.5+ctx.measureText(text).width/2;
+ if(caret>=0){ctx.fillStyle='#101010';ctx.fillRect(caret-.6,159,1.2,36)}
+ // The reference rule straddles rows 205–207: soft edges around a black centre.
+ ctx.fillStyle='#000000';ctx.fillRect(173.5,205.25,669.5,2.5);
+ drawPointer(data,sample);
+ document.getElementById('scrub').value=t;document.getElementById('time').textContent=t.toFixed(2)+' / '+CFG.duration.toFixed(2);
+}
+const clock={t:0};let timeline;
+window.__odRenderAt=t=>{timeline?.pause(t);clock.t=t;render(t)};
+document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))).then(()=>{
+ timeline=gsap.timeline({paused:true,onUpdate:()=>render(clock.t)}).to(clock,{t:CFG.duration,duration:CFG.duration,ease:'none'});
+ window.__timelines={main:timeline};document.getElementById('scrub').max=CFG.duration;render(0);window.__odPreviewReady=true;
+});
+document.getElementById('play').onclick=()=>{if(!timeline)return;timeline.paused()?timeline.play():timeline.pause();document.getElementById('play').textContent=timeline.paused()?'PLAY':'PAUSE'};
+document.getElementById('scrub').oninput=e=>window.__odRenderAt(+e.target.value);
+</script><script data-od-preview-audio>
+(function(){var a=document.getElementById('soundtrack');if(!a||document.documentElement.classList.contains('od-export'))return;
+function tick(){if(window.__odMotionSourcePlayer||window.__odMotionRender)return;var tl=window.__timelines&&window.__timelines.main;
+if(tl){var t=tl.time(),on=tl.isActive();if(on){if(a.paused)a.play().catch(function(){});if(Math.abs(a.currentTime-t)>0.2)a.currentTime=t;}else{if(!a.paused)a.pause();if(Math.abs(a.currentTime-t)>0.05)a.currentTime=t;}}
+requestAnimationFrame(tick);}requestAnimationFrame(tick);})();
+</script>
+</body></html>

@@ -1,0 +1,1426 @@
+.op-meta { color: var(--text-muted); font-size: 12px; }
+.op-desc { font-style: italic; }
+.op-path {
+  background: var(--bg-fill-tertiary);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(220px, 100%);
+}
+.op-status {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.op-status-running { color: var(--purple); }
+.op-status-ok { color: var(--green); }
+.op-status-error { color: var(--red); }
+.op-status-category {
+  border-color: transparent;
+  background: var(--bg-panel);
+}
+.op-toggle {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+}
+.op-open {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.op-open:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
+}
+
+/* ---- Component 14 · artifact cards (design matrix grids 30-33) ----
+   Verbatim port of `.arts` / `.art` / `.thumb` / `.acts` from
+   `docs/design/chat-panel-next.html`; class names are prefixed because the
+   sheet's own selectors (`.art`, `.mini`) are short enough to collide with
+   anything. The card answers exactly one question — "is this the version I
+   wanted?" — so it carries the picture and nothing else: no filename, no
+   toolbar, no preview button (the card IS the preview entry), no overflow
+   menu. D28 / B19. */
+.artifact-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+/* One deliverable is the focus of the turn, so let it use the transcript's
+   available width. The shared cap matches the design sheet's 406px content
+   lane; multiple deliverables keep the two-column matrix above. */
+.artifact-cards:has(> .artifact-card:only-child) {
+  width: 100%;
+  max-width: var(--chat-artifact-single-max-width);
+  grid-template-columns: minmax(0, 1fr);
+}
+/* No `overflow: hidden` on the card itself — it would clip tooltips and any
+   popover an action opens. The thumbnail rounds its own corners instead. */
+.artifact-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+.artifact-card-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  height: auto;
+  max-height: var(--chat-artifact-max-height, 240px);
+  background: var(--bg-subtle);
+  border-radius: calc(var(--radius) - 1px);
+  overflow: hidden;
+  /* Query container for the HTML thumbnail's fit scale (see
+     `.artifact-card-frame`), and it has to be declared HERE. With no
+     container in the ancestor chain, `100cqw` falls back to the viewport:
+     measured 2026-08-28 in a 1600px window, dropping this line takes the
+     frame's scale from 0.140 to 1.111 and the 1440px page renders 1600px
+     wide inside a 202px card. */
+  container-type: size;
+}
+/* The grey placeholder: the only placeholder tone in the whole sheet. */
+.artifact-card-mini {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-muted);
+}
+.artifact-card-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Image deliverables must show the complete canvas. In particular, portrait
+   posters should letterbox inside the 16:10 card instead of losing their top
+   and bottom to the generic media crop. HTML keeps its scaled iframe path and
+   video keeps the dedicated portrait treatment below. */
+.artifact-card-media[data-preview-fit="contain"] {
+  object-fit: contain;
+}
+/* HTML artifacts render the real page as their thumbnail: the frame lays the
+   page out at a DESKTOP viewport and the whole thing is then scaled down to
+   the card. Same trick, same numbers-shape as the home project grid
+   (`styles/home/recent-projects.css` `.recent-projects__thumb-iframe`).
+
+   An iframe's own box size IS its viewport, so the base has to be an absolute
+   px width — not a multiple of the card. This rule used to read
+   `width: 250%; transform: scale(0.4)`, i.e. 2.5x a ~202px card = a 505px
+   viewport, which every responsive page treats as a phone: the card showed a
+   different LAYOUT from the preview beside it (measured 2026-08-28: card
+   `innerWidth` 505 with the page's mobile tab bar, preview pane 1124 with its
+   desktop three-column layout). Scaling was never the missing part; the base
+   was.
+
+   1440x900 because: it is 16/10 like the thumb above, and it clears every
+   common desktop breakpoint (768 / 1024 / 1280) while staying near the real
+   preview pane's width, so both land in the same responsive bucket. Going all
+   the way to 1920 would show a wider layout than the pane on the right
+   actually renders, and would shrink type past legibility at card size.
+   Motion overrides the viewport height to its native canvas ratio. Fit the
+   viewport by BOTH axes and centre it: the outer card has a height cap, so
+   width-only scaling can clip a portrait canvas or a wide single card. */
+.artifact-card-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1440px;
+  height: 900px;
+  transform: translate(-50%, -50%) scale(min(calc(100cqw / 1440px), calc(100cqh / var(--artifact-frame-height, 900px))));
+  transform-origin: center;
+  border: 0;
+  background: var(--bg-panel);
+  pointer-events: none;
+}
+/* Video: nothing is pressed onto the picture — no play button, no scrubber,
+   no "view" chip. A frame that fills the card already reads as tappable, and
+   the centre of a vertical clip is where its content usually is. A portrait
+   clip is letterboxed rather than stretched; the empty margins are themselves
+   information ("this is a vertical cut"). */
+.artifact-card--video .artifact-card-thumb {
+  display: grid;
+  place-items: center;
+}
+.artifact-card--video .artifact-card-media {
+  object-fit: contain;
+}
+.artifact-card--video .artifact-card-mini {
+  width: auto;
+  aspect-ratio: 9 / 16;
+  height: 100%;
+}
+/* The whole picture is the open target, laid over the thumbnail rather than
+   wrapping it: an <iframe>/<video> may not live inside a <button>. */
+/* Descendant-qualified throughout this block: `primitives.css` styles the bare
+   `button` element (36px tall, bordered, grey on hover) and its `:hover` /
+   `:focus-visible` rules carry an element-plus-two-pseudo weight that a single
+   class cannot outrank. */
+.artifact-card .artifact-card-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+}
+.artifact-card .artifact-card-open:hover { background: transparent; }
+.artifact-card .artifact-card-open:active { transform: none; }
+.artifact-card .artifact-card-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Actions sit in the TOP-RIGHT, not on the bottom edge: the lower strip of a
+   UI screenshot is usually still content and a button row lands right on top
+   of it, while the top-right corner is the emptiest part of nearly any
+   interface capture. Count varies by kind (HTML two, everything else one), so
+   the row is flex/end aligned — losing one button pulls the row right instead
+   of shifting the survivor. 12px on both edges so image and video cards line
+   up when they sit side by side. */
+.artifact-card-acts {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: calc(100% - 16px);
+  gap: 4px;
+}
+/* The export pill wraps in a relative anchor when it opens a format popover
+   (multi-format artifacts only). Keeping the wrapper a zero-cost inline-flex
+   means the row still collapses to the right when publish is absent — the
+   count-varies-by-kind rule above holds either way. */
+.artifact-card-act-anchor {
+  flex: none;
+  display: inline-flex;
+}
+/* PR7170 keeps the artwork visible through a dark glass pill. OPEND-2560 only
+   supersedes its outer height; the fill, inset, type, icon and interaction
+   stay on the design baseline. */
+.artifact-card .artifact-card-act {
+  flex: none;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgb(18 18 18 / 60%);
+  color: #fff;
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 16%, transparent), 0 2px 8px rgb(0 0 0 / 12%);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* Wrap the pair when translations do not fit side by side. A single long
+   label may truncate, while its icon and the other action remain reachable. */
+.artifact-card-act-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Hover deepens the same glass fill without changing geometry. */
+.artifact-card .artifact-card-act:hover {
+  background: rgb(18 18 18 / 72%);
+  border-color: transparent;
+}
+.artifact-card .artifact-card-act:active { transform: none; }
+.artifact-card .artifact-card-act:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* PR7170's custom ring glyph remains 12px; -1px eats its optical padding. */
+.artifact-card .artifact-card-act svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-inline-start: -1px;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .artifact-card .artifact-card-act { background: #353535; }
+  .artifact-card .artifact-card-act:hover { background: #202020; }
+}
+/* D37 — NOT in the design sheet. Product asked for it on 2026-08-21: while a
+   file is still being written the turn otherwise sits silent and then pops an
+   artifact out of nowhere. No actions yet, and — product, 2026-08-26 — the
+   placeholder is NOT a grey card: "任何产物卡片加载期间不能用灰色卡片代替".
+   The pixel-liquid canvas (`PixelLiquid`) lives inside the same `-mini` box so
+   the video card's 9/16 letterbox still holds; the box itself drops its grey
+   fill so the liquid's transparent gaps read as the thumb's own tone, exactly
+   as the sheet has it (upstream `bgColor.a = 0`).
+   The old `artifact-card-pulse` keyframes are gone with it — reduced-motion
+   degradation now lives in the canvas (one static frame, no rAF). */
+.artifact-card-mini.is-loading {
+  position: relative;
+  background: none;
+}
+
+.produced-files {
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.produced-files-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.produced-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
+}
+.produced-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: none;
+  border: none;
+  font-size: 13px;
+  box-shadow: none;
+  transition: background 160ms var(--ease-out);
+}
+.produced-file:hover {
+  background: var(--bg-fill-tertiary);
+}
+.produced-file-openable {
+  cursor: pointer;
+}
+.produced-file-openable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.produced-file-icon { width: 22px; text-align: center; color: var(--text-muted); }
+.produced-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.produced-file-size {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.produced-file-actions { display: flex; gap: 4px; }
+.produced-file-actions .ghost,
+.produced-file-actions .ghost-link {
+  font-size: 12px;
+  padding: 2px 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+}
+.produced-file-actions .ghost:hover,
+.produced-file-actions .ghost-link:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
+}
+
+/* "Files this turn" summary — derived from file operation tool_use events.
+   Show up to four files as part of the answer; larger batches stay compact
+   until the user opens the disclosure. */
+.file-ops {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  /* Frosted Thick standard material (材质规范): mostly-opaque + backdrop blur
+     across all four sides, so the card reads as frosted glass on the wash
+     instead of a starkly see-through panel. Theme-aware and degradation-safe
+     via material.css (falls back to a solid --bg-elevated). */
+  background: var(--material-thick);
+  -webkit-backdrop-filter: var(--material-thick-backdrop);
+  backdrop-filter: var(--material-thick-backdrop);
+  overflow: hidden;
+}
+.file-ops-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.file-ops-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 7px 10px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text);
+  min-width: 0;
+}
+.file-ops-toggle:hover { background: var(--bg-subtle); }
+.file-ops-toggle--static { cursor: default; }
+.file-ops-toggle--static:hover { background: transparent; }
+.file-ops-icon { display: inline-flex; color: var(--text-muted); }
+.file-ops-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.file-ops-summary-line {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.file-ops-count {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-soft);
+}
+.file-ops-more {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.file-ops-chev {
+  display: inline-flex;
+  color: var(--text-muted);
+  transition: transform 120ms var(--ease-out);
+}
+.file-ops-chev.is-expanded { transform: rotate(180deg); }
+.file-ops-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: min(34vh, 260px);
+  overflow-y: auto;
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+.file-ops-list--single {
+  padding: 0;
+  border-top: 0;
+  overflow: visible;
+}
+.file-ops-row {
+  display: block;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  min-width: 0;
+}
+.file-ops-row:hover { background: var(--bg-subtle); }
+.file-ops-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.file-ops-row-main--action {
+  cursor: pointer;
+}
+.file-ops-row-main--action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+}
+.file-ops-row--running { color: var(--text); }
+.file-ops-row--error { color: var(--text); }
+.file-ops-row-badges { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.file-ops-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 0;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.file-ops-badge-count {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.file-ops-badge--read {
+  color: color-mix(in oklab, var(--accent) 80%, var(--text));
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--border));
+}
+.file-ops-badge--write {
+  color: #2e7d32;
+  border-color: color-mix(in oklab, #2e7d32 35%, var(--border));
+  background: color-mix(in oklab, #2e7d32 8%, var(--bg-subtle));
+}
+.file-ops-badge--edit {
+  color: #b26500;
+  border-color: color-mix(in oklab, #b26500 35%, var(--border));
+  background: color-mix(in oklab, #b26500 8%, var(--bg-subtle));
+}
+.file-ops-badge--delete {
+  color: #b42318;
+  border-color: color-mix(in oklab, #b42318 35%, var(--border));
+  background: color-mix(in oklab, #b42318 8%, var(--bg-subtle));
+}
+.file-ops-row-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: transparent;
+  padding: 0;
+}
+.file-ops-row-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.file-ops-row-status {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+.file-ops-row-status--running {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.file-ops-row-status--error {
+  color: #c0392b;
+  background: color-mix(in oklab, #c0392b 12%, transparent);
+}
+.file-ops-row-open {
+  font-size: 12px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.file-ops-row-open-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  opacity: 0;
+  transform: translateX(-2px);
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.file-ops-row-open:hover {
+  border-color: var(--border);
+  color: var(--accent);
+}
+.file-ops-row-main--action:hover .file-ops-row-open-icon,
+.file-ops-row-main--action:focus-visible .file-ops-row-open-icon {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.op-bash .op-command,
+.op-bash .op-output {
+  margin: 0;
+  padding: 8px 12px;
+  background: #1c1b1a;
+  color: #f0eee9;
+  border-radius: var(--radius-md);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.op-bash .op-output { background: #2a2926; }
+
+.op-todo .todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+}
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 5px 8px;
+  line-height: 1.45;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
+}
+.todo-check {
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-soft);
+  font-family: var(--mono);
+  text-align: center;
+  line-height: 1.45;
+}
+.todo-text { color: var(--text); }
+
+/* Pending — quietly waiting */
+.todo-pending .todo-check { color: var(--text-faint); }
+.todo-pending .todo-text { color: var(--text-muted); }
+
+/* In progress — the only row that should pop */
+.todo-in_progress {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.todo-in_progress .todo-check { color: var(--accent); }
+.todo-in_progress .todo-text { color: var(--text-strong); font-weight: 600; }
+
+/* Completed — settled, but still readable */
+.todo-completed .todo-check { color: var(--green); }
+.todo-completed .todo-text {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
+  color: var(--text-muted);
+}
+
+/* Stopped — terminal fallback for a run that ended mid-task */
+.todo-stopped {
+  background: color-mix(in srgb, var(--red) 8%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red) 24%, transparent);
+}
+.todo-stopped .todo-check { color: var(--red); font-weight: 700; }
+.todo-stopped .todo-text { color: var(--text); }
+
+/* Composer extras */
+.composer.drag-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
+
+/* Present / Share menus */
+.present-wrap,
+.share-menu {
+  --viewer-action-menu-z: 220;
+}
+.present-wrap { position: relative; display: inline-block; }
+.present-trigger .caret {
+  margin-left: 4px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+.present-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--viewer-action-menu-z);
+  /* Size to the widest item (labels + any description) up to a cap, then wrap —
+     so a longer hint line isn't clipped by a fixed menu width. */
+  min-width: 200px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+.present-menu button {
+  background: transparent;
+  border: none;
+  /* Override the global `button { height: 36px; white-space: nowrap; }`
+     reset (primitives.css) — this menu's first item pairs a label with a
+     wrapped `.present-menu-copy small` hint (deck files only), and the
+     fixed single-line height clipped/overflowed that second line. `auto`
+     lets the row grow to fit the wrapped copy; the plain items (全屏 /
+     新标签页) stay compact since their own padding is the only floor. */
+  height: auto;
+  padding: 8px 10px;
+  font-size: 12px;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  color: var(--text);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.present-menu button:hover { background: var(--bg-subtle); border-color: transparent; }
+.present-icon {
+  display: inline-flex;
+  width: 14px;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.present-menu-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  /* The button's own global reset sets `white-space: nowrap` (inherited by
+     both the label span and the `small` hint below). At the menu's 168px
+     min-width that kept the deck hint ("演讲者备注会在弹窗中打开") on one
+     unbroken line wide enough to overflow past the menu's right edge, which
+     read as the sentence being cut off mid-way with no ellipsis. Let this
+     column wrap normally so the hint reflows onto a second line instead. */
+  white-space: normal;
+}
+.present-menu-copy small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.share-menu { position: relative; display: inline-block; }
+.template-share-menu > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* The Share trigger sits next to the solid "Use" pill in the preview-modal
+   header. `button.ghost` zeroes the border out (`border-color: transparent`),
+   so it used to render as bare text + icons and did not read as a button at
+   all. Give it the same outlined-box treatment the reference uses for a
+   standalone share/more control (`.plugin-share-trigger--solo`): panel fill,
+   1px border, accent-tinted open/hover state. Doubling up on `.ghost` here is
+   deliberate — it out-specifies `button.ghost` without an `!important`; the
+   `:not(:disabled)` is equally deliberate, so the global `button:disabled`
+   treatment still wins when the menu has nothing to offer. The header capsule
+   rule (`.ds-modal-actions .share-menu > button`) still owns the pill radius so
+   the box lines up with the Use pill. */
+.template-share-trigger.ghost:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+/* Both selectors carry `.ghost` so they out-specify the idle rule above
+   (0,3,0). Without it the open state would be (0,2,0) — lower than idle — and
+   specificity beats source order, so an open menu would silently render as if
+   it were closed the moment the pointer left it. */
+.template-share-trigger.ghost:hover:not(:disabled),
+.template-share-trigger.ghost[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.viewer-action-export {
+  gap: 6px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.viewer-action-export:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: white;
+}
+@keyframes export-ready-nudge {
+  0% {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  18% {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
+      0 8px 18px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  36% {
+    transform: translateY(0);
+  }
+  54% {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent),
+      0 8px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-action-export.export-ready-nudge {
+    animation: export-ready-nudge-reduced 1200ms ease-out 1;
+  }
+}
+
+@keyframes export-ready-nudge-reduced {
+  0%, 100% {
+    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+}
+.share-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--viewer-action-menu-z);
+  min-width: 300px;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+.share-menu-item {
+  display: flex;
+  align-items: center;
+  /* Left-align icon + label. Reset the global `button { justify-content: center }`
+     rule, which otherwise centres the row and leaves big empty side margins. */
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text);
+}
+.share-menu-item:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: transparent;
+}
+.share-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.share-menu-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  min-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+}
+.share-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-menu-text small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+.share-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
+.template-share-popover {
+  min-width: 320px;
+  gap: 6px;
+  padding: 8px;
+}
+.template-share-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 10px 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.template-share-summary__eyebrow {
+  font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.template-share-summary strong {
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.template-share-summary span:last-child {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.template-share-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.template-share-section + .template-share-section {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  padding-top: 6px;
+}
+.template-share-section__label {
+  padding: 2px 8px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.template-share-platform-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.template-share-platform {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.template-share-platform:hover:not(:disabled):not([aria-disabled='true']),
+.template-share-platform:focus-visible {
+  background: var(--bg-subtle);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  outline: none;
+}
+.template-share-platform:disabled,
+.template-share-platform[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.template-share-platform__mark {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text);
+  color: var(--bg-panel);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.template-share-platform--reddit .template-share-platform__mark {
+  background: #ff4500;
+  color: white;
+}
+.template-share-platform--facebook .template-share-platform__mark {
+  background: #1877f2;
+  color: white;
+}
+.template-share-platform--linkedin .template-share-platform__mark {
+  background: #0a66c2;
+  color: white;
+}
+.template-share-platform--instagram .template-share-platform__mark {
+  background: #e4405f;
+  color: white;
+}
+.template-share-platform--xiaohongshu .template-share-platform__mark {
+  background: #ff2442;
+  color: white;
+}
+.share-menu-subitem {
+  padding-left: 18px;
+}
+.share-menu-section-label {
+  padding: 8px 10px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.share-menu-subsection-label {
+  padding: 6px 10px 2px 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.button-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.button-like:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.deploy-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.deploy-flow-backdrop.modal-backdrop {
+  box-sizing: border-box;
+  padding: clamp(48px, 7vh, 88px) 16px;
+}
+.viewer-modal-backdrop.modal-backdrop {
+  z-index: 1700;
+}
+.deploy-flow-modal.modal {
+  /* --modal-padding feeds the .deploy-form horizontal padding below. */
+  --modal-padding: 22px;
+  max-height: min(760px, calc(100vh - 112px));
+  max-height: min(760px, calc(100dvh - 112px));
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.deploy-flow-modal__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 22px 18px;
+  scrollbar-width: thin;
+}
+.image-export-modal.modal {
+  width: min(430px, calc(100vw - 32px));
+  gap: 0;
+  padding: 0;
+}
+.image-export-modal .modal-head {
+  padding: 22px 24px 12px;
+}
+.image-export-modal .modal-head .kicker {
+  display: none;
+}
+.image-export-modal .modal-head h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.image-export-modal .modal-head .subtitle {
+  max-width: none;
+  margin-top: 6px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.image-export-form {
+  padding: 0 24px 18px;
+}
+.image-export-format-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.image-export-format-field legend {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.image-export-format-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+.image-export-format-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.image-export-format-option:hover {
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+}
+.image-export-format-option.active {
+  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: var(--bg-panel);
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 7%, transparent);
+}
+.image-export-format-option input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.image-export-format-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+.image-export-format-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+}
+.image-export-format-text strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.image-export-format-text span {
+  display: none;
+}
+.pptx-export-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.pptx-export-mode-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  cursor: pointer;
+  transition:
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pptx-export-mode-option:hover {
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+}
+.pptx-export-mode-option.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+}
+.pptx-export-mode-option input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.pptx-export-mode-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+.pptx-export-mode-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pptx-export-mode-title {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.pptx-export-mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.pptx-export-mode-desc {
+  color: color-mix(in srgb, var(--text) 58%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.image-export-modal .modal-foot {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--border);
+}
+/* Add a few extra pixels above the deploy dialog's primary action so
+   it does not crowd the divider. The shared .modal-foot uses 12px
+   vertical padding which is fine for shorter dialogs but reads as
+   cramped here because the deploy form ends in dense token / domain
+   config rows that push content right up to the border. Scoped to the
+   deploy dialog only (the template-save dialog also carries the
+   .deploy-modal class on its root, which is why we key off the
+   purpose-specific .deploy-flow-modal hook instead). 16px matches the
+   bump proposed for the global rule in #957 so the rhythm stays close
+   to the rest of the app. Issue #913. */
+.deploy-flow-modal .modal-foot {
+  padding-top: 16px;
+}
+.deploy-flow-modal .modal-foot .viewer-action.primary {
+  justify-content: center;
+  min-width: 104px;
+}
+.deploy-flow-modal .deploy-form {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--modal-padding) 18px;
+  margin-top: 0;
+}
+.deploy-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+.deploy-flow-modal .deploy-form {
+  gap: 12px;
+  margin-top: 16px;
+}
+.deploy-provider-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.deploy-form .deploy-field-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.deploy-form label.deploy-field-title {
+  display: inline;
+}
+.deploy-form .deploy-field-title.required::after {
+  content: ' *';
+  color: var(--accent);
+  font-weight: 700;
+}
+.deploy-token-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.deploy-token-input-row input {
+  min-width: 0;
+}
+.deploy-token-input-row .button-like {
+  min-height: 44px;
+}
+.deploy-field-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.deploy-field-inline-action {
+  border: 0;
+  padding: 0 2px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.deploy-field-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.deploy-token-label-row {
+  margin-bottom: -2px;
+}
+.deploy-token-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.deploy-token-hints .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.field-label-row a:not(.field-label-link) {
+  color: var(--accent);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.field-label-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.field-label-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 120ms var(--ease-out);
+}
+.field-label-link:hover {
+  color: var(--accent);
+}
+.field-label-link svg {
+  opacity: 0.75;
+  transition: transform 120ms var(--ease-out), opacity 120ms var(--ease-out);
+}
+.field-label-link:hover svg {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+.field-status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  color: #137a3d;
+  background: color-mix(in srgb, #1f9d55 10%, transparent);
+  border: 1px solid color-mix(in srgb, #1f9d55 28%, var(--border));
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * Inline variant lives next to a label on the same row instead of taking
+ * its own line. We also drop the green "success" treatment because the
+ * media-provider row already has a green "Integrated" badge — two green
+ * pills in one row read as duplicate state. Neutral muted gray keeps it
+ * legible as metadata without competing for attention.
+ */
+.field-status-badge--inline {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  font-weight: 600;
+}

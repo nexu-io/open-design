@@ -1,0 +1,67 @@
+name: bake-plugin-previews-pr
+
+# Low-privilege pre-merge bake validation for plugin preview changes.
+#
+# This workflow intentionally does not receive R2 credentials, a write-capable
+# token, or a manifest push step. It may execute PR-head preview code because it
+# runs with read-only repository permissions and no secrets; the secret-bearing
+# upload/review PR path stays in bake-plugin-previews.yml after merge, and the
+# release writeback stays in bake-plugin-previews-release.yml.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # Everything that changes what a baked preview looks like: both plugin
+    # roots the preview manifest may reference (the guard and the bake cover
+    # plugins/community too), the renderer, and the shared bake action + this
+    # workflow itself — so a change to the bake recipe or its strictness can't
+    # merge without running the strict pre-merge validation.
+    paths:
+      - 'plugins/_official/**'
+      - 'plugins/community/**'
+      - 'scripts/bake-plugin-previews.mjs'
+      - '.github/actions/bake-previews/**'
+      - '.github/workflows/bake-plugin-previews-pr.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bake-plugin-previews-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bake:
+    name: Bake plugin previews (pre-merge)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Render previews without publishing
+        uses: ./.github/actions/bake-previews
+        with:
+          upload: 'false'
+          # Strict: a PR that breaks its own preview (blank clip, or a change
+          # whose re-bake fails and would leave the committed entry serving the
+          # OLD clip) fails here, pre-merge, instead of shipping a gallery card
+          # that no longer matches the plugin.
+          strict: 'true'
+
+      - name: Compare generated manifest
+        run: |
+          OLD=data/plugin-previews/manifest.json
+          NEW=.tmp/plugin-previews/manifest.json
+          diff_result="$(node scripts/plugin-previews-diff.mjs "$OLD" "$NEW")"
+          case "$diff_result" in
+            changed) echo "previews changed — post-merge bake will publish clips and open the rolling manifest PR" ;;
+            unchanged) echo "previews unchanged" ;;
+            *) echo "unexpected diff result: '$diff_result'" >&2; exit 1 ;;
+          esac

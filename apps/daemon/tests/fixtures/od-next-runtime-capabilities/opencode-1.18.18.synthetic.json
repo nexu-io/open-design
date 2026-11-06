@@ -1,0 +1,69 @@
+{
+  "fixtureKind": "contract_only",
+  "runtime": "native_opencode",
+  "cliVersion": "1.18.18",
+  "note": "Synthetic contract fixture only. It is not a sanitized-real capability declaration.",
+  "rootSessionId": "ses_root_synthetic",
+  "frames": [
+    {
+      "type": "step_start",
+      "sessionID": "ses_root_synthetic",
+      "part": { "type": "step-start" }
+    },
+    {
+      "type": "tool_use",
+      "sessionID": "ses_root_synthetic",
+      "part": {
+        "type": "tool",
+        "tool": "task",
+        "callID": "call_task_synthetic",
+        "state": {
+          "status": "completed",
+          "input": {
+            "description": "Synthetic child",
+            "prompt": "Inspect the synthetic fixture only.",
+            "subagent_type": "explore"
+          },
+          "output": "[redacted:tool-output:task]",
+          "metadata": {
+            "parentSessionId": "ses_root_synthetic",
+            "sessionId": "ses_child_synthetic",
+            "model": {
+              "providerID": "synthetic-provider",
+              "modelID": "synthetic-model"
+            }
+          },
+          "time": { "start": 1786723200000, "end": 1786723201250 }
+        }
+      }
+    }
+  ],
+  "sanitizedChildExport": {
+    "info": {
+      "id": "ses_child_synthetic",
+      "parentID": "ses_root_synthetic",
+      "title": "[redacted:session-title:ses_child_synthetic]",
+      "directory": "[redacted:session-directory:ses_child_synthetic]"
+    },
+    "messages": [
+      {
+        "info": {
+          "id": "msg_assistant_synthetic",
+          "sessionID": "ses_child_synthetic",
+          "role": "assistant",
+          "finish": "stop",
+          "time": { "created": 1786723200100, "completed": 1786723201200 },
+          "tokens": {
+            "input": 11,
+            "output": 7,
+            "reasoning": 3,
+            "cache": { "read": 5, "write": 2 }
+          }
+        },
+        "parts": [
+          { "id": "part_text_synthetic", "type": "text", "text": "[redacted:text:part_text_synthetic]" }
+        ]
+      }
+    ]
+  }
+}

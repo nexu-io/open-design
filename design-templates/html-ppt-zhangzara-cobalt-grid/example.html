@@ -1,0 +1,1205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Write a Renewal &amp; Expansion Business Case like an Account Director - B2B sales</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Hanken+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper:    #F0EBDE;   /* warm cream / ivory paper canvas */
+    --paper-2:  #E6E0CE;
+    --ink:      #1F2BE0;   /* electric cobalt / royal blue */
+    --ink-soft: #5560E5;   /* lighter cobalt for secondary marks */
+    --grid:     rgba(31, 43, 224, 0.10);  /* very faint blue grid */
+    --rule:     #1F2BE0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a0a; }
+  body {
+    font-family: 'Hanken Grotesk', 'Helvetica Neue', sans-serif;
+    color: var(--ink);
+    overflow: hidden;
+  }
+
+  /* Deck wrapper — fills the viewport */
+  .deck { position: fixed; inset: 0; display: grid; place-items: center; }
+  .stage {
+    position: relative;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  /* Graph-paper grid behind every slide */
+  .stage::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: clamp(28px, 2.2vw, 44px) clamp(28px, 2.2vw, 44px);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    opacity: 0; pointer-events: none;
+    transition: opacity 280ms ease;
+    z-index: 2;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+
+  /* ─── TYPE SYSTEM ──────────────────────────────────────────── */
+  .disp {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    line-height: 0.92;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .body-tx {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+  .micro {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink);
+  }
+  .mono {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  /* Single page-number marker, shared across slides.
+     Sits ABOVE the bottom hairline rule, with deliberate space between the
+     two so the chrome elements don't collide on any slide. */
+  .pagenum {
+    position: absolute;
+    right: clamp(28px, 2.4vw, 48px);
+    bottom: clamp(48px, 4.8vh, 76px);
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(11px, 0.82vw, 13px);
+    color: var(--ink);
+    letter-spacing: 0.06em;
+    z-index: 9;
+  }
+
+  /* Top + bottom slim hairlines that frame each slide.
+     Echo of the reference's thin rule above and below the composition. The
+     bottom rule is pinned at the slide's lower edge so the page number,
+     which sits above it, has clear space and never overlaps. */
+  .hairlines::before,
+  .hairlines::after {
+    content: '';
+    position: absolute;
+    left: clamp(36px, 3.6vw, 80px);
+    right: clamp(36px, 3.6vw, 80px);
+    height: 1.5px;
+    background: var(--ink);
+    z-index: 4;
+    pointer-events: none;
+  }
+  .hairlines::before { top: clamp(28px, 2.6vh, 48px); }
+  .hairlines::after  { bottom: clamp(20px, 2vh, 32px); }
+
+  /* Fixed nav hint — sits above the bottom hairline, same vertical level
+     as the page number on the opposite side, so neither overlaps the rule. */
+  .nav-hint {
+    position: fixed;
+    left: clamp(36px, 3.6vw, 80px);
+    bottom: clamp(48px, 4.8vh, 76px);
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(10px, 0.75vw, 12px);
+    color: var(--ink);
+    letter-spacing: 0.08em;
+    opacity: 0.4;
+    z-index: 12;
+    pointer-events: none;
+  }
+
+  /* ─── DECORATIVE: pixel-glitch stair (reusable SVG) ─────────── */
+  /* The SVG below renders a column of stair-stepped rectangles, each
+     filled with vertical scanlines — a direct echo of the reference's
+     "pixelated" shape on the right side. Decorative only, pointer-events
+     disabled, sits behind content. */
+  .pixel-glitch {
+    position: absolute;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .pixel-glitch svg { display: block; width: 100%; height: 100%; }
+
+  /* ─── DECORATIVE: small QR-style block ───────────────────────── */
+  /* The QR is paper-backgrounded so it reads as a discrete patch when it
+     overlaps the pixel-glitch column behind it — without the paper fill,
+     the empty grid cells let the glitch's vertical scanlines bleed
+     through and the QR loses its shape. */
+  .qr-block {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 1.5px;
+    background: var(--paper);
+    padding: 4px;
+    box-shadow: 0 0 0 1.5px var(--paper);
+  }
+  .qr-block .px { background: var(--paper); }
+  .qr-block .px.on { background: var(--ink); }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 1 — COVER
+     ────────────────────────────────────────────────────────────── */
+  .s-cover { background: var(--paper); }
+
+  .s-cover .titlewrap {
+    position: absolute;
+    left: clamp(36px, 3.6vw, 80px);
+    top: clamp(80px, 9vh, 160px);
+    z-index: 5;
+    max-width: 60%;
+  }
+  .s-cover .title {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(100px, min(11vw, 18vh), 200px);
+    line-height: 0.92;
+    letter-spacing: -0.008em;
+    color: var(--ink);
+  }
+  .s-cover .subkicker {
+    margin-top: clamp(20px, 2.2vh, 36px);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .s-cover .subkicker .l {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: clamp(13px, 1vw, 16px);
+    color: var(--ink);
+  }
+  .s-cover .subkicker .ed {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(28px, min(2.8vw, 4.6vh), 50px);
+    line-height: 1.1;
+    color: var(--ink);
+  }
+
+  /* Pixel-glitch column on the right side of the cover */
+  .s-cover .pixel-glitch {
+    top: clamp(60px, 6vh, 120px);
+    right: clamp(36px, 3.6vw, 80px);
+    width: clamp(280px, 32vw, 560px);
+    bottom: clamp(110px, 12vh, 200px);
+  }
+
+  /* QR block top-right */
+  .s-cover .qr-block {
+    top: clamp(60px, 6vh, 120px);
+    right: clamp(120px, 8vw, 200px);
+    width: clamp(58px, 4.2vw, 84px);
+    height: clamp(58px, 4.2vw, 84px);
+  }
+
+  /* Vertical right-side label column (reads as a stack of micro-text,
+     replacing the Korean column in the reference). */
+  .s-cover .vstack {
+    position: absolute;
+    right: clamp(36px, 3.6vw, 60px);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    display: flex; flex-direction: column;
+    gap: clamp(10px, 1.2vh, 18px);
+    align-items: end;
+  }
+  .s-cover .vstack .v-row {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(12px, 0.9vw, 15px);
+    line-height: 1;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  /* Footer row */
+  .s-cover .cfooter {
+    /* Constrained to the left half so it never runs under the right-side
+       pixel-glitch column on any viewport. */
+    position: absolute;
+    left: clamp(36px, 3.6vw, 80px);
+    right: clamp(680px, 40vw, 880px);
+    bottom: clamp(82px, 8vh, 120px);
+    display: flex; justify-content: flex-start; align-items: end;
+    z-index: 5;
+    gap: clamp(28px, 3vw, 56px);
+  }
+  .s-cover .cfooter .colf {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: clamp(14px, 0.92vw, 15px);
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .s-cover .cfooter .colf .ftag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em;
+    font-size: clamp(11px, 0.78vw, 13px);
+    margin-bottom: 4px;
+    color: var(--ink);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 2 — MANIFESTO
+     ────────────────────────────────────────────────────────────── */
+  .s-manifesto { background: var(--paper); }
+  .s-manifesto .stmt-wrap {
+    position: absolute;
+    left: clamp(60px, 8vw, 160px);
+    right: clamp(60px, 8vw, 160px);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    text-align: left;
+  }
+  .s-manifesto .stmt {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(56px, min(6.4vw, 11vh), 120px);
+    line-height: 1.05;
+    letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .s-manifesto .stmt .roman {
+    font-style: normal;
+    font-weight: 500;
+  }
+  .s-manifesto .attr {
+    margin-top: clamp(28px, 3vh, 50px);
+    display: flex; gap: clamp(14px, 1.4vw, 24px); align-items: center;
+    border-top: 1px solid var(--ink);
+    padding-top: clamp(10px, 1.2vh, 18px);
+  }
+  .s-manifesto .attr .who {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: clamp(12px, 0.85vw, 14px);
+    color: var(--ink);
+  }
+  .s-manifesto .attr .meta-tag {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(12px, 0.82vw, 14px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    opacity: 0.78;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 3 — INDEX (numbered list of trends)
+     ────────────────────────────────────────────────────────────── */
+  .s-index { background: var(--paper); }
+  .s-index .frame {
+    position: absolute;
+    inset: clamp(76px, 8vh, 130px) clamp(36px, 3.6vw, 80px) clamp(100px, 10vh, 150px);
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    gap: clamp(20px, 2.2vh, 36px);
+    z-index: 5;
+  }
+  .s-index .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(12px, 1.4vh, 22px);
+    gap: 30px;
+  }
+  .s-index .topbar .h {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(48px, min(5vw, 8.5vh), 100px);
+    line-height: 0.95;
+    color: var(--ink);
+  }
+  .s-index .topbar .lab-tag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em;
+    font-size: clamp(12px, 0.9vw, 14px);
+    color: var(--ink); text-align: right;
+  }
+  .s-index .list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: clamp(14px, 2vh, 28px) clamp(28px, 3vw, 56px);
+  }
+  .s-index .row { align-self: stretch; }
+  .s-index .row {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: clamp(12px, 1.4vw, 22px);
+    border-bottom: 1px solid rgba(31, 43, 224, 0.18);
+    padding-bottom: clamp(12px, 1.4vh, 20px);
+  }
+  .s-index .row .num-tag {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(13px, 0.9vw, 15px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    padding-top: 6px;
+  }
+  .s-index .row h3 {
+    margin: 0 0 6px 0;
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(26px, 2vw, 40px);
+    line-height: 1.05;
+    color: var(--ink);
+  }
+  .s-index .row p {
+    margin: 0;
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: clamp(14px, 0.95vw, 15px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 92%;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 4 — CHAPTER (display + intro on glitch background)
+     ────────────────────────────────────────────────────────────── */
+  .s-chapter { background: var(--paper); }
+  .s-chapter .pixel-glitch {
+    top: clamp(60px, 6vh, 120px);
+    right: clamp(0px, 0vw, 0px);
+    width: clamp(220px, 26vw, 460px);
+    bottom: clamp(110px, 12vh, 200px);
+    opacity: 0.75;
+  }
+  .s-chapter .frame {
+    position: absolute;
+    left: clamp(36px, 3.6vw, 80px);
+    right: clamp(280px, 30vw, 540px);
+    top: clamp(80px, 9vh, 140px);
+    bottom: clamp(110px, 11vh, 170px);
+    display: flex; flex-direction: column;
+    justify-content: center;
+    z-index: 5;
+    gap: clamp(18px, 2vh, 32px);
+  }
+  .s-chapter .nm-tag {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(13px, 0.92vw, 15px);
+    color: var(--ink);
+    letter-spacing: 0.06em;
+  }
+  .s-chapter .ttl {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(56px, min(6vw, 10vh), 130px);
+    line-height: 1.0;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .s-chapter .lede {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 400;
+    font-size: clamp(15px, 1vw, 18px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 56ch;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 5 — DATA (vertical pixel-stack bar chart)
+     ────────────────────────────────────────────────────────────── */
+  .s-data { background: var(--paper); }
+  .s-data .frame {
+    position: absolute;
+    inset: clamp(76px, 8vh, 130px) clamp(36px, 3.6vw, 80px) clamp(100px, 10vh, 150px);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    gap: clamp(20px, 2vh, 36px);
+    z-index: 5;
+  }
+  .s-data .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(12px, 1.4vh, 22px);
+    gap: 30px;
+  }
+  .s-data .topbar .h {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(46px, min(4.8vw, 8.2vh), 92px);
+    line-height: 0.95;
+    color: var(--ink);
+  }
+  .s-data .topbar .lab-tag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em;
+    font-size: clamp(12px, 0.9vw, 14px);
+    color: var(--ink); text-align: right;
+  }
+  .s-data .body {
+    display: grid;
+    grid-template-columns: 0.8fr 1.6fr;
+    gap: clamp(28px, 3vw, 56px);
+  }
+  .s-data .col-a {
+    display: flex; flex-direction: column; justify-content: center;
+    gap: clamp(20px, 2.4vh, 36px);
+  }
+  .s-data .stat .vbig {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(110px, min(11vw, 18vh), 240px);
+    line-height: 0.92;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+  }
+  .s-data .stat .lab2 {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: clamp(13px, 0.95vw, 15px);
+    color: var(--ink);
+    margin-top: 6px;
+  }
+  .s-data .stat .desc {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: clamp(15px, 1vw, 17px);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 30ch;
+    margin-top: 6px;
+  }
+
+  /* The chart itself: a row of vertical "pixel stacks" — each track is
+     a column of small filled cells, with cell count proportional to the
+     value. Visually echoes the reference's pixel-glitch decoration. */
+  .s-data .chart {
+    display: flex; flex-direction: column; justify-content: end;
+    gap: clamp(10px, 1.2vh, 18px);
+  }
+  .s-data .chart .bars {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: clamp(10px, 1vw, 18px);
+    align-items: end;
+    height: 100%;
+    min-height: clamp(280px, 38vh, 540px);
+  }
+  .s-data .chart .stack {
+    display: flex; flex-direction: column-reverse; gap: 3px;
+    height: 100%;
+  }
+  .s-data .chart .stack .cell {
+    flex: 1 1 0;
+    min-height: 6px;
+    background: rgba(31, 43, 224, 0.10);
+  }
+  .s-data .chart .stack .cell.on { background: var(--ink); }
+  .s-data .chart .ticks {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: clamp(10px, 1vw, 18px);
+    border-top: 1.5px solid var(--ink);
+    padding-top: clamp(8px, 1vh, 14px);
+  }
+  .s-data .chart .ticks .ticklab {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(12px, 0.85vw, 14px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    text-align: center;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 6 — QUOTE
+     ────────────────────────────────────────────────────────────── */
+  .s-quote { background: var(--paper); }
+  .s-quote .pixel-glitch {
+    top: clamp(40px, 4vh, 80px);
+    right: clamp(36px, 3.6vw, 80px);
+    width: clamp(160px, 16vw, 280px);
+    bottom: clamp(40px, 4vh, 80px);
+    opacity: 0.6;
+  }
+  .s-quote .qframe {
+    position: absolute;
+    left: clamp(36px, 3.6vw, 80px);
+    right: clamp(220px, 22vw, 380px);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+  }
+  .s-quote .qkicker {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: clamp(12px, 0.9vw, 14px);
+    color: var(--ink);
+    margin-bottom: clamp(16px, 1.8vh, 28px);
+  }
+  .s-quote .qbody {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(50px, min(5.6vw, 9vh), 110px);
+    line-height: 1.05;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+    max-width: 92%;
+  }
+  .s-quote .qattr {
+    margin-top: clamp(24px, 2.6vh, 40px);
+    display: grid; grid-template-columns: auto 1fr;
+    gap: clamp(14px, 1.4vw, 24px);
+    align-items: end;
+    border-top: 1px solid var(--ink);
+    padding-top: clamp(10px, 1.2vh, 18px);
+  }
+  .s-quote .qattr .who-tag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: clamp(13px, 0.92vw, 15px);
+    color: var(--ink);
+  }
+  .s-quote .qattr .role-meta {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(12px, 0.85vw, 14px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    opacity: 0.78;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 7 — TREND TABLE (dense ledger)
+     ────────────────────────────────────────────────────────────── */
+  .s-table { background: var(--paper); }
+  .s-table .frame {
+    position: absolute;
+    inset: clamp(76px, 8vh, 130px) clamp(36px, 3.6vw, 80px) clamp(100px, 10vh, 150px);
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+  .s-table .topbar {
+    display: flex; align-items: end; justify-content: space-between;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: clamp(12px, 1.4vh, 22px);
+    margin-bottom: clamp(14px, 1.6vh, 24px);
+    gap: 30px;
+  }
+  .s-table .topbar .h {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(46px, min(4.8vw, 8.2vh), 92px);
+    line-height: 0.95;
+    color: var(--ink);
+  }
+  .s-table .topbar .lab-tag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em;
+    font-size: clamp(12px, 0.9vw, 14px);
+    color: var(--ink); text-align: right;
+  }
+  .s-table .ledger {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* Distribute the rows so they fill the available height.
+       The header row stays at the top, body rows space evenly below. */
+    justify-content: stretch;
+  }
+  .s-table .row {
+    display: grid;
+    grid-template-columns: 76px 0.6fr 1.4fr 0.7fr 0.5fr;
+    gap: clamp(14px, 1.4vw, 28px);
+    align-items: center;
+    padding: 0;
+    flex: 1 1 0;
+    min-height: clamp(46px, 6vh, 80px);
+    border-bottom: 1px solid rgba(31, 43, 224, 0.18);
+  }
+  .s-table .row.headrow {
+    border-bottom: 1.5px solid var(--ink);
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 8px 0;
+  }
+  .s-table .row.headrow > div {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em;
+    font-size: clamp(11px, 0.75vw, 12px);
+    color: var(--ink);
+  }
+  .s-table .num-tag {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(13px, 0.95vw, 15px);
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .s-table .nm {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-size: clamp(20px, 1.6vw, 28px);
+    line-height: 1.15;
+    color: var(--ink);
+  }
+  .s-table .desc {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: clamp(14px, 0.95vw, 15px);
+    line-height: 1.4;
+    color: var(--ink);
+  }
+  .s-table .mood-tag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: clamp(13px, 0.92vw, 15px);
+    color: var(--ink);
+  }
+  .s-table .delta-tag {
+    font-family: 'DM Mono', ui-monospace, monospace;
+    font-size: clamp(13px, 0.92vw, 15px);
+    text-align: right;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+  }
+  .s-table .delta-tag.up::before  { content: '↑ '; }
+  .s-table .delta-tag.down::before { content: '↓ '; opacity: 0.6; }
+  .s-table .delta-tag.flat::before { content: '— '; opacity: 0.6; }
+
+  /* ──────────────────────────────────────────────────────────────
+     SLIDE 8 — COLOPHON / CLOSING
+     ────────────────────────────────────────────────────────────── */
+  .s-colophon { background: var(--paper); }
+  .s-colophon .pixel-glitch {
+    top: clamp(80px, 9vh, 160px);
+    left: clamp(36px, 3.6vw, 80px);
+    width: clamp(220px, 26vw, 460px);
+    bottom: clamp(220px, 22vh, 360px);
+    opacity: 0.75;
+  }
+  .s-colophon .qr-block {
+    top: clamp(80px, 9vh, 160px);
+    right: clamp(36px, 3.6vw, 80px);
+    width: clamp(72px, 5vw, 100px);
+    height: clamp(72px, 5vw, 100px);
+  }
+  .s-colophon .titlewrap {
+    position: absolute;
+    right: clamp(36px, 3.6vw, 80px);
+    top: 28%;
+    z-index: 5;
+    max-width: 56%;
+    text-align: right;
+  }
+  .s-colophon .ktag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: clamp(12px, 0.9vw, 14px);
+    color: var(--ink);
+    margin-bottom: clamp(14px, 1.6vh, 24px);
+  }
+  .s-colophon .ttl {
+    font-family: 'Newsreader', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: clamp(72px, min(8.4vw, 14vh), 180px);
+    line-height: 0.96;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .s-colophon .col-footer {
+    position: absolute;
+    left: clamp(36px, 3.6vw, 80px);
+    right: clamp(36px, 3.6vw, 80px);
+    bottom: clamp(106px, 10.4vh, 160px);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1.2fr;
+    gap: clamp(20px, 2.4vw, 44px);
+    z-index: 5;
+  }
+  .s-colophon .col-footer > div {
+    border-top: 1.5px solid var(--ink);
+    padding-top: clamp(10px, 1.2vh, 16px);
+  }
+  .s-colophon .col-footer .ftag {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: clamp(11px, 0.78vw, 13px);
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  .s-colophon .col-footer .ftxt {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: clamp(14px, 0.95vw, 15px);
+    line-height: 1.5;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<!-- Reusable SVG that draws the staircase of vertical-scanline blocks.
+     Used on cover, chapter divider, quote, and colophon. -->
+<svg style="display:none" aria-hidden="true">
+  <defs>
+    <pattern id="vstripes" width="3" height="100" patternUnits="userSpaceOnUse">
+      <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.2" />
+    </pattern>
+  </defs>
+</svg>
+
+<div class="deck">
+  <div class="stage">
+
+    <!-- 1. COVER ──────────────────────────────────────────────── -->
+    <section class="slide s-cover hairlines active">
+      <div class="titlewrap">
+        <h1 class="title">Renew &<br/>Expand</h1>
+        <div class="subkicker">
+          <div class="l caption">FY26 Business Case · Prepared for Finance Review</div>
+          <div class="ed">Why Anthem Studios should renew OpenDesign and grow from 40 to 85 seats.</div>
+        </div>
+      </div>
+
+      <!-- Pixel-glitch staircase decoration -->
+      <div class="pixel-glitch" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <pattern id="vs1" width="2.4" height="100" patternUnits="userSpaceOnUse">
+              <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.0" />
+            </pattern>
+          </defs>
+          <rect x="36" y="0"  width="38" height="14" fill="url(#vs1)"/>
+          <rect x="22" y="14" width="50" height="12" fill="url(#vs1)"/>
+          <rect x="34" y="26" width="46" height="11" fill="url(#vs1)"/>
+          <rect x="16" y="37" width="60" height="13" fill="url(#vs1)"/>
+          <rect x="28" y="50" width="48" height="11" fill="url(#vs1)"/>
+          <rect x="18" y="61" width="62" height="14" fill="url(#vs1)"/>
+          <rect x="34" y="75" width="44" height="12" fill="url(#vs1)"/>
+          <rect x="22" y="87" width="50" height="13" fill="url(#vs1)"/>
+        </svg>
+      </div>
+
+      <!-- Vertical stack of micro-text on far right (replaces Korean) -->
+      <div class="vstack">
+        <div class="v-row caption">40 → 85 seats</div>
+        <div class="v-row caption">24-mo renewal</div>
+        <div class="v-row caption">anthem studios</div>
+      </div>
+
+      <!-- Footer row — two columns, sized to clear the right-side pixel-glitch -->
+      <div class="cfooter">
+        <div class="colf">
+          <div class="ftag caption">Prepared by</div>
+          <div>OpenDesign account team · for Anthem Studios</div>
+        </div>
+        <div class="colf">
+          <div class="ftag caption">Prepared for</div>
+          <div>Dana Reyes, Design Ops · Priya Shah, VP Finance</div>
+        </div>
+      </div>
+
+      <div class="pagenum">01 / 08</div>
+    </section>
+
+    <!-- 2. MANIFESTO ───────────────────────────────────────────── -->
+    <section class="slide s-manifesto hairlines">
+      <div class="stmt-wrap">
+        <p class="stmt">Every week without full-team access costs Anthem <span class="roman">three days of duplicate design work.</span></p>
+        <div class="attr">
+          <div class="who caption">The business case, in one line</div>
+          <div class="meta-tag caption">Prepared for Priya Shah, VP Finance</div>
+        </div>
+      </div>
+      <div class="pagenum">02 / 08</div>
+    </section>
+
+    <!-- 3. INDEX OF TRENDS ─────────────────────────────────────── -->
+    <section class="slide s-index hairlines">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">The case, in six parts.</div>
+          <div class="lab-tag caption">Anthem Studios · renewal &amp; expansion</div>
+        </div>
+        <div class="list">
+          <div class="row">
+            <div class="num-tag caption">01.</div>
+            <div>
+              <h3>Buyer pain</h3>
+              <p>Forty seats can't cover Product and Marketing, so requests queue behind Brand and spill onto contractors.</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">02.</div>
+            <div>
+              <h3>Current cost</h3>
+              <p>$142K a year in overflow freelance spend, plus a nine-day average concept-to-approved-asset cycle.</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">03.</div>
+            <div>
+              <h3>Proposed change</h3>
+              <p>Renew for 24 months and expand from 40 to 85 seats, bringing Product and Marketing onto the same platform.</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">04.</div>
+            <div>
+              <h3>Proof</h3>
+              <p>94% weekly seat utilization and a 3.2x rise in shipped projects since go-live, on the existing 40 seats.</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">05.</div>
+            <div>
+              <h3>Rollout</h3>
+              <p>Phased onboarding across three sprints, led by Design Ops, with BYOK keys provisioned per team.</p>
+            </div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">06.</div>
+            <div>
+              <h3>Commercial ask</h3>
+              <p>Approve the 45-seat expansion and lock the renewal price ahead of the Q3 team kickoff.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">03 / 08</div>
+    </section>
+
+    <!-- 4. CHAPTER DIVIDER ─────────────────────────────────────── -->
+    <section class="slide s-chapter hairlines">
+      <div class="pixel-glitch" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <pattern id="vs4" width="2.4" height="100" patternUnits="userSpaceOnUse">
+              <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.0" />
+            </pattern>
+          </defs>
+          <rect x="40" y="0"  width="40" height="14" fill="url(#vs4)"/>
+          <rect x="20" y="14" width="56" height="12" fill="url(#vs4)"/>
+          <rect x="32" y="26" width="48" height="11" fill="url(#vs4)"/>
+          <rect x="14" y="37" width="64" height="13" fill="url(#vs4)"/>
+          <rect x="26" y="50" width="50" height="11" fill="url(#vs4)"/>
+          <rect x="16" y="61" width="62" height="14" fill="url(#vs4)"/>
+          <rect x="32" y="75" width="46" height="12" fill="url(#vs4)"/>
+          <rect x="20" y="87" width="54" height="13" fill="url(#vs4)"/>
+        </svg>
+      </div>
+
+      <div class="frame">
+        <div class="nm-tag caption">Chapter one — the cost of the status quo</div>
+        <h2 class="ttl">Design work is bottlenecked on seats, not on talent.</h2>
+        <p class="lede">Anthem's 40 OpenDesign seats sit inside Brand. Product and Marketing route requests through Brand's queue or pay outside agencies to skip it — $142K last year, on work Anthem's own team could have shipped in-house with the right access.</p>
+      </div>
+
+      <div class="pagenum">04 / 08</div>
+    </section>
+
+    <!-- 5. DATA / PIXEL-STACK CHART ───────────────────────────── -->
+    <section class="slide s-data hairlines">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">The proof, by quarter.</div>
+          <div class="lab-tag caption">Shipped projects on the existing 40 seats</div>
+        </div>
+        <div class="body">
+          <div class="col-a">
+            <div class="stat">
+              <div class="vbig">94%</div>
+              <div class="lab2 caption">Weekly seat utilization</div>
+              <div class="desc">Nearly every licensed seat is active every week — the constraint is headcount of seats, not adoption.</div>
+            </div>
+            <div class="stat">
+              <div class="vbig" style="font-size: clamp(72px, min(7vw, 11vh), 150px);">3.2x</div>
+              <div class="lab2 caption">Shipped projects, YoY</div>
+              <div class="desc">Brand's output has more than tripled since go-live, with headcount unchanged.</div>
+            </div>
+          </div>
+          <div class="chart">
+            <!-- Each .stack is a quarter; with column-reverse, the first .cell
+                 in source order sits at the BOTTOM of the column, so .on cells
+                 stack up from baseline like a real pixel-bar chart. -->
+            <div class="bars">
+              <div class="stack"><!-- Q1 2024: 4 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q2 2024: 5 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q3 2024: 5 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q4 2024: 6 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q1 2025: 7 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q2 2025: 7 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q4 2025: 8 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div><div class="cell"></div>
+              </div>
+              <div class="stack"><!-- Q1 2026: 9 -->
+                <div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div><div class="cell on"></div>
+                <div class="cell"></div>
+              </div>
+            </div>
+            <div class="ticks">
+              <div class="ticklab caption">Q1 24</div>
+              <div class="ticklab caption">Q2 24</div>
+              <div class="ticklab caption">Q3 24</div>
+              <div class="ticklab caption">Q4 24</div>
+              <div class="ticklab caption">Q1 25</div>
+              <div class="ticklab caption">Q2 25</div>
+              <div class="ticklab caption">Q4 25</div>
+              <div class="ticklab caption">Q1 26</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">05 / 08</div>
+    </section>
+
+    <!-- 6. QUOTE ──────────────────────────────────────────────── -->
+    <section class="slide s-quote hairlines">
+      <div class="pixel-glitch" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <pattern id="vs6" width="2.4" height="100" patternUnits="userSpaceOnUse">
+              <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.0" />
+            </pattern>
+          </defs>
+          <rect x="20" y="0"  width="50" height="14" fill="url(#vs6)"/>
+          <rect x="34" y="14" width="46" height="13" fill="url(#vs6)"/>
+          <rect x="14" y="27" width="62" height="14" fill="url(#vs6)"/>
+          <rect x="26" y="41" width="50" height="13" fill="url(#vs6)"/>
+          <rect x="22" y="54" width="56" height="14" fill="url(#vs6)"/>
+          <rect x="36" y="68" width="44" height="13" fill="url(#vs6)"/>
+          <rect x="20" y="81" width="60" height="14" fill="url(#vs6)"/>
+        </svg>
+      </div>
+      <div class="qframe">
+        <div class="qkicker caption">A note from the champion</div>
+        <p class="qbody">"Turnaround went from nine days to three. Renewing was never in question — the only question was how fast we could add more seats."</p>
+        <div class="qattr">
+          <div class="who-tag caption">Dana Reyes</div>
+          <div class="role-meta caption">Head of Design Ops, Anthem Studios</div>
+        </div>
+      </div>
+      <div class="pagenum">06 / 08</div>
+    </section>
+
+    <!-- 7. TREND TABLE ─────────────────────────────────────────── -->
+    <section class="slide s-table hairlines">
+      <div class="frame">
+        <div class="topbar">
+          <div class="h">The business case, line by line.</div>
+          <div class="lab-tag caption">Prepared for the FY26 renewal review</div>
+        </div>
+        <div class="ledger">
+          <div class="row headrow">
+            <div class="caption">No.</div>
+            <div class="caption">Line item</div>
+            <div class="caption">Detail</div>
+            <div class="caption">Status</div>
+            <div class="caption">Change</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">01.</div>
+            <div class="nm">Current seats</div>
+            <div class="desc">40 seats licensed to the Brand team since FY24.</div>
+            <div class="mood-tag">Active</div>
+            <div class="delta-tag flat caption">40</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">02.</div>
+            <div class="nm">Seat utilization</div>
+            <div class="desc">Weekly active seats, above the 80% healthy-adoption target.</div>
+            <div class="mood-tag">Healthy</div>
+            <div class="delta-tag up caption">+18pts</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">03.</div>
+            <div class="nm">Turnaround time</div>
+            <div class="desc">Concept-to-approved-asset cycle, Brand team average.</div>
+            <div class="mood-tag">Improved</div>
+            <div class="delta-tag down caption">−67%</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">04.</div>
+            <div class="nm">Contractor spend</div>
+            <div class="desc">Freelance overflow work absorbed back in-house.</div>
+            <div class="mood-tag">Reduced</div>
+            <div class="delta-tag down caption">−$142K</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">05.</div>
+            <div class="nm">Proposed expansion</div>
+            <div class="desc">New seats for Product and Marketing teams.</div>
+            <div class="mood-tag">Requested</div>
+            <div class="delta-tag up caption">+45</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">06.</div>
+            <div class="nm">Renewal term</div>
+            <div class="desc">24-month term with price locked through FY28.</div>
+            <div class="mood-tag">Proposed</div>
+            <div class="delta-tag flat caption">24mo</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">07.</div>
+            <div class="nm">Projected ROI</div>
+            <div class="desc">Modeled against current contractor offset and cycle-time gains.</div>
+            <div class="mood-tag">Modeled</div>
+            <div class="delta-tag up caption">6.4x</div>
+          </div>
+          <div class="row">
+            <div class="num-tag caption">08.</div>
+            <div class="nm">Decision needed</div>
+            <div class="desc">Sign-off to renew and expand ahead of Q3 team kickoff.</div>
+            <div class="mood-tag">Pending</div>
+            <div class="delta-tag flat caption">Q3</div>
+          </div>
+        </div>
+      </div>
+      <div class="pagenum">07 / 08</div>
+    </section>
+
+    <!-- 8. COLOPHON / CLOSING ─────────────────────────────────── -->
+    <section class="slide s-colophon hairlines">
+      <div class="pixel-glitch" aria-hidden="true">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            <pattern id="vs8" width="2.4" height="100" patternUnits="userSpaceOnUse">
+              <line x1="0.5" y1="0" x2="0.5" y2="100" stroke="#1F2BE0" stroke-width="1.0" />
+            </pattern>
+          </defs>
+          <rect x="0"  y="0"  width="48" height="13" fill="url(#vs8)"/>
+          <rect x="14" y="13" width="56" height="12" fill="url(#vs8)"/>
+          <rect x="0"  y="25" width="64" height="14" fill="url(#vs8)"/>
+          <rect x="20" y="39" width="50" height="13" fill="url(#vs8)"/>
+          <rect x="6"  y="52" width="60" height="14" fill="url(#vs8)"/>
+          <rect x="18" y="66" width="48" height="13" fill="url(#vs8)"/>
+          <rect x="0"  y="79" width="56" height="14" fill="url(#vs8)"/>
+          <rect x="20" y="93" width="44" height="7"  fill="url(#vs8)"/>
+        </svg>
+      </div>
+
+      <div class="qr-block" aria-hidden="true">
+        <span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px"></span><span class="px on"></span>
+        <span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px"></span>
+        <span class="px on"></span><span class="px"></span><span class="px"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px on"></span>
+        <span class="px on"></span><span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px on"></span>
+        <span class="px"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px"></span><span class="px"></span><span class="px on"></span><span class="px"></span>
+        <span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px on"></span>
+        <span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span>
+        <span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px"></span><span class="px on"></span><span class="px on"></span><span class="px"></span>
+      </div>
+
+      <div class="titlewrap">
+        <div class="ktag caption">Renewal &amp; Expansion · FY26</div>
+        <h2 class="ttl">Approve by<br/>quarter's end.</h2>
+      </div>
+
+      <div class="col-footer">
+        <div>
+          <div class="ftag caption">Approve</div>
+          <div class="ftxt">Renewal + 45-seat expansion<br/>confirmed by August 14</div>
+        </div>
+        <div>
+          <div class="ftag caption">Champion</div>
+          <div class="ftxt">Dana Reyes, Head of Design Ops<br/>dana.reyes@anthemstudios.com</div>
+        </div>
+        <div>
+          <div class="ftag caption">Finance approver</div>
+          <div class="ftxt">Priya Shah, VP Finance<br/>priya.shah@anthemstudios.com</div>
+        </div>
+        <div>
+          <div class="ftag caption">Contract terms</div>
+          <div class="ftxt">24-month renewal · 40 → 85 seats — price locked through FY28.</div>
+        </div>
+      </div>
+
+      <div class="pagenum">08 / 08</div>
+    </section>
+
+  </div>
+</div>
+
+<div class="caption nav-hint">← / → · space</div>
+
+<script>
+  // Plain vanilla navigation: arrows, space, home/end, swipe.
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let current = 0;
+  function show(i) {
+    if (i < 0) i = 0;
+    if (i > slides.length - 1) i = slides.length - 1;
+    slides[current].classList.remove('active');
+    slides[i].classList.add('active');
+    current = i;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); show(current + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp')               { e.preventDefault(); show(current - 1); }
+    else if (e.key === 'Home')                                            { e.preventDefault(); show(0); }
+    else if (e.key === 'End')                                             { e.preventDefault(); show(slides.length - 1); }
+  });
+  let tx = null;
+  document.addEventListener('touchstart', (e) => { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (tx == null) return;
+    const dx = e.changedTouches[0].clientX - tx;
+    if (Math.abs(dx) > 40) show(current + (dx < 0 ? 1 : -1));
+    tx = null;
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloudflare Kumo UI typography</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: 760px; margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      h1 { margin: 0; font-size: var(--text-2xl); line-height: var(--leading-tight); font-weight: 600; }
+      .intro { margin: var(--space-2) 0 var(--space-8); color: var(--muted); font-size: var(--text-base); }
+      .samples { display: grid; gap: var(--space-5); }
+      .sample { display: grid; grid-template-columns: 88px 1fr; align-items: baseline; gap: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-soft); }
+      .label { color: var(--muted); font: 400 var(--text-xs) / 1.4 var(--font-mono); }
+      .text { margin: 0; font-size: var(--size); line-height: var(--leading-body); }
+      .heading { font-weight: 600; line-height: var(--leading-tight); }
+      .code { font-family: var(--font-mono); font-size: var(--text-sm); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Compact type hierarchy</h1>
+      <p class="intro">Inter with sentence case, zero manual tracking, and restrained medium or semibold emphasis.</p>
+      <section class="samples" aria-label="Typography samples">
+        <div class="sample"><span class="label">12px / xs</span><p class="text" style="--size: var(--text-xs)">Deployment metadata and captions</p></div>
+        <div class="sample"><span class="label">13px / sm</span><p class="text" style="--size: var(--text-sm)">Dense secondary controls and supporting labels</p></div>
+        <div class="sample"><span class="label">14px / base</span><p class="text" style="--size: var(--text-base)">Default product content, controls, and data</p></div>
+        <div class="sample"><span class="label">16px / lg</span><p class="text heading" style="--size: var(--text-lg)">Service overview</p></div>
+        <div class="sample"><span class="label">24px / 2xl</span><p class="text heading" style="--size: var(--text-2xl)">Network operations</p></div>
+        <div class="sample"><span class="label">mono</span><p class="text code">wrangler deploy --env production</p></div>
+      </section>
+    </main>
+  </body>
+</html>

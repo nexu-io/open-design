@@ -1,0 +1,21 @@
+{
+  "id": "profile-avatar-monochrome-studio-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Monochrome Studio Portrait",
+  "summary": "A high-end commercial photography prompt for a monochrome portrait with a distinctive split-background and dramatic studio lighting.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A stunning black and white studio portrait of {argument name=\"subject\" default=\"uploaded person\"}. Eye-level medium shot, framed from the waist up. The subject is standing with his arms casually but firmly crossed over his chest. He is looking downward and slightly off-camera to the left with a calm, contemplative posture. He is wearing a {argument name=\"outfit\" default=\"dark, heavy-textured waffle-knit long-sleeve sweater\"} and a delicate silver chain necklace with a small pendant. He is wearing a classic analog watch with a light dial and leather strap on the lower arm. The background is a {argument name=\"background style\" default=\"stark, graphic vertical split: pure white on the left half and pure deep black on the right half\"}. High-end commercial photography, monochrome masterpiece. Soft but dramatic directional studio lighting originating from the left, highlighting the textures of the clothing and skin while casting natural, smooth shadows on the right side. Crisp focus, hyper-realistic,8k resolution, cinematic composition. ar 4:5",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777367273368_hp9n0c_HG7mqKmb0AA1ecq.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "K",
+    "url": "https://x.com/ChillaiKalan__/status/2048828505497198838"
+  }
+}

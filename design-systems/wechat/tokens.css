@@ -1,0 +1,176 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/wechat/tokens.css
+ *
+ * Structured token bindings for "WeChat" (微信) — Tencent's all-in-one
+ * social, payment, and mini-program super-app. The visual language is
+ * a quiet, light-friendly consumer canvas built around one decisive
+ * signal: WeChat Green (#07C160). Everything else recedes so green
+ * carries the brand — CTAs, success states, active tab, focus ring.
+ * Bilingual CJK-aware typography (PingFang SC, Hiragino Sans GB,
+ * Microsoft YaHei, Noto Sans SC) keeps English and 中文 on the same
+ * vertical rhythm so chat rows, page titles, and mini-program cards
+ * align in either script without per-language overrides.
+ *
+ * Brand identity in three sentences:
+ *   1. The canvas is the muted #EDEDED chat-list gray, not pure white —
+ *      this is the colour every WeChat user has stared at for a decade.
+ *      Surfaces (#F7F7F7) lift one tone above it. Pure white belongs to
+ *      incoming chat bubbles, not pages.
+ *   2. Brand green #07C160 is the only accent. Hover (#10B160) and
+ *      pressed (#059050) come straight from the platform spec; the same
+ *      green doubles as the success state because in WeChat green *is*
+ *      "good / done / sent / paid".
+ *   3. Type is mobile-first and dense: 15px body at 1.6 line-height,
+ *      18px page titles, 11px timestamps. The display ladder (24 → 32
+ *      → 48px) is deliberately modest — WeChat's marketing voice
+ *      ("微信，是一个生活方式") is understated, not billboard-loud.
+ *
+ * Schema decisions:
+ *   - --bg: #ededed (chat-list gray, DESIGN.md §UI Neutrals).
+ *   - --surface: #f7f7f7 (card / sheet lift on bg).
+ *   - --surface-warm: var(--surface) — single surface tier.
+ *   - --fg: #1a1a1a (ink); --fg-2 alias — DESIGN.md has one text tier.
+ *   - --muted: #888888 (secondary + timestamps);
+ *     --meta: var(--muted) — DESIGN.md does not separate the tier.
+ *   - --border: #e0e0e0; --border-soft alias — single border weight.
+ *   - --accent: #07c160 + hover #10b160 + active #059050 (DESIGN.md).
+ *   - --success: #07c160 (brand-as-success — green is "done" in WeChat).
+ *   - --warn: #fab702; --danger: #fa5151 (DESIGN.md functional palette).
+ *   - --font-display / --font-body: identical apple-system + CJK stack.
+ *     DESIGN.md uses a single family across the app; bilingual users get
+ *     PingFang SC → Hiragino Sans GB → Microsoft YaHei → Noto Sans SC
+ *     fallbacks so 中文 renders crisply on macOS, iOS, Windows and Linux.
+ *   - Type scale: 11 / 13 / 15 / 16 / 18 / 24 / 32 / 48 — mobile-first
+ *     chat ladder extended with a modest 48px hero for marketing pages.
+ *   - --leading-body: 1.6 (DESIGN.md body, generous for CJK density).
+ *   - Radius: 4 / 8 / 16 / pill (DESIGN.md §Border Radius).
+ *   - Motion: 100ms hover, 200ms message-entry, cubic-bezier(0.25, 0.1,
+ *     0.25, 1) — DESIGN.md §Motion (instant + fast + ease-default).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────────
+   * Light-friendly canvas: the muted #EDEDED chat-list gray is the
+   * WeChat user's home colour. Surfaces lift one tone above it. */
+  --bg:           #ededed;             /* chat-list gray — primary canvas */
+  --surface:      #f7f7f7;             /* card / sheet lift on bg */
+  --surface-warm: var(--surface);      /* alias — single surface tier */
+
+  /* ─── Foreground ───────────────────────────────────────────────────
+   * One ink, one secondary. DESIGN.md does not separate dark / warm
+   * tiers, so --fg-2 and --meta alias their siblings. */
+  --fg:    #1a1a1a;                    /* ink — primary text */
+  --fg-2:  var(--fg);                  /* alias — single text weight */
+  --muted: #888888;                    /* secondary + timestamps */
+  --meta:  var(--muted);               /* alias — same gray for metadata */
+
+  /* ─── Border ───────────────────────────────────────────────────────
+   * Dividers are quiet — most cards are defined by background contrast,
+   * not borders. When borders appear, they are the same hairline gray. */
+  --border:      #e0e0e0;              /* card / row edge */
+  --border-soft: var(--border);        /* alias — no inner separator tier */
+
+  /* ─── Accent ───────────────────────────────────────────────────────
+   * WeChat Green is the single load-bearing colour. Hover and active
+   * are taken verbatim from DESIGN.md so primary buttons feel native. */
+  --accent:        #07c160;            /* WeChat green — primary brand */
+  --accent-on:     #ffffff;
+  --accent-hover:  #10b160;            /* DESIGN.md primary hover */
+  --accent-active: #059050;            /* DESIGN.md primary pressed */
+
+  /* ─── Semantic ─────────────────────────────────────────────────────
+   * Green doubles as success because in WeChat green *is* "done / paid /
+   * sent". Warning + danger come straight from DESIGN.md §Functional. */
+  --success: #07c160;                  /* brand-as-success — paid / done */
+  --warn:    #fab702;                  /* DESIGN.md warning orange */
+  --danger:  #fa5151;                  /* DESIGN.md error red */
+
+  /* ─── Typography ───────────────────────────────────────────────────
+   * Single bilingual stack across display + body. -apple-system first
+   * for SF / SF Pro on Apple platforms; PingFang SC + Hiragino Sans GB
+   * + Microsoft YaHei + Noto Sans SC keep 中文 crisp on macOS, iOS,
+   * Windows and Linux respectively. Helvetica Neue / Helvetica / Arial
+   * close the Latin tail. */
+  --font-display: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:    -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography is mobile-first (11–18px). The
+   * top three tiers (24 / 32 / 48px) extend the ladder for marketing
+   * pages while staying understated — WeChat does not shout. */
+  --text-xs:   11px;                   /* caption / timestamp */
+  --text-sm:   13px;                   /* secondary text */
+  --text-base: 15px;                   /* body — WeChat default */
+  --text-lg:   16px;                   /* section header / button label */
+  --text-xl:   18px;                   /* page title */
+  --text-2xl:  24px;                   /* feature heading */
+  --text-3xl:  32px;                   /* H2 — section title */
+  --text-4xl:  48px;                   /* display hero — modest by design */
+
+  /* Leading + tracking.
+   * 1.6 body line-height (DESIGN.md) gives Chinese characters generous
+   * air; 1.3 tight line-height matches the page-title spec. Display
+   * tracking compresses one notch — works for both Latin and CJK. */
+  --leading-body:     1.6;
+  --leading-tight:    1.3;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────────
+   * 4px base unit, DESIGN.md §Spacing System. The schema's --space-5
+   * (20px) and --space-12 (48px) fill in tiers DESIGN.md does not name
+   * but the layout grid needs. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ───────────────────────────────────────────────
+   * Phone-first product — desktop rhythm stays modest (72px) and
+   * collapses to 32px on phones to keep chat-row density on small
+   * screens. */
+  --section-y-desktop: 72px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────────
+   * DESIGN.md §Border Radius: 4 / 8 / 16 / pill. (The brand-specific
+   * --radius-bubble lives in DESIGN.md but is component-local — chat
+   * bubbles re-derive it inline so it does not enter the shared schema.) */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   16px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────────
+   * Whisper-quiet shadow lifted from DESIGN.md's incoming-bubble spec
+   * (0 1px 2px rgba(0,0,0,0.06)). WeChat surfaces almost never float;
+   * when they do, the shadow is barely perceptible. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* ─── Focus ────────────────────────────────────────────────────────
+   * Green-tinted ring keeps the brand voice consistent on keyboard
+   * focus across inputs, buttons, and links. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ───────────────────────────────────────────────────────
+   * DESIGN.md §Motion: 100ms hover, 200ms chat-message entry. Easing
+   * is the platform default (cubic-bezier(0.25, 0.1, 0.25, 1)) — the
+   * classic browser "ease", chosen for muscle-memory familiarity. */
+  --motion-fast:   100ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────────
+   * 1200px container fits WeChat's marketing-site pattern; phone
+   * gutters stay at 16px to match the chat row inset. */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

@@ -1,0 +1,14 @@
+/* theme: catppuccin-latte — catppuccin 浅 */
+:root{
+  --bg:#eff1f5;--bg-soft:#e6e9ef;--surface:#ffffff;--surface-2:#eef0f4;
+  --border:rgba(76,79,105,.14);--border-strong:rgba(76,79,105,.28);
+  --text-1:#4c4f69;--text-2:#6c6f85;--text-3:#9ca0b0;
+  --accent:#8839ef;--accent-2:#1e66f5;--accent-3:#ea76cb;
+  --good:#40a02b;--warn:#df8e1d;--bad:#d20f39;
+  --grad:linear-gradient(135deg,#8839ef,#1e66f5 50%,#04a5e5);
+  --grad-soft:linear-gradient(135deg,#eff1f5,#e6e9ef);
+  --radius:14px;--radius-sm:10px;--radius-lg:22px;
+  --shadow:0 8px 24px rgba(76,79,105,.1);
+  --shadow-lg:0 20px 56px rgba(76,79,105,.16);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neutral Modern buttons</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        align-items: center;
+      }
+      .btn {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px 16px;
+        background: transparent;
+        color: var(--fg);
+        font: 600 var(--text-sm) / 1 var(--font-body);
+      }
+      .btn-primary {
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-secondary {
+        background: var(--surface);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="row">
+        <button class="btn btn-primary">Create project</button>
+        <button class="btn btn-secondary">Review changes</button>
+        <button class="btn">Cancel</button>
+      </div>
+    </main>
+  </body>
+</html>

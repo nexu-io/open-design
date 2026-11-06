@@ -1,0 +1,147 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-default",
+  "title": "Default design router",
+  "title_i18n": {
+    "en": "Default design router",
+    "zh-CN": "默认设计路由器",
+    "zh-TW": "預設設計路由器",
+    "ja": "デフォルトデザインルーター",
+    "ko": "기본 디자인 라우터",
+    "de": "Standard-Design-Router",
+    "fr": "Routeur de design par défaut",
+    "ru": "Маршрутизатор дизайна по умолчанию",
+    "es": "Router de diseño por defecto",
+    "pt-BR": "Roteador de design padrão",
+    "it": "Router di design predefinito",
+    "vi": "Router thiết kế mặc định",
+    "pl": "Domyślny router designu",
+    "id": "Router desain default",
+    "nl": "Standaard designrouter",
+    "ar": "موجّه التصميم الافتراضي",
+    "tr": "Varsayılan tasarım yönlendiricisi",
+    "uk": "Типовий маршрутизатор дизайну"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T23:01:12Z",
+  "description": "Hidden fallback scenario for free-form Home prompts. It infers the task type and asks only when the brief cannot be routed reliably.",
+  "description_i18n": {
+    "en": "Hidden fallback scenario for free-form Home prompts. It infers the task type and asks only when the brief cannot be routed reliably.",
+    "zh-CN": "面向 Home 自由提示的隐藏 fallback 场景：先推断任务类型，仅在无法可靠路由时询问。",
+    "zh-TW": "面向 Home 自由提示的隱藏 fallback 場景：先推斷任務類型，僅在無法可靠路由時詢問。",
+    "ja": "Home の自由形式プロンプト向けの隠れたフォールバックシナリオ。タスク種別を推定し、確実に振り分けられない場合だけ質問します。",
+    "ko": "Home 자유 입력 프롬프트를 위한 숨겨진 폴백 시나리오입니다. 작업 유형을 추론하고 확실하게 라우팅할 수 없을 때만 질문합니다.",
+    "de": "Versteckter Fallback für freie Home-Prompts. Leitet den Aufgabentyp ab und fragt nur, wenn keine zuverlässige Zuordnung möglich ist.",
+    "fr": "Scénario de repli caché pour les prompts libres de Home. Il déduit le type de tâche et ne pose une question que si le routage reste incertain.",
+    "ru": "Скрытый fallback-сценарий для свободных промтов Home. Определяет тип задачи и спрашивает только тогда, когда надежная маршрутизация невозможна.",
+    "es": "Escenario de fallback oculto para prompts libres en Home. Infiere el tipo de tarea y solo pregunta cuando no puede enrutarla con fiabilidad.",
+    "pt-BR": "Cenário de fallback oculto para prompts livres no Home. Infere o tipo de tarefa e só pergunta quando não consegue encaminhá-la com segurança.",
+    "it": "Scenario di fallback nascosto per i prompt liberi della Home. Deduce il tipo di attività e chiede solo quando non può instradarla in modo affidabile.",
+    "vi": "Kịch bản fallback ẩn cho prompt tự do ở Home. Hệ thống suy luận loại tác vụ và chỉ hỏi khi không thể định tuyến một cách đáng tin cậy.",
+    "pl": "Ukryty scenariusz fallback dla swobodnych promptów Home. Wnioskuje typ zadania i pyta tylko wtedy, gdy nie może go wiarygodnie skierować.",
+    "id": "Skenario fallback tersembunyi untuk prompt bebas di Home. Menyimpulkan jenis tugas dan hanya bertanya ketika tidak dapat merutekannya dengan andal.",
+    "nl": "Verborgen fallback-scenario voor vrije Home-prompts. Leidt het taaktype af en vraagt alleen wanneer betrouwbare routering niet mogelijk is.",
+    "ar": "سيناريو احتياطي مخفي للموجهات الحرة في Home. يستنتج نوع المهمة ولا يسأل إلا عندما يتعذر توجيهها بشكل موثوق.",
+    "tr": "Home'daki serbest promptlar için gizli yedek senaryo. Görev türünü çıkarır ve yalnızca güvenilir biçimde yönlendiremediğinde sorar.",
+    "uk": "Прихований резервний сценарій для вільних промтів Home. Визначає тип задачі й запитує лише тоді, коли не може надійно її спрямувати."
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-default",
+  "tags": [
+    "scenario",
+    "first-party",
+    "default",
+    "router",
+    "hidden"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "default-router",
+    "mode": "scenario",
+    "hidden": true,
+    "context": {
+      "craft": [
+        "typography",
+        "color",
+        "anti-ai-slop"
+      ],
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "direction-picker",
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "media-image",
+            "media-video",
+            "media-audio",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "pipeline:*",
+      "media:image",
+      "media:video",
+      "media:audio",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Route a free-form Home prompt by inferring its task type, asking only when the route is materially ambiguous.",
+        "zh-CN": "先从自由输入推断设计任务类型，仅在路由存在实质歧义时询问。"
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "text",
+        "required": false,
+        "label": "User prompt",
+        "placeholder": "Describe what you want to design"
+      }
+    ]
+  }
+}

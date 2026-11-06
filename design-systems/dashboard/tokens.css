@@ -1,0 +1,63 @@
+/* design-systems/dashboard/tokens.css
+ * Structured token bindings for Dashboard.
+ * analytics dashboard with compact cards, cool surfaces, and status-first information design.
+ */
+
+:root {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --surface-warm: #eef6ff;
+  --fg: #111827;
+  --fg-2: #334155;
+  --muted: #64748b;
+  --meta: #0ea5e9;
+  --border: #d8e2ee;
+  --border-soft: #edf3f8;
+  --accent: #0ea5e9;
+  --accent-on: #04131d;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #10b981;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 22px;
+  --text-2xl: 30px;
+  --text-3xl: 42px;
+  --text-4xl: 56px;
+  --leading-body: 1.48;
+  --leading-tight: 1.1;
+  --tracking-display: -0.015em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 84px;
+  --section-y-tablet: 60px;
+  --section-y-phone: 42px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 18px 46px rgba(15, 23, 42, 0.10);
+  --focus-ring: 0 0 0 4px rgba(14, 165, 233, 0.22);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1280px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

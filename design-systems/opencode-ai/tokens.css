@@ -1,0 +1,126 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/opencode-ai/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by OpenCode".
+ * Terminal-native dark theme: warm near-black canvas, Berkeley Mono as
+ * the sole typeface, flat depth (no shadows), Apple HIG semantic colors.
+ *
+ * Key brand decisions encoded here:
+ *   - Dark-on-dark: #201d1d (warm near-black) as page bg, #302c2c for surface
+ *   - #fdfcfc (barely-warm off-white) as primary text — never pure white
+ *   - Berkeley Mono ONLY — no second typeface, no typographic variation
+ *   - FLAT depth system — zero shadows; depth via borders and bg shifts
+ *   - Warm borders: rgba(15,0,0,0.12) — subtle red tint ties to warm palette
+ *   - Apple HIG semantic colors (#007aff, #ff3b30, #30d158, #ff9f0a)
+ *   - Narrow reading column (~880px) — single-column, text-centric
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (dark theme) ────────────────────────────────────────
+   * Warm near-black → slightly lighter dark surface.
+   * The reddish warmth (rgb(32,29,29)) is subtle but essential. */
+  --bg: #201d1d;             /* OpenCode Dark — warm near-black with reddish undertone */
+  --surface: #302c2c;        /* Dark Surface — elevated containers, slight differentiation */
+  --surface-warm: var(--surface); /* alias — no separate warm tier needed */
+
+  /* ─── Foreground (on dark) ────────────────────────────────────────
+   * Warm off-white text — never clinical pure white. */
+  --fg: #fdfcfc;             /* OpenCode Light — barely-warm off-white primary text */
+  --fg-2: #c8c6c4;           /* Warm light gray — secondary on dark */
+  --muted: #9a9898;          /* Mid Gray — secondary text, muted links */
+  --meta: #6e6e73;           /* Text Muted — disabled text, placeholders */
+
+  /* ─── Border (warm transparent) ──────────────────────────────────
+   * The warm red tint (rgba(15,0,0,...)) in borders ties them to the
+   * overall warm dark palette. Use #646262 for visible outlines. */
+  --border: #464343;         /* Warm dark border — visible against bg */
+  --border-soft: #302c2c;    /* Same as surface — barely-visible inner separator */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Apple system blue — #007aff. Familiar, trustworthy, high-contrast
+   * on the warm dark canvas. The full three-stage hover sequence:
+   * #007aff → #0056b3 (hover) → #004085 (active). */
+  --accent: #007aff;
+  --accent-on: #ffffff;
+  --accent-hover: #0056b3;   /* Accent Blue Hover — explicitly defined */
+  --accent-active: #004085;  /* Accent Blue Active — deeply pressed */
+
+  /* ─── Semantic (Apple HIG palette) ────────────────────────────────
+   * Familiar trustworthy signals on a dark terminal canvas. */
+  --success: #30d158;        /* Apple system green */
+  --warn: #ff9f0a;           /* Apple system orange */
+  --danger: #ff3b30;         /* Apple system red */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Berkeley Mono is the ONLY font. No typographic variation — no
+   * display face, no body face — "everything is code" philosophy.
+   * Hierarchy via size and weight alone (400 / 500 / 700). */
+  --font-display: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-body: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-mono: "Berkeley Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale — DESIGN.md §3. Heading 1 at 38px, rest at 16px variants.
+   * The system is intentionally compressed — terminal scale. */
+  --text-xs: 12px;
+  --text-sm: 14px;           /* Caption — footnotes, metadata (lh 2.0) */
+  --text-base: 16px;         /* Body — standard text (weight 400 or 500) */
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 38px;          /* Heading 1 — hero headlines (weight 700, lh 1.5) */
+  --text-4xl: 48px;          /* Extended display if needed */
+
+  --leading-body: 1.5;       /* Monospace grid breathes at 1.5 */
+  --leading-tight: 1.0;      /* Compact labels, tab items */
+  --tracking-display: 0em;   /* Monospace doesn't need letter-spacing manipulation */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit. Generous extended scale (up to 96px) for sections.
+   * Sections separated by spacing alone — no decorative dividers. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 80px; /* Terminal-like generous spacing between sections */
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Minimal: 4px everywhere, 6px for form inputs (the roundest element).
+   * "Terminals don't have rounded corners" — utilitarian aesthetic. */
+  --radius-sm: 4px;          /* Default for all elements */
+  --radius-md: 6px;          /* Form inputs — slightly more approachable */
+  --radius-lg: 8px;          /* Rare — largest container radius */
+  --radius-pill: 9999px;     /* Declared but not part of the OpenCode aesthetic */
+
+  /* ─── Elevation (FLAT) ────────────────────────────────────────────
+   * Zero shadows — consistent with the terminal aesthetic.
+   * Depth via border treatments and background color shifts ONLY.
+   * All three levels use rings/outlines, never blur shadows. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 2px var(--border); /* Slightly more prominent ring — no blur */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Accent blue focus ring — no shadow-based ring (flat system). */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Terminal-inspired: instant state changes. 100ms for snappy feedback. */
+  --motion-fast: 100ms;
+  --motion-base: 150ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Narrow reading column (880px) — single-column, text-centric.
+   * Generous side margins focus attention on the content. */
+  --container-max: 880px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 20px;
+  --container-gutter-phone: 16px;
+}

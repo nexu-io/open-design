@@ -1,0 +1,28 @@
+{
+  "id": "game-screenshot-anime-fighting-game-captain-ryuuga-vs-kaze-renshin",
+  "surface": "image",
+  "title": "Game Screenshot - Anime Fighting Game: Captain Ryuuga vs Kaze Renshin",
+  "summary": "An in-game fighting game key visual / combat screenshot in the style of Street Fighter 6 or Tekken 8 intro art. Two anime-style male warriors square off in the center of a dramatic nighttime Chinese temple courtyard — a shirtless straw-hat pirate with a warm orange-red fire aura on the left, and a spiky-haired martial artist in an orange gi charging a massive crackling blue lightning energy sphere on the right. Ships with a complete fighting-game HUD (dual health bars, round timer, P1/P2 portrait panels with named fighters and emblems, per-side combo counters and max gauges). Warm-orange vs cool-blue split color grading matches the rival-fighter convention of the genre. Tuned for gpt-image-2 at 16:9.",
+  "category": "Game UI",
+  "tags": [
+    "game-ui",
+    "fighting-game",
+    "anime",
+    "hud",
+    "street-fighter",
+    "tekken",
+    "vs-screen",
+    "key-visual",
+    "cinematic"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "16:9",
+  "prompt": "A high-detail anime fighting game screenshot, 16:9 aspect ratio, cinematic key visual in the style of Street Fighter 6 or Tekken 8 intro art. Two anime male warriors in dynamic combat poses facing each other in the center.\n\n# LEFT FIGHTER\n{argument name=\"left_fighter\" default=\"shirtless, wearing a worn straw hat, red battle-scar across left eye, grinning with clenched teeth, shark-tooth necklace, tattered red cape, black pants with a skull-pattern sash, bare feet, right fist raised ready to strike, orange fire particles and water splashing at his feet, warm orange-red energy aura surrounding him\"}.\n\n# RIGHT FIGHTER\n{argument name=\"right_fighter\" default=\"spiky jet-black hair, wearing an orange martial-arts gi with a single black kanji character on the left chest, blue waistband sash, black wristbands, both hands in a charging pose with a massive crackling blue lightning energy sphere building between them, intense focused expression, bright blue electric aura\"}.\n\n# BACKGROUND\n{argument name=\"background\" default=\"dramatic nighttime Chinese-style temple courtyard, red pagoda architecture, stone-carved dragon columns, dark cloudy sky with blue moonlight, glowing paper lanterns, scattered debris on the ground\"}.\n\n# GAME UI OVERLAY\n- Top bar: two horizontal health bars (red, mostly full) with two smaller blue meter bars below, a round central timer reading \"{argument name=\"timer\" default=\"45\"}\" in white, labeled \"ROUND {argument name=\"round_number\" default=\"2\"}\" below it, left percentage \"{argument name=\"left_hp_percent\" default=\"75%\"}\", right percentage \"{argument name=\"right_hp_percent\" default=\"80%\"}\".\n- Top-left corner: P1 portrait avatar of the left fighter, character name \"{argument name=\"left_name\" default=\"CAPTAIN RYUUGA\"}\" in bold, subtitle \"{argument name=\"left_title\" default=\"KING OF THE SEAS\"}\", {argument name=\"left_emblem\" default=\"skull-and-crossed-swords emblem\"}.\n- Top-right corner: P2 portrait avatar of the right fighter, character name \"{argument name=\"right_name\" default=\"KAZE RENSHIN\"}\" in bold, subtitle \"{argument name=\"right_title\" default=\"DRAGON'S FIST\"}\", {argument name=\"right_emblem\" default=\"dragon emblem\"}.\n- Bottom-left: large orange number \"{argument name=\"left_combo\" default=\"12\"}\" with \"HITS COMBO\" text, horizontal orange gauge bar labeled \"{argument name=\"left_gauge_label\" default=\"3 MAX\"}\".\n- Bottom-right: large blue number \"{argument name=\"right_combo\" default=\"15\"}\" with \"HITS COMBO\" text, horizontal blue gauge bar labeled \"{argument name=\"right_gauge_label\" default=\"MAX 4\"}\".\n\n# Overall style\nCinematic, hyperdetailed, vibrant color grading, high contrast between warm orange (left half) and cool blue (right half), official fighting game key art quality, 4K resolution.\n\n# Negative prompt\nno watermark, no studio logos, no warped Latin or Japanese characters in UI, no gibberish glyphs, no low-res UI, no duplicated HUD widgets, no extra fingers on either fighter, no misaligned or crooked health bars, no copyrighted character likeness (original anime-styled designs only), no modern firearms, no real-world brands, no cluttered or overlapping UI panels, no signature.",
+  "previewImageUrl": "https://raw.githubusercontent.com/nexu-io/open-design/main/assets/prompt-templates/image/game-screenshot-anime-fighting-game-captain-ryuuga-vs-kaze-renshin.jpg",
+  "source": {
+    "repo": "nexu-io/open-design",
+    "license": "Apache-2.0",
+    "author": "open-design contributors",
+    "url": "https://github.com/nexu-io/open-design"
+  }
+}

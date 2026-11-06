@@ -1,0 +1,63 @@
+/* design-systems/editorial/tokens.css
+ * Structured token bindings for Editorial.
+ * editorial publishing language with warm paper surfaces, serif display type, and composed story cards.
+ */
+
+:root {
+  --bg: #fbf7f0;
+  --surface: #fffdf8;
+  --surface-warm: #f1e6d6;
+  --fg: #1f1a16;
+  --fg-2: #4b4038;
+  --muted: #7d7168;
+  --meta: #9a5a2f;
+  --border: #ded3c5;
+  --border-soft: #eee5da;
+  --accent: #9a5a2f;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #4f8a4f;
+  --warn: #c9822f;
+  --danger: #b33a3a;
+  --font-display: Georgia, "Times New Roman", serif;
+  --font-body: "Source Serif Pro", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 18px;
+  --text-lg: 21px;
+  --text-xl: 30px;
+  --text-2xl: 44px;
+  --text-3xl: 66px;
+  --text-4xl: 92px;
+  --leading-body: 1.65;
+  --leading-tight: 1;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 20px 50px rgba(31, 26, 22, 0.12);
+  --focus-ring: 0 0 0 4px rgba(154, 90, 47, 0.24);
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1120px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

@@ -1,0 +1,63 @@
+/* design-systems/dramatic/tokens.css
+ * Structured token bindings for Dramatic.
+ * dramatic cinematic interface with dark surfaces, strong contrast, and spotlight accent states.
+ */
+
+:root {
+  --bg: #090b12;
+  --surface: #121722;
+  --surface-warm: #1b2233;
+  --fg: #f8fafc;
+  --fg-2: #cbd5e1;
+  --muted: #94a3b8;
+  --meta: #60a5fa;
+  --border: #2a3447;
+  --border-soft: #1d2636;
+  --accent: #60a5fa;
+  --accent-on: #06101d;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #22c55e;
+  --warn: #fbbf24;
+  --danger: #fb7185;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.52;
+  --leading-tight: 1.06;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 72px rgba(0, 0, 0, 0.42);
+  --focus-ring: 0 0 0 4px rgba(96, 165, 250, 0.28);
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

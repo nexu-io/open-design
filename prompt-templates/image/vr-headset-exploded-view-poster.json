@@ -1,0 +1,22 @@
+{
+  "id": "vr-headset-exploded-view-poster",
+  "surface": "image",
+  "title": "VR Headset Exploded View Poster",
+  "summary": "Generates a high-tech exploded view diagram of a VR headset with detailed component callouts and promotional text.",
+  "category": "Social Media Post",
+  "tags": [
+    "fantasy",
+    "3d-render",
+    "product"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "{\n  \"type\": \"exploded view product diagram poster\",\n  \"subject\": \"VR headset\",\n  \"style\": \"clean high-tech 3D render, studio lighting, glowing accents\",\n  \"background\": \"{argument name=\\\"background color\\\" default=\\\"soft purple and blue gradient\\\"}\",\n  \"header\": {\n    \"logo\": \"∞ {argument name=\\\"product name\\\" default=\\\"Meta Quest 3\\\"}\",\n    \"subtitle\": \"{argument name=\\\"main catchphrase\\\" default=\\\"まったく新しい現実を、まったく新しい構造から。\\\"}\"\n  },\n  \"layout\": {\n    \"centerpiece\": \"vertically stacked exploded view of a VR headset showing 9 distinct layers of internal components: outer shell, camera sensors, motherboard with chip, pancake lenses, internal frame, battery packs, side straps, top strap, and facial interface cushion.\",\n    \"callout_labels\": {\n      \"count\": 8,\n      \"left_side\": [\n        \"Snapdragon® XR2 Gen 2\\n圧倒的な処理性能でリアルタイムな体験を。\",\n        \"調整可能なIPD機構\\n幅広いユーザーに快適なフィット感を。\",\n        \"精密設計されたヘッドストラップ\\n快適さと安定性を追求したエルゴノミクス。\"\n      ],\n      \"right_side\": [\n        \"フェイスプレート\\n洗練されたデザインと最適な重量バランス。\",\n        \"トラッキングカメラ\\n高精度な位置トラッキングと環境認識を実現。\",\n        \"パンケーキレンズ\\n薄型設計で広い視野角と鮮明な映像を提供。\",\n        \"高性能バッテリー\\n長時間駆動を支える最適化された電源設計。\",\n        \"柔らかなフェイスインターフェース\\n長時間でも快適な装着感を実現。\"\n      ]\n    },\n    \"footer\": {\n      \"left_text_block\": {\n        \"headline\": \"{argument name=\\\"bottom headline\\\" default=\\\"体験は、構造から進化する。\\\"}\",\n        \"body\": \"一つひとつのパーツに、没入体験を支える最先端テクノロジーとこだわりの設計。Meta Quest 3は、未来を感じさせる体験を内部から生み出しています。\"\n      },\n      \"right_logo\": \"∞ Meta\"\n    }\n  }\n}",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1776658772018_lukyfw_HGSUfldbIAEiMWZ.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "wory＠ホッピング中",
+    "url": "https://x.com/wory37303852/status/2045925660401795478#reversed-0"
+  }
+}

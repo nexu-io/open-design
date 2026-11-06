@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dir-Key Nav Minimal</title>
+<link rel="stylesheet" href="../../../assets/fonts.css">
+<link rel="stylesheet" href="../../../assets/base.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-dir-key-nav-minimal">
+<div class="deck">
+
+  <!-- 1. COVER · indigo -->
+  <section class="slide t-indigo is-active">
+    <div class="dk-snum">01 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">Karpathy LLM Wiki</div>
+      <h1 class="dk-h0">为什么笔记<br>治不了 <span class="dk-accent">LLM</span></h1>
+      <span class="dk-line"></span>
+      <p class="dk-lede">8 种背景、8 张幻灯，一个关于如何把 AI 变成「长期记忆外挂」的最短陈述。<strong>按 → 继续。</strong></p>
+    </div>
+    <div class="dk-keyhint">nav · <kbd>←</kbd> <kbd>→</kbd> · <kbd>space</kbd></div>
+    <div class="dk-page">cover</div>
+  </section>
+
+  <!-- 2. SECTION · cream -->
+  <section class="slide t-cream">
+    <div class="dk-snum">02 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">Chapter 01</div>
+      <h1 class="dk-h0">The <span class="dk-accent">Problem</span>.</h1>
+      <span class="dk-line"></span>
+      <p class="dk-lede">Token 上限是一个物理事实。你每次和 LLM 说话，它都是一个失忆症患者。</p>
+    </div>
+    <div class="dk-keyhint">chapter · 01 / 04</div>
+    <div class="dk-page">section</div>
+  </section>
+
+  <!-- 3. CONTENT · crimson -->
+  <section class="slide t-crimson">
+    <div class="dk-snum">03 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">Symptoms</div>
+      <h2 class="dk-h1">四种你已经<br>受够的<br><span class="dk-accent">遗忘</span>。</h2>
+      <ul class="dk-list">
+        <li>昨天聊过的项目，今天重新解释一遍</li>
+        <li>上下文窗口一到，它开始「编造记忆」</li>
+        <li>不同 session 之间毫无关联，就像第一次见</li>
+        <li>你的真正偏好从未被记住，每次都要 re-prompt</li>
+      </ul>
+    </div>
+    <div class="dk-keyhint">content · list</div>
+    <div class="dk-page">03</div>
+  </section>
+
+  <!-- 4. CONTENT · emerald -->
+  <section class="slide t-emerald">
+    <div class="dk-snum">04 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">The Fix</div>
+      <h2 class="dk-h1">答案不是<br><span class="dk-accent">更大</span> 的窗口。</h2>
+      <p class="dk-lede" style="margin-top:10px">而是：把你的知识、偏好、历史都<strong>写进文件系统</strong>。<br>让 LLM 每次对话前，先去读那个系统。</p>
+      <div class="dk-grid-2">
+        <div class="dk-col"><h3>× 窗口 stuffing</h3><p>把所有东西塞 prompt，贵、慢、最终溢出。</p></div>
+        <div class="dk-col"><h3>✓ 文件 + 检索</h3><p>按需加载，永远不溢出，结构化可 diff。</p></div>
+      </div>
+    </div>
+    <div class="dk-keyhint">content · compare</div>
+    <div class="dk-page">04</div>
+  </section>
+
+  <!-- 5. CODE · slate -->
+  <section class="slide t-slate">
+    <div class="dk-snum">05 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">Minimal Setup</div>
+      <h2 class="dk-h2"><span class="dk-accent">4 行</span> YAML<br>就能开始。</h2>
+      <pre class="dk-code">memory:
+  root: ~/.llm-wiki
+  format: markdown
+  retrieval: hybrid  # embedding + bm25</pre>
+      <p class="dk-lede" style="margin-top:16px;font-size:20px">你现在拥有一个会随时间增长的 <strong>第二大脑</strong>。每次对话它都会被读、被更新。</p>
+    </div>
+    <div class="dk-keyhint">content · code</div>
+    <div class="dk-page">05</div>
+  </section>
+
+  <!-- 6. CHART · violet — big number with bar -->
+  <section class="slide t-violet">
+    <div class="dk-snum">06 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">30-day result</div>
+      <div class="dk-big dk-accent">87%</div>
+      <p class="dk-lede" style="margin-top:14px;font-size:26px">的 re-explain 被消除。平均每次对话节省 <strong>4.2 分钟</strong> 的 re-context。</p>
+      <svg viewBox="0 0 900 80" style="width:100%;max-width:900px;margin-top:30px">
+        <rect x="0" y="30" width="900" height="22" rx="11" fill="rgba(255,255,255,.12)"/>
+        <rect x="0" y="30" width="783" height="22" rx="11" fill="#c4b5fd"/>
+        <text x="792" y="47" font-family="JetBrains Mono" font-size="16" fill="#c4b5fd" font-weight="700">87%</text>
+      </svg>
+    </div>
+    <div class="dk-keyhint">chart · big-num</div>
+    <div class="dk-page">06</div>
+  </section>
+
+  <!-- 7. CTA · white -->
+  <section class="slide t-white">
+    <div class="dk-snum">07 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">Start tonight</div>
+      <h2 class="dk-h1">开始<br>你的 <span class="dk-accent">wiki</span>。</h2>
+      <span class="dk-line"></span>
+      <p class="dk-lede">不是装又一个插件。是决定：从今晚起，<strong>你的所有 AI 对话都要有一个共同的 vault</strong>。</p>
+      <pre class="dk-code" style="font-size:18px">$ mkdir ~/llm-wiki && cd ~/llm-wiki
+$ git init
+$ echo "# my brain" > README.md</pre>
+    </div>
+    <div class="dk-keyhint">cta · three-commands</div>
+    <div class="dk-page">07</div>
+  </section>
+
+  <!-- 8. THANKS · charcoal -->
+  <section class="slide t-charcoal">
+    <div class="dk-snum">08 / 08</div>
+    <div style="margin:auto 0">
+      <div class="dk-eyebrow">End · thanks for staying</div>
+      <h1 class="dk-h0"><span class="dk-accent">謝謝</span>。</h1>
+      <span class="dk-line"></span>
+      <p class="dk-lede">Karpathy 的原始 thread + 我的 vault 结构都在 <strong>github.com/lewis/llm-wiki</strong>。欢迎按 ← 再看一遍。</p>
+    </div>
+    <div class="dk-keyhint">press <kbd>←</kbd> to rewind · <kbd>F</kbd> for fullscreen</div>
+    <div class="dk-page">fin</div>
+  </section>
+
+</div>
+<script src="../../../assets/runtime.js"></script>
+</body>
+</html>

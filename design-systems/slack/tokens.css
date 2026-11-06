@@ -1,0 +1,127 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/slack/tokens.css
+ *
+ * Structured token bindings for the "Slack" brand — aubergine sidebar,
+ * light content surfaces, warm and human workplace communication.
+ *
+ * Brand identity in three sentences:
+ *   1. Light-first content surfaces (white #FFFFFF / near-white #F8F8F8)
+ *      anchored by the iconic deep aubergine (#4A154B) sidebar — the most
+ *      recognizable UI element in workplace software.
+ *   2. Larsseit for marketing display headings; system-ui for all product
+ *      UI at 15px base (slightly below 16px for density); bold (700)
+ *      channel names are the primary unread indicator.
+ *   3. Four logo accent colors (blue, green, yellow, red) are strictly
+ *      semantic (info/success/warn/danger) — never decorative accents;
+ *      #1264A3 for links and focus rings.
+ *
+ * Schema decisions:
+ *   - --bg: #FFFFFF; --surface: #F8F8F8 (thread panels, secondary).
+ *   - --surface-warm aliases --surface (no warm tier in Slack's system).
+ *   - --fg: #1D1C1D (near-black — not pure black per brand spec).
+ *   - --accent: #4A154B (aubergine — primary CTAs and the sidebar).
+ *   - --accent-hover: #611f69 (active aubergine).
+ *   - --leading-tight: 1.10 (display compression at 48px).
+ *   - h2 (36px) → 1.15; h3 (28px) → 1.25 per DESIGN.md type table.
+ *   - --tracking-display: -0.021em (-1px / 48px normalized).
+ *   - --radius-sm: 4px (buttons/inputs — Slack uses conservative radius).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --surface:      #f8f8f8;              /* thread panels, secondary surfaces */
+  --surface-warm: var(--surface);       /* no warm tier in Slack's system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #1d1c1d;                      /* near-black — not pure black */
+  --fg-2: #1d1c1d;                      /* same ink; no split tier */
+  --muted: #616061;                     /* timestamps, muted labels */
+  --meta:  #616061;                     /* same muted tier */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #dddddd;              /* standard dividers, card borders */
+  --border-soft: #f1f1f1;             /* subtle row separators */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #4a154b;            /* aubergine — primary CTAs, sidebar bg */
+  --accent-on:     #ffffff;
+  --accent-hover:  #611f69;            /* active/hover aubergine */
+  --accent-active: #350d36;            /* deep aubergine — pressed */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  /* Logo palette: these ARE the semantic colors (info/success/warn/danger). */
+  --success: #2eb67d;                  /* Slack teal green — online, success */
+  --warn:    #ecb22e;                  /* Slack gold — away, warning */
+  --danger:  #e01e5a;                  /* Slack ruby — notifications, errors */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Larsseit", "Helvetica Neue", Arial, sans-serif;
+  --font-body:    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:    "Monaco", "Menlo", "Courier New", Courier, monospace;
+
+  /* Type scale — DESIGN.md §Type Scale.
+   * Slack base size is 15px (density). Display: 48px marketing hero.
+   * Schema maps: xs=12, sm=15, base=15(=body), lg=18, xl=22, 2xl=28,
+   * 3xl=36, 4xl=48. */
+  --text-xs:   12px;                   /* caption / timestamp */
+  --text-sm:   13px;                   /* body SM — secondary metadata */
+  --text-base: 15px;                   /* default UI text (Slack's base) */
+  --text-lg:   16px;                   /* body L — messages, descriptions */
+  --text-xl:   22px;                   /* heading 2 — card titles */
+  --text-2xl:  28px;                   /* heading 1 — modal titles */
+  --text-3xl:  36px;                   /* display L — section heroes */
+  --text-4xl:  48px;                   /* display XL — marketing hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.10: display hero compression.
+   * h2 (36px) → 1.15; h3 (28px) → 1.25 per DESIGN.md.
+   * --tracking-display: -0.021em = -1px / 48px normalized. */
+  --leading-body:     1.5;
+  --leading-tight:    1.10;
+  --tracking-display: -0.021em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 4px base grid per DESIGN.md §Spacing System. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 4px is Slack's standard for buttons and inputs — not cartoonish. */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Light shadows on a light surface. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 4px 12px rgba(0, 0, 0, 0.12);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Slack focus: blue ring on #1264A3. */
+  --focus-ring: 0 0 0 2px rgba(18, 100, 163, 0.25);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

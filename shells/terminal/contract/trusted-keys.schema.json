@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/trusted-keys-v1.schema.json",
+  "title": "Terminal trusted key ring v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "keys"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "keys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["keyId", "publicKey"],
+        "properties": {
+          "keyId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+          "publicKey": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

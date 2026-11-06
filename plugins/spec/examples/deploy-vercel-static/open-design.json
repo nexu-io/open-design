@@ -1,0 +1,55 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "deploy-vercel-static",
+  "title": "Deploy To Vercel",
+  "version": "0.1.0",
+  "description": "Deploy an accepted static artifact to Vercel or prepare a deployment handoff.",
+  "license": "MIT",
+  "tags": ["deploy", "vercel", "static", "deployment"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "code-migration",
+    "mode": "deploy",
+    "scenario": "deployment",
+    "useCase": {
+      "query": "Deploy the accepted static artifact to Vercel as {{projectName}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["file-read", "build-test", "handoff", "connector"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "inspect", "atoms": ["file-read"] },
+        { "id": "verify", "atoms": ["build-test"] },
+        { "id": "deploy", "atoms": ["connector"] },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "connectors": {
+      "optional": [
+        { "id": "vercel", "tools": ["deploy-project"] }
+      ]
+    },
+    "genui": {
+      "surfaces": [
+        {
+          "id": "confirm-deploy",
+          "kind": "confirmation",
+          "persist": "run",
+          "trigger": { "stageId": "deploy", "atom": "connector" },
+          "prompt": "Deploy this artifact to Vercel now?"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "projectName", "type": "string", "required": true, "label": "Project name" }
+    ],
+    "capabilities": ["prompt:inject", "fs:read", "bash", "connector", "connector:vercel", "network"]
+  }
+}
+

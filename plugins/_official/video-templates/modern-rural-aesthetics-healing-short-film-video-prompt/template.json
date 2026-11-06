@@ -1,0 +1,23 @@
+{
+  "id": "modern-rural-aesthetics-healing-short-film-video-prompt",
+  "surface": "video",
+  "title": "Modern Rural Aesthetics Healing Short Film Video Prompt",
+  "summary": "A detailed, three-shot prompt for Seedance 2.0 to generate a healing, cinematic short film in the Modern Rural Aesthetics style. It specifies the style (Cinematic Commercial, 4K/8K, Extreme Macro, nat",
+  "category": "Cinematic",
+  "tags": [
+    "cinematic",
+    "action",
+    "food"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "[Style]\nModern Rural Aesthetics, Cinematic Commercial quality, shot with Sony A7S3/cinema camera, 4K/8K ultra-clear, Extreme Macro, natural transparent lighting, healing ASMR, no historical costume drama feel.\n\n[Scene]\nA well-maintained modern farmhouse open kitchen, background is a lush vegetable garden, bright sunshine.\n\n[Character]\nModern Rural Creator, black long hair casually tied up with a wooden hairpin, wearing a dark blue comfortable linen outfit, clear makeup, focused and peaceful eyes.\n\n[Shot Details]\n[00:00-00:05] Shot 1: Morning Harvest (The Freshness)\nVisuals: High-definition close-up. Morning sunlight hits the plants with side backlighting.\nAction: The Creator's bare hands (long, clean fingers) pick a bright red tomato with glistening dew drops from the vine.\nDetails: Extremely sharp focus, clearly showing the fuzz on the tomato surface and the trajectory of sliding water droplets. Background is blurred high-quality green.\n\n[00:05-00:10] Shot 2: Extreme Craftsmanship (The Craft)\nVisuals: Indoor stove area, full of life but spotless.\nAction: The Creator is cutting vegetables, movements are skilled and precise (non-performance nature).\nDetails: Macro lens captures the moment the knife blade slices through the ingredients, juice splattering. Then switches to the orange flame flickering in the earthen stove, light and shadow are warm and real.\n\n[00:10-00:15] Shot 3: Tranquil Time (The Moment)\nVisuals: Full shot/Medium shot.\nAction: A delicate home-cooked dish is placed on the wooden long table in the yard. The Creator sits down quietly, gently tidies a stray hair, and picks up a bite of food.\nAtmosphere: Steam slowly rises against the backlight, the scene is so quiet you can almost hear the wind, showcasing the ultimate sense of relaxation modern people yearn for.",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/ce508b28e505ffce07247e2ab036d6f1/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts/releases/download/videos/288.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "John",
+    "url": "https://x.com/johnAGI168/status/2021818021354848258"
+  }
+}

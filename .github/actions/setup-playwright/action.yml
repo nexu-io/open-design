@@ -1,0 +1,149 @@
+name: Setup Playwright
+description: Use a preseeded Nexu browser when available, otherwise restore the browser cache and install browsers
+
+inputs:
+  package-json-path:
+    description: Path to package.json containing @playwright/test or playwright devDependency
+    required: true
+  install-command:
+    description: Command used to install browsers
+    required: true
+  runner-labels:
+    description: JSON array of labels selected for this job's runs-on value
+    required: false
+    default: '[]'
+
+runs:
+  using: composite
+  steps:
+    - name: Detect preinstalled Playwright
+      id: preinstalled-playwright
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        preinstalled_enabled=false
+
+        # The ARC tools image carries both the OS dependencies and Chromium.
+        # Keep this opt-in to the named Nexu profiles so a hosted runner with
+        # a restored browser cache still receives its OS dependencies.
+        case "$RUNNER_LABELS_JSON" in
+          *'"nexu-runners-'*)
+            if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "$PLAYWRIGHT_BROWSERS_PATH" ]; then
+              chromium_bin="$(find "$PLAYWRIGHT_BROWSERS_PATH" -type f \
+                \( -name chrome -o -name chromium -o -name chrome-headless-shell \) \
+                -perm -111 -print -quit 2>/dev/null || true)"
+              if [ -n "$chromium_bin" ]; then
+                preinstalled_enabled=true
+              fi
+            fi
+            ;;
+        esac
+
+        echo "enabled=$preinstalled_enabled" >> "$GITHUB_OUTPUT"
+        if [ "$preinstalled_enabled" = "true" ]; then
+          echo "Using the Playwright browser preseeded in the Nexu runner image."
+        else
+          echo "No preseeded Playwright browser detected; using the workflow install path."
+        fi
+
+    - name: Detect persistent Playwright cache
+      id: persistent-playwright-cache
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        case "$RUNNER_LABELS_JSON" in
+          *'"od-persistent-ci"'*) persistent_enabled=true ;;
+          *) persistent_enabled=false ;;
+        esac
+
+        if [ "$persistent_enabled" = "true" ]; then
+          if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+            echo "runner-labels contains od-persistent-ci, but PLAYWRIGHT_BROWSERS_PATH is not set" >&2
+            exit 1
+          fi
+          mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "path=$PLAYWRIGHT_BROWSERS_PATH" >> "$GITHUB_OUTPUT"
+        else
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Resolve Playwright version
+      id: playwright-version
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
+      shell: bash
+      run: |
+        version=$(node -p "const pkg = require('./${{ inputs.package-json-path }}'); const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }; (deps['@playwright/test'] || deps.playwright || '').replace(/[^0-9.]/g,'')")
+        if [ -z "$version" ]; then
+          echo "Could not resolve Playwright version from ${{ inputs.package-json-path }}" >&2
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Playwright browser binaries
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' && steps.persistent-playwright-cache.outputs.enabled != 'true' }}
+      uses: actions/cache@v5.0.5
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+    - name: Ensure preinstalled Playwright browser revision
+      if: ${{ steps.preinstalled-playwright.outputs.enabled == 'true' }}
+      shell: bash
+      env:
+        PACKAGE_JSON_PATH: ${{ inputs.package-json-path }}
+      run: |
+        package_dir="${PACKAGE_JSON_PATH%/*}"
+        pnpm -C "$package_dir" exec playwright install chromium
+
+    - name: Prepare Blacksmith apt for Playwright dependencies
+      id: playwright-apt
+      if: ${{ runner.os == 'Linux' && steps.preinstalled-playwright.outputs.enabled != 'true' }}
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        # Blacksmith VMs resolve apt through a mirrorlist of third-party
+        # university mirrors. When one goes down, apt retries it for every
+        # index file before falling back, so the `apt-get update` inside
+        # `playwright install --with-deps` hangs until the job timeout.
+        # Browser OS deps are NOT fully preinstalled on the Blacksmith image
+        # (xvfb, fonts, libasound are missing), so apt must stay in the path.
+        # Use HTTPS: a timed-out HTTP mirror can discard the staged indexes,
+        # leaving apt unable to find browser dependencies. Treat any index
+        # refresh failure as an error, with bounded retries for transport faults.
+        case "$RUNNER_LABELS_JSON" in
+          *'"blacksmith-'*) ;;
+          *) exit 0 ;;
+        esac
+        mirrorlist=/etc/apt/blacksmith-ubuntu-mirrors.txt
+        if [ -f "$mirrorlist" ]; then
+          printf 'https://archive.ubuntu.com/ubuntu\tpriority:1\n' | sudo tee "$mirrorlist"
+        fi
+        # Playwright invokes apt-get itself. Persist these options so its update
+        # cannot return success with incomplete package indexes. A unique file
+        # avoids overwriting runner policy; the cleanup step removes it even
+        # when browser installation fails.
+        apt_config="$(sudo mktemp /etc/apt/apt.conf.d/99-open-design-playwright-XXXXXX)"
+        echo "config-path=$apt_config" >> "$GITHUB_OUTPUT"
+        printf '%s\n' \
+          'Acquire::Retries "3";' \
+          'Acquire::http::Timeout "30";' \
+          'Acquire::https::Timeout "30";' \
+          'APT::Update::Error-Mode "any";' \
+          | sudo tee "$apt_config"
+
+    - name: Install Playwright browsers
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
+      shell: bash
+      run: ${{ inputs.install-command }}
+
+    - name: Clean up Playwright apt configuration
+      if: ${{ always() && steps.playwright-apt.outputs.config-path != '' }}
+      shell: bash
+      env:
+        PLAYWRIGHT_APT_CONFIG: ${{ steps.playwright-apt.outputs.config-path }}
+      run: sudo rm -f -- "$PLAYWRIGHT_APT_CONFIG"

@@ -1,0 +1,218 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/cursor/tokens.css
+ *
+ * Structured token bindings for the "Cursor" brand — the AI-first code
+ * editor's marketing voice translated into the shared schema. Like
+ * `default/tokens.css` and `kami/tokens.css`, agents are expected to
+ * paste the `:root { … }` block verbatim into the first `<style>` of
+ * every artifact, then reference values via `var(--name)`.
+ *
+ * Why this file exists:
+ *   DESIGN.md describes Cursor in prose ("warm cream `#f2f1ed`, warm
+ *   near-black `#26251e` text, oklab borders") — agents have to translate
+ *   that prose into shared token names without inventing brand variants
+ *   like `--cursor-cream`. This file pre-translates once.
+ *
+ * Brand identity in three sentences:
+ *   1. Warm-shifted everything — cream surfaces, near-black-with-yellow
+ *      text, oklab-space borders. Pure white / pure black are reserved
+ *      for code-editor panels and nowhere else.
+ *   2. Three typographic voices — CursorGothic at display sizes with
+ *      aggressive negative letter-spacing (signature), jjannon serif for
+ *      editorial body, berkeleyMono for code/kbd.
+ *   3. Hover semantic is text→crimson (`--danger`), not bg-darken.
+ *      Component CSS reading `--accent-hover` still gets the schema's
+ *      darken formula because some artifacts (CTA pills with accent bg)
+ *      do need it; the brand-signature crimson hover is component-level
+ *      not token-level.
+ *
+ * Schema decisions specific to Cursor:
+ *   - --surface-warm binds to a real warmer tier (#ebeae5 — the
+ *     "Surface 300" button-default), not aliased to surface. Cursor's
+ *     surface scale 100→500 is a hallmark; the schema slot maps to the
+ *     middle tier that buttons rest on.
+ *   - --fg-2, --meta, --border-soft bind to oklab-fallback rgba values
+ *     at distinct alpha levels (0.9 / 0.4 / 0.06) rather than aliasing,
+ *     because Cursor genuinely has the richer ramp.
+ *   - --tracking-display is set to -0.03em (the 72px hero value
+ *     normalized to em). Smaller display sizes in components should
+ *     scale tracking proportionally; the schema only carries one slot.
+ *   - --elev-raised binds to Cursor's signature 28px/70px diffused
+ *     shadow rather than the schema fallback. This is the depth move
+ *     that makes Cursor feel like a print publication.
+ *   - --focus-ring is depth-only (0 4px 12px), not the halo formula.
+ *     Cursor never paints cool-blue rings.
+ *   - --ease-standard: ease (per DESIGN.md §Interaction & Motion), not
+ *     the schema's cubic-bezier. Brand authenticity over micro-control.
+ *
+ * Tokens NOT lifted (intentional):
+ *   - The fine-grained sub-8px spacing scale (1.5px, 2px, 2.5px, 3px,
+ *     5px, 6px) used for icon/text micro-alignment is component-internal
+ *     in this fixture. Promote to C-extension via BRAND_EXTENSIONS only
+ *     if cross-component reuse demands it.
+ *   - The named surface scale 100/200/300/400/500 is encoded via the
+ *     three schema slots (--bg / --surface / --surface-warm). The
+ *     extreme tiers (100 lightest, 500 deepest) live as inline
+ *     declarations in components.html where needed.
+ *   - The timeline state colors (Thinking peach, Grep sage, Read blue,
+ *     Edit lavender) are decorative state markers, not brand surface
+ *     tokens. They belong in component CSS for the AI timeline element,
+ *     not in :root.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Cream canvas that defines the entire warm system. Default's
+   * `#fafafa → #ffffff` ladder gets replaced by `#f2f1ed → #e6e5e0`,
+   * with the warmer surface tier (#ebeae5) bound to --surface-warm
+   * for buttons that rest on the page background. */
+  --bg: #f2f1ed;                    /* Surface 200 — warm off-white */
+  --surface: #e6e5e0;               /* Surface 400 — card / lifted */
+  --surface-warm: #ebeae5;          /* Surface 300 — button default */
+
+  /* ─── Foreground ramp (4 levels) ────────────────────────────────
+   * Cursor genuinely has a 4-tier ramp: solid for headings/body,
+   * 90% for "light surface" button labels, 55% for secondary text,
+   * 40% for link underlines and metadata. All bind to the same
+   * oklab-fallback rgba (warm brown) at different alphas. */
+  --fg: #26251e;                              /* warm near-black */
+  --fg-2: rgba(38, 37, 30, 0.9);              /* solid headings on light surfaces */
+  --muted: rgba(38, 37, 30, 0.55);            /* secondary text */
+  --meta: rgba(38, 37, 30, 0.4);              /* metadata, link decoration */
+
+  /* ─── Border (2 levels) ─────────────────────────────────────────
+   * DESIGN.md §Color Palette specifies oklab-space borders as the
+   * brand signature. The CSS-compatible fallback (rgba) is what
+   * actually ships per DESIGN.md §Agent Prompt Guide rule 3. */
+  --border: rgba(38, 37, 30, 0.1);            /* primary border, 10% warm brown */
+  --border-soft: rgba(38, 37, 30, 0.06);      /* row separators, ghost-button bg */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Cursor Orange — primary CTAs, link color, ONE hero accent per
+   * screen. Hard cap of 2 visible uses per screen still applies via
+   * lint. Note: the signature hover semantic in DESIGN.md is text
+   * shifting to --danger (crimson) on buttons; the schema's
+   * --accent-hover is reserved for the bg-darken case (when accent
+   * IS the bg, e.g. accent-pill CTA). */
+  --accent: #f54e00;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * --danger is Cursor's signature interaction color (hover crimson
+   * on buttons), so it gets the brand-specific warm value rather
+   * than the schema fallback's pure red. --success is a muted
+   * teal-green (warm-shifted). --warn keeps the schema fallback;
+   * Cursor's marketing site has no native warn token. */
+  --success: #1f8a65;                         /* muted teal-green */
+  --warn: #eab308;
+  --danger: #cf2d56;                          /* warm crimson — hover signature */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Three voices, three roles:
+   *   --font-display: CursorGothic for headings + UI labels
+   *   --font-body: jjannon serif for editorial body (literary warmth)
+   *   --font-mono: berkeleyMono for code, kbd, terminal text
+   * The three-voice system is the typographic signature; component
+   * CSS should never substitute fewer voices for "simplicity". */
+  --font-display: "CursorGothic", "CursorGothic Fallback", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "jjannon", "Iowan Old Style", "Palatino Linotype", "URW Palladio L", P052, ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: "berkeleyMono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Type scale — distilled from DESIGN.md §Typography Hierarchy.
+   * Cursor has more than 8 sizes in production (caption 11, body
+   * sans 16, body serif sm 17.28, body serif 19.2, title small 22,
+   * sub-heading 26, section 36, hero 72); the schema's 8 slots
+   * cover the spine. 17.28px / 19.2px live inline in components.html
+   * where the body-serif distinction matters. */
+  --text-xs: 11px;                  /* caption, system micro */
+  --text-sm: 14px;                  /* button label, system caption */
+  --text-base: 16px;                /* body sans, ui body */
+  --text-lg: 19.2px;                /* body serif (1.20rem) */
+  --text-xl: 22px;                  /* title small */
+  --text-2xl: 26px;                 /* sub-heading */
+  --text-3xl: 36px;                 /* section heading */
+  --text-4xl: 72px;                 /* display hero */
+
+  /* Leading + tracking — DESIGN.md §Typography Hierarchy.
+   * --leading-tight=1.10 is Cursor's hero rhythm (matches the
+   * 72px display); brands with relaxed display rhythms set 1.20.
+   * --tracking-display=-0.03em is the 72px-normalized hero tracking
+   * (-2.16px / 72px). Smaller display sizes in components.html
+   * use proportional inline overrides. */
+  --leading-body: 1.5;
+  --leading-tight: 1.10;
+  --tracking-display: -0.03em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px-rooted scale from DESIGN.md §Layout Principles (with the
+   * --space-1=4px tier kept for icon/dot rhythm). Cursor's
+   * sub-8px micro-scale (1.5/2/2.5/3/5/6) is component-internal —
+   * see the elev-ring / icon-rule decisions in components.html. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §Responsive Behavior collapsing
+   * strategy: "Section spacing: 80px+ → 48px → 32px on mobile". */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §Border Radius Scale: comfortable 8px (primary
+   * buttons/cards/menus), featured 10px (larger containers), full
+   * pill 9999px (tags/filters). Schema's --radius-md gets 10px
+   * rather than 12px to honor the cursor-specific featured tier;
+   * --radius-lg keeps 12px because no Cursor surface uses 16px+. */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Cursor's depth signature (DESIGN.md §Depth & Elevation): no
+   * crisp drop shadows. Border ring + diffused atmospheric lift.
+   *   --elev-flat: pages, text blocks
+   *   --elev-ring: standard card edge (1px warm-brown ring)
+   *   --elev-raised: signature heavy-blur shadow with oklab ring,
+   *                  used for elevated cards / popovers / modals. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 28px 70px rgba(0, 0, 0, 0.14),
+    0 14px 32px rgba(0, 0, 0, 0.1),
+    0 0 0 1px var(--border);
+
+  /* ─── Focus ───────────────────────────────────────────────────────
+   * DESIGN.md §Interaction & Motion: "Shadow-based focus:
+   * rgba(0,0,0,0.1) 0px 4px 12px for depth-based focus indication.
+   * Consistent warm tone in all focus states — no cold blue focus
+   * rings." Implemented as box-shadow so it layers without
+   * affecting layout. */
+  --focus-ring: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * DESIGN.md §Interaction & Motion specifies 150ms color / 200ms
+   * shadow with `ease` easing. Cursor uses the keyword `ease`
+   * rather than a custom cubic-bezier; component authors should
+   * not rebind to a more aggressive curve. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: ease;
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * DESIGN.md §Grid & Container: "Max content width: approximately
+   * 1200px". Gutters not explicitly specified; using cross-brand
+   * defaults that match default. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

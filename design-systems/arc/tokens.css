@@ -1,0 +1,137 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/arc/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Arc Browser".
+ * Frosted glass over a peach-coral gradient: editorial warmth, squircle-
+ * soft geometry, sidebar-first calm. The browser that browses for you.
+ *
+ * Key brand decisions encoded here:
+ *   - Warm peach-cream canvas (#fdf3ec) — never pure white, always tinted
+ *   - Bright frosted-pane white (#ffffff) as the opaque approximation of
+ *     Arc's translucent rgba(255,255,255,0.7) glass surfaces
+ *   - Arc Coral (#ff5f5f) is the named brand color; the Sunset gradient
+ *     (peach → coral) is composed inline by primary CTAs in components,
+ *     so --accent stays a single resolvable value
+ *   - Squircle-soft 8 / 12 / 16 px radii — every edge softened, never sharp
+ *   - Editorial Argent CF serif for marketing display, Inter for product
+ *   - Apple-style spring easing (0.32, 0.72, 0, 1) at 200/320 ms
+ *   - Single long-throw shadow (0 8px 32px rgba(0,0,0,0.08)) — no harsh
+ *     elevation; depth comes from the gradient backdrop, not box edges
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Peach-cream canvas. Cards float above as bright white frosted
+   * panes; the warm tier holds hero meta panels and sidebar washes. */
+  --bg: #fdf3ec;             /* Peach Cream — the calm canvas, barely warm */
+  --surface: #ffffff;        /* Frosted Pane — opaque approximation of glass */
+  --surface-warm: #fff4ea;   /* Warm Inset — hero meta, sidebar pill background */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Three ink tiers from DESIGN.md §2 — never pure black, always
+   * slightly warm so type sits inside the peach atmosphere. */
+  --fg: #1a1a1f;             /* Ink Primary — body text, headings */
+  --fg-2: #54545a;           /* Ink Secondary — sidebar tabs at rest, sub-headings */
+  --muted: #8c8c93;          /* Ink Muted — captions, URL bar, metadata */
+  --meta: var(--muted);      /* alias — same muted tier suffices for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Borders are rare in Arc — DESIGN.md prefers tinted background
+   * washes. When present, they're hairline-thin and warm-toned. */
+  --border: #ece5db;         /* Warm hairline — card edge over peach cream */
+  --border-soft: #f6f0e8;    /* Softer inner separator — barely visible row line */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Arc Coral — the marketing brand color used on arc.net. Components
+   * compose the Sunset gradient (peach #ff7e5f → coral #feb47b) inline
+   * for primary CTAs; --accent itself stays a single resolvable color
+   * so color-mix derivations work everywhere. */
+  --accent: #ff5f5f;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * DESIGN.md §2 semantic palette — mid-saturated to harmonize with
+   * the warm atmosphere, not clinical Tailwind reds. */
+  --success: #48bb78;
+  --warn: #f6ad55;
+  --danger: #f56565;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Inter for product chrome; Argent CF (editorial display serif)
+   * only for marketing — when Arc speaks publicly, it speaks in serif.
+   * Berkeley Mono for code, URL bar, devtools. */
+  --font-display: "Argent CF", "Source Serif Pro", Georgia, serif;
+  --font-body: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Berkeley Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. 72px hero, 40px section, 32px h1,
+   * 22px h2, 18px featured body, 15px body, 13px tab/code, 12px caption.
+   * Tabs render small (13px) so a long sidebar of 30+ tabs stays scannable. */
+  --text-xs: 12px;           /* Caption — URL bar protocol, metadata */
+  --text-sm: 13px;           /* Tab Title / Code */
+  --text-base: 15px;         /* Body — settings prose, tooltips */
+  --text-lg: 18px;           /* Featured body — intro paragraphs */
+  --text-xl: 22px;           /* Page H2 — sub-section */
+  --text-2xl: 32px;          /* Page H1 — settings, command bar header */
+  --text-3xl: 40px;          /* Section Heading — Argent CF marketing */
+  --text-4xl: 72px;          /* Marketing Hero — Argent CF editorial display */
+
+  --leading-body: 1.55;      /* Generous body line-height — long-form reading */
+  --leading-tight: 1.05;     /* Hero line-height — Argent CF squeezed tight */
+  --tracking-display: -0.03em; /* ≈ -2.16px at 72px — editorial density */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px base. Pane internal padding lands on space-6 (24px) per
+   * DESIGN.md §5. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — generous editorial pacing on marketing pages. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Squircle-soft: 8px on tabs/chips, 12px on buttons & command bar,
+   * 16px on cards/panes, 9999px on space pills. Every edge softened. */
+  --radius-sm: 8px;          /* Tabs / chips */
+  --radius-md: 12px;         /* Buttons / command bar input */
+  --radius-lg: 16px;         /* Cards / panes */
+  --radius-pill: 9999px;     /* Spaces, bookmarks folder pills */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Single long-throw soft shadow — DESIGN.md §1 calls out this exact
+   * value as the signature card lift over the gradient backdrop. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 8px 32px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * 4px coral halo at 20% alpha — DESIGN.md §4 specifies this exact
+   * focus treatment for the command bar input. Wider and softer than
+   * the schema default, in keeping with Arc's frosted-glass language. */
+  --focus-ring: 0 0 0 4px color-mix(in oklab, var(--accent), transparent 80%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Apple-style spring curve from DESIGN.md §6. 200ms for hover,
+   * 320ms for tab create/close — Arc's motion is spring, not bounce. */
+  --motion-fast: 200ms;
+  --motion-base: 320ms;
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px max — wide enough for sidebar + content but never enterprise-
+   * dense. Generous gutters echo the 24px pane padding. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

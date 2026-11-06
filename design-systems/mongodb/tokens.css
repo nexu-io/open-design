@@ -1,0 +1,176 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/mongodb/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by MongoDB".
+ * Forest-dark database aesthetic: a near-black teal canvas (#001e2b) lit
+ * by a single bioluminescent neon green (#00ed64), serif authority at
+ * hero scale, and shadows that carry the brand color into elevation.
+ *
+ * Key brand decisions encoded here:
+ *   - Forest Black (#001e2b) as the primary canvas — never pure black;
+ *     the teal undertone is what keeps the dark mode feeling alive
+ *     rather than void
+ *   - MongoDB Green (#00ed64) as the singular electric accent — used
+ *     for highlights, underlines, and one CTA per screen
+ *   - MongoDB Value Serif for display sizes — editorial authority at
+ *     database-company scale; Euclid Circular A for everything else
+ *   - Source Code Pro as the mono voice — wide-tracked uppercase
+ *     labels are the "database field" identity
+ *   - Teal-tinted shadows (rgba(0,30,43,0.12)) — depth that belongs to
+ *     the MongoDB color world, not generic neutral black
+ *   - Full 4-tier fg/border ramps — MongoDB genuinely uses #ffffff →
+ *     #e8edeb → #b8c4c2 → #5c6c75 for cascading text hierarchies and
+ *     #3d4f58 for dark-surface edges
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Forest-dark canvas: the page is the deepest teal-black; cards lift
+   * on a slightly warmer deep-teal panel. No warm tier — MongoDB's
+   * palette is strictly cool (teal, green, blue) and surface-warm
+   * aliases to the dark surface rather than introducing an amber tint
+   * that would break the forest atmosphere. */
+  --bg: #001e2b;             /* Forest Black — the deepest teal-black canvas */
+  --surface: #1c2d38;        /* Deep Teal — lifted cards / secondary dark panels */
+  --surface-warm: var(--surface); /* alias — MongoDB has no warm tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Four-tier ramp matches MongoDB's real usage on dark surfaces:
+   * pure white for headings, light-input for body, silver-teal for
+   * captions, cool-gray for metadata. Independently bound (not
+   * aliased) because the brand actually paints each tier somewhere. */
+  --fg: #ffffff;             /* Pure White — primary text on dark */
+  --fg-2: #e8edeb;           /* Light Input — body text, secondary headings */
+  --muted: #b8c4c2;          /* Silver Teal — captions, supporting text */
+  --meta: #5c6c75;           /* Cool Gray — metadata, tertiary labels */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Teal Gray edges on dark surfaces — the cool border tone that
+   * belongs to the forest palette. border-soft aliases because
+   * MongoDB does not draw an inner-separator tier distinct from the
+   * card edge on dark mode. */
+  --border: #3d4f58;         /* Teal Gray — dark-surface card edge */
+  --border-soft: var(--border); /* alias — no inner separator tier on dark */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * MongoDB Green — neon, electric, bioluminescent. Used sparingly
+   * (≤2 per screen) for headline highlights, accent underlines, and
+   * one CTA per section. accent-on is Forest Black (not white)
+   * because neon green is luminous enough that dark text reads with
+   * far more contrast than white. accent-hover is the functional
+   * muted Dark Green (#00684a) from DESIGN.md §2 — the brand's own
+   * darker green variant, not a synthesized darken. */
+  --accent: #00ed64;
+  --accent-on: #001e2b;      /* Forest Black text on neon green CTAs */
+  --accent-hover: #00684a;   /* Dark Green — MongoDB's own muted variant */
+  --accent-active: color-mix(in oklab, var(--accent-hover), black 12%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Standard semantic palette. MongoDB's brand green is already the
+   * accent; success keeps the schema default so it does not collide
+   * with the neon brand voice. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Three voices, three roles:
+   *   --font-display: MongoDB Value Serif for editorial hero headlines
+   *   --font-body: Euclid Circular A for geometric body / UI
+   *   --font-mono: Source Code Pro for code and wide-tracked labels
+   * The serif-at-hero choice is the typographic signature; component
+   * CSS should never substitute the body face for display sizes. */
+  --font-display: "MongoDB Value Serif", "Times New Roman", Times, ui-serif, Georgia, serif;
+  --font-body: "Euclid Circular A", "Akzidenz-Grotesk Std", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "Source Code Pro", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — distilled from DESIGN.md §3 hierarchy table.
+   * 96px hero (MongoDB Value Serif) and 64px sub-hero are the
+   * editorial moves; the rest follows Euclid Circular A from 11px
+   * small to 36px section heading. Weight 300 body is encoded in
+   * component CSS (the schema does not carry weight tokens). */
+  --text-xs: 11px;           /* Small — tags, annotations */
+  --text-sm: 14px;           /* Caption, Code Label */
+  --text-base: 16px;         /* Body Light, Nav, Code Body */
+  --text-lg: 20px;           /* Body Large — introductions */
+  --text-xl: 24px;           /* Sub-heading — feature titles */
+  --text-2xl: 36px;          /* Section Heading */
+  --text-3xl: 64px;          /* Display Secondary — serif sub-hero */
+  --text-4xl: 96px;          /* Display Hero — serif at editorial scale */
+
+  /* Leading + tracking — DESIGN.md §3.
+   * Body Light uses 1.5–2.0; we sit at 1.5 so paragraphs breathe
+   * without losing rhythm. Hero display uses 1.20 (tight). Display
+   * letter-spacing is `normal` — MongoDB Value Serif at 96px does
+   * not compress like Geist or industrial sans; the serif drawing
+   * carries the authority without negative tracking. */
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: normal;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px-rooted scale; MongoDB's documented spacing (1/4/7/8/10/12/
+   * 14/15/16/18/20/24/32) includes odd sub-tiers (7, 14, 15, 18)
+   * for fine-grained type alignment that stay component-internal.
+   * The schema's 4/8/12/16/20/24/32/48 covers the structural rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 Whitespace Philosophy: dark hero
+   * sections use extra vertical padding (80px+) to let the forest-
+   * dark background breathe. 96px desktop sits at the generous end
+   * of MongoDB's documented range. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 1/2/4/8/16/20/24/30/32/48/100/9999.
+   * Schema slots bind to: 4 (input subtle), 8 (standard card / link),
+   * 16 (card), 9999 (pill button). The 30–32px image radius and
+   * 48px hero radius live as inline overrides in components.html
+   * where they apply — they are surface-specific, not scale-wide. */
+  --radius-sm: 4px;          /* inputs, small buttons */
+  --radius-md: 8px;          /* standard cards, links */
+  --radius-lg: 16px;         /* feature cards, containers */
+  --radius-pill: 9999px;     /* pill buttons, badges */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Forest-tinted shadow signature. DESIGN.md §6: the primary card
+   * elevation uses rgba(0, 30, 43, 0.12) — a teal-tinted shadow that
+   * carries the forest-dark brand color into the depth system. Even
+   * on light surfaces, shadows feel like they belong to the MongoDB
+   * color world rather than being generic neutral black. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 26px 44px rgba(0, 30, 43, 0.12),
+    0 7px 13px rgba(0, 0, 0, 0.13);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Neon-green-tinted halo at 30% alpha — uses the brand accent so
+   * keyboard focus reads as part of the MongoDB color world rather
+   * than a generic blue ring. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — MongoDB's identity lives in color, type,
+   * and shadow; animation is purposeful, not choreographed. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px max content width — contained editorial layouts within
+   * generous full-bleed dark sections. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

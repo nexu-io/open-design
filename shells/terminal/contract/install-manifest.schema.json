@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/install-manifest-v1.schema.json",
+  "title": "Terminal installed manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "shell", "target", "carrierLock", "shellFiles", "contracts", "runtime", "runtimeModules", "fossil", "sidecarBootstrap", "sidecarHost", "fixtureLifecycle", "fixtureShellUpdater", "standalone", "seed", "releaseDocuments", "trust", "capabilities"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "shell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "version", "buildHash"],
+      "properties": {
+        "type": {"const": "terminal"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "buildHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "target": {"enum": ["darwin-arm64", "darwin-x64", "win32-x64"]},
+    "carrierLock": {"$ref": "#/$defs/fileDigest"},
+    "shellFiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sh", "ps1"],
+      "properties": {
+        "sh": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["terminal", "install"],
+          "properties": {"terminal": {"$ref": "#/$defs/fileDigest"}, "install": {"$ref": "#/$defs/fileDigest"}}
+        },
+        "ps1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["terminal", "install"],
+          "properties": {"terminal": {"$ref": "#/$defs/fileDigest"}, "install": {"$ref": "#/$defs/fileDigest"}}
+        }
+      }
+    },
+    "contracts": {"$ref": "#/$defs/fileDigest"},
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "executable", "sha256"],
+      "properties": {
+        "name": {"const": "node"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "executable": {"type": "string", "pattern": "^carrier/node/"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "fossil": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "sha256"],
+      "properties": {
+        "entrypoint": {"const": "runtime/fossil.mjs"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "sidecarHost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "sha256"],
+      "properties": {
+        "entrypoint": {"const": "runtime/sidecar-host.mjs"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "sidecarBootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "sha256"],
+      "properties": {
+        "entrypoint": {"const": "runtime/sidecar-bootstrap.mjs"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "runtimeModules": {"$ref": "#/$defs/fileDigest"},
+    "fixtureLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "sha256"],
+      "properties": {
+        "entrypoint": {"const": "runtime/fixture-lifecycle.mjs"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "fixtureShellUpdater": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "sha256"],
+      "properties": {
+        "entrypoint": {"const": "runtime/fixture-shell-updater.mjs"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "standalone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint", "sha256"],
+      "properties": {
+        "entrypoint": {"const": "runtime/standalone/index.mjs"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["closure", "standaloneLauncher"],
+      "properties": {
+        "closure": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "sha256"],
+          "properties": {
+            "file": {"const": "seed/closure.mjs"},
+            "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
+        "standaloneLauncher": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "sha256"],
+          "properties": {
+            "file": {"const": "runtime/standalone/index.mjs"},
+            "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        }
+      }
+    },
+    "releaseDocuments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content"],
+      "properties": {
+        "content": {"$ref": "#/$defs/fileDigest"}
+      }
+    },
+    "trust": {"$ref": "#/$defs/fileDigest"},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentUpdater", "sharedInstance", "shellUpdater"],
+      "properties": {
+        "contentUpdater": {"const": "standalone-v4"},
+        "sharedInstance": {"const": "sidecar-v1"},
+        "shellUpdater": {"const": "sidecar-v1"}
+      }
+    }
+  },
+  "$defs": {
+    "fileDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": {"type": "string", "pattern": "^[A-Za-z0-9._/-]+$"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }
+  }
+}

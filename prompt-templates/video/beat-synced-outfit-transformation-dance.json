@@ -1,0 +1,20 @@
+{
+  "id": "beat-synced-outfit-transformation-dance",
+  "surface": "video",
+  "title": "Beat-Synced Outfit Transformation Dance",
+  "summary": "A prompt for Seedance 2.0 that coordinates a character dance following breakdown frames while performing a beat-synced outfit change.",
+  "category": "General",
+  "tags": [
+    "fantasy"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "Have the character from Image 1 perform the dance based on the breakdown in Image 3. During the performance, include a beat-synced transformation into the character from Image 2. After the transformation, the character from Image 2 continues and completes the remaining dance steps from Image 3. Emphasize precise beat matching with the music",
+  "previewImageUrl": "https://pbs.twimg.com/media/HG_FqHJboAA5vAe.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Kashberg",
+    "url": "https://x.com/Kashberg_0/status/2049074008730247669"
+  }
+}

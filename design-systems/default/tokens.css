@@ -1,0 +1,200 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/default/tokens.css
+ *
+ * Structured token bindings for "Neutral Modern" — the canonical
+ * starter design system. This file is the *machine-readable* form of
+ * the values described in `DESIGN.md`. Agents are expected to paste
+ * the `:root { … }` block verbatim into the first `<style>` of every
+ * artifact they generate against this design system, then reference
+ * tokens via `var(--name)` from then on.
+ *
+ * Why this file exists:
+ *   DESIGN.md gives humans context ("Accent #2F6FEB — primary CTAs"),
+ *   but agents have to translate prose names like "Accent" into the
+ *   standard token names the lint enforces (`--accent`). That
+ *   translation is where token misuse happens. This file pre-translates
+ *   the brand once, so agents copy structure instead of inventing it.
+ *
+ * Contract sources:
+ *   - Standard token names: craft/color.md
+ *       (--bg / --surface / --fg / --muted / --border / --accent
+ *        / --success / --warn / --danger)
+ *   - Display-face contract: craft/anti-ai-slop.md
+ *       (--font-display, must be referenced via var())
+ *   - Lint enforcement: apps/daemon/src/lint-artifact.ts
+ *       (raw-hex >12 outside :root → P1; indigo laundering → P0)
+ *
+ * Schema notes (the shared schema grew from kami's stress test —
+ * see design-systems/kami/tokens.css for the rich form, and the
+ * #Gap N tags below for what each addition resolves):
+ *   #Gap 1  — 4-level foreground ramp (fg / fg-2 / muted / meta)
+ *   #Gap 2  — 3-level surface (bg / surface / surface-warm)
+ *   #Gap 3  — 2-level border (border / border-soft)
+ *   #Gap 4  — accent-hover binds to value, not formula
+ *   #Gap 5  — ring elevation as a first-class level (--elev-ring)
+ *
+ * Default doesn't differentiate every level kami needs, so the
+ * shallow tokens (`--fg-2`, `--meta`, `--surface-warm`, `--border-soft`)
+ * collapse to their richer siblings via `var()`. The names still
+ * exist so components can reference them uniformly across brands.
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the craft contracts. New brands cloning this template
+ * should overwrite values, not rename keys.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — #Gap 2) ─────────────────────────────────
+   * Per craft/color.md: never pure black, never pure white. Default
+   * uses #FAFAFA for bg and #FFFFFF for surface — the cream-to-white
+   * contrast gives cards lift without a shadow. `--surface-warm` is a
+   * schema slot for brands that need a tertiary tier (kami's warm-sand
+   * button bg); default has no third tier and aliases it to surface. */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-warm: var(--surface);   /* alias — default has no warm tier */
+
+  /* ─── Foreground ramp (4 levels — #Gap 1) ───────────────────────
+   * Default differentiates only two text levels (primary + muted).
+   * `--fg-2` and `--meta` are schema slots for brands with richer
+   * ramps (kami uses near-black / dark-warm / olive / stone). They
+   * alias here so components targeting the full ramp resolve. */
+  --fg: #111111;
+  --fg-2: var(--fg);                /* alias — default has no secondary tier */
+  --muted: #6b6b6b;
+  --meta: var(--muted);             /* alias — default has no metadata tier */
+
+  /* ─── Border (2 levels — #Gap 3) ────────────────────────────────
+   * Default has one border weight; `--border-soft` is a schema slot
+   * for brands with row-separator vs card-edge differentiation. */
+  --border: #e5e5e5;
+  --border-soft: var(--border);     /* alias — default has no soft tier */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Cobalt — primary CTAs, links, ONE hero element per screen.
+   * Hard cap of 2 visible uses per screen is enforced by lint
+   * (`accent-overuse` P1 fires at >6 inline occurrences). */
+  --accent: #2f6feb;
+  --accent-on: #ffffff; /* fg when accent is the bg (e.g. button label) */
+
+  /* ─── Accent states (#Gap 4) ────────────────────────────────────
+   * Hover and active variants for any element using --accent as bg.
+   * Default's mid-luminance cobalt admits a black-mix formula
+   * cleanly; that's a brand-specific binding, NOT a schema rule.
+   * kami binds --accent-hover to var(--accent) (no color shift,
+   * hover via elevation) because ink-blue is too dark for further
+   * darkening to read; other brands with light accents must
+   * hand-pick.
+   *
+   * Schema rule: every brand provides --accent-hover and
+   * --accent-active. The binding strategy (formula / identity /
+   * hand-picked) is brand-decided.
+   *
+   * Why these two are tokens (and other tints stay inline):
+   *   - cross-component (button, chip, tab, dropdown all need them)
+   *   - cross-mode reversal (dark-mode hover should mix white, not
+   *     black — token re-binding is one line per mode)
+   *   - cross-brand customization (formula breaks on light accents)
+   *   - lint-enforceable contract (every brand must provide these)
+   * Other inline `color-mix(...)` calls in components don't yet hit
+   * any of the above — promote them to tokens when a second use
+   * appears. */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Reserved for state, not decoration. Keep total semantic-color
+   * pixels under 5% of the surface. */
+  --success: #17a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Inter for display is the documented "modern minimal" override
+   * to anti-ai-slop's serif-display rule (see DESIGN.md
+   * §Visual Theme & Atmosphere — "Calm, functional, quietly
+   * confident"). Other brands should rebind --font-display to a
+   * serif unless their direction is also tech/utility. */
+  --font-display: "Inter", -apple-system, system-ui, sans-serif;
+  --font-body: "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+
+  /* Type scale (px) — direct copy of DESIGN.md §Typography Rules */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: -0.01em; /* applied to display sizes ≥32px */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px base unit. Section rhythm (80/48/32) lives below as named
+   * tokens because DESIGN.md §Layout Principles treats them as
+   * breakpoint-specific decisions, not generic spacing. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-20: 80px;
+
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Two intents: small (button/input) and medium (card/modal).
+   * `--radius-pill` reserved for chips/avatars; do not use it on
+   * cards or buttons. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation (3 levels — #Gap 5) ─────────────────────────────
+   * Default uses two levels (flat + raised blur shadow) per its own
+   * DESIGN.md §Depth & Elevation. The schema gains `--elev-ring` as
+   * a first-class level so brands using ring shadows as primary
+   * elevation (kami, paper, editorial) don't need to rebind
+   * --elev-raised away from blur. Default declares all three; ring
+   * is available for hairline edges where a 1px border would shift
+   * layout. No fourth level — that's neumorphism territory. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Single source of truth for keyboard-focus indicators. Every
+   * `:focus-visible` rule on buttons, inputs, links, and tabs must
+   * use this token — uniform behavior is itself a brand signal, and
+   * craft/accessibility-baseline.md treats focus visibility as a
+   * non-negotiable. Implemented as a `box-shadow` so it layers
+   * outside the element without affecting layout. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Two durations + one easing curve, per anti-ai-slop's "short,
+   * purposeful transitions (150–250ms) with stable easing". Add a
+   * third duration only when a real interaction needs it; do not
+   * invent `--motion-slow` speculatively. */
+  --motion-fast: 150ms;            /* hover, focus, micro-states */
+  --motion-base: 200ms;            /* general state changes */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Container width and per-breakpoint gutter. Skill-side responsive
+   * code reads these to decide grid columns. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

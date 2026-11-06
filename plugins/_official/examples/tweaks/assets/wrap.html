@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en" data-mode="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>[ARTIFACT TITLE] · Tweaks</title>
+  <style>
+    /* =========================================================
+       TWEAKS · WRAP TEMPLATE
+       =========================================================
+       This file is a skeleton. Workflow:
+         1. Replace [ARTIFACT TITLE] in <title>.
+         2. Update STORAGE_KEY in the script (tweaks-<artifact-slug>).
+         3. Decide which knobs apply (1-5 from KNOBS_LIBRARY).
+         4. Paste artifact CSS into the [ARTIFACT_STYLE] region.
+         5. Paste artifact body into the [ARTIFACT_BODY] region.
+         6. Lift hard-coded #hex / Npx / Nrem values to custom
+            properties so the knobs actually move.
+       ========================================================= */
+
+    :root {
+      /* ---------- Knob defaults (overridden by JS bridge) ---------- */
+      --accent: #c96442;
+      --scale: 1;
+      --density: 1;
+      --motion-mult: 1;
+
+      /* ---------- Light theme tokens ---------- */
+      --bg: #f6f4ef;
+      --paper: #ffffff;
+      --ink: #1a1a1c;
+      --muted: #6b6964;
+      --rule: #e2dfd7;
+    }
+    [data-mode="dark"] {
+      --bg: #0e0d0c;
+      --paper: #181715;
+      --ink: #f4f1ea;
+      --muted: #8a857a;
+      --rule: #2a2723;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      :root { --motion-mult: 0; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      font-size: calc(16px * var(--scale));
+      line-height: 1.55;
+      transition: background calc(220ms * var(--motion-mult)) ease,
+                  color calc(220ms * var(--motion-mult)) ease;
+    }
+
+    /* =========================================================
+       [ARTIFACT_STYLE]  — paste artifact-specific CSS here
+       ========================================================= */
+
+    /* =========================================================
+       PANEL · fixed sidebar with knobs
+       ========================================================= */
+    .tw-panel {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 100;
+      width: 280px;
+      max-width: calc(100vw - 32px);
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+      font-family: 'Inter', system-ui, sans-serif;
+      transition: transform calc(220ms * var(--motion-mult)) cubic-bezier(.2,.8,.2,1),
+                  opacity calc(220ms * var(--motion-mult)) ease;
+    }
+    [data-mode="dark"] .tw-panel { box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .tw-panel.tw-hidden {
+      transform: translateX(calc(100% + 32px));
+      opacity: 0;
+      pointer-events: none;
+    }
+    .tw-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--rule);
+    }
+    .tw-head .ttl {
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      font-size: 10px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .tw-head .toggle {
+      background: transparent;
+      border: 1px solid var(--rule);
+      color: var(--muted);
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 0;
+    }
+    .tw-head .toggle:hover { color: var(--ink); }
+
+    .tw-body { padding: 14px 18px 18px; }
+
+    .tw-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .tw-row:last-child { margin-bottom: 0; }
+    .tw-row .lbl {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* Segmented control */
+    .tw-seg {
+      display: flex;
+      border: 1px solid var(--rule);
+      border-radius: 5px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .tw-seg button {
+      flex: 1;
+      padding: 7px 8px;
+      background: transparent;
+      border: 0;
+      border-left: 1px solid var(--rule);
+      cursor: pointer;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      transition: color calc(180ms * var(--motion-mult)) ease,
+                  background calc(180ms * var(--motion-mult)) ease;
+    }
+    .tw-seg button:first-child { border-left: 0; }
+    .tw-seg button:hover { color: var(--ink); }
+    .tw-seg button[aria-pressed="true"] {
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    /* Swatch grid */
+    .tw-swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .tw-swatch {
+      width: 100%;
+      aspect-ratio: 1;
+      border: 2px solid transparent;
+      border-radius: 5px;
+      cursor: pointer;
+      padding: 0;
+      transition: transform calc(160ms * var(--motion-mult)) ease,
+                  border-color calc(160ms * var(--motion-mult)) ease;
+    }
+    .tw-swatch:hover { transform: scale(1.06); }
+    .tw-swatch[aria-pressed="true"] { border-color: var(--ink); }
+
+    /* Mini toolbar in panel footer */
+    .tw-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 18px;
+      border-top: 1px solid var(--rule);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .tw-foot button {
+      background: transparent;
+      border: 0;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0;
+      font-family: inherit;
+      font-size: inherit;
+      letter-spacing: inherit;
+      text-transform: inherit;
+    }
+    .tw-foot button:hover { color: var(--ink); }
+    kbd {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      padding: 2px 5px;
+      border: 1px solid var(--rule);
+      border-radius: 3px;
+      color: var(--ink);
+    }
+
+    /* When panel is hidden, expose a "T" button at top-right */
+    .tw-restore {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 100;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: transform calc(180ms * var(--motion-mult)) ease;
+    }
+    .tw-restore:hover { transform: scale(1.06); }
+    .tw-restore.tw-show { display: flex; }
+
+    @media (max-width: 720px) {
+      .tw-panel { left: 16px; right: 16px; width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <!-- =========================================================
+       [ARTIFACT_BODY]  — paste artifact-specific markup here
+       ========================================================= -->
+
+  <!-- =========================================================
+       PANEL  — knob controls (drop the rows you don't ship)
+       ========================================================= -->
+  <aside class="tw-panel" id="tw-panel" aria-label="Tweak panel">
+    <header class="tw-head">
+      <span class="ttl">Tweaks</span>
+      <button class="toggle" id="tw-close" aria-label="Hide panel" title="Hide (T)">×</button>
+    </header>
+    <div class="tw-body">
+
+      <!-- Accent -->
+      <div class="tw-row">
+        <span class="lbl">Accent</span>
+        <div class="tw-swatches" id="tw-accent" role="radiogroup" aria-label="Accent color"></div>
+      </div>
+
+      <!-- Mode -->
+      <div class="tw-row">
+        <span class="lbl">Mode</span>
+        <div class="tw-seg" id="tw-mode" role="radiogroup" aria-label="Color mode">
+          <button data-val="light" aria-pressed="true">Light</button>
+          <button data-val="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+
+      <!-- Scale -->
+      <div class="tw-row">
+        <span class="lbl">Type scale</span>
+        <div class="tw-seg" id="tw-scale" role="radiogroup" aria-label="Type scale">
+          <button data-val="0.85" aria-pressed="false">Compact</button>
+          <button data-val="1" aria-pressed="true">Normal</button>
+          <button data-val="1.15" aria-pressed="false">Generous</button>
+        </div>
+      </div>
+
+      <!-- Density -->
+      <div class="tw-row">
+        <span class="lbl">Density</span>
+        <div class="tw-seg" id="tw-density" role="radiogroup" aria-label="Density">
+          <button data-val="0.75" aria-pressed="false">Tight</button>
+          <button data-val="1" aria-pressed="true">Normal</button>
+          <button data-val="1.4" aria-pressed="false">Roomy</button>
+        </div>
+      </div>
+
+      <!-- Motion -->
+      <div class="tw-row">
+        <span class="lbl">Motion</span>
+        <div class="tw-seg" id="tw-motion" role="radiogroup" aria-label="Motion">
+          <button data-val="0" aria-pressed="false">Off</button>
+          <button data-val="1" aria-pressed="true">Subtle</button>
+          <button data-val="1.6" aria-pressed="false">Lively</button>
+        </div>
+      </div>
+    </div>
+    <footer class="tw-foot">
+      <span><kbd>T</kbd> hide · <kbd>R</kbd> reset</span>
+      <button id="tw-reset" type="button">Reset</button>
+    </footer>
+  </aside>
+
+  <button class="tw-restore" id="tw-restore" aria-label="Show panel" title="Show panel (T)">T</button>
+
+  <script>
+    // =========================================================
+    // BRIDGE  — binds knobs ↔ CSS custom props ↔ localStorage
+    // =========================================================
+    // CHANGE THIS to a unique slug per artifact you wrap.
+    const STORAGE_KEY = 'tweaks-default';
+
+    const ACCENT_PRESETS = [
+      { id: 'rust',     val: '#c96442' },
+      { id: 'cobalt',   val: '#2c4d8e' },
+      { id: 'sage',     val: '#4a7a3f' },
+      { id: 'plum',     val: '#7a3f6a' },
+      { id: 'graphite', val: '#3a3a3a' },
+    ];
+
+    const DEFAULTS = {
+      accent: ACCENT_PRESETS[0].val,
+      mode: 'light',
+      scale: 1,
+      density: 1,
+      motion: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1,
+    };
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...DEFAULTS };
+        return { ...DEFAULTS, ...JSON.parse(raw) };
+      } catch { return { ...DEFAULTS }; }
+    }
+    function save(state) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      catch {}
+    }
+
+    function applyState(s) {
+      const root = document.documentElement;
+      root.style.setProperty('--accent', s.accent);
+      root.style.setProperty('--scale', s.scale);
+      root.style.setProperty('--density', s.density);
+      root.style.setProperty('--motion-mult', s.motion);
+      root.setAttribute('data-mode', s.mode);
+      // Reflect to UI
+      paintAccent(s.accent);
+      paintSeg('tw-mode', s.mode);
+      paintSeg('tw-scale', String(s.scale));
+      paintSeg('tw-density', String(s.density));
+      paintSeg('tw-motion', String(s.motion));
+    }
+
+    function paintAccent(val) {
+      const host = document.getElementById('tw-accent');
+      if (!host) return;
+      host.querySelectorAll('button').forEach((b) =>
+        b.setAttribute('aria-pressed', b.dataset.val === val ? 'true' : 'false'),
+      );
+    }
+    function paintSeg(id, val) {
+      const host = document.getElementById(id);
+      if (!host) return;
+      host.querySelectorAll('button').forEach((b) =>
+        b.setAttribute('aria-pressed', b.dataset.val === val ? 'true' : 'false'),
+      );
+    }
+
+    function buildAccent(state) {
+      const host = document.getElementById('tw-accent');
+      if (!host) return;
+      host.innerHTML = '';
+      for (const p of ACCENT_PRESETS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tw-swatch';
+        b.dataset.val = p.val;
+        b.setAttribute('aria-label', p.id);
+        b.style.background = p.val;
+        b.addEventListener('click', () => {
+          state.accent = p.val;
+          save(state); applyState(state);
+        });
+        host.appendChild(b);
+      }
+    }
+
+    function bindSeg(id, key, parser) {
+      const host = document.getElementById(id);
+      if (!host) return;
+      host.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-val]');
+        if (!btn) return;
+        state[key] = parser ? parser(btn.dataset.val) : btn.dataset.val;
+        save(state); applyState(state);
+      });
+    }
+
+    const state = load();
+    buildAccent(state);
+    bindSeg('tw-mode', 'mode');
+    bindSeg('tw-scale', 'scale', parseFloat);
+    bindSeg('tw-density', 'density', parseFloat);
+    bindSeg('tw-motion', 'motion', parseFloat);
+    applyState(state);
+
+    // ---- Panel show/hide ----
+    const panel = document.getElementById('tw-panel');
+    const restore = document.getElementById('tw-restore');
+    function setPanelVisible(v) {
+      panel.classList.toggle('tw-hidden', !v);
+      restore.classList.toggle('tw-show', !v);
+    }
+    document.getElementById('tw-close').addEventListener('click', () => setPanelVisible(false));
+    restore.addEventListener('click', () => setPanelVisible(true));
+
+    // ---- Reset ----
+    document.getElementById('tw-reset').addEventListener('click', () => {
+      Object.assign(state, DEFAULTS);
+      save(state); applyState(state);
+    });
+
+    // ---- Keyboard shortcuts ----
+    addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        setPanelVisible(panel.classList.contains('tw-hidden'));
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        Object.assign(state, DEFAULTS);
+        save(state); applyState(state);
+      }
+    });
+  </script>
+</body>
+</html>

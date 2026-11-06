@@ -1,0 +1,21 @@
+{
+  "id": "toaster-rocket-jumpscare",
+  "surface": "video",
+  "title": "Toaster Rocket Jumpscare",
+  "summary": "A prompt for a realistic home-video style shot of an old man being jumpscared by a toaster launching bread like a rocket.",
+  "category": "General",
+  "tags": [
+    "food"
+  ],
+  "model": "seedance-2.0",
+  "aspect": "16:9",
+  "prompt": "A realistic shot of an old man in a cozy kitchen being jumpscared when his toaster launches the bread five feet into the air like a rocket. Handheld \"home video\" style capturing his genuine look of shock and the bread hitting the ceiling.A realistic shot of an old man in a cozy kitchen being jumpscared when his toaster launches the bread five feet into the air like a rocket. Handheld \"home video\" style capturing his genuine look of shock and the bread hitting the ceiling.",
+  "previewImageUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/fbf9f399fd8f4905a62661966d937ba8/thumbnails/thumbnail.jpg",
+  "previewVideoUrl": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/fbf9f399fd8f4905a62661966d937ba8/downloads/default.mp4",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-seedance-2-prompts",
+    "license": "CC-BY-4.0",
+    "author": "Marin",
+    "url": "https://x.com/MarinMethod/status/2049140113343394003"
+  }
+}

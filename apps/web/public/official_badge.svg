@@ -1,0 +1,48 @@
+<svg width="184" height="64" viewBox="0 0 184 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="官方角标">
+  <defs>
+    <linearGradient id="pillFill" x1="28" y1="6" x2="166" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B3728"/>
+      <stop offset="0.48" stop-color="#3C2A24"/>
+      <stop offset="1" stop-color="#241D1B"/>
+    </linearGradient>
+    <linearGradient id="pillStroke" x1="22" y1="4" x2="168" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D48A5B"/>
+      <stop offset="0.45" stop-color="#8C543A"/>
+      <stop offset="1" stop-color="#3A2620"/>
+    </linearGradient>
+    <linearGradient id="shieldFill" x1="27" y1="11" x2="57" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD19A"/>
+      <stop offset="0.35" stop-color="#D9784C"/>
+      <stop offset="1" stop-color="#8B412E"/>
+    </linearGradient>
+    <linearGradient id="shieldStroke" x1="25" y1="8" x2="59" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE0B8"/>
+      <stop offset="1" stop-color="#9B5137"/>
+    </linearGradient>
+    <linearGradient id="textFill" x1="80" y1="19" x2="80" y2="45" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE4C7"/>
+      <stop offset="0.42" stop-color="#F8A56E"/>
+      <stop offset="1" stop-color="#D6754E"/>
+    </linearGradient>
+    <filter id="softShadow" x="0" y="0" width="184" height="64" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <filter id="innerGlow" x="18" y="8" width="48" height="48" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#FFD09A" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <rect x="23" y="8" width="148" height="48" rx="24" fill="url(#pillFill)" stroke="url(#pillStroke)" stroke-width="2"/>
+    <rect x="27" y="12" width="140" height="40" rx="20" stroke="#FFFFFF" stroke-opacity="0.06"/>
+
+    <g filter="url(#innerGlow)">
+      <path d="M42 11.5C42 11.5 29 15.4 29 17.7V30.5C29 40.8 37.2 47.6 42 49.7C46.8 47.6 55 40.8 55 30.5V17.7C55 15.4 42 11.5 42 11.5Z" fill="url(#shieldFill)" stroke="url(#shieldStroke)" stroke-width="2"/>
+      <path d="M36.2 30.9L40.1 34.8L48.8 25.2" stroke="#FFF3E0" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M36.2 30.9L40.1 34.8L48.8 25.2" stroke="#7A3527" stroke-opacity="0.18" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M36.2 30.9L40.1 34.8L48.8 25.2" stroke="#FFF3E0" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <text x="72" y="40" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="26" font-weight="800" letter-spacing="1.5" fill="url(#textFill)">官方</text>
+  </g>
+</svg>

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-hps-retro-tv",
+  "title": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+  "title_i18n": {
+    "en": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+    "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史",
+    "zh-TW": "像纪录片剪辑师一样把家庭影像做成家族史"
+  },
+  "version": "1.0.0",
+  "publishedAt": "2026-06-16T09:32:15Z",
+  "description": "A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Built as a decision-grade story deck for family, close friends.",
+  "description_i18n": {
+    "en": "A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Built as a decision-grade story deck for family, close friends.",
+    "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "lewislulu",
+    "url": "https://github.com/lewislulu"
+  },
+  "homepage": "https://github.com/lewislulu/html-ppt-skill",
+  "plugin": {
+    "repo": "https://github.com/lewislulu/html-ppt-skill"
+  },
+  "tags": [
+    "community",
+    "deck",
+    "slides",
+    "ppt",
+    "presentation",
+    "retro-tv",
+    "crt",
+    "scanlines",
+    "nostalgia",
+    "retro-80s",
+    "html-ppt",
+    "design",
+    "brand",
+    "visual-system",
+    "hps-retro-tv",
+    "life",
+    "travel-photo-essay-deck",
+    "personal",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "motion": "deck"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Turn Home Movies into a Family-History Story like a Documentary Editor\" as a decision-grade Life & story deck in this template's own visual system. Subject: A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. Audience: family, close friends. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史。像纪录片剪辑师一样把家庭影像做成家族史——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A family history told through five decades of home movies — the opening question, the eras, and what the footage reveals. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+          "title_i18n": {
+            "en": "Turn Home Movies into a Family-History Story like a Documentary Editor",
+            "zh-CN": "像纪录片剪辑师一样把家庭影像做成家族史",
+            "zh-TW": "像纪录片剪辑师一样把家庭影像做成家族史"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "deckType",
+        "label": "Deck type",
+        "type": "select",
+        "required": true,
+        "options": [
+          "product launch deck",
+          "media / entertainment pitch",
+          "brand intro deck",
+          "year-in-review retrospective",
+          "community talk",
+          "tech-sharing deck"
+        ],
+        "default": "product launch deck"
+      },
+      {
+        "name": "topic",
+        "label": "Topic",
+        "type": "string",
+        "required": true,
+        "placeholder": "What the deck is about",
+        "default": "the user's brief"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "Community, customers, teammates, students…",
+        "default": "a general audience"
+      },
+      {
+        "name": "slideCount",
+        "label": "Pages",
+        "type": "select",
+        "required": true,
+        "options": [
+          "8-10 pages",
+          "10-15 pages",
+          "15-20 pages"
+        ],
+        "default": "8-10 pages"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "life"
+  }
+}

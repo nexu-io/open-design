@@ -1,0 +1,168 @@
+<template id="05-product-surfaces-template">
+
+
+
+  <div
+    data-composition-id="05-product-surfaces"
+    data-start="0"
+    data-duration="4.7"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div class="stage-05">
+      <div class="grid-floor"></div>
+
+      <div class="surface s-plan">
+        <div class="headline h-plan">Plan</div>
+        <div class="device laptop">
+          <div class="screen" style="background-image: url('assets/screenshot-3.png');"></div>
+          <div class="laptop-base"></div>
+        </div>
+      </div>
+
+      <div class="surface s-build">
+        <div class="headline h-build">Build</div>
+        <div class="device laptop">
+          <div class="screen" style="background-image: url('assets/screenshot-1.png');"></div>
+          <div class="laptop-base"></div>
+        </div>
+        <div class="micro-cap">Build and deploy AI agents that work alongside your team</div>
+      </div>
+
+      <div class="surface s-monitor">
+        <div class="headline h-monitor">Monitor</div>
+        <div class="device laptop">
+          <div class="screen" style="background-image: url('assets/screenshot-2.png');"></div>
+          <div class="laptop-base"></div>
+        </div>
+      </div>
+
+      <div class="vignette"></div>
+      <div class="grain"></div>
+    </div>
+
+    <style>
+      [data-composition-id="05-product-surfaces"] {
+        position: absolute; inset: 0; overflow: hidden; background: #000;
+      }
+      [data-composition-id="05-product-surfaces"] .stage-05 { position: absolute; inset: 0; }
+      [data-composition-id="05-product-surfaces"] .grid-floor {
+        position: absolute; inset: 0;
+        transform: perspective(900px) rotateX(60deg) translateY(25%);
+        background:
+          repeating-linear-gradient(0deg,  rgba(255,255,255,0.04) 0 1px, transparent 1px 80px),
+          repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0 1px, transparent 1px 80px);
+        background-color: #000;
+      }
+      [data-composition-id="05-product-surfaces"] .surface {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 40px;
+        opacity: 0;
+        will-change: opacity, transform;
+      }
+      [data-composition-id="05-product-surfaces"] .headline {
+        font-family: "Instrument Serif", serif;
+        font-style: italic;
+        font-size: 140px;
+        line-height: 1;
+        background: linear-gradient(180deg, #ffffff 0%, #bbbbbb 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 0 40px rgba(255,255,255,0.25);
+      }
+      [data-composition-id="05-product-surfaces"] .device {
+        position: relative;
+        box-shadow:
+          0 40px 80px rgba(0,0,0,0.8),
+          inset 0 1px 0 rgba(255,255,255,0.2),
+          0 0 0 2px rgba(255,255,255,0.08);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      [data-composition-id="05-product-surfaces"] .laptop {
+        width: 1280px; height: 720px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.12);
+      }
+      [data-composition-id="05-product-surfaces"] .laptop-base {
+        position: absolute;
+        bottom: -18px; left: -40px;
+        width: calc(100% + 80px); height: 18px;
+        background: linear-gradient(180deg, #2a2a2a, #0a0a0a);
+        border-radius: 0 0 20px 20px;
+      }
+      [data-composition-id="05-product-surfaces"] .screen {
+        width: 100%; height: 100%;
+        background-size: cover;
+        background-position: center top;
+      }
+      [data-composition-id="05-product-surfaces"] .micro-cap {
+        position: absolute;
+        bottom: 80px; left: 50%;
+        transform: translateX(-50%);
+        font-family: "Inter", sans-serif;
+        font-size: 28px;
+        font-weight: 500;
+        color: rgba(255,255,255,0.85);
+        letter-spacing: 0.01em;
+        padding: 10px 20px;
+        border-radius: 10px;
+        background: rgba(10,8,5,0.55);
+        backdrop-filter: blur(8px);
+        opacity: 0;
+      }
+      [data-composition-id="05-product-surfaces"] .vignette {
+        position: absolute; inset: 0; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.95) 95%);
+        opacity: 0.7;
+      }
+      [data-composition-id="05-product-surfaces"] .grain {
+        position: absolute; inset: 0; pointer-events: none;
+        opacity: 0.08;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+        background-size: 3px 3px, 5px 5px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const SLOT = 4.7;
+        const tl = gsap.timeline({ paused: true });
+        const sel = (q) => `[data-composition-id="05-product-surfaces"] ${q}`;
+
+        gsap.set(sel('.s-plan'), { y: '100%', opacity: 0 });
+        tl.to(sel('.s-plan'), { y: '0%', opacity: 1, duration: 0.7, ease: 'power3.out' }, 0);
+        tl.to(sel('.s-plan'), { x: '-40%', opacity: 0, filter: 'blur(20px)', duration: 0.4, ease: 'power2.in' }, 1.5);
+
+        gsap.set(sel('.s-build'), { x: '40%', opacity: 0, filter: 'blur(25px)' });
+        tl.to(sel('.s-build'),
+          { x: '0%', opacity: 1, filter: 'blur(0px)', duration: 0.7, ease: 'power3.out' }, 1.5);
+
+        tl.to(sel('.micro-cap'), { opacity: 1, duration: 0.4, ease: 'power2.out' }, 2.0);
+        tl.to(sel('.micro-cap'), { opacity: 0, duration: 0.3, ease: 'power2.in' }, 3.0);
+
+        tl.to(sel('.s-build'),
+          { y: '-30%', opacity: 0, filter: 'blur(20px)', duration: 0.4, ease: 'power2.in' }, 3.0);
+
+        gsap.set(sel('.s-monitor'), { y: '100%', opacity: 0 });
+        tl.to(sel('.s-monitor'), { y: '0%', opacity: 1, duration: 0.7, ease: 'power3.out' }, 3.0);
+
+        tl.to(sel('.s-monitor'),
+          { scale: 0.8, opacity: 0, filter: 'blur(20px)', duration: 0.35, ease: 'power2.in' }, 4.35);
+
+        tl.to({}, { duration: SLOT }, 0);
+        window.__timelines = window.__timelines || {};
+        window.__timelines['05-product-surfaces'] = tl;
+      })();
+    </script>
+  </div>
+</template>

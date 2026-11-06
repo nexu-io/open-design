@@ -1,0 +1,310 @@
+import { expect, test } from '@/playwright/suite';
+import type { Page } from '@playwright/test';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
+import { routeAgents, suppressWhatsNew } from '../lib/playwright/mock-factory.js';
+
+const STORAGE_KEY = 'open-design:config';
+const LOCALE_KEY = 'open-design:locale';
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定|Account & settings/i;
+const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
+
+test.describe.configure({ timeout: 30_000 });
+
+type AppConfigSeed = Record<string, unknown>;
+
+type AgentFixture = {
+  id: string;
+  name: string;
+  bin: string;
+  available: boolean;
+  version?: string | null;
+  models?: Array<{ id: string; label: string }>;
+};
+
+type ConnectionTestFixture = {
+  ok: boolean;
+  kind: string;
+  latencyMs: number;
+  agentName?: string;
+  sample?: string;
+  detail?: string;
+  configuredExecutablePath?: string;
+  detectedExecutablePath?: string;
+  usedExecutablePath?: string;
+  usedExecutableSource?: 'configured' | 'path' | 'fallback_invalid' | 'fallback_failed';
+};
+
+const CODEX_AGENT: AgentFixture = {
+  id: 'codex',
+  name: 'Codex CLI',
+  bin: 'codex',
+  available: true,
+  version: '0.130.0',
+  models: [{ id: 'default', label: 'Default' }],
+};
+
+function baseConfig(overrides: Partial<AppConfigSeed> = {}): AppConfigSeed {
+  return {
+    mode: 'daemon',
+    apiKey: '',
+    apiProtocol: 'openai',
+    apiVersion: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
+    agentId: 'codex',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    privacyDecisionAt: 1,
+    mediaProviders: {},
+    agentModels: {},
+    agentCliEnv: {},
+    ...overrides,
+  };
+}
+
+async function waitForLoadingToClear(page: Page) {
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+}
+
+async function gotoEntryHome(page: Page) {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx) and its backdrop sits
+  // at z-index 1500 — above the z-index 120 chrome that owns the rail/settings
+  // controls this spec clicks. A live release card would swallow those clicks.
+  await suppressWhatsNew(page);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
+  if (await privacyDialog.isVisible()) {
+    await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
+  }
+  await expect(
+    page
+      .getByTestId('entry-settings-button')
+      .or(page.getByTestId('entry-nav-settings'))
+      .or(page.getByRole('button', { name: OPEN_SETTINGS_LABEL }))
+      .first(),
+  ).toBeVisible();
+}
+
+async function openLocalCliSettings(
+  page: Page,
+  {
+    config,
+    locale = 'en',
+    agents = [CODEX_AGENT],
+    onConnectionTest,
+  }: {
+    config: AppConfigSeed;
+    locale?: string;
+    agents?: AgentFixture[];
+    onConnectionTest: (payload: Record<string, unknown>) => ConnectionTestFixture;
+  },
+) {
+  let currentConfig: AppConfigSeed = {
+    ...config,
+    agentCliEnv: { ...(config.agentCliEnv ?? {}) },
+    agentModels: { ...(config.agentModels ?? {}) },
+  };
+  let configSaveCount = 0;
+
+  await page.addInitScript(
+    ({ key, value, localeKey, localeValue }) => {
+      window.localStorage.setItem(key, JSON.stringify(value));
+      window.localStorage.setItem(localeKey, localeValue);
+    },
+    { key: STORAGE_KEY, value: config, localeKey: LOCALE_KEY, localeValue: locale },
+  );
+
+  await page.route('**/api/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '{"ok":true}',
+    });
+  });
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          config: currentConfig,
+        }),
+      });
+      return;
+    }
+
+    const payload = route.request().postDataJSON() as
+      | Partial<AppConfigSeed>
+      | { config?: Partial<AppConfigSeed> };
+    const nextConfig: Partial<AppConfigSeed> =
+      'config' in payload && payload.config ? payload.config : payload;
+    currentConfig = {
+      ...currentConfig,
+      ...nextConfig,
+      agentCliEnv: { ...(nextConfig.agentCliEnv ?? currentConfig.agentCliEnv ?? {}) },
+      agentModels: { ...(nextConfig.agentModels ?? currentConfig.agentModels ?? {}) },
+    };
+    configSaveCount += 1;
+    await page.evaluate(
+      ({ key, value }) => {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      },
+      { key: STORAGE_KEY, value: currentConfig },
+    );
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+
+  await routeAgents(page, agents);
+
+  await page.route('**/api/test/connection', async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(onConnectionTest(payload)),
+    });
+  });
+
+  await gotoEntryHome(page);
+  const dialog = await openSettingsDialog(page);
+  await dialog.getByTestId('settings-nav-execution').click();
+  await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
+  const codexCard = dialog
+    .locator('[data-testid="settings-agent-select-codex"], .agent-card-select', {
+      hasText: /Codex CLI/i,
+    })
+    .first();
+  await expect(codexCard).toBeVisible({ timeout: 20_000 });
+  await codexCard.click();
+  await dialog.getByTestId('settings-cli-env').evaluate((details) => {
+    if (details instanceof HTMLDetailsElement) details.open = true;
+  });
+  await expect(
+    dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+  ).toBeVisible();
+  return {
+    dialog,
+    waitForConfigSave: async (count = 1) => {
+      await expect.poll(() => configSaveCount, { timeout: 20_000 }).toBeGreaterThanOrEqual(count);
+    },
+    readCurrentConfig: () => currentConfig,
+  };
+}
+
+test.describe('Settings Local CLI Codex fallback UX', () => {
+  test('[P0] @critical shows fallback repair actions and can replace the saved path with the detected Codex binary', async ({ page }) => {
+    test.setTimeout(60_000);
+    const configuredPath = '/bad/codex';
+    const detectedPath = '/usr/local/bin/codex';
+    let lastRequest: Record<string, unknown> | null = null;
+
+    const { dialog, waitForConfigSave, readCurrentConfig } = await openLocalCliSettings(page, {
+      config: baseConfig({
+        agentCliEnv: { codex: { CODEX_BIN: configuredPath } },
+      }),
+      onConnectionTest: (payload) => {
+        lastRequest = payload;
+        return {
+          ok: true,
+          kind: 'success',
+          latencyMs: 18,
+          agentName: 'Codex CLI',
+          sample: 'ready',
+          configuredExecutablePath: configuredPath,
+          detectedExecutablePath: detectedPath,
+          usedExecutablePath: detectedPath,
+          usedExecutableSource: 'fallback_invalid',
+        };
+      },
+    });
+
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(configuredPath);
+    await dialog.getByRole('button', { name: 'Test' }).click();
+
+    const status = dialog.locator('.settings-test-status');
+    await expect(dialog.getByText('Use detected Codex')).toBeVisible();
+    await expect(dialog.getByText('Clear custom path')).toBeVisible();
+    await expect(dialog.getByText('The saved Codex path is not the binary this test should keep using.')).toBeVisible();
+    await expect(status).toContainText(configuredPath);
+    await expect(status).toContainText(detectedPath);
+
+    expect(lastRequest).toMatchObject({
+      mode: 'agent',
+      agentId: 'codex',
+      agentCliEnv: {
+        codex: {
+          CODEX_BIN: configuredPath,
+        },
+      },
+    });
+
+    await dialog.getByRole('button', { name: 'Use detected Codex' }).click();
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue(detectedPath);
+    await expect(dialog.getByRole('button', { name: 'Use detected Codex' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await waitForConfigSave();
+    await expect.poll(() => readCurrentConfig(), { timeout: 20_000 }).toMatchObject({
+      agentCliEnv: {
+        codex: {
+          CODEX_BIN: detectedPath,
+        },
+      },
+    });
+  });
+
+  test('[P0] can clear an unusable custom Codex path after a fallback_failed test result', async ({ page }) => {
+    test.setTimeout(60_000);
+    const configuredPath = '/Applications/Codex.app/Contents/Resources/codex';
+    const detectedPath = '/opt/homebrew/bin/codex';
+
+    const { dialog, waitForConfigSave, readCurrentConfig } = await openLocalCliSettings(page, {
+      config: baseConfig({
+        agentCliEnv: { codex: { CODEX_BIN: configuredPath } },
+      }),
+      onConnectionTest: () => ({
+        ok: true,
+        kind: 'success',
+        latencyMs: 33,
+        agentName: 'Codex CLI',
+        sample: 'fallback ok',
+        configuredExecutablePath: configuredPath,
+        detectedExecutablePath: detectedPath,
+        usedExecutablePath: detectedPath,
+        usedExecutableSource: 'fallback_failed',
+      }),
+    });
+
+    await dialog.getByRole('button', { name: 'Test' }).click();
+    const status = dialog.locator('.settings-test-status');
+    await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toBeVisible();
+    await expect(status).toContainText(configuredPath);
+    await expect(status).toContainText(detectedPath);
+
+    await dialog.getByRole('button', { name: 'Clear custom path' }).click();
+    await expect(
+      dialog.getByLabel(/Codex executable path|Codex 可执行文件路径/i),
+    ).toHaveValue('');
+    await expect(dialog.getByRole('button', { name: 'Clear custom path' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await waitForConfigSave();
+    await expect.poll(() => readCurrentConfig(), { timeout: 20_000 }).toMatchObject({
+      agentCliEnv: {},
+    });
+  });
+
+});

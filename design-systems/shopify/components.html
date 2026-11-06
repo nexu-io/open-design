@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shopify — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/shopify. Every visible
+        value comes from tokens.css. Shopify's signature moves: dark-first
+        cinematic (void black canvas), NeueHaasGrotesk ultra-light display,
+        full-pill CTAs, neon green (#36F4A4) focus rings only."
+    />
+
+    <style>
+      :root {
+        --bg:           #000000;
+        --surface:      #02090a;
+        --surface-warm: #061a1c;
+
+        --fg:   #ffffff;
+        --fg-2: #ffffff;
+        --muted: #a1a1aa;
+        --meta:  #71717a;
+
+        --border:      #1e2c31;
+        --border-soft: #3f3f46;
+
+        --accent:        #36f4a4;
+        --accent-on:     #000000;
+        --accent-hover:  #2de097;
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #36f4a4;
+        --warn:    #eab308;
+        --danger:  #dc2626;
+
+        --font-display: "NeueHaasGrotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-body:    "Inter Variable", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+        --text-xs:   12px;
+        --text-sm:   14px;
+        --text-base: 18px;
+        --text-lg:   20px;
+        --text-xl:   32px;
+        --text-2xl:  48px;
+        --text-3xl:  70px;
+        --text-4xl:  96px;
+
+        --leading-body:     1.56;
+        --leading-tight:    1.00;
+        --tracking-display: 0em;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  24px;
+        --space-6:  28px;
+        --space-8:  36px;
+        --space-12: 64px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet:  64px;
+        --section-y-phone:   40px;
+
+        --radius-sm:   9999px;
+        --radius-md:   8px;
+        --radius-lg:   12px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised:
+          rgba(0, 0, 0, 0.1) 0px 0px 0px 1px,
+          rgba(0, 0, 0, 0.1) 0px 2px 2px,
+          rgba(0, 0, 0, 0.1) 0px 4px 4px,
+          rgba(0, 0, 0, 0.1) 0px 8px 8px,
+          rgba(255, 255, 255, 0.03) 0px 1px 0px inset;
+
+        --focus-ring: 0 0 0 2px #36f4a4;
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: ease;
+
+        --container-max:            1280px;
+        --container-gutter-desktop: 64px;
+        --container-gutter-tablet:  32px;
+        --container-gutter-phone:   16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--muted);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        /* ss03 on all text per brand spec. */
+        font-feature-settings: "ss03";
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ─────────────────────────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 330;              /* ultra-light — the Shopify signature */
+        margin: 0;
+        color: var(--fg);
+        font-feature-settings: "ss03";
+        line-height: var(--leading-tight);
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        /* 96px display: weight 330, line-height 1.00. */
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        /* 70px heading 1: line-height 1.00. */
+      }
+      h3 {
+        font-size: var(--text-xl);
+        /* 32px heading 4: line-height 1.14, tracking 0.32px (positive).
+           Overrides the shared 1.00 set above. */
+        line-height: 1.14;
+        letter-spacing: 0.32px;
+        font-weight: 360;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        line-height: 1.40;
+        color: var(--muted);
+        font-weight: 500;
+        letter-spacing: 0.3px;
+      }
+      .body-muted { color: var(--muted); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — full pill for all CTAs. ──── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 12px 26px 12px 16px;
+        border-radius: var(--radius-sm);   /* 9999px full pill */
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: 400;
+        font-feature-settings: "ss03";
+        line-height: 1.5;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: all var(--motion-base) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary {
+        background: var(--fg);
+        color: var(--bg);
+        border-color: transparent;
+      }
+      .btn-primary:hover { opacity: 0.9; }
+      .btn-ghost {
+        background: transparent;
+        color: var(--fg);
+        border-color: var(--fg);
+      }
+      .btn-ghost:hover { background: var(--fg); color: var(--bg); }
+
+      /* ─── Cards ──────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        box-shadow: var(--elev-raised);
+        transition: box-shadow var(--motion-base) var(--ease-standard);
+      }
+
+      /* ─── Stats ──────────────────────────────── */
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .stat-number {
+        font-family: var(--font-display);
+        font-size: var(--text-3xl);
+        font-weight: 750;
+        color: var(--fg);
+        font-feature-settings: "ss03";
+        line-height: 1.00;
+      }
+
+      /* ─── Inputs ─────────────────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label { font-size: var(--text-sm); font-weight: 500; color: var(--muted); }
+      .field input {
+        background: var(--surface-warm);
+        color: var(--fg);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        padding: 12px 16px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+
+      /* ─── Layout ─────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+      }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; } }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-8);
+      }
+      @media (max-width: 639px) { .stats-grid { grid-template-columns: 1fr; } }
+      .hero-actions { display: flex; gap: var(--space-4); margin-block-start: var(--space-8); flex-wrap: wrap; }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-6">
+            <h1>Commerce is yours to own.</h1>
+            <p class="lead" style="max-width:46ch">
+              Start, run, and grow your business. Shopify's cinematic dark canvas
+              stages commerce like a product keynote. Ultra-light NeueHaasGrotesk
+              at 96px. Every value from tokens.css.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Start for free
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-ghost">Read the spec</a>
+            </div>
+          </div>
+
+          <aside>
+            <div class="card">
+              <p style="font-size:var(--text-sm);color:var(--meta);margin-bottom:var(--space-4)">Commerce data</p>
+              <div class="stats-grid" style="grid-template-columns:1fr 1fr">
+                <div class="stat">
+                  <span class="stat-number">150M+</span>
+                  <span style="font-size:var(--text-sm);color:var(--muted)">buyers served</span>
+                </div>
+                <div class="stat">
+                  <span class="stat-number">15+</span>
+                  <span style="font-size:var(--text-sm);color:var(--muted)">years in commerce</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section data-od-id="features" style="background:var(--surface-warm);margin-inline:calc(var(--container-gutter-desktop)*-1);padding-inline:var(--container-gutter-desktop)">
+        <h2 style="max-width:24ch;margin-bottom:var(--space-8)">Built for scale.</h2>
+
+        <div class="stats-grid">
+          <div class="stat">
+            <span style="font-family:var(--font-display);font-size:var(--text-3xl);font-weight:750;color:var(--fg);font-feature-settings:'ss03';line-height:1">96px</span>
+            <span style="font-size:var(--text-sm);color:var(--muted);margin-top:var(--space-2)">Display XL, weight 330 — featherweight monumental type</span>
+          </div>
+          <div class="stat">
+            <span style="font-family:var(--font-display);font-size:var(--text-3xl);font-weight:750;color:var(--accent);font-feature-settings:'ss03';line-height:1">#36F4A4</span>
+            <span style="font-size:var(--text-sm);color:var(--muted);margin-top:var(--space-2)">Neon Green — focus rings only, never fills large surfaces</span>
+          </div>
+          <div class="stat">
+            <span style="font-family:var(--font-display);font-size:var(--text-3xl);font-weight:750;color:var(--fg);font-feature-settings:'ss03';line-height:1">9999px</span>
+            <span style="font-size:var(--text-sm);color:var(--muted);margin-top:var(--space-2)">Full pill for all primary CTAs — non-negotiable brand rule</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- FORM -->
+      <section data-od-id="form">
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:var(--space-12);align-items:start">
+          <div class="stack-4">
+            <h3>Start your free trial.</h3>
+            <p style="font-size:var(--text-base);color:var(--muted);line-height:var(--leading-body);margin-top:var(--space-3)">
+              Dark input surfaces. Border: 1px solid #3f3f46 at rest.
+              Focus: 2px solid neon green. 8px radius on inputs.
+            </p>
+          </div>
+          <form style="display:flex;flex-direction:column;gap:var(--space-4);max-width:400px"
+                onsubmit="event.preventDefault()">
+            <div class="field">
+              <label for="email">Email address</label>
+              <input id="email" type="email" placeholder="you@store.com" />
+            </div>
+            <div style="margin-top:var(--space-2)">
+              <button type="submit" class="btn btn-primary">Start for free</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

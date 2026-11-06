@@ -1,0 +1,819 @@
+/**
+ * Coverage for `apps/daemon/src/integrations/vela.ts` — the read-side of
+ * the AMR (vela) login integration. The spawn path is exercised by
+ * `tests/amr-acp-integration.test.ts` (which uses the fake-vela stub); here
+ * we focus on the status reader that drives the Settings UI.
+ *
+ * `~/.amr/config.json` is the source of truth — vela CLI writes it on
+ * successful `vela login` and OpenDesign just surfaces a small projection.
+ * Tests redirect HOME via env so we never touch the real user file.
+ */
+
+import { mkdtempSync, rmSync, mkdirSync, readFileSync, writeFileSync, existsSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  applyVelaLiveAccount,
+  clearAllVelaLiveAccounts,
+  forgetVelaLogin,
+  peekVelaLiveAccount,
+  readVelaControlApiContext,
+  readVelaCredentialRevision,
+  clearVelaAuthorizationState,
+  markVelaAuthorizationExpired,
+  readVelaLoginStatus,
+  resolveAmrProfile,
+  setVelaLiveAccount,
+  spawnVelaLogin,
+  velaLiveAccountCacheKey,
+  amrConfigPath,
+  type VelaCredentialRevision,
+  type VelaLoginStatus,
+} from '../../src/integrations/vela.js';
+
+let originalHome: string | undefined;
+let originalAmrHome: string | undefined;
+let tmpHome: string;
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const FAKE_VELA = path.resolve(HERE, '..', 'fixtures', 'fake-vela.mjs');
+
+function writeConfig(payload: unknown): string {
+  const dir = path.join(tmpHome, '.amr');
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'config.json');
+  writeFileSync(file, JSON.stringify(payload), 'utf8');
+  return file;
+}
+
+function writeLegacyVelaConfig(payload: unknown): string {
+  const dir = path.join(tmpHome, '.vela');
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'config.json');
+  writeFileSync(file, JSON.stringify(payload), 'utf8');
+  return file;
+}
+
+beforeEach(() => {
+  originalHome = process.env.HOME;
+  originalAmrHome = process.env.AMR_HOME;
+  tmpHome = mkdtempSync(path.join(tmpdir(), 'od-vela-test-'));
+  process.env.HOME = tmpHome;
+  delete process.env.AMR_HOME;
+  delete process.env.OPEN_DESIGN_AMR_PROFILE;
+  delete process.env.VELA_PROFILE;
+});
+
+afterEach(() => {
+  if (originalHome === undefined) delete process.env.HOME;
+  else process.env.HOME = originalHome;
+  if (originalAmrHome === undefined) delete process.env.AMR_HOME;
+  else process.env.AMR_HOME = originalAmrHome;
+  rmSync(tmpHome, { recursive: true, force: true });
+});
+
+describe('resolveAmrProfile', () => {
+  it('defaults to "prod" when OPEN_DESIGN_AMR_PROFILE is unset or empty', () => {
+    expect(resolveAmrProfile({})).toBe('prod');
+    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: '   ' })).toBe('prod');
+  });
+
+  it('honors OPEN_DESIGN_AMR_PROFILE when set to a known profile', () => {
+    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'prod' })).toBe('prod');
+    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'local' })).toBe('local');
+    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'test' })).toBe('test');
+    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'feature-test' })).toBe('feature-test');
+  });
+
+  it('uses VELA_PROFILE when OPEN_DESIGN_AMR_PROFILE is unset', () => {
+    expect(resolveAmrProfile({ VELA_PROFILE: 'local' })).toBe('local');
+    expect(
+      resolveAmrProfile({
+        OPEN_DESIGN_AMR_PROFILE: 'test',
+        VELA_PROFILE: 'local',
+      }),
+    ).toBe('test');
+  });
+
+  it('warns for unknown OPEN_DESIGN_AMR_PROFILE values and falls back to prod', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(resolveAmrProfile({ OPEN_DESIGN_AMR_PROFILE: 'evil' })).toBe('prod');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('OPEN_DESIGN_AMR_PROFILE'),
+    );
+    warn.mockRestore();
+  });
+});
+
+describe('readVelaLoginStatus', () => {
+  it('does not publish credentials with an unfinished receipt after a daemon restart', () => {
+    writeConfig({ profiles: { local: { controlKey: 'pending-control', runtimeKey: 'pending-runtime', pendingLogin: { deviceId: 'attempt' }, user: {id: 'u', email: 'u@example.test'} } } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
+    expect(readVelaLoginStatus(env)).toMatchObject({loggedIn: false, sessionState: 'signed_out'});
+    expect(readVelaControlApiContext(env)).toBeNull();
+    expect(readVelaControlApiContext(env, {}, true)?.controlKey).toBe('pending-control');
+  });
+
+  afterEach(() => clearVelaAuthorizationState());
+
+  it('marks only the rejected credential revision as requiring sign-in again', () => {
+    const firstEnv = {
+      OPEN_DESIGN_AMR_PROFILE: 'local',
+      VELA_RUNTIME_KEY: 'expired-runtime-key',
+      VELA_LINK_URL: 'https://link.example/v1',
+    };
+    markVelaAuthorizationExpired(firstEnv);
+    expect(readVelaLoginStatus(firstEnv)).toMatchObject({
+      loggedIn: true,
+      sessionState: 'reauth_required',
+    });
+
+    expect(readVelaLoginStatus({
+      ...firstEnv,
+      VELA_RUNTIME_KEY: 'rotated-runtime-key',
+    })).toMatchObject({
+      loggedIn: true,
+      sessionState: 'authenticated',
+    });
+  });
+
+  it('recognizes a rotated file credential even when the config mtime is unchanged', () => {
+    const file = writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'expired-file-key',
+          controlKey: 'expired-control-key',
+          linkUrl: 'https://link.example/v1',
+          user: { id: 'user-1', email: 'user@example.com' },
+        },
+      },
+    });
+    const fixedTime = new Date('2026-08-12T03:57:36Z');
+    utimesSync(file, fixedTime, fixedTime);
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
+
+    markVelaAuthorizationExpired(env);
+    expect(readVelaLoginStatus(env).sessionState).toBe('reauth_required');
+
+    writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rotated-file-key',
+          controlKey: 'rotated-control-key',
+          linkUrl: 'https://link.example/v1',
+          user: { id: 'user-1', email: 'user@example.com' },
+        },
+      },
+    });
+    utimesSync(file, fixedTime, fixedTime);
+
+    expect(readVelaLoginStatus(env).sessionState).toBe('authenticated');
+  });
+  it('returns loggedIn=false when ~/.amr/config.json is absent', () => {
+    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(false);
+    expect(status.user).toBeNull();
+    expect(status.profile).toBe('local');
+    expect(status.configPath).toBe(amrConfigPath());
+  });
+
+  it('ignores legacy ~/.vela/config.json when ~/.amr/config.json is absent', () => {
+    writeLegacyVelaConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rt-legacy',
+          user: { id: 'legacy-user', email: 'legacy@example.com' },
+        },
+      },
+    });
+    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(false);
+    expect(status.user).toBeNull();
+    expect(status.configPath).toBe(amrConfigPath());
+  });
+
+  it('treats configured AMR env credentials as logged in without an AMR config file', () => {
+    const status = readVelaLoginStatus(
+      { OPEN_DESIGN_AMR_PROFILE: 'local' },
+      {
+        VELA_RUNTIME_KEY: 'rt-env-secret',
+        VELA_LINK_URL: 'https://openrouter.example/v1',
+      },
+    );
+    expect(status.loggedIn).toBe(true);
+    expect(status.user).toBeNull();
+    expect(status.profile).toBe('local');
+    expect(JSON.stringify(status)).not.toContain('rt-env-secret');
+  });
+
+  it('prefers configured AMR env credentials over an incomplete ~/.amr active profile', () => {
+    writeConfig({
+      profiles: {
+        local: {
+          apiUrl: 'http://localhost:18080',
+          user: { id: 'stale-user', email: 'stale@example.com' },
+        },
+      },
+    });
+    const status = readVelaLoginStatus(
+      { OPEN_DESIGN_AMR_PROFILE: 'local' },
+      {
+        VELA_RUNTIME_KEY: 'rt-env-secret',
+        VELA_LINK_URL: 'https://openrouter.example/v1',
+      },
+    );
+    expect(status.loggedIn).toBe(true);
+    expect(status.profile).toBe('local');
+    expect(status.user).toBeNull();
+    expect(JSON.stringify(status)).not.toContain('rt-env-secret');
+    expect(JSON.stringify(status)).not.toContain('stale@example.com');
+  });
+
+  it('uses the Settings-configured AMR profile when reading status', () => {
+    writeConfig({
+      profiles: {
+        prod: {},
+        local: { runtimeKey: 'rt-local', user: { id: 'u', email: 'local@example.com' } },
+      },
+    });
+    const status = readVelaLoginStatus(
+      { OPEN_DESIGN_AMR_PROFILE: 'prod' },
+      { OPEN_DESIGN_AMR_PROFILE: 'local' },
+    );
+    expect(status.loggedIn).toBe(true);
+    expect(status.profile).toBe('local');
+    expect(status.user?.email).toBe('local@example.com');
+  });
+
+  it('treats daemon process AMR env credentials as logged in without an AMR config file', () => {
+    const status = readVelaLoginStatus({
+      OPEN_DESIGN_AMR_PROFILE: 'local',
+      VELA_RUNTIME_KEY: 'rt-process-secret',
+      VELA_LINK_URL: 'https://openrouter.example/v1',
+    });
+    expect(status.loggedIn).toBe(true);
+    expect(status.user).toBeNull();
+    expect(status.profile).toBe('local');
+    expect(JSON.stringify(status)).not.toContain('rt-process-secret');
+  });
+
+  it('requires both env runtime key and link URL before reporting env-only login', () => {
+    expect(
+      readVelaLoginStatus(
+        { OPEN_DESIGN_AMR_PROFILE: 'local' },
+        { VELA_RUNTIME_KEY: 'rt-env-secret' },
+      ).loggedIn,
+    ).toBe(false);
+    expect(
+      readVelaLoginStatus(
+        { OPEN_DESIGN_AMR_PROFILE: 'local' },
+        { VELA_LINK_URL: 'https://openrouter.example/v1' },
+      ).loggedIn,
+    ).toBe(false);
+  });
+
+  it('returns loggedIn=true with user info when the active profile has a runtimeKey', () => {
+    writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rt-secret-abc',
+          controlKey: 'ck-secret',
+          apiUrl: 'http://localhost:18080',
+          linkUrl: 'http://localhost:18081',
+          user: {
+            id: 'user_1',
+            email: 'leaf@example.com',
+            name: '杨瑾龙',
+            image: 'https://example.com/avatar.png',
+            plan: 'free',
+          },
+        },
+      },
+    });
+    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(true);
+    expect(status.profile).toBe('local');
+    expect(status.user?.email).toBe('leaf@example.com');
+    expect(status.user?.plan).toBe('free');
+    // The secrets in the file are intentionally NOT surfaced through the
+    // status projection — the UI never needs them and we don't want them
+    // showing up in HTTP responses to the local web.
+    expect(JSON.stringify(status)).not.toContain('rt-secret-abc');
+    expect(JSON.stringify(status)).not.toContain('ck-secret');
+  });
+
+  it('reads the Vela CLI config from AMR_HOME when set', () => {
+    const amrHome = path.join(tmpHome, 'custom-amr-home');
+    mkdirSync(amrHome, { recursive: true });
+    writeFileSync(
+      path.join(amrHome, 'config.json'),
+      JSON.stringify({
+        profiles: {
+          local: {
+            runtimeKey: 'rt-custom',
+            controlKey: 'vela_ctrl_custom',
+            apiUrl: 'http://127.0.0.1:18082',
+            user: { id: 'u-custom', email: 'custom@example.com' },
+          },
+        },
+      }),
+      'utf8',
+    );
+    process.env.AMR_HOME = amrHome;
+
+    const status = readVelaLoginStatus({ AMR_HOME: amrHome, OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(true);
+    expect(status.configPath).toBe(path.join(amrHome, 'config.json'));
+    expect(status.user?.email).toBe('custom@example.com');
+    expect(readVelaControlApiContext({ AMR_HOME: amrHome, OPEN_DESIGN_AMR_PROFILE: 'local' })).toMatchObject({
+      profile: 'local',
+      apiUrl: 'http://127.0.0.1:18082',
+      controlKey: 'vela_ctrl_custom',
+    });
+  });
+
+  it('returns loggedIn=false when the active profile is present but lacks runtimeKey', () => {
+    writeConfig({
+      profiles: {
+        local: { apiUrl: 'http://localhost:18080', user: { id: 'u', email: 'e' } },
+      },
+    });
+    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(false);
+  });
+
+  it('isolates profiles — a logged-in "local" does not imply logged-in "prod"', () => {
+    writeConfig({
+      profiles: {
+        local: { runtimeKey: 'rt-local', user: { id: 'u', email: 'leaf@example.com' } },
+      },
+    });
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(true);
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'prod' }).loggedIn).toBe(false);
+  });
+
+  it('does not let VELA_PROFILE select the active status profile', () => {
+    writeConfig({
+      profiles: {
+        local: { runtimeKey: 'rt-local', user: { id: 'u', email: 'leaf@example.com' } },
+      },
+    });
+    expect(
+      readVelaLoginStatus({
+        OPEN_DESIGN_AMR_PROFILE: 'prod',
+        VELA_PROFILE: 'local',
+      }).loggedIn,
+    ).toBe(false);
+  });
+
+  it('treats malformed JSON as logged-out rather than crashing', () => {
+    const file = path.join(tmpHome, '.amr', 'config.json');
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, '{not json', 'utf8');
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(false);
+  });
+
+  it('treats the local runtimeKey as the source of truth even when user fields are missing', () => {
+    writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rt-local',
+          user: { email: 42, plan: ['pro'] },
+        },
+      },
+    });
+    const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(status.loggedIn).toBe(true);
+    expect(status.user?.id).toBe('');
+    expect(status.user?.email).toBe('');
+    expect(status.user?.plan).toBeUndefined();
+  });
+});
+
+describe('readVelaCredentialRevision', () => {
+  it('changes when file-backed logout clears the active profile credentials', async () => {
+    writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rt-local',
+          user: { id: 'u-local', email: 'local@example.com' },
+        },
+      },
+    });
+    const before = readVelaCredentialRevision({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(before).toMatchObject({
+      authSource: 'file',
+      loggedIn: true,
+      userId: 'u-local',
+      userEmail: 'local@example.com',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+
+    const after = readVelaCredentialRevision({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(after).toMatchObject({
+      authSource: 'none',
+      loggedIn: false,
+      userId: '',
+      userEmail: '',
+    });
+    expect(after.configMtimeMs).not.toBe(before.configMtimeMs);
+  });
+});
+
+describe('readVelaControlApiContext', () => {
+  it('keeps apiUrl and controlKey on the same config snapshot', async () => {
+    vi.resetModules();
+    const configPath = path.join(tmpHome, '.amr', 'config.json');
+    let configReads = 0;
+
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      const readFileSyncMock = vi.fn(
+        (target: Parameters<typeof actual.readFileSync>[0], options?: Parameters<typeof actual.readFileSync>[1]) => {
+          if (typeof target === 'string' && target === configPath) {
+            configReads += 1;
+            return JSON.stringify({
+              profiles: {
+                test:
+                  configReads === 1
+                    ? {
+                        apiUrl: 'https://old.example',
+                        controlKey: 'ck-old',
+                        user: { id: 'u-old', email: 'old@example.com' },
+                      }
+                    : {
+                        apiUrl: 'https://new.example',
+                        controlKey: 'ck-new',
+                        user: { id: 'u-new', email: 'new@example.com' },
+                      },
+              },
+            });
+          }
+          return actual.readFileSync(target, options as never);
+        },
+      );
+      return {
+        ...actual,
+        existsSync: vi.fn((target: string) =>
+          target.endsWith(path.join('.amr', 'config.json')) ? true : actual.existsSync(target),
+        ),
+        readFileSync: readFileSyncMock,
+        statSync: vi.fn(() => ({ mtimeMs: 123 } as ReturnType<typeof actual.statSync>)),
+      };
+    });
+
+    const vela = await import('../../src/integrations/vela.js');
+    const context = vela.readVelaControlApiContext({ HOME: tmpHome, OPEN_DESIGN_AMR_PROFILE: 'test' });
+    expect(context).toEqual({
+      profile: 'test',
+      apiUrl: 'https://old.example',
+      controlKey: 'ck-old',
+      user: { id: 'u-old', email: 'old@example.com' },
+      configMtimeMs: 123,
+    });
+    expect(configReads).toBe(1);
+
+    vi.doUnmock('node:fs');
+    vi.resetModules();
+  });
+});
+
+describe('forgetVelaLogin', () => {
+  it('removes only the resolved profile credentials and preserves the rest of the config', () => {
+    const file = writeConfig({
+      version: 1,
+      profiles: {
+        local: {
+          runtimeKey: 'rt',
+          controlKey: 'ck',
+          apiUrl: 'http://localhost:18080',
+          linkUrl: 'http://localhost:18081',
+          user: { id: 'u', email: 'e' },
+        },
+        prod: { runtimeKey: 'rt-prod', user: { id: 'p', email: 'prod@example.com' } },
+      },
+      otherTopLevel: true,
+    });
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(true);
+    forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' });
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).loggedIn).toBe(false);
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'prod' }).loggedIn).toBe(true);
+
+    const next = JSON.parse(readFileSync(file, 'utf8'));
+    expect(next.otherTopLevel).toBe(true);
+    expect(next.profiles.local.runtimeKey).toBeUndefined();
+    expect(next.profiles.local.controlKey).toBeUndefined();
+    expect(next.profiles.local.user).toBeUndefined();
+    expect(next.profiles.local.apiUrl).toBe('http://localhost:18080');
+    expect(next.profiles.local.linkUrl).toBe('http://localhost:18081');
+    expect(next.profiles.prod.runtimeKey).toBe('rt-prod');
+  });
+
+  it('is a no-op when the resolved profile does not exist', () => {
+    const file = writeConfig({
+      profiles: {
+        prod: { runtimeKey: 'rt-prod', user: { id: 'p', email: 'prod@example.com' } },
+      },
+    });
+    expect(() => forgetVelaLogin({ OPEN_DESIGN_AMR_PROFILE: 'local' })).not.toThrow();
+    const next = JSON.parse(readFileSync(file, 'utf8'));
+    expect(next.profiles.prod.runtimeKey).toBe('rt-prod');
+  });
+
+  it('is a no-op when the config file does not exist (idempotent)', () => {
+    expect(() => forgetVelaLogin()).not.toThrow();
+  });
+});
+
+describe('spawnVelaLogin', () => {
+  it('returns an actionable error when no vela binary can be resolved', async () => {
+    const originalPath = process.env.PATH;
+    const originalResourceRoot = process.env.OD_RESOURCE_ROOT;
+    try {
+      process.env.PATH = '';
+      delete process.env.OD_RESOURCE_ROOT;
+      await expect(
+        spawnVelaLogin({
+          baseEnv: { ...process.env, HOME: tmpHome },
+          configuredEnv: {},
+        }),
+      ).rejects.toThrow('vela binary not found');
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      if (originalResourceRoot === undefined) delete process.env.OD_RESOURCE_ROOT;
+      else process.env.OD_RESOURCE_ROOT = originalResourceRoot;
+    }
+  });
+
+  it('keeps login pending until the daemon accepts the saved credentials', async () => {
+    let allowAcceptance: () => void = () => undefined;
+    let observePersistence: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { allowAcceptance = resolve; });
+    const persisted = new Promise<void>((resolve) => { observePersistence = resolve; });
+    const baseEnv = {...process.env, HOME: tmpHome, OPEN_DESIGN_AMR_PROFILE: 'local'};
+    await spawnVelaLogin({
+      baseEnv,
+      configuredEnv: {VELA_BIN: FAKE_VELA},
+      acceptCredentials: () => { observePersistence(); return gate; },
+    });
+    await persisted;
+    expect(readVelaLoginStatus(baseEnv)).toMatchObject({loggedIn: false, loginInFlight: true});
+    expect(JSON.parse(readFileSync(path.join(tmpHome, '.amr', 'config.json'), 'utf8')).profiles.local.controlKeyId).toBe('fake-control-key-id');
+    allowAcceptance();
+    // Real child stdio drain and close are the completion boundary here.
+    await vi.waitFor(() => expect(readVelaLoginStatus(baseEnv)).toMatchObject({loggedIn: true, loginInFlight: false}));
+  });
+
+  it('spawns the configured vela binary and writes/reads only the feature-test AMR profile', async () => {
+    const result = await spawnVelaLogin({
+      baseEnv: {
+        ...process.env,
+        HOME: tmpHome,
+        OPEN_DESIGN_AMR_PROFILE: 'feature-test',
+        VELA_PROFILE: 'prod',
+        FAKE_VELA_LOGIN_USER_EMAIL: 'spawn-login@example.com',
+      },
+      configuredEnv: {
+        VELA_BIN: FAKE_VELA,
+      },
+    });
+
+    expect(result.pid).toBeGreaterThan(0);
+    expect(result.profile).toBe('feature-test');
+
+    const file = path.join(tmpHome, '.amr', 'config.json');
+    for (let i = 0; i < 20; i += 1) {
+      if (existsSync(file)) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    const next = JSON.parse(readFileSync(file, 'utf8'));
+    expect(Object.keys(next.profiles)).toEqual(['feature-test']);
+    expect(next.profiles['feature-test'].user.email).toBe('spawn-login@example.com');
+    expect(next.profiles.prod).toBeUndefined();
+    expect(next.profiles.test).toBeUndefined();
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'feature-test' })).toMatchObject({
+      loggedIn: true,
+      profile: 'feature-test',
+      user: { email: 'spawn-login@example.com' },
+    });
+  });
+
+  it('spawns login with the Settings-configured AMR profile over daemon env', async () => {
+    const result = await spawnVelaLogin({
+      baseEnv: {
+        ...process.env,
+        HOME: tmpHome,
+        OPEN_DESIGN_AMR_PROFILE: 'prod',
+        VELA_PROFILE: 'prod',
+        FAKE_VELA_LOGIN_USER_EMAIL: 'settings-profile@example.com',
+      },
+      configuredEnv: {
+        VELA_BIN: FAKE_VELA,
+        OPEN_DESIGN_AMR_PROFILE: 'local',
+      },
+    });
+
+    expect(result.pid).toBeGreaterThan(0);
+    expect(result.profile).toBe('local');
+
+    const file = path.join(tmpHome, '.amr', 'config.json');
+    for (let i = 0; i < 20; i += 1) {
+      if (existsSync(file)) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+
+    const next = JSON.parse(readFileSync(file, 'utf8'));
+    expect(next.profiles.local.user.email).toBe('settings-profile@example.com');
+    expect(next.profiles.prod).toBeUndefined();
+  });
+});
+
+describe('applyVelaLiveAccount', () => {
+  const signedIn = (user: VelaLoginStatus['user']): VelaLoginStatus => ({
+    loggedIn: true,
+    loginInFlight: false,
+    profile: 'prod',
+    user,
+    configPath: '/tmp/x',
+  });
+
+  it('surfaces plan + balance on a separate field without fabricating a user', () => {
+    // VELA_RUNTIME_KEY / VELA_LINK_URL auth → readVelaLoginStatus returns
+    // loggedIn:true, user:null; the live billing data rides on `account` so the
+    // null identity (and the analytics `user.id` signal) is preserved.
+    const status = signedIn(null);
+    applyVelaLiveAccount(status, { plan: 'max', balanceUsd: '204.35' });
+    expect(status.user).toBeNull();
+    expect(status.account).toEqual({ plan: 'max', balanceUsd: '204.35' });
+  });
+
+  it('leaves an existing config-backed user identity untouched', () => {
+    const status = signedIn({ id: 'u1', email: 'a@b.c', plan: 'free' });
+    applyVelaLiveAccount(status, { plan: 'plus', balanceUsd: '10.00' });
+    expect(status.user).toEqual({ id: 'u1', email: 'a@b.c', plan: 'free' });
+    expect(status.account).toEqual({ plan: 'plus', balanceUsd: '10.00' });
+  });
+
+  it('is a no-op when signed out or when there is no account', () => {
+    const out: VelaLoginStatus = { ...signedIn(null), loggedIn: false };
+    applyVelaLiveAccount(out, { plan: 'max', balanceUsd: '1' });
+    expect(out.account).toBeUndefined();
+
+    const noAccount = signedIn(null);
+    applyVelaLiveAccount(noAccount, null);
+    expect(noAccount.account).toBeUndefined();
+  });
+});
+
+describe('velaLiveAccountCacheKey + clearAllVelaLiveAccounts', () => {
+  const rev = (
+    over: Partial<VelaCredentialRevision> = {},
+  ): VelaCredentialRevision => ({
+    authSource: 'file',
+    profile: 'prod',
+    loggedIn: true,
+    userId: 'u1',
+    userEmail: 'a@b.c',
+    configMtimeMs: 100,
+    credentialFingerprint: '',
+    ...over,
+  });
+
+  it('changes key after logout / account switch on the same profile', () => {
+    const signedInKey = velaLiveAccountCacheKey(rev());
+    const loggedOutKey = velaLiveAccountCacheKey(
+      rev({ loggedIn: false, userId: '', configMtimeMs: 200 }),
+    );
+    const otherUserKey = velaLiveAccountCacheKey(
+      rev({ userId: 'u2', configMtimeMs: 300 }),
+    );
+    expect(signedInKey).not.toBe(loggedOutKey);
+    expect(signedInKey).not.toBe(otherUserKey);
+  });
+
+  it('invalidates an env-backed key when the config account changes', () => {
+    // Env-backed auth (VELA_RUNTIME_KEY) has userId='' (user:null), so the
+    // config mtime is the ONLY signal that the underlying billing account
+    // changed — it must be part of the key or a switch leaks the prior
+    // account's plan/balance. readVelaCredentialRevision now keeps configMtimeMs
+    // for env auth so these differ.
+    const env = (mtime: number) =>
+      velaLiveAccountCacheKey(
+        rev({ authSource: 'env', userId: '', userEmail: '', configMtimeMs: mtime }),
+      );
+    expect(env(100)).not.toBe(env(200));
+  });
+
+  it('invalidates an env-backed key when the configured AMR credential changes', () => {
+    // Settings-backed VELA_RUNTIME_KEY can switch accounts without touching
+    // ~/.amr/config.json (same configMtimeMs, user:null), so the credential
+    // fingerprint is the only thing distinguishing account A from account B.
+    const base = {
+      authSource: 'env' as const,
+      userId: '',
+      userEmail: '',
+      configMtimeMs: 100,
+    };
+    const keyA = velaLiveAccountCacheKey(
+      rev({ ...base, credentialFingerprint: 'aaaaaaaaaaaaaaaa' }),
+    );
+    const keyB = velaLiveAccountCacheKey(
+      rev({ ...base, credentialFingerprint: 'bbbbbbbbbbbbbbbb' }),
+    );
+    expect(keyA).not.toBe(keyB);
+  });
+
+  it('never serves the previous account billing data after a switch', () => {
+    clearAllVelaLiveAccounts();
+    const oldKey = velaLiveAccountCacheKey(rev({ userId: 'u1' }));
+    setVelaLiveAccount(oldKey, { plan: 'max', balanceUsd: '999.00' });
+
+    // A different account logging in (rewritten config) gets a fresh key.
+    const newKey = velaLiveAccountCacheKey(
+      rev({ userId: 'u2', configMtimeMs: 999 }),
+    );
+    expect(peekVelaLiveAccount(newKey)).toBeNull();
+    expect(peekVelaLiveAccount(oldKey)).toEqual({
+      plan: 'max',
+      balanceUsd: '999.00',
+    });
+
+    // Logout wipes everything.
+    clearAllVelaLiveAccounts();
+    expect(peekVelaLiveAccount(oldKey)).toBeNull();
+  });
+});
+
+describe('new-registration invitation claim', () => {
+  it('reads only the selected profile claim matching its account', () => {
+    writeConfig({ profiles: { local: { runtimeKey: 'selected-runtime', user: { id: 'new-account', email: 'new@example.com' }, registrationInvite: { accountId: 'new-account', deviceAuthorizationId: 'cuid-authorization' } }, prod: { runtimeKey: 'other-runtime', user: { id: 'existing', email: 'old@example.com' } } } });
+    expect(readVelaLoginStatus({}, { OPEN_DESIGN_AMR_PROFILE: 'local' }).registrationInvite).toEqual({ accountId: 'new-account', deviceAuthorizationId: 'cuid-authorization' });
+    expect(readVelaLoginStatus({}, { OPEN_DESIGN_AMR_PROFILE: 'prod' }).registrationInvite).toBeUndefined();
+  });
+  it.each([undefined, { accountId: 'other', deviceAuthorizationId: 'cuid' }, { accountId: 'new-account', deviceAuthorizationId: '' }, { accountId: 'new-account', deviceAuthorizationId: 123 }, { accountId: 'new-account', deviceAuthorizationId: 'a'.repeat(257) }])('rejects an absent or malformed registration claim %#', claim => {
+    writeConfig({ profiles: { local: { runtimeKey: 'runtime', user: { id: 'new-account', email: 'new@example.com' }, registrationInvite: claim } } });
+    expect(readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' }).registrationInvite).toBeUndefined();
+  });
+  it('does not surface a stored claim on an expired credential or an env-backed anonymous identity', () => {
+    writeConfig({ profiles: { local: { runtimeKey: 'runtime', user: { id: 'new-account', email: 'new@example.com' }, registrationInvite: { accountId: 'new-account', deviceAuthorizationId: 'cuid' } } } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
+    markVelaAuthorizationExpired(env); expect(readVelaLoginStatus(env).registrationInvite).toBeUndefined();
+    expect(readVelaLoginStatus({ ...env, VELA_RUNTIME_KEY: 'env-key', VELA_LINK_URL: 'https://link.example' }).registrationInvite).toBeUndefined();
+  });
+});
+
+describe('registration claim credential-source binding', () => {
+  const claim = { accountId: 'account-a', deviceAuthorizationId: 'authorization-a' };
+  const profile = { runtimeKey: 'runtime-a', controlKey: 'control-a', apiUrl: 'https://api-a.example', user: { id: 'account-a', email: 'a@example.com' }, registrationInvite: claim };
+  it.each(['env', 'configured'] as const)('drops only the claim when %s overrides the effective control credential', source => {
+    writeConfig({ profiles: { local: profile } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local', ...(source === 'env' ? { VELA_CONTROL_KEY: 'control-b', VELA_API_URL: profile.apiUrl } : {}) };
+    const configured = source === 'configured' ? { VELA_CONTROL_KEY: 'control-b', VELA_API_URL: profile.apiUrl } : {};
+    const status = readVelaLoginStatus(env, configured);
+    expect(status).toMatchObject({ loggedIn: true, sessionState: 'authenticated', user: { id: 'account-a' } });
+    expect(readVelaControlApiContext(env, configured)?.controlKey).toBe('control-b');
+    expect(status.registrationInvite).toBeUndefined();
+  });
+  it('drops the claim when a matching key is redirected to a different API source', () => {
+    writeConfig({ profiles: { local: profile } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local', VELA_CONTROL_KEY: profile.controlKey, VELA_API_URL: 'https://api-b.example' };
+    expect(readVelaControlApiContext(env)?.apiUrl).toBe('https://api-b.example');
+    expect(readVelaLoginStatus(env).registrationInvite).toBeUndefined();
+  });
+  it('does not borrow a stored test-source claim when env control defaults to production API', () => {
+    writeConfig({ profiles: { local: profile } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local', VELA_CONTROL_KEY: profile.controlKey };
+    expect(readVelaControlApiContext(env)?.apiUrl).toBe('https://amr-api.open-design.ai');
+    expect(readVelaLoginStatus(env).registrationInvite).toBeUndefined();
+  });
+  it('drops an effective API override when the stored profile has no explicit API source', () => {
+    const { apiUrl: _apiUrl, ...withoutApi } = profile;
+    writeConfig({ profiles: { local: withoutApi } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local', VELA_API_URL: 'https://api-b.example' };
+    expect(readVelaControlApiContext(env)?.apiUrl).toBe('https://api-b.example');
+    expect(readVelaLoginStatus(env).registrationInvite).toBeUndefined();
+  });
+  it('preserves the claim when the effective key and API source are the selected stored values', () => {
+    writeConfig({ profiles: { local: profile } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local', VELA_CONTROL_KEY: profile.controlKey, VELA_API_URL: `${profile.apiUrl}/` };
+    expect(readVelaLoginStatus(env).registrationInvite).toEqual(claim);
+  });
+  it('drops the stored claim when an explicit API env redirects the stored control key', () => {
+    writeConfig({ profiles: { local: profile } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local', VELA_API_URL: 'https://override-api.example' };
+    expect(readVelaControlApiContext(env)?.apiUrl).toBe(env.VELA_API_URL);
+    expect(readVelaLoginStatus(env).registrationInvite).toBeUndefined();
+  });
+  it('preserves the stored claim without an API or control credential override', () => {
+    writeConfig({ profiles: { local: profile } });
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
+    expect(readVelaControlApiContext(env)).toMatchObject({ apiUrl: profile.apiUrl, controlKey: profile.controlKey });
+    expect(readVelaLoginStatus(env).registrationInvite).toEqual(claim);
+  });
+});

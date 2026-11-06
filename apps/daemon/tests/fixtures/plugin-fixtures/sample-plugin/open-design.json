@@ -1,0 +1,26 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "sample-plugin",
+  "title": "Sample Plugin",
+  "version": "1.0.0",
+  "description": "Phase 1 e2e fixture used by od plugin install/apply walkthroughs.",
+  "license": "MIT",
+  "tags": ["sample", "phase1"],
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "useCase": {
+      "query": "Generate a {{topic}} brief for {{audience}}."
+    },
+    "context": {
+      "skills": [{ "ref": "open-design-landing" }],
+      "atoms": ["todo-write", "discovery-question-form"]
+    },
+    "inputs": [
+      { "name": "topic", "type": "string", "required": true, "label": "Topic" },
+      { "name": "audience", "type": "select", "options": ["VC pitch", "general"], "default": "general" }
+    ],
+    "capabilities": ["prompt:inject"]
+  }
+}

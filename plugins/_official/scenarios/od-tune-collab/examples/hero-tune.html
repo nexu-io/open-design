@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>od-tune-collab · Hero copy tune cycle</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fbfaf7;
+      --fg: #14141a;
+      --muted: #5f5f6a;
+      --line: #ececef;
+      --soft: #f3f1ec;
+      --card: #ffffff;
+      --good: #14803c;
+      --good-soft: #e6f4ea;
+      --acc: #5b54ff;
+      --acc-soft: #efeeff;
+      --del: #c2410c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f0f10;
+        --fg: #f4f4f5;
+        --muted: #a1a1aa;
+        --line: #27272a;
+        --soft: #18181b;
+        --card: #17171b;
+        --good-soft: #0f3a21;
+        --acc: #8a83ff;
+        --acc-soft: #1d1b40;
+      }
+    }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); }
+    body {
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 13px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+      background: var(--good-soft); color: var(--good);
+    }
+    .pill.acc { background: var(--acc-soft); color: var(--acc); }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    section { margin-top: 28px; }
+    h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; letter-spacing: 0.01em; text-transform: uppercase; color: var(--muted); }
+
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .panel { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow: hidden; }
+    .panel header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--soft); border: 0; border-bottom: 1px solid var(--line); margin: 0; }
+    .panel header span { font-size: 12px; color: var(--muted); }
+    .panel .body { padding: 18px; min-height: 120px; }
+    .hero-eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .hero-title { font-size: 22px; line-height: 1.18; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .hero-lede { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; }
+    .cta {
+      display: inline-block; background: var(--fg); color: var(--bg);
+      padding: 7px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 500;
+    }
+
+    .critique { display: grid; grid-template-columns: 60px 1fr; gap: 14px; align-items: center; }
+    .score {
+      width: 60px; height: 60px; border-radius: 50%;
+      background: var(--acc-soft); color: var(--acc);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 18px;
+    }
+    .notes { display: grid; gap: 6px; font-size: 13px; }
+    .notes li { list-style: none; padding-left: 18px; position: relative; color: var(--muted); }
+    .notes li::before { content: '✓'; color: var(--good); position: absolute; left: 0; top: 0; }
+    .notes li.warn::before { content: '!'; color: var(--del); }
+
+    .timeline { display: grid; gap: 6px; font-size: 13px; }
+    .step { display: flex; gap: 10px; align-items: center; }
+    .step .n { width: 22px; height: 22px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 11px; }
+    .step .l { color: var(--muted); }
+    .step strong { color: var(--fg); font-weight: 500; }
+
+    footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Hero copy tune · cycle 2</h1>
+    <div class="sub">od-tune-collab · scenario · direction → patch → critique → handoff</div>
+    <div class="row">
+      <span class="pill">critique 4.6/5</span>
+      <span class="pill acc">parent artifact preserved</span>
+      <span class="pill">handoff: patch</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Before vs. after</h2>
+    <div class="compare">
+      <div class="panel">
+        <header><span>Before · parent artifact</span><span>v1</span></header>
+        <div class="body">
+          <div class="hero-eyebrow">Welcome</div>
+          <h3 class="hero-title">A platform that does it all</h3>
+          <p class="hero-lede">Lamina is the all-in-one place for your team to do all of the things they need to do.</p>
+          <span class="cta">Get started</span>
+        </div>
+      </div>
+      <div class="panel">
+        <header><span>After · tuned</span><span>v2</span></header>
+        <div class="body">
+          <div class="hero-eyebrow">For product teams</div>
+          <h3 class="hero-title">Ship the thing customers actually asked for.</h3>
+          <p class="hero-lede">Lamina turns your scattered tooling into one coherent surface — so the next thing your team ships is the thing your customers wanted.</p>
+          <span class="cta">Start free</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Critique</h2>
+    <div class="critique">
+      <div class="score">4.6</div>
+      <ul class="notes">
+        <li>Specific audience (“product teams”) replaces vague “your team”.</li>
+        <li>Headline names a real outcome instead of restating the category.</li>
+        <li>CTA verb sharpened from “Get started” to “Start free”.</li>
+        <li class="warn">Lede is still slightly long — consider trimming to one clause for mobile.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pipeline trace</h2>
+    <div class="timeline">
+      <div class="step"><span class="n">1</span><span><strong>direction</strong> — picked “sharper, audience-named hero”.</span></div>
+      <div class="step"><span class="n">2</span><span><strong>patch</strong> — rewrote eyebrow, title, lede, CTA inline.</span></div>
+      <div class="step"><span class="n">3</span><span><strong>critique</strong> — score 4.1 → 4.6 across 2 iterations.</span></div>
+      <div class="step"><span class="n">4</span><span><strong>handoff</strong> — recorded as <code>handoffKind: 'patch'</code>; lineage chain intact.</span></div>
+    </div>
+  </section>
+
+  <footer>
+    Example artifact rendered for the <code>od-tune-collab</code> scenario.
+    Real runs inherit <code>parentArtifactId</code> from the project metadata so
+    the produced artifact's <code>ArtifactManifest.parentArtifactId</code> is
+    set automatically.
+  </footer>
+</body>
+</html>

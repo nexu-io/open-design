@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PlayStation — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/playstation. Console Black hero,
+        Paper White content panels, SST weight 300 display type, 1.2× scale-on-hover
+        with PlayStation Cyan fill and a 2px PlayStation Blue ring."
+    />
+
+    <style>
+      :root {
+        --bg: #000000;
+        --surface: #ffffff;
+        --surface-warm: #f5f7fa;
+
+        --fg: #ffffff;
+        --fg-2: var(--fg);
+        --muted: #cccccc;
+        --meta: var(--muted);
+
+        --border: #cccccc;
+        --border-soft: #f3f3f3;
+
+        --accent: #0070cc;
+        --accent-on: #ffffff;
+        --accent-hover: #1eaedb;
+        --accent-active: #0068bd;
+
+        --success: #16a34a;
+        --warn: #eab308;
+        --danger: #c81b3a;
+
+        --font-display: "SST", "Playstation SST", Arial, Helvetica, sans-serif;
+        --font-body: "SST", "Playstation SST", Arial, Helvetica, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 18px;
+        --text-lg: 22px;
+        --text-xl: 28px;
+        --text-2xl: 35px;
+        --text-3xl: 44px;
+        --text-4xl: 54px;
+
+        --leading-body: 1.5;
+        --leading-tight: 1.25;
+        --tracking-display: -0.1px;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 48px;
+
+        --radius-sm: 6px;
+        --radius-md: 12px;
+        --radius-lg: 24px;
+        --radius-pill: 999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: rgba(0, 0, 0, 0.08) 0 5px 9px 0;
+
+        --focus-ring: 0 0 0 2px #0070cc;
+
+        --motion-fast: 180ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1600px;
+        --container-gutter-desktop: 64px;
+        --container-gutter-tablet: 32px;
+        --container-gutter-phone: 16px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout ─────────────────────────────────────────────── */
+      .container { max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-gutter-desktop); }
+      section { padding-block: var(--section-y-desktop); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Surface alternation — three-channel layout ────────── */
+      .panel-light {
+        background: var(--surface);
+        color: #1f1f1f; /* Deep Charcoal — body on Paper White */
+      }
+      .panel-light h1,
+      .panel-light h2,
+      .panel-light h3 { color: #000000; }      /* Display Ink */
+      .panel-light .lead { color: #6b6b6b; }   /* Body Gray */
+      .panel-light .body-muted { color: #6b6b6b; }
+      .panel-light .eyebrow { color: #6b6b6b; }
+
+      /* ─── Typography — SST weight 300 at display sizes ──────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 300; /* Quiet-authority — the PlayStation voice */
+        line-height: var(--leading-tight);
+        margin: 0;
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-4xl); }
+      h2 { font-size: var(--text-2xl); letter-spacing: 0; }
+      h3 { font-size: var(--text-lg); letter-spacing: 0.1px; }
+      p { margin: 0; }
+      .lead { font-size: var(--text-base); color: var(--muted); line-height: var(--leading-body); }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      /* No ALL-CAPS — sentence case eyebrow */
+      .eyebrow {
+        font-size: var(--text-sm);
+        color: var(--muted);
+        font-weight: 500;
+        letter-spacing: 0.1px;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — full-pill, 1.2× cyan power-on hover ─────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 12px 24px;
+        border-radius: var(--radius-pill);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        letter-spacing: 0.4px;
+        line-height: 1.25;
+        cursor: pointer;
+        border: 2px solid transparent; /* Reserved gutter so hover border doesn't shift */
+        text-decoration: none;
+        transform-origin: center;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    color var(--motion-fast) var(--ease-standard),
+                    border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard),
+                    transform var(--motion-fast) var(--ease-standard);
+      }
+      .btn:active { opacity: 0.6; }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+      /* Primary — PlayStation Blue → Cyan power-on signature */
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+        color: var(--accent-on);
+        border-color: #ffffff;
+        box-shadow: 0 0 0 2px var(--accent);
+        transform: scale(1.2);
+      }
+
+      /* Secondary on dark — White surface, blue ink */
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--accent);
+        border-color: var(--surface);
+      }
+      .btn-secondary:hover {
+        background: var(--accent-hover);
+        color: var(--accent-on);
+        border-color: #ffffff;
+        box-shadow: 0 0 0 2px var(--accent);
+        transform: scale(1.2);
+      }
+      /* On Paper White panels, secondary inverts to outline ink */
+      .panel-light .btn-secondary {
+        background: transparent;
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .panel-light .btn-secondary:hover {
+        background: var(--accent-hover);
+        color: var(--accent-on);
+        border-color: #ffffff;
+        box-shadow: 0 0 0 2px var(--accent);
+        transform: scale(1.2);
+      }
+
+      /* ─── Inputs — 3px radius, 2px blue focus ring ──────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label { font-size: var(--text-sm); font-weight: 600; color: #1f1f1f; }
+      .field input {
+        padding: 12px 14px;
+        border-radius: 3px; /* Tighter than the system — DESIGN.md §Inputs */
+        border: 1px solid var(--border);
+        background: #ffffff;
+        color: #1f1f1f;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input:focus-visible {
+        box-shadow: var(--focus-ring); /* Ring does the work — no border-color shift */
+      }
+      .field input::placeholder { color: rgba(0, 0, 0, 0.6); }
+      .field-help { font-size: var(--text-sm); color: #6b6b6b; }
+
+      /* ─── Cards — feature tile, 24px radius, feather lift ───── */
+      .card {
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        padding: var(--space-8);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        box-shadow: var(--elev-raised);
+        border: 1px solid var(--border-soft);
+        color: #1f1f1f;
+      }
+      .card h3 { color: #000000; }
+      .card a { color: var(--accent); }
+      .card a:hover { color: #1883fd; }
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex; align-items: center; gap: var(--space-2);
+        padding: 4px var(--space-3);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs); font-weight: 600; line-height: 1.5;
+      }
+      .badge-success { color: var(--success); background: color-mix(in oklab, var(--success), transparent 86%); }
+      .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+      /* Platform pill — distinctive game-store white-on-dark tag */
+      .pill {
+        display: inline-flex; align-items: center;
+        padding: 6px 14px;
+        border-radius: var(--radius-pill);
+        background: var(--surface);
+        color: #000000;
+        font-size: var(--text-sm); font-weight: 500;
+      }
+
+      /* ─── Links & inline ────────────────────────────────────── */
+      a { color: #53b1ff; text-decoration: none; }
+      a:hover { color: #1883fd; }
+      .panel-light a { color: var(--accent); }
+      .panel-light a:hover { color: #1883fd; }
+
+      kbd {
+        font-family: var(--font-mono); font-size: var(--text-xs);
+        padding: 2px 6px; border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08); color: var(--muted);
+      }
+
+      /* ─── Layout helpers ────────────────────────────────────── */
+      .hero-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: var(--space-12); align-items: end; }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); } }
+      .hero-actions { display: flex; gap: var(--space-4); margin-block-start: var(--space-8); flex-wrap: wrap; }
+      .hero-meta {
+        display: flex; flex-direction: column; gap: var(--space-3);
+        padding: var(--space-5);
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(8px);
+      }
+      .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-6); }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px) { .features-grid { grid-template-columns: 1fr; } }
+      .form-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--space-12); align-items: start; }
+      @media (max-width: 1023px) { .form-row { grid-template-columns: 1fr; } }
+      .form { display: flex; flex-direction: column; gap: var(--space-4); max-width: 460px; }
+      .form-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-3); flex-wrap: wrap; }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+      .pill-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-6">
+            <p class="eyebrow">Reference fixture · playstation</p>
+            <h1>Play has no limits.</h1>
+            <p class="lead" style="max-width: 52ch">
+              From masthead to footer, PlayStation moves like a console powering on —
+              quiet-weight SST headlines lead the eye, and every primary button
+              scales 1.2× into PlayStation Cyan on hover.
+            </p>
+            <div class="pill-row" aria-label="Supported platforms">
+              <span class="pill">PS5</span>
+              <span class="pill">PS4</span>
+              <span class="pill">PSVR2</span>
+            </div>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Enter the system
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the spec</a>
+            </div>
+          </div>
+          <aside class="hero-meta" aria-label="System status">
+            <div class="row-between">
+              <span class="body-sm">PSN status</span>
+              <span class="badge badge-success">
+                <span class="badge-dot" aria-hidden="true"></span>
+                All services online
+              </span>
+            </div>
+            <p class="body-sm" style="color: var(--muted)">Network reviewed <time datetime="2026-05-15">2026-05-15</time> · v1.0</p>
+            <p class="body-sm" style="color: var(--muted)">Press <kbd>⌘</kbd> <kbd>K</kbd> to browse tokens.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section data-od-id="features" class="panel-light">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 24ch">Three surfaces. One vertical channel.</h2>
+        </div>
+        <div class="features-grid" style="margin-block-start: var(--space-12)">
+          <article class="card">
+            <h3>Quiet-authority headlines</h3>
+            <p class="body-sm" style="color: #6b6b6b">
+              SST weight 300 from 22 to 54px — the typographic
+              signature that lets product photography lead while
+              the chrome stays restrained.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect tokens →</a>
+          </article>
+          <article class="card">
+            <h3>Cyan power-on hover</h3>
+            <p class="body-sm" style="color: #6b6b6b">
+              Hover any primary button: fill snaps to PlayStation
+              Cyan, a 2px white border appears, a blue ring blooms,
+              and the button scales 1.2× — all in 180ms.
+            </p>
+            <a href="./DESIGN.md" class="body-sm">Read the rule →</a>
+          </article>
+          <article class="card">
+            <h3>Eleven-radius system</h3>
+            <p class="body-sm" style="color: #6b6b6b">
+              3px on inputs, 12px on covers, 24px on hero cards,
+              999px on pill CTAs. Square corners are forbidden —
+              every surface lands on a declared tier.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect radius →</a>
+          </article>
+        </div>
+      </section>
+
+      <section data-od-id="form" class="panel-light">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs in the Paper White panel.</h2>
+            <p class="body-sm" style="color: #6b6b6b; max-width: 48ch">
+              Input borders sit at 1px Mute Gray with a 3px radius —
+              tighter than the rest of the system. The focus indicator
+              is a 2px PlayStation Blue ring; no border-color change.
+            </p>
+          </div>
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="psn">PSN ID</label>
+              <input id="psn" type="text" placeholder="enter your PSN ID" autocomplete="username" required />
+              <p class="field-help">We'll pair this with your console on first sign-in.</p>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Sign in</button>
+              <button type="button" class="btn btn-secondary">Create an account</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

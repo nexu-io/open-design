@@ -1,0 +1,128 @@
+{
+  "name": "@open-design/contracts",
+  "version": "0.25.1",
+  "private": true,
+  "type": "module",
+  "description": "Shared pure TypeScript contracts for the OpenDesign web/daemon boundary.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./api/connectionTest": {
+      "types": "./dist/api/connectionTest.d.ts",
+      "default": "./dist/api/connectionTest.mjs"
+    },
+    "./api/amrWallet": {
+      "types": "./dist/api/amrWallet.d.ts",
+      "default": "./dist/api/amrWallet.mjs"
+    },
+    "./api/orbit": {
+      "types": "./dist/api/orbit.d.ts",
+      "default": "./dist/api/orbit.mjs"
+    },
+    "./api/finalize": {
+      "types": "./dist/api/finalize.d.ts",
+      "default": "./dist/api/finalize.mjs"
+    },
+    "./api/handoff": {
+      "types": "./dist/api/handoff.d.ts",
+      "default": "./dist/api/handoff.mjs"
+    },
+    "./api/providerModels": {
+      "types": "./dist/api/providerModels.d.ts",
+      "default": "./dist/api/providerModels.mjs"
+    },
+    "./api/reasoningExecution": {
+      "types": "./dist/api/reasoningExecution.d.ts",
+      "default": "./dist/api/reasoningExecution.mjs"
+    },
+    "./api/research": {
+      "types": "./dist/api/research.d.ts",
+      "default": "./dist/api/research.mjs"
+    },
+    "./api/touchpointOffline": {
+      "types": "./dist/api/touchpointOffline.d.ts",
+      "default": "./dist/api/touchpointOffline.mjs"
+    },
+    "./api/touchpointTestRuntime": {
+      "types": "./dist/api/touchpointTestRuntime.d.ts",
+      "default": "./dist/api/touchpointTestRuntime.mjs"
+    },
+    "./runtime/deck-stage-fallback": {
+      "types": "./dist/runtime/deck-stage-fallback.d.ts",
+      "default": "./dist/runtime/deck-stage-fallback.mjs"
+    },
+    "./runtime/deck-protocol": {
+      "types": "./dist/runtime/deck-protocol.d.ts",
+      "default": "./dist/runtime/deck-protocol.mjs"
+    },
+    "./runtime/preview-observability": {
+      "types": "./dist/runtime/preview-observability.d.ts",
+      "default": "./dist/runtime/preview-observability.mjs"
+    },
+    "./runtime/preview-build-focus": {
+      "types": "./dist/runtime/preview-build-focus.d.ts",
+      "default": "./dist/runtime/preview-build-focus.mjs"
+    },
+    "./runtime/preview-runtime-state": {
+      "types": "./dist/runtime/preview-runtime-state.d.ts",
+      "default": "./dist/runtime/preview-runtime-state.mjs"
+    },
+    "./runtime/preview-guards": {
+      "types": "./dist/runtime/preview-guards.d.ts",
+      "default": "./dist/runtime/preview-guards.mjs"
+    },
+    "./design-systems/components-manifest": {
+      "types": "./dist/design-systems/components-manifest.d.ts",
+      "default": "./dist/design-systems/components-manifest.mjs"
+    },
+    "./design-systems/derived-token-outputs": {
+      "types": "./dist/design-systems/derived-token-outputs.d.ts",
+      "default": "./dist/design-systems/derived-token-outputs.mjs"
+    },
+    "./design-systems/token-schema": {
+      "types": "./dist/design-systems/token-schema.d.ts",
+      "default": "./dist/design-systems/token-schema.mjs"
+    },
+    "./prompts/comment-identity": {
+      "types": "./dist/prompts/comment-identity.d.ts",
+      "default": "./dist/prompts/comment-identity.mjs"
+    },
+    "./critique": {
+      "types": "./dist/critique.d.ts",
+      "default": "./dist/critique.mjs"
+    },
+    "./analytics": {
+      "types": "./dist/analytics/index.d.ts",
+      "default": "./dist/analytics/index.mjs"
+    },
+    "./runtime/html-injection-points": {
+      "types": "./dist/runtime/html-injection-points.d.ts",
+      "default": "./dist/runtime/html-injection-points.mjs"
+    },
+    "./runtime/motion-source-player": {
+      "types": "./dist/runtime/motion-source-player.d.ts",
+      "default": "./dist/runtime/motion-source-player.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/release": "workspace:*",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "esbuild": "0.28.0",
+    "vitest": "4.1.6"
+  }
+}

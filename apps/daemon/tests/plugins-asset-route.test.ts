@@ -1,0 +1,241 @@
+// Plan §3.L3 / spec §10.3.5 / §9.2 — plugin asset endpoint.
+//
+// Validates the daemon-side half of the SandboxedComponentSurface
+// contract:
+//
+//   - 404 when the plugin id is unknown.
+//   - 400 when the relpath includes traversal segments.
+//   - 200 with the §9.2 CSP + nosniff headers when the asset is
+//     served from a real fsPath.
+//   - Requests outside the plugin's fsPath are refused even when the
+//     normalized path resolves to an existing file elsewhere.
+
+import type http from 'node:http';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import { startServer } from '../src/server.js';
+import { migratePlugins } from '../src/plugins/persistence.js';
+import { defaultRegistryRoots, upsertInstalledPlugin } from '../src/plugins/registry.js';
+
+let server: http.Server;
+let baseUrl: string;
+let shutdown: (() => Promise<void> | void) | undefined;
+let pluginRoot: string;
+
+beforeAll(async () => {
+  pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'od-asset-'));
+  const surfacesDir = path.join(pluginRoot, 'surfaces');
+  await mkdir(surfacesDir, { recursive: true });
+  await writeFile(
+    path.join(surfacesDir, 'index.html'),
+    '<!DOCTYPE html><title>fixture</title><script>console.log(1)</script>',
+  );
+  await writeFile(
+    path.join(pluginRoot, 'open-design.json'),
+    JSON.stringify({
+      $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+      name: 'asset-plugin',
+      title: 'Asset',
+      version: '1.0.0',
+      description: 'fixture',
+      license: 'MIT',
+      od: { kind: 'skill', capabilities: ['prompt:inject', 'genui:custom-component'], context: { assets: ['./display.ttf'] } },
+    }),
+  );
+
+  const started = (await startServer({ port: 0, returnServer: true })) as {
+    url: string;
+    server: http.Server;
+    shutdown?: () => Promise<void> | void;
+  };
+  baseUrl = started.url;
+  server = started.server;
+  shutdown = started.shutdown;
+
+  // Insert the plugin row into the running daemon's DB. We can't reach
+  // the daemon's `db` handle directly, so we open a sibling SQLite
+  // session against the same RUNTIME_DATA_DIR. Instead, simulate the
+  // installer's effect by hitting the install API:
+  //
+  // For test simplicity we open a private DB and skip the daemon's
+  // registry. The asset route reads through `getInstalledPlugin(db,…)`
+  // backed by the daemon's own DB, so we must use the install route.
+  // But install requires SAFE_BASENAME id matching the folder name —
+  // achievable by pointing at our prepared fixture.
+  const installResp = await fetch(`${baseUrl}/api/plugins/install`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+    body: JSON.stringify({ source: pluginRoot }),
+  });
+  // Drain SSE.
+  if (installResp.body) {
+    const reader = installResp.body.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+  }
+  const secretPath = path.join(pluginRoot, 'secret.txt');
+  const outsideDir = path.join(pluginRoot, 'outside');
+  await mkdir(outsideDir, { recursive: true });
+  await writeFile(secretPath, 'outside secret');
+  await writeFile(path.join(outsideDir, 'nested-secret.txt'), 'nested outside secret');
+  const installedSurfacesDir = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin', 'surfaces');
+  const installedInternalDir = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin', 'internal-assets');
+  await mkdir(installedInternalDir, { recursive: true });
+  await writeFile(path.join(installedInternalDir, 'nested-internal.txt'), 'nested internal secret');
+  await symlink(
+    secretPath,
+    path.join(installedSurfacesDir, 'leak.txt'),
+  );
+  await symlink(outsideDir, path.join(installedSurfacesDir, 'linked-outside'), 'dir');
+  await symlink(installedInternalDir, path.join(installedSurfacesDir, 'linked-internal'), 'dir');
+  const installedRoot = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin');
+  await writeFile(
+    path.join(installedRoot, 'SKILL.md'),
+    '---\nname: asset-plugin\ndescription: Fixture skill description.\n---\n\n# Asset plugin\n',
+  );
+  await writeFile(path.join(installedRoot, 'notes.markdown'), '# notes\n');
+  await writeFile(path.join(installedRoot, 'payload.bin'), 'not a text asset');
+  await writeFile(path.join(installedRoot, 'soundtrack.mp3'), '0123456789');
+  await writeFile(path.join(installedRoot, 'display.ttf'), 'font bytes');
+  void migratePlugins;
+  void upsertInstalledPlugin;
+  void Database;
+});
+
+afterAll(async () => {
+  await fetch(`${baseUrl}/api/plugins/asset-plugin/uninstall`, { method: 'POST' }).catch(() => undefined);
+  await Promise.resolve(shutdown?.());
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await rm(path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin'), { recursive: true, force: true });
+  await rm(pluginRoot, { recursive: true, force: true });
+});
+
+describe('GET /api/plugins/:id/asset/*', () => {
+  it('serves seekable media ranges with the media MIME type', async () => {
+    const response = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/soundtrack.mp3`, {
+      headers: { range: 'bytes=2-5' },
+    });
+    expect(response.status).toBe(206);
+    expect(response.headers.get('content-type')).toBe('audio/mpeg');
+    expect(response.headers.get('content-range')).toBe('bytes 2-5/10');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(await response.text()).toBe('2345');
+  });
+  it('serves bundled fonts with a font MIME type under a CSP that allows them', async () => {
+    const response = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/display.ttf`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('font/ttf');
+    expect(response.headers.get('content-security-policy') ?? '').toContain("font-src 'self' data:");
+  });
+  it.each(['assets/model/hello.gltf', 'assets/fonts/TikTokSans.ttf', 'assets/sticker_img/s_01.webp'])(
+    'allows sandbox previews to load declared bundled asset %s',
+    async (asset) => {
+      const response = await fetch(`${baseUrl}/api/plugins/example-open-design-homepage/asset/${asset}`, {
+        headers: { origin: 'null' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('access-control-allow-origin')).toBe('null');
+      expect(response.headers.get('access-control-allow-credentials')).toBeNull();
+      expect(response.headers.get('vary')).toContain('Origin');
+      expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    },
+  );
+
+  it.each([
+    'asset-plugin/asset/display.ttf',
+    'example-open-design-homepage/asset/SKILL.md',
+  ])('keeps private or undeclared plugin files unavailable to opaque origins: %s', async (asset) => {
+    const response = await fetch(`${baseUrl}/api/plugins/${asset}`, { headers: { origin: 'null' } });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('does not expose bundled assets to arbitrary web origins', async () => {
+    const response = await fetch(`${baseUrl}/api/plugins/example-open-design-homepage/asset/assets/model/hello.gltf`, {
+      headers: { origin: 'https://untrusted.example' },
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('returns 404 for an unknown plugin', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/unknown/asset/index.html`);
+    expect(resp.status).toBe(404);
+  });
+
+  it('rejects path-traversal segments with 400', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/..%2Fescape`);
+    expect(resp.status).toBe(400);
+  });
+
+  it('serves an asset with the §9.2 preview CSP + nosniff', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/index.html`);
+    expect(resp.status).toBe(200);
+    const csp = resp.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("default-src 'none'");
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("frame-ancestors 'self'");
+    expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(resp.headers.get('content-type')).toMatch(/text\/html/);
+    const body = await resp.text();
+    expect(body).toContain('fixture');
+  });
+
+  it('returns 404 for a missing asset under a known plugin', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/does/not/exist.html`);
+    expect(resp.status).toBe(404);
+  });
+
+  it('rejects symlinked assets inside the plugin root', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/leak.txt`);
+    expect(resp.status).toBe(404);
+    expect(await resp.text()).not.toContain('outside secret');
+  });
+
+  it('rejects assets reached through a symlinked directory inside the plugin root', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/linked-outside/nested-secret.txt`);
+    expect(resp.status).toBe(404);
+    expect(await resp.text()).not.toContain('nested outside secret');
+  });
+
+  it('rejects assets reached through an internal symlinked directory inside the plugin root', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/linked-internal/nested-internal.txt`);
+    expect(resp.status).toBe(404);
+    expect(await resp.text()).not.toContain('nested internal secret');
+  });
+});
+
+// The plugin detail page reads a suite's "Knowledge skills" descriptions by
+// fetching each `SKILL.md` through this route and parsing its frontmatter.
+// That client only parses bodies whose media type is in its markdown
+// allowlist (`apps/web/src/runtime/plugin-skill-descriptions.ts`); any other
+// type has the response body cancelled unread, which silently blanks the
+// description line under the skill title. Serving markdown with a markdown
+// media type is therefore a contract of this route, not a cosmetic detail.
+describe('GET /api/plugins/:id/asset/* markdown media type', () => {
+  it('serves SKILL.md as text/markdown so the client parses it', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/SKILL.md`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+    expect(await resp.text()).toContain('Fixture skill description.');
+  });
+
+  it('serves a .markdown asset with the same media type', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/notes.markdown`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+  });
+
+  // Guards the safe default: only known-safe types are named, everything else
+  // must stay a non-renderable download rather than become inlineable.
+  it('still falls back to application/octet-stream for unknown extensions', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/payload.bin`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('application/octet-stream');
+  });
+});

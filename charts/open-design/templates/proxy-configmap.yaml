@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-design.fullname" . }}-proxy
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+data:
+  default.conf.template: |
+    server {
+        listen ${PROXY_PORT};
+        
+        location /nginx-health {
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        location / {
+            proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+        }
+
+        location /api/ {
+            proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+            proxy_set_header X-Forwarded-Host $http_x_forwarded_host;
+            
+            proxy_set_header Authorization "Bearer ${PROXY_API_TOKEN}";
+            
+            # Critical for Server-Sent Events (SSE)
+            proxy_buffering off;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+            proxy_set_header Connection '';
+            http2_push_preload on;
+        }
+    }

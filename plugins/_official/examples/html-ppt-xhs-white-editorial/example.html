@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write a Staff-Engineer Promotion Case like a Calibration-Committee Insider - Career</title>
+<style>/* html-ppt :: shared webfonts (only families actually used) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+</style>
+<style>/* html-ppt :: base.css — reset + shared tokens + layout primitives */
+/* Default tokens. Themes in assets/themes/*.css override the :root block. */
+:root {
+  --bg: #fbfaf7;
+  --bg-soft: #f4f2ec;
+  --surface: #fbfaf7;
+  --surface-2: #f4f2ec;
+  --border: rgba(25,23,20,.12);
+  --border-strong: rgba(25,23,20,.32);
+  --text-1: #191714;
+  --text-2: #52504a;
+  --text-3: #6e6a60;
+  --accent: #b3261e;
+  --accent-2: #b3261e;
+  --accent-3: #b3261e;
+  --good: #2c6e49;
+  --warn: #a05c12;
+  --bad:  #b3261e;
+  --grad: none;
+  --grad-soft: none;
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-lg: 0px;
+  --shadow: none;
+  --shadow-lg: none;
+  --font-sans: 'Inter',-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;
+  --font-serif: 'Fraunces',Georgia,serif;
+  --font-mono: 'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --font-display: var(--font-serif);
+  --letter-tight: -.02em;
+  --letter-normal: 0em;
+  --ease: cubic-bezier(.16,1,.3,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-1);
+  font-family:var(--font-sans);font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  letter-spacing:var(--letter-normal)}
+img,svg,video{max-width:100%;display:block}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,pre,samp{font-family:var(--font-mono)}
+
+/* ================= SLIDE SYSTEM ================= */
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg)}
+.slide{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:72px 96px;
+  box-sizing:border-box;
+  opacity:0;pointer-events:none;
+  transition:opacity .5s var(--ease), transform .5s var(--ease);
+  transform:translateX(30px);
+  overflow:hidden;
+}
+.slide.is-active{opacity:1;pointer-events:auto;transform:translateX(0);z-index:2}
+.slide.is-prev{transform:translateX(-30px)}
+
+/* single-page standalone (used when a layout file is opened directly) */
+body.single .slide{position:relative;width:100vw;height:100vh;opacity:1;transform:none;pointer-events:auto}
+
+/* ================= TYPOGRAPHY ================= */
+.eyebrow{font-size:13px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)}
+.kicker{font-size:14px;font-weight:600;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+h1.title,.h1{font-family:var(--font-display);font-size:72px;line-height:1.05;font-weight:800;letter-spacing:var(--letter-tight);margin:0 0 18px;color:var(--text-1)}
+h2.title,.h2{font-family:var(--font-display);font-size:54px;line-height:1.1;font-weight:700;letter-spacing:var(--letter-tight);margin:0 0 14px}
+h3,.h3{font-size:32px;line-height:1.2;font-weight:600;letter-spacing:var(--letter-normal);margin:0 0 10px}
+h4,.h4{font-size:22px;line-height:1.3;font-weight:600;margin:0 0 8px}
+.lede{font-size:22px;line-height:1.55;color:var(--text-2);font-weight:300;max-width:62ch}
+.dim{color:var(--text-2)}
+.dim2{color:var(--text-3)}
+.mono{font-family:var(--font-mono)}
+.serif{font-family:var(--font-serif)}
+.gradient-text{color:var(--accent)}
+
+/* ================= LAYOUT PRIMITIVES ================= */
+.stack>*+*{margin-top:14px}
+.row{display:flex;gap:24px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.grid{display:grid;gap:24px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.center{display:flex;align-items:center;justify-content:center;text-align:center}
+.fill{flex:1}
+.sp-t{padding-top:24px}.sp-b{padding-bottom:24px}
+.mt-s{margin-top:8px}.mt-m{margin-top:18px}.mt-l{margin-top:32px}
+.mb-s{margin-bottom:8px}.mb-m{margin-bottom:18px}.mb-l{margin-bottom:32px}
+
+/* ================= CARDS ================= */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:26px 28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.card-soft{background:var(--surface-2);border:1px solid var(--border)}
+.card-outline{background:transparent;border:1.5px solid var(--border-strong);box-shadow:none}
+.card-accent{background:var(--surface);border-top:3px solid var(--accent)}
+.card-hover{transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+.card-hover:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;
+  background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
+.pill-accent{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 28%,transparent)}
+
+/* ================= BARS / DIVIDERS ================= */
+.divider{height:1px;background:var(--border);width:100%}
+.divider-accent{height:3px;width:72px;background:var(--accent);border-radius:2px}
+
+/* ================= CHROME (header/footer/progress) ================= */
+.deck-header{position:absolute;top:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);letter-spacing:.12em;text-transform:uppercase;z-index:10;pointer-events:none}
+.deck-footer{position:absolute;bottom:24px;left:40px;right:40px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--text-3);z-index:10;pointer-events:none}
+.slide-number::before{content:attr(data-current)}
+.slide-number::after{content:" / " attr(data-total)}
+.progress-bar{position:fixed;left:0;right:0;bottom:0;height:3px;background:transparent;z-index:20}
+.progress-bar > span{display:block;height:100%;width:0;background:var(--accent);transition:width .3s var(--ease)}
+
+/* ================= PRESENTER / OVERVIEW ================= */
+.notes{display:none!important}
+.notes-overlay{position:fixed;inset:auto 0 0 0;max-height:42vh;background:rgba(20,22,30,.95);color:#e8ebf4;
+  padding:20px 32px;font-size:16px;line-height:1.6;border-top:1px solid rgba(255,255,255,.1);transform:translateY(100%);
+  transition:transform .3s var(--ease);z-index:40;overflow:auto;font-family:var(--font-sans)}
+.notes-overlay.open{transform:translateY(0)}
+.overview{position:fixed;inset:0;background:rgba(10,12,18,.92);backdrop-filter:blur(12px);z-index:50;
+  display:none;padding:40px;overflow:auto}
+.overview.open{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;align-content:start}
+.overview .thumb{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  aspect-ratio:16/9;overflow:hidden;cursor:pointer;position:relative;color:var(--text-1);padding:16px;
+  font-size:11px;transition:transform .2s var(--ease)}
+.overview .thumb:hover{transform:scale(1.04)}
+.overview .thumb .n{position:absolute;top:8px;left:10px;font-weight:700;font-size:14px;color:var(--text-3)}
+.overview .thumb .t{position:absolute;bottom:10px;left:14px;right:14px;font-weight:600;color:var(--text-1)}
+
+/* ================= PRESENTER VIEW ================= */
+/* Presenter view opens in a separate popup window (S key).
+ * All presenter styles are self-contained in the popup HTML generated by runtime.js.
+ * The audience window (this file) is NOT affected — it stays as normal deck view.
+ * Only the .notes class below is needed to hide speaker notes from audience. */
+
+/* ================= UTILITY ================= */
+.hidden{display:none!important}
+.nowrap{white-space:nowrap}
+.tr{text-align:right}.tc{text-align:center}.tl{text-align:left}
+.uppercase{text-transform:uppercase;letter-spacing:.12em}
+
+/* ================= PRINT ================= */
+@media print{
+  .slide{position:relative;opacity:1!important;transform:none!important;page-break-after:always;height:100vh}
+  .deck-header,.deck-footer,.progress-bar,.notes-overlay,.overview{display:none!important}
+}
+
+</style>
+<style>/* xhs-white-editorial — white-paper magazine style
+   restyle direction: warm paper masthead editorial. Serif display (Fraunces),
+   single ink-red accent, hairline rules instead of shadow cards, zero gradients. */
+.tpl-xhs-white-editorial{
+  --xw-bg:#fbfaf7;
+  --xw-paper2:#f3f0e9;
+  --xw-ink:#191714;
+  --xw-ink2:#52504a;
+  --xw-muted:#6e6a60;
+  --xw-line:rgba(25,23,20,.14);
+  --xw-line-strong:rgba(25,23,20,.6);
+  --xw-accent:#b3261e;
+  --xw-serif:'Fraunces',Georgia,serif;
+  --xw-sans:'Inter',-apple-system,sans-serif;
+  --xw-mono:'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  background:var(--xw-bg);
+  color:var(--xw-ink);
+  font-family:var(--xw-sans);
+}
+.tpl-xhs-white-editorial .slide{background:var(--xw-bg);padding:76px 88px}
+.tpl-xhs-white-editorial .xw-topbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;padding-top:14px}
+.tpl-xhs-white-editorial .xw-tag{display:inline-flex;align-items:center;gap:10px;padding:0;border:0;font-family:var(--xw-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--xw-ink2);background:transparent}
+.tpl-xhs-white-editorial .xw-tag .dot{width:9px;height:9px;border-radius:0;background:var(--xw-accent)}
+.tpl-xhs-white-editorial .xw-page{font-family:var(--xw-mono);font-size:12px;color:var(--xw-muted);letter-spacing:.14em}
+.tpl-xhs-white-editorial .xw-kicker{font-size:17px;color:var(--xw-ink2);margin-top:10px;font-weight:500}
+.tpl-xhs-white-editorial .xw-title{font-family:var(--xw-serif);font-size:80px;line-height:1.06;letter-spacing:-.01em;font-weight:900;margin:18px 0 0;color:var(--xw-ink)}
+.tpl-xhs-white-editorial .xw-title-md{font-family:var(--xw-serif);font-size:56px;line-height:1.1;letter-spacing:-.01em;font-weight:900;margin:14px 0 0}
+.tpl-xhs-white-editorial .xw-grad{color:var(--xw-accent)}
+.tpl-xhs-white-editorial .xw-sub{font-size:22px;line-height:1.55;color:var(--xw-ink2);margin-top:24px;max-width:62ch}
+.tpl-xhs-white-editorial .xw-focus{display:inline-block;padding:1px 10px;background:var(--xw-ink);color:var(--xw-bg);font-weight:600}
+.tpl-xhs-white-editorial .xw-focus-blue,
+.tpl-xhs-white-editorial .xw-focus-pink,
+.tpl-xhs-white-editorial .xw-focus-orange,
+.tpl-xhs-white-editorial .xw-focus-green{display:inline-block;padding:0 1px;color:var(--xw-accent);font-weight:600;box-shadow:inset 0 -2px 0 var(--xw-accent)}
+.tpl-xhs-white-editorial .xw-hero{margin-top:34px;border:0;border-top:1px solid var(--xw-line-strong);border-bottom:1px solid var(--xw-line);padding:26px 0 28px;background:transparent;box-shadow:none}
+/* when a ruled block (steps/grid) precedes the hero quote, its bottom rule already
+   separates the two; drop the hero's own top rule to avoid a stray double hairline */
+.tpl-xhs-white-editorial .xw-steps+.xw-hero,
+.tpl-xhs-white-editorial .xw-grid-2+.xw-hero,
+.tpl-xhs-white-editorial .xw-grid-3+.xw-hero{border-top:0;margin-top:8px}
+.tpl-xhs-white-editorial .xw-quote{font-family:var(--xw-serif);font-size:36px;line-height:1.35;font-weight:700;letter-spacing:0}
+.tpl-xhs-white-editorial .xw-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:30px;border-top:1px solid var(--xw-line-strong)}
+.tpl-xhs-white-editorial .xw-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;margin-top:30px;border-top:1px solid var(--xw-line-strong)}
+.tpl-xhs-white-editorial .xw-card{border:0;border-bottom:1px solid var(--xw-line);padding:26px 28px 26px 0;box-shadow:none;background:transparent}
+.tpl-xhs-white-editorial .xw-grid-2 .xw-card:nth-child(2n){border-left:1px solid var(--xw-line);padding-left:28px}
+.tpl-xhs-white-editorial .xw-grid-3 .xw-card+.xw-card{border-left:1px solid var(--xw-line);padding-left:28px}
+.tpl-xhs-white-editorial .xw-card.soft-purple,
+.tpl-xhs-white-editorial .xw-card.soft-pink,
+.tpl-xhs-white-editorial .xw-card.soft-blue,
+.tpl-xhs-white-editorial .xw-card.soft-green,
+.tpl-xhs-white-editorial .xw-card.soft-orange{background:transparent}
+.tpl-xhs-white-editorial .xw-label{font-family:var(--xw-mono);font-size:12px;font-weight:500;color:var(--xw-accent);opacity:1;margin-bottom:14px;letter-spacing:.16em;text-transform:uppercase}
+.tpl-xhs-white-editorial .xw-card .main{font-family:var(--xw-serif);font-size:27px;line-height:1.25;font-weight:700;letter-spacing:0}
+.tpl-xhs-white-editorial .xw-card .desc{font-size:15px;line-height:1.55;color:var(--xw-ink2);margin-top:12px}
+.tpl-xhs-white-editorial .xw-steps{margin-top:26px;border-top:1px solid var(--xw-line-strong)}
+.tpl-xhs-white-editorial .xw-step{display:flex;gap:22px;align-items:baseline;margin:0;padding:15px 0;border-bottom:1px solid var(--xw-line)}
+.tpl-xhs-white-editorial .xw-num{flex:0 0 44px;height:auto;border-radius:0;background:transparent;color:var(--xw-accent);display:block;text-align:left;font-family:var(--xw-serif);font-size:24px;font-weight:700}
+.tpl-xhs-white-editorial .xw-txt{font-size:21px;line-height:1.5;font-weight:500}
+.tpl-xhs-white-editorial .xw-codebox{background:#1c1916;color:#e8e3d8;border-radius:0;padding:24px 28px;font-family:var(--xw-mono);font-size:15px;line-height:1.75;margin-top:26px;border:0;border-left:3px solid var(--xw-accent)}
+.tpl-xhs-white-editorial .xw-codebox .cm{color:#8a8478}
+.tpl-xhs-white-editorial .xw-codebox .kw{color:#d9a05f}
+.tpl-xhs-white-editorial .xw-codebox .st{color:#a8bd8c}
+.tpl-xhs-white-editorial .xw-codebox .hl{color:#e8b08e;font-weight:500}
+.tpl-xhs-white-editorial .xw-footer{position:absolute;left:88px;right:88px;bottom:40px;display:flex;justify-content:space-between;align-items:flex-end;font-family:var(--xw-mono);font-size:11.5px;letter-spacing:.06em;color:var(--xw-muted);border-top:1px solid var(--xw-line);padding-top:12px}
+.tpl-xhs-white-editorial .xw-topline{position:absolute;top:0;left:0;right:0;height:0;border-top:6px double var(--xw-ink);background:none}
+.tpl-xhs-white-editorial .xw-pill{display:inline-block;padding:9px 16px;border-radius:0;font-family:var(--xw-mono);font-size:13px;font-weight:500;margin:0 10px 10px 0;background:transparent;border:1px solid var(--xw-line-strong);color:var(--xw-ink2)}
+.tpl-xhs-white-editorial .xw-big-stat{font-family:var(--xw-serif);font-size:120px;font-weight:900;letter-spacing:-.01em;line-height:1;color:var(--xw-ink)}
+.tpl-xhs-white-editorial .xw-big-stat small{font-family:var(--xw-mono);font-size:18px;color:var(--xw-muted);font-weight:400;letter-spacing:.1em;margin-left:10px}
+
+/* entrance motion: transform+opacity only, staggered, reduced-motion safe */
+@keyframes xw-rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.tpl-xhs-white-editorial .slide>*:not(.xw-topline):not(.xw-footer){animation:xw-rise .65s cubic-bezier(.16,1,.3,1) both}
+.tpl-xhs-white-editorial .slide>*:nth-child(3){animation-delay:.06s}
+.tpl-xhs-white-editorial .slide>*:nth-child(4){animation-delay:.12s}
+.tpl-xhs-white-editorial .slide>*:nth-child(5){animation-delay:.18s}
+.tpl-xhs-white-editorial .slide>*:nth-child(6){animation-delay:.24s}
+@media (prefers-reduced-motion:reduce){
+  .tpl-xhs-white-editorial .slide>*{animation:none!important}
+}
+</style>
+<style>
+/* Static-preview fallback (runtime.js is absent — keep every slide visible) */
+.deck{height:auto;min-height:100vh;overflow:visible}
+.slide{position:relative;inset:auto;opacity:1;pointer-events:auto;transform:none;height:100vh;page-break-after:always}
+.deck-header,.deck-footer,.slide-number,.progress-bar,.notes-overlay,.overview{pointer-events:none}
+.notes{display:none!important}
+</style></head>
+<body class="tpl-xhs-white-editorial">
+<div class="deck">
+
+  <!-- 1. COVER -->
+  <section class="slide is-active">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>Staff promotion · Calibration playbook</div>
+      <div class="xw-page">01 / 08</div>
+    </div>
+    <div class="xw-kicker">How I built a case the committee couldn't argue with</div>
+    <h1 class="xw-title">Write a Staff-Engineer case<br>like a <span class="xw-grad">calibration-committee insider</span></h1>
+    <p class="xw-sub">A real packet from Payments Platform — the <span class="xw-focus">scope</span>, the <span class="xw-focus">proof</span>, and the <span class="xw-focus">artifacts</span> that cleared the bar.</p>
+    <div class="xw-hero">
+      <div class="xw-quote">Committees don't promote potential.<br>They promote <span class="xw-focus-orange">evidence</span> that reads as <span class="xw-focus">already Staff</span>.</div>
+    </div>
+    <div class="xw-footer"><span>White paper | Bold highlights | Editorial layout</span><span>Cover · 01</span></div>
+  </section>
+
+  <!-- 2. SECTION DIVIDER -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>Chapter · 01</div>
+      <div class="xw-page">02 / 08</div>
+    </div>
+    <div style="margin-top:120px">
+      <div class="xw-kicker" style="font-family:var(--xw-mono);font-size:15px;letter-spacing:.3em;text-transform:uppercase;color:var(--xw-accent)">Chapter One</div>
+      <h1 class="xw-title" style="font-size:104px;margin-top:20px">First, the <span class="xw-grad">scope</span></h1>
+      <p class="xw-sub" style="font-size:28px">Maya Chen, senior engineer on Payments Platform — three teams, one outage, and a system nobody wanted to own.</p>
+    </div>
+    <div class="xw-footer"><span>Section Divider</span><span>02 / 08</span></div>
+  </section>
+
+  <!-- 3. CONTENT — 4 card grid -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>Four moments the committee circled twice</div>
+      <div class="xw-page">03 / 08</div>
+    </div>
+    <h2 class="xw-title-md">The <span class="xw-grad">proof moments</span> that carried the packet</h2>
+    <div class="xw-grid-2">
+      <div class="xw-card soft-pink"><div class="xw-label">Incident</div><div class="main">Led the ledger-drift recovery</div><div class="desc">Zero customer-facing loss across 3 teams in 11 hours</div></div>
+      <div class="xw-card soft-blue"><div class="xw-label">Architecture</div><div class="main">Proposed the idempotency-key redesign</div><div class="desc">Adopted by 4 squads before the RFC even closed</div></div>
+      <div class="xw-card soft-green"><div class="xw-label">Mentoring</div><div class="main">Grew two engineers to senior in one cycle</div><div class="desc">Both cite her 1:1 notes as the turning point</div></div>
+      <div class="xw-card soft-orange"><div class="xw-label">Cross-team</div><div class="main">Aligned Payments and Risk on a shared schema</div><div class="desc">Ended an 8-month stalemate in one working session</div></div>
+    </div>
+    <div class="xw-footer"><span>Content · Grid 2x2</span><span>03 / 08</span></div>
+  </section>
+
+  <!-- 4. STEPS -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>How the packet is built</div>
+      <div class="xw-page">04 / 08</div>
+    </div>
+    <h2 class="xw-title-md">One scope statement, the <span class="xw-grad">whole packet</span> out</h2>
+    <div class="xw-steps">
+      <div class="xw-step"><div class="xw-num">1</div><div class="xw-txt">Scope memo: one page naming the system, the blast radius, and who now depends on her</div></div>
+      <div class="xw-step"><div class="xw-num">2</div><div class="xw-txt">Incident retro: the ledger-drift timeline, decisions made under pressure, and the fix that stuck</div></div>
+      <div class="xw-step"><div class="xw-num">3</div><div class="xw-txt">Design doc: the idempotency-key RFC, with the counter-proposal it beat</div></div>
+      <div class="xw-step"><div class="xw-num">4</div><div class="xw-txt">Peer packet: six calibrated quotes from partner teams, not just her manager — <span class="xw-focus">settle the doubt</span></div></div>
+    </div>
+    <div class="xw-hero"><div class="xw-quote" style="font-size:30px">Every artifact backs the same claim —<br>it doesn't <span class="xw-focus-blue">ask for trust</span>, it <span class="xw-focus">shows the receipts</span>.</div></div>
+    <div class="xw-footer"><span>Content · Steps</span><span>04 / 08</span></div>
+  </section>
+
+  <!-- 5. CODE EXAMPLE -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>The packet the committee skimmed in 6 minutes</div>
+      <div class="xw-page">05 / 08</div>
+    </div>
+    <h2 class="xw-title-md">Not an essay —<br>just one <span class="xw-grad">SCOPE.md</span></h2>
+    <pre class="xw-codebox"><span class="cm"># promotion/maya-chen/SCOPE.md</span>
+<span class="kw">level</span>: <span class="st">L7 (Staff)</span>
+<span class="kw">scope</span>: <span class="st">"Payments Platform — ledger, idempotency, settlement retries"</span>
+
+<span class="kw">evidence</span>:
+  - <span class="hl">incident</span>:   <span class="st">"Ledger-drift recovery, zero customer loss, 11h, 3 teams"</span>
+  - <span class="hl">design</span>:     <span class="st">"Idempotency-key RFC — adopted by 4 squads pre-approval"</span>
+  - <span class="hl">mentoring</span>: <span class="st">"2 engineers promoted to senior in one cycle"</span>
+  - <span class="hl">alignment</span>: <span class="st">"Payments/Risk schema agreement after 8-month stalemate"</span></pre>
+    <div class="xw-footer"><span>Content · Code Block</span><span>05 / 08</span></div>
+  </section>
+
+  <!-- 6. CHART — SVG bar -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>The numbers the committee actually checked</div>
+      <div class="xw-page">06 / 08</div>
+    </div>
+    <h2 class="xw-title-md">How far the <span class="xw-focus-pink">scope</span> grew, how deep the <span class="xw-focus-green">impact</span> reached</h2>
+    <svg viewBox="0 0 960 380" style="width:100%;max-width:1000px;margin-top:30px" xmlns="http://www.w3.org/2000/svg">
+      <g font-family="'Inter',sans-serif" font-size="16" fill="#52504a">
+        <!-- baseline: spans exactly the bar-track width so the axis ends with the tracks -->
+        <line x1="180" y1="330" x2="700" y2="330" stroke="#191714" stroke-width="1.5"/>
+        <!-- rows: monochrome ink bars, accent reserved for the headline value -->
+        <g transform="translate(0,40)">
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Incidents owned end-to-end</text>
+          <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
+          <rect x="180" y="10" width="120" height="24" fill="#191714"/>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">6</text>
+        </g>
+        <g transform="translate(0,100)">
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">RFCs adopted without rework</text>
+          <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
+          <rect x="180" y="10" width="200" height="24" fill="#191714"/>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">3</text>
+        </g>
+        <g transform="translate(0,160)">
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Engineers leveled up to senior</text>
+          <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
+          <rect x="180" y="10" width="320" height="24" fill="#191714"/>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">2</text>
+        </g>
+        <g transform="translate(0,220)">
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Cross-team peers in calibration</text>
+          <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
+          <rect x="180" y="10" width="440" height="24" fill="#191714"/>
+          <text x="710" y="29" fill="#191714" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">9</text>
+        </g>
+        <g transform="translate(0,280)">
+          <text x="170" y="30" text-anchor="end" font-weight="700" fill="#191714">Revenue at risk, ledger-drift</text>
+          <rect x="180" y="10" width="520" height="24" fill="#f3f0e9"/>
+          <rect x="180" y="10" width="500" height="24" fill="#b3261e"/>
+          <text x="710" y="29" fill="#b3261e" font-weight="700" font-family="'JetBrains Mono',monospace" font-size="15">$4.2M</text>
+        </g>
+      </g>
+    </svg>
+    <div class="xw-footer"><span>Chart · Horizontal Bars</span><span>06 / 08</span></div>
+  </section>
+
+  <!-- 7. CTA -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>Three things she did before submitting</div>
+      <div class="xw-page">07 / 08</div>
+    </div>
+    <h2 class="xw-title-md">Don't just gather evidence —<br><span class="xw-grad">frame the ask</span></h2>
+    <div class="xw-grid-3">
+      <div class="xw-card soft-purple"><div class="xw-label">Learning</div><div class="main">Named her one miss<br>the schema rollout slip</div><div class="desc">Owning a gap made every other claim more credible</div></div>
+      <div class="xw-card soft-blue"><div class="xw-label">Sponsorship</div><div class="main">Got her skip-level<br>to co-sign the packet</div><div class="desc">A manager alone reads as advocacy; a skip-level reads as calibration</div></div>
+      <div class="xw-card soft-green"><div class="xw-label">The ask</div><div class="main">Requested Staff<br>this cycle, not "eventually"</div><div class="desc">A specific ask forces a specific answer from the committee</div></div>
+    </div>
+    <div class="xw-hero"><div class="xw-quote" style="font-size:32px">The packet doesn't ask the committee to imagine Staff.<br>It shows them <span class="xw-focus">she's already operating there</span>.</div></div>
+    <div class="xw-footer"><span>CTA</span><span>07 / 08</span></div>
+  </section>
+
+  <!-- 8. THANKS -->
+  <section class="slide">
+    <div class="xw-topline"></div>
+    <div class="xw-topbar">
+      <div class="xw-tag"><span class="dot"></span>Thanks for reading</div>
+      <div class="xw-page">08 / 08</div>
+    </div>
+    <div style="margin-top:100px">
+      <div class="xw-big-stat xw-grad">L7<small> · the ask</small></div>
+      <p class="xw-sub" style="font-size:28px;margin-top:36px">If you're building your own case: name the scope, collect the receipts, get a skip-level to sign —<br>and ask for the level directly, not "whenever you think I'm ready."</p>
+      <div style="margin-top:40px">
+        <span class="xw-pill">Scope · Proof · Artifacts · Impact · Ask</span>
+        <span class="xw-pill">Staff Engineer Promotion</span>
+        <span class="xw-pill">Calibration-Committee Playbook</span>
+      </div>
+    </div>
+    <div class="xw-footer"><span>End</span><span>08 / 08</span></div>
+  </section>
+
+</div>
+
+</body>
+</html>

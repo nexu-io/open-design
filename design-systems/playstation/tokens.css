@@ -1,0 +1,150 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/playstation/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by PlayStation".
+ * Console-grade retail: a three-surface channel (black hero → white content
+ * → cobalt footer), SST weight 300 at display sizes, and a signature
+ * 1.2× scale-on-hover that fires across the page like a power-on chime.
+ *
+ * Key brand decisions encoded here:
+ *   - Console Black (#000000) is the dominant brand canvas; Paper White
+ *     is the lifted --surface tier where editorial content lives
+ *   - PlayStation Blue (#0070cc) is the immovable anchor — primary CTAs,
+ *     focus ring, footer
+ *   - PlayStation Cyan (#1eaedb) lives only in --accent-hover — the
+ *     "cyan never appears at rest" rule encoded into the token layer
+ *   - SST weight 300 at 22–54px is the typographic voice (component layer
+ *     enforces the weight; tokens carry sizes)
+ *   - 180ms is the canonical interaction window for hover/focus/scale
+ *   - Eleven-radius system collapsed onto the schema spine: 6/12/24/999
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Three-surface channel. Console Black anchors the masthead and hero
+   * zones; Paper White is the editorial gallery panel; Ice Mist is the
+   * gradient end-stop that quietly lifts panels off pure white. */
+  --bg: #000000;             /* Console Black — masthead / hero canvas */
+  --surface: #ffffff;        /* Paper White — primary content panel */
+  --surface-warm: #f5f7fa;   /* Ice Mist — atmospheric panel lift */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * On Console Black the primary text is Inverse White. Body Gray
+   * (#6b6b6b) is reserved for white-panel context (set at component
+   * layer); Mute Gray (#cccccc) is the muted tier visible on dark. */
+  --fg: #ffffff;             /* Inverse White — text on dark canvas */
+  --fg-2: var(--fg);         /* alias — single display weight throughout */
+  --muted: #cccccc;          /* Mute Gray — tertiary labels on dark */
+  --meta: var(--muted);      /* alias — one muted tier */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Borders sit quiet — the brand prefers spacing and feather shadow to
+   * define edges. #cccccc matches the input border spec from DESIGN.md
+   * §Inputs; Divider Tint is the editorial row separator. */
+  --border: #cccccc;         /* Mute Gray — input edges, default rule */
+  --border-soft: #f3f3f3;    /* Divider Tint — quiet horizontal rule */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * PlayStation Blue is the immovable anchor. PlayStation Cyan lives
+   * exclusively in --accent-hover — never as a resting background.
+   * Active state lands on Dark Link Blue. */
+  --accent: #0070cc;         /* PlayStation Blue — primary CTA / anchor */
+  --accent-on: #ffffff;
+  --accent-hover: #1eaedb;   /* PlayStation Cyan — hover/focus only */
+  --accent-active: #0068bd;  /* Dark Link Blue — pressed state */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Warning Red is the only semantic color the brand declares. Success
+   * and warn ride the schema defaults — PlayStation reserves its warm
+   * palette for Commerce Orange, not for semantic green/yellow. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #c81b3a;         /* Warning Red — form errors */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * SST is Sony's proprietary global typeface. Fallback chain:
+   * Arial → Helvetica → system sans. The weight 300 voice is enforced
+   * at the component layer — type tokens carry sizes, not weights. */
+  --font-display: "SST", "Playstation SST", Arial, Helvetica, sans-serif;
+  --font-body: "SST", "Playstation SST", Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 Typography.
+   * 54px hero → 12px legal microcopy. SST weight 300 occupies 22–54px;
+   * body lives at 18px; mini CTAs and captions at 14px. */
+  --text-xs: 12px;           /* Micro Caption — footer / legal */
+  --text-sm: 14px;           /* Caption Body / Mini CTA */
+  --text-base: 18px;         /* Body Relaxed — standard reading */
+  --text-lg: 22px;           /* Compact Display — module titles */
+  --text-xl: 28px;           /* Mid Display — section headings */
+  --text-2xl: 35px;          /* Large Display — feature headlines */
+  --text-3xl: 44px;          /* Hero Display L — secondary hero */
+  --text-4xl: 54px;          /* Hero Display XL — biggest SST moment */
+
+  --leading-body: 1.5;       /* Body Relaxed — 1.5 throughout reading */
+  --leading-tight: 1.25;     /* Display rhythm — 1.25 on 22–54px */
+  --tracking-display: -0.1px; /* 54px hero — barely-there tightening */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. Component-level micro-scale (3/6/
+   * 9/10px) lives inside individual rules; the section-y tokens below
+   * carry the gallery rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — gallery pace. DESIGN.md collapsing strategy:
+   * 96px → 64px → 48px as the viewport narrows. */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Eleven-value radius system collapsed onto the schema spine:
+   *   6px  → compact buttons / inline images
+   *   12px → standard game cover images & content media
+   *   24px → hero cards, primary feature frames
+   *   999px → full-pill primary buttons (the CTA signature)
+   * Inputs override --radius-sm with their own 3px at component layer. */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Whisper-or-shout ladder per DESIGN.md §6: shadow opacity lands on
+   * 0.06 / 0.08 / 0.16 / 0.8 with no middle ground. --elev-raised
+   * holds the standard 0.08 grid-tile feather. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: rgba(0, 0, 0, 0.08) 0 5px 9px 0; /* Feather tile lift */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * 2px PlayStation Blue ring — the exact spec from DESIGN.md §Inputs
+   * and §Buttons. Brand blue does focus; cyan does hover; the two
+   * never overlap at rest. */
+  --focus-ring: 0 0 0 2px #0070cc;
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * 180ms is the canonical PlayStation interaction window — every
+   * hover / focus / scale transition lands here. The brand's "power-
+   * on" feel comes from synchronizing four properties at 180ms, not
+   * from a longer duration. */
+  --motion-fast: 180ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1600px container — PlayStation explicitly tunes through 4K-TV
+   * browsing contexts (breakpoints reach 2120px). Outer gutters follow
+   * DESIGN.md §5: 64/32/16 from desktop to phone. */
+  --container-max: 1600px;
+  --container-gutter-desktop: 64px;
+  --container-gutter-tablet: 32px;
+  --container-gutter-phone: 16px;
+}

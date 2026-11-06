@@ -1,0 +1,8 @@
+{
+  "colorPrimary": "#0064e0",
+  "colorPrimaryBg": "#f2f0e6",
+  "colorPrimaryHover": "#0143b5",
+  "colorPrimaryActive": "#004bb9",
+  "fontSize": 16,
+  "borderRadius": 20
+}

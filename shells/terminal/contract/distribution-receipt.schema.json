@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/distribution-receipt-v1.schema.json",
+  "title": "Terminal distribution receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operation", "target", "archive", "manifestSha256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "operation": {"const": "terminal.distribution.build"},
+    "target": {"enum": ["darwin-arm64", "darwin-x64", "win32-x64"]},
+    "manifestSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256", "size", "mediaType"],
+      "properties": {
+        "file": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "size": {"type": "integer", "minimum": 1},
+        "mediaType": {"enum": ["application/gzip", "application/zip"]}
+      }
+    }
+  }
+}

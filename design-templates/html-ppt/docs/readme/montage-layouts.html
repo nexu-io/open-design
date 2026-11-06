@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>31 layouts showcase</title>
+<style>
+  :root{--ink:#0b0b10;--muted:#6b6b78;--line:#e7e7ef}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1920px;height:1080px;overflow:hidden}
+  body{background:#f6f7fa;font-family:"PingFang SC","Noto Sans SC","Inter",-apple-system,sans-serif;color:var(--ink);padding:48px 56px 44px;display:flex;flex-direction:column;gap:28px}
+  .hdr{display:flex;align-items:flex-end;justify-content:space-between}
+  .hdr h2{font:900 48px/1 "Inter",sans-serif;letter-spacing:-.02em}
+  .hdr h2 b{display:inline-block;font-size:58px;padding-right:14px;background:linear-gradient(90deg,#2563eb,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hdr .sub{font:600 16px/1 "JetBrains Mono","SF Mono",monospace;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:18px;min-height:0}
+  .cell{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:0 16px 48px rgba(10,10,30,.1);background:#fff;min-height:0}
+  .cell iframe{position:absolute;inset:0;width:1920px;height:1080px;border:0;pointer-events:none;transform-origin:top left}
+  .cell .label{position:absolute;left:14px;bottom:12px;z-index:5;font:700 11px/1 "JetBrains Mono","SF Mono",monospace;letter-spacing:.1em;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.94);color:#1a1a22;text-transform:uppercase;border:1px solid rgba(0,0,0,.06)}
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <h2><b>31</b>Layouts — batteries included, demo data bundled</h2>
+    <div class="sub">html-ppt · templates/single-page/*.html · pick 8 of 31</div>
+  </div>
+  <div class="grid" id="grid"></div>
+
+<script>
+const LAYOUTS = [
+  ['kpi-grid','KPI Grid'],
+  ['chart-bar','Chart · Bar'],
+  ['timeline','Timeline'],
+  ['mindmap','Mindmap'],
+  ['flow-diagram','Flow Diagram'],
+  ['roadmap','Roadmap'],
+  ['pros-cons','Pros / Cons'],
+  ['code','Code']
+];
+const grid = document.getElementById('grid');
+LAYOUTS.forEach(([name,label]) => {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const ifr = document.createElement('iframe');
+  ifr.src = '../../templates/single-page/' + name + '.html';
+  ifr.loading = 'eager';
+  cell.appendChild(ifr);
+  const lab = document.createElement('span');
+  lab.className = 'label';
+  lab.textContent = label + ' · ' + name;
+  cell.appendChild(lab);
+  grid.appendChild(cell);
+});
+
+function fit(){
+  document.querySelectorAll('.cell iframe').forEach(ifr => {
+    const c = ifr.parentElement;
+    const w = c.clientWidth, h = c.clientHeight;
+    const s = Math.min(w / 1920, h / 1080);
+    ifr.style.transform = 'scale('+s+')';
+    const sw = 1920*s, sh = 1080*s;
+    ifr.style.left = ((w - sw)/2) + 'px';
+    ifr.style.top  = ((h - sh)/2) + 'px';
+    ifr.style.position = 'absolute';
+  });
+}
+window.addEventListener('resize', fit);
+setTimeout(fit, 80);
+setTimeout(fit, 400);
+setTimeout(fit, 1200);
+</script>
+</body>
+</html>

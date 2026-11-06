@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Present a Workplace-Safety Compliance Review like a Senior Regulator - Government &amp; policy</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root {
+    --bone:    #E2DCC9;
+    --black:   #15120D; /* warm near-black, not pure #000, keeps the charcoal-rubbing feel */
+    --ink:     #0A0A0A;
+    --paper:   #F4EFE0;
+    --sienna:  #A9713F; /* lightened from #A06A3C so 18-22px ink body copy clears AA on sienna surfaces */
+    --magenta: #B13069; /* display accents on bone only */
+    --rose:    #9E2A5C; /* deep rose for surfaces that carry body text, bone copy clears AA */
+    --orange:  #EE7A2E;
+    --teal:    #266B61;
+    --blue:    #345F9A;
+    --mustard: #D8A93B;
+  }
+  html, body { margin:0; padding:0; background:#1a1a1a; }
+  body { font-family: "Barlow", "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+  deck-stage { background: #1a1a1a; }
+
+  section.slide { background: var(--bone); color: var(--ink); overflow: hidden; position: relative; }
+  section.slide.dark { background: var(--black); color: var(--bone); }
+
+  /* ---------- chrome ---------- */
+  .top {
+    position: absolute; top: 48px; left: 64px; right: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-family: "Barlow Condensed", "Helvetica Neue", sans-serif;
+    font-weight: 800;
+    font-size: 32px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .top .meta { display: flex; gap: 64px; font-size: 24px; font-weight: 600; letter-spacing: .06em; opacity: .85; }
+  section.slide.dark .top { color: var(--bone); }
+
+  .footer {
+    position: absolute; left: 64px; right: 64px; bottom: 36px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: "Barlow Condensed", sans-serif;
+    font-weight: 600; font-size: 22px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    opacity: .75;
+  }
+  section.slide.dark .footer { color: var(--bone); }
+
+  /* =========== 01 COVER =========== */
+  .s-cover { padding: 0; }
+  .s-cover .stage {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    padding: 48px 64px;
+  }
+  .s-cover .super {
+    font-family: "Barlow Condensed", sans-serif;
+    font-weight: 800; font-size: 28px; letter-spacing: .12em;
+    text-transform: uppercase; opacity: .8;
+  }
+  .s-cover h1 {
+    font-family: "Stardos Stencil", serif;
+    font-weight: 700;
+    font-size: 220px;
+    line-height: .82;
+    letter-spacing: -.015em;
+    text-transform: uppercase;
+    color: var(--ink);
+    align-self: end;
+    margin: 0;
+  }
+  .s-cover h1 em { font-style: normal; color: var(--magenta); }
+  .s-cover .row {
+    display: flex; align-items: end; justify-content: space-between;
+    margin-top: 24px;
+  }
+  .s-cover .row .lockup { display: flex; align-items: center; gap: 18px; }
+  .s-cover .row .mark {
+    width: 56px; height: 56px; border-radius: 12px; background: var(--orange);
+    position: relative; overflow: hidden;
+  }
+  /* stencil bridge cut through the mark, ties the lockup to the headline letterforms */
+  .s-cover .row .mark::after {
+    content: ""; position: absolute; left: 16%; right: 16%; top: 42%; height: 16%;
+    background: var(--bone);
+  }
+  .s-cover .row .who {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 30px; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .s-cover .row .who small {
+    display: block; font-size: 22px; font-weight: 500; letter-spacing: .08em; opacity: .65;
+  }
+  .s-cover .row .date {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 36px; text-transform: uppercase;
+  }
+  .s-cover .shape {
+    position: absolute; right: 56px; top: 64px;
+    width: 320px; height: 380px;
+    color: var(--teal);
+  }
+
+  /* =========== 02 AGENDA (organic shapes on black) =========== */
+  .s-agenda { padding: 0; }
+  .s-agenda .grid {
+    position: absolute;
+    left: 64px; right: 64px; top: 200px; bottom: 100px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+  }
+  .s-agenda .item { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 36px 18px 36px; }
+  .s-agenda .item svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .s-agenda .item .n {
+    position: relative; z-index: 2;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 32px; letter-spacing: .06em; color: var(--ink);
+  }
+  .s-agenda .item .lab {
+    position: relative; z-index: 2;
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 32px; line-height: 1.05; text-align: center;
+    text-transform: uppercase; color: var(--ink);
+  }
+  /* teal and blue tablets are too dark for ink labels, switch to bone */
+  .s-agenda .item:nth-child(2) .n, .s-agenda .item:nth-child(2) .lab,
+  .s-agenda .item:nth-child(3) .n, .s-agenda .item:nth-child(3) .lab { color: var(--bone); }
+
+  /* =========== 03 PRINCIPLES (the source slide) =========== */
+  .s-princ { padding: 0; }
+  .s-princ .row {
+    position: absolute;
+    left: 64px; right: 64px; top: 160px; bottom: 70px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+  .s-princ .card { border-radius: 26px; padding: 36px 30px 32px; display: flex; flex-direction: column; min-height: 0; }
+  .s-princ .card.c1 { background: var(--sienna); }
+  .s-princ .card.c2 { background: var(--rose); }
+  .s-princ .card.c3 { background: var(--orange); }
+  .s-princ .card.c4 { background: var(--teal); }
+  .s-princ .card .n {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 240px; line-height: .85; letter-spacing: -.02em;
+    color: var(--ink);
+  }
+  .s-princ .card.c2 .n, .s-princ .card.c4 .n { color: var(--bone); }
+  .s-princ .card h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 30px; line-height: 1.05;
+    text-transform: uppercase; letter-spacing: .02em;
+    margin: auto 0 14px; color: var(--ink);
+  }
+  .s-princ .card p {
+    font-size: 22px; line-height: 1.4; color: var(--ink);
+  }
+  .s-princ .card.c2 h3, .s-princ .card.c2 p,
+  .s-princ .card.c4 h3, .s-princ .card.c4 p { color: var(--bone); }
+
+  /* =========== 04 SECTION DIVIDER =========== */
+  .s-sec { padding: 0; }
+  .s-sec .num {
+    position: absolute; left: 64px; top: 110px;
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 540px; line-height: .8; color: var(--orange);
+  }
+  .s-sec .label {
+    position: absolute; right: 64px; top: 220px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--bone); opacity: .7;
+    text-align: right;
+  }
+  .s-sec h2 {
+    position: absolute;
+    right: 64px; bottom: 130px; left: 360px;
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 120px; line-height: .92; text-transform: uppercase;
+    letter-spacing: -.005em;
+    color: var(--bone);
+    text-align: right;
+  }
+  .s-sec h2 em { font-style: normal; color: var(--orange); }
+
+  /* =========== 05 CONSULT (text-dense action title) =========== */
+  .s-consult .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    background: var(--mustard);
+    border-radius: 22px;
+    padding: 24px 32px;
+    display: flex; align-items: center; gap: 28px;
+  }
+  .s-consult .head .tag {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 24px; letter-spacing: .12em; text-transform: uppercase;
+    flex-shrink: 0; padding-right: 28px;
+    border-right: 2px solid var(--ink);
+  }
+  .s-consult .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 34px; line-height: 1.15; text-transform: uppercase; letter-spacing: -.005em;
+  }
+  .s-consult .grid {
+    position: absolute; left: 64px; right: 64px; top: 290px; bottom: 80px;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr;
+    gap: 24px;
+  }
+  .s-consult .col {
+    border-radius: 22px; padding: 28px 28px;
+    display: flex; flex-direction: column; gap: 14px; min-height: 0;
+  }
+  .s-consult .col.a { background: var(--paper); }
+  .s-consult .col.b { background: var(--orange); }
+  .s-consult .col.c { background: var(--paper); }
+  .s-consult .col h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 28px; text-transform: uppercase; letter-spacing: .02em;
+    border-bottom: 2px solid var(--ink); padding-bottom: 12px;
+  }
+  .s-consult .col .meta {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 32px; line-height: 1.1;
+  }
+  .s-consult .col p { font-size: 20px; line-height: 1.45; }
+  .s-consult .col ul { margin: 0; padding-left: 22px; font-size: 20px; line-height: 1.45; }
+  .s-consult .col ul li { margin-bottom: 8px; }
+  .s-consult .col ul li strong { font-weight: 700; }
+  .s-consult .col .src {
+    margin-top: auto;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 18px; letter-spacing: .12em; text-transform: uppercase;
+    border-top: 1px dashed rgba(10,10,10,.35); padding-top: 12px; opacity: .75;
+  }
+
+  /* =========== 06 CHART =========== */
+  .s-chart { padding: 0; }
+  /* Bottom bumped from 110 to 150 so the legend can never collide with
+     the absolutely-positioned .footer (which sits at bottom: 36 with
+     ~24px text height). Also: h2 size now caps by viewport height too. */
+  .s-chart .left {
+    position: absolute; left: 64px; top: 200px; bottom: 150px; width: 540px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+  .s-chart .left h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: min(110px, 12vh); line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+    color: var(--bone);
+  }
+  .s-chart .left h2 em { font-style: normal; color: var(--orange); }
+  .s-chart .left p { font-size: 22px; line-height: 1.5; color: var(--bone); opacity: .85; }
+  .s-chart .left .legend {
+    margin-top: auto; display: flex; flex-direction: column; gap: 10px;
+  }
+  .s-chart .left .legend .li {
+    display: flex; align-items: center; gap: 14px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase; color: var(--bone);
+  }
+  .s-chart .left .legend .li i { width: 32px; height: 6px; }
+  .s-chart .right {
+    position: absolute; right: 64px; top: 200px; bottom: 130px; left: 680px;
+    background: var(--paper); border-radius: 22px;
+    padding: 32px 32px 28px 80px;
+    display: flex; flex-direction: column; overflow: hidden;
+    color: var(--ink);
+  }
+  .s-chart .right .yhead {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 18px; letter-spacing: .12em; text-transform: uppercase;
+    margin-bottom: 8px; opacity: .7;
+  }
+  .s-chart .plot { flex: 1; min-height: 0; position: relative;
+    border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+  .s-chart .plot .gline { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(10,10,10,.18); }
+  .s-chart .plot .yticks {
+    position: absolute; left: -52px; top: 0; bottom: 0;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 18px;
+  }
+  .s-chart .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .s-chart .right .xticks { display: flex; justify-content: space-between; padding-top: 10px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 18px; letter-spacing: .06em; }
+
+  /* =========== 07 PROCESS DIAGRAM =========== */
+  .s-process .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 40px;
+  }
+  .s-process .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 92px; line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+  }
+  .s-process .head h2 em { font-style: normal; color: var(--magenta); }
+  .s-process .head .sub {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase;
+    max-width: 38ch; line-height: 1.5; opacity: .8; margin-top: 12px;
+  }
+  .s-process .flow {
+    position: absolute; left: 64px; right: 64px; top: 470px; bottom: 200px;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 22px;
+  }
+  .s-process .node {
+    border-radius: 22px; padding: 24px 22px 22px;
+    display: flex; flex-direction: column; gap: 8px; position: relative;
+  }
+  .s-process .node.n1 { background: var(--sienna); color: var(--ink); }
+  .s-process .node.n2 { background: var(--rose); color: var(--bone); }
+  .s-process .node.n3 { background: var(--orange); color: var(--ink); }
+  .s-process .node.n4 { background: var(--teal); color: var(--bone); }
+  .s-process .node.n5 { background: var(--blue); color: var(--bone); }
+  .s-process .node .n {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 64px; line-height: .9;
+  }
+  .s-process .node h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 28px; line-height: 1.05; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .s-process .node p { font-size: 18px; line-height: 1.4; }
+  .s-process .node .arr {
+    position: absolute; right: -16px; top: 40%;
+    width: 32px; height: 32px; z-index: 2;
+    color: var(--ink); /* arrows straddle the bone gap, currentColor from bone-text nodes made them vanish */
+  }
+  .s-process .node.n5 .arr { display: none; }
+  .s-process .timeline {
+    position: absolute; left: 64px; right: 64px; bottom: 110px; height: 50px;
+    background: var(--paper); border-radius: 14px;
+    padding: 0 28px; display: flex; align-items: center; justify-content: space-between;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 700;
+    font-size: 20px; letter-spacing: .08em; text-transform: uppercase;
+  }
+
+  /* =========== 08 COMPARISON MATRIX =========== */
+  .s-matrix .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 40px;
+  }
+  .s-matrix .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 92px; line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+  }
+  .s-matrix .head h2 em { font-style: normal; color: var(--teal); }
+  .s-matrix .head .sub {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase;
+    max-width: 38ch; line-height: 1.5; opacity: .8; margin-top: 12px;
+  }
+  .s-matrix .table {
+    position: absolute; left: 64px; right: 64px; top: 460px; bottom: 110px;
+    background: var(--paper); border-radius: 22px;
+    display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+    grid-auto-rows: 1fr; overflow: hidden;
+  }
+  .s-matrix .cell {
+    padding: 18px 22px; display: flex; align-items: center;
+    font-size: 22px; line-height: 1.35;
+    border-bottom: 1.5px solid rgba(10,10,10,.35);
+    border-right: 1.5px solid rgba(10,10,10,.35);
+  }
+  .s-matrix .cell:nth-child(4n) { border-right: 0; }
+  .s-matrix .cell.last { border-bottom: 0; }
+  .s-matrix .cell.head-row {
+    background: var(--ink); color: var(--bone);
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 24px; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .s-matrix .cell.row-label {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 26px; text-transform: uppercase; letter-spacing: .01em;
+  }
+  .s-matrix .pill {
+    display: inline-block; border-radius: 999px;
+    padding: 6px 16px; font-weight: 700;
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: 18px; letter-spacing: .08em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .s-matrix .pill.yes  { background: var(--teal); color: var(--bone); }
+  .s-matrix .pill.part { background: var(--mustard); color: var(--ink); }
+  .s-matrix .pill.no   { background: var(--rose); color: var(--bone); }
+  .s-matrix .pill.note { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
+
+  /* =========== 09 STATS / NUMBERS =========== */
+  .s-stats .head {
+    position: absolute; left: 64px; right: 64px; top: 130px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 40px;
+  }
+  .s-stats .head h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 92px; line-height: .92; text-transform: uppercase; letter-spacing: -.01em;
+    color: var(--bone);
+  }
+  .s-stats .head h2 em { font-style: normal; color: var(--orange); }
+  .s-stats .head .sub {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 600;
+    font-size: 22px; letter-spacing: .06em; text-transform: uppercase;
+    max-width: 36ch; line-height: 1.5; opacity: .85; color: var(--bone); margin-top: 12px;
+  }
+  .s-stats .grid {
+    position: absolute; left: 64px; right: 64px; top: 470px; bottom: 110px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+  }
+  .s-stats .stat {
+    border-radius: 22px; padding: 32px 30px;
+    display: flex; flex-direction: column; gap: 14px;
+    color: var(--ink);
+  }
+  .s-stats .stat.s1 { background: var(--orange); }
+  .s-stats .stat.s2 { background: var(--mustard); }
+  .s-stats .stat.s3 { background: var(--bone); }
+  .s-stats .stat .big {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 160px; line-height: .85; letter-spacing: -.02em;
+  }
+  .s-stats .stat .big small {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 40px; vertical-align: top; margin-left: 6px;
+  }
+  .s-stats .stat h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 26px; text-transform: uppercase; letter-spacing: .02em;
+    margin-top: auto;
+  }
+  .s-stats .stat p { font-size: 20px; line-height: 1.4; }
+
+  /* =========== 10 QUOTE =========== */
+  .s-quote { padding: 0; }
+  .s-quote .panel {
+    position: absolute; left: 64px; right: 64px; top: 130px; bottom: 110px;
+    background: var(--rose);
+    border-radius: 26px;
+    padding: 60px 80px;
+    display: grid;
+    grid-template-columns: 1fr 1.6fr;
+    gap: 60px;
+    align-items: center;
+  }
+  .s-quote .panel .qmark {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 320px; line-height: .8; color: var(--ink); opacity: .55;
+  }
+  .s-quote .panel blockquote {
+    margin: 0;
+    font-family: "Stardos Stencil", serif; font-weight: 400;
+    font-size: 60px; line-height: 1.05;
+    color: var(--bone);
+    letter-spacing: -.005em;
+  }
+  .s-quote .panel .who {
+    margin-top: 32px;
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 26px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--bone);
+  }
+  .s-quote .panel .who small {
+    display: block; font-weight: 600; font-size: 22px; opacity: .8; margin-top: 4px;
+  }
+
+  /* =========== 11 CTA =========== */
+  .s-cta { padding: 0; }
+  .s-cta .stage {
+    position: absolute; inset: 0;
+    padding: 130px 64px 100px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+  }
+  .s-cta .pane {
+    border-radius: 26px; padding: 40px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .s-cta .pane.l { background: var(--teal); color: var(--bone); justify-content: space-between; }
+  .s-cta .pane.r { background: var(--orange); color: var(--ink); }
+  .s-cta .pane.l h2 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 130px; line-height: .9; text-transform: uppercase; letter-spacing: -.015em;
+  }
+  .s-cta .pane.l h2 em { font-style: normal; color: var(--orange); }
+  .s-cta .pane.l p { font-size: 22px; line-height: 1.5; opacity: .9; max-width: 32ch; }
+  .s-cta .pane.r h3 {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 36px; line-height: 1; text-transform: uppercase; letter-spacing: .02em;
+  }
+  .s-cta .pane.r .step { display: grid; grid-template-columns: 60px 1fr; gap: 14px; align-items: start; }
+  .s-cta .pane.r .step .n {
+    font-family: "Stardos Stencil", serif; font-weight: 700;
+    font-size: 56px; line-height: .9;
+  }
+  .s-cta .pane.r .step h4 {
+    font-family: "Barlow Condensed", sans-serif; font-weight: 800;
+    font-size: 26px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+  }
+  .s-cta .pane.r .step p { font-size: 20px; line-height: 1.4; }
+
+  /* ---------- entrance motion (transform+opacity only, staggered, reduced-motion safe) ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes slide-rise {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: none; }
+    }
+    section.slide[data-deck-active] > :not(.top):not(.footer) {
+      animation: slide-rise .6s cubic-bezier(.16,1,.3,1) both;
+    }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(3) { animation-delay: .07s; }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(4) { animation-delay: .14s; }
+    section.slide[data-deck-active] > :not(.top):not(.footer):nth-of-type(5) { animation-delay: .21s; }
+  }
+</style>
+</head>
+<body>
+
+<deck-stage>
+
+  <!-- ============ 01 COVER ============ -->
+  <section class="slide s-cover" data-label="01 Cover" data-om-validate="false">
+    <div class="stage">
+      <div>
+        <div class="super">Government &amp; Policy · Compliance Review</div>
+      </div>
+      <div>
+        <h1>Compliance,<br/><em>enforced.</em></h1>
+        <div class="row">
+          <div class="lockup">
+            <div class="mark"></div>
+            <div class="who">Bureau of Workplace Safety
+              <small>Compliance &amp; Enforcement Division</small>
+            </div>
+          </div>
+          <div class="date">Case WS-2026-0417</div>
+        </div>
+      </div>
+    </div>
+    <svg class="shape" viewBox="0 0 100 120" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M50 0 C 80 0, 100 20, 100 40 C 100 60, 80 60, 50 60 C 20 60, 0 60, 0 80 C 0 100, 20 120, 50 120 C 80 120, 100 100, 100 80" fill="currentColor"/>
+    </svg>
+  </section>
+
+  <!-- ============ 02 AGENDA (organic shapes) ============ -->
+  <section class="slide s-agenda dark" data-label="02 Agenda" data-om-validate="false">
+    <div class="top">
+      <span>Review Agenda</span>
+      <span class="meta"><span>Meridian Fabrication Works</span><span>Case WS-2026-0417</span></span>
+    </div>
+    <div class="grid">
+      <div class="item">
+        <!-- figure-8 / peanut -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M50 0 C 90 0, 100 30, 100 65 C 100 95, 70 110, 50 125 C 30 140, 0 155, 0 185 C 0 220, 10 250, 50 250 C 90 250, 100 220, 100 185 C 100 155, 70 140, 50 125 C 30 110, 0 95, 0 65 C 0 30, 10 0, 50 0 Z" fill="var(--orange)"/>
+        </svg>
+        <span class="n">01</span>
+        <span class="lab">Context<br/>&amp; scope</span>
+      </div>
+      <div class="item">
+        <!-- octagon -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <polygon points="30,0 70,0 100,40 100,210 70,250 30,250 0,210 0,40" fill="var(--teal)"/>
+        </svg>
+        <span class="n">02</span>
+        <span class="lab">The<br/>hazard record</span>
+      </div>
+      <div class="item">
+        <!-- hourglass / bowtie -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 0 L100 0 L100 30 Q 50 125 100 220 L100 250 L0 250 L0 220 Q 50 125 0 30 Z" fill="var(--blue)"/>
+        </svg>
+        <span class="n">03</span>
+        <span class="lab">Evidence<br/>&amp; findings</span>
+      </div>
+      <div class="item">
+        <!-- pinched X -->
+        <svg viewBox="0 0 100 250" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M0 0 L100 0 L100 90 Q 70 125 100 160 L100 250 L0 250 L0 160 Q 30 125 0 90 Z" fill="var(--sienna)"/>
+        </svg>
+        <span class="n">04</span>
+        <span class="lab">Corrective<br/>mandate</span>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>02 / 11</span></div>
+  </section>
+
+  <!-- ============ 03 PRINCIPLES ============ -->
+  <section class="slide s-princ" data-label="03 Review Standards" data-om-validate="false">
+    <div class="top">
+      <span>Review Standards</span>
+      <span class="meta"><span>Bureau of Workplace Safety</span><span>Methodology</span></span>
+    </div>
+    <div class="row">
+      <div class="card c1">
+        <div class="n">1</div>
+        <h3>Independent<br/>evidence</h3>
+        <p>Findings rest on inspector logs, maintenance records, and sworn statements — never the plant's self-reporting alone.</p>
+      </div>
+      <div class="card c2">
+        <div class="n">2</div>
+        <h3>Full chain<br/>of custody</h3>
+        <p>Every exhibit is timestamped and cross-referenced from the original incident report to the final citation.</p>
+      </div>
+      <div class="card c3">
+        <div class="n">3</div>
+        <h3>Proportionate<br/>remedy</h3>
+        <p>The mandate matches the hazard: engineering controls first, a shutdown only where controls cannot hold.</p>
+      </div>
+      <div class="card c4">
+        <div class="n">4</div>
+        <h3>Public<br/>accountability</h3>
+        <p>This review and its corrective mandate become part of the public compliance record on the day it is served.</p>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>03 / 11</span></div>
+  </section>
+
+  <!-- ============ 04 SECTION DIVIDER ============ -->
+  <section class="slide s-sec dark" data-label="04 Section · Why This Review" data-om-validate="false">
+    <div class="top">
+      <span>Why this review</span>
+      <span class="meta"><span>Section II</span></span>
+    </div>
+    <div class="num">02</div>
+    <div class="label">Public<br/>need</div>
+    <h2>Nine incidents,<br/>one preventable<br/><em>pattern.</em></h2>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>04 / 11</span></div>
+  </section>
+
+  <!-- ============ 05 CONSULT (text-dense) ============ -->
+  <section class="slide s-consult" data-label="05 Findings &amp; Mandate" data-om-validate="false">
+    <div class="top">
+      <span>Findings</span>
+      <span class="meta"><span>Bureau of Workplace Safety</span><span>Case WS-2026-0417</span></span>
+    </div>
+    <div class="head">
+      <div class="tag">Action title · 05</div>
+      <h2>Bypassed interlocks on the Line 3 stamping press caused 62% of this year's reportable injuries — the mandate closes that gap within 90 days.</h2>
+    </div>
+    <div class="grid">
+      <div class="col a">
+        <h3>What we found</h3>
+        <p><strong>Nine reportable incidents</strong> in fourteen months, three lost-time injuries, and one hand-crush injury requiring surgery.</p>
+        <ul>
+          <li><strong>Root cause</strong> — 62% of incidents trace to guarding interlocks bypassed for faster changeover on Line 3.</li>
+          <li><strong>41 interviews</strong> — floor workers and supervisors corroborate a standing practice of defeating guards during shift changes.</li>
+          <li><strong>Maintenance logs</strong> — the interlock override was logged nineteen times in six months and never escalated.</li>
+        </ul>
+        <div class="src">Inspection period · Jan–Oct 2026</div>
+      </div>
+      <div class="col b">
+        <h3>Why it matters</h3>
+        <div class="meta">$2.3M in downtime and claims exposure to date.</div>
+        <p>A hand-crush injury is not a statistic to the worker who lost function in three fingers — and it is not a one-off; it is what a bypassed interlock does when a press keeps cycling on schedule.</p>
+        <p>Every week the interlocks stay defeated, six presses and roughly 340 workers on Line 3 carry the same exposure.</p>
+        <div class="src">State Bureau of Workplace Safety</div>
+      </div>
+      <div class="col c">
+        <h3>The corrective mandate</h3>
+        <ul>
+          <li><strong>Retrofit all six presses</strong> — tamper-evident interlocks, verified by third-party audit. Owner: plant engineering. Due: Day 60.</li>
+          <li><strong>Retrain 340 floor workers</strong> — lockout/tagout certification required before floor access. Owner: EHS. Due: Day 30.</li>
+          <li><strong>Independent verification</strong> — third-party audit before Line 3 resumes full-speed changeover. Owner: BWS. Due: Day 90.</li>
+        </ul>
+        <div class="src">Mandate effective on service of this order</div>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>05 / 11</span></div>
+  </section>
+
+  <!-- ============ 06 CHART ============ -->
+  <section class="slide s-chart dark" data-label="06 Incident Trend" data-om-validate="false">
+    <div class="top">
+      <span>Reportable incidents, by month</span>
+      <span class="meta"><span>Evidence</span><span>Case WS-2026-0417</span></span>
+    </div>
+    <div class="left">
+      <h2>Curve bends<br/>only after<br/><em>Line 3.</em></h2>
+      <p>Nine reportable incidents across fourteen months, concentrated on the Line 3 stamping press. The interim guard order issued in September is the only period the count actually falls.</p>
+      <div class="legend">
+        <div class="li"><i style="background:var(--bone); opacity:.5"></i> Plant-wide incidents (baseline)</div>
+        <div class="li"><i style="background:var(--mustard)"></i> Line 3 stamping press</div>
+        <div class="li"><i style="background:var(--orange)"></i> Line 3, interlock confirmed bypassed</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="yhead">Reportable incidents, by month (rolling)</div>
+      <div class="plot">
+        <div class="yticks">
+          <span>8</span><span>6</span><span>4</span><span>2</span><span>0</span>
+        </div>
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="#0a0a0a" stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2,1.5"
+            points="0,98 16,96 32,95 48,94 64,93 80,92 100,91" />
+          <polyline fill="none" stroke="#D8A93B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+            points="0,98 16,88 32,77 48,66 64,57 80,50 100,46" />
+          <polyline fill="none" stroke="#EE7A2E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+            points="0,98 16,82 32,63 48,45 64,29 80,18 100,10" />
+        </svg>
+      </div>
+      <div class="xticks">
+        <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Sep</span>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>06 / 11</span></div>
+  </section>
+
+  <!-- ============ 07 PROCESS ============ -->
+  <section class="slide s-process" data-label="07 Process" data-om-validate="false">
+    <div class="top">
+      <span>Corrective action process</span>
+      <span class="meta"><span>Case WS-2026-0417</span><span>Enforcement</span></span>
+    </div>
+    <div class="head">
+      <h2>From <em>citation</em><br/>to certified,<br/>in five steps.</h2>
+      <div class="sub">The corrective mandate follows a fixed enforcement sequence — every plant under an active citation moves through the same five checkpoints.</div>
+    </div>
+    <div class="flow">
+      <div class="node n1">
+        <div class="n">1</div>
+        <h3>Cite</h3>
+        <p>Formal citation issued for bypassed interlocks; the notice is posted on Line 3 within 24 hours.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n2">
+        <div class="n">2</div>
+        <h3>Correct</h3>
+        <p>Plant engineering retrofits guarding and interlocks to the mandate's tamper-evident specification.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n3">
+        <div class="n">3</div>
+        <h3>Retrain</h3>
+        <p>All 340 Line 3 workers recertify on lockout/tagout before floor access resumes.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n4">
+        <div class="n">4</div>
+        <h3>Verify</h3>
+        <p>An independent third-party auditor inspects every retrofitted press against the mandate.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n5">
+        <div class="n">5</div>
+        <h3>Certify</h3>
+        <p>The Bureau closes the case and certifies the plant for standard-speed changeover.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>Day 0 · Cite</span>
+      <span>Day 30 · Correct</span>
+      <span>Day 45 · Retrain</span>
+      <span>Day 75 · Verify</span>
+      <span>Day 90 · Certify</span>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>07 / 11</span></div>
+  </section>
+
+  <!-- ============ 08 COMPARISON MATRIX ============ -->
+  <section class="slide s-matrix" data-label="08 Comparison" data-om-validate="false">
+    <div class="top">
+      <span>Policy options, side by side</span>
+      <span class="meta"><span>Case WS-2026-0417</span><span>Decision</span></span>
+    </div>
+    <div class="head">
+      <h2>Where each<br/><em>option</em> holds<br/>up.</h2>
+      <div class="sub">Scored against the four levers that decide this case: how fast the risk actually drops, cost to the plant, and what happens to the workforce.</div>
+    </div>
+    <div class="table">
+      <div class="cell head-row">Lever</div>
+      <div class="cell head-row">Full shutdown</div>
+      <div class="cell head-row">Phased retrofit (recommended)</div>
+      <div class="cell head-row">Status quo + fines</div>
+
+      <div class="cell row-label">Time-to-compliance</div>
+      <div class="cell"><span class="pill part">45 days idle</span></div>
+      <div class="cell"><span class="pill yes">90 days, no idle</span></div>
+      <div class="cell"><span class="pill no">Indefinite</span></div>
+
+      <div class="cell row-label">Cost to plant</div>
+      <div class="cell"><span class="pill no">$4.8M lost production</span></div>
+      <div class="cell"><span class="pill yes">$620K retrofit</span></div>
+      <div class="cell"><span class="pill part">Fines only, recurring</span></div>
+
+      <div class="cell row-label">Injury risk reduction</div>
+      <div class="cell"><span class="pill yes">Full, immediate</span></div>
+      <div class="cell"><span class="pill yes">Full, staged</span></div>
+      <div class="cell"><span class="pill no">None</span></div>
+
+      <div class="cell row-label last">Workforce impact</div>
+      <div class="cell last"><span class="pill no">340 workers idled</span></div>
+      <div class="cell last"><span class="pill yes">No layoffs</span></div>
+      <div class="cell last"><span class="pill note">Unchanged</span></div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>08 / 11</span></div>
+  </section>
+
+  <!-- ============ 09 STATS ============ -->
+  <section class="slide s-stats dark" data-label="09 In Numbers" data-om-validate="false">
+    <div class="top">
+      <span>In numbers</span>
+      <span class="meta"><span>Evidence</span><span>Case WS-2026-0417</span></span>
+    </div>
+    <div class="head">
+      <h2>The record,<br/><em>by the numbers.</em></h2>
+      <div class="sub">Three figures anchor this mandate. If any one of them does not move within 90 days, the case reopens.</div>
+    </div>
+    <div class="grid">
+      <div class="stat s1">
+        <div class="big">9</div>
+        <h3>Reportable<br/>incidents</h3>
+        <p>Fourteen months, Line 3 stamping press, all traced to defeated interlocks.</p>
+      </div>
+      <div class="stat s2">
+        <div class="big">62<small>%</small></div>
+        <h3>Traced to<br/>one cause</h3>
+        <p>Guarding interlocks bypassed for changeover speed — confirmed by maintenance logs and interviews.</p>
+      </div>
+      <div class="stat s3">
+        <div class="big">340</div>
+        <h3>Workers<br/>on Line 3</h3>
+        <p>Every one of them carries this exposure until the retrofit and retraining are certified complete.</p>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>09 / 11</span></div>
+  </section>
+
+  <!-- ============ 10 QUOTE ============ -->
+  <section class="slide s-quote" data-label="10 Inspector Voice" data-om-validate="false">
+    <div class="top">
+      <span>Testimony</span>
+      <span class="meta"><span>Evidence</span><span>Case WS-2026-0417</span></span>
+    </div>
+    <div class="panel">
+      <div class="qmark">"</div>
+      <div>
+        <blockquote>I logged the override nineteen times. Nobody above me would sign the change order to fix it — the press was faster with the guard defeated, and faster was what got measured.</blockquote>
+        <div class="who">Floor safety technician
+          <small>Line 3, Meridian Fabrication Works — deposed Oct 2026</small>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>10 / 11</span></div>
+  </section>
+
+  <!-- ============ 11 CTA ============ -->
+  <section class="slide s-cta" data-label="11 Decision" data-om-validate="false">
+    <div class="top">
+      <span>The decision</span>
+      <span class="meta"><span>Case WS-2026-0417</span><span>Order</span></span>
+    </div>
+    <div class="stage">
+      <div class="pane l">
+        <div class="super" style="font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 24px; letter-spacing: .14em; text-transform: uppercase; opacity: .8;">Bureau of Workplace Safety</div>
+        <h2>Mandate<br/>takes<br/><em>effect.</em></h2>
+        <p>Phased retrofit, full retraining, independent verification. No shutdown, no layoffs — and no further changeover at the expense of a guard.</p>
+      </div>
+      <div class="pane r">
+        <h3>What happens next</h3>
+        <div class="step">
+          <div class="n">1</div>
+          <div>
+            <h4>Citation issued today</h4>
+            <p>Formal citation posted on Line 3; production continues under the interim guard order.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <div>
+            <h4>Day 30 — retraining complete</h4>
+            <p>All 340 Line 3 workers recertified on lockout/tagout before floor access resumes.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <div>
+            <h4>Day 90 — case closes on verification</h4>
+            <p>Independent audit certifies all six presses; the Bureau closes Case WS-2026-0417.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Bureau of Workplace Safety</span><span>11 / 11</span></div>
+  </section>
+
+</deck-stage>
+
+</body>
+</html>

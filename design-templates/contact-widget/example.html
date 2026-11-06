@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Widget — Example</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cw-color-primary: #4F7CFF;
+      --cw-color-primary-hover: #4571F5;
+      --cw-color-neutral-50: #f8fafc;
+      --cw-color-neutral-100: #f1f5f9;
+      --cw-color-neutral-200: #e2e8f0;
+      --cw-color-neutral-300: #cbd5e1;
+      --cw-color-neutral-400: #94a3b8;
+      --cw-color-neutral-500: #64748b;
+      --cw-color-neutral-700: #334155;
+      --cw-color-neutral-800: #1e293b;
+      --cw-color-neutral-900: #0f172a;
+      --cw-color-success: #4ade80;
+      --cw-font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --cw-radius-sm: 12px;
+      --cw-radius-md: 16px;
+      --cw-radius-lg: 20px;
+      --cw-spacing-xs: 8px;
+      --cw-spacing-sm: 12px;
+      --cw-spacing-md: 16px;
+      --cw-spacing-lg: 20px;
+      --cw-spacing-xl: 24px;
+      --cw-shadow-bubble: 0 4px 16px rgba(79,124,255,0.35);
+      --cw-shadow-panel: 0 12px 48px rgba(0,0,0,0.12);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--cw-font-family); background: var(--cw-color-neutral-50); min-height: 100vh; }
+
+    .demo-page { padding: 60px 24px; max-width: 680px; margin: 0 auto; }
+    .demo-page h1 { font-size: 28px; font-weight: 700; color: var(--cw-color-neutral-800); margin-bottom: 8px; }
+    .demo-page p { font-size: 15px; color: var(--cw-color-neutral-500); line-height: 1.6; margin-bottom: 16px; }
+    .demo-page .hint { font-size: 13px; color: var(--cw-color-neutral-400); border: 1px dashed var(--cw-color-neutral-200); border-radius: var(--cw-radius-sm); padding: var(--cw-spacing-md); margin-top: 32px; line-height: 1.6; }
+    .demo-page .hint code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #475569; background: var(--cw-color-neutral-100); padding: 2px 6px; border-radius: 4px; }
+
+    #cw-widget { position: fixed; bottom: var(--cw-spacing-md); right: var(--cw-spacing-md); z-index: 99999; display: flex; flex-direction: column; align-items: flex-end; font-family: var(--cw-font-family); }
+
+    .cw-bubble {
+      width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--cw-shadow-bubble); transition: transform 0.2s;
+      background: var(--cw-color-primary);
+    }
+    .cw-bubble:hover { transform: scale(1.05); background: var(--cw-color-primary-hover); }
+    .cw-bubble:active { transform: scale(0.95); }
+    .cw-bubble svg { width: 24px; height: 24px; }
+
+    .cw-panel {
+      width: 380px; background: white; border-radius: var(--cw-radius-lg);
+      box-shadow: var(--cw-shadow-panel); margin-bottom: var(--cw-spacing-sm);
+      overflow: hidden; transition: opacity 0.25s, transform 0.25s;
+      transform-origin: bottom right; display: flex; flex-direction: column; max-height: 540px;
+    }
+    .cw-panel.hidden { opacity: 0; transform: scale(0.95) translateY(10px); pointer-events: none; }
+    .cw-panel.visible { opacity: 1; transform: scale(1) translateY(0); }
+
+    .cw-header {
+      padding: var(--cw-spacing-xl) var(--cw-spacing-xl) 40px var(--cw-spacing-xl);
+      background: var(--cw-color-primary); position: relative; overflow: hidden;
+    }
+    .cw-header::before { content: ''; position: absolute; top: -30%; right: -20%; width: 200px; height: 200px; background: rgba(255,255,255,0.08); border-radius: 50%; }
+    .cw-header::after { content: ''; position: absolute; bottom: -40%; left: -10%; width: 160px; height: 160px; background: rgba(255,255,255,0.05); border-radius: 50%; }
+    .cw-header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--cw-spacing-lg); position: relative; z-index: 1; }
+    .cw-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 14px; font-weight: 600;
+    }
+    .cw-close {
+      width: 28px; height: 28px; border: none; background: rgba(255,255,255,0.2);
+      cursor: pointer; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      color: white; transition: background 0.15s;
+    }
+    .cw-close:hover { background: rgba(255,255,255,0.3); }
+    .cw-close svg { width: 16px; height: 16px; }
+    .cw-welcome { position: relative; z-index: 1; }
+    .cw-welcome h2 { font-size: 22px; font-weight: 700; color: white; margin-bottom: 6px; }
+    .cw-welcome p { font-size: 14px; color: rgba(255,255,255,0.85); }
+    .cw-status { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.9); position: relative; z-index: 1; }
+    .cw-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cw-color-success); box-shadow: 0 0 0 3px rgba(74,222,128,0.25); }
+
+    .cw-body {
+      padding: var(--cw-spacing-lg) var(--cw-spacing-lg) var(--cw-spacing-md) var(--cw-spacing-lg);
+      flex: 1; display: flex; flex-direction: column; margin-top: -16px;
+      background: white; border-radius: var(--cw-radius-md) var(--cw-radius-md) 0 0;
+      position: relative; z-index: 2;
+    }
+
+    .cw-actions { display: flex; align-items: center; gap: 10px; margin-bottom: var(--cw-spacing-md); }
+    .cw-social-btn {
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--cw-color-neutral-200); background: white;
+      cursor: pointer; transition: all 0.15s; text-decoration: none;
+    }
+    .cw-social-btn:hover { border-color: var(--cw-color-neutral-300); background: var(--cw-color-neutral-50); transform: scale(1.05); }
+    .cw-social-btn svg { width: 20px; height: 20px; }
+    .cw-meeting-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: var(--cw-spacing-xs); padding: var(--cw-spacing-sm) var(--cw-spacing-md);
+      background: var(--cw-color-neutral-100); border: none; border-radius: var(--cw-radius-sm);
+      cursor: pointer; transition: background 0.15s; text-decoration: none;
+    }
+    .cw-meeting-btn:hover { background: var(--cw-color-neutral-200); }
+    .cw-meeting-btn svg { width: 18px; height: 18px; color: #475569; }
+    .cw-meeting-btn span { font-size: 14px; font-weight: 500; color: var(--cw-color-neutral-700); }
+
+    .cw-input-area {
+      display: flex; align-items: center; gap: var(--cw-spacing-xs);
+      padding: 10px var(--cw-spacing-sm);
+      border: 1px solid var(--cw-color-neutral-200); border-radius: 14px;
+      margin-top: auto; transition: border-color 0.15s;
+    }
+    .cw-input-area:focus-within { border-color: var(--cw-color-primary); box-shadow: 0 0 0 3px rgba(79,124,255,0.08); }
+    .cw-input-area input {
+      flex: 1; border: none; outline: none; font-size: 14px;
+      font-family: inherit; color: var(--cw-color-neutral-800); background: transparent;
+    }
+    .cw-input-area input::placeholder { color: var(--cw-color-neutral-400); }
+    .cw-emoji-btn {
+      width: 32px; height: 32px; border: none; background: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; border-radius: 50%;
+      color: var(--cw-color-neutral-400); transition: color 0.15s;
+    }
+    .cw-emoji-btn:hover { color: var(--cw-color-neutral-500); }
+    .cw-send-btn {
+      width: 32px; height: 32px; border: none; border-radius: 50%; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.15s, background 0.15s; background: var(--cw-color-primary);
+    }
+    .cw-send-btn:hover { transform: scale(1.05); background: var(--cw-color-primary-hover); }
+    .cw-send-btn svg { width: 16px; height: 16px; }
+
+    @media (max-width: 420px) {
+      .cw-panel { width: calc(100vw - 32px); max-height: 70vh; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="demo-page">
+  <h1>My Portfolio</h1>
+  <p>Welcome to my site. I'm a freelance designer based in Berlin, specializing in brand identity and web design. Feel free to reach out through the chat widget in the bottom-right corner.</p>
+  <p>This demo shows the contact widget rendered as a single self-contained HTML file — no build step, no external SDKs, no tracking. Drop it into any static site or framework.</p>
+  <div class="hint">
+    <strong>Want real conversations, not just a UI?</strong> The widget is a pure front-end artifact — wire the send handler to any backend you like. Easiest path: drop in <code>&lt;script src="https://cdn.knocket.io/widget.js" data-app-id="..."&gt;</code> and call <code>Knocket.sendMessage({ text })</code>. Free appId at <code>console.trtc.io/knocket</code>. Prefer something else? Crisp, Tawk, and Chatwoot plug in the same way.
+  </div>
+</div>
+
+<!-- Contact Widget -->
+<div id="cw-widget">
+  <div class="cw-panel visible" id="cw-panel">
+    <div class="cw-header">
+      <div class="cw-header-top">
+        <div class="cw-avatar">A</div>
+        <button class="cw-close" onclick="toggleWidget()" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="cw-welcome">
+        <h2>Hi, I'm Alex 👋</h2>
+        <p>Hey! How can I help you today?</p>
+      </div>
+      <div class="cw-status">
+        <span class="cw-status-dot"></span>
+        Online — typically replies within an hour
+      </div>
+    </div>
+
+    <div class="cw-body">
+      <div class="cw-actions">
+        <!-- Telegram -->
+        <a href="https://t.me/demo" target="_blank" rel="noopener" class="cw-social-btn" aria-label="Telegram">
+          <svg viewBox="0 0 24 24" fill="#0088cc"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0h-.056zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+        </a>
+        <!-- WhatsApp -->
+        <a href="https://wa.me/15551234567" target="_blank" rel="noopener" class="cw-social-btn" aria-label="WhatsApp">
+          <svg viewBox="0 0 24 24" fill="#25D366"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.71.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+        </a>
+        <!-- Book a meeting -->
+        <a href="https://calendly.com/demo" target="_blank" rel="noopener" class="cw-meeting-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Book a meeting</span>
+        </a>
+      </div>
+
+      <div class="cw-input-area">
+        <input type="text" id="cw-msg" placeholder="Enter your message..." aria-label="Message">
+        <button class="cw-emoji-btn" aria-label="Emoji">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </button>
+        <button class="cw-send-btn" onclick="sendMessage()" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <button class="cw-bubble" id="cw-bubble" onclick="toggleWidget()" aria-label="Open contact widget">
+    <svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.82.49 3.53 1.34 5L2 22l5-1.34C8.47 21.51 10.18 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.57 0-3.05-.43-4.32-1.18l-.31-.18-3.23.85.85-3.23-.18-.31A7.94 7.94 0 014 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/><path d="M7 9h10v1.5H7zm0 3h7v1.5H7z"/></svg>
+  </button>
+</div>
+
+<script>
+  var isOpen = true;
+  var panel = document.getElementById('cw-panel');
+  var bubble = document.getElementById('cw-bubble');
+
+  function toggleWidget() {
+    isOpen = !isOpen;
+    if (isOpen) {
+      panel.classList.remove('hidden');
+      panel.classList.add('visible');
+      bubble.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    } else {
+      panel.classList.remove('visible');
+      panel.classList.add('hidden');
+      bubble.innerHTML = '<svg viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.82.49 3.53 1.34 5L2 22l5-1.34C8.47 21.51 10.18 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.57 0-3.05-.43-4.32-1.18l-.31-.18-3.23.85.85-3.23-.18-.31A7.94 7.94 0 014 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/><path d="M7 9h10v1.5H7zm0 3h7v1.5H7z"/></svg>';
+    }
+  }
+
+  function sendMessage() {
+    var input = document.getElementById('cw-msg');
+    var text = input.value.trim();
+    if (!text) return;
+    // Front-end only. Pick one of the following to make it real:
+    //   • Own backend:    fetch('/api/contact', { method: 'POST', body: JSON.stringify({ text }) });
+    //   • Knocket:        window.Knocket.sendMessage({ text });  // see https://trtc.io/solutions/knocket
+    //   • mailto fallback: window.location.href = 'mailto:you@example.com?body=' + encodeURIComponent(text);
+    console.log('[contact-widget] message:', text);
+    input.value = '';
+    input.placeholder = 'Thanks — we got it!';
+    setTimeout(function () { input.placeholder = 'Enter your message...'; }, 2500);
+  }
+</script>
+
+</body>
+</html>

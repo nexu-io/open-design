@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Present a Poster-Series Case Study like a Festival Art Director - Design craft</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+/* =============================================
+   RAW GRID — Neobrutalist Presentation Template
+   ============================================= */
+
+/* --- RESET & BASE --- */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --black: #0e0d0b;
+  --white: #f7f4ec;
+  --pink: #f2d4cf;
+  --green: #e5edd6;
+  --gray: #ece8db;
+  --darkgray: #3a382f;
+  --red: #c8371e;
+  --border: 3px solid var(--black);
+  --shadow: 6px 6px 0 var(--black);
+  --shadow-sm: 4px 4px 0 var(--black);
+  --font-sans: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
+}
+html, body {
+  width: 100%; height: 100%;
+  font-family: var(--font-sans);
+  background: var(--white);
+  color: var(--black);
+  overflow: hidden;
+}
+
+/* --- SLIDE SYSTEM --- */
+.slide-deck {
+  width: 100vw; height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+.slide {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: none;
+  background: var(--white);
+  overflow: hidden;
+}
+.slide.active { display: flex; }
+.slide-content {
+  width: 100%; height: 100%;
+  overflow: hidden;
+}
+.slide.active .slide-content {
+  animation: slide-in 0.5s cubic-bezier(.16,1,.3,1) both;
+}
+/* opacity-only child stagger: keeps the shared 3px grid borders aligned while panels land in sequence */
+.slide.active .slide-content > * {
+  animation: fade-in 0.45s cubic-bezier(.16,1,.3,1) both;
+}
+.slide.active .slide-content > *:nth-child(2) { animation-delay: 0.08s; }
+.slide.active .slide-content > *:nth-child(3) { animation-delay: 0.16s; }
+.slide.active .slide-content > *:nth-child(4) { animation-delay: 0.24s; }
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide.active .slide-content,
+  .slide.active .slide-content > * { animation: none; }
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* --- TYPOGRAPHY --- */
+.t-display {
+  font-size: clamp(48px, 7vw, 96px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+.t-headline {
+  font-size: clamp(32px, 4.5vw, 64px);
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.t-title {
+  font-size: clamp(24px, 2.5vw, 36px);
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+.t-subtitle {
+  font-size: clamp(16px, 1.4vw, 22px);
+  font-weight: 700;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.t-body {
+  font-size: clamp(15px, 1.25vw, 19px);
+  font-weight: 500;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+.t-caption {
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1vw, 13px);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.t-number {
+  font-size: clamp(64px, 8vw, 120px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+/* --- UTILITIES --- */
+.b { border: var(--border); }
+.b-t { border-top: var(--border); }
+.b-b { border-bottom: var(--border); }
+.b-l { border-left: var(--border); }
+.b-r { border-right: var(--border); }
+.bg-pink { background: var(--pink); }
+.bg-green { background: var(--green); }
+.bg-red { background: var(--red); }
+.bg-black { background: var(--black); }
+.bg-gray { background: var(--gray); }
+.bg-white { background: var(--white); }
+.c-white { color: var(--white); }
+.c-black { color: var(--black); }
+.pad-lg { padding: clamp(32px, 4vw, 64px); }
+.pad-md { padding: clamp(20px, 2.5vw, 40px); }
+.pad-sm { padding: clamp(12px, 1.5vw, 20px); }
+.shadow { box-shadow: var(--shadow); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.w-100 { width: 100%; }
+.h-100 { height: 100%; }
+.flex { display: flex; }
+.col { flex-direction: column; }
+.center { align-items: center; justify-content: center; }
+.grow { flex: 1; }
+.gap-sm { gap: clamp(8px, 1vw, 16px); }
+.gap-md { gap: clamp(16px, 2vw, 32px); }
+.gap-lg { gap: clamp(24px, 3vw, 48px); }
+.arrow::before { content: "\2192\00a0"; }
+.grid { display: grid; }
+
+/* --- SPECIAL COMPONENTS --- */
+.label {
+  display: inline-block;
+  background: var(--black);
+  color: var(--white);
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.line {
+  width: 60px;
+  height: 4px;
+  background: var(--red);
+}
+.line-w { width: 100%; }
+.line-v {
+  width: 4px;
+  height: 60px;
+  background: var(--black);
+}
+
+/* =============================================
+   SLIDE 1 — TITLE / COVER
+   ============================================= */
+.s1 .slide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+.s1-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--pink);
+  border-right: var(--border);
+}
+.s1-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.s1-logo-box {
+  width: 48px; height: 48px;
+  border: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  background: var(--red);
+  color: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+.s1-brand-text {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.s1-headline { margin-top: auto; margin-bottom: auto; }
+.s1-cta .label { cursor: pointer; }
+.s1-right {
+  display: flex;
+  flex-direction: column;
+}
+.s1-list-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 clamp(24px, 3vw, 48px);
+  border-bottom: var(--border);
+  font-size: clamp(18px, 2vw, 28px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.s1-list-item:last-child { border-bottom: none; }
+.s1-list-item:hover { background: var(--green); }
+.s1-list-item::before {
+  content: "\2192\00a0";
+  margin-right: 12px;
+  font-size: 0.85em;
+}
+
+/* =============================================
+   SLIDE 2 — SPLIT FEATURE
+   ============================================= */
+.s2 .slide-content {
+  display: grid;
+  grid-template-columns: 45% 55%;
+  height: 100%;
+}
+.s2-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  border-right: var(--border);
+}
+.s2-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: clamp(24px, 3vw, 48px);
+}
+.s2-right {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+}
+.s2-block {
+  padding: clamp(24px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.s2-block:first-child { border-bottom: var(--border); }
+
+/* =============================================
+   SLIDE 3 — DATA BAR CHART
+   ============================================= */
+.s3 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s3-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s3-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.s3-chart-area {
+  padding: clamp(24px, 3vw, 48px);
+  border-right: var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.s3-chart-title {
+  margin-bottom: 24px;
+}
+.s3-bar-group {
+  margin-bottom: 20px;
+}
+.s3-bar-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.s3-bar-track {
+  width: 100%;
+  height: 32px;
+  border: var(--border);
+  background: var(--white);
+  position: relative;
+}
+.s3-bar-fill {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--black);
+  color: var(--white);
+  transition: width 0.8s cubic-bezier(.16,1,.3,1);
+}
+.s3-bar-fill.hot { background: var(--red); }
+.s3-insights {
+  padding: clamp(24px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(16px, 2vw, 32px);
+}
+.s3-stat-box {
+  border: var(--border);
+  padding: clamp(16px, 2vw, 28px);
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+.s3-stat-number {
+  font-size: clamp(36px, 4vw, 56px);
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.s3-stat-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* =============================================
+   SLIDE 4 — 4-CARD GRID
+   ============================================= */
+.s4 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s4-header {
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.s4-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.s4-card {
+  padding: clamp(24px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.s4-card:nth-child(1) { border-right: var(--border); border-bottom: var(--border); background: var(--white); }
+.s4-card:nth-child(2) { border-bottom: var(--border); background: var(--green); }
+.s4-card:nth-child(3) { border-right: var(--border); background: var(--pink); }
+.s4-card:nth-child(4) { background: var(--gray); }
+.s4-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.s4-num {
+  font-family: var(--font-mono);
+  font-size: clamp(40px, 5vw, 72px);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--black);
+  -webkit-text-stroke: 2px var(--black);
+  -webkit-text-fill-color: transparent;
+}
+.s4-icon {
+  width: 48px; height: 48px;
+  border: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 900;
+  background: var(--white);
+}
+
+/* =============================================
+   SLIDE 5 — FULL IMAGE + TEXT OVERLAY
+   ============================================= */
+.s5 .slide-content {
+  display: grid;
+  grid-template-columns: 55% 45%;
+  height: 100%;
+}
+.s5-image-area {
+  background: var(--black);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.s5-image-placeholder {
+  width: 80%;
+  height: 70%;
+  border: 3px dashed var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.75;
+}
+.s5-text-area {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--white);
+}
+.s5-badge {
+  align-self: flex-start;
+  margin-bottom: clamp(24px, 3vw, 40px);
+}
+
+/* =============================================
+   SLIDE 6 — TIMELINE / PROCESS
+   ============================================= */
+.s6 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s6-header {
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s6-body {
+  flex: 1;
+  display: flex;
+  /* full-bleed columns: the colored panels run edge to edge like every other slide */
+  padding: 0;
+}
+.s6-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(24px, 3vw, 48px) clamp(24px, 3vw, 48px);
+  position: relative;
+}
+.s6-step + .s6-step { border-left: var(--border); }
+.s6-step-num {
+  font-family: var(--font-mono);
+  font-size: clamp(48px, 6vw, 80px);
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: clamp(16px, 2vw, 28px);
+  -webkit-text-stroke: 2px var(--black);
+  -webkit-text-fill-color: transparent;
+}
+.s6-step-title { margin-bottom: 12px; }
+.s6-connector {
+  position: absolute;
+  top: calc(50% - 16px);
+  right: -18px;
+  width: 32px; height: 32px;
+  border: var(--border);
+  background: var(--red);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 900;
+  z-index: 10;
+}
+.s6-step:nth-child(3) { background: var(--green); }
+.s6-step:nth-child(4) { background: var(--pink); }
+
+/* =============================================
+   SLIDE 7 — PIE / DONUT CHART + METRICS
+   ============================================= */
+.s7 .slide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+.s7-left {
+  padding: clamp(32px, 4vw, 64px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-right: var(--border);
+}
+.s7-donut-container {
+  position: relative;
+  width: clamp(200px, 22vw, 320px);
+  height: clamp(200px, 22vw, 320px);
+  margin-bottom: clamp(24px, 3vw, 40px);
+}
+.s7-donut-center {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.s7-donut-value {
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 900;
+  line-height: 1;
+}
+.s7-donut-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+.s7-legend {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.s7-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.s7-legend-swatch {
+  width: 16px; height: 16px;
+  border: var(--border);
+}
+.s7-right {
+  display: flex;
+  flex-direction: column;
+}
+.s7-metric-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s7-metric-row:last-child { border-bottom: none; }
+.s7-metric-num {
+  font-size: clamp(36px, 4vw, 56px);
+  font-weight: 900;
+  min-width: 120px;
+}
+.s7-metric-info { margin-left: clamp(16px, 2vw, 32px); }
+.s7-metric-title { margin-bottom: 4px; }
+
+/* =============================================
+   SLIDE 8 — STATEMENT / QUOTE
+   ============================================= */
+.s8 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s8-top {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--green);
+  border-bottom: var(--border);
+  position: relative;
+}
+.s8-quote-mark {
+  font-size: clamp(56px, 7vw, 96px);
+  font-weight: 900;
+  line-height: 0.6;
+  color: var(--red);
+  margin-bottom: clamp(16px, 2vw, 28px);
+}
+.s8-statement {
+  max-width: 900px;
+}
+.s8-bottom {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: 140px;
+}
+.s8-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-right: var(--border);
+}
+.s8-stat:last-child { border-right: none; }
+.s8-stat-num {
+  font-size: clamp(24px, 2.5vw, 36px);
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+.s8-stat:nth-child(1) { background: var(--white); }
+.s8-stat:nth-child(2) { background: var(--pink); }
+.s8-stat:nth-child(3) { background: var(--gray); }
+.s8-stat:nth-child(4) { background: var(--black); color: var(--white); }
+
+/* =============================================
+   SLIDE 9 — COMPARISON TABLE
+   ============================================= */
+.s9 .slide-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.s9-header {
+  padding: clamp(20px, 2vw, 32px) clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.s9-table-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(24px, 3vw, 48px) clamp(32px, 4vw, 64px);
+  overflow: auto;
+}
+.s9-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.s9-table th {
+  border: var(--border);
+  padding: clamp(12px, 1.5vw, 20px);
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.1vw, 13px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+  background: var(--black);
+  color: var(--white);
+}
+.s9-table td:nth-child(3) { font-weight: 800; color: var(--red); }
+.s9-table td {
+  border: var(--border);
+  padding: clamp(12px, 1.5vw, 20px);
+  font-size: clamp(14px, 1.2vw, 17px);
+  font-weight: 600;
+}
+.s9-table tr:nth-child(even) td { background: var(--gray); }
+.s9-table tr:hover td { background: var(--green); }
+
+/* =============================================
+   SLIDE 10 — CLOSING / CTA
+   ============================================= */
+.s10 .slide-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+}
+.s10-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  background: var(--pink);
+  border-right: var(--border);
+}
+.s10-left .label {
+  background: var(--red);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
+}
+.s10-right {
+  display: flex;
+  flex-direction: column;
+}
+.s10-r-top {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 4vw, 64px);
+  border-bottom: var(--border);
+}
+.s10-r-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100px;
+}
+.s10-rb-block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.s10-rb-block:first-child { border-right: var(--border); background: var(--green); }
+.s10-rb-block:last-child { background: var(--black); color: var(--white); }
+
+/* =============================================
+   PRINT
+   ============================================= */
+@media print {
+  /* print styles */
+  .slide { position: static; display: flex !important; page-break-after: always; }
+}
+</style>
+</head>
+<body>
+
+<div class="slide-deck" id="deck">
+
+<!-- ====== SLIDE 1: COVER ====== -->
+<div class="slide s1 active">
+  <div class="slide-content">
+    <div class="s1-left">
+      <div class="s1-brand">
+        <div class="s1-logo-box">FS</div>
+        <span class="s1-brand-text">FIELDTONE</span>
+      </div>
+      <div class="s1-headline">
+        <div class="t-display">Raw<br>Signal.</div>
+      </div>
+      <div class="s1-cta">
+        <span class="label arrow">Design Craft Case Study &middot; Fieldtone Festival</span>
+      </div>
+    </div>
+    <div class="s1-right">
+      <div class="s1-list-item">The Brief</div>
+      <div class="s1-list-item">The Diagnosis</div>
+      <div class="s1-list-item">Rescue Principles</div>
+      <div class="s1-list-item">The Grid System</div>
+      <div class="s1-list-item">Ink &amp; Format Tests</div>
+      <div class="s1-list-item">Proof: The Rebuild</div>
+      <div class="s1-list-item">Export Checklist</div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 2: SPLIT FEATURE ====== -->
+<div class="slide s2">
+  <div class="slide-content">
+    <div class="s2-left">
+      <div class="s2-meta">
+        <div class="line"></div>
+        <span class="t-caption">Diagnose</span>
+      </div>
+      <div class="t-headline" style="margin-bottom: 24px;">The Poster Looked Like Any Festival, Not This One</div>
+      <p class="t-body" style="max-width: 420px;">Round-one comps leaned on stock gradient mesh and a generic all-caps sans — nothing tied the art to the high-desert site, the radio-tower skyline, or the dust-red ground Fieldtone actually sits on.</p>
+    </div>
+    <div class="s2-right">
+      <div class="s2-block">
+        <span class="t-number">03</span>
+        <span class="t-subtitle" style="margin-top: 8px;">Concepts Rejected</span>
+        <p class="t-body" style="margin-top: 12px; color: var(--darkgray);">Three separate agency submissions were turned down in the first review — each one a reskin of the same techno-festival template.</p>
+      </div>
+      <div class="s2-block bg-green">
+        <span class="t-number">0</span>
+        <span class="t-subtitle" style="margin-top: 8px;">Site-Specific Marks</span>
+        <p class="t-body" style="margin-top: 12px; color: var(--darkgray);">Not one comp referenced the actual stage layout, the radio towers, or the ground color photographed on site.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 3: BAR CHART ====== -->
+<div class="slide s3">
+  <div class="slide-content">
+    <div class="s3-header">
+      <span class="t-title">Where The Brief Broke Down</span>
+      <span class="label">Concept Review, Round One</span>
+    </div>
+    <div class="s3-body">
+      <div class="s3-chart-area">
+        <div class="t-subtitle s3-chart-title">Studio Hours Spent Per Revision Round</div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Round 1</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 30%;">40 hrs</div></div>
+        </div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Round 2</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 50%;">65 hrs</div></div>
+        </div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Round 3</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill" style="width: 68%;">88 hrs</div></div>
+        </div>
+        <div class="s3-bar-group">
+          <div class="s3-bar-label">Round 4</div>
+          <div class="s3-bar-track"><div class="s3-bar-fill hot" style="width: 91%;">110 hrs</div></div>
+        </div>
+      </div>
+      <div class="s3-insights">
+        <div class="s3-stat-box">
+          <div class="s3-stat-number">4</div>
+          <div class="s3-stat-label">Revision Rounds Before Reset</div>
+        </div>
+        <div class="s3-stat-box bg-green">
+          <div class="s3-stat-number">110 hrs</div>
+          <div class="s3-stat-label">Studio Time Burned In Round Four Alone</div>
+        </div>
+        <div class="s3-stat-box bg-pink">
+          <div class="s3-stat-number">61%</div>
+          <div class="s3-stat-label">Sign-off Rate Even After Four Rounds</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 4: 4-CARD GRID ====== -->
+<div class="slide s4">
+  <div class="slide-content">
+    <div class="s4-header">
+      <span class="t-title">Four Rescue Principles</span>
+      <span class="t-caption">The Reset Brief</span>
+    </div>
+    <div class="s4-grid">
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">01</span>
+          <div class="s4-icon">I</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">One Ink Story</div>
+          <p class="t-body">Every piece prints in a single spot color — Pantone 187 dust-red — plus black. No gradients, no CMYK photography, no exceptions.</p>
+        </div>
+      </div>
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">02</span>
+          <div class="s4-icon">II</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Type As Terrain</div>
+          <p class="t-body">One condensed grotesk, Owners Wide, carries the entire hierarchy at extreme scale. No secondary display face was allowed into the system.</p>
+        </div>
+      </div>
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">03</span>
+          <div class="s4-icon">III</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Modular Six-Column Grid</div>
+          <p class="t-body">Poster, ticket, wristband, and social all sit on the same six-column base grid, so nothing gets redesigned from a blank page twice.</p>
+        </div>
+      </div>
+      <div class="s4-card">
+        <div class="s4-card-top">
+          <span class="s4-num">04</span>
+          <div class="s4-icon">IV</div>
+        </div>
+        <div>
+          <div class="t-subtitle" style="margin-bottom: 10px;">Scale Without Shrinking</div>
+          <p class="t-body">Legibility rules for an 18mm wristband and a 12m billboard were written before a single layout began — not fixed afterward.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 5: IMAGE + TEXT ====== -->
+<div class="slide s5">
+  <div class="slide-content">
+    <div class="s5-image-area">
+      <div class="s5-image-placeholder">[ Image Placeholder ]</div>
+    </div>
+    <div class="s5-text-area">
+      <div class="label s5-badge">Featured</div>
+      <div class="t-headline" style="margin-bottom: 20px;">The Grid System</div>
+      <p class="t-body" style="margin-bottom: 20px;">Six columns, a 24px baseline, and three fixed type steps — display, label, and caption — are the only moves the system allows. Every poster in the series is built from the same master page.</p>
+      <p class="t-body" style="color: var(--darkgray); margin-bottom: 32px;">The same grid underlies the handbill, the laminate, and the wayfinding signage, so swapping formats never means starting the layout over.</p>
+      <div class="line"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 6: TIMELINE ====== -->
+<div class="slide s6">
+  <div class="slide-content">
+    <div class="s6-header">
+      <div class="t-title">From Grid To Site</div>
+    </div>
+    <div class="s6-body">
+      <div class="s6-step">
+        <span class="s6-step-num">01</span>
+        <div class="s6-connector">&rarr;</div>
+        <div class="t-subtitle s6-step-title">Lock The Grid</div>
+        <p class="t-body">The six-column module is tested against the largest format (a 12m billboard) and the smallest (an 18mm wristband) before any imagery is chosen.</p>
+      </div>
+      <div class="s6-step">
+        <span class="s6-step-num">02</span>
+        <div class="s6-connector">&rarr;</div>
+        <div class="t-subtitle s6-step-title">Draw The Mark</div>
+        <p class="t-body">The radio-tower silhouette is redrawn as a single-weight line icon that still reads cleanly at wristband size.</p>
+      </div>
+      <div class="s6-step">
+        <span class="s6-step-num">03</span>
+        <div class="s6-connector">&rarr;</div>
+        <div class="t-subtitle s6-step-title">Ink Test</div>
+        <p class="t-body">Pantone 187 is proofed on uncoated stock under actual stage lighting — dusk and floodlight — before the print run is signed off.</p>
+      </div>
+      <div class="s6-step">
+        <span class="s6-step-num">04</span>
+        <div class="t-subtitle s6-step-title">Roll Out</div>
+        <p class="t-body">The system ships across posters, wristbands, signage, and merch from one shared file, not four separate ones.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 7: DONUT CHART + METRICS ====== -->
+<div class="slide s7">
+  <div class="slide-content">
+    <div class="s7-left">
+      <div class="s7-donut-container">
+        <svg viewBox="0 0 200 200" width="100%" height="100%">
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#c8371e" stroke-width="24" stroke-dasharray="314 502" stroke-dashoffset="0" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#f2d4cf" stroke-width="24" stroke-dasharray="126 502" stroke-dashoffset="-314" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#e5edd6" stroke-width="24" stroke-dasharray="50 502" stroke-dashoffset="-440" transform="rotate(-90 100 100)"/>
+          <circle cx="100" cy="100" r="92" fill="none" stroke="#0e0d0b" stroke-width="2"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="#0e0d0b" stroke-width="2"/>
+        </svg>
+        <div class="s7-donut-center">
+          <div class="s7-donut-value">94%</div>
+          <div class="s7-donut-label">Sign-off Rate</div>
+        </div>
+      </div>
+      <div class="s7-legend">
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-red"></div>Poster &amp; Print</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-pink"></div>Wayfinding &amp; Signage</div>
+        <div class="s7-legend-item"><div class="s7-legend-swatch bg-green"></div>Merch &amp; Wearables</div>
+      </div>
+    </div>
+    <div class="s7-right">
+      <div class="s7-metric-row">
+        <div class="s7-metric-num">94%</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Stakeholder Sign-off</div>
+          <p class="t-caption">The full board approved the round-two rebuild on its first pass</p>
+        </div>
+      </div>
+      <div class="s7-metric-row bg-green">
+        <div class="s7-metric-num">6</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Formats From One File</div>
+          <p class="t-caption">Poster, handbill, wristband, laminate, sign, and tote</p>
+        </div>
+      </div>
+      <div class="s7-metric-row">
+        <div class="s7-metric-num">41 hrs</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Total Studio Time</div>
+          <p class="t-caption">Down from 110 hours burned on the rejected round-four concept</p>
+        </div>
+      </div>
+      <div class="s7-metric-row bg-pink">
+        <div class="s7-metric-num">3.2x</div>
+        <div class="s7-metric-info">
+          <div class="t-subtitle s7-metric-title">Attendee Photo Reposts</div>
+          <p class="t-caption">Photos of the tower mark outpaced round-one art three to one</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 8: STATEMENT / QUOTE ====== -->
+<div class="slide s8">
+  <div class="slide-content">
+    <div class="s8-top">
+      <div class="s8-quote-mark">"</div>
+      <div class="s8-statement">
+        <div class="t-headline" style="margin-bottom: 24px;">A poster isn't a picture of the festival. It's the system the festival gets built from — every format, every year.</div>
+        <div class="line"></div>
+      </div>
+    </div>
+    <div class="s8-bottom">
+      <div class="s8-stat">
+        <span class="s8-stat-num">94%</span>
+        <span class="t-caption">Sign-off</span>
+      </div>
+      <div class="s8-stat">
+        <span class="s8-stat-num">6</span>
+        <span class="t-caption">Formats</span>
+      </div>
+      <div class="s8-stat">
+        <span class="s8-stat-num">41 hrs</span>
+        <span class="t-caption">Studio Time</span>
+      </div>
+      <div class="s8-stat">
+        <span class="s8-stat-num">1</span>
+        <span class="t-caption">Ink Story</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 9: COMPARISON TABLE ====== -->
+<div class="slide s9">
+  <div class="slide-content">
+    <div class="s9-header">
+      <span class="t-title">Export Checklist</span>
+      <span class="label">Before Files Leave The Studio</span>
+    </div>
+    <div class="s9-table-wrap">
+      <table class="s9-table">
+        <thead>
+          <tr>
+            <th>Deliverable</th>
+            <th>Poster (Offset)</th>
+            <th>Wristband (Screen)</th>
+            <th>Wayfinding (Vinyl)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Color Mode</td>
+            <td>1 Spot + Black</td>
+            <td>1-Color Screen</td>
+            <td>2-Color Cut Vinyl</td>
+          </tr>
+          <tr>
+            <td>Bleed</td>
+            <td>5mm</td>
+            <td>None, Die-Cut</td>
+            <td>3mm</td>
+          </tr>
+          <tr>
+            <td>Minimum Line Weight</td>
+            <td>0.5pt</td>
+            <td>1.2pt (Mesh Count)</td>
+            <td>2pt</td>
+          </tr>
+          <tr>
+            <td>File Format</td>
+            <td>Press-Ready PDF/X-4</td>
+            <td>Vector EPS</td>
+            <td>Cut-Ready SVG</td>
+          </tr>
+          <tr>
+            <td>Proof Required</td>
+            <td>Wet Proof On Stock</td>
+            <td>Physical Pull</td>
+            <td>Site Mock-Up</td>
+          </tr>
+          <tr>
+            <td>Sign-Off Owner</td>
+            <td>Studio Lead</td>
+            <td>Print Vendor</td>
+            <td>Fabricator</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ====== SLIDE 10: CLOSING / CTA ====== -->
+<div class="slide s10">
+  <div class="slide-content">
+    <div class="s10-left">
+      <div class="t-display" style="margin-bottom: 24px;">Ship<br>Clean.</div>
+      <p class="t-body" style="margin-bottom: 32px; max-width: 380px;">Every file that leaves the studio carries the same ink story, the same grid, and the same checklist — so the festival looks like one system, not four separate print jobs.</p>
+      <span class="label arrow" style="text-decoration:none;">View Full Case Study</span>
+    </div>
+    <div class="s10-right">
+      <div class="s10-r-top">
+        <div class="t-title" style="margin-bottom: 20px;">Credits</div>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Creative Direction:</strong> Mara Voss</p>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Design Lead:</strong> Studio Halftone</p>
+        <p class="t-body" style="margin-bottom: 8px;"><strong>Print Production:</strong> Ridgeline Press</p>
+        <p class="t-body"><strong>Client:</strong> Fieldtone Festival</p>
+      </div>
+      <div class="s10-r-bottom">
+        <span class="s10-rb-block" style="text-decoration:none;color:inherit;">Poster Series</span>
+        <span class="s10-rb-block" style="text-decoration:none;color:inherit;">Full Case Study</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /slide-deck -->
+
+<script>
+const slides = document.querySelectorAll('.slide');
+let current = 0;
+const total = slides.length;
+
+function showSlide(idx) {
+  slides[current].classList.remove('active');
+  current = Math.max(0, Math.min(idx, total - 1));
+  slides[current].classList.add('active');
+  /* slide change handler */
+}
+function nextSlide() { showSlide(current + 1); }
+function prevSlide() { showSlide(current - 1); }
+function firstSlide() { showSlide(0); }
+function lastSlide() { showSlide(total - 1); }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); prevSlide(); }
+  else if (e.key === 'Home') { e.preventDefault(); firstSlide(); }
+  else if (e.key === 'End') { e.preventDefault(); lastSlide(); }
+});
+
+let touchStartY = 0;
+document.addEventListener('touchstart', e => { touchStartY = e.changedTouches[0].screenY; });
+document.addEventListener('touchend', e => {
+  const touchEndY = e.changedTouches[0].screenY;
+  if (touchStartY - touchEndY > 50) nextSlide();
+  else if (touchEndY - touchStartY > 50) prevSlide();
+});
+</script>
+
+</body>
+</html>

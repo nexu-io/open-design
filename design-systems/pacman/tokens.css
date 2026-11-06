@@ -1,0 +1,64 @@
+/* design-systems/pacman/tokens.css
+ *
+ * Structured token bindings for Pac-Man.
+ * classic arcade maze language with black board, yellow signal, and rounded score capsules.
+ */
+
+:root {
+  --bg: #050505;
+  --surface: #101014;
+  --surface-warm: #1f1b08;
+  --fg: #fff7d6;
+  --fg-2: #f6e79c;
+  --muted: #b9a85d;
+  --meta: #ffcc00;
+  --border: #2338ff;
+  --border-soft: #17218a;
+  --accent: #ffcc00;
+  --accent-on: #050505;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #00ff66;
+  --warn: #ff9900;
+  --danger: #ff3b3b;
+  --font-display: "Press Start 2P", "Arial Black", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "Press Start 2P", ui-monospace, monospace;
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 30px;
+  --text-3xl: 44px;
+  --text-4xl: 64px;
+  --leading-body: 1.6;
+  --leading-tight: 1.08;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 84px;
+  --section-y-tablet: 60px;
+  --section-y-phone: 44px;
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 9999px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 2px #2338ff, 0 22px 60px rgba(0, 0, 0, 0.46);
+  --focus-ring: 0 0 0 4px rgba(255, 204, 0, 0.34);
+  --motion-fast: 90ms;
+  --motion-base: 160ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1080px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

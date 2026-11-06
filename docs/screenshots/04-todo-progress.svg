@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Live todo progress placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FBF7EF"/>
+      <stop offset="100%" stop-color="#EFE7D7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect x="32" y="32" width="1536" height="836" rx="28" ry="28"
+    fill="none" stroke="#C2532D" stroke-width="3" stroke-dasharray="16 12" opacity="0.85"/>
+  <g transform="translate(800 390)" stroke="#1F1B16" stroke-width="6"
+     stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9">
+    <rect x="-110" y="-72" width="220" height="144" rx="18"/>
+    <rect x="-36" y="-94" width="72" height="26" rx="8"/>
+    <circle r="42"/>
+    <circle r="18"/>
+  </g>
+  <text x="800" y="480" text-anchor="middle"
+        font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="34" font-weight="600" letter-spacing="6" fill="#C2532D">
+    04
+  </text>
+  <text x="800" y="560" text-anchor="middle"
+        font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="56" font-weight="700" fill="#1F1B16">
+    Live todo progress
+  </text>
+  <text x="800" y="625" text-anchor="middle"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="26" fill="#6B6258">
+    docs/screenshots/04-todo-progress.svg
+  </text>
+  <text x="800" y="690" text-anchor="middle"
+        font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="24" fill="#6B6258">
+    Streaming TodoWrite plan · in_progress → completed in real time.
+  </text>
+  <text x="800" y="844" text-anchor="middle"
+        font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="20" letter-spacing="4" fill="#6B6258" opacity="0.85">
+    SCREENSHOT PENDING · 截图占位
+  </text>
+</svg>

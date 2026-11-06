@@ -1,0 +1,49 @@
+{
+  "slug": "zhangzara-cobalt-grid",
+  "name": "Cobalt Grid",
+  "tagline": "Electric cobalt italic serifs on a graph-paper canvas, anchored by stair-stepped pixel-glitch decorations and slim hairline rules.",
+  "mood": [
+    "editorial",
+    "design-research",
+    "studious",
+    "modernist",
+    "tech-print",
+    "monochrome"
+  ],
+  "occasion": [
+    "design trend or research report",
+    "studio annual or seasonal bulletin",
+    "creative agency capabilities deck",
+    "art or architecture publication",
+    "academic / curatorial publication",
+    "newsletter or zine pitch"
+  ],
+  "tone": [
+    "considered",
+    "literary",
+    "studious",
+    "quietly-modern",
+    "editorial"
+  ],
+  "formality": "high",
+  "density": "medium",
+  "palette": {
+    "paper": "#F0EBDE",
+    "ink": "#1F2BE0",
+    "ink-soft": "#5560E5",
+    "grid": "rgba(31,43,224,0.10)",
+    "description": "warm cream / ivory paper canvas with one strict accent of electric cobalt royal blue. The grid is a faint cobalt overlay, and decorations (pixel stair-blocks, QR-style mini-grids, hairline rules) all use the same blue, keeping the deck strictly bichromatic"
+  },
+  "typography": {
+    "display": "Newsreader (italic)",
+    "body": "Hanken Grotesk",
+    "mono": "DM Mono",
+    "style": "transitional italic serif for hero type and section heads, paired with a neutral grotesk for body and a clean mono for tabular data and micro-captions; strictly cobalt-on-cream"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel like a quietly serious design / research bulletin, art publication, or curated trend report. Strong for studio annuals, agency capabilities decks, design-research publications, architecture / art / academic decks, and any deck wanting one strict accent colour and a printed-ledger calmness rather than corporate polish.",
+  "avoid_for": "Decks that need warmth, multi-colour energy, or a casual / playful voice — the strict cobalt + cream + grid palette is intentionally austere.",
+  "slide_count": 8,
+  "navigation": "vanilla JS (arrow keys, space, Home/End, touch swipe)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/cobalt-grid"
+}

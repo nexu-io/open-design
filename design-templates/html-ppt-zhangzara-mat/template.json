@@ -1,0 +1,49 @@
+{
+  "slug": "zhangzara-mat",
+  "name": "Mat",
+  "tagline": "Dark sage canvas with bone paper and burnt-orange accent; mid-century modern with wood undertones.",
+  "mood": [
+    "warm-modern",
+    "considered",
+    "tactile",
+    "mid-century"
+  ],
+  "occasion": [
+    "design studio credentials",
+    "architecture / interior brand",
+    "ceramics or craft brand",
+    "furniture pitch",
+    "advisory deliverable",
+    "bilingual EN/CN deck"
+  ],
+  "tone": [
+    "warm",
+    "design-led",
+    "intentional",
+    "considered"
+  ],
+  "formality": "medium",
+  "density": "medium",
+  "palette": {
+    "bg": "#232e26",
+    "bg_alt": "#2e3d30",
+    "fg": "#f0e8d2",
+    "accent": "#c07030",
+    "bg_light": "#ede6d0",
+    "wood": "#7a4e24",
+    "description": "muted sage green canvas with warm bone paper and a saturated burnt-orange accent; an underlying wood tone for tactile detail"
+  },
+  "typography": {
+    "display": "Bricolage Grotesque",
+    "body": "DM Sans",
+    "mono": "DM Mono",
+    "cn": "Noto Sans SC",
+    "style": "expressive variable grotesk display + clean DM body + DM Mono captions"
+  },
+  "scheme": "mixed",
+  "best_for": "Anything that should feel mid-century, tactile, and intentional: design studio credentials, architecture / interior brands, ceramics / craft / furniture, advisory decks. Also a warm, distinctive choice for tech, research, or business decks that want a considered analog feel instead of digital-cool.",
+  "avoid_for": "Contexts that need fast tech energy or institutional restraint — the muted sage and burnt-orange palette is intentionally warm and slow.",
+  "slide_count": 9,
+  "navigation": "inline keyboard handler",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/mat"
+}

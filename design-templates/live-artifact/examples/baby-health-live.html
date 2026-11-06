@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mira's First Month · A quiet panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Soft, warm, parental */
+    --bg:           #fdf9f5;
+    --paper:        #ffffff;
+    --paper-tint:   #faf5ef;
+    --paper-deep:   #f4ece2;
+    --line:         #ece2d5;
+    --line-strong:  #d8c8b3;
+    --hairline:     rgba(60,40,20,0.06);
+    --ink:          #2a2520;
+    --ink-soft:     #4d433b;
+    --muted:        #8a7e72;
+    --muted-2:      #b3a89a;
+
+    /* Soft pastel accents */
+    --peach:        #f5b885;
+    --peach-soft:   #fce4cf;
+    --sage:         #9ec79e;
+    --sage-soft:    #e0eddc;
+    --lavender:     #c5b8e0;
+    --lavender-soft: #e8e1f5;
+    --sky:          #b3d4e8;
+    --sky-soft:     #def0fa;
+    --rose:         #e8b3c2;
+    --rose-soft:    #fadfe6;
+    --gold:         #e8d094;
+    --gold-soft:    #faf1d6;
+
+    /* Type */
+    --serif:    'Instrument Serif', Iowan, Charter, Georgia, serif;
+    --display:  'Instrument Serif', Iowan, Charter, Georgia, serif;
+    --body:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --hand:     'Caveat', 'Instrument Serif', cursive;
+
+    --r: 16px;       /* softer corners */
+    --r-pill: 999px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(800px 400px at 100% -10%, rgba(245,184,133,0.15), transparent 60%),
+      radial-gradient(700px 400px at 0% 60%, rgba(197,184,224,0.12), transparent 60%),
+      radial-gradient(900px 500px at 50% 110%, rgba(158,199,158,0.10), transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ─────── Layout ─────── */
+  main {
+    max-width: 880px; margin: 0 auto;
+    padding: 60px 32px 80px;
+  }
+
+  header.app {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 32px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .word-mark {
+    font-family: var(--serif); font-style: italic;
+    font-size: 19px; letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .word-mark .small {
+    font-family: var(--body); font-style: normal;
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.16em;
+    margin-right: 10px;
+  }
+  .icon-btn {
+    padding: 7px 14px; font-size: 12.5px;
+    border-radius: var(--r-pill);
+    background: var(--paper); border: 1px solid var(--line);
+    color: var(--ink-soft); transition: all 0.15s;
+    display: inline-flex; gap: 8px; align-items: center;
+  }
+  .icon-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+  .icon-btn.warm {
+    background: linear-gradient(180deg, #fef4e6, var(--paper));
+    border-color: rgba(245,184,133,0.45);
+    color: #8a5a2a;
+  }
+  .icon-btn .ic { width: 13px; height: 13px; }
+  .icon-btn.spin .ic { animation: spin 0.8s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─────── Hero ─────── */
+  .hero {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+  .hero .pre {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.2em; margin-bottom: 18px;
+  }
+  .hero .name {
+    font-family: var(--serif); font-weight: 400;
+    font-size: 80px; line-height: 1.05;
+    margin: 0; letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .hero .name em {
+    font-style: italic;
+    background: linear-gradient(180deg, #f5b885 0%, #c5b8e0 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .age {
+    font-family: var(--hand);
+    font-size: 32px; line-height: 1;
+    color: var(--peach);
+    margin-top: 14px;
+    transform: rotate(-2deg);
+    display: inline-block;
+  }
+  .hero .meta {
+    margin-top: 22px;
+    display: inline-flex; gap: 18px;
+    font-size: 13px; color: var(--muted);
+  }
+  .hero .meta .v { color: var(--ink); }
+  .hero .meta .sep { color: var(--muted-2); }
+
+  /* ─────── Section ─────── */
+  section.block {
+    margin-bottom: 44px;
+  }
+  .block-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .block-head h2 {
+    font-family: var(--serif); font-weight: 400; font-size: 30px;
+    margin: 0; line-height: 1; letter-spacing: -0.005em;
+    color: var(--ink);
+  }
+  .block-head h2 em {
+    font-style: italic; color: var(--peach);
+    margin-right: 8px; font-size: 21px; vertical-align: 4px;
+  }
+  .block-head .meta {
+    font-size: 11.5px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.14em;
+  }
+  .block-head .meta .src { color: var(--ink-soft); margin-right: 4px; }
+
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    padding: 28px;
+    box-shadow: 0 2px 0 rgba(60,40,20,0.02);
+  }
+
+  /* ─────── Sleep circle ─────── */
+  .sleep-card {
+    display: grid; grid-template-columns: 280px 1fr; gap: 28px; align-items: center;
+  }
+  .sleep-circle {
+    width: 280px; height: 280px;
+    margin: 0 auto;
+  }
+  .sleep-circle svg { width: 100%; height: 100%; display: block; }
+  .sleep-stat .lbl {
+    font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em;
+  }
+  .sleep-stat .big {
+    font-family: var(--serif); font-weight: 400; font-size: 56px;
+    line-height: 1; margin-top: 8px; letter-spacing: -0.02em;
+  }
+  .sleep-stat .delta {
+    margin-top: 10px; font-size: 13px; color: var(--sage);
+  }
+  .sleep-stat .delta strong { color: var(--ink); font-weight: 600; }
+  .sleep-stat .quote {
+    font-family: var(--serif); font-style: italic;
+    font-size: 17px; color: var(--ink-soft);
+    margin-top: 22px; padding-left: 14px;
+    border-left: 2px solid var(--lavender);
+    line-height: 1.5;
+    max-width: 36ch;
+  }
+
+  /* ─────── Feeding timeline ─────── */
+  .feed-timeline {
+    position: relative; padding: 28px 0 32px;
+  }
+  .feed-line {
+    height: 2px;
+    background: linear-gradient(90deg, var(--lavender), var(--peach), var(--sage));
+    border-radius: 2px;
+    position: relative;
+    margin: 0 14px;
+  }
+  .feed-marker {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    width: 14px; height: 14px; border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .feed-marker:hover { transform: translate(-50%, -50%) scale(1.4); }
+  .feed-marker.bottle { background: var(--peach); box-shadow: 0 0 0 4px var(--peach-soft); }
+  .feed-marker.breast { background: var(--rose); box-shadow: 0 0 0 4px var(--rose-soft); }
+  .feed-marker.now {
+    background: var(--ink); box-shadow: 0 0 0 4px var(--paper), 0 0 0 6px var(--ink);
+    animation: nowBreath 2.4s ease-in-out infinite;
+  }
+  @keyframes nowBreath {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.15); }
+  }
+  .feed-tip {
+    position: absolute; top: -36px; transform: translate(-50%, 0);
+    background: var(--ink); color: var(--paper);
+    font-size: 11px; padding: 4px 8px; border-radius: 5px;
+    white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s;
+    font-family: var(--body);
+  }
+  .feed-tip::after {
+    content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+    border: 4px solid transparent; border-top-color: var(--ink);
+  }
+  .feed-marker:hover .feed-tip { opacity: 1; }
+  .feed-axis {
+    margin-top: 36px; padding: 0 14px;
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    font-family: var(--body); font-size: 11px; color: var(--muted);
+    text-align: center;
+  }
+  .feed-legend {
+    margin-top: 24px;
+    display: flex; gap: 22px; flex-wrap: wrap;
+    font-size: 12px; color: var(--ink-soft);
+  }
+  .feed-legend .swatch { display: inline-flex; gap: 8px; align-items: center; }
+  .feed-legend .swatch::before { content: ""; width: 10px; height: 10px; border-radius: 50%; }
+  .feed-legend .swatch.bottle::before { background: var(--peach); box-shadow: 0 0 0 3px var(--peach-soft); }
+  .feed-legend .swatch.breast::before { background: var(--rose); box-shadow: 0 0 0 3px var(--rose-soft); }
+  .feed-legend .swatch.now::before { background: var(--ink); }
+  .feed-legend .v { font-family: var(--serif); font-style: italic; color: var(--ink); }
+
+  /* ─────── Weight curve ─────── */
+  .growth-card { padding: 28px 32px; }
+  .growth-card svg { width: 100%; height: 220px; display: block; margin-top: 8px; }
+  .growth-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline);
+  }
+  .growth-stats .stat .lbl { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; }
+  .growth-stats .stat .v { font-family: var(--serif); font-size: 24px; line-height: 1; margin-top: 6px; letter-spacing: -0.01em; }
+  .growth-stats .stat .pctile { color: var(--sage); font-size: 11.5px; margin-top: 4px; }
+
+  /* ─────── Today reminders ─────── */
+  .reminders {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .rem-card {
+    padding: 18px 20px; border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    display: flex; flex-direction: column; gap: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .rem-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(60,40,20,0.06); }
+  .rem-card .l-row { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.14em; }
+  .rem-card .glyph {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .rem-card.feed .glyph { background: var(--peach-soft); color: #8a5a2a; }
+  .rem-card.nap .glyph  { background: var(--lavender-soft); color: #5e4d8e; }
+  .rem-card.appt .glyph { background: var(--sky-soft); color: #2a5e7a; }
+  .rem-card.bath .glyph { background: var(--sage-soft); color: #4a6e4a; }
+  .rem-card .when {
+    font-family: var(--serif); font-size: 28px; line-height: 1; letter-spacing: -0.01em;
+  }
+  .rem-card .desc { font-size: 12.5px; color: var(--ink-soft); line-height: 1.45; }
+
+  /* ─────── AI insights ─────── */
+  .insight-card {
+    background: linear-gradient(180deg, var(--lavender-soft) 0%, var(--paper) 100%);
+    border-color: rgba(197,184,224,0.4);
+    padding: 28px 32px;
+  }
+  .insight-card .badge {
+    display: inline-flex; gap: 8px; align-items: center;
+    font-family: var(--body); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.16em;
+    color: #6e5e9e;
+  }
+  .insight-card .badge .glyph {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--lavender), var(--peach));
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; font-weight: 600;
+    box-shadow: 0 0 12px rgba(197,184,224,0.4);
+  }
+  .insight-card h3 {
+    font-family: var(--serif); font-weight: 400; font-size: 28px;
+    line-height: 1.2; margin: 12px 0 6px; letter-spacing: -0.01em;
+  }
+  .insight-card h3 em { font-style: italic; color: #6e5e9e; }
+  .insight-card p {
+    color: var(--ink-soft); font-size: 14px; margin: 0;
+    line-height: 1.55; max-width: 56ch;
+  }
+  .insight-list {
+    margin-top: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .insight-list .row {
+    display: grid; grid-template-columns: 22px 1fr; gap: 10px;
+    align-items: flex-start;
+  }
+  .insight-list .check {
+    color: var(--sage); font-family: var(--serif); font-size: 18px; line-height: 1;
+  }
+  .insight-list .text { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+  .insight-list .text strong { color: var(--ink); }
+  .insight-list .text .hand {
+    font-family: var(--hand); font-size: 16px; color: var(--peach);
+    transform: rotate(-1deg); display: inline-block; padding: 0 4px;
+  }
+
+  /* ─────── Photo strip (placeholder) ─────── */
+  .photo-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  }
+  .photo {
+    aspect-ratio: 4 / 5; border-radius: 10px;
+    background: linear-gradient(135deg, var(--peach-soft), var(--lavender-soft));
+    border: 1px solid var(--line);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .photo:hover { transform: translateY(-2px) rotate(-1deg); }
+  .photo:nth-child(2) { background: linear-gradient(135deg, var(--rose-soft), var(--sky-soft)); transform: rotate(0.5deg); }
+  .photo:nth-child(3) { background: linear-gradient(135deg, var(--sage-soft), var(--gold-soft)); transform: rotate(-0.5deg); }
+  .photo:nth-child(4) { background: linear-gradient(135deg, var(--gold-soft), var(--peach-soft)); transform: rotate(0.8deg); }
+  .photo .cap {
+    position: absolute; bottom: 8px; left: 10px; right: 10px;
+    font-family: var(--hand); font-size: 16px;
+    color: var(--ink-soft); transform: rotate(-1deg);
+  }
+  .photo .day {
+    position: absolute; top: 8px; right: 10px;
+    font-family: var(--body); font-size: 10.5px; color: var(--muted);
+    background: rgba(255,255,255,0.7); padding: 2px 6px; border-radius: 3px;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Closing line */
+  .closing {
+    text-align: center; margin-top: 40px;
+    font-family: var(--serif); font-style: italic;
+    font-size: 18px; color: var(--muted);
+    line-height: 1.5;
+  }
+  .closing .author {
+    font-family: var(--body); font-style: normal;
+    font-size: 11px; color: var(--muted-2);
+    text-transform: uppercase; letter-spacing: 0.16em;
+    margin-top: 8px;
+  }
+
+  /* Toast */
+  .toast-box { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+  .toast {
+    pointer-events: auto;
+    min-width: 280px; max-width: 380px;
+    padding: 14px 16px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--peach);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(60,40,20,0.10);
+    font-size: 13px;
+    color: var(--ink);
+    animation: toastIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .toast.lavender { border-left-color: var(--lavender); }
+  .toast.sage { border-left-color: var(--sage); }
+  .toast .t-title { font-family: var(--serif); font-size: 16px; line-height: 1.2; margin-bottom: 4px; }
+  .toast .t-body { color: var(--ink-soft); line-height: 1.45; }
+  .toast .t-body strong { color: var(--ink); }
+  .toast.fade { opacity: 0; transform: translateX(20px); transition: all 0.25s; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+  @media (max-width: 720px) {
+    main { padding: 40px 18px 60px; }
+    .hero .name { font-size: 56px; }
+    .sleep-card { grid-template-columns: 1fr; }
+    .sleep-circle { width: 220px; height: 220px; }
+    .reminders { grid-template-columns: 1fr; }
+    .photo-strip { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="word-mark">
+    <span class="small">a quiet panel from</span>
+    <em>quiver</em>
+  </div>
+  <button class="icon-btn warm" id="logBtn">
+    <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    Log a feed
+  </button>
+</header>
+
+<main>
+
+  <!-- ─────── Hero ─────── -->
+  <div class="hero">
+    <div class="pre">Mira's first month · 2026</div>
+    <h1 class="name">Mira <em>Avery</em></h1>
+    <div class="age">28 days &amp; counting</div>
+    <div class="meta">
+      <span><span class="v">Born</span> April 9 · 2026</span>
+      <span class="sep">·</span>
+      <span><span class="v">3.42 kg</span> · 50.8 cm</span>
+      <span class="sep">·</span>
+      <span><span class="v">Mom &amp; dad</span> have her back</span>
+    </div>
+  </div>
+
+  <!-- ─────── 1. Sleep ─────── -->
+  <section class="block">
+    <div class="block-head">
+      <h2><em>i.</em>How she slept last night</h2>
+      <span class="meta"><span class="src">Huckleberry</span>· synced 6:42 AM</span>
+    </div>
+    <div class="card sleep-card">
+      <div class="sleep-circle">
+        <svg viewBox="0 0 200 200">
+          <defs>
+            <radialGradient id="bgG" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#c5b8e0" stop-opacity="0.06"/>
+            </radialGradient>
+          </defs>
+          <circle cx="100" cy="100" r="92" fill="url(#bgG)" stroke="#ece2d5" stroke-width="0.8"/>
+          <!-- 24h tick marks -->
+          <g stroke="#d8c8b3" stroke-width="0.6">
+            <line x1="100" y1="14" x2="100" y2="20"/>
+            <line x1="186" y1="100" x2="180" y2="100"/>
+            <line x1="100" y1="186" x2="100" y2="180"/>
+            <line x1="14" y1="100" x2="20" y2="100"/>
+          </g>
+          <!-- Hour labels -->
+          <g font-family="Inter,sans-serif" font-size="9" fill="#8a7e72">
+            <text x="100" y="11" text-anchor="middle">12 am</text>
+            <text x="194" y="103" text-anchor="end">6</text>
+            <text x="100" y="197" text-anchor="middle">12 pm</text>
+            <text x="6" y="103">6</text>
+          </g>
+          <!-- Sleep arcs (purple = night, peach = naps) -->
+          <!-- Night sleep 7:30 PM → 6:30 AM (with 4 brief wakes) -->
+          <!-- Stroke arcs at radius 76 -->
+          <path d="M 154.5 145.5 A 76 76 0 0 1 100 24" fill="none" stroke="#c5b8e0" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
+          <path d="M 100 24 A 76 76 0 0 1 134.7 32.5" fill="none" stroke="#c5b8e0" stroke-width="14" stroke-linecap="round" opacity="0.5"/>
+          <!-- 1st morning nap 9:00–10:30 -->
+          <path d="M 162.4 76.6 A 76 76 0 0 1 173.1 105.4" fill="none" stroke="#f5b885" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
+          <!-- afternoon nap 1:30–3:00 -->
+          <path d="M 142.1 168.6 A 76 76 0 0 1 100 176" fill="none" stroke="#f5b885" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
+          <!-- evening nap 6:00–6:45 -->
+          <path d="M 24 100 A 76 76 0 0 1 32.5 65.3" fill="none" stroke="#f5b885" stroke-width="14" stroke-linecap="round" opacity="0.65"/>
+          <!-- Center text -->
+          <text x="100" y="92" text-anchor="middle" font-family="Instrument Serif,serif" font-size="34" fill="#2a2520" letter-spacing="-0.5">14h 22m</text>
+          <text x="100" y="115" text-anchor="middle" font-family="Inter,sans-serif" font-size="10" fill="#8a7e72" letter-spacing="0.6">total · 24h window</text>
+          <!-- now hand -->
+          <line x1="100" y1="100" x2="100" y2="62" stroke="#2a2520" stroke-width="1.5" stroke-linecap="round" transform="rotate(105 100 100)"/>
+          <circle cx="100" cy="100" r="3" fill="#2a2520"/>
+        </svg>
+      </div>
+      <div class="sleep-stat">
+        <div class="lbl">Last night · 7:30 PM → 6:30 AM</div>
+        <div class="big">9h 14m</div>
+        <div class="delta">3 wakes (down from 4) · longest stretch <strong>3h 12m</strong></div>
+        <div class="quote">"She slept 22 minutes longer per night this week. Not a streak — a rhythm."</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────── 2. Feeding ─────── -->
+  <section class="block">
+    <div class="block-head">
+      <h2><em>ii.</em>How she ate today</h2>
+      <span class="meta"><span class="src">Baby Tracker + scale</span>· last 24h</span>
+    </div>
+    <div class="card">
+      <div class="feed-timeline">
+        <div class="feed-line">
+          <!-- timeline runs midnight → midnight → markers as %  -->
+          <div class="feed-marker bottle" style="left:8.3%"><span class="feed-tip">2:00 AM · 90ml bottle</span></div>
+          <div class="feed-marker breast" style="left:21%"><span class="feed-tip">5:00 AM · breast 18 min</span></div>
+          <div class="feed-marker bottle" style="left:33%"><span class="feed-tip">8:00 AM · 110ml bottle</span></div>
+          <div class="feed-marker breast" style="left:46%"><span class="feed-tip">11:00 AM · breast 22 min</span></div>
+          <div class="feed-marker bottle" style="left:58%"><span class="feed-tip">2:00 PM · 100ml bottle</span></div>
+          <div class="feed-marker now"    style="left:60.5%"><span class="feed-tip">Now · 14:32</span></div>
+          <div class="feed-marker breast" style="left:71%"><span class="feed-tip">5:00 PM · breast 16 min (est.)</span></div>
+          <div class="feed-marker bottle" style="left:83%"><span class="feed-tip">8:00 PM · 100ml bottle (est.)</span></div>
+          <div class="feed-marker breast" style="left:96%"><span class="feed-tip">11:30 PM · breast (est.)</span></div>
+        </div>
+        <div class="feed-axis">
+          <span>12am</span><span>4am</span><span>8am</span><span>noon</span><span>4pm</span><span>8pm</span><span>12am</span>
+        </div>
+        <div class="feed-legend">
+          <span class="swatch bottle">Bottle <span class="v" style="margin-left:4px;">4 today · 400 ml</span></span>
+          <span class="swatch breast">Breast <span class="v" style="margin-left:4px;">5 today · ~110 min</span></span>
+          <span class="swatch now">Now</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────── 3. Weight curve ─────── -->
+  <section class="block">
+    <div class="block-head">
+      <h2><em>iii.</em>How she's growing</h2>
+      <span class="meta"><span class="src">Withings smart scale</span>· weekly</span>
+    </div>
+    <div class="card growth-card">
+      <svg viewBox="0 0 600 220" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="growthArea" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#9ec79e" stop-opacity="0.28"/>
+            <stop offset="100%" stop-color="#9ec79e" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="bandG" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#c5b8e0" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="#c5b8e0" stop-opacity="0.04"/>
+          </linearGradient>
+        </defs>
+        <!-- WHO percentile band (10–90) -->
+        <polygon fill="url(#bandG)" points="40,170 120,154 200,138 280,122 360,108 440,96 520,84 580,76 580,140 520,150 440,160 360,168 280,176 200,182 120,188 40,194"/>
+        <!-- 50th percentile dashed line -->
+        <polyline fill="none" stroke="#c5b8e0" stroke-width="1" stroke-dasharray="3 4"
+          points="40,182 120,170 200,158 280,148 360,138 440,128 520,118 580,108"/>
+        <!-- Mira's actual weight -->
+        <polygon fill="url(#growthArea)" points="40,200 40,178 130,170 220,158 310,142 400,124 490,108 580,90 580,200"/>
+        <polyline fill="none" stroke="#9ec79e" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"
+          points="40,178 130,170 220,158 310,142 400,124 490,108 580,90"/>
+        <!-- Markers -->
+        <g>
+          <circle cx="40" cy="178" r="3.5" fill="#9ec79e"/>
+          <circle cx="130" cy="170" r="3.5" fill="#9ec79e"/>
+          <circle cx="220" cy="158" r="3.5" fill="#9ec79e"/>
+          <circle cx="310" cy="142" r="3.5" fill="#9ec79e"/>
+          <circle cx="400" cy="124" r="3.5" fill="#9ec79e"/>
+          <circle cx="490" cy="108" r="3.5" fill="#9ec79e"/>
+          <circle cx="580" cy="90" r="5" fill="#9ec79e" stroke="#fff" stroke-width="2"/>
+        </g>
+        <!-- X labels -->
+        <g font-family="Inter,sans-serif" font-size="10" fill="#8a7e72" text-anchor="middle">
+          <text x="40" y="215">birth</text>
+          <text x="130" y="215">wk 1</text>
+          <text x="220" y="215">wk 2</text>
+          <text x="310" y="215">wk 3</text>
+          <text x="400" y="215">wk 4</text>
+          <text x="490" y="215">wk 5</text>
+          <text x="580" y="215" fill="#2a2520" font-weight="600">today</text>
+        </g>
+        <!-- "now" callout -->
+        <text x="572" y="80" text-anchor="end" font-family="Caveat,cursive" font-size="20" fill="#9ec79e" transform="rotate(-3 572 80)">on track ✓</text>
+        <!-- Y axis labels -->
+        <g font-family="Geist Mono,monospace" font-size="9.5" fill="#8a7e72">
+          <text x="6" y="80">5.0</text>
+          <text x="6" y="120">4.5</text>
+          <text x="6" y="160">4.0</text>
+          <text x="6" y="200">3.5</text>
+        </g>
+      </svg>
+      <div class="growth-stats">
+        <div class="stat">
+          <div class="lbl">Weight today</div>
+          <div class="v">4.84 kg</div>
+          <div class="pctile">62nd percentile · WHO</div>
+        </div>
+        <div class="stat">
+          <div class="lbl">Length</div>
+          <div class="v">53.4 cm</div>
+          <div class="pctile">58th percentile · WHO</div>
+        </div>
+        <div class="stat">
+          <div class="lbl">Gain · 7 days</div>
+          <div class="v">+218 g</div>
+          <div class="pctile">healthy range (150–280g)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────── 4. Today's reminders ─────── -->
+  <section class="block">
+    <div class="block-head">
+      <h2><em>iv.</em>Today's gentle reminders</h2>
+      <span class="meta">4 things, no alarms</span>
+    </div>
+    <div class="reminders">
+      <div class="rem-card feed" data-rem="feed">
+        <div class="l-row"><span class="glyph">◍</span> Next feed</div>
+        <div class="when">in ~38 min</div>
+        <div class="desc">Last feed at 2:00 PM (100 ml bottle). Suggested 100–110 ml.</div>
+      </div>
+      <div class="rem-card nap" data-rem="nap">
+        <div class="l-row"><span class="glyph">☾</span> Next likely nap</div>
+        <div class="when">3:30 — 5:00 PM</div>
+        <div class="desc">She tends to fade ~90 min after morning rouse. Recent pattern.</div>
+      </div>
+      <div class="rem-card appt" data-rem="appt">
+        <div class="l-row"><span class="glyph">✓</span> Doctor visit</div>
+        <div class="when">Friday 10:30 AM</div>
+        <div class="desc">1-month checkup with Dr. Wei. We'll bring the weight log.</div>
+      </div>
+      <div class="rem-card bath" data-rem="bath">
+        <div class="l-row"><span class="glyph">~</span> Bath night</div>
+        <div class="when">tonight, 6:30 PM</div>
+        <div class="desc">Every other day · grandma's lullaby works.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────── 5. AI Insight ─────── -->
+  <section class="block">
+    <div class="block-head">
+      <h2><em>v.</em>What we noticed this week</h2>
+      <span class="meta"><span class="src">Quiver</span>· soft patterns</span>
+    </div>
+    <div class="card insight-card">
+      <div class="badge">
+        <span class="glyph">✦</span>
+        Quiver insights · weekly
+      </div>
+      <h3>She's settling into a <em>longer-stretch</em> sleep at night.</h3>
+      <p>Five small patterns matched up this week. None demand action — they just paint a picture.</p>
+      <div class="insight-list">
+        <div class="row"><span class="check">✓</span><span class="text"><strong>Longer first stretch:</strong> first sleep block grew from 2h 14m → 3h 12m on average. <span class="hand">good for you both</span></span></div>
+        <div class="row"><span class="check">✓</span><span class="text"><strong>Feed-then-sleep latency dropped to 14 min</strong> (was 28 min in week 2). She's calmer post-feed.</span></div>
+        <div class="row"><span class="check">✓</span><span class="text"><strong>Bottle preference stabilized</strong> on the slow-flow Dr. Brown's after the size-2 trial. No spit-up since Monday.</span></div>
+        <div class="row"><span class="check">✓</span><span class="text"><strong>62nd percentile</strong> on weight, up from 58th — within healthy range. Length is steady at 58th.</span></div>
+        <div class="row"><span class="check">✓</span><span class="text"><strong>Diaper count averaged 8 per day</strong> (target ≥6). Hydration is comfortable.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────── 6. Photo memory ─────── -->
+  <section class="block">
+    <div class="block-head">
+      <h2><em>vi.</em>This week, in pictures</h2>
+      <span class="meta"><span class="src">iCloud Photos</span>· auto-curated</span>
+    </div>
+    <div class="photo-strip">
+      <div class="photo">
+        <div class="day">Mon</div>
+        <div class="cap">first finger-grip</div>
+      </div>
+      <div class="photo">
+        <div class="day">Wed</div>
+        <div class="cap">sun nap on the porch</div>
+      </div>
+      <div class="photo">
+        <div class="day">Thu</div>
+        <div class="cap">grandma met her</div>
+      </div>
+      <div class="photo">
+        <div class="day">Sat</div>
+        <div class="cap">first real smile (we think)</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="closing">
+    "What you measure, you remember."<br/>
+    <span class="author">— quiver, a quiet panel · auto-refreshes daily at 6:30 AM</span>
+  </div>
+
+</main>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+(() => {
+  // Toast
+  const toastBox = document.getElementById('toastBox');
+  function toast(opts) {
+    const { kind = '', title = '', body = '' } = (typeof opts === 'string') ? { body: opts } : opts;
+    const node = document.createElement('div');
+    node.className = `toast ${kind}`;
+    node.innerHTML = `<div class="t-title">${title}</div><div class="t-body">${body}</div>`;
+    toastBox.appendChild(node);
+    setTimeout(() => {
+      node.classList.add('fade');
+      setTimeout(() => node.remove(), 280);
+    }, 4200);
+  }
+
+  // Reminders
+  const remCopy = {
+    feed: { kind: '', title: 'Logged a feed', body: 'Recorded · <strong>110 ml at 3:10 PM</strong> bottle. Updated next-feed estimate to 6:15 PM.' },
+    nap:  { kind: 'lavender', title: 'Nap window noted', body: 'We\'ll send a quiet ping at <strong>3:25 PM</strong> if she\'s still awake.' },
+    appt: { kind: 'sage', title: 'Friday checkup', body: 'Calendar event opened · 1-month checkup with Dr. Wei · 10:30 AM.<br/>We\'ll auto-prepare the weight log.' },
+    bath: { kind: '', title: 'Bath time saved', body: 'Tonight at 6:30 PM. We\'ll dim the smart lights at 6:25.' }
+  };
+  document.querySelectorAll('[data-rem]').forEach(r => {
+    r.addEventListener('click', () => {
+      const k = r.dataset.rem;
+      if (remCopy[k]) toast(remCopy[k]);
+    });
+  });
+
+  // Log a feed (header button)
+  document.getElementById('logBtn').addEventListener('click', () => {
+    toast({ kind: 'sage', title: 'New feed logged', body: '<strong>110 ml</strong> bottle · 3:10 PM<br/>Avg gain trend: +218 g this week, on track.' });
+  });
+
+  // Photos
+  document.querySelectorAll('.photo').forEach(p => {
+    p.addEventListener('click', () => {
+      const cap = p.querySelector('.cap').textContent;
+      toast({ kind: 'lavender', title: 'Photo memory', body: `"${cap}" · saved to your Mira album.` });
+    });
+  });
+
+  // Feed marker click (open detail)
+  document.querySelectorAll('.feed-marker').forEach(m => {
+    m.addEventListener('click', e => {
+      const tip = m.querySelector('.feed-tip');
+      if (tip) toast({ kind: '', title: 'Feed entry', body: tip.textContent });
+    });
+  });
+
+})();
+</script>
+
+</body>
+</html>

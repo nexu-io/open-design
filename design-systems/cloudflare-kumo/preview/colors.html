@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloudflare Kumo UI colors</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      h1 { margin: 0; font-size: var(--text-2xl); line-height: var(--leading-tight); }
+      .intro { margin: var(--space-2) 0 var(--space-6); color: var(--muted); font-size: var(--text-base); }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-4); }
+      .swatch { overflow: hidden; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-ring), var(--elev-raised); }
+      .color { height: 92px; background: var(--value); }
+      .meta { padding: var(--space-3); color: var(--muted); font-size: var(--text-sm); }
+      strong { display: block; margin-bottom: var(--space-1); color: var(--fg); font-weight: 600; }
+      code { font-family: var(--font-mono); font-size: var(--text-xs); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Semantic color roles</h1>
+      <p class="intro">Use roles, not raw palette names. Toggle the document's <code>data-mode</code> to review dark mode.</p>
+      <section class="grid" aria-label="Color tokens">
+        <article class="swatch" style="--value: var(--bg)"><div class="color"></div><div class="meta"><strong>Canvas</strong><code>--bg</code></div></article>
+        <article class="swatch" style="--value: var(--surface)"><div class="color"></div><div class="meta"><strong>Base surface</strong><code>--surface</code></div></article>
+        <article class="swatch" style="--value: var(--surface-warm)"><div class="color"></div><div class="meta"><strong>Recessed surface</strong><code>--surface-warm</code></div></article>
+        <article class="swatch" style="--value: var(--fg)"><div class="color"></div><div class="meta"><strong>Default text</strong><code>--fg</code></div></article>
+        <article class="swatch" style="--value: var(--muted)"><div class="color"></div><div class="meta"><strong>Subtle text</strong><code>--muted</code></div></article>
+        <article class="swatch" style="--value: var(--border-soft)"><div class="color"></div><div class="meta"><strong>Hairline</strong><code>--border-soft</code></div></article>
+        <article class="swatch" style="--value: var(--accent)"><div class="color"></div><div class="meta"><strong>Brand action</strong><code>--accent</code></div></article>
+        <article class="swatch" style="--value: var(--success)"><div class="color"></div><div class="meta"><strong>Success</strong><code>--success</code></div></article>
+        <article class="swatch" style="--value: var(--warn)"><div class="color"></div><div class="meta"><strong>Warning</strong><code>--warn</code></div></article>
+        <article class="swatch" style="--value: var(--danger)"><div class="color"></div><div class="meta"><strong>Danger</strong><code>--danger</code></div></article>
+      </section>
+    </main>
+  </body>
+</html>

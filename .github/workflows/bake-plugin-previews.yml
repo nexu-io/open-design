@@ -1,0 +1,154 @@
+name: bake-plugin-previews
+
+# Post-merge + nightly bake of the home gallery's plugin previews.
+#
+# Role after the pipeline rework (specs/change/20260618-plugin-preview-bake-
+# pipeline/spec.md): this workflow is the trusted UPLOADER + manifest review PR
+# writer + nightly BACKSTOP.
+#   - Pull requests validate the bake without secrets in
+#     bake-plugin-previews-pr.yml.
+#   - Manifest refreshes that need R2 credentials or a write-capable token happen
+#     here after merge, from trusted main code.
+#   - Fork contributions follow the same post-merge path.
+#   - Nightly re-runs catch transient bake failures and BAKE_VERSION bumps.
+# When it does need to land a manifest, it opens ONE rolling review PR (it cannot
+# push to protected main directly). Until a plugin is baked the gallery falls
+# back to its live example.html iframe, so there is no gap.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/_official/**'
+      - 'scripts/bake-plugin-previews.mjs'
+  schedule:
+    - cron: '0 18 * * *' # nightly self-healing full sweep
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # push the rolling manifest branch
+  pull-requests: write # open the review PR (gh pr create needs this; unset perms default to none)
+
+concurrency:
+  group: bake-plugin-previews
+  cancel-in-progress: false
+
+jobs:
+  bake:
+    name: Bake plugin previews
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          # Do NOT persist the default GITHUB_TOKEN as a github.com credential.
+          # The rolling manifest branch is force-pushed below with the release-bot
+          # App token (`x-access-token:${APP_TOKEN}`) precisely so the resulting PR
+          # sync is attributed to app/open-design-release-bot and its CI runs
+          # automatically (a github-actions[bot]-attributed pull_request run is held
+          # as `action_required` — GitHub's bot-recursion gate — which starves
+          # bake-plugin-previews-automerge.yml, since that reactor only approves +
+          # enqueues on `workflow_run.conclusion == 'success'`). When checkout
+          # persists the GITHUB_TOKEN it installs an `http.https://github.com/.extraheader`
+          # Authorization header that overrides the inline App token on push, so the
+          # force-push authenticates as github-actions[bot] and the rolling PR's CI
+          # never runs without a manual "Approve and run". Nothing between here and
+          # the push needs the persisted credential (setup-workspace only touches the
+          # pnpm store; render/upload uses R2 creds; gh + push use the App token), so
+          # dropping it is safe and keeps the App token the sole push credential.
+          persist-credentials: false
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+
+      - name: Render previews + publish clips to R2 (main only)
+        uses: ./.github/actions/bake-previews
+        with:
+          upload: ${{ github.ref == 'refs/heads/main' }}
+          r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
+          r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
+          r2-bucket: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
+          r2-endpoint: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
+
+      - name: Mint release-bot token for the rolling manifest PR
+        if: ${{ github.ref == 'refs/heads/main' }}
+        id: app
+        # A GITHUB_TOKEN-authored push/PR does NOT trigger workflows, so a manifest
+        # PR opened with it never runs `Validate workspace` — main's required check
+        # — and can never clear the merge queue (even manually). Author the rolling
+        # branch + PR with the release-bot App instead: its push DOES start CI, and
+        # its distinct identity (app/open-design-release-bot) lets a different bot
+        # (github-actions[bot]) approve it in bake-plugin-previews-automerge.yml.
+        # Minted here (not at job start) because an App token lives ~1h and the
+        # bake render+upload above can run long.
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+
+      - name: Open or update the rolling manifest PR for review
+        if: ${{ github.ref == 'refs/heads/main' }} # branch debug runs skip publishing
+        # The clips are already on R2; the manifest is version-pinned (it ships
+        # with the build), so it must land on main through a reviewed PR rather
+        # than a direct push to protected main.
+        #
+        # Two guards keep this quiet and tidy (spec slice 1):
+        #   1. Open a PR only when a `previews` entry actually changed. The
+        #      manifest's `generatedAt` timestamp moves every run, so the old
+        #      whole-file `git diff` opened a noise PR every time (e.g. #4261).
+        #      scripts/plugin-previews-diff.mjs compares only the `previews`
+        #      subtree.
+        #   2. Use ONE rolling branch (`chore/plugin-previews`) and force-update
+        #      the existing open PR in place, instead of stacking a fresh
+        #      `chore/plugin-previews-<run_id>` branch + PR per run (which built
+        #      the backlog this rework removes).
+        #
+        # Authored by the release-bot App (token minted above) so the manifest
+        # commit triggers CI; bake-plugin-previews-automerge.yml then approves +
+        # enqueues it once `Validate workspace` is green.
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          OLD=data/plugin-previews/manifest.json
+          NEW=.tmp/plugin-previews/manifest.json
+          # Capture on its own line so `set -e` surfaces a helper error (the diff
+          # script exits 2 on bad args / unreadable manifest) instead of command
+          # substitution swallowing it into the test and silently skipping the PR.
+          diff_result="$(node scripts/plugin-previews-diff.mjs "$OLD" "$NEW")"
+          case "$diff_result" in
+            changed) ;;
+            unchanged) echo "previews unchanged (only generatedAt moved) — nothing to review"; exit 0 ;;
+            *) echo "unexpected diff result: '$diff_result'" >&2; exit 1 ;;
+          esac
+          cp "$NEW" "$OLD"
+          BRANCH="chore/plugin-previews"
+          # Rebuild the rolling branch as `<rendered HEAD> + one manifest commit`. The commit is a
+          # plain local commit (its committer identity is NOT a trust signal — the auto-merge
+          # reactor instead requires the PR diff to touch ONLY manifest.json, which a forged
+          # committer cannot defeat). Parent on the checked-out HEAD — the exact revision $NEW was
+          # rendered against — NOT live main: the bake can run ~90min while main advances, and
+          # basing it on live main would publish a manifest from an older render on top of newer
+          # commits. The reactor's base-freshness gate skips a behind PR so the next bake re-renders
+          # on the newer tip.
+          git config user.name "open-design-bot"
+          git config user.email "bot@open-design.ai"
+          git checkout -B "$BRANCH"
+          git add "$OLD"
+          git commit -m "chore(plugin-previews): refresh baked preview manifest"
+          # Push with the App token (not the checkout's GITHUB_TOKEN, whose pushes do not start CI)
+          # so the rolling PR runs `Validate workspace` and can clear the merge queue.
+          git push --force \
+            "https://x-access-token:${APP_TOKEN}@github.com/${REPO}.git" "$BRANCH"
+          # Reuse the existing open PR (the force-push already refreshed it); only
+          # create one if none is open.
+          if [ "$(gh pr view "$BRANCH" --json state --jq '.state' 2>/dev/null)" = "OPEN" ]; then
+            echo "rolling PR already open for $BRANCH — force-push refreshed it in place"
+          else
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore(plugin-previews): refresh baked preview manifest" \
+              --reviewer lefarcen \
+              --body "Automated by the bake-plugin-previews workflow: preview clips were re-rendered and uploaded to R2; this updates data/plugin-previews/manifest.json to match (the clips live on R2 and are not committed). This is a single **rolling** PR — each bake force-updates it in place rather than stacking a new PR per run. @lefarcen please review and merge."
+          fi

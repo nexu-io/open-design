@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Intercom — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/intercom. Warm cream canvas,
+        80px Saans display with -2.4px tracking, Fin Orange (#ff5600) accent,
+        sharp 4px radius, scale(1.1) hover."
+    />
+
+    <style>
+      :root {
+        --bg: #faf9f6;
+        --surface: #ffffff;
+        --surface-warm: #faf9f6;
+
+        --fg: #111111;
+        --fg-2: var(--fg);
+        --muted: #7b7b78;
+        --meta: #9c9fa5;
+
+        --border: #dedbd6;
+        --border-soft: #ebe9e4;
+
+        --accent: #ff5600;
+        --accent-on: #ffffff;
+        --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #00da00;
+        --warn: #eab308;
+        --danger: #c41c1c;
+
+        --font-display: "Saans", "Saans Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+        --font-body: "Saans", "Saans Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+        --font-mono: "SaansMono", "SaansMono Fallback", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 20px;
+        --text-xl: 24px;
+        --text-2xl: 32px;
+        --text-3xl: 54px;
+        --text-4xl: 80px;
+
+        --leading-body: 1.5;
+        --leading-tight: 1.0;
+        --tracking-display: -0.03em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 48px;
+
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 94%);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1280px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      /* ─── Layout ─────────────────────────────────────────────── */
+      .container { max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-gutter-desktop); }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — Saans, 1.00 leading, negative tracking ─ */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        line-height: var(--leading-tight);
+        color: var(--fg);
+        margin: 0;
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        letter-spacing: -0.02em;
+      }
+      h3 {
+        font-size: var(--text-xl);
+        letter-spacing: -0.02em;
+      }
+      @media (max-width: 1023px) {
+        h1 { font-size: var(--text-3xl); }
+        h2 { font-size: var(--text-2xl); }
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--fg);
+        line-height: 1.4;
+        letter-spacing: -0.01em;
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .meta { color: var(--meta); font-size: var(--text-sm); }
+
+      /* SaansMono uppercase eyebrow — DESIGN.md §3 mono-label voice */
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-weight: 500;
+      }
+
+      .stack-2 > * + * { margin-block-start: var(--space-2); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-5 > * + * { margin-block-start: var(--space-5); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — sharp 4px corners, scale(1.1) hover ─────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 12px 18px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        border: 1px solid transparent;
+        text-decoration: none;
+        transform-origin: center;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard),
+          transform var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn:active { transform: scale(0.92); }
+
+      /* Primary: Off Black background — the Intercom dark-button move */
+      .btn-primary {
+        background: var(--fg);
+        color: #ffffff;
+        border-color: var(--fg);
+      }
+      .btn-primary:hover {
+        background: #ffffff;
+        color: var(--fg);
+        transform: scale(1.04);
+      }
+
+      /* Outlined: hairline over the warm canvas */
+      .btn-outline {
+        background: transparent;
+        color: var(--fg);
+        border-color: var(--fg);
+      }
+      .btn-outline:hover {
+        background: var(--fg);
+        color: #ffffff;
+        transform: scale(1.04);
+      }
+
+      /* Accent: Fin Orange — primary AI / brand moments only */
+      .btn-accent {
+        background: var(--accent);
+        color: var(--accent-on);
+        border-color: var(--accent);
+      }
+      .btn-accent:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+        transform: scale(1.04);
+      }
+      .btn-accent:active { background: var(--accent-active); }
+
+      /* ─── Inputs — oat borders, accent focus ─────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg);
+      }
+      .field input {
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: 1.25;
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:hover { border-color: color-mix(in oklab, var(--border), black 10%); }
+      .field input:focus-visible {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help { font-size: var(--text-xs); color: var(--muted); }
+
+      /* ─── Cards — warm cream surface, oat border, no shadow ── */
+      .card {
+        background: var(--surface-warm);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        transition:
+          border-color var(--motion-base) var(--ease-standard),
+          box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .card:hover {
+        border-color: color-mix(in oklab, var(--border), black 12%);
+        box-shadow: var(--elev-raised);
+      }
+      .card-eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        font-weight: 500;
+      }
+      .card h3 { font-size: var(--text-2xl); letter-spacing: -0.03em; }
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex; align-items: center; gap: var(--space-2);
+        padding: 4px var(--space-3);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        line-height: 1.4;
+        font-family: var(--font-mono);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .badge-success { color: var(--success); background: color-mix(in oklab, var(--success), transparent 88%); }
+      .badge-accent { color: var(--accent); background: color-mix(in oklab, var(--accent), transparent 90%); }
+      .badge-muted { color: var(--muted); background: color-mix(in oklab, var(--muted), transparent 88%); }
+      .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+      /* ─── Links ─────────────────────────────────────────────── */
+      a { color: var(--fg); text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; text-decoration-color: var(--border); }
+      a:hover { text-decoration-color: var(--accent); color: var(--accent); }
+
+      kbd {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 3px 6px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+      }
+
+      /* ─── Hero — billboard grid ─────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr;
+        gap: var(--space-12);
+        align-items: end;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); align-items: start; }
+      }
+      .hero-actions {
+        display: flex; gap: var(--space-3);
+        margin-block-start: var(--space-6);
+        flex-wrap: wrap;
+      }
+
+      /* Messenger-style preview panel — Intercom's conversational signature */
+      .messenger {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-5);
+        display: flex; flex-direction: column; gap: var(--space-4);
+        box-shadow: var(--elev-raised);
+      }
+      .messenger-header {
+        display: flex; align-items: center; gap: var(--space-3);
+        padding-block-end: var(--space-3);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .messenger-avatar {
+        width: 36px; height: 36px;
+        border-radius: var(--radius-pill);
+        background: var(--accent);
+        color: var(--accent-on);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: 500;
+        letter-spacing: -0.02em;
+      }
+      .messenger-name {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg);
+        line-height: 1.2;
+      }
+      .messenger-status {
+        font-size: var(--text-xs);
+        color: var(--muted);
+        line-height: 1.2;
+        margin-block-start: 2px;
+      }
+      .bubble {
+        max-width: 86%;
+        padding: 10px 14px;
+        font-size: var(--text-sm);
+        line-height: 1.4;
+        border-radius: var(--radius-lg);
+      }
+      .bubble-in {
+        align-self: flex-start;
+        background: var(--surface-warm);
+        color: var(--fg);
+        border: 1px solid var(--border-soft);
+        border-bottom-left-radius: var(--radius-sm);
+      }
+      .bubble-out {
+        align-self: flex-end;
+        background: var(--fg);
+        color: #ffffff;
+        border-bottom-right-radius: var(--radius-sm);
+      }
+      .messenger-input {
+        margin-block-start: var(--space-2);
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: var(--text-sm);
+        color: var(--meta);
+        background: var(--surface);
+      }
+
+      /* ─── Features grid ─────────────────────────────────────── */
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px) { .features-grid { grid-template-columns: 1fr; } }
+
+      /* ─── Form section ──────────────────────────────────────── */
+      .form-row {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) { .form-row { grid-template-columns: 1fr; gap: var(--space-8); } }
+      .form {
+        display: flex; flex-direction: column; gap: var(--space-4);
+        max-width: 460px;
+        padding: var(--space-6);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+      }
+      .form-actions {
+        display: flex; gap: var(--space-3);
+        margin-block-start: var(--space-2);
+        flex-wrap: wrap;
+      }
+
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-5">
+            <p class="eyebrow">Reference fixture · intercom</p>
+            <h1>AI-first customer service, built on real conversations.</h1>
+            <p class="lead" style="max-width: 56ch">
+              Fin handles the routine questions instantly, your team handles the rest.
+              One platform for every message — chat, email, phone, ticket — with the
+              warmth of a human and the speed of a machine.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Try Fin free
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-outline">See how it works</a>
+            </div>
+            <p class="meta" style="margin-block-start: var(--space-4)">
+              No credit card · 14-day trial · cancel anytime
+            </p>
+          </div>
+
+          <aside class="messenger" aria-label="Messenger preview">
+            <header class="messenger-header">
+              <span class="messenger-avatar" aria-hidden="true">F</span>
+              <div>
+                <div class="messenger-name">Fin</div>
+                <div class="messenger-status">
+                  <span class="badge badge-success" style="padding: 2px 8px">
+                    <span class="badge-dot" aria-hidden="true"></span>
+                    Online
+                  </span>
+                </div>
+              </div>
+            </header>
+            <div class="stack-2" style="display: flex; flex-direction: column; gap: var(--space-2)">
+              <div class="bubble bubble-in">Hi there — how can I help today?</div>
+              <div class="bubble bubble-out">Where do I update my billing address?</div>
+              <div class="bubble bubble-in">
+                Settings → Billing → Payment details. Want me to open it for you?
+              </div>
+            </div>
+            <div class="messenger-input" role="presentation">Write a reply…</div>
+          </aside>
+        </div>
+      </section>
+
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 22ch">A conversational system, not a help-desk form.</h2>
+        </div>
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card">
+            <p class="card-eyebrow">Fin AI</p>
+            <h3>Answers in seconds</h3>
+            <p class="body-muted body-sm">
+              Trained on your help center, past conversations, and product docs.
+              Resolves up to 50% of queries with no human escalation.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect tokens →</a>
+          </article>
+          <article class="card">
+            <p class="card-eyebrow">Inbox</p>
+            <h3>One thread per customer</h3>
+            <p class="body-muted body-sm">
+              Chat, email, phone, and social messages collapse into a single
+              conversation — your team never asks the customer to repeat themselves.
+            </p>
+            <a href="./DESIGN.md" class="body-sm">Read the spec →</a>
+          </article>
+          <article class="card">
+            <p class="card-eyebrow">Workflows</p>
+            <h3>Sharp by design</h3>
+            <p class="body-muted body-sm">
+              4px button corners, oat-tone borders, 80px Saans display with
+              -2.4px tracking — the system insists on precision.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect type →</a>
+          </article>
+        </div>
+      </section>
+
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Get started</p>
+            <h2>Install the Messenger in three minutes.</h2>
+            <p class="body-muted" style="max-width: 48ch">
+              Drop one script into your site, point Fin at your help center, and
+              the conversation surface is live. No backend rewrites, no design audit.
+            </p>
+            <p class="meta">
+              Press <kbd>⌘</kbd> <kbd>K</kbd> anywhere to search the docs.
+            </p>
+          </div>
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input id="email" type="email" placeholder="you@company.com" autocomplete="email" required />
+              <p class="field-help">We'll send setup steps and nothing else.</p>
+            </div>
+            <div class="field">
+              <label for="company">Company</label>
+              <input id="company" type="text" placeholder="Acme, Inc." autocomplete="organization" />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-accent">
+                Start free trial
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+              <button type="button" class="btn btn-outline">Talk to sales</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

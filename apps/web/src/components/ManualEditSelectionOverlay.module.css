@@ -1,0 +1,273 @@
+/* Selection chrome for manual edit mode. Sits inside .manual-edit-workspace
+   (position: relative); everything is display-only except the handles and
+   action bar, so canvas clicks keep flowing into the preview iframe. */
+
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 29;
+}
+
+/* Once a gesture starts, keep every subsequent pointer event in the host
+   document. Without this shield, a side-resize can move its narrow handle out
+   from under the pointer and the next event lands inside the preview iframe,
+   which makes the drag feel frozen or commit after only a few pixels. */
+.layerGestureActive {
+  pointer-events: auto;
+}
+
+.frame {
+  position: absolute;
+  border: 1.5px solid #2563eb;
+  border-radius: 2px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.frameDragging {
+  border-style: solid;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+/* Whole-image move surface. Fills the frame interior so an image can be
+   dragged from anywhere on the picture, not only the top pill. Sits under the
+   side/top handles (later in DOM) so their edge hit areas keep resizing. */
+.moveBody {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.moveBody:active {
+  cursor: grabbing;
+}
+
+/* Top-center pill: free move. */
+.moveHandle {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 10px;
+  border-radius: 999px;
+  background: #2563eb;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.moveHandle:hover {
+  transform: translateX(-50%) scale(1.12);
+}
+
+.moveHandle:active {
+  cursor: grabbing;
+}
+
+/* Side pills: width resize. */
+.sideHandle {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 26px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid #2563eb;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.sideHandle:hover {
+  transform: translateY(-50%) scale(1.12);
+}
+
+.sideHandleLeft {
+  left: -6px;
+}
+
+.sideHandleRight {
+  right: -6px;
+}
+
+/* Corner anchors (image targets): aspect-locked scale from any corner. */
+.cornerHandle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #2563eb;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  pointer-events: auto;
+  touch-action: none;
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cornerHandle:hover {
+  transform: scale(1.15);
+}
+
+.cornerHandleNw { left: -7px; top: -7px; cursor: nwse-resize; }
+.cornerHandleNe { right: -7px; top: -7px; cursor: nesw-resize; }
+.cornerHandleSw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+.cornerHandleSe { right: -7px; bottom: -7px; cursor: nwse-resize; }
+
+/* Floating action bar above the frame (duplicate / delete / image ops). */
+.actionBar {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+  pointer-events: auto;
+  opacity: 0;
+  animation: manual-edit-overlay-in 160ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.actionButton:hover:not(:disabled) {
+  background: color-mix(in srgb, #2563eb 10%, transparent);
+  color: #2563eb;
+}
+
+.actionButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.actionButtonDanger:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef4444 10%, transparent);
+  color: #ef4444;
+}
+
+/* Alignment guides shown while dragging. */
+.guideVertical,
+.guideHorizontal {
+  position: absolute;
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.guideVertical {
+  width: 0;
+  border-left: 1px dashed #ef4444;
+}
+
+.guideHorizontal {
+  height: 0;
+  border-top: 1px dashed #ef4444;
+}
+
+/* Crop mode. */
+.cropMask {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.45);
+  pointer-events: auto;
+}
+
+.cropWindow {
+  position: absolute;
+  border: 1.5px solid #fff;
+  outline: 1px solid rgba(15, 23, 42, 0.4);
+  box-sizing: border-box;
+  cursor: move;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.cropHandle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #2563eb;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.3);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.cropHandle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.cropHandle-n { left: calc(50% - 6px); top: -6px; cursor: ns-resize; }
+.cropHandle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.cropHandle-e { right: -6px; top: calc(50% - 6px); cursor: ew-resize; }
+.cropHandle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.cropHandle-s { left: calc(50% - 6px); bottom: -6px; cursor: ns-resize; }
+.cropHandle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.cropHandle-w { left: -6px; top: calc(50% - 6px); cursor: ew-resize; }
+
+.cropActions {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22);
+  pointer-events: auto;
+}
+
+.cropButton {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cropButtonPrimary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.cropButtonPrimary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@keyframes manual-edit-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}

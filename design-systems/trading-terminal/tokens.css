@@ -1,0 +1,63 @@
+/* design-systems/trading-terminal/tokens.css
+ * Structured token bindings for Trading Terminal.
+ * professional trading terminal with dark market panels, green-red status, and compact data density.
+ */
+
+:root {
+  --bg: #070b12;
+  --surface: #101826;
+  --surface-warm: #162238;
+  --fg: #f8fafc;
+  --fg-2: #cbd5e1;
+  --muted: #8492a6;
+  --meta: #38bdf8;
+  --border: #263246;
+  --border-soft: #1c2638;
+  --accent: #38bdf8;
+  --accent-on: #03111a;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "Roboto Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.45;
+  --leading-tight: 1.08;
+  --tracking-display: -0.01em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 60px;
+  --section-y-phone: 42px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 80px rgba(0, 0, 0, 0.42);
+  --focus-ring: 0 0 0 4px rgba(56, 189, 248, 0.28);
+  --motion-fast: 90ms;
+  --motion-base: 160ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1320px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

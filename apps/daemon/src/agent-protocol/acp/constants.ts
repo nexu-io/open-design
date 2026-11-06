@@ -1,0 +1,60 @@
+/** @module agent-protocol/acp/constants
+ * Protocol version, timeout defaults, artifact-detection patterns, and
+ * model-config identifier sets used across all acp/ files. No dependencies
+ * on other agent-protocol modules — safe to import from anywhere in acp/.
+ */
+
+/** ACP JSON-RPC protocol version sent in every `initialize` handshake. */
+export const ACP_PROTOCOL_VERSION = 1;
+/** Default timeout in milliseconds for short-lived ACP operations such as model detection. */
+export const DEFAULT_TIMEOUT_MS = 15_000;
+/** Absolute upper ceiling for any ACP-derived timeout value (24 hours). */
+export const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// Gap-between-chunks watchdog for an ACP session stage. The timer resets on
+// every line received from the agent, so this bounds *silent* periods, not
+// total runtime. Default kept in line with the outer chat-run inactivity
+// watchdog (10 min) so agents that spend several minutes silently writing
+// large artifacts do not get killed before the outer watchdog can apply.
+// Callers can override via `stageTimeoutMs`; the chat server reads
+// `OD_ACP_STAGE_TIMEOUT_MS` from the environment.
+// A non-positive `stageTimeoutMs` (`<= 0`) disables the watchdog entirely,
+// mirroring the outer chat watchdog's escape-hatch semantics — without this,
+// `OD_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
+// ACP session on the next tick instead of disabling the watchdog.
+/** Default per-stage inactivity watchdog timeout (10 minutes) for an ACP session; resets on every received line from the agent subprocess. */
+export const DEFAULT_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
+/** Regex source fragment matching an opening DSML artifact or plain `artifact` tag in an ACP agent's text output. */
+export const ACP_ARTIFACT_OPEN_PATTERN = String.raw`<\s*(?:\|?\s*DSML[\s,]+artifact\b|artifact\b)`;
+/** Regex source fragment matching agent preamble text like "here is the generated file:" that precedes an artifact open tag. */
+export const ACP_GENERATED_FILE_PREFIX_PATTERN =
+  String.raw`(?:here\s+is|here'?s)\s+the\s+generated\s+file\s*:?\s*(?:\r?\n|\s)*`;
+/** Compiled regex that detects the start of an ACP artifact echo in an `agent_message_chunk` delta; used to arm the DSML text suppressor. */
+export const ACP_ARTIFACT_ECHO_START_RE = new RegExp(
+  String.raw`^\s*(?:${ACP_ARTIFACT_OPEN_PATTERN}|${ACP_GENERATED_FILE_PREFIX_PATTERN}${ACP_ARTIFACT_OPEN_PATTERN})`,
+  'i',
+);
+/** Maximum number of `acp_raw_event_shape` and `acp_artifact_text_suppression` diagnostic events emitted per session to avoid flooding the event stream. */
+export const ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT = 8;
+/** Maximum number of bytes retained from stderr to detect AMR retry/failure signals; older bytes are discarded to bound memory use. */
+export const AMR_STDERR_RETRY_TAIL_LIMIT = 16_000;
+/** Maximum number of redacted stderr characters attached to an ACP child-exit diagnostic. */
+export const ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT = 4_000;
+/**
+ * Floor between two `tool_in_flight` publications for the SAME tool call.
+ *
+ * The first publication of a call is never throttled — that is the entire
+ * point, since a row must appear the moment the agent says it started. This
+ * only bounds the UPDATES that follow.
+ *
+ * 250ms is read off the real AMR corpus (202 calls / 911 frames): a shell call
+ * lands its `in_progress` frames in bursts of three within ~14ms while its
+ * payload is unchanged, and no burst of *changed* payloads was ever tighter
+ * than a second. A quarter second collapses those bursts, keeps at most four
+ * updates per second for an agent that streams output, and is far below the
+ * threshold at which a growing number reads as stalled.
+ */
+export const ACP_IN_FLIGHT_TOOL_MIN_INTERVAL_MS = 250;
+/** Maximum characters of in-progress tool output carried on a `tool_in_flight` event. */
+export const ACP_IN_FLIGHT_TOOL_OUTPUT_LIMIT = 2_000;
+/** Normalised token IDs that identify a model-selection config option in an ACP `session/new` response's `configOptions` array. */
+export const MODEL_CONFIG_OPTION_IDS = new Set(['model', 'models', 'modelid', 'modelids']);

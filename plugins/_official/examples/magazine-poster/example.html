@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>You don't need a designer to ship your first draft anymore — AI Enthusiast</title>
+  <style>
+    :root {
+      --paper: #f3eee2;
+      --ink: #1f1c17;
+      --muted: #6e6a5d;
+      --rule: #d3cdbe;
+      --accent: #b85a3a;
+      --tint: #ece5d3;
+      --serif-display: 'Playfair Display', 'Iowan Old Style', Georgia, serif;
+      --serif-body: 'Iowan Old Style', 'Charter', Georgia, serif;
+      --mono: 'IBM Plex Mono', ui-monospace, 'JetBrains Mono', monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; color: var(--ink);
+      background:
+        radial-gradient(circle, rgba(31,28,23,0.05) 1px, transparent 1.4px) 0 0 / 16px 16px,
+        var(--paper);
+      font: 14px/1.55 var(--serif-body);
+    }
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 36px 56px 48px;
+    }
+
+    .top-rule {
+      display: flex; justify-content: space-between; align-items: center;
+      font: 10.5px/1.4 var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--ink);
+    }
+    .eyebrow-row {
+      padding: 14px 0 28px;
+      font: 10.5px/1.4 var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1.headline {
+      font-family: var(--serif-display);
+      font-weight: 800;
+      font-size: clamp(56px, 7vw, 96px);
+      line-height: 0.98;
+      letter-spacing: -0.012em;
+      margin: 0 0 16px;
+      max-width: 18ch;
+    }
+    h1.headline .strike { text-decoration: line-through; text-decoration-thickness: 3px; text-decoration-color: var(--ink); color: var(--ink); }
+    h1.headline .accent { font-style: italic; color: var(--accent); font-weight: 700; }
+
+    .deck {
+      max-width: 78ch;
+      font: italic 18px/1.45 var(--serif-body);
+      color: var(--ink);
+      margin: 0 0 22px;
+    }
+    .deck b { font-style: normal; color: var(--accent); font-weight: 600; padding: 0 4px; background: var(--tint); border-radius: 2px; }
+
+    .accent-rule { width: 80px; height: 3px; background: var(--accent); margin: 6px 0 32px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px 56px;
+      padding-top: 4px;
+      border-top: 1px solid var(--rule);
+    }
+    .cell { padding: 28px 0 4px; border-bottom: 1px solid var(--rule); }
+    .cell:nth-last-child(-n+2) { border-bottom: none; }
+    .cell .num {
+      font: 10.5px/1.4 var(--mono);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .cell .num span.bar { display: inline-block; width: 20px; height: 1px; background: var(--accent); opacity: 0.6; }
+    .cell h3 {
+      font: 700 22px/1.2 var(--serif-display);
+      letter-spacing: -0.005em;
+      margin: 0 0 10px;
+    }
+    .cell p { margin: 0 0 14px; font-size: 15px; line-height: 1.55; max-width: 46ch; color: var(--ink); }
+    .cell .quote {
+      background: var(--tint);
+      border-left: 2px solid var(--accent);
+      padding: 10px 12px;
+      font: 12px/1.55 var(--mono);
+      color: var(--ink);
+      max-width: 50ch;
+    }
+    .cell .quote::before { content: '"'; }
+    .cell .quote::after { content: '"'; }
+
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid var(--ink);
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 24px;
+      align-items: center;
+      font: 10.5px/1.4 var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .pro-tip {
+      display: flex; gap: 12px; align-items: center;
+      padding: 10px 14px;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      max-width: 78%;
+    }
+    .pro-tip .badge { font: 9.5px/1 var(--mono); letter-spacing: 0.2em; padding: 6px 8px; border: 1px solid var(--ink); color: var(--ink); }
+    .pro-tip .text { font: italic 13px/1.4 var(--serif-body); color: var(--ink); text-transform: none; letter-spacing: 0; }
+    .pro-tip .text b { color: var(--accent); font-style: normal; font-weight: 600; }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      .cell { border-bottom: 1px solid var(--rule); }
+      .cell:last-child { border-bottom: none; }
+      .page { padding: 24px 24px 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="top-rule" data-od-id="top-rule">
+      <span>01 · AI ENTHUSIAST</span>
+      <span>17 · APR · 2026</span>
+    </div>
+    <div class="eyebrow-row" data-od-id="eyebrow">— POSTED TODAY</div>
+
+    <h1 class="headline" data-od-id="headline">
+      You don't need <span class="strike">a designer</span><br />
+      to ship your <span class="accent">first draft</span><br />
+      anymore.
+    </h1>
+
+    <p class="deck" data-od-id="deck">
+      Six honest ways I'm using AI to move faster from idea → artifact this week — <b>what works</b>, what I'd still hand to a human, and the exact prompts that got me there.
+    </p>
+    <div class="accent-rule"></div>
+
+    <div class="grid" data-od-id="grid">
+      <section class="cell" data-od-id="cell-1">
+        <div class="num"><span class="bar"></span>01 · SHIP FAST</div>
+        <h3>Clickable prototype in 90 seconds</h3>
+        <p>Describe the flow in plain English. Get a real, tappable prototype — not static screens. Export to HTML and share the link.</p>
+        <div class="quote">Onboarding flow for a fintech app — 5 screens, dark mode, rounded cards, haptic-style transitions.</div>
+      </section>
+      <section class="cell" data-od-id="cell-2">
+        <div class="num"><span class="bar"></span>02 · PITCH</div>
+        <h3>Investor deck from a napkin idea</h3>
+        <p>Skip the template hunt. Draft the deck, refine it section-by-section, then export straight to PPTX or PDF — notes included.</p>
+        <div class="quote">10-slide seed pitch for a RAG tool for lawyers. Keep it minimal, data-first, one chart per slide.</div>
+      </section>
+      <section class="cell" data-od-id="cell-3">
+        <div class="num"><span class="bar"></span>03 · BRAND LOCK</div>
+        <h3>Your design system, auto-applied</h3>
+        <p>Point the model at your tokens, components, or a codebase. Every new asset respects your type, color, and spacing scale.</p>
+        <div class="quote">Use our /design-system tokens. Build a pricing page variant. Match the radius + shadow of the marketing site.</div>
+      </section>
+      <section class="cell" data-od-id="cell-4">
+        <div class="num"><span class="bar"></span>04 · MARKETING</div>
+        <h3>Landing pages &amp; launch collateral</h3>
+        <p>One-pagers, email headers, feature comparison grids — editable, on-brand, and ready to hand off in minutes, not days.</p>
+        <div class="quote">One-pager for a Series A launch. Headline, three proof points, CTA. Editorial feel, no stock photos.</div>
+      </section>
+      <section class="cell" data-od-id="cell-5">
+        <div class="num"><span class="bar"></span>05 · HANDOFF</div>
+        <h3>Design → engineering bundle</h3>
+        <p>Finished the mock? Ship the whole handoff to your dev environment. Specs, tokens, components — no translation layer.</p>
+        <div class="quote">Export this mock to code. Wire the auth screen to Supabase. Add a loading state and empty state.</div>
+      </section>
+      <section class="cell" data-od-id="cell-6">
+        <div class="num"><span class="bar"></span>06 · EXPLORE</div>
+        <h3>Ten directions in ten minutes</h3>
+        <p>Generate N visual directions side-by-side. Use sliders to dial tone: playful, brutalist, editorial, corporate — same copy.</p>
+        <div class="quote">Show six hero section variants. Same copy, different aesthetics. Label each with a mood word.</div>
+      </section>
+    </div>
+
+    <div class="footer" data-od-id="footer">
+      <div class="pro-tip">
+        <span class="badge">PRO TIP</span>
+        <span class="text">Don't prompt for <b>"a good design."</b> Prompt for a mood — <b>"serene", "brutalist", "Bloomberg terminal," "Sunday newspaper."</b> Aesthetic specificity is the unlock.</span>
+      </div>
+      <div></div>
+      <div>SAVE · REPOST · TRY ONE THIS WEEKEND</div>
+    </div>
+  </div>
+</body>
+</html>

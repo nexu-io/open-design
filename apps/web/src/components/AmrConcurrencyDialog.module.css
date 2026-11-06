@@ -1,0 +1,79 @@
+/* Frozen client F04 (2026-10-20) supplies its own system typography. Inheriting
+ * the app's 125% body line-height compressed the title from 25px to 17.5px.
+ * Keep palette tokens theme-aware while matching the supplied light frame. */
+.offerPanel {
+  /* The supplied offer is neutral, independent of the user's accent color. */
+  --accent: var(--text-strong);
+  --accent-hover: var(--text);
+  --accent-tint: var(--bg-subtle);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  font-weight: 400;
+  line-height: normal;
+  background: var(--bg);
+  border-radius: 16px;
+  box-shadow: var(--f04-shadow, var(--shadow-lg));
+}
+
+:global([data-theme="light"]) .offerPanel {
+  --accent: #353535;
+  --accent-hover: #202020;
+  --accent-tint: #f7f7f7;
+  --f04-shadow: 0 24px 64px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 6%);
+}
+
+@media (prefers-color-scheme: light) {
+  :global(html:not([data-theme])) .offerPanel {
+    --accent: #353535;
+    --accent-hover: #202020;
+    --accent-tint: #f7f7f7;
+    --f04-shadow: 0 24px 64px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 6%);
+  }
+}
+
+.offerPanel h2 {
+  margin: 0 0 10px;
+}
+
+.offerPanel p,
+.offerPanel li {
+  font-weight: 400;
+}
+
+.benefitsTitle {
+  color: var(--accent);
+}
+
+.benefitIcon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill, 999px);
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.offerPanel .laterButton {
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: normal;
+  color: var(--text);
+}
+
+.upgradeButton,
+.offerPanel .noticeButton {
+  line-height: normal;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 8px 20px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.upgradeButton:hover:not(:disabled),
+.offerPanel .noticeButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent) 26%, transparent);
+}

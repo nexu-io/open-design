@@ -1,0 +1,108 @@
+node_modules
+
+# Local validation output; retained on disk but never delivered as repository content.
+/evidence/
+dist/
+out/
+.next/
+.next-*/
+.tmp/
+.DS_Store
+*.log
+/Open Design.exe
+.vite
+.astro/
+.wrangler/
+.vscode
+
+# Local runtime data — auto-created by the daemon on first start.
+# Holds app.sqlite (project metadata), projects/<id>/ (per-project artifacts,
+# the agent's CWD), and artifacts/ (one-off renders). Never commit.
+.od
+.od-e2e
+test-results
+playwright-report
+e2e/.od-data
+e2e/playwright-report
+e2e/reports/html
+e2e/reports/playwright-html-report
+e2e/reports/test-results
+e2e/reports/results.json
+e2e/reports/junit.xml
+e2e/reports/latest.md
+e2e/ui/.od-data
+e2e/ui/reports
+e2e/ui/test-results
+apps/web/playwright/
+
+# Playwright MCP capture output (YAML page snapshots + PNG screenshots).
+# Written ad-hoc during local visual checks; never commit — these hold local
+# UI/session state and are not a maintained test fixture.
+.playwright-mcp/
+
+# Legacy folder name from before the rename; keep ignored so existing
+# clones don't accidentally stage stale runtime data.
+.ocd
+
+tsconfig.tsbuildinfo
+
+# Generated from the checked-in compressed vendor source during postinstall.
+apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js
+
+**/.claude-sessions/*
+
+.cursor/
+.agents/
+.pi/
+.opencode/
+.claude/*
+# Exception: od-contribute skill ships with the repo so the OD app can mount it
+# for non-coder contributors. Personal Claude state (sessions, settings, etc.) stays ignored.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/od-contribute/
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/od-contribute.md
+.codex/
+.deepseek/
+.antigravitycli/
+
+# Commander task scratchpad; keep local task notes out of git by default.
+.task/
+task.md
+specs/change/active
+.ralph/
+docs/superpowers/
+
+# direnv
+.direnv/
+.envrc
+# Local secrets (PostHog keys, BYOK creds for local testing, etc.)
+.env.local
+.env.*.local
+# Local design assistant context
+.impeccable.md
+
+# Ad-hoc local e2e scripts and their screenshots
+e2e/scripts/test-fal-webui.ts
+e2e/scripts/fal-webui-*.png
+growth/**
+
+# Agent long-running task memory
+.task/
+deploy/agent-bins/
+
+# Looper harness attachments (bug screenshots etc.) — agent scratch, not repo content
+.looper-attachments/
+
+# Deepwork local progress (git-local; OpenCode-readable via .ignore)
+.slim/deepwork/
+
+# Local agent worktrees (must stay git-ignored so pnpm guard does not scan them)
+.slim/worktrees/
+.slim/worktrees.json
+
+# Python bytecode from workflow helper self-checks / local compile.
+__pycache__/
+*.py[cod]

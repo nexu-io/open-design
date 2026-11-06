@@ -1,0 +1,203 @@
+# One-Click Install Guide
+
+**Parent:** [`spec.md`](spec.md) · **Related:** [`deployment/docker.md`](deployment/docker.md) · [`deploy/README.md`](../deploy/README.md)
+
+Deploy OpenDesign on Linux or macOS with a single command. The installer wraps the existing Docker Compose stack — no build step required.
+
+## Quick reference
+
+Clone the repository and run the installer:
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design
+bash deploy/scripts/install.sh
+```
+
+## Prerequisites
+
+The supported Linux path requires Docker with the Compose v2 plugin. On macOS, the installer can also detect Podman, although Docker Desktop remains the documented path.
+
+| Platform | Minimum version | Install |
+|----------|----------------|---------|
+| Docker Engine | 24.0 | [docs.docker.com/engine/install](https://docs.docker.com/engine/install/) |
+| Docker Compose plugin | 2.20 | Bundled with Docker Desktop; `apt install docker-compose-plugin` on Linux |
+| Docker Desktop (macOS/Windows) | 4.25 | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+
+The installer checks for Docker or Podman and, on Ubuntu/Debian, Fedora, and macOS with Homebrew, offers to install Docker after confirmation; otherwise it prints the manual installation guidance. Use `--skip-docker-install` to skip the prompt. Linux uses the Docker Compose v2 override and therefore requires `docker compose` v2.17 or later.
+
+> **MCP note:** Docker/Compose installs run the daemon inside the container. The MCP client snippets shown in Settings are stdio/local-path based and require a local/source install for now. Container-friendly MCP transport will be added in a follow-up.
+
+## Interactive install walkthrough
+
+Running the installer without flags launches an interactive wizard:
+
+```
+  ╔══════════════════════════════════════╗
+  ║         O P E N   D E S I G N        ║
+  ║          One-Click Installer         ║
+  ╚══════════════════════════════════════╝
+
+[open-design] OS: Linux ubuntu 24.04 (x86_64)
+[open-design] Docker: Docker version 26.1.3, build b72abbb
+[open-design] Compose: Docker Compose version v2.27.1
+
+Docker image [ghcr.io/nexu-io/od:latest]:
+Port [7456]:
+Allowed origins (CORS, comma-separated, or empty) []:
+Memory limit [384m]:
+
+[open-design] Pulling image: ghcr.io/nexu-io/od:latest
+[open-design] Starting OpenDesign...
+[open-design] Waiting for health check (up to 60s)...
+[open-design] Daemon is healthy (200 OK)
+```
+
+### What each prompt does
+
+| Prompt | Default | Notes |
+|--------|---------|-------|
+| **Docker image** | `ghcr.io/nexu-io/od:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
+| **Port** | `7456` | The port the daemon listens on. Must not be in use. |
+| **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`deploy/README.md`](../deploy/README.md). Leave empty for localhost-only use. |
+| **Memory limit** | `384m` | Container memory cap. Raise for large concurrent agent runs. |
+
+After you confirm, the installer:
+
+1. Writes a `deploy/.env` file (backs up any existing one) and generates a fresh `OD_API_TOKEN`.
+2. Runs `docker compose pull` to fetch the image.
+3. Runs `docker compose up -d --no-build` to start the container.
+4. Polls `/api/health` for up to 60 seconds to confirm the daemon is ready.
+5. On Linux: installs a `systemd --user` unit so the service starts on login.
+
+## Non-interactive install
+
+For CI, headless servers, and automated provisioning:
+
+```bash
+bash deploy/scripts/install.sh --non-interactive [--port 7456] [--image <ref>] [--no-systemd]
+```
+
+All prompts are skipped and defaults are used. If Docker is not installed, the script exits with an error instead of offering to install it.
+
+### All flags
+
+**`install.sh`**
+
+| Flag | Description |
+|------|-------------|
+| `--non-interactive` | Skip all prompts |
+| `--port <n>` | Host port (default: `7456`) |
+| `--image <ref>` | Docker image reference |
+| `--skip-docker-install` | Never attempt to install Docker |
+| `--no-systemd` | Skip systemd unit creation |
+
+## Service management
+
+### Linux (systemd)
+
+The installer creates a `systemd --user` unit that wraps Docker Compose. No `sudo` required.
+
+```bash
+# Check status
+systemctl --user status open-design
+
+# Start / stop / restart
+systemctl --user start open-design
+systemctl --user stop open-design
+systemctl --user restart open-design
+
+# View logs
+journalctl --user -u open-design -f
+
+# Disable auto-start
+systemctl --user disable open-design
+
+# Re-enable auto-start
+systemctl --user enable open-design
+```
+
+To skip systemd unit creation, pass `--no-systemd` to the installer.
+
+### macOS (Docker Desktop)
+
+Docker Desktop manages the container lifecycle. Use Docker Desktop's dashboard to start, stop, or restart the `open-design` container, or use the CLI:
+
+```bash
+# Using docker compose directly
+docker compose -f deploy/docker-compose.yml start
+docker compose -f deploy/docker-compose.yml stop
+docker compose -f deploy/docker-compose.yml logs -f
+```
+
+## Update
+
+Pull the latest image and restart with a single command:
+
+```bash
+bash deploy/scripts/update.sh
+```
+
+To update to a specific image:
+
+```bash
+bash deploy/scripts/update.sh --image=ghcr.io/nexu-io/od@sha256:<digest>
+```
+
+The update script:
+1. Pulls the new image.
+2. Restarts the container with `docker compose up -d --no-build`.
+3. Waits for `/api/health` to return 200.
+4. Prunes dangling old images.
+
+## Uninstall
+
+```bash
+# Remove containers and persistent daemon storage
+bash deploy/scripts/uninstall.sh
+
+# Remove containers but keep persistent daemon storage
+bash deploy/scripts/uninstall.sh --keep-data
+```
+
+The uninstaller:
+1. Stops and removes containers (`docker compose down`), then removes persistent daemon storage separately.
+2. On Linux: disables and removes the systemd unit.
+3. Removes `deploy/.env`.
+
+> **Data:** Before documenting, changing, deleting, or preserving persistent daemon storage, you MUST read root [`AGENTS.md`](../AGENTS.md) → **Daemon data directory contract**. This guide MUST NOT restate that contract or define storage paths.
+
+## Configuration
+
+All settings live in `deploy/.env`. Edit it directly or re-run the installer to regenerate it.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPEN_DESIGN_IMAGE` | `ghcr.io/nexu-io/od:latest` | Full image reference |
+| `OPEN_DESIGN_PORT` | `7456` | Host-side port (bound to `127.0.0.1`) |
+| `OPEN_DESIGN_ALLOWED_ORIGINS` | _(empty)_ | CORS origins for reverse-proxy setups |
+| `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory cap |
+| `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the container |
+
+The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`deploy/README.md`](../deploy/README.md) for the authentication and allowed-origin contract.
+
+## Troubleshooting
+
+| Problem | Likely cause | Fix |
+|---------|-------------|-----|
+| `Docker is not installed` | Docker not on PATH | Install Docker Desktop or Docker Engine |
+| `Docker daemon is not running` | Docker Desktop not started | Open Docker Desktop or run `sudo systemctl start docker` |
+| `Port 7456 is already in use` | Another service on that port | Re-run with `--port 8080` |
+| Health check times out | Image pull slow or daemon slow to start | Wait and check `docker compose -f deploy/docker-compose.yml logs` |
+| `Permission denied` on install.sh | Script not executable | Run `chmod +x deploy/scripts/install.sh` |
+| systemd unit not created | `systemd` not found | Omit `--no-systemd` if systemd is available, or manage via Docker CLI |
+| `.env` has wrong port after re-install | Old backup not restored | Edit `deploy/.env` directly or delete it and re-run |
+| Container exits immediately | Image incompatibility | Check `docker compose -f deploy/docker-compose.yml logs` for errors |
+| Browser sign-in repeats | Username or token does not match | Use username `open-design` and the exact `OD_API_TOKEN` value from `deploy/.env`; recreate the container after changing it |
+
+## References
+
+- Docker Compose config: [`deploy/docker-compose.yml`](../deploy/docker-compose.yml)
+- Environment template: [`deploy/.env.example`](../deploy/.env.example)
+- Beginner Docker walkthrough: [`docs/deployment/docker.md`](deployment/docker.md)
+- Authentication, remote access, and Linux CLI mounts: [`deploy/README.md`](../deploy/README.md)

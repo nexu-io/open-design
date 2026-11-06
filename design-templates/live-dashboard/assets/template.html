@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<!--
+  OD · live-dashboard · template seed
+  ----------------------------------------------------------------------
+  This is the skeleton an agent starts from. The structure is locked.
+  The agent is expected to:
+
+   1. Replace every {{placeholder}} with the user's brief or DESIGN.md.
+   2. Fill the four SEED_* arrays at the bottom (people, rows, feed,
+      series) with plausible mock data — this is what shows when the
+      connector is offline or the user picks `inputs.connector === mock`.
+   3. Re-skin the CSS custom-property block (`:root`) using the active
+      DESIGN.md tokens. Do not introduce new property names.
+   4. Wire the Refresh button to a real connector by replacing the
+      contents of `seedNextChange()` with a `poll()` call into
+      `/api/od/connectors/poll`. See references/connectors.md.
+   5. Honor `prefers-reduced-motion: reduce` everywhere.
+
+  Hard nos: see references/checklist.md (P0 rows are non-negotiable).
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="od:project" content="{{project_id}}" />
+<title>{{workspace_name}} · {{page_title}}</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f7f6f3;
+    --bg-hover: #efeeec;
+    --ink: #37352f;
+    --ink-2: #787774;
+    --ink-3: #9b9a97;
+    --line: #ececea;
+    --line-strong: #d3d1cb;
+    --accent: oklch(72% 0.10 var(--accent-hue, 198));
+    --accent-ink: oklch(45% 0.12 var(--accent-hue, 198));
+    --pill-done-bg: #dbeddb;       --pill-done-ink: #2b593f;
+    --pill-progress-bg: #fdecc8;   --pill-progress-ink: #976d23;
+    --pill-blocked-bg: #ffe2dd;    --pill-blocked-ink: #b13b2c;
+    --pill-todo-bg: #e9e5e3;       --pill-todo-ink: #5a534f;
+    --pill-review-bg: #d3e5ef;     --pill-review-ink: #1f5b78;
+    --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+                 "Noto Sans", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+  /* sidebar */
+  .side { background: var(--bg-soft); border-right: 1px solid var(--line);
+          padding: 14px 8px; user-select: none; }
+  .ws { display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+        border-radius: var(--radius-sm); cursor: pointer; }
+  .ws:hover { background: var(--bg-hover); }
+  .ws-icon { width: 22px; height: 22px; border-radius: 4px;
+             background: linear-gradient(135deg,#1f1f1f,#3a3a3a); color: #fff;
+             display: grid; place-items: center; font-weight: 600; font-size: 12px; }
+  .ws-name { font-weight: 600; flex: 1; font-size: 14px; }
+  .ws-caret { color: var(--ink-3); font-size: 12px; }
+  .side-search { margin: 12px 4px 6px; padding: 5px 8px; color: var(--ink-3);
+                 font-size: 13px; display: flex; align-items: center; gap: 8px;
+                 border-radius: var(--radius-sm); cursor: pointer; }
+  .side-search:hover { background: var(--bg-hover); }
+  .side-search kbd { margin-left: auto; font-family: inherit; font-size: 11px;
+                     color: var(--ink-3); background: #fff; border: 1px solid var(--line);
+                     padding: 1px 5px; border-radius: 3px; }
+  .side-section { margin-top: 14px; padding: 0 8px; color: var(--ink-3);
+                  font-size: 12px; letter-spacing: .02em; text-transform: uppercase; }
+  .nav { margin-top: 4px; display: flex; flex-direction: column; gap: 1px; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+              border-radius: var(--radius-sm); color: var(--ink); cursor: pointer; }
+  .nav-item:hover { background: var(--bg-hover); }
+  .nav-item.active { background: #e8e6e1; font-weight: 500; }
+  .nav-icon { width: 18px; text-align: center; }
+  .nav-caret { margin-left: auto; color: var(--ink-3); font-size: 10px; }
+
+  /* main */
+  .main { display: flex; flex-direction: column; min-width: 0; }
+  .topbar { height: 44px; padding: 0 16px; border-bottom: 1px solid var(--line);
+            display: flex; align-items: center; gap: 12px;
+            color: var(--ink-2); font-size: 13px; }
+  .crumbs span:not(:last-child)::after { content: "/"; margin: 0 6px; color: var(--ink-3); }
+  .topbar-spacer { flex: 1; }
+
+  .pill-live { display: inline-flex; align-items: center; gap: 6px;
+               padding: 2px 8px 2px 6px; background: #fff;
+               border: 1px solid var(--line-strong); border-radius: 999px;
+               font-size: 12px; color: var(--ink-2); }
+  .pill-live .dot { width: 7px; height: 7px; border-radius: 50%;
+                    background: #2ecc71; box-shadow: 0 0 0 0 rgba(46,204,113,.55);
+                    animation: pulse 1.8s infinite; }
+  .pill-live.syncing .dot { background: var(--accent); animation: none; }
+  .pill-live.stale   .dot { background: #e6a23c; animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(46,204,113,.55); }
+    70% { box-shadow: 0 0 0 7px rgba(46,204,113,0); }
+    100% { box-shadow: 0 0 0 0 rgba(46,204,113,0); }
+  }
+
+  .page { padding: 56px max(80px, 8vw) 80px; max-width: 1100px; width: 100%; align-self: center; }
+  .page-cover { height: 24px; }
+  .page-emoji { font-size: 64px; line-height: 1; margin: -4px 0 12px; }
+  h1.page-title { font-size: calc(40px * var(--display-scale, 1));
+                  line-height: 1.15; font-weight: 700; letter-spacing: -0.01em;
+                  margin: 0 0 8px; color: var(--ink); }
+
+  .page-meta { display: flex; align-items: center; gap: 14px;
+               color: var(--ink-2); font-size: 13px; margin-bottom: 28px; }
+  .page-meta .updated { display: inline-flex; align-items: center; gap: 6px; }
+  .page-meta .updated .who { width: 18px; height: 18px; border-radius: 50%;
+                              background: #f1c40f; color: #5a4500;
+                              display: inline-grid; place-items: center;
+                              font-size: 11px; font-weight: 700; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+         font-size: 13px; color: var(--ink); background: #fff;
+         border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+         cursor: pointer; transition: background .15s ease, transform .15s ease; }
+  .btn:hover { background: var(--bg-hover); }
+  .btn .ico { width: 14px; height: 14px; display: inline-block; }
+  .btn .ico.spin { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .btn.primary:hover { background: var(--accent-ink); }
+  .btn.ghost { border-color: transparent; }
+  .btn.ghost:hover { background: var(--bg-hover); }
+
+  .callout { background: var(--bg-soft); border-radius: var(--radius-md);
+             padding: 14px 16px; display: flex; gap: 12px;
+             align-items: flex-start; margin: 10px 0 28px; color: var(--ink); }
+  .callout .emj { font-size: 18px; line-height: 1.4; }
+  .callout small { color: var(--ink-2); }
+
+  .kpis { display: grid; grid-template-columns: repeat(var(--kpi-count, 4), 1fr);
+          gap: 1px; background: var(--line); border: 1px solid var(--line);
+          border-radius: var(--radius-md); overflow: hidden; margin: 8px 0 32px; }
+  .kpi { background: #fff; padding: 18px 20px;
+         display: flex; flex-direction: column; gap: 4px; }
+  .kpi .label { color: var(--ink-2); font-size: 12px; letter-spacing: .03em;
+                text-transform: uppercase; font-weight: 500; }
+  .kpi .value { font-size: 32px; font-weight: 600; letter-spacing: -0.01em;
+                color: var(--ink); font-variant-numeric: tabular-nums;
+                transition: color .25s ease; }
+  .kpi .value.flash { color: var(--accent-ink); }
+  .kpi .delta { font-size: 12px; color: var(--ink-2); }
+  .kpi .delta.up   { color: #2b8a3e; }
+  .kpi .delta.down { color: #c0392b; }
+  .kpi .delta .arr { display: inline-block; width: 10px; }
+
+  h2.h { font-size: 18px; font-weight: 600; margin: 32px 0 8px;
+         letter-spacing: -0.005em; }
+  .h-sub { color: var(--ink-2); font-size: 13px; margin-bottom: 12px; }
+
+  .two-col { display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px;
+             margin-bottom: 8px; }
+  .card { background: #fff; border: 1px solid var(--line);
+          border-radius: var(--radius-md); padding: 16px 18px; }
+  .card-title { display: flex; align-items: center; justify-content: space-between;
+                font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+  .card-title strong { color: var(--ink); font-weight: 600; }
+  .spark { width: 100%; height: 120px; }
+  .spark-axis { color: var(--ink-3); font-size: 11px; }
+  .spark-fill { fill: rgba(46,170,220,.10); }
+  .spark-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .spark-dot  { fill: var(--accent); }
+  .spark-grid line { stroke: var(--line); stroke-dasharray: 2 3; }
+
+  .feed { display: flex; flex-direction: column; }
+  .feed-row { display: flex; gap: 12px; padding: 10px 4px;
+              border-bottom: 1px solid var(--line); }
+  .feed-row:last-child { border-bottom: none; }
+  .feed-row .av { flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%;
+                  display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700; }
+  .feed-row .body { flex: 1; min-width: 0; font-size: 13px; }
+  .feed-row .body .who { font-weight: 600; }
+  .feed-row .body .what { color: var(--ink); }
+  .feed-row .body .target { color: var(--accent-ink);
+                            border-bottom: 1px dotted var(--accent); cursor: pointer; }
+  .feed-row .time { color: var(--ink-3); font-size: 12px; flex: 0 0 auto; }
+  .feed-row.new { background: rgba(46,170,220,.06); }
+  .feed-row.new .body .who::before { content: "•"; color: var(--accent); margin-right: 6px; }
+
+  .db { border: 1px solid var(--line); border-radius: var(--radius-md);
+        overflow: hidden; margin-top: 4px; background: #fff; }
+  .db-head, .db-row {
+    display: grid; grid-template-columns: 32px 2.4fr 1fr 1fr 0.9fr 0.9fr;
+    align-items: center; padding: 8px 12px;
+    border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .db-head { background: var(--bg-soft); color: var(--ink-2);
+             font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
+             font-weight: 500; }
+  .db-row:last-child { border-bottom: none; }
+  .db-row:hover { background: var(--bg-soft); }
+  .db-row.changed { animation: rowflash 1.4s ease; }
+  @keyframes rowflash {
+    0% { background: rgba(46,170,220,.18); }
+    100% { background: transparent; }
+  }
+  .db-cell.title { font-weight: 500; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .db-cell.title .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-cell .pill { display: inline-flex; align-items: center; gap: 4px;
+                   padding: 2px 8px; border-radius: 3px; font-size: 12px; font-weight: 500; }
+  .pill.done     { background: var(--pill-done-bg);     color: var(--pill-done-ink); }
+  .pill.progress { background: var(--pill-progress-bg); color: var(--pill-progress-ink); }
+  .pill.blocked  { background: var(--pill-blocked-bg);  color: var(--pill-blocked-ink); }
+  .pill.todo     { background: var(--pill-todo-bg);     color: var(--pill-todo-ink); }
+  .pill.review   { background: var(--pill-review-bg);   color: var(--pill-review-ink); }
+  .person { display: inline-flex; align-items: center; gap: 6px; }
+  .person .av { width: 18px; height: 18px; border-radius: 50%;
+                color: #fff; display: grid; place-items: center;
+                font-size: 10px; font-weight: 700; }
+
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line);
+            color: var(--ink-3); font-size: 12px;
+            display: flex; align-items: center; gap: 8px; }
+  .footer .key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                 background: var(--bg-soft); padding: 1px 5px;
+                 border-radius: 3px; color: var(--ink-2); }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+           background: #1f1f1f; color: #fff; padding: 8px 14px;
+           border-radius: 8px; font-size: 13px;
+           opacity: 0; pointer-events: none;
+           transition: opacity .2s ease, transform .2s ease; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 980px) {
+    .app { grid-template-columns: 1fr; }
+    .side { display: none; }
+    .page { padding: 32px 20px 64px; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .db-head, .db-row { grid-template-columns: 24px 1.8fr 0.8fr 0.8fr; }
+    .db-cell.due, .db-cell.priority { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!--
+    Sidebar nav rows are interactive — keep the keyboard semantics
+    (role="button" + tabindex="0") on every clickable .ws / .side-search
+    / .nav-item even if the agent re-skins the visuals.
+  -->
+  <aside class="side">
+    <div class="ws" role="button" tabindex="0">
+      <div class="ws-icon">{{workspace_initial}}</div>
+      <div class="ws-name">{{workspace_name}}</div>
+      <div class="ws-caret">⌄</div>
+    </div>
+    <div class="side-search" role="button" tabindex="0"><span>🔎</span><span>Search</span><kbd>⌘K</kbd></div>
+    <div class="side-search" role="button" tabindex="0"><span>⌚</span><span>Updates</span></div>
+    <div class="side-search" role="button" tabindex="0"><span>⚙️</span><span>Settings & members</span></div>
+
+    <div class="side-section">Workspace</div>
+    <div class="nav">
+      <div class="nav-item active" role="button" tabindex="0" aria-current="page"><span class="nav-icon">📊</span><span>{{page_title}}</span></div>
+      <!-- AGENT: list 3-5 plausible sibling pages here ("Tasks", "Docs", "Roadmap", …); keep role="button" + tabindex="0" on every nav-item. -->
+    </div>
+
+    <div class="side-section">Connections</div>
+    <div class="nav">
+      <div class="nav-item" role="button" tabindex="0"><span class="nav-icon">🔌</span><span>{{connector_label}}</span></div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <div class="topbar">
+      <div class="crumbs">
+        <span>{{workspace_name}}</span>
+        <span>Workspace</span>
+        <span>{{page_title}}</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="pill-live" id="livePill">
+        <span class="dot"></span>
+        <span id="liveText">Live · synced</span>
+      </div>
+    </div>
+
+    <div class="page">
+      <div class="page-cover"></div>
+      <div class="page-emoji">{{page_emoji}}</div>
+      <h1 class="page-title">{{page_title}}</h1>
+
+      <div class="page-meta">
+        <div class="updated">
+          <span class="who">{{owner_initials}}</span>
+          <span>Last edited by <strong>{{owner_name}}</strong></span>
+        </div>
+        <span>·</span>
+        <span id="updatedAt">Last refreshed just now</span>
+        <span style="flex:1"></span>
+        <button class="btn ghost" id="autoBtn" title="Auto refresh"><span>⏱</span><span id="autoLbl">Auto · on</span></button>
+        <button class="btn primary" id="refreshBtn" title="Pull latest from {{connector_label}}">
+          <span class="ico" id="refreshIco">↻</span>
+          <span>Refresh from {{connector_label}}</span>
+        </button>
+      </div>
+
+      <div class="callout">
+        <div class="emj">💡</div>
+        <div>
+          <div><strong>This page is a Live Artifact.</strong> Numbers below are pulled from
+          your <strong>{{workspace_name}}</strong> {{connector_label}} via the Composio connector.</div>
+          <small>Refreshes on demand or when the page opens. Last 7 days only.</small>
+        </div>
+      </div>
+
+      <!-- AGENT: render <inputs.kpi_count> .kpi cells inside this grid. -->
+      <div class="kpis" id="kpis" style="--kpi-count: {{kpi_count}}"></div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">
+            <strong>Tasks created · last 7 days</strong>
+            <span id="sparkSum">— total</span>
+          </div>
+          <svg class="spark" viewBox="0 0 600 140" preserveAspectRatio="none">
+            <g class="spark-grid">
+              <line x1="0" y1="35"  x2="600" y2="35"/>
+              <line x1="0" y1="70"  x2="600" y2="70"/>
+              <line x1="0" y1="105" x2="600" y2="105"/>
+            </g>
+            <path class="spark-fill" id="sparkFill" d=""></path>
+            <path class="spark-line" id="sparkLine" d=""></path>
+            <g id="sparkDots"></g>
+            <g id="sparkLabels" class="spark-axis"></g>
+          </svg>
+        </div>
+        <div class="card">
+          <div class="card-title">
+            <strong>Recent activity</strong>
+            <span>From <span style="color: var(--accent-ink)">{{connector_label}}</span></span>
+          </div>
+          <div class="feed" id="feed"></div>
+        </div>
+      </div>
+
+      <h2 class="h">📋 Tasks · Active sprint</h2>
+      <div class="h-sub">Linked database · filtered by Status ≠ Done · sorted by Updated time</div>
+      <div class="db" id="db">
+        <div class="db-head">
+          <div></div><div>Name</div><div>Status</div><div>Assignee</div>
+          <div class="db-cell due">Due</div>
+          <div class="db-cell priority">Priority</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>Source: {{connector_label}} API · workspace <strong>{{workspace_slug}}</strong></span>
+        <span>·</span>
+        <span>Connector <span class="key">composio.{{connector_slug}}</span></span>
+        <span>·</span>
+        <span id="footerTime"></span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast">Synced</div>
+
+<script>
+/* =====================================================================
+   live-dashboard runtime
+   ---------------------------------------------------------------------
+   The agent fills SEED_PEOPLE / SEED_ROWS / SEED_FEED / SEED_SERIES
+   below. The runtime renders, refreshes (mock or real), and tracks
+   staleness. Replace seedNextChange() with poll() to wire a real
+   connector.
+   ===================================================================== */
+
+/* --- AGENT FILL: people, rows, feed, series ------------------------ */
+const SEED_PEOPLE = [
+  /* { id: "SC", name: "Sarah Chen", color: "#f1c40f" }, … */
+];
+const SEED_ROWS = [
+  /* { id, icon, title, status: "todo|progress|review|blocked|done",
+       who: <person id>, due, prio: "High|Med|Low", updated: <ms> }, … */
+];
+const SEED_FEED = [
+  /* { who: "<full name>", action: "moved|created|commented on|updated|shared",
+       target: "<task title>", suffix: "<optional clause>", icon: "<emoji>",
+       mins: <minutes ago> }, … */
+];
+const SEED_SERIES = [/* 7 integers, oldest → today's bucket */];
+const DAY_LABELS  = ["Wed","Thu","Fri","Sat","Sun","Mon","Tue"];
+
+const KPI_DEFS = [
+  /* { id: "kTotal",  label: "Total tasks",         get: () => total      } */
+];
+
+/* --- runtime ------------------------------------------------------- */
+const $ = id => document.getElementById(id);
+let people = SEED_PEOPLE.slice();
+let rows   = SEED_ROWS.slice();
+let feed   = SEED_FEED.map(x => ({ ...x, when: new Date(Date.now() - x.mins * 60000), id: rid() }));
+let series = SEED_SERIES.slice();
+let lastRefresh = new Date();
+let autoOn = JSON.parse(localStorage.live_dashboard_auto || "true");
+let autoTimer = null;
+let busy = false;
+
+function rid() { return "f" + Math.random().toString(36).slice(2, 9); }
+function rand(a) { return a[Math.floor(Math.random() * a.length)]; }
+function timeAgo(d) {
+  const s = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  if (s < 5) return "just now"; if (s < 60) return s + "s ago";
+  const m = Math.floor(s / 60); if (m < 60) return m + " min ago";
+  const h = Math.floor(m / 60); if (h < 24) return h + " h ago";
+  return Math.floor(h / 24) + " d ago";
+}
+
+/* All data interpolations into innerHTML must go through e() — task
+   titles / activity strings / person names can come from a connector
+   payload, and unescaped innerHTML is a working XSS sink. */
+function e(v) {
+  return String(v == null ? "" : v)
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+/* Tween + flash hooks for the live-refresh pass — wired to .flash /
+   .feed-row.new / .db-row.changed in the CSS above. renderKpi(prev) is
+   the public entry; pass the previous KPI snapshot in to get tween +
+   highlight on changed values. Both helpers honor
+   prefers-reduced-motion: reduce — the CSS @media block already
+   neutralizes animations/transitions, but tweenText() schedules JS rAF
+   updates and flash() toggles a highlight class, so we short-circuit
+   them here for reduced-motion users (P0 row in checklist.md). */
+function reduceMotion() {
+  return typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+function tweenText(el, from, to, ms = 600) {
+  if (!el) return;
+  if (from === to || reduceMotion()) { el.textContent = String(to); return; }
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - start) / ms);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = String(Math.round(from + (to - from) * eased));
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+function flash(el) {
+  if (!el || reduceMotion()) return;
+  el.classList.add("flash");
+  setTimeout(() => el.classList.remove("flash"), 700);
+}
+
+/* connector hook: replace this with a real poll() — see references/connectors.md */
+async function seedNextChange() {
+  await new Promise(r => setTimeout(r, 700 + Math.random() * 600));
+  const candidates = rows.filter(r => r.status !== "done");
+  const r = candidates.length ? rand(candidates) : null;
+  if (r) { r.status = "done"; r.updated = Date.now(); }
+  series[series.length - 1] += 1 + Math.floor(Math.random() * 2);
+  const person = rand(people);
+  feed = [{
+    id: rid(), when: new Date(),
+    who: person.name, action: "moved",
+    target: r ? r.title : "—", suffix: "to Done", icon: "✅"
+  }, ...feed].slice(0, 8);
+  return { changedRowId: r ? r.id : null };
+}
+
+/* render: KPI / spark / feed / rows  --------------------------------- */
+function renderKpi(prev) {
+  const wrap = $("kpis");
+  // First render: build the cards from scratch (escaped) so KPI labels /
+  // deltas / values can come from any connector payload safely.
+  if (!wrap.children.length) {
+    wrap.innerHTML = KPI_DEFS.map(def => `
+      <div class="kpi">
+        <div class="label">${e(def.label)}</div>
+        <div class="value" id="${e(def.id)}">${e(def.get())}</div>
+        <div class="delta">${e(def.delta || "")}</div>
+      </div>`).join("");
+    return;
+  }
+  // Subsequent renders: tween numeric KPIs from prev → current and
+  // flash the cell when the value actually changed.
+  for (const def of KPI_DEFS) {
+    const cell = $(def.id);
+    if (!cell) continue;
+    const next = def.get();
+    const before = prev ? Number(prev[def.id]) : Number(cell.textContent);
+    const after = Number(next);
+    if (Number.isFinite(before) && Number.isFinite(after)) {
+      tweenText(cell, before, after);
+      if (before !== after) flash(cell);
+    } else {
+      cell.textContent = String(next);
+    }
+  }
+}
+/* Snapshot the values KPI_DEFS produced so the next renderKpi can
+   tween from "old" → "new". Call before mutating state. */
+function snapshotKpi() {
+  const out = {};
+  for (const def of KPI_DEFS) out[def.id] = Number(def.get());
+  return out;
+}
+function renderSpark() {
+  const W=600,H=140,padL=24,padR=16,padT=10,padB=24;
+  const max=Math.max(...series,1);
+  const stepX=(W-padL-padR)/(series.length-1);
+  const pts=series.map((v,i)=>[padL+i*stepX, padT+(1-v/(max*1.15))*(H-padT-padB)]);
+  const line="M "+pts.map(p=>p.join(" ")).join(" L ");
+  const fill=line+` L ${pts.at(-1)[0]} ${H-padB} L ${pts[0][0]} ${H-padB} Z`;
+  $("sparkLine").setAttribute("d",line);
+  $("sparkFill").setAttribute("d",fill);
+  $("sparkDots").innerHTML = pts.map(([x,y])=>`<circle class="spark-dot" cx="${x}" cy="${y}" r="3"/>`).join("");
+  $("sparkLabels").innerHTML = DAY_LABELS.map((d,i)=>{const x=padL+i*stepX;return `<text x="${x}" y="${H-6}" text-anchor="middle">${d}</text>`;}).join("");
+  $("sparkSum").textContent = series.reduce((a,b)=>a+b,0)+" total";
+}
+function pcolor(name) { return (people.find(p=>p.name===name)||{}).color || "#7f8c8d"; }
+const STATUS_CSS = { done: 1, progress: 1, blocked: 1, todo: 1, review: 1 };
+const STATUS_LABEL = { done: "Done", progress: "In progress", blocked: "Blocked", todo: "To do", review: "In review" };
+/* Connector payloads can contain attacker-controlled strings (task
+   titles, activity descriptors, person names). Every dynamic value
+   below goes through e() before it lands in innerHTML. */
+function renderFeed(highlightId) {
+  // Drop the transient .new highlight under reduced-motion so the row
+  // doesn't get a coloured background pulse for users who opted out.
+  const effectiveHighlight = reduceMotion() ? null : highlightId;
+  $("feed").innerHTML = feed.slice(0,6).map(it=>{
+    const init = String(it.who||"").split(" ").map(s=>s[0]).join("").slice(0,2).toUpperCase();
+    const cls = it.id===effectiveHighlight ? "feed-row new" : "feed-row";
+    const suffixHtml = it.suffix ? `<span class="what"> ${e(it.suffix)}</span>` : "";
+    return `<div class="${cls}">
+      <span class="av" style="background:${e(pcolor(it.who))}">${e(init)}</span>
+      <div class="body"><span class="who">${e(it.who)}</span>
+        <span class="what"> ${e(it.action)}</span>
+        <span class="target"> ${e(it.icon||"")} ${e(it.target)}</span>
+        ${suffixHtml}</div>
+      <div class="time">${e(timeAgo(it.when))}</div></div>`;
+  }).join("");
+}
+function personChip(id) {
+  const p = people.find(x=>x.id===id) || {};
+  return `<span class="person"><span class="av" style="background:${e(p.color||"#888")}">${e(p.id||"")}</span><span>${e(p.name||"")}</span></span>`;
+}
+function renderRows(changedId) {
+  // Same reduced-motion gate as renderFeed: skip the .changed row-flash
+  // class so we don't paint a transient highlight for opted-out users.
+  const effectiveChanged = reduceMotion() ? null : changedId;
+  const db=$("db"); [...db.querySelectorAll(".db-row")].forEach(n=>n.remove());
+  [...rows].sort((a,b)=>b.updated-a.updated).forEach(r=>{
+    const div=document.createElement("div");
+    div.className="db-row"+(r.id===effectiveChanged?" changed":"");
+    const statusKey = STATUS_CSS[r.status] ? r.status : "todo";
+    const lbl = STATUS_LABEL[statusKey];
+    div.innerHTML=`<div class="db-cell">${e(r.icon)}</div>
+      <div class="db-cell title"><span class="t">${e(r.title)}</span></div>
+      <div class="db-cell"><span class="pill ${statusKey}">${e(lbl)}</span></div>
+      <div class="db-cell">${personChip(r.who)}</div>
+      <div class="db-cell due">${e(r.due)}</div>
+      <div class="db-cell priority">${e(r.prio)}</div>`;
+    db.appendChild(div);
+  });
+}
+
+async function refresh({silent=false}={}) {
+  if (busy) return; busy = true;
+  $("refreshIco").classList.add("spin");
+  $("livePill").classList.add("syncing"); $("liveText").textContent="Syncing…";
+  // Snapshot KPIs before mutation so renderKpi(prev) can tween from
+  // old → new and flash on values that actually changed.
+  const prev = snapshotKpi();
+  try {
+    const result = await seedNextChange(); /* AGENT: replace with real poll() */
+    lastRefresh = new Date();
+    renderKpi(prev); renderSpark(); renderFeed(feed[0]?.id);
+    renderRows(result?.changedRowId);
+    if (!silent) showToast("Synced · 1 task moved, 1 activity added");
+  } catch (err) {
+    $("livePill").classList.add("stale"); $("liveText").textContent = "Stale · " + timeAgo(lastRefresh);
+  } finally {
+    busy = false; $("refreshIco").classList.remove("spin");
+    $("livePill").classList.remove("syncing"); updateTimes();
+  }
+}
+
+function showToast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(showToast._t); showToast._t = setTimeout(()=>t.classList.remove("show"), 1800);
+}
+function updateTimes() {
+  $("updatedAt").textContent = "Last refreshed " + timeAgo(lastRefresh);
+  $("footerTime").textContent = "Last sync · " + lastRefresh.toLocaleTimeString();
+  const stale = (Date.now() - lastRefresh.getTime()) > ({{stale_after_seconds}} * 1000);
+  $("livePill").classList.toggle("stale", stale);
+  $("liveText").textContent = stale ? ("Stale · " + timeAgo(lastRefresh)) : "Live · synced";
+}
+function startAuto() { stopAuto(); autoTimer = setInterval(()=>refresh({silent:true}), {{refresh_seconds}} * 1000); }
+function stopAuto()  { if (autoTimer) clearInterval(autoTimer); autoTimer = null; }
+
+// .ws / .side-search / .nav-item are styled as clickable rows but they
+// are <div>, so keyboard users get nothing for free. Map Enter/Space
+// onto a synthetic click for any role="button" element that is not
+// already a real button/link.
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  const t = ev.target;
+  if (!(t instanceof HTMLElement)) return;
+  if (t.getAttribute("role") !== "button") return;
+  if (t.matches("button, a, input, select, textarea")) return;
+  ev.preventDefault();
+  t.click();
+});
+
+document.getElementById("refreshBtn").addEventListener("click", ()=>refresh());
+document.getElementById("autoBtn").addEventListener("click", () => {
+  autoOn = !autoOn;
+  document.getElementById("autoLbl").textContent = "Auto · " + (autoOn ? "on" : "off");
+  localStorage.live_dashboard_auto = JSON.stringify(autoOn);
+  autoOn ? startAuto() : stopAuto();
+});
+setInterval(updateTimes, 5000);
+setInterval(()=>renderFeed(), 15000);
+
+renderKpi(); renderSpark(); renderFeed(); renderRows(); updateTimes();
+if (autoOn) startAuto();
+setTimeout(()=>refresh({silent:true}), 600);   // refresh-on-open
+</script>
+</body>
+</html>

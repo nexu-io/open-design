@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Northwind · Q4 FY25 OKRs</title>
+<style>
+  :root {
+    --bg: #f5f6f9;
+    --paper: #ffffff;
+    --ink: #161924;
+    --muted: #5d6678;
+    --line: #e3e6ee;
+    --accent: #2c4ee8;
+    --accent-soft: #eaeefe;
+    --positive: #1f8a5a;
+    --warn: #b58522;
+    --danger: #b13b3b;
+    --display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.55; }
+  .app { display: grid; grid-template-columns: 1fr 320px; min-height: 100vh; }
+  main { padding: 28px 32px 56px; min-width: 0; }
+  aside.side { padding: 28px 28px 56px; background: var(--paper); border-left: 1px solid var(--line); }
+
+  .crumb { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .quarter-banner { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 24px; padding: 28px 32px; background: linear-gradient(135deg, var(--ink), #2a3050); color: white; border-radius: 16px; margin: 6px 0 28px; }
+  .quarter-banner h1 { margin: 6px 0 4px; font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+  .quarter-banner .meta { color: rgba(255,255,255,0.72); font-size: 13.5px; }
+  .qb-progress { text-align: right; }
+  .qb-progress .num { font-size: 56px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: #b3c0ff; }
+  .qb-progress .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+  /* Objective cards */
+  .objectives { display: flex; flex-direction: column; gap: 16px; }
+  .obj { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .obj-head { padding: 22px 26px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto auto; gap: 18px; align-items: center; }
+  .obj-title { display: flex; flex-direction: column; gap: 4px; }
+  .obj-num { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .obj-name { font-size: 19px; font-weight: 600; letter-spacing: -0.005em; line-height: 1.35; max-width: 60ch; }
+  .obj-owner { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .av { width: 30px; height: 30px; border-radius: 50%; color: white; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .av-mr { background: linear-gradient(135deg, #d6336c, #ff7a9b); }
+  .av-pb { background: linear-gradient(135deg, #b58522, #f1b13a); }
+  .av-dp { background: linear-gradient(135deg, #2c4ee8, #6e85ff); }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-family: var(--mono); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pill.on-track { background: rgba(31,138,90,0.12); color: var(--positive); }
+  .pill.at-risk { background: rgba(181,133,34,0.12); color: var(--warn); }
+  .pill.off-track { background: rgba(177,59,59,0.12); color: var(--danger); }
+
+  .krs { padding: 8px 0; }
+  .kr { display: grid; grid-template-columns: 1fr 200px 110px; gap: 18px; padding: 16px 26px; border-top: 1px solid var(--line); align-items: center; }
+  .kr:first-child { border-top: none; }
+  .kr-name { font-size: 14px; }
+  .kr-name strong { display: block; font-weight: 500; }
+  .kr-name small { color: var(--muted); display: block; margin-top: 2px; font-family: var(--mono); font-size: 11px; }
+  .kr-bar { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; position: relative; }
+  .kr-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #6e85ff); }
+  .kr-fill.warn { background: linear-gradient(90deg, var(--warn), #f1b13a); }
+  .kr-fill.danger { background: linear-gradient(90deg, var(--danger), #d8625e); }
+  .kr-pct { font-family: var(--mono); font-size: 13px; font-weight: 600; text-align: right; }
+
+  /* Sidebar */
+  aside.side h3 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 22px 0 12px; font-weight: 500; }
+  aside.side h3:first-child { margin-top: 0; }
+  .stat { display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px dashed var(--line); font-size: 13.5px; }
+  .stat:first-of-type { border-top: none; padding-top: 4px; }
+  .stat strong { font-family: var(--mono); }
+  .stat strong.up { color: var(--positive); }
+  .stat strong.down { color: var(--danger); }
+
+  .mover { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px dashed var(--line); font-size: 13px; align-items: center; }
+  .mover:first-of-type { border-top: none; padding-top: 0; }
+  .mover .delta { font-family: var(--mono); font-size: 11.5px; color: var(--positive); }
+  .mover .delta.down { color: var(--danger); }
+
+  .blocker { padding: 16px; background: rgba(177,59,59,0.06); border: 1px solid rgba(177,59,59,0.2); border-radius: 10px; margin-top: 10px; }
+  .blocker strong { color: var(--danger); }
+  .blocker p { margin: 6px 0 0; font-size: 12.5px; color: var(--muted); }
+
+  @media (max-width: 1080px) {
+    .app { grid-template-columns: 1fr; }
+    aside.side { border-left: none; border-top: 1px solid var(--line); }
+    .obj-head { grid-template-columns: 1fr; }
+    .kr { grid-template-columns: 1fr; }
+    .kr-pct { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <main>
+    <div class="crumb">Northwind / OKRs / FY25 / Q4</div>
+    <div class="quarter-banner">
+      <div>
+        <h1>Q4 FY25 · Northwind</h1>
+        <div class="meta">14 October → 31 December 2025 · Owner Devon Park · 3 objectives · 9 key results</div>
+      </div>
+      <div class="qb-progress">
+        <div class="num">42%</div>
+        <div class="label">Quarter through · 47% time elapsed</div>
+      </div>
+    </div>
+
+    <section class="objectives">
+      <article class="obj">
+        <div class="obj-head">
+          <div class="obj-title"><span class="obj-num">Objective 1</span><span class="obj-name">Make Northwind feel finished to the Enterprise buyer.</span></div>
+          <div class="obj-owner"><span class="av av-mr">MR</span>Mira Reddy</div>
+          <span class="pill on-track"><span class="dot"></span>On track</span>
+        </div>
+        <div class="krs">
+          <div class="kr">
+            <div class="kr-name"><strong>Close 3 of 3 stalled enterprise deals</strong><small>auth-gap blocker · sales: Devon</small></div>
+            <div class="kr-bar"><span class="kr-fill" style="width: 67%"></span></div>
+            <div class="kr-pct">2 of 3</div>
+          </div>
+          <div class="kr">
+            <div class="kr-name"><strong>Reach SOC 2 Type II readiness</strong><small>controls: 14 / 16 implemented</small></div>
+            <div class="kr-bar"><span class="kr-fill" style="width: 88%"></span></div>
+            <div class="kr-pct">88%</div>
+          </div>
+          <div class="kr">
+            <div class="kr-name"><strong>Ship workspace 2FA enforcement (TOTP + WebAuthn)</strong><small>M3 lands Dec 2 · Devon</small></div>
+            <div class="kr-bar"><span class="kr-fill" style="width: 60%"></span></div>
+            <div class="kr-pct">60%</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="obj">
+        <div class="obj-head">
+          <div class="obj-title"><span class="obj-num">Objective 2</span><span class="obj-name">Cut time-to-value for new sign-ups in half.</span></div>
+          <div class="obj-owner"><span class="av av-dp">DP</span>Devon Park</div>
+          <span class="pill at-risk"><span class="dot"></span>At risk</span>
+        </div>
+        <div class="krs">
+          <div class="kr">
+            <div class="kr-name"><strong>Median activation time ≤ 30 min</strong><small>baseline 72 min · current 47 min</small></div>
+            <div class="kr-bar"><span class="kr-fill warn" style="width: 64%"></span></div>
+            <div class="kr-pct">64%</div>
+          </div>
+          <div class="kr">
+            <div class="kr-name"><strong>Activation rate ≥ 50% of new signups</strong><small>current 38% · last quarter 29%</small></div>
+            <div class="kr-bar"><span class="kr-fill warn" style="width: 76%"></span></div>
+            <div class="kr-pct">76%</div>
+          </div>
+          <div class="kr">
+            <div class="kr-name"><strong>Ship onboarding redesign v2 to 100%</strong><small>currently at 25% experiment</small></div>
+            <div class="kr-bar"><span class="kr-fill warn" style="width: 25%"></span></div>
+            <div class="kr-pct">25%</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="obj">
+        <div class="obj-head">
+          <div class="obj-title"><span class="obj-num">Objective 3</span><span class="obj-name">Make the platform feel native on mobile.</span></div>
+          <div class="obj-owner"><span class="av av-pb">PB</span>Priya Banerjee</div>
+          <span class="pill off-track"><span class="dot"></span>Off track</span>
+        </div>
+        <div class="krs">
+          <div class="kr">
+            <div class="kr-name"><strong>Mobile DAU as % of total ≥ 35%</strong><small>current 22% · last quarter 19%</small></div>
+            <div class="kr-bar"><span class="kr-fill danger" style="width: 22%"></span></div>
+            <div class="kr-pct">22%</div>
+          </div>
+          <div class="kr">
+            <div class="kr-name"><strong>Ship redesigned mobile settings + auth surfaces</strong><small>scope locked Nov 1 · build started</small></div>
+            <div class="kr-bar"><span class="kr-fill danger" style="width: 18%"></span></div>
+            <div class="kr-pct">18%</div>
+          </div>
+          <div class="kr">
+            <div class="kr-name"><strong>App Store rating ≥ 4.6 (currently 4.2)</strong><small>10-week rolling, requires sustained release cadence</small></div>
+            <div class="kr-bar"><span class="kr-fill danger" style="width: 10%"></span></div>
+            <div class="kr-pct">10%</div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <aside class="side">
+    <h3>This quarter at a glance</h3>
+    <div class="stat"><span>Objectives on track</span><strong class="up">1 of 3</strong></div>
+    <div class="stat"><span>Key results green</span><strong>4 of 9</strong></div>
+    <div class="stat"><span>Days remaining</span><strong>53 of 78</strong></div>
+    <div class="stat"><span>Risk score</span><strong class="down">Medium</strong></div>
+
+    <h3>Top movers (this week)</h3>
+    <div class="mover"><span class="av av-mr" style="width:24px;height:24px;font-size:9.5px;">MR</span><span>Enterprise deal #2 — closed</span><span class="delta">+33%</span></div>
+    <div class="mover"><span class="av av-dp" style="width:24px;height:24px;font-size:9.5px;">DP</span><span>Activation rate · funnel B</span><span class="delta">+9 pp</span></div>
+    <div class="mover"><span class="av av-pb" style="width:24px;height:24px;font-size:9.5px;">PB</span><span>Mobile signup completion</span><span class="delta down">−2.4%</span></div>
+
+    <h3>Blockers</h3>
+    <div class="blocker">
+      <strong>Mobile O3 is off-track.</strong>
+      <p>Two engineers were borrowed for the 2FA push. Either we drop the auth-surface redesign from O3, or we backfill with contractors by Nov 4. Decision needed Friday.</p>
+    </div>
+  </aside>
+</div>
+</body>
+</html>

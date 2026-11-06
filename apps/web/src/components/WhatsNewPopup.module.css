@@ -1,0 +1,89 @@
+/* Post-update "what's new" dialog: cover art inset at the top, the running
+   version as the title, then the release headline and its bullet list. Layout
+   carried over from the accepted #6156 design; the data behind it is real. */
+.panel {
+  width: 420px;
+  padding: var(--spacing-18, 18px);
+  gap: 0;
+}
+
+/* No scrim override: this used to wear the Liquid Glass material
+   (--glass-regular + a 28px glass blur), which is the language of PANELS, not
+   of the sheet behind them. It now takes the shared `<Dialog>` scrim like
+   every other overlay. */
+
+/* The cover sits inset as its own card, at the image's natural aspect ratio. */
+.cover {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md, 8px);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-10, 10px);
+  padding: var(--spacing-18, 18px) 0 0;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-20, 20px);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.headline {
+  margin: 0;
+  font-size: var(--font-size-13, 13px);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-10, 10px);
+}
+
+.note {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-10, 10px);
+  font-size: var(--font-size-13, 13px);
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.noteDot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-circular, 50%);
+  background: var(--text-strong);
+}
+
+.footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-8, 8px);
+  padding: var(--spacing-20, 20px) 0 0;
+}
+
+/* Doubled selectors out-rank the shared Button variant classes regardless of
+   stylesheet injection order. */
+.close.close {
+  border-radius: var(--radius-pill, 999px);
+}
+
+/* Dark solid fill comes from the shared primary variant; the brand green
+   lands on the label via currentColor. */
+.cta.cta {
+  color: var(--brand);
+}

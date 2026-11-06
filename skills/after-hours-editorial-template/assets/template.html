@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=Cormorant+Garamond:ital,wght@0,500;0,700;1,600;1,700&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root { --bg:#0a090f; --fg:#f4f1f6; --muted:#8f8698; --accent:#ff4ea2; --line:#26232d; }
+      * { box-sizing:border-box; margin:0; padding:0; }
+      html,body { width:1920px; height:1080px; overflow:hidden; font-family:Inter,sans-serif; background:var(--bg); color:var(--fg); }
+      #root { position:relative; width:1920px; height:1080px; overflow:hidden; background:radial-gradient(1700px 780px at 50% 50%, #1c1823 0%, #0d0b12 55%, #08070d 100%); }
+      .vignette { position:absolute; inset:-2%; pointer-events:none; z-index:92; box-shadow:inset 0 0 240px rgba(0,0,0,.9), inset 0 0 10px #000; }
+      .grain { position:absolute; inset:0; pointer-events:none; z-index:90; opacity:.09; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' /%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.86'/%3E%3C/svg%3E"); mix-blend-mode:soft-light; }
+      .cursor-light { position:absolute; width:560px; height:560px; border-radius:50%; pointer-events:none; z-index:6; opacity:.24; transform:translate(-50%,-50%); background:radial-gradient(circle,#ff4ea280 0%,#ff4ea225 32%,transparent 76%); }
+      .frame { position:absolute; inset:18px; border:1px solid var(--line); z-index:15; pointer-events:none; }
+      .frame::before,.frame::after { content:""; position:absolute; width:14px; height:14px; border:1px solid #ffffff35; }
+      .frame::before { top:10px; left:10px; border-right:none; border-bottom:none; }
+      .frame::after { right:10px; bottom:10px; border-left:none; border-top:none; }
+      .hud { position:absolute; top:32px; left:42px; right:42px; z-index:30; font-size:20px; text-transform:uppercase; letter-spacing:.28em; color:#a198ad; display:flex; justify-content:space-between; }
+      .pager { position:absolute; right:50px; bottom:38px; z-index:30; font-size:32px; letter-spacing:.22em; font-weight:700; color:var(--accent); }
+      .scene { position:absolute; inset:0; opacity:0; pointer-events:none; padding:54px 64px; display:grid; }
+      .scene.live { opacity:1; pointer-events:auto; }
+      .serif { font-family:"Cormorant Garamond",serif; font-style:italic; }
+      .accent { color:var(--accent); }
+      .chapter-tag { writing-mode:vertical-rl; text-orientation:mixed; font-size:20px; letter-spacing:.42em; color:#9d96a8; text-transform:uppercase; }
+      .wipe { position:absolute; inset:0; opacity:0; z-index:70; display:grid; grid-template-columns:repeat(5,1fr); pointer-events:none; }
+      .wipe i { transform:translateY(-100%); background:linear-gradient(180deg,#111,#23202c,#17141f); border-right:1px solid #17141f; }
+
+      .s1 { grid-template-rows:auto 1fr auto; }
+      .s1-top { display:flex; justify-content:space-between; align-items:center; font-size:18px; letter-spacing:.38em; color:#9a91a7; text-transform:uppercase; }
+      .s1-title { align-self:center; justify-self:center; text-align:center; line-height:.82; font-size:156px; letter-spacing:.01em; text-shadow:0 0 38px #ff4ea240; }
+      .s1-title .accent { text-shadow:0 0 56px #ff4ea25a; }
+      .s1-meta { display:grid; grid-template-columns:repeat(4,1fr); gap:34px; border-top:1px solid #2b2734; padding-top:20px; font-size:21px; letter-spacing:.24em; color:#aaa2b5; text-transform:uppercase; }
+      .s1-meta strong { display:block; margin-top:12px; color:#f5f2f8; letter-spacing:.02em; font-size:54px; font-family:"Cormorant Garamond",serif; font-style:italic; text-transform:none; }
+
+      .s2 { grid-template-columns:52% 48%; align-items:center; }
+      .s2-left { display:grid; grid-template-columns:80px 1fr; gap:28px; align-items:center; }
+      .chapter-no { font-family:"Cormorant Garamond",serif; font-size:262px; line-height:.8; color:var(--accent); }
+      .s2-right { padding:50px 34px; border-left:1px solid var(--line); }
+      .kicker { color:#a39ab0; letter-spacing:.36em; text-transform:uppercase; font-size:22px; }
+      .s2-headline { margin-top:24px; font-size:90px; line-height:.82; text-shadow:0 0 40px #000; }
+      .s2-copy { margin-top:24px; max-width:680px; color:#b8afc1; font-size:39px; line-height:1.2; font-family:"Cormorant Garamond",serif; }
+
+      .s3 { grid-template-rows:1fr auto; }
+      .quote-wrap { align-self:center; display:grid; grid-template-columns:95px 1fr; gap:34px; }
+      .quote-mark { font-family:"Cormorant Garamond",serif; font-size:200px; color:var(--accent); line-height:.65; }
+      .quote { font-size:86px; line-height:.9; max-width:1480px; text-shadow:0 0 42px #000; }
+      .author { margin-top:30px; font-size:52px; letter-spacing:.01em; }
+      .author .meta { font-family:Inter,sans-serif; font-style:normal; color:#af6f92; letter-spacing:.25em; font-size:24px; text-transform:uppercase; margin-left:16px; }
+      .rule { width:100%; height:1px; margin-top:18px; background:linear-gradient(90deg,#ff4ea2 0%,#5a3e4f 48%,transparent 100%); }
+      .s3-foot { display:flex; justify-content:space-between; color:#93899f; letter-spacing:.3em; text-transform:uppercase; font-size:22px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="8.4" data-width="1920" data-height="1080">
+      <div class="cursor-light" id="cursorLight"></div>
+      <div class="grain"></div>
+      <div class="frame"></div>
+      <div class="vignette"></div>
+      <div class="hud"><span>Maison Nocturne</span><span id="chapterTop">Vol. XIV · A/W 2026</span></div>
+      <div class="pager" id="pager">01 / 03</div>
+      <div class="wipe" id="wipe"><i></i><i></i><i></i><i></i><i></i></div>
+
+      <section class="scene s1 live" id="s1">
+        <div class="s1-top"><span>A field report on late-night couture</span><span>Edition 14</span></div>
+        <h1 class="s1-title serif"><span class="accent">After</span><br />Hours.</h1>
+        <div class="s1-meta">
+          <div>Edition<strong>No. 14</strong></div>
+          <div>Director<strong>L. Marchetti</strong></div>
+          <div>Locale<strong>Paris · 11e</strong></div>
+          <div>Date<strong><span class="accent">May</span> 2026</strong></div>
+        </div>
+      </section>
+
+      <section class="scene s2" id="s2">
+        <div class="s2-left">
+          <div class="chapter-tag">Maison Nocturne Vol. XIV</div>
+          <div class="chapter-no serif">02</div>
+        </div>
+        <div class="s2-right">
+          <div class="kicker">Movements</div>
+          <h2 class="s2-headline serif">A study<br />in cuts<br />& color.</h2>
+          <p class="s2-copy">Three silhouettes carry the season - the column, the cape, and the cinch. Each is annotated in the chapters that follow.</p>
+        </div>
+      </section>
+
+      <section class="scene s3" id="s3">
+        <div class="quote-wrap">
+          <div class="quote-mark serif">"</div>
+          <div>
+            <div class="quote serif">The house dresses you for an <span class="accent">evening</span> that has not begun. You leave the fitting and somewhere a room is already <span class="accent">waiting</span>.</div>
+            <div class="author serif">- Camille Aubry <span class="meta">Editor-in-Chief · Le Soir Parisien</span></div>
+            <div class="rule"></div>
+          </div>
+        </div>
+        <div class="s3-foot"><span>Voices · Le Soir Parisien</span><span>Issue 14</span></div>
+      </section>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      var scenes = ["s1", "s2", "s3"];
+      var pager = document.getElementById("pager");
+      var chapterTop = document.getElementById("chapterTop");
+      var light = document.getElementById("cursorLight");
+      function showScene(index) {
+        scenes.forEach(function (id, i) { document.getElementById(id).classList.toggle("live", i === index); });
+        pager.textContent = "0" + (index + 1) + " / 03";
+        chapterTop.textContent = index === 0 ? "Vol. XIV · A/W 2026" : index === 1 ? "Chapter 02 · Movements" : "Chapter 06 · Voices";
+      }
+      function reveal(index, at) {
+        var id = "#" + scenes[index];
+        if (index === 0) {
+          tl.from(id + " .s1-top span", { y: -28, opacity: 0, stagger: 0.06, duration: 0.36, ease: "power3.out" }, at);
+          tl.from(id + " .s1-title", { y: 90, opacity: 0, scale: 0.95, duration: 0.72, ease: "expo.out" }, at + 0.08);
+          tl.from(id + " .s1-meta > div", { y: 34, opacity: 0, stagger: 0.07, duration: 0.36, ease: "power2.out" }, at + 0.45);
+        } else if (index === 1) {
+          tl.from(id + " .chapter-tag", { opacity: 0, y: 30, duration: 0.3, ease: "power2.out" }, at + 0.08);
+          tl.from(id + " .chapter-no", { scale: 0.75, opacity: 0, duration: 0.6, ease: "expo.out" }, at + 0.02);
+          tl.from(id + " .kicker, " + id + " .s2-headline, " + id + " .s2-copy", { x: 55, opacity: 0, stagger: 0.1, duration: 0.42, ease: "power3.out" }, at + 0.18);
+        } else {
+          tl.from(id + " .quote-mark", { scale: 0.5, opacity: 0, duration: 0.45, ease: "back.out(2.2)" }, at + 0.08);
+          tl.from(id + " .quote", { y: 44, opacity: 0, duration: 0.48, ease: "power2.out" }, at + 0.12);
+          tl.from(id + " .author, " + id + " .rule, " + id + " .s3-foot span", { y: 20, opacity: 0, stagger: 0.08, duration: 0.36, ease: "power2.out" }, at + 0.42);
+        }
+      }
+      function doWipe(at, nextIdx) {
+        tl.set("#wipe", { opacity: 1 }, at - 0.03);
+        tl.fromTo(".wipe i", { yPercent: -100 }, { yPercent: 0, duration: 0.24, stagger: 0.04, ease: "power3.in", overwrite: "auto" }, at);
+        tl.add(function () { showScene(nextIdx); }, at + 0.18);
+        tl.to(".wipe i", { yPercent: 100, duration: 0.24, stagger: 0.04, ease: "power3.out", overwrite: "auto" }, at + 0.2);
+        tl.set("#wipe", { opacity: 0 }, at + 0.49);
+      }
+      var T12 = 2.72;
+      var T23 = 5.44;
+      var tl = gsap.timeline({ paused: true });
+      reveal(0, 0);
+      tl.to(".s1-title .accent", { textShadow: "0 0 72px #ff4ea299", duration: 0.3, yoyo: true, repeat: 1 }, 1.24);
+      tl.to("#cursorLight", { opacity: 0.32, duration: 0.34, yoyo: true, repeat: 1, ease: "sine.inOut" }, 1.45);
+      doWipe(T12, 1);
+      reveal(1, T12 + 0.3);
+      tl.to("#s2 .chapter-no", { scale: 1.06, transformOrigin: "center", duration: 0.25, yoyo: true, repeat: 1 }, T12 + 1.2);
+      doWipe(T23, 2);
+      reveal(2, T23 + 0.3);
+      tl.to("#s3 .accent", { color: "#ffc4e0", duration: 0.23, yoyo: true, repeat: 1 }, T23 + 1.08);
+      tl.to("#pager", { y: -4, duration: 0.2, yoyo: true, repeat: 1 }, T23 + 1.35);
+      window.__timelines.main = tl;
+
+      var root = document.getElementById("root");
+      var mouseX = 960, mouseY = 540;
+      root.addEventListener("mousemove", function (e) {
+        var rect = root.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+        gsap.to("#cursorLight", { x: mouseX, y: mouseY, duration: 0.35, ease: "power2.out" });
+      });
+      root.addEventListener("mouseleave", function () { gsap.to("#cursorLight", { x: 960, y: 540, duration: 0.8, ease: "power3.out" }); });
+
+      // Interactive controls for local preview. Render output still follows the master timeline.
+      function jump(index) { tl.pause(index === 0 ? 0 : index === 1 ? T12 + 0.52 : T23 + 0.52); showScene(index); }
+      window.addEventListener("keydown", function (e) {
+        if (e.key === "1") jump(0);
+        if (e.key === "2") jump(1);
+        if (e.key === "3") jump(2);
+        if (e.key.toLowerCase() === "r") { tl.restart(); showScene(0); }
+      });
+      showScene(0);
+    </script>
+  </body>
+</html>

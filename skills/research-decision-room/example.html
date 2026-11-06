@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Research Decision Room - Activation Checklist</title>
+    <style>
+      :root {
+        --bg: #f4efe6;
+        --paper: #fffaf0;
+        --paper-2: #ebe2d2;
+        --ink: #181713;
+        --muted: #6e675d;
+        --line: #d4c8b7;
+        --accent: #0d6b5c;
+        --accent-2: #b54a2f;
+        --accent-3: #6f5aa7;
+        --success: #1d6d46;
+        --warning: #a16b00;
+        --shadow: 0 20px 60px rgba(48, 38, 24, 0.12);
+        --display: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+        --body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          linear-gradient(90deg, rgba(24, 23, 19, 0.035) 1px, transparent 1px),
+          linear-gradient(rgba(24, 23, 19, 0.035) 1px, transparent 1px),
+          var(--bg);
+        background-size: 34px 34px;
+        color: var(--ink);
+        font-family: var(--body);
+        line-height: 1.5;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        width: min(1440px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 12px 0 26px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .mark {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--ink);
+        font-weight: 760;
+      }
+
+      .mark::before {
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--ink);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .hero-main,
+      .side-panel,
+      .module,
+      .memo,
+      .experiment {
+        background: rgba(255, 250, 240, 0.92);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .hero-main {
+        padding: clamp(28px, 5vw, 56px);
+      }
+
+      .eyebrow {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 28px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 760;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .pill.good {
+        border-color: rgba(29, 109, 70, 0.35);
+        color: var(--success);
+      }
+
+      .pill.warn {
+        border-color: rgba(161, 107, 0, 0.38);
+        color: var(--warning);
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+        font-family: var(--display);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      h1 {
+        max-width: 980px;
+        font-size: clamp(46px, 7vw, 112px);
+        font-weight: 680;
+      }
+
+      h2 {
+        font-size: clamp(28px, 3vw, 48px);
+      }
+
+      h3 {
+        font-size: 22px;
+      }
+
+      .lede {
+        max-width: 760px;
+        margin: 24px 0 0;
+        color: #332f29;
+        font-size: clamp(17px, 1.4vw, 22px);
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 34px;
+      }
+
+      .stat {
+        min-height: 116px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        background: rgba(235, 226, 210, 0.38);
+      }
+
+      .stat b {
+        display: block;
+        margin-bottom: 16px;
+        font-family: var(--display);
+        font-size: 34px;
+        line-height: 1;
+      }
+
+      .stat span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .side-panel {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 24px;
+      }
+
+      .recommendation {
+        padding: 22px;
+        background: var(--ink);
+        color: var(--paper);
+      }
+
+      .recommendation small {
+        color: rgba(255, 250, 240, 0.68);
+        font-size: 12px;
+        font-weight: 760;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .recommendation p {
+        margin: 16px 0 0;
+        font-size: 18px;
+      }
+
+      .risk-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .risk-item {
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+      }
+
+      .risk-item b {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .risk-item span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .section {
+        margin-top: 30px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 20px;
+        margin: 0 0 16px;
+      }
+
+      .section-head p {
+        max-width: 560px;
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 16px;
+      }
+
+      .filter {
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--muted);
+        cursor: pointer;
+        min-height: 34px;
+        padding: 6px 12px;
+      }
+
+      .filter:hover,
+      .filter:focus-visible,
+      .filter.active {
+        border-color: var(--accent);
+        color: var(--accent);
+        outline: none;
+      }
+
+      .ledger {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border: 1px solid var(--line);
+        background: var(--paper);
+      }
+
+      .ledger-card {
+        min-height: 260px;
+        padding: 18px;
+        border-right: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .ledger-card:nth-child(4n) {
+        border-right: 0;
+      }
+
+      .ledger-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 760;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .ledger-card h3 {
+        margin-top: 20px;
+        font-family: var(--body);
+        font-size: 18px;
+        line-height: 1.2;
+      }
+
+      .ledger-card blockquote {
+        margin: 18px 0;
+        padding-left: 14px;
+        border-left: 3px solid var(--accent);
+        color: #363027;
+      }
+
+      .ledger-card footer {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .themes {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .theme {
+        padding: 22px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+      }
+
+      .theme p {
+        color: var(--muted);
+      }
+
+      .ids {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 18px;
+      }
+
+      .id {
+        border: 1px solid var(--line);
+        padding: 3px 7px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .matrix {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        background: var(--paper);
+      }
+
+      table {
+        width: 100%;
+        min-width: 820px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--paper-2);
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      td.score {
+        color: var(--accent);
+        font-weight: 820;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .memo-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+      }
+
+      .memo {
+        padding: 24px;
+      }
+
+      .memo ol {
+        margin: 18px 0 0;
+        padding-left: 22px;
+      }
+
+      .memo li + li {
+        margin-top: 12px;
+      }
+
+      .experiments {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .experiment {
+        display: flex;
+        flex-direction: column;
+        min-height: 280px;
+        padding: 22px;
+      }
+
+      .experiment .num {
+        margin-bottom: 28px;
+        color: var(--accent-2);
+        font-family: var(--display);
+        font-size: 48px;
+        line-height: 1;
+      }
+
+      .experiment p {
+        color: var(--muted);
+      }
+
+      .experiment dl {
+        display: grid;
+        gap: 10px;
+        margin: auto 0 0;
+      }
+
+      .experiment div {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        gap: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      dt {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 760;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      dd {
+        margin: 0;
+      }
+
+      .limits {
+        display: grid;
+        grid-template-columns: 0.7fr 1.3fr;
+        gap: 16px;
+        padding: 22px;
+        border: 1px solid var(--line);
+        background: var(--ink);
+        color: var(--paper);
+      }
+
+      .limits p {
+        margin: 0;
+        color: rgba(255, 250, 240, 0.7);
+      }
+
+      @media (max-width: 1120px) {
+        .hero,
+        .memo-grid,
+        .limits {
+          grid-template-columns: 1fr;
+        }
+
+        .ledger,
+        .themes,
+        .experiments {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .ledger-card:nth-child(4n) {
+          border-right: 1px solid var(--line);
+        }
+
+        .ledger-card:nth-child(2n) {
+          border-right: 0;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          width: min(100% - 20px, 1440px);
+          padding-top: 12px;
+        }
+
+        .topbar,
+        .section-head,
+        .hero-grid {
+          display: block;
+        }
+
+        .topbar > span {
+          display: block;
+        }
+
+        .topbar > * + *,
+        .hero-grid > * + * {
+          margin-top: 12px;
+        }
+
+        .hero-main,
+        .side-panel,
+        .memo,
+        .experiment,
+        .theme,
+        .limits {
+          padding: 18px;
+        }
+
+        .ledger,
+        .themes,
+        .experiments {
+          grid-template-columns: 1fr;
+        }
+
+        .ledger-card,
+        .ledger-card:nth-child(2n),
+        .ledger-card:nth-child(4n) {
+          border-right: 0;
+        }
+
+        h1 {
+          font-size: clamp(38px, 14vw, 62px);
+        }
+      }
+
+      @media print {
+        body {
+          background: white;
+        }
+
+        .filter {
+          display: none;
+        }
+
+        .hero-main,
+        .side-panel,
+        .module,
+        .memo,
+        .experiment {
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <nav class="topbar" aria-label="Report metadata">
+        <span class="mark">Research Decision Room</span>
+        <span>Generated from 8 interviews, 24 tickets, 3 funnel notes</span>
+      </nav>
+
+      <section class="hero" aria-labelledby="decision-title">
+        <div class="hero-main">
+          <div class="eyebrow">
+            <span class="pill good">Confidence: medium-high</span>
+            <span class="pill">Segment: new workspace admins</span>
+            <span class="pill">Last updated: not provided</span>
+          </div>
+          <h1 id="decision-title">Should onboarding start with a checklist or inline tips?</h1>
+          <p class="lede">
+            Recommend a short activation checklist that unlocks contextual tips after the first task is complete.
+            The evidence points to blank-start anxiety more than lack of feature discovery.
+          </p>
+          <div class="hero-grid" aria-label="Research readout">
+            <div class="stat">
+              <b>5/8</b>
+              <span>Interviewed admins described the first workspace setup as unclear.</span>
+            </div>
+            <div class="stat">
+              <b>31%</b>
+              <span>Activation drop noted after project creation, before inviting teammates.</span>
+            </div>
+            <div class="stat">
+              <b>2</b>
+              <span>Contradictory signals suggest power users prefer less guided setup.</span>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side-panel" aria-label="Recommendation summary">
+          <div class="recommendation">
+            <small>Recommended move</small>
+            <p>Ship a reversible checklist experiment for first-time admins, capped at four steps and dismissed after activation.</p>
+          </div>
+          <div class="risk-list">
+            <div class="risk-item">
+              <b>What could be wrong</b>
+              <span>The drop may come from permission anxiety rather than onboarding structure.</span>
+            </div>
+            <div class="risk-item">
+              <b>Measure next</b>
+              <span>Invite completion, first task created, and checklist dismissal within 24 hours.</span>
+            </div>
+            <div class="risk-item">
+              <b>Reversible step</b>
+              <span>A/B test a local checklist panel against current empty state for one sprint.</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section" aria-labelledby="ledger-title">
+        <div class="section-head">
+          <div>
+            <h2 id="ledger-title">Evidence ledger</h2>
+            <p>Filter by source type. Quotes are shown only where the source material supplied them.</p>
+          </div>
+          <div class="toolbar" aria-label="Evidence filters">
+            <button class="filter active" type="button" data-filter="all">All</button>
+            <button class="filter" type="button" data-filter="interview">Interviews</button>
+            <button class="filter" type="button" data-filter="support">Support</button>
+            <button class="filter" type="button" data-filter="analytics">Analytics</button>
+            <button class="filter" type="button" data-filter="stakeholder">Stakeholder</button>
+          </div>
+        </div>
+        <div class="ledger" id="ledger">
+          <article class="ledger-card" data-source="interview">
+            <div class="ledger-meta"><span>I-02</span><span>interview</span><span>strong</span></div>
+            <h3>Admins do not know what a "ready" workspace looks like.</h3>
+            <blockquote>"I created the project, then stared at the empty board because I wasn't sure what counted as done."</blockquote>
+            <footer>Segment: startup admin. Limitation: early adopter, may overstate setup expectations.</footer>
+          </article>
+          <article class="ledger-card" data-source="interview">
+            <div class="ledger-meta"><span>I-05</span><span>interview</span><span>medium</span></div>
+            <h3>Users accept guidance when it is tied to the next visible outcome.</h3>
+            <blockquote>"If it told me the next thing to do with my team, I would follow it. I don't want a tour."</blockquote>
+            <footer>Segment: agency lead. Limitation: self-reported preference, not observed.</footer>
+          </article>
+          <article class="ledger-card" data-source="support">
+            <div class="ledger-meta"><span>T-11</span><span>support</span><span>strong</span></div>
+            <h3>Support tickets mention setup order more than feature location.</h3>
+            <blockquote>24 tickets tagged onboarding; 11 ask what to configure first.</blockquote>
+            <footer>Segment: mixed. Limitation: ticket taxonomy may undercount silent churn.</footer>
+          </article>
+          <article class="ledger-card" data-source="analytics">
+            <div class="ledger-meta"><span>M-01</span><span>analytics</span><span>medium</span></div>
+            <h3>Drop-off clusters before the invitation step.</h3>
+            <blockquote>31% drop after project creation; sample size not provided.</blockquote>
+            <footer>Segment: new workspaces. Limitation: metric lacks cohort dates and source channel.</footer>
+          </article>
+          <article class="ledger-card" data-source="support">
+            <div class="ledger-meta"><span>T-18</span><span>support</span><span>medium</span></div>
+            <h3>Teams ask for examples, not more tooltips.</h3>
+            <blockquote>"Can you show a sample project setup for a marketing team?"</blockquote>
+            <footer>Segment: marketing ops. Limitation: one explicit quote, related tickets summarized.</footer>
+          </article>
+          <article class="ledger-card" data-source="stakeholder">
+            <div class="ledger-meta"><span>S-03</span><span>stakeholder</span><span>weak</span></div>
+            <h3>Sales wants fewer setup questions during demos.</h3>
+            <blockquote>Stakeholder belief: guided setup will reduce demo friction.</blockquote>
+            <footer>Segment: internal. Limitation: not user evidence; use for context only.</footer>
+          </article>
+          <article class="ledger-card" data-source="interview">
+            <div class="ledger-meta"><span>I-07</span><span>interview</span><span>medium</span></div>
+            <h3>Power users want a bypass.</h3>
+            <blockquote>"I would close a checklist immediately if I already know the workflow."</blockquote>
+            <footer>Segment: operations lead. Limitation: experienced segment may not match activation cohort.</footer>
+          </article>
+          <article class="ledger-card" data-source="analytics">
+            <div class="ledger-meta"><span>M-03</span><span>analytics</span><span>weak</span></div>
+            <h3>Inline tips have unknown effect in this product.</h3>
+            <blockquote>Existing tips were not instrumented; impact not provided.</blockquote>
+            <footer>Segment: all users. Limitation: absence of evidence is not evidence of poor performance.</footer>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="themes-title">
+        <div class="section-head">
+          <div>
+            <h2 id="themes-title">Theme map</h2>
+            <p>The strongest themes explain behavior, not just requested UI components.</p>
+          </div>
+        </div>
+        <div class="themes">
+          <article class="theme">
+            <span class="pill good">High confidence</span>
+            <h3>Blank-start anxiety blocks activation.</h3>
+            <p>New admins need a visible definition of progress before they explore advanced features.</p>
+            <div class="ids"><span class="id">I-02</span><span class="id">T-11</span><span class="id">M-01</span></div>
+          </article>
+          <article class="theme">
+            <span class="pill good">Medium confidence</span>
+            <h3>Outcome-tied guidance beats generic tours.</h3>
+            <p>Participants rejected walkthroughs but welcomed instructions that create a real workspace outcome.</p>
+            <div class="ids"><span class="id">I-05</span><span class="id">T-18</span></div>
+          </article>
+          <article class="theme">
+            <span class="pill warn">Medium confidence</span>
+            <h3>Guidance needs an escape hatch.</h3>
+            <p>Experienced admins may see persistent onboarding as friction unless it is dismissible and state-aware.</p>
+            <div class="ids"><span class="id">I-07</span><span class="id">M-03</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="matrix-title">
+        <div class="section-head">
+          <div>
+            <h2 id="matrix-title">Opportunity matrix</h2>
+            <p>Scores use a 1 to 5 scale. Higher implementation-risk score means lower delivery risk.</p>
+          </div>
+        </div>
+        <div class="matrix">
+          <table>
+            <thead>
+              <tr>
+                <th>Opportunity</th>
+                <th>Evidence</th>
+                <th>User pain</th>
+                <th>Business leverage</th>
+                <th>Low risk</th>
+                <th>Total</th>
+                <th>Decision note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Four-step activation checklist</td>
+                <td class="score">4</td>
+                <td class="score">5</td>
+                <td class="score">4</td>
+                <td class="score">4</td>
+                <td class="score">17</td>
+                <td>Best fit because it directly addresses blank-start anxiety and can be A/B tested.</td>
+              </tr>
+              <tr>
+                <td>Contextual inline tips only</td>
+                <td class="score">2</td>
+                <td class="score">3</td>
+                <td class="score">3</td>
+                <td class="score">4</td>
+                <td class="score">12</td>
+                <td>Useful later, but current evidence says users need sequence before feature hints.</td>
+              </tr>
+              <tr>
+                <td>Sample project generator</td>
+                <td class="score">3</td>
+                <td class="score">4</td>
+                <td class="score">4</td>
+                <td class="score">2</td>
+                <td class="score">13</td>
+                <td>Promising, but larger product and data-model surface than a checklist experiment.</td>
+              </tr>
+              <tr>
+                <td>Long onboarding wizard</td>
+                <td class="score">2</td>
+                <td class="score">4</td>
+                <td class="score">2</td>
+                <td class="score">1</td>
+                <td class="score">9</td>
+                <td>Likely too rigid for teams with different setup styles.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section memo-grid" aria-labelledby="memo-title">
+        <article class="memo">
+          <h2 id="memo-title">Decision memo</h2>
+          <ol>
+            <li><b>Recommended move:</b> Test a four-step checklist for first-time admins.</li>
+            <li><b>Why now:</b> Activation drops before team invite and users describe uncertainty in setup order.</li>
+            <li><b>Evidence:</b> I-02, T-11, and M-01 point to progress-definition gaps.</li>
+            <li><b>What could be wrong:</b> The drop may be caused by invite anxiety or permissions, not the empty state itself.</li>
+            <li><b>Measure next:</b> Invite completion, first task creation, and time to first shared project.</li>
+            <li><b>Reversible step:</b> Ship to 25% of new workspaces for one sprint with a dismissible panel.</li>
+          </ol>
+        </article>
+        <article class="memo">
+          <h2>Contradictions</h2>
+          <ol>
+            <li>Power users want less guidance, so the checklist must disappear after activation or explicit dismissal.</li>
+            <li>Support data overrepresents users who ask for help; silent churn remains under-instrumented.</li>
+            <li>Inline tips might still matter after first progress, but the current dataset does not prove it.</li>
+          </ol>
+        </article>
+      </section>
+
+      <section class="section" aria-labelledby="experiments-title">
+        <div class="section-head">
+          <div>
+            <h2 id="experiments-title">Experiment queue</h2>
+            <p>Each test is designed to validate a decision, not to decorate the interface.</p>
+          </div>
+        </div>
+        <div class="experiments">
+          <article class="experiment">
+            <div class="num">01</div>
+            <h3>Checklist A/B</h3>
+            <p>Expose a four-step checklist to 25% of new admin workspaces for one sprint.</p>
+            <dl>
+              <div><dt>Owner</dt><dd>Growth product manager</dd></div>
+              <div><dt>Metric</dt><dd>Invite completion within 24h</dd></div>
+              <div><dt>Threshold</dt><dd>+8% relative lift</dd></div>
+              <div><dt>Learning</dt><dd>Does progress framing beat current blank state?</dd></div>
+            </dl>
+          </article>
+          <article class="experiment">
+            <div class="num">02</div>
+            <h3>Dismissal study</h3>
+            <p>Track whether experienced admins dismiss the checklist and whether dismissal predicts higher activation.</p>
+            <dl>
+              <div><dt>Owner</dt><dd>Activation analyst</dd></div>
+              <div><dt>Metric</dt><dd>Dismissal then activation</dd></div>
+              <div><dt>Threshold</dt><dd>No negative activation delta</dd></div>
+              <div><dt>Learning</dt><dd>Is an escape hatch enough for power users?</dd></div>
+            </dl>
+          </article>
+          <article class="experiment">
+            <div class="num">03</div>
+            <h3>Example project probe</h3>
+            <p>Prototype one sample project card in moderated testing before committing to generation.</p>
+            <dl>
+              <div><dt>Owner</dt><dd>User research lead</dd></div>
+              <div><dt>Metric</dt><dd>Task completion confidence</dd></div>
+              <div><dt>Threshold</dt><dd>6 of 8 users explain next step</dd></div>
+              <div><dt>Learning</dt><dd>Do examples solve the same anxiety better?</dd></div>
+            </dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="section limits" aria-labelledby="limits-title">
+        <h2 id="limits-title">Assumptions and limitations</h2>
+        <p>
+          Sample size, dates, and acquisition channels were not provided. Support tickets may overrepresent confused users.
+          Stakeholder input was used for framing only, not as proof. The recommendation should be treated as a reversible
+          product experiment, not a roadmap commitment.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const buttons = Array.from(document.querySelectorAll("[data-filter]"));
+      const cards = Array.from(document.querySelectorAll("[data-source]"));
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const filter = button.dataset.filter;
+          buttons.forEach((item) => item.classList.toggle("active", item === button));
+          cards.forEach((card) => {
+            card.classList.toggle("hidden", filter !== "all" && card.dataset.source !== filter);
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

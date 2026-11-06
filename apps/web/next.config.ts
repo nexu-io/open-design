@@ -1,0 +1,261 @@
+import type { NextConfig } from 'next';
+import { existsSync, realpathSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { networkInterfaces } from 'node:os';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Daemon port the local Express server binds to (see apps/daemon/src/cli.ts). The
+// dev-all launcher overrides OD_PORT after probing for a free port; we read
+// the same env so /api, /artifacts, and /frames always reach the right
+// daemon instance during `next dev`.
+const DAEMON_PORT = Number(process.env.OD_PORT) || 7456;
+const DAEMON_ORIGIN = `http://127.0.0.1:${DAEMON_PORT}`;
+
+// The regular CLI build still ships as a static export so the `od` daemon can
+// serve a single-process production build. Packaged desktop builds opt into a
+// server runtime with OD_WEB_OUTPUT_MODE=server; in that mode the web sidecar
+// owns the Next.js SSR server and proxies daemon routes at runtime. The
+// packaged-size standalone spike uses OD_WEB_OUTPUT_MODE=standalone to ask
+// Next.js for a traced standalone server while keeping the sidecar-owned daemon
+// proxy in front of it at runtime.
+const isProd = process.env.NODE_ENV !== 'development';
+const webOutputMode = process.env.OD_WEB_OUTPUT_MODE;
+const isServerOutput = webOutputMode === 'server' || webOutputMode === 'standalone';
+const shouldStaticExport = isProd && !isServerOutput;
+
+const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
+
+function resolveWorkspaceRoot(): string {
+  const computed = dirname(dirname(WEB_ROOT));
+  const override = process.env.OD_WORKSPACE_ROOT;
+  if (override && override.trim()) {
+    const resolved = isAbsolute(override.trim()) ? override.trim() : resolve(WEB_ROOT, override.trim());
+    if (!existsSync(resolved)) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist. ` +
+        `Fix the path or unset the variable to use the computed default.`,
+      );
+    }
+    // Canonicalize via realpathSync so that symlinked paths (e.g. macOS
+    // /tmp → /private/tmp) compare correctly against WEB_ROOT.
+    const canonicalResolved = realpathSync(resolved);
+    const canonicalWebRoot = realpathSync(WEB_ROOT);
+    const rel = relative(canonicalResolved, canonicalWebRoot);
+    // rel.startsWith('..') catches the non-ancestor case on POSIX.
+    // isAbsolute(rel) catches the Windows cross-drive case where relative()
+    // returns an absolute path (e.g. C:\repo\apps\web) instead of a ..-path.
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but WEB_ROOT "${canonicalWebRoot}" ` +
+        `is not inside it (relative path "${rel}"). ` +
+        `The override must be an ancestor of apps/web.`,
+      );
+    }
+    // Require the resolved path to be a real pnpm workspace root. Without this,
+    // an ancestor like `<repo>/apps` would pass the relative-path check but
+    // miss the sibling `packages/*` directory that `apps/web` imports from
+    // (for example `@open-design/contracts`), and Next would later fail deep
+    // inside file tracing / Turbopack with a much harder-to-diagnose error.
+    if (!existsSync(resolve(canonicalResolved, 'pnpm-workspace.yaml'))) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but no ` +
+        `pnpm-workspace.yaml was found there. The override must point at the ` +
+        `pnpm workspace root so outputFileTracingRoot and turbopack.root can ` +
+        `resolve sibling packages.`,
+      );
+    }
+    return canonicalResolved;
+  }
+  return computed;
+}
+
+const WORKSPACE_ROOT = resolveWorkspaceRoot();
+const toPosixPath = (value: string) => value.replaceAll('\\', '/');
+
+function resolveDistDir(defaultValue: string) {
+  if (process.env.OD_WEB_PROD === '1') return defaultValue;
+  const configured = process.env.OD_WEB_DIST_DIR;
+  if (!configured) return defaultValue;
+  return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || '.' : configured);
+}
+
+const DIST_DIR = shouldStaticExport && !process.env.OD_WEB_DIST_DIR
+  ? null
+  : resolveDistDir('.next');
+
+function resolveDevTsconfigPath() {
+  const configured = process.env.OD_WEB_TSCONFIG_PATH;
+  if (!configured) return undefined;
+  return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || 'tsconfig.json' : configured);
+}
+
+const DEV_TSCONFIG_PATH = resolveDevTsconfigPath();
+
+function parseAllowedDevHost(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).hostname.toLowerCase();
+  } catch {
+    try {
+      return new URL(`http://${trimmed}`).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parseIpv4(value: string): [number, number, number, number] | null {
+  const parts = value.split('.');
+  if (parts.length !== 4) return null;
+  if (!parts.every((part) => /^\d+$/.test(part))) return null;
+  const octets = parts.map((part) => Number(part));
+  if (!octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) return null;
+  return octets as [number, number, number, number];
+}
+
+function isPrivateLanIpv4(value: string): boolean {
+  const octets = parseIpv4(value);
+  if (octets == null) return false;
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+function localPrivateLanHosts(): string[] {
+  return Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => entry.family === 'IPv4' && !entry.internal && isPrivateLanIpv4(entry.address))
+    .map((entry) => entry.address);
+}
+
+function configuredAllowedDevHosts(): string[] {
+  const configured = (process.env.OD_ALLOWED_DEV_ORIGINS ?? '')
+    .split(',')
+    .map(parseAllowedDevHost)
+    .filter((host): host is string => host != null);
+
+  const allowedOrigins = (process.env.OD_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map(parseAllowedDevHost)
+    .filter((host): host is string => host != null);
+
+  const bindHost = parseAllowedDevHost(process.env.OD_HOST ?? '');
+  return Array.from(new Set([
+    '127.0.0.1',
+    ...localPrivateLanHosts(),
+    ...(bindHost != null && bindHost !== '0.0.0.0' && bindHost !== '::' ? [bindHost] : []),
+    ...configured,
+    ...allowedOrigins,
+  ]));
+}
+
+/**
+ * Direct inputs to the client host contract reported with CMS Test acceptances.
+ *
+ * Keep this closure at the host boundary: the touchpoint adapters and their
+ * presentation assets, the production decision loader, and the app/shell
+ * modules that mount or position those hosts. Broad shared application styles
+ * are intentionally excluded; including the whole app graph would turn an
+ * unrelated shell change into a CMS host release.
+ */
+export const CMS_HOST_RELEASE_INPUTS = [
+  'apps/web/app/layout.tsx',
+  'apps/web/src/App.tsx',
+  'apps/web/src/components/EntryNavRail.tsx',
+  'apps/web/src/components/EntryShell.tsx',
+  'apps/web/src/components/touchpoint-component.ts',
+  'apps/web/src/components/touchpoint-lifecycle.ts',
+  'apps/web/src/components/touchpoint-static-actions.ts',
+  'apps/web/src/components/touchpoint-navigation.ts',
+  'apps/web/src/components/TestCampaignModal.tsx',
+  'apps/web/src/components/TestCampaignModal.module.css',
+  'apps/web/src/components/ProductionCampaignModal.tsx',
+  'apps/web/src/components/ProductionCampaignBadge.tsx',
+  'apps/web/src/components/ProductionCampaignBadge.module.css',
+  'apps/web/src/components/ProductionCampaignHover.tsx',
+  'apps/web/src/components/HoverTouchpointOverlay.tsx',
+  'apps/web/src/components/HoverTouchpointOverlay.module.css',
+  'apps/web/src/components/production-touchpoint-loader.ts',
+  'packages/contracts/src/touchpoint-component-v2.ts',
+] as const;
+
+export function cmsHostReleaseFingerprint(
+  readFile: (file: (typeof CMS_HOST_RELEASE_INPUTS)[number]) => string | Buffer,
+): string {
+  return `sha256:${CMS_HOST_RELEASE_INPUTS.reduce(
+    (hash, file) => hash.update(file).update('\0').update(readFile(file)),
+    createHash('sha256'),
+  ).digest('hex')}`;
+}
+
+const nextConfig: NextConfig = {
+  env: {
+    // Embedded in the client at build time. Packaged servers use the already
+    // compiled client and need not retain source files to load this config.
+    NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))
+      ? cmsHostReleaseFingerprint((file) => readFileSync(resolve(WORKSPACE_ROOT, file)))
+      : undefined,
+  },
+  allowedDevOrigins: configuredAllowedDevHosts(),
+  outputFileTracingRoot: WORKSPACE_ROOT,
+  reactStrictMode: true,
+  // Emit browser sourcemaps so packaged-runtime exceptions can be symbolicated
+  // by PostHog. `tools/pack/src/web-sourcemaps.ts` runs after `next build`
+  // to inject chunk IDs, upload to PostHog, and ALWAYS delete the .map files
+  // before packaging so source never ships inside an installer.
+  productionBrowserSourceMaps: true,
+  transpilePackages: ['@open-design/components'],
+  turbopack: {
+    root: WORKSPACE_ROOT,
+  },
+  typescript: {
+    tsconfigPath: DEV_TSCONFIG_PATH ?? (isProd ? 'tsconfig.build.json' : 'tsconfig.json'),
+    // The build script runs native TypeScript 7 after Next generates route types.
+    // Next 16's in-process checker still requires the TypeScript 6 JS API.
+    ignoreBuildErrors: true,
+  },
+  // Static exports keep Next.js's default `out/` output directory so static
+  // hosts like Vercel can publish the generated site directly. Server runtimes
+  // still keep a predictable traced build directory for sidecar launchers.
+  ...(DIST_DIR ? { distDir: DIST_DIR } : {}),
+  ...(shouldStaticExport
+    ? {
+        output: 'export' as const,
+        // `next export` skips trailing slashes by default; opting in keeps
+        // the daemon's static fallback simple (every directory has its own
+        // index.html on disk).
+        trailingSlash: true,
+        images: { unoptimized: true },
+      }
+    : webOutputMode === 'standalone'
+      ? {
+        output: 'standalone' as const,
+      }
+      : !isProd
+      ? {
+        async rewrites() {
+          // In dev we run the daemon on a sibling port; proxy the app API
+          // proxy so the SPA can hit /api, /artifacts, and /frames without
+          // CORS gymnastics. SSE on /api/chat works through this rewrite
+          // because Next.js's dev server streams responses unbuffered.
+          return [
+            { source: '/api/:path*', destination: `${DAEMON_ORIGIN}/api/:path*` },
+            { source: '/artifacts/:path*', destination: `${DAEMON_ORIGIN}/artifacts/:path*` },
+            { source: '/frames/:path*', destination: `${DAEMON_ORIGIN}/frames/:path*` },
+          ];
+        },
+        devIndicators: {
+          position: 'bottom-right',
+        },
+      }
+      : {}),
+};
+
+export default nextConfig;

@@ -1,0 +1,126 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/figma/tokens.css
+ *
+ * Structured token bindings for the "Figma" brand — vibrant product
+ * content inside a strictly black-and-white interface shell.
+ *
+ * Brand identity in three sentences:
+ *   1. Monochrome interface absolutely — pure black (#000000) for all
+ *      text, borders, and solid buttons; pure white (#ffffff) for all
+ *      backgrounds; no mid-tones in the chrome layer whatsoever.
+ *   2. figmaSans variable font at unusual weight stops (320, 330, 340,
+ *      450, 480, 540, 700); figmaMono for uppercase section labels with
+ *      positive letter-spacing; OpenType "kern" on all text.
+ *   3. Pill (50px) and circular (50%) geometry on all interactive
+ *      elements; dashed 2px focus outlines echoing editor selection
+ *      handles; negative tracking even on body text (-0.14px).
+ *
+ * Schema decisions:
+ *   - --bg: #ffffff; --surface: #ffffff (gallery wall — no surface tint).
+ *   - --surface-warm aliases --surface (B&W system has no warm tier).
+ *   - --fg: #000000; --muted: rgba(0,0,0,0.55) for secondary text.
+ *   - --accent: #000000 (black IS the accent in a monochrome system).
+ *   - --accent-on: #ffffff; hover and active via glass tint overlays.
+ *   - --tracking-display: -0.02em (-1.72px / 86px normalized).
+ *   - --leading-tight: 1.00 (display hero line-height).
+ *   - --radius-sm: 50px (pill — all interactive elements); pill = pill.
+ *   - Focus: dashed 2px outline — encoded in components.html, not ring.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --surface:      #ffffff;              /* gallery wall — no surface tint */
+  --surface-warm: var(--surface);       /* no warm tier in B&W system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #000000;
+  --fg-2: #000000;                      /* B&W — no secondary ink tier */
+  --muted: rgba(0, 0, 0, 0.55);        /* secondary text on white */
+  --meta:  rgba(0, 0, 0, 0.40);        /* metadata, captions */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(0, 0, 0, 0.12);  /* minimal — only where structurally needed */
+  --border-soft: rgba(0, 0, 0, 0.06);
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  /* In a strictly B&W system, black IS the accent (solid CTA). */
+  --accent:        #000000;
+  --accent-on:     #ffffff;
+  --accent-hover:  rgba(0, 0, 0, 0.85);
+  --accent-active: rgba(0, 0, 0, 0.08); /* glass dark — secondary button bg */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "figmaSans", "figmaSans Fallback", "SF Pro Display", system-ui, Helvetica, sans-serif;
+  --font-body:    "figmaSans", "figmaSans Fallback", "SF Pro Display", system-ui, Helvetica, sans-serif;
+  --font-mono:    "figmaMono", "figmaMono Fallback", "SF Mono", Menlo, ui-monospace, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Figma's display range 86px→12px. The schema spine: 86px hero,
+   * 64px section, 26px sub-heading, 20px body-large, 16px body. */
+  --text-xs:   12px;                   /* mono small — uppercase tiny labels */
+  --text-sm:   16px;                   /* body / button */
+  --text-base: 16px;                   /* body baseline */
+  --text-lg:   20px;                   /* body large — descriptions */
+  --text-xl:   26px;                   /* sub-heading */
+  --text-2xl:  26px;                   /* sub-heading (same tier, weight varies) */
+  --text-3xl:  64px;                   /* section heading */
+  --text-4xl:  86px;                   /* display / hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.00: 86px hero compression.
+   * --tracking-display: -0.02em = -1.72px / 86px normalized.
+   * Body text: -0.14px inline; mono labels: +0.54px inline. */
+  --leading-body:     1.40;
+  --leading-tight:    1.00;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — gallery-like pacing between product sections. */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* Figma uses pill (50px) for all CTAs/tabs; 8px for card containers. */
+  --radius-sm:   50px;                 /* pill — all interactive elements */
+  --radius-md:   8px;                  /* cards, images, dialogs */
+  --radius-lg:   8px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Depth via background contrast, not shadows. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Figma's signature: dashed 2px outline encoded at component level.
+     --focus-ring is used as the fallback shadow for keyboard nav. */
+  --focus-ring: 0 0 0 2px rgba(0, 0, 0, 0.8);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1920px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet:  24px;
+  --container-gutter-phone:   16px;
+}

@@ -1,0 +1,22 @@
+{
+  "title": "Invalid Raw Provider Fields",
+  "preview": {
+    "type": "html",
+    "entry": "index.html"
+  },
+  "document": {
+    "format": "html_template_v1",
+    "templatePath": "template.html",
+    "generatedPreviewPath": "index.html",
+    "dataPath": "data.json",
+    "dataJson": {
+      "title": "Invalid Raw Provider Fields",
+      "rawResponse": {
+        "status": 200,
+        "payload": {
+          "items": ["provider envelope should not be persisted"]
+        }
+      }
+    }
+  }
+}

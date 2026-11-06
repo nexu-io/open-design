@@ -1,0 +1,327 @@
+/* -------- Buttons --------------------------------------------------- */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-8, 8px);
+  font: inherit;
+  height: 36px;
+  padding: 0 var(--spacing-16, 16px);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text);
+  background: transparent;
+  border: var(--stroke-thin, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
+    border-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
+    color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
+    transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
+    box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
+}
+/*
+ * 默认值,不是判决 —— 特异性归零(`:where()`),理由和 `apps/web/src/styles/primitives.css`
+ * 里那份**一模一样**,而且必须两边一起改:这两个文件都会被加载,只改一边的话
+ * 剩下那条裸选择器(0,2,1)照样压过组件自己的单类 hover(0,2,0),
+ * 深色实心按钮 hover 时仍旧被刷成近白的 `--bg-subtle`。
+ * (2026-08-27 就是这么漏的:改完 `primitives.css` 在真机上量,发现两条规则都还在。)
+ */
+:where(button:hover:not(:disabled)) { background: var(--bg-subtle); border-color: var(--border-strong); }
+:where(button:active:not(:disabled)) { transform: translateY(1px); }
+button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
+
+button.primary {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  border-radius: var(--radius-pill);
+  color: var(--bg);
+}
+button.primary:hover:not(:disabled) {
+  background: #353535;
+  border-color: #353535;
+}
+button.primary:active:not(:disabled) {
+  background: var(--text);
+  border-color: var(--text);
+}
+button.primary-ghost {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-strong);
+}
+button.primary-ghost:hover:not(:disabled) { background: var(--bg-muted); }
+button.primary-ghost:active:not(:disabled) { background: var(--border-strong); }
+
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text);
+}
+button.ghost:hover:not(:disabled) { background: var(--bg-subtle); border-color: transparent; }
+button.ghost:active:not(:disabled) { background: var(--bg-muted); }
+/*
+ * Transient success state for ghost buttons. Used by the Media
+ * Providers "Reload from daemon" button after a successful reload —
+ * the button briefly turns green with a check icon for ~2s then snaps
+ * back to its idle treatment, replacing what used to be a permanent
+ * success paragraph under the section header. Reusable on any
+ * ghost button that wants the same "did it" pulse.
+ */
+button.ghost.is-success-flash {
+  border-color: var(--green-border, color-mix(in srgb, #1f9d55 32%, var(--border)));
+  background: var(--green-bg, color-mix(in srgb, #1f9d55 8%, transparent));
+  color: var(--green, #137a3d);
+}
+button.ghost.is-success-flash:hover:not(:disabled) {
+  background: var(--green-bg, color-mix(in srgb, #1f9d55 14%, transparent));
+}
+button.ghost.is-success-flash svg {
+  color: currentColor;
+}
+
+/*
+ * Visually-hidden but assistive-tech accessible. We use it to keep
+ * a `role="status"` live-region for actions whose visible feedback
+ * is too transient (e.g. a 2s button-label flash) for a screen
+ * reader to catch reliably. Borrowed from Tailwind's `sr-only` so
+ * it reads as the same primitive everyone already knows.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button.subtle {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-strong);
+}
+button.subtle:hover:not(:disabled) { background: var(--bg-muted); }
+button.subtle:active:not(:disabled) { background: var(--border-strong); }
+
+button.icon-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-medium);
+}
+button.is-selected,
+button[aria-pressed="true"] {
+  border-color: var(--border-selected);
+}
+button:disabled {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* -------- Inputs ---------------------------------------------------- */
+input, textarea, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: var(--stroke-thin, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-8, 8px) var(--spacing-10, 10px);
+  width: 100%;
+  transition:
+    border-color var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
+    box-shadow var(--duration-faster, 100ms) var(--curve-easy-ease, ease);
+}
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--selected);
+  box-shadow: none;
+}
+/* Entry sidebar form fields keep a quieter, neutral focus so the orange
+   "Create" CTA stays the loudest thing in the panel. A low-opacity black
+   halo reads as "focused" without re-introducing the global blue/accent
+   ring. Using rgba directly because the Next CSS pipeline collapses
+   `color-mix(in srgb, var(--text) 8%, transparent)` to a solid var(--text)
+   ring (would render a 3px black band — too loud). */
+.entry-side input:focus,
+.entry-side textarea:focus,
+.entry-side select:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px rgba(28, 27, 26, 0.08);
+}
+/* Native <select> on macOS uses its own intrinsic min-height that ends up
+   shorter than <input> at the same `padding: 7px 10px` rule above, so any
+   form that flex-aligns an input next to a select (e.g. the memory editor's
+   Title + Type row) renders with mismatched heights. Stripping the native
+   chrome lets the shared padding and inherited line-height compute the
+   same box dimensions as the input, then we paint our own chevron via a
+   background SVG. The chevron color is a per-theme override so it stays
+   readable against the panel in both light and dark. */
+select {
+  padding-right: 32px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+}
+select::-ms-expand { display: none; }
+[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
+  }
+}
+textarea { resize: vertical; font-family: inherit; }
+
+.od-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.od-select-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: var(--spacing-8, 8px) var(--spacing-10, 10px);
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: var(--bg-panel);
+  border: var(--stroke-thin, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
+    box-shadow var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
+    background var(--duration-faster, 100ms) var(--curve-easy-ease, ease);
+}
+.od-select-trigger:hover:not(:disabled),
+.od-select-trigger[aria-expanded='true'] {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.od-select-trigger:focus-visible,
+.od-select-trigger[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-soft);
+}
+.od-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.od-select-trigger svg {
+  color: var(--text-muted);
+  transition: transform 120ms ease;
+}
+.od-select-trigger[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.od-select-value,
+.od-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-select-menu {
+  z-index: 9000;
+  padding: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+.od-select-menu.portal {
+  position: fixed;
+}
+.od-select-menu.inline {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(280px, 48vh);
+}
+.od-select-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-medium, 4px);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.od-select-option:hover:not(:disabled),
+.od-select-option.active:not(:disabled) {
+  background: var(--bg-subtle);
+}
+.od-select-option.selected {
+  color: var(--text);
+  background: color-mix(in srgb, var(--selected) 9%, var(--bg-subtle));
+  font-weight: 600;
+}
+.od-select-option.selected:hover:not(:disabled),
+.od-select-option.selected.active:not(:disabled) {
+  background: color-mix(in srgb, var(--selected) 13%, var(--bg-subtle));
+}
+.od-select-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.od-select-option-check {
+  display: inline-flex;
+  justify-content: center;
+  color: var(--selected);
+  opacity: 0;
+}
+.od-select-option.selected .od-select-option-check {
+  opacity: 1;
+}
+.od-select-group + .od-select-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+.od-select-group-label {
+  padding: 6px 8px 4px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+}

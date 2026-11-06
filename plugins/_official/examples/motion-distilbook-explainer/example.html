@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en" data-od-preview-ready="false" data-composition-variables='[{&quot;id&quot;: &quot;brand&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;品牌名称&quot;, &quot;default&quot;: &quot;DistilBook&quot;, &quot;maxLength&quot;: 16, &quot;brandToken&quot;: &quot;brand.name&quot;}, {&quot;id&quot;: &quot;tagline&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;产品描述&quot;, &quot;default&quot;: &quot;Turn any PDF into a hand-illustrated explainer video.&quot;, &quot;maxLength&quot;: 64}, {&quot;id&quot;: &quot;domain&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;网址&quot;, &quot;default&quot;: &quot;distilbook.com&quot;, &quot;maxLength&quot;: 24}, {&quot;id&quot;: &quot;price&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;月费&quot;, &quot;default&quot;: &quot;$15&quot;, &quot;maxLength&quot;: 8}, {&quot;id&quot;: &quot;primary&quot;, &quot;type&quot;: &quot;color&quot;, &quot;label&quot;: &quot;主色&quot;, &quot;default&quot;: &quot;#4264F5&quot;, &quot;brandToken&quot;: &quot;color.primary&quot;}, {&quot;id&quot;: &quot;material&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文件名称&quot;, &quot;default&quot;: &quot;Photosynthesis_Chapter7.pdf&quot;, &quot;maxLength&quot;: 32}, {&quot;id&quot;: &quot;minutes&quot;, &quot;type&quot;: &quot;number&quot;, &quot;label&quot;: &quot;生成分钟数&quot;, &quot;default&quot;: 6, &quot;min&quot;: 1, &quot;max&quot;: 99}, {&quot;id&quot;: &quot;languageCount&quot;, &quot;type&quot;: &quot;number&quot;, &quot;label&quot;: &quot;语言数量&quot;, &quot;default&quot;: 19, &quot;min&quot;: 1, &quot;max&quot;: 19}, {&quot;id&quot;: &quot;books&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 books&quot;, &quot;default&quot;: &quot;assets/books.png&quot;}, {&quot;id&quot;: &quot;leafFactory&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 leafFactory&quot;, &quot;default&quot;: &quot;assets/leaf-factory.png&quot;}, {&quot;id&quot;: &quot;plant&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 plant&quot;, &quot;default&quot;: &quot;assets/plant.png&quot;}, {&quot;id&quot;: &quot;water&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 water&quot;, &quot;default&quot;: &quot;assets/water.png&quot;}, {&quot;id&quot;: &quot;factory&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 factory&quot;, &quot;default&quot;: &quot;assets/factory.png&quot;}, {&quot;id&quot;: &quot;formatArt&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 formatArt&quot;, &quot;default&quot;: &quot;assets/format-art.png&quot;}, {&quot;id&quot;: &quot;brandArt&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 brandArt&quot;, &quot;default&quot;: &quot;assets/brand-art.png&quot;}, {&quot;id&quot;: &quot;yourLogo&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 yourLogo&quot;, &quot;default&quot;: &quot;assets/your-logo.png&quot;}, {&quot;id&quot;: &quot;hindi&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 hindi&quot;, &quot;default&quot;: &quot;assets/hindi.png&quot;}, {&quot;id&quot;: &quot;style1&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style1&quot;, &quot;default&quot;: &quot;assets/style-01.jpg&quot;}, {&quot;id&quot;: &quot;style2&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style2&quot;, &quot;default&quot;: &quot;assets/style-02.jpg&quot;}, {&quot;id&quot;: &quot;style3&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style3&quot;, &quot;default&quot;: &quot;assets/style-03.jpg&quot;}, {&quot;id&quot;: &quot;style4&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style4&quot;, &quot;default&quot;: &quot;assets/style-04.jpg&quot;}, {&quot;id&quot;: &quot;style5&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style5&quot;, &quot;default&quot;: &quot;assets/style-05.jpg&quot;}, {&quot;id&quot;: &quot;style6&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style6&quot;, &quot;default&quot;: &quot;assets/style-06.jpg&quot;}, {&quot;id&quot;: &quot;style7&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style7&quot;, &quot;default&quot;: &quot;assets/style-07.jpg&quot;}, {&quot;id&quot;: &quot;style8&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style8&quot;, &quot;default&quot;: &quot;assets/style-08.jpg&quot;}, {&quot;id&quot;: &quot;style9&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style9&quot;, &quot;default&quot;: &quot;assets/style-09.jpg&quot;}, {&quot;id&quot;: &quot;style10&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style10&quot;, &quot;default&quot;: &quot;assets/style-10.jpg&quot;}, {&quot;id&quot;: &quot;style11&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style11&quot;, &quot;default&quot;: &quot;assets/style-11.jpg&quot;}, {&quot;id&quot;: &quot;style12&quot;, &quot;type&quot;: &quot;image&quot;, &quot;label&quot;: &quot;参考图片 style12&quot;, &quot;default&quot;: &quot;assets/style-12.jpg&quot;}, {&quot;id&quot;: &quot;hookStatement&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 hookStatement&quot;, &quot;default&quot;: &quot;A good teacher doesn’t read the page.&quot;, &quot;maxLength&quot;: 50}, {&quot;id&quot;: &quot;hookAnswer&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 hookAnswer&quot;, &quot;default&quot;: &quot;They draw it.&quot;, &quot;maxLength&quot;: 18}, {&quot;id&quot;: &quot;addHeading&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 addHeading&quot;, &quot;default&quot;: &quot;Add your\nmaterial.&quot;, &quot;maxLength&quot;: 28}, {&quot;id&quot;: &quot;addDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 addDescription&quot;, &quot;default&quot;: &quot;PDF, Word, notes, a link,\nor just a topic.&quot;, &quot;maxLength&quot;: 64}, {&quot;id&quot;: &quot;editHeading&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 editHeading&quot;, &quot;default&quot;: &quot;Read the script.\nFix any line.&quot;, &quot;maxLength&quot;: 40}, {&quot;id&quot;: &quot;editDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 editDescription&quot;, &quot;default&quot;: &quot;Nothing is drawn\nuntil you approve it.&quot;, &quot;maxLength&quot;: 60}, {&quot;id&quot;: &quot;drawHeading&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 drawHeading&quot;, &quot;default&quot;: &quot;Watch every\nidea get\ndrawn.&quot;, &quot;maxLength&quot;: 42}, {&quot;id&quot;: &quot;drawDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 drawDescription&quot;, &quot;default&quot;: &quot;Each one appears\nas the voice\nreaches it.&quot;, &quot;maxLength&quot;: 64}, {&quot;id&quot;: &quot;speedDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 speedDescription&quot;, &quot;default&quot;: &quot;to your first narrated slide.&quot;, &quot;maxLength&quot;: 42}, {&quot;id&quot;: &quot;stylesDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 stylesDescription&quot;, &quot;default&quot;: &quot;Every scene is drawn for your content. No stock footage, no avatars.&quot;, &quot;maxLength&quot;: 90}, {&quot;id&quot;: &quot;formatDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 formatDescription&quot;, &quot;default&quot;: &quot;For courses and YouTube, or Shorts and Reels.&quot;, &quot;maxLength&quot;: 60}, {&quot;id&quot;: &quot;languageHeading&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 languageHeading&quot;, &quot;default&quot;: &quot;narration languages.&quot;, &quot;maxLength&quot;: 24}, {&quot;id&quot;: &quot;languageDescription&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 languageDescription&quot;, &quot;default&quot;: &quot;Written in your language,\nnot translated.&quot;, &quot;maxLength&quot;: 64}, {&quot;id&quot;: &quot;brandingHeading&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 brandingHeading&quot;, &quot;default&quot;: &quot;Your logo\non every video.&quot;, &quot;maxLength&quot;: 42}, {&quot;id&quot;: &quot;freeTrial&quot;, &quot;type&quot;: &quot;string&quot;, &quot;label&quot;: &quot;文案 freeTrial&quot;, &quot;default&quot;: &quot;Free to try. No card needed.&quot;, &quot;maxLength&quot;: 36}]'>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="od-motion-output" content="video"><title>DistilBook</title><script src="assets/gsap.min.js"></script><style>@font-face{font-family:Inter;src:url(assets/inter-100-900.ttf) format("truetype");font-weight:100 900;font-display:block}
+@font-face{font-family:"Patrick Hand";src:url(assets/patrickhand-400.ttf) format("truetype");font-weight:400;font-display:block}
+:root{--od-font-heading:"Inter","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--od-font-body:"Inter","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--od-font-hand:"Patrick Hand","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+*{box-sizing:border-box;margin:0}html,body{width:100%;height:100%;overflow:hidden;background:#F8FAF7}body{font-family:var(--od-font-body)}.od-heading{font-family:var(--od-font-heading)}.od-hand{font-family:var(--od-font-hand)}#viewport{position:fixed;inset:0;overflow:hidden}#main{position:absolute;left:50%;top:50%;width:1920px;height:1080px;overflow:hidden;transform-origin:center}canvas{display:block;width:1920px;height:1080px}#controls{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:100;display:flex;gap:14px;align-items:center;background:#13182bdd;color:#fff;border-radius:14px;padding:12px 18px;width:min(900px,92vw);opacity:0;font-family:var(--od-font-body)}#controls:hover,#controls:focus-within{opacity:1}#controls button{padding:9px 16px;border:0;border-radius:22px;background:#4264F5;color:#fff;font-family:var(--od-font-body);cursor:pointer}#scrub{flex:1}#tc{min-width:112px;font-variant-numeric:tabular-nums}html.od-export #controls{display:none!important}html.od-export #main{left:0!important;top:0!important;transform:none!important}</style><style data-od-font-synthesis>html{font-synthesis:none}</style>
+<style data-od-preview-chrome>
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);box-sizing:border-box;padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent,#3b6cf6);color:#fff;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px;white-space:nowrap}
+#controls input[type=range]{flex:1;width:auto;min-width:0;accent-color:var(--accent,#3b6cf6)}
+#controls span,#controls output{white-space:nowrap;font-variant-numeric:tabular-nums}
+html.od-export #controls{display:none!important}
+</style>
+</head>
+<body><div id="viewport"><div id="main" data-composition-id="main" data-od-motion-layout="stage" data-start="0" data-duration="40.054422" data-width="1920" data-height="1080">
+<audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="40.054" data-track-index="2" data-volume="1" preload="auto"></audio><canvas id="stage" data-od-id="film-stage" width="1920" height="1080"></canvas></div></div><div id="controls"><button id="playBtn" type="button">PLAY</button><input id="scrub" type="range" min="0" step="0.01" value="0"><span id="tc"></span></div>
+<script>
+const VARIABLES=[{"id": "brand", "type": "string", "label": "品牌名称", "default": "DistilBook", "maxLength": 16, "brandToken": "brand.name"}, {"id": "tagline", "type": "string", "label": "产品描述", "default": "Turn any PDF into a hand-illustrated explainer video.", "maxLength": 64}, {"id": "domain", "type": "string", "label": "网址", "default": "distilbook.com", "maxLength": 24}, {"id": "price", "type": "string", "label": "月费", "default": "$15", "maxLength": 8}, {"id": "primary", "type": "color", "label": "主色", "default": "#4264F5", "brandToken": "color.primary"}, {"id": "material", "type": "string", "label": "文件名称", "default": "Photosynthesis_Chapter7.pdf", "maxLength": 32}, {"id": "minutes", "type": "number", "label": "生成分钟数", "default": 6, "min": 1, "max": 99}, {"id": "languageCount", "type": "number", "label": "语言数量", "default": 19, "min": 1, "max": 19}, {"id": "books", "type": "image", "label": "参考图片 books", "default": "assets/books.png"}, {"id": "leafFactory", "type": "image", "label": "参考图片 leafFactory", "default": "assets/leaf-factory.png"}, {"id": "plant", "type": "image", "label": "参考图片 plant", "default": "assets/plant.png"}, {"id": "water", "type": "image", "label": "参考图片 water", "default": "assets/water.png"}, {"id": "factory", "type": "image", "label": "参考图片 factory", "default": "assets/factory.png"}, {"id": "formatArt", "type": "image", "label": "参考图片 formatArt", "default": "assets/format-art.png"}, {"id": "brandArt", "type": "image", "label": "参考图片 brandArt", "default": "assets/brand-art.png"}, {"id": "yourLogo", "type": "image", "label": "参考图片 yourLogo", "default": "assets/your-logo.png"}, {"id": "hindi", "type": "image", "label": "参考图片 hindi", "default": "assets/hindi.png"}, {"id": "style1", "type": "image", "label": "参考图片 style1", "default": "assets/style-01.jpg"}, {"id": "style2", "type": "image", "label": "参考图片 style2", "default": "assets/style-02.jpg"}, {"id": "style3", "type": "image", "label": "参考图片 style3", "default": "assets/style-03.jpg"}, {"id": "style4", "type": "image", "label": "参考图片 style4", "default": "assets/style-04.jpg"}, {"id": "style5", "type": "image", "label": "参考图片 style5", "default": "assets/style-05.jpg"}, {"id": "style6", "type": "image", "label": "参考图片 style6", "default": "assets/style-06.jpg"}, {"id": "style7", "type": "image", "label": "参考图片 style7", "default": "assets/style-07.jpg"}, {"id": "style8", "type": "image", "label": "参考图片 style8", "default": "assets/style-08.jpg"}, {"id": "style9", "type": "image", "label": "参考图片 style9", "default": "assets/style-09.jpg"}, {"id": "style10", "type": "image", "label": "参考图片 style10", "default": "assets/style-10.jpg"}, {"id": "style11", "type": "image", "label": "参考图片 style11", "default": "assets/style-11.jpg"}, {"id": "style12", "type": "image", "label": "参考图片 style12", "default": "assets/style-12.jpg"}, {"id": "hookStatement", "type": "string", "label": "文案 hookStatement", "default": "A good teacher doesn’t read the page.", "maxLength": 50}, {"id": "hookAnswer", "type": "string", "label": "文案 hookAnswer", "default": "They draw it.", "maxLength": 18}, {"id": "addHeading", "type": "string", "label": "文案 addHeading", "default": "Add your\nmaterial.", "maxLength": 28}, {"id": "addDescription", "type": "string", "label": "文案 addDescription", "default": "PDF, Word, notes, a link,\nor just a topic.", "maxLength": 64}, {"id": "editHeading", "type": "string", "label": "文案 editHeading", "default": "Read the script.\nFix any line.", "maxLength": 40}, {"id": "editDescription", "type": "string", "label": "文案 editDescription", "default": "Nothing is drawn\nuntil you approve it.", "maxLength": 60}, {"id": "drawHeading", "type": "string", "label": "文案 drawHeading", "default": "Watch every\nidea get\ndrawn.", "maxLength": 42}, {"id": "drawDescription", "type": "string", "label": "文案 drawDescription", "default": "Each one appears\nas the voice\nreaches it.", "maxLength": 64}, {"id": "speedDescription", "type": "string", "label": "文案 speedDescription", "default": "to your first narrated slide.", "maxLength": 42}, {"id": "stylesDescription", "type": "string", "label": "文案 stylesDescription", "default": "Every scene is drawn for your content. No stock footage, no avatars.", "maxLength": 90}, {"id": "formatDescription", "type": "string", "label": "文案 formatDescription", "default": "For courses and YouTube, or Shorts and Reels.", "maxLength": 60}, {"id": "languageHeading", "type": "string", "label": "文案 languageHeading", "default": "narration languages.", "maxLength": 24}, {"id": "languageDescription", "type": "string", "label": "文案 languageDescription", "default": "Written in your language,\nnot translated.", "maxLength": 64}, {"id": "brandingHeading", "type": "string", "label": "文案 brandingHeading", "default": "Your logo\non every video.", "maxLength": 42}, {"id": "freeTrial", "type": "string", "label": "文案 freeTrial", "default": "Free to try. No card needed.", "maxLength": 36}];
+const VARS=(window.__hyperframes && window.__hyperframes.getVariables?.()) || {};
+const CFG = {
+  "duration": 40.054422,
+  "scenes": [
+    {
+      "id": "hook",
+      "name": "手写开场",
+      "dur": 2.0,
+      "minDur": 1.8,
+      "maxDur": 3.0
+    },
+    {
+      "id": "intro",
+      "name": "品牌揭示",
+      "dur": 1.9,
+      "minDur": 1.9,
+      "maxDur": 2.5
+    },
+    {
+      "id": "add",
+      "name": "添加资料",
+      "dur": 5.75,
+      "minDur": 4.5,
+      "maxDur": 8.5
+    },
+    {
+      "id": "edit",
+      "name": "编辑脚本",
+      "dur": 6.0,
+      "minDur": 5.5,
+      "maxDur": 9.0
+    },
+    {
+      "id": "draw",
+      "name": "同步绘图",
+      "dur": 6.467,
+      "minDur": 6.467,
+      "maxDur": 9.0
+    },
+    {
+      "id": "speed",
+      "name": "六分钟",
+      "dur": 1.75,
+      "minDur": 1.75,
+      "maxDur": 2.5
+    },
+    {
+      "id": "styles",
+      "name": "风格画廊",
+      "dur": 4.133,
+      "minDur": 3.5,
+      "maxDur": 6.5
+    },
+    {
+      "id": "formats",
+      "name": "横竖屏",
+      "dur": 1.9,
+      "minDur": 1.9,
+      "maxDur": 3
+    },
+    {
+      "id": "languages",
+      "name": "多语言",
+      "dur": 2.1,
+      "minDur": 2.1,
+      "maxDur": 3.5
+    },
+    {
+      "id": "branding",
+      "name": "品牌定制",
+      "dur": 1.767,
+      "minDur": 1.767,
+      "maxDur": 3
+    },
+    {
+      "id": "close",
+      "name": "品牌收尾",
+      "dur": 6.287422,
+      "minDur": 4,
+      "maxDur": 9
+    }
+  ],
+  "cues": [
+    {
+      "id": "hook-line",
+      "scene": "hook",
+      "at": 0.12
+    },
+    {
+      "id": "hook-answer",
+      "scene": "hook",
+      "at": 0.98
+    },
+    {
+      "id": "hook-underline",
+      "scene": "hook",
+      "at": 1.48
+    },
+    {
+      "id": "hook-out",
+      "scene": "hook",
+      "at": 0.17,
+      "from": "end"
+    },
+    {
+      "id": "books-land",
+      "scene": "intro",
+      "at": 0.05
+    },
+    {
+      "id": "brand-in",
+      "scene": "intro",
+      "at": 0.25
+    },
+    {
+      "id": "intro-out",
+      "scene": "intro",
+      "at": 0.14,
+      "from": "end"
+    },
+    {
+      "id": "add-enter",
+      "scene": "add",
+      "at": 0.05
+    },
+    {
+      "id": "file-float",
+      "scene": "add",
+      "at": 0.8
+    },
+    {
+      "id": "file-drop",
+      "scene": "add",
+      "at": 2.4
+    },
+    {
+      "id": "upload-done",
+      "scene": "add",
+      "at": 3.6
+    },
+    {
+      "id": "add-out",
+      "scene": "add",
+      "at": 0.2,
+      "from": "end"
+    },
+    {
+      "id": "edit-enter",
+      "scene": "edit",
+      "at": 0.15
+    },
+    {
+      "id": "script-fill",
+      "scene": "edit",
+      "at": 0.5
+    },
+    {
+      "id": "word-select",
+      "scene": "edit",
+      "at": 2.5
+    },
+    {
+      "id": "word-change",
+      "scene": "edit",
+      "at": 3.1
+    },
+    {
+      "id": "script-approved",
+      "scene": "edit",
+      "at": 4.7
+    },
+    {
+      "id": "edit-out",
+      "scene": "edit",
+      "at": 0.2,
+      "from": "end"
+    },
+    {
+      "id": "draw-enter",
+      "scene": "draw",
+      "at": 0.12
+    },
+    {
+      "id": "plant-reveal",
+      "scene": "draw",
+      "at": 1.4
+    },
+    {
+      "id": "water-reveal",
+      "scene": "draw",
+      "at": 1.2
+    },
+    {
+      "id": "factory-reveal",
+      "scene": "draw",
+      "at": 4.6
+    },
+    {
+      "id": "draw-out",
+      "scene": "draw",
+      "at": 0.2,
+      "from": "end"
+    },
+    {
+      "id": "speed-enter",
+      "scene": "speed",
+      "at": 0.05
+    },
+    {
+      "id": "six-in",
+      "scene": "speed",
+      "at": 0.65
+    },
+    {
+      "id": "speed-out",
+      "scene": "speed",
+      "at": 0.22,
+      "from": "end"
+    },
+    {
+      "id": "styles-enter",
+      "scene": "styles",
+      "at": 0.02
+    },
+    {
+      "id": "styles-select",
+      "scene": "styles",
+      "at": 1.4
+    },
+    {
+      "id": "styles-out",
+      "scene": "styles",
+      "at": 0.13,
+      "from": "end"
+    },
+    {
+      "id": "formats-enter",
+      "scene": "formats",
+      "at": 0.06
+    },
+    {
+      "id": "phone-slide",
+      "scene": "formats",
+      "at": 0.5
+    },
+    {
+      "id": "formats-out",
+      "scene": "formats",
+      "at": 0.15,
+      "from": "end"
+    },
+    {
+      "id": "languages-enter",
+      "scene": "languages",
+      "at": 0.02
+    },
+    {
+      "id": "languages-out",
+      "scene": "languages",
+      "at": 0.1,
+      "from": "end"
+    },
+    {
+      "id": "branding-enter",
+      "scene": "branding",
+      "at": 0.1
+    },
+    {
+      "id": "your-logo-in",
+      "scene": "branding",
+      "at": 0.45
+    },
+    {
+      "id": "branding-out",
+      "scene": "branding",
+      "at": 0.13,
+      "from": "end"
+    },
+    {
+      "id": "close-books",
+      "scene": "close",
+      "at": 0.05
+    },
+    {
+      "id": "close-brand",
+      "scene": "close",
+      "at": 0.2
+    },
+    {
+      "id": "close-cta",
+      "scene": "close",
+      "at": 1.55
+    },
+    {
+      "id": "close-click",
+      "scene": "close",
+      "at": 4.25
+    },
+    {
+      "id": "close-out",
+      "scene": "close",
+      "at": 0,
+      "from": "end"
+    }
+  ],
+  "brand": "DistilBook",
+  "tagline": "Turn any PDF into a hand-illustrated explainer video.",
+  "domain": "distilbook.com",
+  "price": "$15",
+  "primary": "#4264F5",
+  "material": "Photosynthesis_Chapter7.pdf",
+  "minutes": 6,
+  "languageCount": 19,
+  "books": "assets/books.png",
+  "leafFactory": "assets/leaf-factory.png",
+  "plant": "assets/plant.png",
+  "water": "assets/water.png",
+  "factory": "assets/factory.png",
+  "formatArt": "assets/format-art.png",
+  "brandArt": "assets/brand-art.png",
+  "yourLogo": "assets/your-logo.png",
+  "hindi": "assets/hindi.png",
+  "style1": "assets/style-01.jpg",
+  "style2": "assets/style-02.jpg",
+  "style3": "assets/style-03.jpg",
+  "style4": "assets/style-04.jpg",
+  "style5": "assets/style-05.jpg",
+  "style6": "assets/style-06.jpg",
+  "style7": "assets/style-07.jpg",
+  "style8": "assets/style-08.jpg",
+  "style9": "assets/style-09.jpg",
+  "style10": "assets/style-10.jpg",
+  "style11": "assets/style-11.jpg",
+  "style12": "assets/style-12.jpg",
+  "hookStatement": "A good teacher doesn’t read the page.",
+  "hookAnswer": "They draw it.",
+  "addHeading": "Add your\nmaterial.",
+  "addDescription": "PDF, Word, notes, a link,\nor just a topic.",
+  "editHeading": "Read the script.\nFix any line.",
+  "editDescription": "Nothing is drawn\nuntil you approve it.",
+  "drawHeading": "Watch every\nidea get\ndrawn.",
+  "drawDescription": "Each one appears\nas the voice\nreaches it.",
+  "speedDescription": "to your first narrated slide.",
+  "stylesDescription": "Every scene is drawn for your content. No stock footage, no avatars.",
+  "formatDescription": "For courses and YouTube, or Shorts and Reels.",
+  "languageHeading": "narration languages.",
+  "languageDescription": "Written in your language,\nnot translated.",
+  "brandingHeading": "Your logo\non every video.",
+  "freeTrial": "Free to try. No card needed.",
+  "scriptLines": [
+    [
+      "Roots drink water from the soil and send it up the stem to",
+      "the factory."
+    ],
+    [
+      "Simultaneously, the leaf breathes carbon dioxide through",
+      "thousands of tiny holes on its underside."
+    ],
+    [
+      "The sun delivers energy, beaming onto the leaf’s green",
+      "solar panels to power the work."
+    ]
+  ],
+  "editedScriptLine": "thousands of tiny pores on its underside."
+,
+...VARS
+};
+const SCENE_START={};CFG.scenes.reduce((t,s)=>(SCENE_START[s.id]=t,t+s.dur),0);
+const cueTime=id=>{const c=CFG.cues.find(c=>c.id===id),s=CFG.scenes.find(s=>s.id===c.scene);return SCENE_START[c.scene]+(c.from==='end'?s.dur-c.at:c.at)};
+const C={hookLine:cueTime('hook-line'),hookAnswer:cueTime('hook-answer'),hookUnderline:cueTime('hook-underline'),hookOut:cueTime('hook-out'),booksLand:cueTime('books-land'),brandIn:cueTime('brand-in'),introOut:cueTime('intro-out'),addEnter:cueTime('add-enter'),fileFloat:cueTime('file-float'),fileDrop:cueTime('file-drop'),uploadDone:cueTime('upload-done'),addOut:cueTime('add-out'),editEnter:cueTime('edit-enter'),scriptFill:cueTime('script-fill'),wordSelect:cueTime('word-select'),wordChange:cueTime('word-change'),approved:cueTime('script-approved'),editOut:cueTime('edit-out'),drawEnter:cueTime('draw-enter'),plant:cueTime('plant-reveal'),water:cueTime('water-reveal'),factory:cueTime('factory-reveal'),drawOut:cueTime('draw-out'),speedEnter:cueTime('speed-enter'),six:cueTime('six-in'),speedOut:cueTime('speed-out'),stylesEnter:cueTime('styles-enter'),styleSelect:cueTime('styles-select'),stylesOut:cueTime('styles-out'),formatsEnter:cueTime('formats-enter'),phone:cueTime('phone-slide'),formatsOut:cueTime('formats-out'),languagesEnter:cueTime('languages-enter'),languagesOut:cueTime('languages-out'),brandingEnter:cueTime('branding-enter'),yourLogo:cueTime('your-logo-in'),brandingOut:cueTime('branding-out'),closeBooks:cueTime('close-books'),closeBrand:cueTime('close-brand'),closeCta:cueTime('close-cta'),closeClick:cueTime('close-click'),closeOut:cueTime('close-out')};
+const cv=document.querySelector('canvas'),g=cv.getContext('2d');
+const styles=getComputedStyle(document.documentElement),F={head:styles.getPropertyValue('--od-font-heading').trim(),body:styles.getPropertyValue('--od-font-body').trim(),hand:styles.getPropertyValue('--od-font-hand').trim()};
+const I={};const imageKeys=VARIABLES.filter(v=>v.type==='image').map(v=>v.id);const imagesReady=Promise.all(imageKeys.map(k=>new Promise(resolve=>{I[k]=new Image();I[k].onload=resolve;I[k].onerror=resolve;I[k].src=CFG[k]})));
+const ink='#101323',grey='#62666E',green='#24D65B',pink='#C90A7B';
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)),lerp=(a,b,p)=>a+(b-a)*p;
+const progress=(t,a,d=.35)=>clamp((t-a)/d),ease=p=>1-Math.pow(1-p,3),expo=p=>p>=1?1:1-Math.pow(2,-10*p);
+const spring=x=>x<=0?0:1-Math.exp(-10*x)*Math.cos(17*x);
+function rr(x,y,w,h,r=20,fill='#fff',stroke=null){g.beginPath();g.roundRect(x,y,w,h,r);if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.strokeStyle=stroke;g.lineWidth=1.5;g.stroke()}}
+function line(x1,y1,x2,y2,color=ink,width=3){g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.strokeStyle=color;g.lineWidth=width;g.lineCap='round';g.stroke()}
+function text(s,x,y,size=32,weight=400,color=ink,align='left',role='body'){g.font=`${weight} ${size}px ${F[role]||F.head}`;g.fillStyle=color;g.textAlign=align;g.textBaseline='alphabetic';g.save();g.translate(x,y);if(role==='head')g.scale(.95,1);g.fillText(s,0,0);g.restore()}
+function width(s,size=32,w=400,role='body'){g.font=`${w} ${size}px ${F[role]||F.head}`;return g.measureText(s).width*(role==='head'?.95:1)}
+function alpha(a,fn){g.save();g.globalAlpha*=clamp(a);fn();g.restore()}
+function clip(x,y,w,h,fn){g.save();g.beginPath();g.rect(x,y,w,h);g.clip();fn();g.restore()}
+function image(k,x,y,w,h){const im=I[k];if(im?.complete&&im.naturalWidth)g.drawImage(im,x,y,w,h)}
+function shadow(fn,c='rgba(20,25,35,.18)',blur=52,dy=28){g.save();g.shadowColor=c;g.shadowBlur=blur;g.shadowOffsetY=dy;fn();g.restore()}
+function card(x,y,w,h,r=26){shadow(()=>rr(x,y,w,h,r,'#fff'));rr(x,y,w,h,r,null,'#E1E3E2')}
+function check(x,y,s=10,c='#fff'){line(x-s*.55,y,x-s*.12,y+s*.45,c,3);line(x-s*.12,y+s*.45,x+s*.75,y-s*.45,c,3)}
+function circle(x,y,r,fill){g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fillStyle=fill;g.fill()}
+function cursor(x,y,scale=1){g.save();g.translate(x,y);g.scale(scale,scale);g.shadowColor='#0003';g.shadowBlur=8;g.beginPath();g.moveTo(0,0);g.lineTo(0,38);g.lineTo(10,28);g.lineTo(20,46);g.lineTo(29,41);g.lineTo(19,24);g.lineTo(34,24);g.closePath();g.fillStyle='#fff';g.strokeStyle='#fff';g.lineWidth=7;g.stroke();g.fillStyle=ink;g.fill();g.restore()}
+function reveal(s,x,y,size,w,t,at,color=ink,role='head',align='left',duration=.48){const p=progress(t,at,duration);if(!p)return;const wd=width(s,size,w,role),left=align==='center'?x-wd/2:x;clip(left-4,y-size*1.2,wd+12,size*1.5,()=>text(s,x,y+(1-expo(p))*size*1.3,size,w,color,align,role))}
+function underline(x,y,w,p,color=CFG.primary){if(p<=0)return;g.beginPath();g.moveTo(x,y);g.bezierCurveTo(x+w*.3,y+9,x+w*.57,y+3,x+w*.7,y+3);g.bezierCurveTo(x+w*.83,y-2,x+w*.91,y-3,x+w,y-2);g.strokeStyle=color;g.lineWidth=6;g.lineCap='round';g.save();g.setLineDash([w*1.1]);g.lineDashOffset=w*1.1*(1-p);g.stroke();g.restore()}
+function sceneOut(t,cue){return 1-progress(t,cue,.16)}
+function ambient(t,amp=4){return amp*Math.sin(t*1.6)}
+function background(t){g.fillStyle='#F8FAF7';g.fillRect(0,0,1920,1080);g.fillStyle='rgba(109,125,144,.12)';for(let y=30;y<1100;y+=40)for(let x=20;x<1940;x+=40){g.beginPath();g.arc(x+.7*Math.sin(t*.9+y),y,1.45,0,Math.PI*2);g.fill()} }
+function books(x,y,w,h,t,at){const im=I.books;if(!im?.naturalWidth)return;const part=im.naturalWidth/3;for(let i=0;i<3;i++){const p=progress(t,at+i*.06,.33),dy=(1-expo(p))*(-630-i*200);g.save();g.globalAlpha*=p;g.drawImage(im,i*part,0,part,im.naturalHeight,x+i*w/3,y+dy,w/3,h);g.restore()}}
+function brandTitle(t,at,closing=false){const p=progress(t,at,.5);const x=closing?570:493,y=closing?369:374,w=closing?166:197,h=closing?206:251;books(x,y,w,h,t,at-.15);clip(x+w+20,300,width(CFG.brand,closing?120:144,800,'brand')*p+10,360,()=>text(CFG.brand,x+w+30,closing?515:554,closing?120:144,800,ink,'left','brand'));const q=progress(t,at+.45,.25);alpha(q,()=>text(CFG.tagline,960,closing?676:733,46,400,grey,'center'))}
+function hook(t){const s=CFG.hookStatement,p=progress(t,C.hookLine,.7);const x=960-width(s,84,400,'hand')/2;clip(x-5,290,width(s,84,400,'hand')*p+5,180,()=>text(s,960,420,84,400,ink,'center','hand'));const a=CFG.hookAnswer,q=progress(t,C.hookAnswer,.45),xx=960-width(a,128,400,'hand')/2;clip(xx-2,480,width(a,128,400,'hand')*q+5,190,()=>text(a,960,610,128,400,CFG.primary,'center','hand'));underline(xx,647,width(a,128,400,'hand'),progress(t,C.hookUnderline,.1));}
+function steps(t,active){const cols=[green,CFG.primary,pink],names=['1 Add','2 Edit','3 Watch'];for(let i=0;i<3;i++){const x=541+i*286;rr(x,70,268,24,14,cols[i]);if(i>=active){rr(x+8,78,252,8,5,'#FFFFFF55');const dur=active===0?CFG.scenes[2].dur:active===1?CFG.scenes[3].dur:CFG.scenes[4].dur;const start=SCENE_START[['add','edit','draw'][active]];const amount=i===active?clamp((t-start)/dur):0;rr(x+8,78,Math.max(1,252*amount),8,4,cols[i]);}text(names[i]+(i<active?' ✓':''),x+3,124,21,650,i<active?cols[i]:i===active?ink:'#969AA2');}}
+function leftCopy(t,at,step,lines,sub,size=100){const color=[green,CFG.primary,pink][step-1];alpha(progress(t,at,.25),()=>text('S T E P  '+step,150,313,23,700,color));const first=step===3?409:430;const stride=step===3?84.5:size*1.08;lines.forEach((s,i)=>reveal(s,150,first+i*stride,size,800,t,at+.1+i*.08));const y=step===3?653:620;sub.forEach((s,i)=>alpha(progress(t,at+.32+i*.05,.35),()=>text(s,150,y+i*(step===3?43:48),step===3?32:36,400,grey)));}
+function fileBadge(label,x,y,c,t,at,rot=0){const p=progress(t,at,.3);if(!p)return;g.save();g.translate(x,y+ambient(t,6)+(1-expo(p))*80);g.rotate(rot);g.scale(p,p);shadow(()=>rr(0,0,label==='Web link'?204:140,80,18,'#fff'));rr(14,15,42,50,6,c);text(label==='Web link'?'URL':label,35,59,12,800,'#fff','center');text(label,68,51,26,700);g.restore()}
+function add(t){steps(t,0);leftCopy(t,C.addEnter,1,CFG.addHeading.split('\n'),CFG.addDescription.split('\n'));const p=expo(progress(t,C.addEnter,.5));g.save();g.translate(0,(1-p)*630+ambient(t,6));card(1011,250,760,560);text('Files',1044,297,22,650);text('Image',1124,297,22,650,'#92969E');text('Web URL',1220,297,22,650,'#92969E');line(1044,313,1090,313,CFG.primary,3);const dropped=t>=C.fileDrop;rr(1043,336,696,442,19,dropped?'#F3FCF6':'#F7F9FA',dropped?'#A9E5BC':'#CCD0D2');if(!dropped){g.save();g.setLineDash([6,5]);rr(1043,336,696,442,19,null,'#CCD0D2');g.restore();circle(1391,508,46,'#EDF1FF');line(1391,519,1391,495,CFG.primary,4);line(1382,504,1391,495,CFG.primary,4);line(1400,504,1391,495,CFG.primary,4);line(1378,522,1403,522,CFG.primary,4);text('Drop your file here',1391,602,32,750,ink,'center');text('PDF, Word, text, or a link',1391,645,23,400,'#969AA2','center');}else{let u=progress(t,C.fileDrop,.28);alpha(u,()=>{shadow(()=>rr(1085,487,613,124,20,'#fff'),'#10201822',22,14);rr(1111,516,56,68,9,'#D43050');text('PDF',1139,573,14,800,'#fff','center');text(CFG.material,1189,535,25,700);text(t>=C.uploadDone?'24 pages, ready':'24 pages, processing…',1189,563,21,400,'#92969E');rr(1189,581,414,8,5,'#E2F2E7');rr(1189,581,414*progress(t,C.fileDrop,1.1),8,5,green);if(t>=C.uploadDone){circle(1648,550,23,green);check(1648,550,11);}})}g.restore();const fade=1-progress(t,C.fileDrop-.18,.3);alpha(fade,()=>{fileBadge('PDF',838,396,'#D43050',t,C.fileFloat,-.06);fileBadge('DOCX',1172,165,'#4264F5',t,C.fileFloat+.17,.04);fileBadge('Web link',985,842,green,t,C.fileFloat+.32,.06);fileBadge('TXT',1635,834,'#677894',t,C.fileFloat+.46,-.06)});if(t>C.fileFloat+.9&&t<C.fileDrop+.15){const p=progress(t,C.fileFloat+.9,C.fileDrop-C.fileFloat-.9);cursor(lerp(869,1377,ease(p)),lerp(445,552,ease(p)),.85)} }
+function edit(t){steps(t,1);leftCopy(t,C.editEnter,2,CFG.editHeading.split('\n'),CFG.editDescription.split('\n'));if(t>C.approved-.2)underline(222,681,248,progress(t,C.approved-.2,.3));const p=expo(progress(t,C.editEnter-.1,.42));g.save();g.translate((1-p)*70,ambient(t,6));card(932,222,839,635);line(933,307,1770,307,'#E2E3E5',1);text('Narration',964,277,28,700);rr(1103,251,123,33,20,'#EDF3FA');text('Slide 2 of 6',1116,275,19,650,'#4B6ACC');text('0:38',1740,275,19,600,'#93979E','right');const parts=CFG.scriptLines.map(row=>row.slice());if(t>=C.wordChange)parts[1][1]=CFG.editedScriptLine;for(let j=0;j<3;j++){line(966,363+j*112,966,437+j*112,j===1&&t>C.wordChange?'#55C787':'#DDE0E4',4);let n=progress(t,C.scriptFill+j*.27,.3);for(let k=0;k<2;k++)clip(987,335+j*112+k*46,745*n,60,()=>text(parts[j][k],988,389+j*112+k*46,29,400,'#1A2025'));}if(t>C.wordSelect&&t<C.wordChange)rr(1214,520,73,36,4,'#BAD0FC77');if(t>C.wordChange){rr(1649,426,91,32,18,'#DDFFE9');text('Edited ✓',1661,449,17,650,'#358451');text('pores',1215,547,29,400,'#348455');underline(1218,554,66,1,'#A0E5B9');}const approved=t>C.approved;shadow(()=>rr(1450,766,290,61,34,approved?green:CFG.primary),approved?'#22CC5577':'#4264F566',20,12);text(approved?'Approved ✓':'Approve narration',1595,805,23,700,'#fff','center');g.restore();if(t>C.wordSelect-.5&&t<C.approved+.4){let p=progress(t,C.approved-.8,.7);cursor(lerp(1247,1628,ease(p)),lerp(546,798,ease(p))+ambient(t,3),.82)}}
+function maskedImage(k,x,y,w,h,p,dir='y'){if(p<=0)return;clip(x,y+(dir==='y'?h*(1-p):0),dir==='x'?w*p:w,dir==='y'?h*p:h,()=>image(k,x,y,w,h))}
+function draw(t){steps(t,2);leftCopy(t,C.drawEnter+.2,3,CFG.drawHeading.split('\n'),CFG.drawDescription.split('\n'),80);const p=expo(progress(t,C.drawEnter-.18,.45));g.save();g.translate(0,(1-p)*430+ambient(t,6));card(691,232,1080,607,22);rr(692,233,1078,605,22,'#FAFAFA');clip(700,242,1060,588,()=>{if(t<C.plant+.2){alpha(1-progress(t,C.plant-.1,.35),()=>image('leafFactory',717,248,1027,569))}else{maskedImage('plant',988,284,432,537,progress(t,C.plant+.15,.7));maskedImage('water',790,585,253,186,progress(t,C.water,.6),'x');maskedImage('factory',1425,574,233,201,progress(t,C.factory,1.05),'x');}});rr(700,834,1060*clamp(.28+(t-SCENE_START.draw)*.027),5,0,pink);g.restore();}
+function speed(t){let p=progress(t,C.speedEnter,.3),q=progress(t,C.six,.45);let yy=lerp(552,335,ease(q));alpha(p*(1-.4*q),()=>{reveal('Not a week.',960,yy,80,800,t,C.speedEnter,ink,'head','center');line(967,yy-27,1180,yy-37,'#DF718A',8)});let xx=530;alpha(q,()=>{circle(386,641,59,'#EDF0FC');circle(386,641,45,'#F8FAF7');line(386,641,386+25*Math.sin(t*2),641-35*Math.cos(t*2),ink,6);circle(386,582,7,CFG.primary);reveal('About '+CFG.minutes+' minutes',xx,735,124,800,t,C.six,CFG.primary);alpha(progress(t,C.six+.25,.25),()=>text(CFG.speedDescription,960,812,34,400,grey,'center'))})}
+const QUADS=[[159,151,136,280,433,266,462,127],[489,120,450,261,775,237,796,91],[828,79,786,249,1178,211,1195,40],[1237,42,1207,218,1634,181,1652,0],[118,303,82,475,418,462,449,283],[467,283,424,469,771,447,796,256],[804,255,769,459,1150,434,1191,222],[1200,230,1157,445,1641,420,1664,197],[64,507,13,691,359,706,398,496],[412,500,370,697,714,716,764,480],[770,480,723,710,1117,725,1155,461],[1172,466,1149,687,1672,702,1655,433]];
+function triImage(im,src,dst){g.save();g.beginPath();g.moveTo(...dst[0]);g.lineTo(...dst[1]);g.lineTo(...dst[2]);g.closePath();g.clip();const [u,v,w]=src,[a,b,c]=dst;const den=u[0]*(v[1]-w[1])+v[0]*(w[1]-u[1])+w[0]*(u[1]-v[1]);const affine=k=>[(a[k]*(v[1]-w[1])+b[k]*(w[1]-u[1])+c[k]*(u[1]-v[1]))/den,(a[k]*(w[0]-v[0])+b[k]*(u[0]-w[0])+c[k]*(v[0]-u[0]))/den,(a[k]*(v[0]*w[1]-w[0]*v[1])+b[k]*(w[0]*u[1]-u[0]*w[1])+c[k]*(u[0]*v[1]-v[0]*u[1]))/den];let x=affine(0),y=affine(1);g.transform(x[0],y[0],x[1],y[1],x[2],y[2]);g.drawImage(im,0,0);g.restore()}
+function quadImage(k,q){let im=I[k];if(!im?.naturalWidth)return;let w=im.naturalWidth,h=im.naturalHeight;let a=[q[0],q[1]],b=[q[2],q[3]],c=[q[4],q[5]],d=[q[6],q[7]];triImage(im,[[0,0],[0,h],[w,h]],[a,b,c]);triImage(im,[[0,0],[w,h],[w,0]],[a,c,d])}
+function stylesScene(t){let p=expo(progress(t,C.stylesEnter,.4)),dx=(t-SCENE_START.styles-2.133)*-80;g.save();g.translate(dx,(1-p)*650);for(let i=0;i<12;i++){quadImage('style'+(i+1),QUADS[i]);}for(let j=0;j<3;j++){let q=[1665,0+j*235,1650,180+j*235,2100,180+j*235,2115,-25+j*235];quadImage('style'+[1,6,9][j],q)}for(let i=0;i<5;i++)quadImage('style'+(i+1),[-35+i*390,770,-70+i*390,960,310+i*390,970,350+i*390,760]);g.restore();const grad=g.createLinearGradient(0,690,0,865);grad.addColorStop(0,'#F8FAF700');grad.addColorStop(1,'#F8FAF7');g.fillStyle=grad;g.fillRect(0,690,1920,390);if(t>C.styleSelect&&t<C.stylesOut-.2){const ids=[2,11,9,10],ix=ids[Math.floor((t-C.styleSelect)/.65)%4],q=QUADS[ix];g.beginPath();g.moveTo(q[0]+dx,q[1]);g.lineTo(q[2]+dx,q[3]);g.lineTo(q[4]+dx,q[5]);g.lineTo(q[6]+dx,q[7]);g.closePath();g.strokeStyle='#6C69D9';g.lineWidth=4;g.lineJoin='round';g.stroke();}reveal('Hand-drawn whiteboard',960,874,78,800,t,C.stylesEnter+.28,ink,'head','center');let words=[['or ',ink],['full motion',CFG.primary],[' graphics.',ink]];const total=words.reduce((a,[s])=>a+width(s,78,800,'head'),0);let x=960-total/2;words.forEach(([s,c])=>{reveal(s,x,966,78,800,t,C.stylesEnter+.45,c);x+=width(s,78,800,'head')});alpha(progress(t,C.stylesEnter+.7,.3),()=>text(CFG.stylesDescription,960,1027,31,400,grey,'center'));}
+function formats(t){const q=progress(t,C.formatsEnter,.3);alpha(q,()=>{const a='16:9 or ',b='9:16.',w=width(a+b,96,800);text(a,960-w/2,160,96,800);text(b,960-w/2+width(a,96,800),160,96,800,CFG.primary);text(CFG.formatDescription,960,215,33,400,grey,'center')});let p=expo(progress(t,C.formatsEnter,.3));let y=280+(1-p)*680;card(440,y,1042,586,18);clip(442,y+2,1038,582,()=>{image('formatArt',449,y+9,1023,570);line(787,y,787,y+300,'#8984D7',3);line(1134,y,1134,y+300,'#8984D7',3)});if(t>C.phone){let dt=t-C.phone,x=dt<.42?456:dt<.57?lerp(456,787,ease(progress(dt,.42,.15))):dt<.75?787:lerp(787,1134,ease(progress(dt,.75,.15)));if(dt>1.2)x+=5*Math.sin((dt-1.2)*2);g.save();g.beginPath();g.roundRect(440,y,1042,586,18);g.clip();g.fillStyle='#11182A88';g.fillRect(440,y,x-440,586);g.fillRect(x+333,y,1482-x-333,586);g.restore();shadow(()=>rr(x,y,333,586,39,'#13182B'),'#0006',10,0);rr(x+7,y+7,319,572,32,'#fff');g.save();g.beginPath();g.roundRect(x+7,y+7,319,572,32);g.clip();image('formatArt',449,y+9,1023,570);g.restore();rr(x+130,y+15,74,10,6,ink);rr(x+109,y+609,116,49,25,ink);text('9:16',x+167,y+644,24,700,'#fff','center');}else{rr(1353,y+609,116,49,25,CFG.primary);text('16:9',1411,y+644,24,700,'#fff','center')}}
+const langs=['English (US)','English (UK)','Español','Français','Deutsch','Italiano','Português','Nederlands','Polski','Română','Bahasa Indonesia','Türkçe','Svenska','Русский','Suomi','Tiếng Việt','Українська','Ελληνικά','हिन्दी'];
+function languages(t){let p=progress(t,C.languagesEnter,.58),n=Math.max(1,Math.round(CFG.languageCount*ease(p)));reveal(String(n),166,461,360,800,t,C.languagesEnter,CFG.primary,'brand');reveal(CFG.languageHeading,150,615,57,800,t,C.languagesEnter+.25);alpha(progress(t,C.languagesEnter+.35,.3),()=>{text(CFG.languageDescription.split('\n')[0],150,691,36,400,grey);text(CFG.languageDescription.split('\n')[1]||'',150,737,36,400,grey)});for(let i=0;i<CFG.languageCount;i++){const pr=progress(t,C.languagesEnter+.03*i,.25),x=831+(i%3)*339,y=190+Math.floor(i/3)*78+ambient(t+i,6);if(!pr)continue;g.save();g.translate(x,y+(1-expo(pr))*80);g.globalAlpha*=pr;shadow(()=>rr(0,0,317,61,17,'#fff'),'#24304016',16,7);rr(0,0,317,61,17,null,'#E3E5E4');if(i===18)image('hindi',24,6,82,48);else text(langs[i],24,41,29,650,'#162027');g.restore()}}
+function branding(t){reveal(CFG.brandingHeading.split('\n')[0],150,420,100,800,t,C.brandingEnter+.08);reveal(CFG.brandingHeading.split('\n')[1]||'',150,524,100,800,t,C.brandingEnter+.12);alpha(progress(t,C.brandingEnter+.35,.3),()=>text('Every paid plan, from '+CFG.price+' a month.',150,611,36,400,grey));let p=ease(progress(t,C.brandingEnter-.1,.48));g.save();g.translate(0,(1-p)*600+ambient(t,3));card(810,250,961,540,19);clip(818,258,945,525,()=>image('brandArt',818,258,945,525));let q=spring(t-C.yourLogo);if(q>0){g.save();g.translate(1620,320);g.scale(q,q);shadow(()=>rr(-116,-40,232,74,17,'#fff'));image('yourLogo',-115,-37,229,72);g.restore();}g.restore();if(t>C.yourLogo+.4){[ '#F68022','#151A30','#24BA9B'].forEach((c,i)=>circle(832+i*61,846,17,c));text('and your brand colours',1013,855,27,600,'#999B9F')}}
+function close(t){brandTitle(t,C.closeBrand,true);const bw=Math.max(368,width(CFG.domain,42,750)+64),extra=bw-368,bx=1018-extra/2;let p=progress(t,C.closeCta,.38);alpha(p,()=>{text(CFG.freeTrial,534-extra/2,813,36,650);shadow(()=>rr(bx,759,bw,82,44,CFG.primary),'#4264F55A',25,16);g.save();g.beginPath();g.roundRect(bx,759,bw,82,44);g.clip();let shine=bx+2+((t-C.closeCta)*170)%(560+extra);g.fillStyle='#FFFFFF20';g.beginPath();g.moveTo(shine-110,745);g.lineTo(shine,745);g.lineTo(shine+65,850);g.lineTo(shine-45,850);g.fill();g.restore();text(CFG.domain,1202,815,42,750,'#fff','center')});if(t>C.closeClick-.8){let p=progress(t,C.closeClick-.8,.7);cursor(lerp(1450,1277,ease(p)),lerp(964,793,ease(p))+ambient(t,3),.82)}}
+function render(t){t=clamp(t,0,CFG.duration);g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,1920,1080);background(t);let s=CFG.scenes.find(s=>t<SCENE_START[s.id]+s.dur)||CFG.scenes.at(-1);const out={hook:C.hookOut,intro:C.introOut,add:C.addOut,edit:C.editOut,draw:C.drawOut,speed:C.speedOut,styles:C.stylesOut,formats:C.formatsOut,languages:C.languagesOut,branding:C.brandingOut,close:C.closeOut};alpha(sceneOut(t,out[s.id]),()=>{if(['hook','intro','formats'].includes(s.id))g.translate(0,5*Math.sin(t*2));({hook,intro:t=>brandTitle(t,C.brandIn),add,edit,draw,speed,styles:stylesScene,formats,languages,branding,close}[s.id])(t)});document.querySelector('#scrub').value=t;document.querySelector('#tc').textContent=t.toFixed(2)+' / '+CFG.duration.toFixed(2)}
+const clock={t:0};const tl=gsap.timeline({paused:true,onUpdate:()=>render(clock.t)});tl.to(clock,{t:CFG.duration,duration:CFG.duration,ease:'none'});window.__odRenderAt=t=>{tl.pause();tl.time(clamp(t,0,CFG.duration),true);clock.t=clamp(t,0,CFG.duration);render(clock.t)};
+document.querySelector('#main').dataset.duration=CFG.duration;document.querySelector('#scrub').max=CFG.duration;
+const play=document.querySelector('#playBtn');play.onclick=()=>{if(tl.paused()){if(tl.time()>=CFG.duration)tl.time(0);tl.play();play.textContent='PAUSE'}else{tl.pause();play.textContent='PLAY'}};document.querySelector('#scrub').oninput=e=>{window.__odRenderAt(+e.target.value);play.textContent='PLAY'};
+function fit(){if(document.documentElement.classList.contains('od-export'))return;const s=Math.min(innerWidth/1920,innerHeight/1080);document.querySelector('#main').style.transform=`translate(-50%,-50%) scale(${s})`};addEventListener('resize',fit);fit();Promise.all([document.fonts.ready,document.fonts.load('800 100px Inter').catch(()=>[]),document.fonts.load('400 100px "Patrick Hand"').catch(()=>[]),imagesReady]).then(()=>{requestAnimationFrame(()=>requestAnimationFrame(()=>{window.__odRenderAt(3);document.documentElement.dataset.odPreviewReady='true';window.__timelines={main:tl}}))});
+
+</script><script data-od-preview-audio>
+(function(){var a=document.getElementById('soundtrack');if(!a||document.documentElement.classList.contains('od-export'))return;
+function tick(){if(window.__odMotionSourcePlayer||window.__odMotionRender)return;var tl=window.__timelines&&window.__timelines.main;
+if(tl){var t=tl.time(),on=tl.isActive();if(on){if(a.paused)a.play().catch(function(){});if(Math.abs(a.currentTime-t)>0.2)a.currentTime=t;}else{if(!a.paused)a.pause();if(Math.abs(a.currentTime-t)>0.05)a.currentTime=t;}}
+requestAnimationFrame(tick);}requestAnimationFrame(tick);})();
+</script>
+</body></html>

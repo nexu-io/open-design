@@ -1,0 +1,64 @@
+/* design-systems/miro/tokens.css
+ *
+ * Structured token bindings for Miro.
+ * whiteboard canvas with sunny yellow, ink-black controls, and collaborative board energy.
+ */
+
+:root {
+  --bg: #fff7c2;
+  --surface: #ffffff;
+  --surface-warm: #fff3a3;
+  --fg: #050038;
+  --fg-2: #322b6b;
+  --muted: #605a8a;
+  --meta: #f7c600;
+  --border: #ded9ff;
+  --border-soft: #eeeaff;
+  --accent: #ffd02f;
+  --accent-on: #050038;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #1a7f37;
+  --warn: #ff9f1c;
+  --danger: #d92d20;
+  --font-display: "Formular", Inter, Arial, sans-serif;
+  --font-body: "Formular", Inter, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 38px;
+  --text-3xl: 56px;
+  --text-4xl: 76px;
+  --leading-body: 1.5;
+  --leading-tight: 1.02;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 52px;
+  --radius-sm: 10px;
+  --radius-md: 18px;
+  --radius-lg: 28px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 16px 40px rgba(5, 0, 56, 0.14);
+  --focus-ring: 0 0 0 4px rgba(255, 208, 47, 0.38);
+  --motion-fast: 150ms;
+  --motion-base: 230ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1220px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 18px;
+}

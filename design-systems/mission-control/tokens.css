@@ -1,0 +1,63 @@
+/* design-systems/mission-control/tokens.css
+ * Structured token bindings for Mission Control.
+ * mission control interface with dark command panels, status color, and dense operational modules.
+ */
+
+:root {
+  --bg: #090b12;
+  --surface: #121722;
+  --surface-warm: #1b2233;
+  --fg: #f8fafc;
+  --fg-2: #cbd5e1;
+  --muted: #94a3b8;
+  --meta: #60a5fa;
+  --border: #2a3447;
+  --border-soft: #1d2636;
+  --accent: #60a5fa;
+  --accent-on: #06101d;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #26de81;
+  --warn: #fbbf24;
+  --danger: #ff4757;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.45;
+  --leading-tight: 1.06;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 60px;
+  --section-y-phone: 42px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 72px rgba(0, 0, 0, 0.42);
+  --focus-ring: 0 0 0 4px rgba(96, 165, 250, 0.28);
+  --motion-fast: 100ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1280px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

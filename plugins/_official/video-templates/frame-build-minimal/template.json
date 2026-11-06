@@ -1,0 +1,53 @@
+{
+  "id": "frame-build-minimal",
+  "surface": "hyperframes",
+  "title": "Build Minimal Frame",
+  "summary": "Luxury-minimal whitespace hero — single word reveals letter by letter, warm-gold hairline, breathing indicators.",
+  "category": "Presentation",
+  "tags": [
+    "minimal",
+    "luxury",
+    "whitespace",
+    "hero",
+    "gold",
+    "build",
+    "thin"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Premium product / brand hero",
+    "Calm single-word statement",
+    "Elegant title card"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-build-minimal",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/alchaincyf/huashu-design"
+  },
+  "provenance": {
+    "origin": {
+      "name": "Build",
+      "kind": "design-studio",
+      "reference": "London branding studio — luxury minimalism, ultra-thin type, generous whitespace"
+    },
+    "via_skill": {
+      "name": "huashu-design",
+      "author": "alchaincyf (花叔 · 花生)",
+      "url": "https://github.com/alchaincyf/huashu-design",
+      "license": "MIT",
+      "source_file": "assets/showcases/ppt/ppt-build.html"
+    },
+    "transformation": "Static PPT showcase → animated hyperframes timeline (hero word reveals letter by letter in ultra-thin Inter, #D4A574 gold hairline extends, thin indicators rise and breathe) built as original CSS keyframes. Re-typed for motion; original sample data. No upstream source code copied verbatim.\n"
+  }
+}

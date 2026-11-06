@@ -1,0 +1,903 @@
+// @vitest-environment jsdom
+//
+// recvpZCr4MAqNQ: a project's name stayed "未命名" forever, even after its
+// first prompt ran and produced real content. Root cause: the Drafts / All-
+// projects empty-state "New project" CTA (`EntryShell.startBlankProjectFromRail`)
+// created a project with the literal placeholder name and NO `nameSource`
+// metadata at all. `canAutoRenameProjectFromPrompt` (utils/projectName.ts)
+// only re-engages for `nameSource: 'generated' | 'prompt'` — a project
+// missing the field entirely fails closed forever, unlike every other blank/
+// no-name create path (`handleCreateProjectFromDesignSystem`, the New Project
+// panel's blank pick), which already tag `nameSource: 'generated'`.
+
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { EntryShell } from '../../src/components/EntryShell';
+import { I18nProvider } from '../../src/i18n';
+import type { AgentInfo, AppConfig } from '../../src/types';
+import {
+  notifyWorkspaceContextRefresh,
+  resetTeamProjectsCache,
+  resetWorkspaceContextCache,
+} from '../../src/collab/useWorkspaceContext';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
+import {
+  fetchProjectFiles,
+  invalidateProjectFilesCache,
+} from '../../src/providers/registry';
+
+
+const originalFetch = globalThis.fetch;
+const originalResizeObserver = globalThis.ResizeObserver;
+
+class ResizeObserverMock {
+  observe() {}
+  disconnect() {}
+  unobserve() {}
+}
+
+type EventSourceListener = (event: unknown) => void;
+class MockWorkspaceEventSource {
+  static instances: MockWorkspaceEventSource[] = [];
+  onopen: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  listeners = new Map<string, Set<EventSourceListener>>();
+
+  constructor(readonly url: string) {
+    MockWorkspaceEventSource.instances.push(this);
+  }
+
+  addEventListener(name: string, listener: EventSourceListener): void {
+    if (!this.listeners.has(name)) this.listeners.set(name, new Set());
+    this.listeners.get(name)!.add(listener);
+  }
+
+  removeEventListener(name: string, listener: EventSourceListener): void {
+    this.listeners.get(name)?.delete(listener);
+  }
+
+  dispatch(name: string, data: unknown): void {
+    for (const listener of this.listeners.get(name) ?? []) {
+      listener({ data: JSON.stringify(data) });
+    }
+  }
+
+  close(): void {}
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+// All-projects is a workspace-only view: EntryShell redirects it back to Home
+// once the workspace-context read resolves with nothing (Drafts stays, as the
+// local project list, since OPEND-3140). Give
+// every test a resolved team context up front — the real bug reproduces
+// inside a team workspace ("OD Feature Team" in the live acceptance check) —
+// so the empty-state CTA renders deterministically instead of racing a
+// same-tick redirect.
+function teamContext(
+  overrides: Partial<WorkspaceCollabContext> = {},
+): WorkspaceCollabContext {
+  const role = 'member' as const;
+  const lifecycleState = 'active' as const;
+  return {
+    workspaceId: 'ws-1',
+    workspaceType: 'team',
+    workspaceMemberId: 'wm-1',
+    role,
+    memberStatus: 'active',
+    lifecycleState,
+    billingState: 'active',
+    planId: null,
+    providerMode: 'platform_credits',
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role, lifecycleState }),
+    displayName: 'Ma Shu',
+    ...overrides,
+  };
+}
+
+function installFetchMock() {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const pathname = new URL(String(input), 'http://d.local').pathname;
+    if (pathname.endsWith('/workspace/directory')) {
+      return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+    }
+    if (pathname.endsWith('/workspace/context')) {
+      return jsonResponse({ context: teamContext() });
+    }
+    if (pathname.endsWith('/workspace/projects/team')) {
+      return jsonResponse({ projects: [] });
+    }
+    return jsonResponse({});
+  }) as typeof fetch;
+}
+
+function cliAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
+  return {
+    id: 'claude-code',
+    name: 'Claude Code',
+    bin: 'claude',
+    available: true,
+    version: '1.0.0',
+    models: [{ id: 'sonnet', label: 'Sonnet' }],
+    ...overrides,
+  };
+}
+
+function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  return {
+    mode: 'daemon',
+    agentId: 'claude-code',
+    agentModels: { 'claude-code': { model: 'sonnet' } },
+    apiProtocol: 'anthropic',
+    apiProtocolConfigs: {},
+    apiKey: '',
+    baseUrl: '',
+    model: '',
+    theme: 'system',
+    ...overrides,
+  } as AppConfig;
+}
+
+function renderAt(path: string, overrides: Partial<React.ComponentProps<typeof EntryShell>> = {}) {
+  window.history.replaceState(null, '', path);
+  const props: React.ComponentProps<typeof EntryShell> = {
+    skills: [],
+    designTemplates: [],
+    designSystems: [],
+    projects: [],
+    templates: [],
+    promptTemplates: [],
+    defaultDesignSystemId: null,
+    connectors: [],
+    connectorsLoading: false,
+    config: baseConfig(),
+    agents: [cliAgent()],
+    daemonLive: true,
+    onModeChange: vi.fn(),
+    onAgentChange: vi.fn(),
+    onAgentModelChange: vi.fn(),
+    onApiProtocolChange: vi.fn(),
+    onApiModelChange: vi.fn(),
+    onConfigPersist: vi.fn(),
+    onRefreshAgents: vi.fn(() => [cliAgent()]),
+    onCreateProject: vi.fn(() => Promise.resolve(true)),
+    onBeginProjectCreation: () => ({ projectId: 'optimistic-project', rollback: () => undefined }),
+    onAmrBalanceGateBlockChange: () => undefined,
+    onCreatePluginShareProject: vi.fn(),
+    onImportClaudeDesign: vi.fn(),
+    onOpenProject: vi.fn(),
+    onOpenLiveArtifact: vi.fn(),
+    onDeleteProject: vi.fn(),
+    onRenameProject: vi.fn(),
+    onChangeDefaultDesignSystem: vi.fn(),
+    onPersistComposioKey: vi.fn(),
+    onOpenSettings: vi.fn(),
+    onCompleteOnboarding: vi.fn(),
+    ...overrides,
+  };
+
+  render(
+    <I18nProvider initial="en">
+      <EntryShell {...props} />
+    </I18nProvider>,
+  );
+
+  return props;
+}
+
+beforeEach(() => {
+  globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
+  resetWorkspaceContextCache();
+  resetTeamProjectsCache();
+  MockWorkspaceEventSource.instances = [];
+  installFetchMock();
+});
+
+afterEach(() => {
+  cleanup();
+  globalThis.fetch = originalFetch;
+  globalThis.ResizeObserver = originalResizeObserver;
+  resetWorkspaceContextCache();
+  resetTeamProjectsCache();
+  vi.unstubAllGlobals();
+});
+
+describe('EntryShell signed-out recent projects', () => {
+  const localProject = {
+    id: 'local-project', name: 'Local project', skillId: null,
+    designSystemId: null, createdAt: 1, updatedAt: 1,
+  };
+  beforeEach(() => {
+    // The rail is collapsed (aria-hidden) on a fresh profile; dock it open so
+    // role queries can reach its rows.
+    window.localStorage.setItem('od.entry.railOpen', 'true');
+    globalThis.fetch = vi.fn(async () => jsonResponse({ context: null, projects: [], plugins: [] }));
+  });
+  afterEach(() => {
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  // OPEND-3140: the local shell lists its projects in the rail's 最近项目
+  // section, not in a Home grid, and the rail row's menu drives the same
+  // rename handler the grid used to.
+  it('lists local projects in the rail, not on Home, and renames from the rail row', async () => {
+    const props = renderAt('/', { projects: [localProject] });
+    const home = screen.getByTestId('entry-view-home');
+    const row = await screen.findByTestId('entry-nav-recent-item');
+    expect(row.textContent).toContain('Local project');
+    expect(home.querySelector('.recent-projects')).toBeNull();
+    expect(screen.queryByTestId('recent-projects-strip')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('entry-nav-recent-more'));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Rename' }));
+    const input = screen.getByRole('textbox', { name: 'Rename' }) as HTMLInputElement;
+    expect(input.value).toBe('Local project');
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'Renamed local project' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    expect(props.onRenameProject).toHaveBeenCalledWith('local-project', 'Renamed local project');
+  });
+
+  it('opens the 项目 page from the rail with the local catalogue', async () => {
+    renderAt('/', { projects: [localProject] });
+    await screen.findByTestId('entry-nav-recent-item');
+    fireEvent.click(screen.getByTestId('entry-nav-drafts'));
+    expect(window.location.pathname).toBe('/drafts');
+    const strip = await screen.findByTestId('recent-projects-strip');
+    expect(within(strip).getByText('Local project')).toBeTruthy();
+  });
+
+  // OPEND-2793 (product decision B): the community gallery browses without a
+  // docked composer until phase three gives it a template-bound shape. The
+  // `dock` variant of HomeView stays in the codebase; Community just no longer
+  // mounts it, so the grid can use the full page height.
+  it('renders the Community gallery without a docked composer', async () => {
+    renderAt('/community', { projects: [localProject] });
+    await screen.findByTestId('entry-view-home');
+    expect(screen.queryByTestId('community-composer-dock')).toBeNull();
+    // Home's own composer is still the single composer in the shell.
+    expect(screen.getAllByTestId('home-hero-composer-card')).toHaveLength(1);
+  });
+});
+
+describe('EntryShell team project content readiness', () => {
+  // The grid this reads lives on 全部项目 now: with a cloud identity Home carries
+  // no recent-projects grid any more (#7635 / OPEND-2683 — the rail's 最近项目
+  // section is the entry there), so the catalog-name-over-placeholder rule is
+  // asserted on the team grid surface instead.
+  it('renders another member\'s catalog name and timestamp on 全部项目 instead of the fresh pulled placeholder', async () => {
+    const catalogUpdatedAt = Date.now() - (2 * 24 * 60 * 60 * 1000);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({ context: teamContext() });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) {
+        return jsonResponse({
+          projects: [{
+            projectId: 'shared-pulled',
+            ownerMemberId: 'wm-owner',
+            sharedAt: '2026-07-25T00:00:00.000Z',
+            name: 'Owner catalog name',
+            updatedAt: catalogUpdatedAt,
+          }],
+        });
+      }
+      if (pathname.endsWith('/files')) return jsonResponse({ files: [] });
+      return jsonResponse({});
+    }) as typeof fetch;
+
+    renderAt('/all-projects', {
+      projects: [{
+        id: 'shared-pulled',
+        name: '共享项目',
+        skillId: null,
+        designSystemId: null,
+        workspaceId: 'ws-1',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }],
+    });
+
+    const card = await screen.findByTitle('Owner catalog name');
+    expect(card.textContent).toContain('Owner catalog name');
+    expect(card.textContent).toContain('2d ago');
+    expect(card.textContent).not.toContain('just now');
+  });
+
+  it('opens a materialized local Team row without hydration or pull', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({ context: teamContext() });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) {
+        return jsonResponse({
+          projects: [{
+            projectId: 'shared-ready',
+            ownerMemberId: 'wm-owner',
+            sharedAt: '2026-07-25T00:00:00.000Z',
+            name: 'Ready shared project',
+            updatedAt: 42,
+          }],
+        });
+      }
+      if (pathname.endsWith('/files')) return jsonResponse({ files: [] });
+      return jsonResponse({});
+    }) as typeof fetch;
+    const onTeamProjectContentReady = vi.fn(async () => true);
+    const onOpenProject = vi.fn(async () => true);
+    renderAt('/all-projects', {
+      projects: [{
+        id: 'shared-ready',
+        name: '共享项目',
+        skillId: null,
+        designSystemId: null,
+        workspaceId: 'ws-1',
+        createdAt: 100,
+        updatedAt: 100,
+      }],
+      onOpenProject,
+      onTeamProjectContentReady,
+    });
+
+    // Scoped to the project grid: the rail's 最近浏览过 list names the same
+    // projects, so an unscoped lookup matches the card AND its rail row.
+    const activeCard = await within(document.querySelector('main') as HTMLElement).findByRole(
+      'button',
+      { name: /Ready shared project/ },
+    );
+    fireEvent.click(activeCard);
+
+    await waitFor(() => {
+      expect(onOpenProject).toHaveBeenCalledWith(
+        'shared-ready',
+        undefined,
+        {
+          authoritative: true,
+          name: 'Ready shared project',
+          workspaceId: 'ws-1',
+          workspaceMemberId: 'wm-1',
+        },
+      );
+    });
+    expect(onTeamProjectContentReady).not.toHaveBeenCalled();
+    expect(vi.mocked(globalThis.fetch).mock.calls.some(([input, init]) => (
+      init?.method === 'POST'
+      && String(input).includes('/api/projects/shared-ready/collab/pull')
+    ))).toBe(false);
+  });
+
+  it('hydrates a local shared-project placeholder before opening it', async () => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({ context: teamContext() });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) {
+        return jsonResponse({
+          projects: [{
+            projectId: 'shared-ready',
+            ownerMemberId: 'wm-owner',
+            sharedAt: '2026-07-25T00:00:00.000Z',
+            name: 'Ready shared project',
+            updatedAt: 42,
+          }],
+        });
+      }
+      return jsonResponse({});
+    }) as typeof fetch;
+    let finishHydration!: (hydrated: boolean) => void;
+    const hydration = new Promise<boolean>((resolve) => {
+      finishHydration = resolve;
+    });
+    const onTeamProjectContentReady = vi.fn(async () => hydration);
+    const onOpenProject = vi.fn(async () => true);
+    renderAt('/all-projects', {
+      projects: [{
+        id: 'shared-ready',
+        name: '共享项目',
+        skillId: null,
+        designSystemId: null,
+        workspaceId: 'ws-1',
+        metadata: { kind: 'prototype', sharedProjectPlaceholderAt: 100 },
+        createdAt: 100,
+        updatedAt: 100,
+      }],
+      onOpenProject,
+      onTeamProjectContentReady,
+    });
+
+    const readyProjectCard = await screen.findByRole('button', {
+      name: /Ready shared project/,
+    });
+    fireEvent.click(readyProjectCard);
+
+    await waitFor(() => {
+      expect(onTeamProjectContentReady).toHaveBeenCalledWith(
+        'shared-ready',
+        'ws-1',
+        'wm-1',
+      );
+    });
+    expect(onOpenProject).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishHydration(true);
+      await hydration;
+    });
+    await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
+      'shared-ready',
+      undefined,
+      {
+        authoritative: true,
+        name: 'Ready shared project',
+        workspaceId: 'ws-1',
+        workspaceMemberId: 'wm-1',
+      },
+    ));
+  });
+
+  it('hydrates only a catalog-confirmed ready project and opens it without a second pull', async () => {
+    vi.stubGlobal('EventSource', MockWorkspaceEventSource as unknown as typeof EventSource);
+    const requests: Array<{
+      url: string;
+      method: string;
+      workspaceId: string | null;
+      workspaceMemberId: string | null;
+    }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const pathname = new URL(url, 'http://d.local').pathname;
+      const headers = new Headers(init?.headers);
+      requests.push({
+        url,
+        method: init?.method ?? 'GET',
+        workspaceId: headers.get('x-od-workspace-id'),
+        workspaceMemberId: headers.get('x-od-workspace-member-id'),
+      });
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({ context: teamContext() });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) {
+        return jsonResponse({
+          projects: [{
+            projectId: 'shared-ready',
+            ownerMemberId: 'wm-owner',
+            sharedAt: '2026-07-25T00:00:00.000Z',
+            name: 'Ready shared project',
+          }],
+        });
+      }
+      if (pathname.endsWith('/files')) return jsonResponse({ files: [] });
+      return jsonResponse({});
+    }) as typeof fetch;
+    const onOpenProject = vi.fn(async () => true);
+    const onProjectsRefresh = vi.fn();
+    let finishHydration!: (hydrated: boolean) => void;
+    const hydration = new Promise<boolean>((resolve) => {
+      finishHydration = resolve;
+    });
+    const onTeamProjectContentReady = vi.fn(async () => hydration);
+    renderAt('/all-projects', {
+      onOpenProject,
+      onProjectsRefresh,
+      onTeamProjectContentReady,
+    });
+
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
+    expect(MockWorkspaceEventSource.instances).toHaveLength(1);
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
+        type: 'team-project-content-ready',
+        projectId: 'shared-ready',
+        workspaceId: 'ws-1',
+      });
+      MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
+        type: 'team-project-content-ready',
+        projectId: 'shared-ready',
+        workspaceId: 'ws-1',
+      });
+    });
+    await waitFor(() => {
+      expect(onTeamProjectContentReady).toHaveBeenCalledWith('shared-ready', 'ws-1', 'wm-1');
+    });
+    expect(onTeamProjectContentReady).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTitle('Ready shared project'));
+    expect(onOpenProject).not.toHaveBeenCalled();
+    expect(
+      requests.some(({ url, method }) =>
+        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+    ).toBe(false);
+    await act(async () => {
+      finishHydration(true);
+      await hydration;
+    });
+    await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
+      'shared-ready',
+      undefined,
+      {
+        authoritative: true,
+        name: 'Ready shared project',
+        workspaceId: 'ws-1',
+        workspaceMemberId: 'wm-1',
+      },
+    ));
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+    expect(
+      requests.some(({ url, method }) =>
+        method === 'POST' && url.includes('/api/projects/shared-ready/collab/pull')),
+    ).toBe(false);
+  });
+
+  it('bootstraps a progressive open when ready hydration does not succeed', async () => {
+    vi.stubGlobal('EventSource', MockWorkspaceEventSource as unknown as typeof EventSource);
+    const workspace = teamContext();
+    const materializedFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 128,
+      mtime: 123,
+      isDirectory: false,
+      kind: 'code' as const,
+      mime: 'text/html',
+    };
+    let bootstrapSucceeded = false;
+    const requests: Array<{
+      url: string;
+      method: string;
+      workspaceId: string | null;
+      workspaceMemberId: string | null;
+    }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const pathname = new URL(url, 'http://d.local').pathname;
+      const headers = new Headers(init?.headers);
+      requests.push({
+        url,
+        method: init?.method ?? 'GET',
+        workspaceId: headers.get('x-od-workspace-id'),
+        workspaceMemberId: headers.get('x-od-workspace-member-id'),
+      });
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({ context: workspace });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) {
+        return jsonResponse({
+          projects: [{
+            projectId: 'shared-ready',
+            ownerMemberId: 'wm-owner',
+            sharedAt: '2026-07-25T00:00:00.000Z',
+            name: 'Ready shared project',
+          }],
+        });
+      }
+      if (pathname.endsWith('/collab/bootstrap') && init?.method === 'PUT') {
+        bootstrapSucceeded = true;
+        return jsonResponse({ ok: true, awaitingFirstMaterialization: true }, 202);
+      }
+      if (pathname.endsWith('/files')) {
+        return jsonResponse({ files: bootstrapSucceeded ? [materializedFile] : [] });
+      }
+      return jsonResponse({});
+    }) as typeof fetch;
+    const onOpenProject = vi.fn(async () => true);
+    const onProjectsRefresh = vi.fn();
+    let finishHydration!: (hydrated: boolean) => void;
+    const hydration = new Promise<boolean>((resolve) => {
+      finishHydration = resolve;
+    });
+    const onTeamProjectContentReady = vi.fn(async () => hydration);
+    renderAt('/all-projects', {
+      onOpenProject,
+      onProjectsRefresh,
+      onTeamProjectContentReady,
+    });
+
+    await expect(fetchProjectFiles('shared-ready', {
+      workspaceContext: workspace,
+      fresh: true,
+    })).resolves.toEqual([]);
+
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
+        type: 'team-project-content-ready',
+        projectId: 'shared-ready',
+        workspaceId: 'ws-1',
+      });
+    });
+    await waitFor(() => expect(onTeamProjectContentReady).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTitle('Ready shared project'));
+    expect(
+      requests.some(({ url, method }) =>
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
+    ).toBe(false);
+    await act(async () => {
+      finishHydration(false);
+      await hydration;
+    });
+    await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
+      'shared-ready',
+      undefined,
+      {
+        authoritative: true,
+        name: 'Ready shared project',
+        workspaceId: 'ws-1',
+        workspaceMemberId: 'wm-1',
+      },
+    ));
+    expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
+    expect(
+      requests.some(({ url, method }) =>
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
+    ).toBe(true);
+    const bootstrapRequest = requests.find(
+      ({ url, method }) =>
+        method === 'PUT'
+        && url.includes('/api/projects/shared-ready/collab/bootstrap'),
+    );
+    expect(bootstrapRequest).toMatchObject({
+      workspaceId: 'ws-1',
+      workspaceMemberId: 'wm-1',
+    });
+    await expect(fetchProjectFiles('shared-ready', {
+      workspaceContext: workspace,
+    })).resolves.toEqual([materializedFile]);
+    invalidateProjectFilesCache('shared-ready', workspace);
+  });
+
+  it('clears content-ready latches when the member changes inside the same workspace', async () => {
+    vi.stubGlobal('EventSource', MockWorkspaceEventSource as unknown as typeof EventSource);
+    let workspaceMemberId = 'wm-1';
+    const requests: Array<{ url: string; method: string }> = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const pathname = new URL(url, 'http://d.local').pathname;
+      requests.push({ url, method: init?.method ?? 'GET' });
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({
+          context: teamContext({
+            workspaceMemberId,
+            displayName: workspaceMemberId === 'wm-1' ? 'Member A' : 'Member B',
+          }),
+        });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) {
+        return jsonResponse({
+          projects: [{
+            projectId: 'shared-ready',
+            ownerMemberId: 'wm-owner',
+            sharedAt: '2026-07-25T00:00:00.000Z',
+            name: 'Ready shared project',
+          }],
+        });
+      }
+      if (pathname.endsWith('/files')) return jsonResponse({ files: [] });
+      return jsonResponse({});
+    }) as typeof fetch;
+    const onOpenProject = vi.fn(async () => true);
+    const onProjectsRefresh = vi.fn();
+    const onTeamProjectContentReady = vi.fn(async () => true);
+    renderAt('/all-projects', {
+      onOpenProject,
+      onProjectsRefresh,
+      onTeamProjectContentReady,
+    });
+
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
+        type: 'team-project-content-ready',
+        projectId: 'shared-ready',
+        workspaceId: 'ws-1',
+      });
+    });
+    await waitFor(() => {
+      expect(onTeamProjectContentReady).toHaveBeenCalledWith(
+        'shared-ready',
+        'ws-1',
+        'wm-1',
+      );
+    });
+
+    workspaceMemberId = 'wm-2';
+    act(() => {
+      notifyWorkspaceContextRefresh({
+        context: teamContext({
+          workspaceMemberId,
+          displayName: 'Member B',
+        }),
+      });
+    });
+    // Barrier: the member switch must land in the shell before the click
+    // below, or it would capture wm-1. The account name is no longer rendered
+    // as visible text (320a36ac1 made the trigger avatar-only and moved the
+    // name into the hover menu) — it survives as the trigger's aria-label,
+    // which is the same value in the always-mounted chrome.
+    expect(await screen.findByLabelText('Member B')).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('Ready shared project'));
+    await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
+      'shared-ready',
+      undefined,
+      {
+        authoritative: true,
+        name: 'Ready shared project',
+        workspaceId: 'ws-1',
+        workspaceMemberId: 'wm-2',
+      },
+    ));
+    expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
+    expect(
+      requests.some(({ url, method }) =>
+        method === 'PUT' && url.includes('/api/projects/shared-ready/collab/bootstrap')),
+    ).toBe(true);
+    expect(onTeamProjectContentReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a ready hydration after its catalog row arrives', async () => {
+    vi.stubGlobal('EventSource', MockWorkspaceEventSource as unknown as typeof EventSource);
+    let releaseCatalog!: (response: Response) => void;
+    const catalogResponse = new Promise<Response>((resolve) => {
+      releaseCatalog = resolve;
+    });
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) {
+        return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+      }
+      if (pathname.endsWith('/workspace/context')) {
+        return jsonResponse({ context: teamContext() });
+      }
+      if (pathname.endsWith('/workspace/projects/team')) return catalogResponse;
+      if (pathname.endsWith('/files')) return jsonResponse({ files: [] });
+      return jsonResponse({});
+    }) as typeof fetch;
+    const onTeamProjectContentReady = vi.fn(async () => true);
+    renderAt('/all-projects', { onTeamProjectContentReady });
+
+    await waitFor(() => expect(MockWorkspaceEventSource.instances).toHaveLength(1));
+    // Barrier: wait for the workspace context to land before dispatching the
+    // readiness event. Read it off the account trigger's aria-label — the
+    // avatar-only trigger (320a36ac1) no longer prints the name as text.
+    await screen.findByLabelText('Ma Shu');
+    act(() => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
+        type: 'team-project-content-ready',
+        projectId: 'shared-ready',
+        workspaceId: 'ws-1',
+      });
+    });
+    expect(onTeamProjectContentReady).not.toHaveBeenCalled();
+
+    releaseCatalog(jsonResponse({
+      projects: [{
+        projectId: 'shared-ready',
+        ownerMemberId: 'wm-owner',
+        sharedAt: '2026-07-25T00:00:00.000Z',
+        name: 'Ready shared project',
+      }],
+    }));
+    // Scoped to the grid: the rail's 最近浏览过 list names the same project.
+    expect(
+      await within(document.querySelector('main') as HTMLElement).findByText('Ready shared project'),
+    ).toBeTruthy();
+    await waitFor(() => {
+      expect(onTeamProjectContentReady).toHaveBeenCalledWith('shared-ready', 'ws-1', 'wm-1');
+    });
+  });
+});
+
+describe('EntryShell blank-project creation tags nameSource', () => {
+  it('tags the Drafts empty-state "New project" CTA as generated', async () => {
+    const props = renderAt('/drafts');
+
+    const cta = await screen.findByRole('button', { name: 'New project' });
+    fireEvent.click(cta);
+
+    expect(props.onCreateProject).toHaveBeenCalledTimes(1);
+    expect(props.onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Untitled',
+        metadata: expect.objectContaining({ nameSource: 'generated' }),
+      }),
+    );
+  });
+
+  it('tags the All-projects empty-state "New project" CTA as generated', async () => {
+    const props = renderAt('/all-projects');
+
+    const cta = await screen.findByRole('button', { name: 'New project' });
+    fireEvent.click(cta);
+
+    expect(props.onCreateProject).toHaveBeenCalledTimes(1);
+    expect(props.onCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Untitled',
+        metadata: expect.objectContaining({ nameSource: 'generated' }),
+      }),
+    );
+  });
+});
+
+
+describe('empty project catalog completion', () => {
+  it('shows the empty state in a personal workspace without waiting for a team catalog', async () => {
+    const context = teamContext({ workspaceType: 'personal' });
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const pathname = new URL(String(input), 'http://d.local').pathname;
+      if (pathname.endsWith('/workspace/directory')) return jsonResponse(workspaceDirectoryFixture([context]));
+      if (pathname.endsWith('/workspace/context')) return jsonResponse({ context });
+      return jsonResponse({ projects: [], plugins: [] });
+    }) as typeof fetch;
+    renderAt('/drafts');
+    await act(async () => {});
+    expect(screen.queryByText('Loading…')).toBeNull();
+    expect(screen.getByText('Create a project here first. It stays private until you move it into the team space.')).toBeTruthy();
+  });
+});
+
+
+it('renders a settled team catalog failure with retry instead of a loader or an empty success', async () => {
+  let denied = true;
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const pathname = new URL(String(input), 'http://d.local').pathname;
+    if (pathname.endsWith('/workspace/directory')) return jsonResponse(workspaceDirectoryFixture([teamContext()]));
+    if (pathname.endsWith('/workspace/context')) return jsonResponse({ context: teamContext() });
+    if (pathname.endsWith('/workspace/projects/team')) return denied
+      ? jsonResponse({ error: 'WORKSPACE_ACCESS_DENIED' }, 403)
+      : jsonResponse({ projects: [] });
+    return jsonResponse({});
+  }) as typeof fetch;
+  renderAt('/drafts');
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Could not load projects');
+  expect(screen.queryByText('Loading…')).toBeNull();
+  denied = false;
+  await act(async () => fireEvent.click(within(alert).getByRole('button', { name: 'Retry' })));
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByText('Create a project here first. It stays private until you move it into the team space.')).toBeTruthy();
+});

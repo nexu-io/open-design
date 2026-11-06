@@ -1,0 +1,130 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/duolingo/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Duolingo".
+ * Bright owl-green gamified universe: chunky 4px bottom-shadows, big
+ * confident type, friendly pill geometry, mascot-driven warmth.
+ *
+ * Key brand decisions encoded here:
+ *   - Owl Green (#58cc02) — dominant brand color, primary CTA + correct answer
+ *   - Snow white canvas (#ffffff) — never tinted; optical clarity is the foundation
+ *   - 4px chunky offset shadow (--elev-raised) — the "tactile press" signature
+ *   - Feather Bold + Mona Sans — rounded display + Swiss workhorse body
+ *   - Display starts at 56px — Duolingo never whispers; size is identity
+ *   - Pill-and-rounded radii — 16px cards, 12px buttons/inputs, 9999px chips
+ *   - Spring easing (back-out, slight overshoot) — gamified joy in motion
+ *   - Eel-blue focus ring (#1cb0f6 tinted) — playful contrast to the green brand
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Snow white canvas with Eel as the section-break tone. Pure optical
+   * clarity — Duolingo never tints the page itself, only the chrome. */
+  --bg: #ffffff;             /* Snow — primary background, the page canvas */
+  --surface: #f7f7f7;        /* Eel — section break, secondary surface, lesson row */
+  --surface-warm: var(--surface); /* alias — palette has no third (warm) surface tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Three real text tiers: Eel Black for primary, Wolf for secondary,
+   * Hare for tertiary. Each tier carries clear, child-readable contrast. */
+  --fg: #3c3c3c;             /* Eel Black — primary text, headings, button labels */
+  --fg-2: var(--fg);         /* alias — single primary text weight throughout */
+  --muted: #777777;          /* Wolf — secondary text, captions, dividers */
+  --meta: #afafaf;           /* Hare — tertiary metadata, placeholder, disabled */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Swan grey at thick 2–3px on most surfaces. Borders are visual,
+   * never hairlines — they read as part of the chunky aesthetic. */
+  --border: #e5e5e5;         /* Swan — standard 2px border, card edge */
+  --border-soft: var(--border); /* alias — single border tier (no inner-row separation) */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Owl Green — the brand IS this green. Used liberally in 30%+ of the
+   * surface for buttons, progress bars, success states, brand chrome. */
+  --accent: #58cc02;
+  --accent-on: #ffffff;
+  --accent-hover: #89e219;   /* Owl Green Light — hover state, soft fills */
+  --accent-active: #58a700;  /* Owl Green Deep — pressed state, the chunky shadow color */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Success IS owl green — DESIGN.md: "primary CTA, correct answer" are
+   * the same affordance. Bee Yellow warns; Cardinal Red marks wrong. */
+  --success: #58cc02;        /* Owl Green — "correct answer" is the brand */
+  --warn: #ffc800;           /* Bee Yellow — pro badge, achievement glow */
+  --danger: #ff4b4b;         /* Cardinal Red — wrong answer, life lost */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Feather Bold (rounded display) drives chrome and headings; Mona Sans
+   * carries body. Default weight is 800 — Duolingo never whispers. */
+  --font-display: "Feather Bold", "DIN Round Pro", "Helvetica Neue", sans-serif;
+  --font-body: "Mona Sans", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. Display 56px is +25–40% above typical
+   * product brands; the ladder favors round whole-pixel sizes. */
+  --text-xs: 12px;           /* Tiny utility, progress numerals */
+  --text-sm: 13px;           /* Caption — XP counter, metadata */
+  --text-base: 15px;         /* Body — standard prose */
+  --text-lg: 18px;           /* H3 / lesson row title / featured body */
+  --text-xl: 24px;           /* H2 — section heading */
+  --text-2xl: 32px;          /* H1 — page title */
+  --text-3xl: 40px;          /* Sub-display — hero secondary, marketing eyebrow */
+  --text-4xl: 56px;          /* Display — onboarding hero, never timid */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.15;     /* Headings — slight breathing under big rounded faces */
+  --tracking-display: -0.01em; /* ≈ -0.56px at 56px — confident, not condensed */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px base unit (DESIGN.md §5): 4, 8, 12, 16, 20, 24, 32, 48. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — generous on desktop, tight on phone so the lesson
+   * tree column reads as a continuous flow rather than chunked pages. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 56px;
+  --section-y-phone: 40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Pill-and-rounded everywhere. Cards 16px (DESIGN.md §4), buttons +
+   * inputs 12px, chips and progress bars 9999px — friendly forever. */
+  --radius-sm: 12px;         /* Inputs, buttons — friendly compact corners */
+  --radius-md: 16px;         /* Cards, lesson tiles — primary signature */
+  --radius-lg: 20px;         /* Featured containers, modals */
+  --radius-pill: 9999px;     /* Chips, progress bars, avatars */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Chunky 4px bottom-shadow IS Duolingo. Buttons and cards cast a hard
+   * offset shadow that reads as a 3D button waiting to be pressed. The
+   * raised value pairs with translateY(4px) on :active to "press" it. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 2px var(--border); /* 2px ring matches the chunky border weight */
+  --elev-raised: 0 4px 0 #d7d7d7; /* Hard tactile shadow — the press affordance */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Eel Blue 20% tint (DESIGN.md §4 inputs) — playful contrast against
+   * the ambient owl-green brand; signals "you can interact with this". */
+  --focus-ring: 0 0 0 3px rgba(28, 176, 246, 0.2);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * 180ms button press, 320ms skill-node unlock; back-out spring with
+   * slight overshoot (DESIGN.md §6). Every state change feels gamified. */
+  --motion-fast: 180ms;
+  --motion-base: 320ms;
+  --ease-standard: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1080px container (DESIGN.md §5) — narrower than a SaaS deck because
+   * Duolingo content reads vertically as a focused lesson tree column. */
+  --container-max: 1080px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 20px;
+  --container-gutter-phone: 16px;
+}

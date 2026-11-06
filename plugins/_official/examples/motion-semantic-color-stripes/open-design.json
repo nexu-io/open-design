@@ -1,0 +1,160 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-semantic-color-stripes",
+  "title": "Semantic Color Stripes",
+  "title_i18n": {
+    "en": "Semantic Color Stripes",
+    "id": "Garis Warna Semantik",
+    "de": "Semantische Farbstreifen",
+    "zh-CN": "词语生成色带",
+    "zh-TW": "語義色條紋",
+    "pt-BR": "Listras de cores semânticas",
+    "es-ES": "Rayas de color semánticas",
+    "ru": "Семантические цветовые полосы",
+    "fa": "راه راه رنگ معنایی",
+    "ar": "خطوط اللون الدلالية",
+    "ja": "セマンティックカラーストライプ",
+    "ko": "의미 있는 색상 줄무늬",
+    "pl": "Semantyczne kolorowe paski",
+    "hu": "Szemantikus színes csíkok",
+    "fr": "Rayures de couleur sémantiques",
+    "uk": "Семантичні кольорові смуги",
+    "tr": "Anlamsal Renk Çizgileri",
+    "th": "แถบสีความหมาย",
+    "it": "Strisce di colore semantiche"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "A live word-to-palette study, from tomato and neon tokyo to sunlight and stormclouds.",
+  "description_i18n": {
+    "en": "A live word-to-palette study, from tomato and neon tokyo to sunlight and stormclouds.",
+    "id": "Studi kata-ke-palet secara langsung, mulai dari tomat dan neon tokyo hingga sinar matahari dan awan badai.",
+    "de": "Eine Live-Wort-zu-Palette-Studie, von Tomaten und Neon-Tokyo bis hin zu Sonnenlicht und Gewitterwolken.",
+    "zh-CN": "输入 tomato、neon tokyo、sunlight 与 stormclouds，观看词语如何化为连续重排的色带。",
+    "zh-TW": "從番茄和東京霓虹燈到陽光和暴風雨雲的實時單詞到調色板研究。",
+    "pt-BR": "Um estudo ao vivo, palavra por paleta, desde tomate e neon em Tóquio até a luz do sol e nuvens de tempestade.",
+    "es-ES": "Un estudio en vivo de palabra a paleta, desde el tomate y el neón de Tokio hasta la luz del sol y las nubes de tormenta.",
+    "ru": "Живое исследование от слова к палитре, от томата и неонового Токио до солнечного света и грозовых облаков.",
+    "fa": "یک مطالعه زنده کلمه به پالت، از گوجه فرنگی و نئون توکیو گرفته تا نور خورشید و ابرهای طوفان.",
+    "ar": "دراسة حية من الكلمات إلى لوحة الألوان، من الطماطم وطوكيو النيون إلى ضوء الشمس والسحب العاصفة.",
+    "ja": "トマトや東京のネオンから太陽光や嵐雲まで、言葉からパレットへの生きた研究。",
+    "ko": "토마토와 네온 도쿄부터 햇빛과 폭풍우까지, 단어부터 팔레트까지의 실시간 연구입니다.",
+    "pl": "Studium na żywo od słowa do palety, od pomidora i neonowego Tokio po światło słoneczne i chmury burzowe.",
+    "hu": "Élő szó-paletta tanulmány a paradicsomtól és a neontól a napfényig és a viharfelhőkig.",
+    "fr": "Une étude mot à palette en direct, de la tomate et du néon de Tokyo à la lumière du soleil et aux nuages d'orage.",
+    "uk": "Живе дослідження від слова до палітри, від томатного й неонового Токіо до сонячного світла й грозових хмар.",
+    "tr": "Domates ve neon tokyo'dan güneş ışığına ve fırtına bulutlarına kadar, kelimeden palete canlı bir çalışma.",
+    "th": "การศึกษาแบบคำต่อจานแบบสดๆ ตั้งแต่มะเขือเทศและโตเกียวนีออนไปจนถึงแสงแดดและเมฆพายุ",
+    "it": "Uno studio dal vivo, parola per tavolozza, dal pomodoro e il neon di Tokyo alla luce del sole e alle nuvole temporalesche."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "generative",
+    "color",
+    "typography"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "terms",
+        "type": "text",
+        "label": "Color matching words (one per line)",
+        "default": "tomato\ntomato on a vine\nneon\nneon tokyo\n80s\n80s disco\n80s pop\nretro\nbrowser\nbowser\nmario\nluigi\nwario\ncanada\nlondon\nlondon bus\nlondon pub\nroyalty\nindigo\nblue screen of death\nmatrix\nthe matrix\nbeach\nbeach sunset\nsunlight\nsunlight over the fields\nsunlight over the beach\nstormclouds",
+        "label_i18n": {
+          "en": "Color matching words (one per line)",
+          "id": "Kata-kata yang cocok dengan warna (satu per baris)",
+          "de": "Farblich passende Wörter (eines pro Zeile)",
+          "zh-CN": "配色词语（每行一个）",
+          "zh-TW": "顏色匹配字（每行一個）",
+          "pt-BR": "Palavras de correspondência de cores (uma por linha)",
+          "es-ES": "Palabras de combinación de colores (una por línea)",
+          "ru": "Слова, соответствующие цвету (по одному в строке)",
+          "fa": "کلمات تطبیق رنگ (یکی در هر خط)",
+          "ar": "كلمات مطابقة الألوان (واحدة في كل سطر)",
+          "ja": "カラーマッチングの単語 (1 行に 1 つ)",
+          "ko": "색상 일치 단어(한 줄에 하나씩)",
+          "pl": "Słowa dopasowujące kolory (po jednym w wierszu)",
+          "hu": "Színegyeztető szavak (soronként egy)",
+          "fr": "Mots de correspondance des couleurs (un par ligne)",
+          "uk": "Слова відповідності кольору (по одному на рядок)",
+          "tr": "Renk eşleştirme sözcükleri (her satıra bir tane)",
+          "th": "คำจับคู่สี (หนึ่งคำต่อบรรทัด)",
+          "it": "Parole di corrispondenza dei colori (una per riga)"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a minimal word-to-palette exploration using these terms: {{terms}}.",
+        "id": "Buat eksplorasi kata-ke-palet minimal menggunakan istilah berikut: {{terms}}.",
+        "de": "Erstellen Sie eine minimale Wort-zu-Palette-Erkundung mit diesen Begriffen: {{terms}}.",
+        "zh-CN": "用这些词语制作极简的文字配色演示：{{terms}}。",
+        "zh-TW": "使用以下術語創建最小的單詞到調色板探索：{{terms}}。",
+        "pt-BR": "Crie uma exploração mínima de palavra a paleta usando estes termos: {{terms}}.",
+        "es-ES": "Cree una exploración mínima de palabra a paleta utilizando estos términos: {{terms}}.",
+        "ru": "Создайте минимальное исследование от слова к палитре, используя следующие термины: {{terms}}.",
+        "fa": "حداقل کاوش کلمه به پالت را با استفاده از این عبارات ایجاد کنید: {{terms}}.",
+        "ar": "قم بإنشاء الحد الأدنى من استكشاف الكلمات إلى لوحة الألوان باستخدام هذه المصطلحات: {{terms}}.",
+        "ja": "次の用語を使用して、最小限の単語からパレットへの探索を作成します: {{terms}}。",
+        "ko": "다음 용어를 사용하여 최소한의 단어-팔레트 탐색을 만듭니다: {{terms}}.",
+        "pl": "Utwórz minimalną eksplorację od słowa do palety, używając tych terminów: {{terms}}.",
+        "hu": "Hozzon létre egy minimális szó-paletta felfedezést a következő kifejezések használatával: {{terms}}.",
+        "fr": "Créez une exploration minimale de mot à palette en utilisant ces termes : {{terms}}.",
+        "uk": "Створіть мінімальне дослідження від слова до палітри, використовуючи ці терміни: {{terms}}.",
+        "tr": "Şu terimleri kullanarak minimal düzeyde kelimeden palete keşif oluşturun: {{terms}}.",
+        "th": "สร้างการสำรวจคำต่อจานสีขั้นต่ำโดยใช้คำเหล่านี้: {{terms}}",
+        "it": "Crea un'esplorazione minima da parola a tavolozza utilizzando questi termini: {{terms}}."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Semantic Color Stripes"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "Matt DesLauriers (@mattdesl)",
+      "url": "https://x.com/mattdesl/status/2100899669802963060",
+      "note": "参考动画来源；未访问来源链接。"
+    }
+  ]
+}

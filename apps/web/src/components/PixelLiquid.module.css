@@ -1,0 +1,16 @@
+/* 像素液体的画布。宿主必须是 `position: relative` 并且自己裁圆角 —— 生图格
+   (`.shot`)和产物卡缩略图(`.artifact-card-thumb`)本来就都是。 */
+.liquid {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  /* 画布按 CSS 像素开(见 runtime/pixel-liquid.ts 的说明),2× 屏上要放大一倍
+     才铺满格子。nearest 放大,抖动的方格才是实的;默认的平滑会把 4×4 那层
+     抖动抹成灰。 */
+  image-rendering: pixelated;
+  -webkit-user-select: none;
+  user-select: none;
+}

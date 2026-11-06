@@ -1,0 +1,1559 @@
+import type { CSSProperties } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Dialog, DialogDescription, DialogFooter, DialogTitle } from "@open-design/components";
+import type { WorkspaceCollabContext } from "@open-design/contracts";
+import { projectKindFromMetadataToTracking } from "@open-design/contracts/analytics";
+import { useAnalytics } from "../analytics/provider";
+import {
+  trackPageView,
+  trackProjectsListClick,
+  trackProjectsListControlsClick,
+  trackProjectsMorePopoverClick,
+} from "../analytics/events";
+import { useT } from "../i18n";
+import { useWorkspaceContext } from "../collab/useWorkspaceContext";
+import { currentWorkspaceAccountGeneration, workspaceIdentityCacheKey } from "../collab/workspace-identity";
+import {
+	getProjectCoverSnapshot,
+	projectCoverSnapshotKey,
+	setProjectCoverSnapshot,
+} from "../lib/project-cover-cache";
+import { deleteLiveArtifact, fetchLiveArtifacts, fetchProjectFiles, liveArtifactPreviewUrl } from "../providers/registry";
+import type {
+	DesignSystemSummary,
+	LiveArtifactSummary,
+	Project,
+	ProjectDisplayStatus,
+	ProjectFile,
+	SkillSummary,
+} from "../types";
+import { AnimatePresence } from "motion/react";
+import { Icon } from "./Icon";
+import {
+	isDesignSystemProject,
+	isPublishedDesignSystemProject,
+	resolveProjectDesignSystemId,
+} from "./design-system-project";
+import { LiveArtifactBadges } from "./LiveArtifactBadges";
+import { Toast } from "./Toast";
+import { ProjectDeleteConfirmDialog } from "./project-actions/ProjectDeleteConfirmDialog";
+import { useProjectDeleteFlow } from "./project-actions/useProjectDeleteFlow";
+import { useBatchProjectShareCount } from "./project-actions/useBatchProjectShareCount";
+import {
+	HtmlProjectCoverFrame,
+	coverFromProjectFile,
+	projectCoverUrl,
+	selectProjectFileCover,
+	type ProjectCoverOverride,
+} from "./project-cover";
+
+type SubTab = "recent" | "yours";
+type ViewMode = "grid" | "kanban";
+
+type DesignListItem =
+	| { type: "project"; project: Project; updatedAt: number; createdAt: number }
+	| {
+			type: "live-artifact";
+			project: Project;
+			liveArtifact: LiveArtifactSummary;
+			updatedAt: number;
+			createdAt: number;
+	  };
+
+const DESIGNS_VIEW_STORAGE_KEY = "od:designs:view";
+const PROJECTS_AUTO_REFRESH_MS = 15000;
+const MAX_BACKGROUND_PROJECT_READS = 2;
+
+async function mapWithConcurrency<T, R>(
+	items: readonly T[],
+	concurrency: number,
+	map: (item: T) => Promise<R>,
+): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let nextIndex = 0;
+	const worker = async () => {
+		for (;;) {
+			const index = nextIndex;
+			if (index >= items.length) return;
+			nextIndex += 1;
+			results[index] = await map(items[index]!);
+		}
+	};
+	await Promise.all(
+		Array.from(
+			{ length: Math.min(Math.max(1, concurrency), items.length) },
+			() => worker(),
+		),
+	);
+	return results;
+}
+
+export const STATUS_ORDER = [
+	"not_started",
+	"running",
+	"awaiting_input",
+	"incomplete",
+	"succeeded",
+	"failed",
+	"canceled",
+] as const satisfies readonly ProjectDisplayStatus[];
+
+export const STATUS_LABEL_KEYS = {
+	not_started: "designs.status.notStarted",
+	queued: "designs.status.queued",
+	running: "designs.status.running",
+	awaiting_input: "designs.status.awaitingInput",
+	incomplete: "designs.status.incomplete",
+	succeeded: "designs.status.succeeded",
+	failed: "designs.status.failed",
+	canceled: "designs.status.canceled",
+} as const satisfies Record<
+	ProjectDisplayStatus,
+	Parameters<ReturnType<typeof useT>>[0]
+>;
+
+interface Props {
+	projects: Project[];
+	skills: SkillSummary[];
+	designSystems: DesignSystemSummary[];
+	onOpen: (id: string) => void;
+	onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
+	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
+	onDuplicate?: (id: string) => Promise<void> | void;
+	onRename?: (id: string, name: string) => void;
+	onNewProject?: () => void;
+	onRefresh?: () => Promise<void> | void;
+	isActive?: boolean;
+}
+
+export function DesignsTab({
+	projects,
+	skills,
+	designSystems,
+	onOpen,
+	onOpenLiveArtifact,
+	onDelete,
+	onDuplicate,
+	onRename,
+	onNewProject,
+	onRefresh,
+	isActive = true,
+}: Props) {
+	const renameTitleId = useId();
+	const confirmTitleId = useId();
+	const t = useT();
+	const analytics = useAnalytics();
+	const { context: workspaceContext, loading: workspaceContextLoading } = useWorkspaceContext();
+	const deleteFlow = useProjectDeleteFlow({ onDelete, analyticsPage: "all_projects", workspaceContext });
+	// P0 page_view page_name=projects — fire once when the tab mounts so
+	// `/projects` landings register even before the user clicks anything.
+	// ref-keyed to survive re-renders that flip parent state without
+	// remounting DesignsTab, mirroring the pattern in HomeView.
+	const projectsPageViewFiredRef = useRef(false);
+	useEffect(() => {
+		if (projectsPageViewFiredRef.current) return;
+		projectsPageViewFiredRef.current = true;
+		trackPageView(analytics.track, { page_name: 'projects' });
+	}, [analytics.track]);
+	const [filter, setFilter] = useState("");
+	const [sub, setSub] = useState<SubTab>("recent");
+	const [liveArtifactsByProject, setLiveArtifactsByProject] = useState<
+		Record<string, LiveArtifactSummary[]>
+	>({});
+	const [coverByProject, setCoverByProject] = useState<
+		Record<string, ProjectCoverOverride | null>
+	>({});
+	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+	const [selectMode, setSelectMode] = useState(false);
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const toastIdRef = useRef(0);
+	const [designsToast, setDesignsToast] = useState<{
+		id: number;
+		message: string;
+		role?: "status" | "alert";
+		tone?: "default" | "success" | "error";
+	} | null>(null);
+	const [projectsRefreshing, setProjectsRefreshing] = useState(false);
+	const menuContainerRef = useRef<HTMLDivElement | null>(null);
+	const projectsRefreshInFlightRef = useRef(false);
+	const liveWorkspaceIdentityRef = useRef<string | null>(null);
+	const coverWorkspaceIdentityRef = useRef<string | null>(null);
+	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
+	const [renameInput, setRenameInput] = useState("");
+	const [confirmTarget, setConfirmTarget] = useState<{
+		title: string;
+		message: string;
+		confirmLabel: string;
+		onConfirm: () => Promise<boolean | void> | boolean | void;
+	} | null>(null);
+	const [confirmPending, setConfirmPending] = useState(false);
+	const [confirmError, setConfirmError] = useState<string | null>(null);
+	const [batchDeleteIds, setBatchDeleteIds] = useState<string[]>([]);
+	const batchShares = useBatchProjectShareCount(confirmTarget ? batchDeleteIds : [], workspaceContext);
+	const [view, setView] = useState<ViewMode>(() => {
+		if (typeof window === "undefined") return "grid";
+		try {
+			const storedView = window.localStorage.getItem(DESIGNS_VIEW_STORAGE_KEY);
+			return storedView === "grid" || storedView === "kanban"
+				? storedView
+				: "grid";
+		} catch {
+			return "grid";
+		}
+	});
+
+	useEffect(() => {
+		if (!isActive || workspaceContextLoading) return;
+		const controller = new AbortController();
+		const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
+		if (liveWorkspaceIdentityRef.current !== workspaceIdentity) {
+			liveWorkspaceIdentityRef.current = workspaceIdentity;
+			setLiveArtifactsByProject({});
+		}
+		const projectIds = projects.map((project) => project.id);
+		if (projectIds.length === 0) {
+			setLiveArtifactsByProject({});
+			return;
+		}
+
+		void mapWithConcurrency(
+			projectIds,
+			MAX_BACKGROUND_PROJECT_READS,
+			async (projectId) =>
+					[
+						projectId,
+						await fetchLiveArtifacts(projectId, {
+							signal: controller.signal,
+							workspaceContext,
+						}),
+					] as const,
+		).then((entries) => {
+			if (controller.signal.aborted) return;
+			setLiveArtifactsByProject(Object.fromEntries(entries));
+		});
+
+		return () => controller.abort();
+	}, [isActive, projects, workspaceContext, workspaceContextLoading]);
+
+	useEffect(() => {
+		if (!isActive || workspaceContextLoading) return;
+		const controller = new AbortController();
+		if (projects.length === 0) {
+			setCoverByProject({});
+			return;
+		}
+		const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
+		const workspaceIdentityChanged = coverWorkspaceIdentityRef.current !== workspaceIdentity;
+		coverWorkspaceIdentityRef.current = workspaceIdentity;
+		const immediateEntries: Array<readonly [string, ProjectCoverOverride | null]> = [];
+		const unresolvedProjects = projects.filter((project) => {
+			const snapshot = getProjectCoverSnapshot(
+				projectCoverSnapshotKey(workspaceIdentity, project.id, project.updatedAt),
+			);
+			if (snapshot === undefined) return true;
+			immediateEntries.push([project.id, snapshot.cover] as const);
+			return false;
+		});
+	const immediateByProject = new Map(immediateEntries);
+	setCoverByProject((current) => {
+		const next: Record<string, ProjectCoverOverride | null> = {};
+		for (const project of projects) {
+			if (immediateByProject.has(project.id)) {
+				next[project.id] = immediateByProject.get(project.id)!;
+			} else if (!workspaceIdentityChanged && Object.hasOwn(current, project.id)) {
+				next[project.id] = current[project.id]!;
+			}
+		}
+		return next;
+	});
+		void mapWithConcurrency(
+			unresolvedProjects,
+			MAX_BACKGROUND_PROJECT_READS,
+			async (project) => {
+				const designSystemProject = isDesignSystemProject(project);
+				// Brand projects render a generated logo/monogram cover (see
+				// projectCover) instead of a raw HTML file preview, so skip the
+				// file scan entirely for them.
+				let cover: ProjectCoverOverride | null;
+				if (project.metadata?.kind === "brand" || (project.metadata?.entryFile && !designSystemProject)) {
+					cover = null;
+				} else {
+					let files: Awaited<ReturnType<typeof fetchProjectFiles>>;
+					try {
+						files = await fetchProjectFiles(project.id, {
+							signal: controller.signal,
+							workspaceContext,
+						});
+					} catch {
+						return [project.id, undefined] as const;
+					}
+					if (controller.signal.aborted) return [project.id, undefined] as const;
+					if (designSystemProject) {
+						const logo = findDesignSystemLogoFile(files);
+						cover = logo ? coverFromProjectFile(logo, "logo") : null;
+					} else {
+						cover = selectProjectFileCover(files);
+					}
+				}
+				setProjectCoverSnapshot(
+					projectCoverSnapshotKey(workspaceIdentity, project.id, project.updatedAt),
+					cover,
+				);
+				return [project.id, cover] as const;
+			},
+		).then((entries) => {
+			if (controller.signal.aborted) return;
+			const resolvedEntries = entries.filter(
+				(entry): entry is readonly [string, ProjectCoverOverride | null] => entry[1] !== undefined,
+			);
+			setCoverByProject((current) => ({
+				...current,
+				...Object.fromEntries(resolvedEntries),
+			}));
+		});
+		return () => controller.abort();
+	}, [isActive, projects, workspaceContext, workspaceContextLoading]);
+
+	useEffect(() => {
+		if (!menuOpenId) return;
+		const onDocClick = (e: MouseEvent) => {
+			const el = menuContainerRef.current;
+			if (el && el.contains(e.target as Node)) return;
+			setMenuOpenId(null);
+		};
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setMenuOpenId(null);
+		};
+		window.addEventListener("mousedown", onDocClick);
+		window.addEventListener("keydown", onKey);
+		return () => {
+			window.removeEventListener("mousedown", onDocClick);
+			window.removeEventListener("keydown", onKey);
+		};
+	}, [menuOpenId]);
+
+	useEffect(() => {
+		// Drop selected ids that no longer exist
+		setSelected((curr) => {
+			const valid = new Set(projects.map((p) => p.id));
+			let changed = false;
+			const next = new Set<string>();
+			curr.forEach((id) => {
+				if (valid.has(id)) next.add(id);
+				else changed = true;
+			});
+			return changed ? next : curr;
+		});
+	}, [projects]);
+
+	useEffect(() => {
+		try {
+			window.localStorage.setItem(DESIGNS_VIEW_STORAGE_KEY, view);
+		} catch {
+			// Storage may be disabled; keep the in-memory view selection usable.
+		}
+	}, [view]);
+
+	useEffect(() => {
+		if (view === "kanban" && selectMode) exitSelectMode();
+	}, [selectMode, view]);
+
+	const refreshProjectsList = useCallback(
+		async (source: "manual" | "auto") => {
+			if (!onRefresh || projectsRefreshInFlightRef.current) return;
+			projectsRefreshInFlightRef.current = true;
+			setProjectsRefreshing(true);
+			if (source === "manual") {
+				trackProjectsListControlsClick(analytics.track, {
+					page_name: "projects",
+					area: "list_controls",
+					element: "refresh",
+				});
+			}
+			try {
+				await onRefresh();
+			} catch {
+				if (source === "manual") {
+					setDesignsToast({
+						id: (toastIdRef.current += 1),
+						message: t("liveArtifact.refresh.networkFailure"),
+						role: "alert",
+						tone: "error",
+					});
+				}
+			} finally {
+				projectsRefreshInFlightRef.current = false;
+				setProjectsRefreshing(false);
+			}
+		},
+		[analytics.track, onRefresh, t],
+	);
+
+	const refreshProjectsListRef = useRef(refreshProjectsList);
+	useEffect(() => {
+		refreshProjectsListRef.current = refreshProjectsList;
+	}, [refreshProjectsList]);
+
+	const hasProjectsRefresh = Boolean(onRefresh);
+	useEffect(() => {
+		if (!isActive || !hasProjectsRefresh) return;
+
+		const refreshIfVisible = () => {
+			if (document.visibilityState !== "visible") return;
+			void refreshProjectsListRef.current("auto");
+		};
+
+		refreshIfVisible();
+		const interval = window.setInterval(refreshIfVisible, PROJECTS_AUTO_REFRESH_MS);
+		window.addEventListener("focus", refreshIfVisible);
+		document.addEventListener("visibilitychange", refreshIfVisible);
+		return () => {
+			window.clearInterval(interval);
+			window.removeEventListener("focus", refreshIfVisible);
+			document.removeEventListener("visibilitychange", refreshIfVisible);
+		};
+	}, [hasProjectsRefresh, isActive]);
+
+	const filtered = useMemo(() => {
+		const q = filter.trim().toLowerCase();
+		let list: DesignListItem[] = projects
+			.filter(
+				(project) =>
+					!shouldHideProjectCard(
+						project,
+						liveArtifactsByProject[project.id] ?? [],
+					),
+			)
+			.map((project) => ({
+				type: "project",
+				project,
+				updatedAt: project.updatedAt,
+				createdAt: project.createdAt,
+			}));
+
+		const liveItems = projects.flatMap((project) =>
+			(liveArtifactsByProject[project.id] ?? []).map((liveArtifact) => ({
+				type: "live-artifact" as const,
+				project,
+				liveArtifact,
+				updatedAt: Date.parse(liveArtifact.updatedAt) || project.updatedAt,
+				createdAt: Date.parse(liveArtifact.createdAt) || project.createdAt,
+			})),
+		);
+
+		list = [...list, ...liveItems];
+
+		if (sub === "recent") {
+			list = [...list].sort((a, b) => b.updatedAt - a.updatedAt);
+		}
+
+		if (sub === "yours") {
+			list = [...list].sort((a, b) => b.createdAt - a.createdAt);
+		}
+
+		if (!q) return list;
+		return list.filter((item) => {
+			if (item.project.name.toLowerCase().includes(q)) return true;
+			return (
+				item.type === "live-artifact" &&
+				item.liveArtifact.title.toLowerCase().includes(q)
+			);
+		});
+	}, [projects, liveArtifactsByProject, filter, sub]);
+
+	const filteredProjects = useMemo(
+		() =>
+			filtered.filter(
+				(item): item is Extract<DesignListItem, { type: "project" }> =>
+					item.type === "project",
+			),
+		[filtered],
+	);
+
+	const skillName = (id: string | null) =>
+		skills.find((s) => s.id === id)?.name ?? "";
+	const dsName = (id: string | null) =>
+		designSystems.find((d) => d.id === id)?.title ?? "";
+	const toggleSelected = (id: string) => {
+		setSelected((curr) => {
+			const next = new Set(curr);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	};
+	const exitSelectMode = () => {
+		setSelectMode(false);
+		setSelected(new Set());
+	};
+	const handleRenameProject = (project: Project) => {
+		setRenameTarget({ id: project.id, original: project.name });
+		setRenameInput(project.name);
+	};
+	const commitRename = () => {
+		if (!renameTarget) return;
+		const trimmed = renameInput.trim();
+		if (trimmed && trimmed !== renameTarget.original) {
+			onRename?.(renameTarget.id, trimmed);
+		}
+		setRenameTarget(null);
+		setRenameInput("");
+	};
+	const cancelRename = () => {
+		setRenameTarget(null);
+		setRenameInput("");
+	};
+	const handleDeleteProject = (project: Project) => {
+		deleteFlow.request(project);
+	};
+	const handleDuplicateProject = (project: Project) => {
+		if (!onDuplicate) return;
+		void Promise.resolve(onDuplicate(project.id)).catch((err) => {
+			setDesignsToast({
+				id: (toastIdRef.current += 1),
+				message: err instanceof Error ? err.message : String(err),
+				role: "alert",
+				tone: "error",
+			});
+		});
+	};
+	const handleBatchDelete = () => {
+		const ids = Array.from(selected);
+		if (ids.length === 0) return;
+		setConfirmError(null);
+		setBatchDeleteIds(ids);
+		setConfirmTarget({
+			title: t("designs.deleteTitle"),
+			message: t("designs.deleteSelectedConfirm", { n: ids.length }),
+			confirmLabel: t("designs.deleteSelected"),
+			onConfirm: async () => {
+				const results = await Promise.all(
+					ids.map(async (id) => {
+						try {
+							const result = await onDelete(id);
+							return result !== false;
+						} catch {
+							return false;
+						}
+					}),
+				);
+				const deleted = results.filter(Boolean).length;
+				const failed = results.length - deleted;
+				exitSelectMode();
+				const message =
+					failed > 0
+						? t("designs.deleteSelectedPartial", { deleted, failed })
+						: t("designs.deleteSelectedSuccess", { n: deleted });
+				setDesignsToast({
+					id: (toastIdRef.current += 1),
+					message,
+					tone: "success",
+				});
+			},
+		});
+	};
+	const handleDeleteLiveArtifact = async (
+		projectId: string,
+		artifact: LiveArtifactSummary,
+	) => {
+		setConfirmError(null);
+		setConfirmTarget({
+			title: t("common.delete"),
+			message: `${t("common.delete")} "${artifact.title}"?`,
+			confirmLabel: t("designs.menuDelete"),
+			onConfirm: async () => {
+				const ok = await deleteLiveArtifact(projectId, artifact.id, workspaceContext);
+				if (!ok) return false;
+				setLiveArtifactsByProject((current) => ({
+					...current,
+					[projectId]: (current[projectId] ?? []).filter(
+						(candidate) => candidate.id !== artifact.id,
+					),
+				}));
+				return true;
+			},
+		});
+	};
+
+	const commitConfirmTarget = async () => {
+		if (!confirmTarget || confirmPending || (batchDeleteIds.length > 0 &&
+      (batchShares.pending || batchShares.failed || batchShares.count === null ||
+        batchShares.generation !== currentWorkspaceAccountGeneration()))) return;
+		const target = confirmTarget;
+		setConfirmError(null);
+		setConfirmPending(true);
+		try {
+			const result = await target.onConfirm();
+			if (result === false) {
+				setConfirmError(t("ds.actionFailed"));
+				return;
+			}
+			setConfirmTarget((current) => current === target ? null : current);
+			setBatchDeleteIds([]);
+		} catch (error) {
+			setConfirmError(error instanceof Error ? error.message : t("ds.actionFailed"));
+		} finally {
+			setConfirmPending(false);
+		}
+	};
+
+	return (
+		<div
+			className={`tab-panel${view === "kanban" ? " design-kanban-view" : ""}`}
+		>
+			<div className="tab-panel-toolbar designs-toolbar">
+				<div className="toolbar-left">
+					<div
+						className="subtab-pill"
+						role="group"
+						aria-label={t("designs.filterAria")}
+					>
+						<button
+							aria-pressed={sub === "recent"}
+							className={sub === "recent" ? "active" : ""}
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "recent",
+								});
+								setSub("recent");
+							}}
+						>
+							{t("designs.subRecent")}
+						</button>
+						<button
+							aria-pressed={sub === "yours"}
+							className={sub === "yours" ? "active" : ""}
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "your_designs",
+								});
+								setSub("yours");
+							}}
+						>
+							{t("designs.subYours")}
+						</button>
+					</div>
+				</div>
+				<div className="toolbar-right">
+					{onNewProject && projects.length > 0 ? (
+						<button
+							type="button"
+							className="designs-new-project-button"
+							data-testid="designs-new-project"
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "create_project",
+								});
+								onNewProject();
+							}}
+						>
+							<Icon name="plus" size={13} />
+							<span>{t("entry.navNewProject")}</span>
+						</button>
+					) : null}
+					<div className="toolbar-search">
+						<span className="search-icon" aria-hidden>
+							<Icon name="search" size={14} />
+						</span>
+						<input
+							placeholder={t("designs.searchPlaceholder")}
+							value={filter}
+							onChange={(e) => setFilter(e.target.value)}
+							onFocus={() => {
+								// P0 ui_click area=list_controls element=search_input.
+								// Tracked on focus rather than every keystroke so each
+								// engagement counts once.
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "search_input",
+								});
+							}}
+						/>
+					</div>
+					{onRefresh ? (
+						<button
+							type="button"
+							className="designs-refresh-button"
+							onClick={() => void refreshProjectsList("manual")}
+							disabled={projectsRefreshing}
+							title={
+								projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")
+							}
+							aria-label={
+								projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")
+							}
+						>
+							<Icon
+								name={projectsRefreshing ? "spinner" : "refresh"}
+								size={14}
+								className={projectsRefreshing ? "icon-spin" : undefined}
+							/>
+							<span>
+								{projectsRefreshing
+									? t("designs.statusRefreshing")
+									: t("designFiles.refresh")}
+							</span>
+						</button>
+					) : null}
+					{view === "grid" && selectMode ? (
+						<div className="designs-select-bar" role="group">
+							<span className="designs-select-count">
+								{t("designs.selectedCount", { n: selected.size })}
+							</span>
+							<button
+								type="button"
+								className="designs-select-delete"
+								disabled={selected.size === 0}
+								onClick={handleBatchDelete}
+							>
+								{t("designs.deleteSelected")}
+							</button>
+							<button
+								type="button"
+								className="designs-select-cancel"
+								onClick={exitSelectMode}
+							>
+								{t("designs.cancelSelect")}
+							</button>
+						</div>
+					) : view === "grid" ? (
+						<button
+							type="button"
+							className="designs-select-toggle"
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "select",
+								});
+								setSelectMode(true);
+							}}
+						>
+							<Icon name="check" size={14} />
+							<span>{t("designs.selectMode")}</span>
+						</button>
+					) : null}
+					<div
+						className="subtab-pill"
+						role="group"
+						aria-label={t("designs.viewToggleAria")}
+					>
+						<button
+							aria-pressed={view === "grid"}
+							className={view === "grid" ? "active" : ""}
+							onClick={() => {
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "grid_view",
+								});
+								setView("grid");
+							}}
+							title={t("designs.viewGrid")}
+							data-testid="designs-view-grid"
+						>
+							<Icon name="grid" size={14} />
+						</button>
+						<button
+							aria-pressed={view === "kanban"}
+							className={view === "kanban" ? "active" : ""}
+							onClick={() => {
+								// Kanban view substitutes for the contract's
+								// list_view element.
+								trackProjectsListControlsClick(analytics.track, {
+									page_name: "projects",
+									area: "list_controls",
+									element: "list_view",
+								});
+								setView("kanban");
+							}}
+							title={t("designs.viewKanban")}
+							data-testid="designs-view-kanban"
+						>
+							<Icon name="kanban" size={14} />
+						</button>
+					</div>
+				</div>
+			</div>
+			{filtered.length === 0 ? (
+				<div className="tab-empty">
+					{projects.length === 0 ? (
+						<div className="designs-empty-state">
+							<h2 className="designs-empty-title">
+								{t("designs.emptyNoProjects")}
+							</h2>
+							{onNewProject ? (
+								<button
+									type="button"
+									className="primary designs-empty-cta"
+									data-testid="designs-empty-new-project"
+									onClick={() => {
+										trackProjectsListControlsClick(analytics.track, {
+											page_name: "projects",
+											area: "list_controls",
+											element: "create_project",
+										});
+										onNewProject();
+									}}
+								>
+									<span>{t("entry.navNewProject")}</span>
+								</button>
+							) : null}
+						</div>
+					) : (
+						t("designs.emptyNoMatch")
+					)}
+				</div>
+			) : view === "grid" ? (
+				<div className="design-grid">
+					{filtered.map((item) => {
+						const p = item.project;
+						const skill = skillName(p.skillId);
+						const ds = dsName(resolveProjectDesignSystemId(p));
+						if (item.type === "live-artifact") {
+							const artifact = item.liveArtifact;
+							const title = liveArtifactCardTitle(p, artifact);
+							const metaLead = liveArtifactCardMetaLead(p, artifact);
+							return (
+								<div
+									key={`live:${artifact.id}`}
+									className={`design-card live-artifact-card status-${artifact.status} refresh-${artifact.refreshStatus}`}
+									role="button"
+									tabIndex={0}
+									onClick={() => onOpenLiveArtifact(p.id, artifact.id)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.preventDefault();
+											onOpenLiveArtifact(p.id, artifact.id);
+										}
+									}}
+								>
+									<button
+										type="button"
+										className="design-card-close"
+										title={t("common.delete")}
+										aria-label={`${t("common.delete")} ${artifact.title}`}
+										onClick={(e) => {
+											e.stopPropagation();
+											void handleDeleteLiveArtifact(p.id, artifact);
+										}}
+									>
+										<Icon name="close" size={14} />
+									</button>
+									<div
+										className="design-card-thumb live-artifact-thumb"
+										aria-hidden
+									>
+										<iframe
+											className="thumb-iframe"
+											src={liveArtifactPreviewUrl(
+												p.id,
+												artifact.id,
+												"rendered",
+												workspaceContext,
+											)}
+											title=""
+											loading="lazy"
+											sandbox="allow-scripts"
+											tabIndex={-1}
+										/>
+									</div>
+									<div className="design-card-meta-block">
+										<ProjectTag category="live-artifact" />
+										<LiveArtifactBadges
+											className="design-card-badges"
+											status={artifact.status}
+											refreshStatus={artifact.refreshStatus}
+										/>
+										<div className="design-card-name" title={title}>
+											{title}
+										</div>
+										<div className="design-card-meta">
+											<span className="ds">{metaLead}</span>
+											{" · "}
+											{artifactStatusLabel(
+												artifact.status,
+												artifact.refreshStatus,
+												t,
+											)}
+											{" · "}
+											{relativeTime(item.updatedAt, t)}
+										</div>
+									</div>
+								</div>
+							);
+						}
+
+						const liveCount = liveArtifactsByProject[p.id]?.length ?? 0;
+						const status = p.status?.value ?? "not_started";
+						const cover = projectCover(
+							p,
+							coverByProject[p.id] ?? null,
+							workspaceContext,
+						);
+						const isSelected = selected.has(p.id);
+						const designSystemProject = isDesignSystemProject(p);
+						const publishedDesignSystem = isPublishedDesignSystemProject(p, designSystems);
+						return (
+							<div
+								key={p.id}
+								className={`design-card${isSelected ? " is-selected" : ""}${selectMode ? " select-mode" : ""}${designSystemProject ? " is-design-system-project" : ""}`}
+								role="button"
+								tabIndex={0}
+								onClick={() => {
+									if (selectMode) {
+										toggleSelected(p.id);
+									} else {
+										// P0 ui_click area=list element=project_card.
+										const projectKind = projectKindFromMetadataToTracking(p.metadata);
+										trackProjectsListClick(analytics.track, {
+											page_name: "projects",
+											area: "list",
+											element: "project_card",
+											project_id: p.id,
+											...(projectKind ? { project_kind: projectKind } : {}),
+										});
+										onOpen(p.id);
+									}
+								}}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										if (selectMode) toggleSelected(p.id);
+										else onOpen(p.id);
+									}
+								}}
+							>
+								{selectMode ? (
+									<span
+										className={`design-card-checkbox${isSelected ? " checked" : ""}`}
+										aria-hidden
+									>
+										{isSelected ? <Icon name="check" size={14} /> : null}
+									</span>
+								) : (
+									<div
+										className="design-card-menu-anchor"
+										ref={menuOpenId === p.id ? menuContainerRef : undefined}
+									>
+										<button
+											type="button"
+											className="design-card-more"
+											aria-label={t("designs.menuMore")}
+											aria-haspopup="menu"
+											aria-expanded={menuOpenId === p.id}
+											onClick={(e) => {
+												e.stopPropagation();
+												setMenuOpenId((cur) => {
+													const nextId = cur === p.id ? null : p.id;
+													if (nextId === p.id) {
+														const projectKind = projectKindFromMetadataToTracking(p.metadata);
+														trackProjectsListClick(analytics.track, {
+															page_name: "projects",
+															area: "list",
+															element: "more",
+															project_id: p.id,
+															...(projectKind ? { project_kind: projectKind } : {}),
+														});
+													}
+													return nextId;
+												});
+											}}
+										>
+											<Icon name="more-horizontal" size={14} />
+									</button>
+									{menuOpenId === p.id ? (
+										<div
+											className="design-card-menu"
+											role="menu"
+											onClick={(e) => e.stopPropagation()}
+										>
+											<button
+												type="button"
+												role="menuitem"
+												onClick={() => {
+													const projectKind = projectKindFromMetadataToTracking(p.metadata);
+													trackProjectsMorePopoverClick(analytics.track, {
+														page_name: "projects",
+														area: "projects_more_popover",
+														element: "rename",
+														project_id: p.id,
+														...(projectKind ? { project_kind: projectKind } : {}),
+													});
+													setMenuOpenId(null);
+													handleRenameProject(p);
+												}}
+											>
+												<Icon name="pencil" size={14} />
+												<span>{t("designs.menuRename")}</span>
+											</button>
+											{onDuplicate ? (
+												<button
+													type="button"
+													role="menuitem"
+													onClick={() => {
+														const projectKind = projectKindFromMetadataToTracking(p.metadata);
+														trackProjectsMorePopoverClick(analytics.track, {
+															page_name: "projects",
+															area: "projects_more_popover",
+															element: "duplicate",
+															project_id: p.id,
+															...(projectKind ? { project_kind: projectKind } : {}),
+														});
+														setMenuOpenId(null);
+														handleDuplicateProject(p);
+													}}
+												>
+													<Icon name="copy" size={12} />
+													<span>{t("designs.menuDuplicate")}</span>
+												</button>
+											) : null}
+											<button
+												type="button"
+												role="menuitem"
+												className="danger"
+												onClick={() => {
+													const projectKind = projectKindFromMetadataToTracking(p.metadata);
+													trackProjectsMorePopoverClick(analytics.track, {
+														page_name: "projects",
+														area: "projects_more_popover",
+														element: "delete",
+														project_id: p.id,
+														...(projectKind ? { project_kind: projectKind } : {}),
+													});
+													setMenuOpenId(null);
+													handleDeleteProject(p);
+												}}
+											>
+												<Icon name="close" size={14} />
+												<span>{t("designs.menuDelete")}</span>
+											</button>
+										</div>
+									) : null}
+								</div>
+								)}
+								<div
+									className={`design-card-thumb project-thumb project-thumb-${cover.kind}`}
+									style={cover.style}
+									aria-hidden
+								>
+									{cover.kind === "brand" ? (
+										<ProjectBrandCover
+											brandId={cover.brandId}
+											host={cover.brandHost}
+											initial={cover.initial}
+										/>
+									) : (cover.kind === "image" || cover.kind === "logo") && cover.src ? (
+										<img className="thumb-media" src={cover.src} alt="" loading="lazy" />
+									) : cover.kind === "video" && cover.src ? (
+										<video className="thumb-media" src={cover.src} muted preload="metadata" playsInline />
+									) : cover.kind === "html" ? (
+										<HtmlProjectCoverFrame
+											src={cover.src}
+											initial={cover.initial}
+											iframeClassName="thumb-iframe"
+											glyphClassName="project-thumb-glyph"
+											diagnostic={`${p.id}:${cover.name ?? "unknown"}`}
+										/>
+									) : (
+										<span className="project-thumb-glyph">{cover.initial}</span>
+									)}
+									{liveCount > 0 ? (
+										<span className="design-live-count">
+											{t("designs.liveCount", { n: liveCount })}
+										</span>
+									) : null}
+								</div>
+								<div className="design-card-meta-block">
+									<div className="design-card-tag-row">
+										{designSystemProject ? (
+											<DesignSystemProjectTag />
+										) : (
+											<ProjectTag category={projectCategory(p)} />
+										)}
+									</div>
+									<div className="design-card-name" title={p.name}>
+										{p.name}
+									</div>
+									<div className="design-card-meta">
+										<span className="design-card-meta-main">
+											{ds ? (
+												<span className="ds">{ds}</span>
+											) : (
+												<span>{t("designs.cardFreeform")}</span>
+											)}
+											{skill ? ` · ${skill}` : ""}
+											{" · "}
+											<span
+												className={`design-card-status design-card-status-${publishedDesignSystem ? "published" : status}`}
+											>
+												{publishedDesignSystem ? t("designs.status.published") : statusLabel(status, t)}
+											</span>
+										</span>
+										{sub === "recent" || sub === "yours" ? (
+											<span className="design-card-meta-time">
+												{relativeTime(p.updatedAt, t)}
+											</span>
+										) : null}
+									</div>
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			) : (
+				<div className="design-kanban-board">
+					{STATUS_ORDER.map((status) => {
+						const colProjects = filteredProjects.filter(
+							(item) =>
+								normalizeStatus(item.project.status?.value ?? "not_started") ===
+								status,
+						);
+						return (
+							<div key={status} className="design-kanban-col">
+								<div className="design-kanban-header">
+									<span>{statusLabel(status, t)}</span>
+									<span className="design-kanban-count">
+										{colProjects.length}
+									</span>
+								</div>
+								<div className="design-kanban-list">
+									{colProjects.length === 0 ? (
+										<div className="design-kanban-empty">
+											{t("designs.kanbanEmptyColumn")}
+										</div>
+									) : (
+										colProjects.map(({ project: p }) => {
+											const skill = skillName(p.skillId);
+											const ds = dsName(resolveProjectDesignSystemId(p));
+											const designSystemProject = isDesignSystemProject(p);
+											return (
+												<div
+													key={p.id}
+													className={`design-kanban-card status-${status}${designSystemProject ? " is-design-system-project" : ""}`}
+													role="button"
+													tabIndex={0}
+													onClick={() => onOpen(p.id)}
+													onKeyDown={(e) => {
+														if (e.key === "Enter" || e.key === " ") {
+															e.preventDefault();
+															onOpen(p.id);
+														}
+													}}
+												>
+													<button
+														className="design-card-close"
+														title={t("designs.deleteTitle")}
+														aria-label={t("designs.deleteAria", {
+															name: p.name,
+														})}
+														onClick={(e) => {
+															e.stopPropagation();
+															handleDeleteProject(p);
+														}}
+													>
+														<Icon name="close" size={14} />
+													</button>
+													<div
+														className="design-kanban-card-name"
+														title={p.name}
+													>
+														{p.name}
+													</div>
+													{designSystemProject ? (
+														<div className="design-card-tag-row">
+															<DesignSystemProjectTag />
+														</div>
+													) : null}
+													<div className="design-kanban-card-meta">
+														{ds ? (
+															<span className="ds">{ds}</span>
+														) : (
+															<span>{t("designs.cardFreeform")}</span>
+														)}
+														{skill ? ` · ${skill}` : ""}
+														{sub === "recent" || sub === "yours"
+															? ` · ${relativeTime(p.updatedAt, t)}`
+															: ""}
+													</div>
+												</div>
+											);
+										})
+									)}
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			)}
+			{renameTarget ? (
+				<Dialog
+					as="form"
+					className="modal-rename"
+					onClose={cancelRename}
+					closeOnEscape
+					ariaLabelledBy={renameTitleId}
+					onSubmit={(e) => {
+						e.preventDefault();
+						commitRename();
+					}}
+				>
+					<DialogTitle id={renameTitleId}>{t("designs.renameTitle")}</DialogTitle>
+					<label>
+						{t("designs.renamePrompt", { name: renameTarget.original })}
+						<input
+							type="text"
+							value={renameInput}
+							autoFocus
+							onChange={(e) => setRenameInput(e.target.value)}
+						/>
+					</label>
+					<DialogFooter className="row">
+						<button type="button" onClick={cancelRename}>
+							{t("designs.renameCancel")}
+						</button>
+						<button
+							type="submit"
+							className="primary"
+							disabled={
+								!renameInput.trim() ||
+								renameInput.trim() === renameTarget.original
+							}
+						>
+							{t("designs.renameSave")}
+						</button>
+					</DialogFooter>
+				</Dialog>
+			) : null}
+			{deleteFlow.target ? (
+				<ProjectDeleteConfirmDialog
+					projectName={deleteFlow.target.name}
+					activeShareCount={deleteFlow.activeShareCount}
+					shareReadStatus={deleteFlow.shareReadStatus}
+					pending={deleteFlow.pending}
+					failed={deleteFlow.failed}
+					errorMessage={deleteFlow.errorMessage}
+					onCancel={deleteFlow.cancel}
+					onConfirm={() => void deleteFlow.commit()}
+				/>
+			) : null}
+			{confirmTarget ? (
+				<Dialog
+					className="modal-confirm"
+					role="alertdialog"
+					onClose={() => {
+						if (confirmPending) return;
+						setConfirmTarget(null);
+						setBatchDeleteIds([]);
+						setConfirmError(null);
+					}}
+					closeOnBackdrop={!confirmPending}
+					ariaLabelledBy={confirmTitleId}
+				>
+					<DialogTitle id={confirmTitleId}>{confirmTarget.title}</DialogTitle>
+					<DialogDescription className="modal-confirm-message">{confirmTarget.message}</DialogDescription>
+					{batchDeleteIds.length > 0 && batchShares.count !== null && batchShares.count > 0 ? (
+						<DialogDescription>{t("designs.deleteActiveShares", { count: batchShares.count })}</DialogDescription>
+					) : null}
+					{batchDeleteIds.length > 0 && batchShares.pending ? <p role="status">{t("common.loading")}</p> : null}
+					{batchDeleteIds.length > 0 && batchShares.failed ? <p role="alert">{t("ds.actionFailed")}</p> : null}
+					{confirmError ? (
+						<p className="modal-confirm-error" role="alert">
+							{confirmError}
+						</p>
+					) : null}
+					<DialogFooter className="row">
+						<button
+							type="button"
+							disabled={confirmPending}
+							onClick={() => {
+								setConfirmTarget(null);
+								setBatchDeleteIds([]);
+								setConfirmError(null);
+							}}
+						>
+							{t("designs.renameCancel")}
+						</button>
+						<button
+							type="button"
+							className="primary danger"
+							autoFocus
+							disabled={confirmPending || (batchDeleteIds.length > 0 && (batchShares.pending || batchShares.failed || batchShares.count === null || batchShares.generation !== currentWorkspaceAccountGeneration()))}
+							onClick={() => void commitConfirmTarget()}
+						>
+							{confirmTarget.confirmLabel}
+						</button>
+					</DialogFooter>
+				</Dialog>
+			) : null}
+			<AnimatePresence>
+				{designsToast ? (
+					<Toast
+						key={designsToast.id}
+						message={designsToast.message}
+						role={designsToast.role}
+						tone={designsToast.tone}
+						onDismiss={() => setDesignsToast(null)}
+					/>
+				) : null}
+			</AnimatePresence>
+		</div>
+	);
+}
+
+function normalizeStatus(
+	status: ProjectDisplayStatus,
+): Exclude<ProjectDisplayStatus, "queued"> {
+	return status === "queued" ? "running" : status;
+}
+
+function statusLabel(
+	status: ProjectDisplayStatus,
+	t: ReturnType<typeof useT>,
+): string {
+	return t(STATUS_LABEL_KEYS[status]);
+}
+
+function relativeTime(ts: number, t: ReturnType<typeof useT>): string {
+	const diff = Date.now() - ts;
+	const min = 60_000;
+	const hr = 60 * min;
+	const day = 24 * hr;
+	if (diff < min) return t("common.justNow");
+	if (diff < hr) return t("common.minutesAgo", { n: Math.floor(diff / min) });
+	if (diff < day) return t("common.hoursAgo", { n: Math.floor(diff / hr) });
+	if (diff < 7 * day) return t("common.daysAgo", { n: Math.floor(diff / day) });
+	return new Date(ts).toLocaleDateString();
+}
+
+function artifactStatusLabel(
+	status: LiveArtifactSummary["status"],
+	refreshStatus: LiveArtifactSummary["refreshStatus"],
+	t: ReturnType<typeof useT>,
+): string {
+	if (status === "archived") return t("designs.statusArchived");
+	if (status === "error") return t("designs.statusError");
+	if (refreshStatus === "running") return t("designs.statusRefreshing");
+	if (refreshStatus === "failed") return t("designs.statusRefreshFailed");
+	if (refreshStatus === "succeeded") return t("designs.statusRefreshed");
+	return t("designs.statusLive");
+}
+
+function shouldHideProjectCard(project: Project, liveArtifacts: LiveArtifactSummary[]): boolean {
+  if (liveArtifacts.length === 0) return false;
+  return project.skillId === 'live-artifact' && isOrbitProject(project);
+}
+
+function liveArtifactCardTitle(project: Project, liveArtifact: LiveArtifactSummary): string {
+  return isCollapsedOrbitArtifactProject(project) ? project.name : liveArtifact.title;
+}
+
+function liveArtifactCardMetaLead(project: Project, liveArtifact: LiveArtifactSummary): string {
+  return isCollapsedOrbitArtifactProject(project) ? liveArtifact.title : project.name;
+}
+
+function isCollapsedOrbitArtifactProject(project: Project): boolean {
+  return project.skillId === 'live-artifact' && isOrbitProject(project);
+}
+
+function isOrbitProject(project: Project): boolean {
+  const metadata = project.metadata as { kind?: unknown } | undefined;
+  return metadata?.kind === 'orbit';
+}
+
+
+function projectCover(
+	project: Project,
+	override: ProjectCoverOverride | null,
+	workspaceContext?: WorkspaceCollabContext | null,
+): {
+	kind: "image" | "video" | "html" | "logo" | "brand" | "fallback";
+	src?: string;
+	style: CSSProperties;
+	initial: string;
+	name?: string;
+	brandId?: string;
+	brandHost?: string;
+} {
+	let h = 0;
+	for (let i = 0; i < project.id.length; i++) {
+		h = (h * 31 + project.id.charCodeAt(i)) >>> 0;
+	}
+	const hue = h % 360;
+	const hue2 = (hue + 38) % 360;
+	const style: CSSProperties = {
+		background: `radial-gradient(circle at 30% 28%, hsl(${hue} 70% 78% / 0.55), transparent 42%), linear-gradient(135deg, hsl(${hue} 65% 88%), hsl(${hue2} 70% 90%))`,
+	};
+	const trimmed = project.name.trim();
+	const initial = (trimmed ? Array.from(trimmed)[0]! : "?").toUpperCase();
+	const meta = project.metadata;
+	// Brand projects get a clean generated cover (extracted logo / site favicon
+	// / monogram) rather than a raw scaled-down HTML page, which reads as broken
+	// clipped text in the card. The brand color gradient mirrors the monogram
+	// cards so brand kits sit consistently in the grid.
+	if (meta?.kind === "brand") {
+		return {
+			kind: "brand",
+			style,
+			initial,
+			brandId: meta.brandId,
+			brandHost: brandHostname(meta.brandSourceUrl),
+		};
+	}
+	if (override) {
+		return {
+			kind: override.kind,
+			src: projectCoverUrl(
+				project.id,
+				override.name,
+				override.mtime,
+				workspaceContext,
+			),
+			style,
+			initial,
+			name: override.name,
+		};
+	}
+	const entry = meta?.entryFile;
+	if (entry) {
+		const src = projectCoverUrl(
+			project.id,
+			entry,
+			project.updatedAt,
+			workspaceContext,
+		);
+		if (meta?.kind === "image") return { kind: "image", src, style, initial };
+		if (meta?.kind === "video") return { kind: "video", src, style, initial };
+		if (/\.html?$/i.test(entry)) return { kind: "html", src, style, initial, name: entry };
+	}
+	return { kind: "fallback", style, initial };
+}
+
+// Best-effort hostname for the brand cover's favicon fallback. Mirrors the
+// helper in BrandsTab; brand source URLs are always present in metadata even
+// before extraction finishes.
+function brandHostname(rawUrl: string | undefined): string | undefined {
+	if (!rawUrl) return undefined;
+	try {
+		return new URL(rawUrl).hostname.replace(/^www\./, "");
+	} catch {
+		const stripped = rawUrl
+			.replace(/^https?:\/\//, "")
+			.replace(/^www\./, "")
+			.split("/")[0];
+		return stripped || undefined;
+	}
+}
+
+// Brand project cover: shows the extracted brand logo when available, falling
+// back to the site favicon, then a monogram. The image error chain lets a card
+// degrade gracefully without leaving a broken image icon on the gradient.
+function ProjectBrandCover({
+	brandId,
+	host,
+	initial,
+}: {
+	brandId?: string;
+	host?: string;
+	initial: string;
+}) {
+	const sources = useMemo(() => {
+		const list: string[] = [];
+		if (brandId) list.push(`/api/brands/${encodeURIComponent(brandId)}/logo`);
+		if (host) {
+			list.push(
+				`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`,
+			);
+		}
+		return list;
+	}, [brandId, host]);
+	const sourceKey = sources.join("|");
+	const [index, setIndex] = useState(0);
+	useEffect(() => {
+		setIndex(0);
+	}, [sourceKey]);
+	const src = sources[index];
+	if (!src) {
+		return <span className="project-thumb-glyph">{initial}</span>;
+	}
+	return (
+		<span className="project-thumb-brand-logo">
+			<img
+				className="thumb-media"
+				src={src}
+				alt=""
+				loading="lazy"
+				onError={() => setIndex((current) => current + 1)}
+			/>
+		</span>
+	);
+}
+
+type ProjectCategory = "prototype" | "live-artifact" | "web-clone" | "slide" | "media" | "brand";
+
+function projectCategory(project: Project): ProjectCategory {
+	const meta = project.metadata;
+	if (meta?.intent === "live-artifact" || project.skillId === "live-artifact") {
+		return "live-artifact";
+	}
+	// Website clone projects still store `kind: 'prototype'` (see
+	// home-hero/chips.ts's 'web-clone' chip); only `intent: 'web-clone'`
+	// marks the scenario, so it must be checked before the prototype fallback.
+	if (meta?.intent === "web-clone") return "web-clone";
+	if (meta?.kind === "deck") return "slide";
+	if (meta?.kind === "brand") return "brand";
+	if (meta?.kind === "image" || meta?.kind === "video" || meta?.kind === "audio") {
+		return "media";
+	}
+	return "prototype";
+}
+
+function ProjectTag({ category }: { category: ProjectCategory }) {
+	const t = useT();
+	const label =
+		category === "live-artifact"
+			? t("designs.tagLiveArtifact")
+			: category === "web-clone"
+				? t("designs.tagWebClone")
+				: category === "slide"
+					? t("designs.tagSlide")
+					: category === "brand"
+						? "Brand"
+					: category === "media"
+						? t("designs.tagMedia")
+						: t("designs.tagPrototype");
+	return (
+		<span className={`design-card-tag tag-${category}`}>{label}</span>
+	);
+}
+
+function DesignSystemProjectTag() {
+	return (
+		<span className="design-card-tag tag-design-system">Design System</span>
+	);
+}
+
+function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
+	const logoCandidates = files
+		.filter((file) => file.type !== "dir")
+		.filter((file) => {
+			const name = file.path ?? file.name;
+			return file.kind === "image" || /\.(svg|png|jpe?g|webp|gif)$/iu.test(name);
+		});
+	return (
+		logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === "assets/logo.svg") ??
+		logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
+		null
+	);
+}

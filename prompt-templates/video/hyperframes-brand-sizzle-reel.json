@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-brand-sizzle-reel",
+  "surface": "video",
+  "title": "HyperFrames: 30-Second Brand Sizzle Reel",
+  "summary": "A 30-second 16:9 HyperFrames sizzle reel — fast cuts, beat-synced kinetic typography, audio-reactive scale on display words, shader transitions between five scenes, end-card with logo bloom. Modelled on the aisoc-hype archetype from the student kit.",
+  "category": "Marketing",
+  "tags": ["hyperframes", "sizzle", "kinetic-typography", "audio-reactive", "brand"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 30-second HyperFrames sizzle reel (1920×1080, 30fps) — five scenes hammered to a tempo, beat-synced display words, restrained color, one logo outro. The audio is a 90 BPM bed track (`bed.mp3`) — every scene cut and major pop lands on a beat (every 666ms). Use the audio-reactive reference for amplitude-driven scale, and pull `npx hyperframes add flash-through-white`, `npx hyperframes add cinematic-zoom`, `npx hyperframes add chromatic-radial-split`, `npx hyperframes add logo-outro`.\n\nVisual identity: ink canvas #0a0a0a, single jewel accent #f0c14b, off-white #f7f3e8. Display: \"Druk Wide\" 220px (or \"Anton\") for one-word scenes; body \"Inter\" 28px; tabular-nums on any number scene.\n\nScene 1 (0–6s) WHO — full-bleed display word \"BUILD\" centered, scales 0.92→1 ease expo.out 0.5s on the first beat (beat 1, t=0.0s), then audio-amplitude reacts on every beat with a +2% scale pop (use audio-reactive: map 0–80Hz amplitude → scale, dampened). At 4s the kicker line \"a film about shipping\" fades in below at 36px. Transition at 6.0s → flash-through-white, 0.4s.\n\nScene 2 (6.4–12s) WHAT — three quick cuts inside the scene of static product photography (img clips), each 1.8s, with x-axis whip-pan transitions between them (`whip-pan` shader, 0.25s each). Caption mode: a single mono line at the bottom changes per cut.\nTransition at 12.0s → chromatic-radial-split, 0.5s.\n\nScene 3 (12.5–18.5s) STATS — three numbers, each in a dedicated 2s slot, animated with apple-money-count-style counters (use the catalog block as reference). 0 → 12k, 0 → 4.2×, 0 → $1.4M. Tabular-nums forced.\nTransition at 18.5s → cinematic-zoom, 0.5s.\n\nScene 4 (19.0–25.0s) PEOPLE — three back-to-back testimonial pull-quotes typeset like NYT, each 2s, with a left hairline rule extending in from y=0 over 0.4s before the quote types in via a clip-path reveal.\nTransition at 25.0s → flash-through-white, 0.3s.\n\nScene 5 (25.3–30s) END-CARD — logo-outro block: wordmark piece-by-piece assembly over 1.4s with #f0c14b bloom; one-line CTA fades in at 28.5s; hold to 30s.\n\nNon-negotiables: every cut on a beat, no orphan motion; min 60px headlines; entrance-only (transitions handle exits); deterministic; all timelines paused:true; root data-duration=30. Run lint/validate/inspect. Output: `brand-sizzle-30s.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://x.com/HeyGen/status/2044827454460871072"
+  }
+}

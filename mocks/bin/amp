@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Mock wrapper for amp — runs the bundled mock-agent in this agent's
+# stdout protocol. Amp's `-x --stream-json` emits the Claude Code-compatible
+# stream JSON format, so the mock renders via the claude renderer. The
+# wrapper accepts (and ignores) any flags the real CLI would take; the mock
+# doesn't honor mode selection or tool gates — recording selection is via
+# OD_MOCKS_* env vars (see ../README.md).
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+exec node "$HERE/../mock-agent.mjs" --as amp "$@"

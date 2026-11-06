@@ -1,0 +1,471 @@
+/* -------- Buttons --------------------------------------------------- */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-8, 8px);
+  font: inherit;
+  height: 36px;
+  padding: 0 var(--spacing-16, 16px);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text);
+  background: transparent;
+  border: var(--stroke-thin, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
+    border-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
+    color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease),
+    transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
+    box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
+}
+/*
+ * 这三条是**默认值**,不是判决 —— 所以特异性归零(`:where()`)。
+ *
+ * 原来写成裸选择器 `button:hover:not(:disabled)`,特异性 (0,2,1),压过了组件自己的
+ * 单类 hover(比如 CSS Module 的 `.play:hover`,(0,2,0))。后果是一颗深色实心的
+ * 播放键 hover 时被刷成近白的 `--bg-subtle`,组件写的 `opacity: .86` 完全不算数。
+ * 用户 2026-08-27 指认:「hover 不是应该变成稍微亮一点点的颜色吗…而不是一整个
+ * 按钮全变成白色」,并且说「很多按钮都是」—— 确实,仓里已有十几处在跟它打层叠仗。
+ *
+ * `:where()` 之后:没写 hover 的裸 button 仍然拿到这层反馈,而任何组件只要写了
+ * 自己的 hover 就直接生效,不必再靠加祖先选择器去拼特异性。
+ */
+:where(button:hover:not(:disabled)) { background: var(--bg-subtle); border-color: var(--border-strong); }
+:where(button:active:not(:disabled)) { transform: translateY(1px); }
+button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
+
+button.primary {
+  background: var(--text-strong);
+  border-color: var(--text-strong);
+  border-radius: var(--radius-pill);
+  color: var(--bg);
+}
+button.primary:hover:not(:disabled) {
+  background: #353535;
+  border-color: #353535;
+}
+button.primary:active:not(:disabled) {
+  background: var(--text);
+  border-color: var(--text);
+}
+button.primary-ghost {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-strong);
+}
+button.primary-ghost:hover:not(:disabled) { background: var(--bg-muted); }
+button.primary-ghost:active:not(:disabled) { background: var(--border-strong); }
+
+button.ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+}
+button.ghost:hover:not(:disabled) { background: var(--bg-subtle); border-color: transparent; }
+button.ghost:active:not(:disabled) { background: var(--bg-muted); }
+/*
+ * Transient success state for ghost buttons. Used by the Media
+ * Providers "Refresh providers" button after a successful refresh —
+ * the button briefly turns green with a check icon for ~2s then snaps
+ * back to its idle treatment, replacing what used to be a permanent
+ * success paragraph under the section header. Reusable on any
+ * ghost button that wants the same "did it" pulse.
+ */
+button.ghost.is-success-flash {
+  border-color: var(--green-border, color-mix(in srgb, #1f9d55 32%, var(--border)));
+  background: var(--green-bg, color-mix(in srgb, #1f9d55 8%, transparent));
+  color: var(--green, #137a3d);
+}
+button.ghost.is-success-flash:hover:not(:disabled) {
+  background: var(--green-bg, color-mix(in srgb, #1f9d55 14%, transparent));
+}
+button.ghost.is-success-flash svg {
+  color: currentColor;
+}
+
+/*
+ * Visually-hidden but assistive-tech accessible. We use it to keep
+ * a `role="status"` live-region for actions whose visible feedback
+ * is too transient (e.g. a 2s button-label flash) for a screen
+ * reader to catch reliably. Borrowed from Tailwind's `sr-only` so
+ * it reads as the same primitive everyone already knows.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button.subtle {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-strong);
+}
+button.subtle:hover:not(:disabled) { background: var(--bg-muted); }
+button.subtle:active:not(:disabled) { background: var(--border-strong); }
+
+button.icon-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-medium);
+}
+button.is-selected,
+button[aria-pressed="true"] {
+  border-color: var(--border-selected);
+}
+button:disabled {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-faint);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.od-tooltip {
+  position: relative;
+}
+.od-tooltip-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* hint tier — see the ladder in tokens.css */
+  z-index: var(--z-hint);
+  /* 换行策略是这条规则里**唯一没跟稿子**的一处。稿子写的是
+     `white-space: nowrap` 且不设 max-width —— 那是为「纯图标按钮的名字」
+     量身的,两三个字,一行放得下。这条 primitive 是全应用共享的,上面还挂着
+     长描述(`fileViewer.publishSingleFileDescription` 法语 202 字符)和一批
+     长度无上限的用户数据(`data-tooltip={workingDir}` 是文件系统路径、
+     `{active.title}` 是标签页标题)。单行会横穿屏幕,所以限宽换行留着。
+     判据在 `tests/styles/w126-tooltip-design-parity.test.ts` 的
+     「换行策略」那一组,别照着稿子顺手补 nowrap。 */
+  max-width: min(260px, calc(100vw - 16px));
+  /* 以下逐条取自稿 `729fa43ce7:docs/design/chat-panel/src/components.css:2699-2707`
+     的 `[data-tip]::after`(产品裁决 2026-09-03:全站都改成稿子这套)。
+     搬的是值不是机制 —— 稿子是 `::after` 伪元素,我们是 body portal,
+     定位/贴边那一套归 `TooltipLayer.tsx`。 */
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* 实底,不是磨砂。稿子的理由写在 :2691-2698:气泡是被动的标签,只在鼠标停住时
+     出现,不该比它解释的那个按钮还重 —— 浅底 + 细边 + 软阴影已经够把它从正文里
+     分出来。深色磨砂留给「你要伸手去点」的浮层(选中浮条、注释全文)。
+     实底还顺带解决了一件事:气泡会盖在预览 iframe 的任意用户内容上方,
+     半透明 + blur 在花底子上会掉对比度,不透明的 --bg-elevated 不会。 */
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  contain: layout paint style;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  will-change: transform;
+  /* 稿 `729fa43ce7:docs/design/chat-panel/src/components.css:2706-2707`:
+       `opacity: 0; transition: opacity var(--duration-faster) var(--ease-out);`
+     两个 token 在 `styles/tokens.css` 里同名同值(`:123` 100ms,`:134` → `:132`
+     `cubic-bezier(0, 0, 0, 1)`),所以连写法一起照搬,不折算成字面值。
+
+     ⚠️ 和 `AGENTS.md`「UI animation philosophy」列的默认值不同 —— 那条默认是
+     `cubic-bezier(0.23, 1, 0.32, 1)`、进场 ~200ms / 退场 ~140ms。这里以稿子为准
+     (聊天面板的设计稿是这个面板的事实源),两条硬约束仍然满足:
+     `cubic-bezier(0,0,0,1)` 是减速曲线,不是被禁的 ease-in;也没有从 scale(0) 起。
+
+     ⚠️ 这条能生效的前提是 `TooltipLayer.tsx` **不卸载**节点、只切 opacity。
+     谁把它改回「hide 时 return null」,这条就重新变成死规则 ——
+     判据在 `tests/components/w129-tooltip-fade.test.tsx`。 */
+  opacity: 0;
+  transition: opacity var(--duration-faster) var(--ease-out);
+}
+/* A hint opened FROM INSIDE an already-open menu belongs to that menu. The
+   default ladder deliberately keeps unrelated hints below menus, but applying
+   that rule to a menu's own help trigger hides most of the bubble behind its
+   parent surface. Lift only this scoped case; activation still dismisses the
+   hint before another menu can open, so the global menu > hint invariant stays
+   intact for every unrelated tooltip. */
+.od-tooltip-layer[data-tooltip-context="menu"] {
+  z-index: calc(var(--z-menu) + 1);
+}
+
+/* -------- Inputs ---------------------------------------------------- */
+input, textarea, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: var(--stroke-thin, 1px) solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-8, 8px) var(--spacing-10, 10px);
+  width: 100%;
+  transition:
+    border-color var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
+    box-shadow var(--duration-faster, 100ms) var(--curve-easy-ease, ease);
+}
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--selected);
+}
+/* Entry sidebar form fields keep a quieter, neutral focus (just a darker
+   border, no outer halo) so the orange "Create" CTA stays the loudest thing
+   in the panel. */
+.entry-side input:focus,
+.entry-side textarea:focus,
+.entry-side select:focus {
+  border-color: var(--text);
+}
+/* Native <select> on macOS uses its own intrinsic min-height that ends up
+   shorter than <input> at the same `padding: 7px 10px` rule above, so any
+   form that flex-aligns an input next to a select (e.g. the memory editor's
+   Title + Type row) renders with mismatched heights. Stripping the native
+   chrome lets the shared padding and inherited line-height compute the
+   same box dimensions as the input, then we paint our own chevron via a
+   background SVG. The chevron color is a per-theme override so it stays
+   readable against the panel in both light and dark. */
+select {
+  padding-right: 32px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+}
+select::-ms-expand { display: none; }
+[data-theme='dark'] select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 12px;
+  }
+}
+textarea { resize: vertical; font-family: inherit; }
+
+.od-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.od-select-trigger {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out);
+}
+.od-select-trigger:hover:not(:disabled),
+.od-select-trigger[aria-expanded='true'] {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+.od-select-trigger:focus-visible,
+.od-select-trigger[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--selected);
+}
+.od-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.od-select-trigger svg {
+  color: var(--text-muted);
+  transition: transform var(--dur-quick) var(--ease-out);
+}
+.od-select-trigger[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.od-select-value,
+.od-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-select-menu {
+  /* menu tier — deliberately above the hint tier */
+  z-index: var(--z-menu);
+  padding: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  max-width: calc(100vw - 24px);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+.od-select-menu.portal {
+  position: fixed;
+}
+.od-select-menu.inline {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(280px, 48vh);
+}
+.od-select-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.od-select-option:hover:not(:disabled),
+.od-select-option.active:not(:disabled) {
+  background: var(--vibrancy-fill-secondary);
+}
+.od-select-option.selected {
+  color: var(--text);
+  background: color-mix(in srgb, var(--selected) 9%, var(--bg-subtle));
+  font-weight: 600;
+}
+.od-select-option.selected:hover:not(:disabled),
+.od-select-option.selected.active:not(:disabled) {
+  background: color-mix(in srgb, var(--selected) 13%, var(--bg-subtle));
+}
+.od-select-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.od-select-option-check {
+  display: inline-flex;
+  justify-content: center;
+  color: var(--selected);
+  opacity: 0;
+}
+.od-select-option.selected .od-select-option-check {
+  opacity: 1;
+}
+.od-select-group + .od-select-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+.od-select-group-label {
+  padding: 6px 8px 4px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+code {
+  font-family: var(--mono);
+  background: var(--bg-subtle);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  font-size: 0.92em;
+  color: var(--text);
+}
+
+/* -------- Brand glyph ------------------------------------------------ */
+/* Monochrome OpenDesign brand mark. The glyph ships as /brand-icon.svg and
+   is masked with --text-strong so it reads as ink in light mode and cream in
+   dark mode. Consumers set their own size and placement. */
+.od-brand-glyph {
+  display: inline-block;
+  background-color: var(--text-strong);
+  -webkit-mask: url(/brand-icon.svg) center / contain no-repeat;
+  mask: url(/brand-icon.svg) center / contain no-repeat;
+}
+
+/* -------- Hover marquee ---------------------------------------------- */
+/* Pairs with <MarqueeLabel> (components/MarqueeLabel.tsx). The slot is a
+   fixed clipping window; the text inside it is what travels, so the ellipsis
+   lives on the inner span rather than on the box the layout positions.
+   Consumers keep their own class on the slot for sizing/typography — this adds
+   only the clipping and the motion. */
+.od-marquee {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.od-marquee__text {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Written as `*:hover` rather than a bare `:hover`: same match, same specificity,
+   but a selector that still parses once a test harness strips the state
+   pseudo-class off it (tests/components/chat/queue-draft-alignment.test.tsx).
+   Plays while the slot's PARENT is hovered or keyboard-focused — the row or
+   button the label sits in, so crossing the leading icon starts it too. The
+   240ms delay keeps a sweep down a list from firing every row the pointer has
+   already left. One pass, then it holds at the tail (`forwards`); leaving
+   drops the animation and the ellipsis returns.
+   `data-marquee` is set by MarqueeLabel only when the name actually overflows,
+   so labels that already fit never move. */
+*:hover > .od-marquee[data-marquee='on'] > .od-marquee__text,
+*:focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text {
+  flex: 0 0 auto;
+  max-width: none;
+  text-overflow: clip;
+  animation: od-marquee-slide var(--marquee-duration, 1200ms) ease-in-out 240ms 1
+    forwards;
+}
+@keyframes od-marquee-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--marquee-shift, 0px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No crawl for readers who asked for none — the name stays truncated, which
+     is the state the ellipsis already advertises. */
+  *:hover > .od-marquee[data-marquee='on'] > .od-marquee__text,
+  *:focus-visible > .od-marquee[data-marquee='on'] > .od-marquee__text {
+    flex: 0 1 auto;
+    max-width: 100%;
+    text-overflow: ellipsis;
+    animation: none;
+  }
+}

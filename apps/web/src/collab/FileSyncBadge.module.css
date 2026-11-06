@@ -1,0 +1,19 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.badge svg {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge :global(svg *) {
+    animation-duration: 1.6s !important;
+  }
+}

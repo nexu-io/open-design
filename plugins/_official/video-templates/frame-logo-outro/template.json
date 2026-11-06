@@ -1,0 +1,37 @@
+{
+  "id": "frame-logo-outro",
+  "surface": "hyperframes",
+  "title": "Logo Outro Frame",
+  "summary": "Segmented logo assembly, glow bloom, and tagline reveal for video outros or brand closing frames.",
+  "category": "Intro-outro",
+  "tags": [
+    "logo",
+    "outro",
+    "branding",
+    "end-card",
+    "frame",
+    "glow"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Video closing card",
+    "Brand outro",
+    "Channel sign-off"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-logo-outro",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io"
+  }
+}

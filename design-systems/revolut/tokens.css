@@ -1,0 +1,64 @@
+/* design-systems/revolut/tokens.css
+ *
+ * Structured token bindings for Revolut.
+ * premium consumer-finance surfaces with bright blue action and polished dashboard cards.
+ */
+
+:root {
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --surface-warm: #eef4ff;
+  --fg: #111827;
+  --fg-2: #334155;
+  --muted: #64748b;
+  --meta: #0666eb;
+  --border: #dbe3ef;
+  --border-soft: #edf2f7;
+  --accent: #0666eb;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --font-display: "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.5;
+  --leading-tight: 1.02;
+  --tracking-display: -0.03em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 52px;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 30px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 64px rgba(17, 24, 39, 0.12);
+  --focus-ring: 0 0 0 4px rgba(6, 102, 235, 0.22);
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 18px;
+}

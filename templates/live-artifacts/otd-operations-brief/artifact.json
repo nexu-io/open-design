@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "live_otd_operations_brief_sample",
+  "projectId": "project_fixture",
+  "title": "On-Time Delivery Dashboard",
+  "slug": "on-time-delivery-dashboard",
+  "status": "active",
+  "pinned": false,
+  "preview": {
+    "type": "html",
+    "entry": "index.html"
+  },
+  "refreshStatus": "never",
+  "createdAt": "2026-05-07T00:00:00.000Z",
+  "updatedAt": "2026-05-07T00:00:00.000Z",
+  "document": {
+    "format": "html_template_v1",
+    "templatePath": "template.html",
+    "generatedPreviewPath": "index.html",
+    "dataPath": "data.json",
+    "dataJson": {
+      "page": {
+        "title": "On-Time Delivery Dashboard"
+      }
+    }
+  }
+}

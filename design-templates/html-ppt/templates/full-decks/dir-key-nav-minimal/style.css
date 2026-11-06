@@ -1,0 +1,60 @@
+/* dir-key-nav-minimal — 方向键极简 · 8 种 mono-background 切换 */
+.tpl-dir-key-nav-minimal{
+  --dk-font:'Inter','Noto Sans SC','PingFang SC',-apple-system,sans-serif;
+  --dk-mono:'JetBrains Mono',monospace;
+  background:#000;
+  color:#fff;
+  font-family:var(--dk-font);
+}
+.tpl-dir-key-nav-minimal .slide{padding:80px 104px;overflow:hidden;position:absolute;inset:0}
+/* 8 background themes */
+.tpl-dir-key-nav-minimal .t-indigo{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%);color:#fff}
+.tpl-dir-key-nav-minimal .t-cream{background:#F5F0E8;color:#1a1a1a}
+.tpl-dir-key-nav-minimal .t-crimson{background:linear-gradient(135deg,#7f1d1d 0%,#991b1b 100%);color:#fff}
+.tpl-dir-key-nav-minimal .t-emerald{background:linear-gradient(135deg,#052e16 0%,#064e3b 100%);color:#ecfdf5}
+.tpl-dir-key-nav-minimal .t-slate{background:linear-gradient(135deg,#0f1923 0%,#1a2942 100%);color:#e6edf3}
+.tpl-dir-key-nav-minimal .t-violet{background:linear-gradient(135deg,#1e0a2e 0%,#2e1065 100%);color:#f5f3ff}
+.tpl-dir-key-nav-minimal .t-white{background:#ffffff;color:#111216}
+.tpl-dir-key-nav-minimal .t-charcoal{background:linear-gradient(135deg,#111827 0%,#1f2937 100%);color:#f3f4f6}
+
+.tpl-dir-key-nav-minimal .dk-snum{position:absolute;top:30px;right:48px;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;font-family:var(--dk-mono)}
+.tpl-dir-key-nav-minimal .t-cream .dk-snum,
+.tpl-dir-key-nav-minimal .t-white .dk-snum{color:#999}
+.tpl-dir-key-nav-minimal .t-indigo .dk-snum,
+.tpl-dir-key-nav-minimal .t-crimson .dk-snum,
+.tpl-dir-key-nav-minimal .t-emerald .dk-snum,
+.tpl-dir-key-nav-minimal .t-slate .dk-snum,
+.tpl-dir-key-nav-minimal .t-violet .dk-snum,
+.tpl-dir-key-nav-minimal .t-charcoal .dk-snum{color:rgba(255,255,255,.38)}
+
+.tpl-dir-key-nav-minimal .dk-eyebrow{font-size:12px;font-weight:700;letter-spacing:3.5px;text-transform:uppercase;opacity:.55;margin-bottom:22px;display:flex;align-items:center;gap:14px}
+.tpl-dir-key-nav-minimal .dk-eyebrow::after{content:'';flex:1;max-width:120px;height:1px;background:currentColor;opacity:.3}
+.tpl-dir-key-nav-minimal .dk-h0{font-size:160px;font-weight:900;line-height:.9;letter-spacing:-5px;margin:0 0 20px}
+.tpl-dir-key-nav-minimal .dk-h1{font-size:100px;font-weight:900;line-height:.98;letter-spacing:-3px;margin:0 0 18px}
+.tpl-dir-key-nav-minimal .dk-h2{font-size:72px;font-weight:800;line-height:1.05;letter-spacing:-2px;margin:0 0 16px}
+.tpl-dir-key-nav-minimal .dk-lede{font-size:26px;line-height:1.45;opacity:.72;max-width:900px;font-weight:300}
+.tpl-dir-key-nav-minimal .dk-lede strong{font-weight:700;opacity:1}
+.tpl-dir-key-nav-minimal .dk-big{font-family:var(--dk-mono);font-size:240px;font-weight:800;line-height:.9;letter-spacing:-10px}
+
+.tpl-dir-key-nav-minimal .dk-line{display:block;width:90px;height:4px;background:currentColor;margin:30px 0;opacity:.85}
+.tpl-dir-key-nav-minimal .t-indigo .dk-accent{color:#a5b4fc}
+.tpl-dir-key-nav-minimal .t-cream .dk-accent{color:#B5392A}
+.tpl-dir-key-nav-minimal .t-crimson .dk-accent{color:#fecaca}
+.tpl-dir-key-nav-minimal .t-emerald .dk-accent{color:#6ee7b7}
+.tpl-dir-key-nav-minimal .t-slate .dk-accent{color:#7dd3fc}
+.tpl-dir-key-nav-minimal .t-violet .dk-accent{color:#c4b5fd}
+.tpl-dir-key-nav-minimal .t-white .dk-accent{color:#6366f1}
+.tpl-dir-key-nav-minimal .t-charcoal .dk-accent{color:#fbbf24}
+
+.tpl-dir-key-nav-minimal .dk-list{list-style:none;padding:0;margin:28px 0 0;font-family:var(--dk-mono);font-size:22px;line-height:2}
+.tpl-dir-key-nav-minimal .dk-list li{padding-left:30px;position:relative;font-weight:400;opacity:.85}
+.tpl-dir-key-nav-minimal .dk-list li::before{content:'→';position:absolute;left:0;opacity:.5}
+.tpl-dir-key-nav-minimal .dk-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:56px;margin-top:36px}
+.tpl-dir-key-nav-minimal .dk-col h3{font-size:28px;font-weight:700;margin-bottom:10px}
+.tpl-dir-key-nav-minimal .dk-col p{font-size:19px;line-height:1.55;opacity:.72;font-weight:300}
+.tpl-dir-key-nav-minimal .dk-code{font-family:var(--dk-mono);font-size:16px;line-height:1.9;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:24px 28px;margin-top:24px;white-space:pre}
+.tpl-dir-key-nav-minimal .t-cream .dk-code,
+.tpl-dir-key-nav-minimal .t-white .dk-code{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.1)}
+.tpl-dir-key-nav-minimal .dk-keyhint{position:absolute;bottom:34px;left:104px;font-family:var(--dk-mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.45}
+.tpl-dir-key-nav-minimal .dk-keyhint kbd{display:inline-block;padding:2px 10px;margin:0 3px;border:1px solid currentColor;border-radius:4px;font-size:12px}
+.tpl-dir-key-nav-minimal .dk-page{position:absolute;bottom:34px;right:48px;font-family:var(--dk-mono);font-size:12px;letter-spacing:2px;opacity:.45}

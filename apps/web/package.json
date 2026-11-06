@@ -1,0 +1,81 @@
+{
+  "name": "@open-design/web",
+  "version": "0.25.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./sidecar": {
+      "types": "./dist/sidecar/index.d.ts",
+      "default": "./dist/sidecar/index.js"
+    }
+  },
+  "files": [
+    ".next",
+    "!.next/cache",
+    "app",
+    "dist",
+    "next.config.ts",
+    "package.json",
+    "public",
+    "src"
+  ],
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build && tsc -b --noEmit",
+    "build:sidecar": "tsc -p tsconfig.sidecar.json",
+    "typecheck": "next typegen && tsc -b --noEmit",
+    "test": "vitest run -c vitest.config.ts --maxWorkers=2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.32.1",
+    "@excalidraw/excalidraw": "0.18.1",
+    "@formkit/auto-animate": "0.9.0",
+    "@lexical/react": "0.36.2",
+    "@lexical/utils": "0.36.2",
+    "@open-design/components": "workspace:*",
+    "@open-design/contracts": "workspace:*",
+    "@open-design/host": "workspace:*",
+    "@open-design/platform": "workspace:*",
+    "@open-design/sidecar": "workspace:*",
+    "@open-design/sidecar-proto": "workspace:*",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "dompurify": "3.4.2",
+    "htmlparser2": "10.1.0",
+    "jspdf": "4.2.1",
+    "lexical": "0.36.2",
+    "lucide-react": "1.16.0",
+    "micromark": "4.0.2",
+    "micromark-extension-gfm": "3.0.0",
+    "motion": "12.40.0",
+    "next": "16.2.6",
+    "openai": "6.38.0",
+    "parse5": "8.0.1",
+    "posthog-js": "1.374.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "shiki": "4.1.0",
+    "thinking-orbs": "0.3.1",
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@tailwindcss/postcss": "4.3.0",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/jsdom": "28.0.3",
+    "@types/node": "20.19.39",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "@types/three": "0.185.1",
+    "jsdom": "29.1.1",
+    "postcss": "8.5.15",
+    "tailwindcss": "4.3.0",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

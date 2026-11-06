@@ -1,0 +1,74 @@
+name: bake-plugin-previews-gc
+
+# Weekly garbage collection of orphaned plugin-preview clips on R2 (spec slice
+# 4b). Preview clips are immutable + content-addressed, so the bucket only grows;
+# this prunes clips that NO live build references. The protected set is the union
+# of object keys named by every git tag's manifest, every live release/** branch
+# HEAD, and the current main manifest — so a clip a shipped/old client still
+# points at is never deleted (see scripts/plugin-previews-gc.mjs).
+#
+# Ships in DRY-RUN: it only reports what it would delete. Arming real deletion
+# needs BOTH the `delete` input AND the GC_ENABLE_DELETE env below — flip them
+# only after eyeballing a few dry-run deletion lists.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: 'Actually delete orphans (default: dry-run report only).'
+        type: boolean
+        default: false
+      grace-days:
+        description: Minimum age in days before an orphan may be deleted.
+        type: string
+        default: '90'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bake-plugin-previews-gc
+  cancel-in-progress: false
+
+jobs:
+  gc:
+    name: GC orphaned preview clips
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0 # need all tags + refs to build the protected set
+
+      - name: Fetch release branches + tags (fail closed)
+        # No `|| true`: these refs define the protected set. If we cannot fetch
+        # them, fail the job rather than GC from partial ref data — once deletion
+        # is armed, an incomplete protected set could prune clips a live release
+        # or main manifest still references.
+        run: |
+          git fetch --tags --force origin '+refs/heads/release/*:refs/remotes/origin/release/*'
+          git fetch origin main:refs/remotes/origin/main
+
+      - name: Garbage-collect (dry-run unless armed)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_AK }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_SK }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: 'true'
+          R2_BUCKET: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_BUCKET }}
+          R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_REPOSITORY_ASSETS_URL }}
+          # Second arming switch. Leave unset/empty to keep deletions disabled even
+          # if someone passes --delete; set to '1' here only when ready to prune.
+          GC_ENABLE_DELETE: ''
+          # Dispatch inputs via env (never interpolated into the script body) to
+          # avoid script injection.
+          GC_DELETE: ${{ github.event.inputs.delete }}
+          GC_GRACE_DAYS: ${{ github.event.inputs.grace-days }}
+        run: |
+          GRACE="${GC_GRACE_DAYS:-90}"
+          DELETE_FLAG=""
+          if [ "$GC_DELETE" = "true" ]; then DELETE_FLAG="--delete"; fi
+          node scripts/plugin-previews-gc.mjs --grace-days "$GRACE" $DELETE_FLAG

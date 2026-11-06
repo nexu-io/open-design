@@ -1,0 +1,39 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "export-nextjs-handoff",
+  "title": "Next.js Handoff",
+  "version": "0.1.0",
+  "description": "Export an accepted artifact into a Next.js App Router handoff.",
+  "license": "MIT",
+  "tags": ["export", "nextjs", "react", "handoff", "downstream-export"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "code-migration",
+    "mode": "export",
+    "scenario": "handoff",
+    "useCase": {
+      "query": "Export the accepted artifact to a Next.js App Router handoff for {{destination}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["file-read", "rewrite-plan", "file-write", "build-test", "diff-review", "handoff"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "inspect", "atoms": ["file-read", "rewrite-plan"] },
+        { "id": "write", "atoms": ["file-write"] },
+        { "id": "verify", "atoms": ["build-test", "diff-review"] },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "inputs": [
+      { "name": "destination", "type": "string", "required": false, "label": "Destination", "default": "nextjs-handoff" }
+    ],
+    "capabilities": ["prompt:inject", "fs:read", "fs:write", "bash"]
+  }
+}
+

@@ -1,0 +1,47 @@
+{
+  "slug": "zhangzara-retro-windows",
+  "name": "Retro Windows",
+  "tagline": "Windows 95 chrome: gray title bars, MS Sans Serif, pixel typography, full nostalgia.",
+  "mood": [
+    "nostalgic",
+    "retro",
+    "geeky",
+    "playful"
+  ],
+  "occasion": [
+    "retro gaming pitch",
+    "Y2K brand",
+    "creator portfolio (90s aesthetic)",
+    "tech-history talk",
+    "shitpost-but-make-it-fancy deck"
+  ],
+  "tone": [
+    "winking",
+    "nostalgic",
+    "geeky",
+    "fun"
+  ],
+  "formality": "low",
+  "density": "medium",
+  "palette": {
+    "bg_gray": "#C0C0C0",
+    "bg_light": "#D4D0C8",
+    "blue_navy": "#000080",
+    "blue_light": "#1084D0",
+    "white": "#FFFFFF",
+    "black": "#000000",
+    "description": "Windows 95 system palette: 3D-button gray, navy title bars, pixel-perfect inset/outset borders, no anti-aliasing aesthetic"
+  },
+  "typography": {
+    "display": "Press Start 2P",
+    "body": "MS Sans Serif",
+    "mono": "VT323",
+    "style": "8-bit pixel display + Microsoft system sans + DOS terminal mono"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel knowingly nostalgic: retro gaming, Y2K-aesthetic brands, creator portfolios with a 90s vibe, tech-history talks, deliberately tongue-in-cheek decks. A great choice anywhere a playful retro reference is the entire point.",
+  "avoid_for": "Decks that need to read as modern, elegant, or institutionally credible — the Win95 chrome will always read as a costume.",
+  "slide_count": 10,
+  "navigation": "inline keyboard handler with on-page nav dots and slide counter",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/retro-windows"
+}

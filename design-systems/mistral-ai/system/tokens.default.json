@@ -1,0 +1,8 @@
+{
+  "colorPrimary": "#fa520f",
+  "colorPrimaryBg": "var(--surface)",
+  "colorPrimaryHover": "#fb6424",
+  "colorPrimaryActive": "color-mix(in oklab, var(--accent), black 12%)",
+  "fontSize": 16,
+  "borderRadius": 2
+}

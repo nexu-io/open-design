@@ -1,0 +1,37 @@
+{
+  "id": "frame-data-chart-nyt",
+  "surface": "hyperframes",
+  "title": "NYT-Style Data Chart Frame",
+  "summary": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
+  "category": "Data-viz",
+  "tags": [
+    "chart",
+    "bar",
+    "data",
+    "nyt",
+    "journalism",
+    "number-counter"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 60,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Editorial data viz",
+    "Annual report",
+    "Comparison reveal"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-data-chart-nyt",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io"
+  }
+}

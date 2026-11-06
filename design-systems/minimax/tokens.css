@@ -1,0 +1,148 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/minimax/tokens.css
+ *
+ * Structured token bindings for the "MiniMax" brand — the Shanghai-based
+ * AI lab behind Hailuo (海螺) video and Conch text. The visual language
+ * is a white-dominant product gallery: pure white canvas, vivid product
+ * cards, pill navigation, multi-font hierarchy, and a purple-tinted brand
+ * glow on featured surfaces. The font stacks include CJK fallbacks
+ * (PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans SC) so the
+ * bilingual en/zh audience sees the same vertical rhythm in either script.
+ *
+ * Brand identity in three sentences:
+ *   1. White canvas (#ffffff) is structural; color enters via product
+ *      cards, illustrations, and a single brand-blue accent — never via
+ *      tinted page backgrounds.
+ *   2. Multi-font system: Outfit for display headings (geometric, weight
+ *      500), DM Sans as the UI workhorse for body / nav / buttons. CJK
+ *      fallbacks keep Chinese headings on the same rhythm as English.
+ *   3. Brand blue (#1456f0) is the accent — sparing, reserved for links,
+ *      focus rings, and small chips. Primary CTAs use near-black
+ *      (#181e25 → --fg-2) per the MiniMax button system; brand pink
+ *      (#ea5ec1) is logo / decorative only and never tokenized.
+ *
+ * Schema decisions:
+ *   - --bg: #ffffff;  --surface: #fafafa (whisper card lift on white).
+ *   - --surface-warm: #f0f0f0 (secondary button bg per DESIGN.md §4).
+ *   - --fg: #222222 (near-black);  --fg-2: #18181b (button text, deep heads).
+ *   - --muted: #45515e (DESIGN.md "dark gray" secondary text).
+ *   - --meta:  #8e8e93 (tertiary, muted labels per DESIGN.md §2).
+ *   - --border: #e5e7eb;  --border-soft: #f2f3f5 (section divider).
+ *   - --accent: #1456f0 (brand blue 6); hover #2563eb / active #1d4ed8.
+ *   - --font-display: Outfit + CJK fallbacks; --font-body: DM Sans + CJK.
+ *   - --text-4xl: 80px (display hero, Outfit weight 500 per DESIGN.md §3).
+ *   - --leading-body: 1.5 (universal MiniMax rhythm); --leading-tight: 1.1.
+ *   - --radius-sm: 8px (CTA), --radius-md: 13px (card),
+ *     --radius-lg: 20px (product showcase), --radius-pill: 9999px (nav).
+ *   - --elev-raised: 0 4px 6px rgba(0, 0, 0, 0.08) — DESIGN.md §6 Level 1.
+ *     The brand-glow shadow rgba(44, 30, 116, 0.16) stays inline on
+ *     featured product cards (one-off, not promoted to a token).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;             /* pure white — primary canvas */
+  --surface:      #fafafa;             /* near-white — card lift on bg */
+  --surface-warm: #f0f0f0;             /* secondary button bg (DESIGN.md §4) */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #222222;                     /* near-black — primary text */
+  --fg-2: #18181b;                     /* button text + dark headings */
+  --muted: #45515e;                    /* dark gray — secondary text */
+  --meta:  #8e8e93;                    /* mid gray — tertiary, muted labels */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #e5e7eb;              /* component edge */
+  --border-soft: #f2f3f5;              /* subtle section divider */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #1456f0;            /* MiniMax brand blue 6 */
+  --accent-on:     #ffffff;
+  --accent-hover:  #2563eb;            /* primary 600 — hover */
+  --accent-active: #1d4ed8;            /* primary 700 — pressed */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  /* DM Sans = UI workhorse; Outfit = geometric display. CJK fallbacks
+     (PingFang SC, Hiragino Sans GB, Microsoft YaHei, Noto Sans SC) give
+     Chinese-language headings + body the same vertical rhythm so 海螺 /
+     Conch / MiniMax all align without per-script overrides. */
+  --font-display: "Outfit", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-body:    "DM Sans", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 hierarchy.
+   * MiniMax compresses from 80px display straight to 32px section, then
+   * 16–20px body — a deliberate jump that keeps the visual ladder short. */
+  --text-xs:   12px;                   /* small label, tag */
+  --text-sm:   14px;                   /* nav / link */
+  --text-base: 16px;                   /* body */
+  --text-lg:   20px;                   /* body large, emphasized */
+  --text-xl:   24px;                   /* sub-heading (Poppins context) */
+  --text-2xl:  32px;                   /* section heading alt */
+  --text-3xl:  48px;                   /* H1 step between section and display */
+  --text-4xl:  80px;                   /* display hero — Outfit weight 500 */
+
+  /* Leading + tracking.
+   * Universal 1.50 line-height across body and most headings is the
+   * MiniMax signature (DESIGN.md §3); display compresses to 1.10 for the
+   * 80px hero. Slight negative tracking on display sizes only. */
+  --leading-body:     1.5;
+  --leading-tight:    1.1;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 8px base grid per DESIGN.md §5; the schema spine uses 4px steps
+     capped at --space-12 (48px). Larger gallery gaps (64–80px) live in
+     the section-rhythm tier below. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ───────────────────────────────────────────── */
+  /* DESIGN.md §5 gallery spacing: 64–80px between sections on desktop,
+     compressing to 32–40px on phone. */
+  --section-y-desktop: 80px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* DESIGN.md §5 scale: 8px on CTA buttons / small cards, 13px on
+     medium cards/panels, 20px on product cards, 9999px on pill nav. */
+  --radius-sm:   8px;
+  --radius-md:   13px;
+  --radius-lg:   20px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* DESIGN.md §6: light, airy shadows capped at 0.08 opacity. Standard
+     cards use the neutral black drop below; featured product cards add
+     the purple-tinted brand glow rgba(44, 30, 116, 0.16) inline as a
+     one-off (single-use, not promoted to a token). */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 4px 6px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

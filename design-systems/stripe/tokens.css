@@ -1,0 +1,295 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/stripe/tokens.css
+ *
+ * Structured token bindings for "Inspired by Stripe" — fintech
+ * infrastructure dressed in deep navy, signature violet, and the
+ * blue-tinted multi-layer shadow that makes elevation feel branded.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into
+ * the schema shared with every OD design system. Agents generating a
+ * Stripe-flavored artifact should paste the `:root { … }` block
+ * verbatim into the first `<style>` of the artifact, then reference
+ * every value through `var(--name)` — never re-author the hex
+ * inline. The fixture in `components.html` is the round-trip proof
+ * that the token block alone is sufficient to render a recognisably
+ * Stripe page.
+ *
+ * Why this file exists:
+ *   DESIGN.md gives humans context ("Stripe Purple #533afd — primary
+ *   CTAs"), but agents have to translate prose names like
+ *   "Stripe Purple" into the standard token names the lint enforces
+ *   (`--accent`). This file pre-translates the brand once, so agents
+ *   copy structure rather than invent it.
+ *
+ * Schema notes (Stripe binds the shared schema in seven brand-
+ * specific ways — see `#Stripe N` tags inline for each decision):
+ *   #Stripe 1  — 3-tier surface stops short of a darker third tier;
+ *                `--surface-warm` binds to the cool-pale #f6f9fc that
+ *                Stripe uses behind nested panels (pricing rows, code
+ *                previews) rather than to a warm parchment.
+ *   #Stripe 2  — 3-tier foreground (navy heading / dark-slate label /
+ *                slate body). No fourth metadata tier — `--meta`
+ *                aliases `var(--muted)`.
+ *   #Stripe 3  — One border tier. `--border-soft` aliases `--border`
+ *                because DESIGN.md never describes a separate
+ *                row-separator weight.
+ *   #Stripe 4  — `--accent-hover` and `--accent-active` bind to the
+ *                hand-picked Purple Hover (#4434d4) and Purple Deep
+ *                (#2e2b8c) values from DESIGN.md, not the schema's
+ *                black-mix formula. Stripe's saturation needs the
+ *                exact shifts.
+ *   #Stripe 5  — Type scale ceiling is 56px (`--text-4xl`), not 64px.
+ *                DESIGN.md §3 puts the display hero at 56px / weight
+ *                300 with -1.4px tracking — Stripe's "whisper
+ *                authority". Adding 64px would push past the brand's
+ *                self-imposed ceiling.
+ *   #Stripe 6  — `--elev-raised` carries Stripe's trademark
+ *                multi-layer blue-tinted shadow
+ *                (`rgba(50,50,93,0.25) … , rgba(0,0,0,0.1) …`). This
+ *                is the single most brand-distinctive token in the
+ *                file; rebinding it to a neutral drop shadow erases
+ *                Stripe's atmosphere even when every color is right.
+ *   #Stripe 7  — `--focus-ring` is a layered purple halo — a thin
+ *                solid edge plus a translucent outer glow. Stripe's
+ *                focus state is more visible than the schema default
+ *                because keyboard navigation in payment flows is a
+ *                first-class concern.
+ *
+ * Brand-specific extensions (Layer C):
+ *   None. The dark brand section (`#1c1e54`) and ruby/magenta
+ *   gradient accents from DESIGN.md are *decorative* — they exist
+ *   only as one-off inline expressions in components.html, derived
+ *   from `--accent` via `color-mix(...)`. They are not promoted to
+ *   tokens because no cross-component rule needs to reference them
+ *   by name; promoting them would force every other brand to declare
+ *   matching slots.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels — #Stripe 1) ──────────────────────────────
+   * Stripe sits on pure white. The "warm" tier is a cool-pale
+   * blue-tinted #f6f9fc (DESIGN.md's neutral-pill border colour) —
+   * it reads as a separate elevation under nested panels (pricing
+   * rows, code previews, sticky nav blur) without introducing a
+   * warm cast that would clash with the navy / violet palette.
+   * Brands without a tertiary surface tier should alias
+   * `--surface-warm` to `var(--surface)`; Stripe binds a real value
+   * because its dense data panels need that quiet separation. */
+  --bg:           #ffffff;
+  --surface:      #ffffff;
+  --surface-warm: #f6f9fc;  /* cool-pale blue — nested panels, sticky nav */
+
+  /* ─── Foreground ramp (3 tiers — #Stripe 2) ─────────────────────
+   * Deep Navy (`#061b31`) carries every heading — never pure
+   * black, never gray. DESIGN.md is explicit: "warmth matters".
+   * Dark Slate (`#273951`) is the form-label tier. Slate (`#64748d`)
+   * is the body / caption / placeholder colour.
+   *
+   * Stripe doesn't differentiate a fourth metadata tier, so
+   * `--meta` aliases `var(--muted)`. Brands like kami that need
+   * dates / timestamps / footnote text at a fourth shade may bind
+   * an independent value. */
+  --fg:    #061b31;          /* deep navy — headings, nav text, strong labels */
+  --fg-2:  #273951;          /* dark slate — form labels, sub-headings */
+  --muted: #64748d;          /* slate — body, placeholders, captions */
+  --meta:  var(--muted);     /* alias — Stripe has no separate metadata tier */
+
+  /* ─── Border (1 tier — #Stripe 3) ───────────────────────────────
+   * One border weight for everything: card edges, dividers,
+   * containers. DESIGN.md's purple/magenta/dashed border variants
+   * are *decorative* (drop-zones, themed badges), not row
+   * separators — they live inline in components.html and do not
+   * earn a slot in the schema. `--border-soft` aliases. */
+  --border:      #e5edf5;
+  --border-soft: var(--border);  /* alias — Stripe has one border weight */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Stripe Purple — primary CTAs, link text, interactive
+   * highlights, the focus ring. A saturated blue-violet that
+   * anchors the entire system. Hard cap of ≤2 visible uses per
+   * screen (lint `accent-overuse` P1 enforces). */
+  --accent:    #533afd;
+  --accent-on: #ffffff;     /* button label on purple — DESIGN.md §4 */
+
+  /* ─── Accent states (#Stripe 4) ─────────────────────────────────
+   * Hand-picked values from DESIGN.md §2, NOT a black-mix formula.
+   * Stripe Purple is saturated enough that the schema's
+   * `color-mix(in oklab, var(--accent), black 8%)` produces a
+   * muddy violet rather than the deliberate Purple Hover that
+   * Stripe.com ships. Use the brand's own values.
+   *
+   * Schema rule: every brand provides `--accent-hover` and
+   * `--accent-active`. The binding strategy (formula / identity /
+   * hand-picked) is brand-decided. */
+  --accent-hover:  #4434d4;  /* Purple Hover — DESIGN.md §2 */
+  --accent-active: #2e2b8c;  /* Purple Deep — DESIGN.md §2 */
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Status colours pulled from DESIGN.md §2. Stripe's success is a
+   * deliberately vivid green (`#15be53`) because payment-success
+   * confirmations are the system's happy path — that pixel deserves
+   * the saturation. Warn is the muted lemon Stripe uses for
+   * highlight pills; danger is the ruby accent because rejected
+   * cards and disputed charges are the only "danger" surface
+   * Stripe.com renders, and they ship ruby — not the schema's
+   * neutral red — for the alert. */
+  --success: #15be53;        /* DESIGN.md success green */
+  --warn:    #9b6829;        /* lemon — warning / highlight accent */
+  --danger:  #ea2261;        /* ruby — used for alerts, dispute states */
+
+  /* ─── Typography — fonts ─────────────────────────────────────────
+   * `sohne-var` is the defining element of Stripe's identity
+   * (DESIGN.md §1). It is a custom face and will not load for
+   * most readers; the fallback chain is the closest SF / system
+   * sans we can reach without licensing. Components must always
+   * set `font-feature-settings: "ss01"` on top of these stacks —
+   * the stylistic set is non-negotiable when sohne-var IS loaded.
+   *
+   * `--font-mono` is `SourceCodePro` per DESIGN.md §3 — the
+   * brand's monospace companion, used for code blocks at 12px /
+   * 500 with 2.00 line-height. */
+  --font-display:
+    "sohne-var", "Söhne", "Sohne",
+    "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-body:
+    "sohne-var", "Söhne", "Sohne",
+    "SF Pro Display", -apple-system, BlinkMacSystemFont,
+    system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "SourceCodePro", "Source Code Pro",
+    ui-monospace, "SF Mono", "JetBrains Mono",
+    Menlo, Monaco, Consolas, monospace;
+
+  /* ─── Typography — type scale (#Stripe 5) ───────────────────────
+   * Direct mapping of DESIGN.md §3 hierarchy: 12 / 14 / 16 / 18 /
+   * 22 / 32 / 48 / 56. Stripe's display ceiling is 56px (weight
+   * 300, -1.4px tracking) — adding a 64px tier would push past
+   * the brand's self-imposed limit on hero loudness. The smaller
+   * 8px / 10px / 11px / 13px sizes from DESIGN.md's table are
+   * intentional micro sizes (chart axes, financial fine print) and
+   * are inlined where used rather than promoted to the shared
+   * scale. */
+  --text-xs:   12px;         /* caption small, dense labels */
+  --text-sm:   14px;         /* button small, navigation links */
+  --text-base: 16px;         /* body baseline */
+  --text-lg:   18px;         /* body large, feature lede */
+  --text-xl:   22px;         /* sub-heading, card title */
+  --text-2xl:  32px;         /* section heading */
+  --text-3xl:  48px;         /* display large */
+  --text-4xl:  56px;         /* display hero — ceiling */
+
+  /* ─── Typography — leading & tracking ───────────────────────────
+   * Reading rhythm is 1.40 — denser than the schema-default 1.5
+   * because Stripe's body type (sohne-var at weight 300) reads
+   * lighter than Inter / system sans, and slightly tighter
+   * leading prevents the page from feeling airy.
+   *
+   * `--leading-tight` is the headline rhythm — 1.10 matches
+   * DESIGN.md's section-heading line-height. The 1.03 / 1.15
+   * variations for individual display sizes are tuned in
+   * components.html overrides; this token is the default.
+   *
+   * `--tracking-display` is brand-defining: Stripe compresses
+   * display sizes with negative letter-spacing (-1.4px at 56px →
+   * -0.025em). The token uses -0.02em so the rule reads
+   * consistently across the display range (48px → -0.96px,
+   * 32px → -0.64px, all close to -0.02em). Components targeting
+   * the 56px hero may override locally for the exact -1.4px. */
+  --leading-body:     1.40;
+  --leading-tight:    1.10;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 4px base unit. DESIGN.md §5 calls out a denser scale at the
+   * small end (every 2px from 4 → 12) for precision data displays;
+   * those fine-grained values are inlined inside specific
+   * financial-data components rather than promoted to tokens —
+   * the schema's 4/8/12/16/20/24/32/48 ladder covers the
+   * UI-chrome rhythm Stripe actually uses on hero / nav / card
+   * surfaces. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ─────────────────────────────────────────────
+   * Generous vertical breathing room desktop-side (96px) so the
+   * 56px hero has air above and below; tightens to 64px on
+   * tablet, 40px on phone per DESIGN.md §8 ("64px → 40px on
+   * mobile"). */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * Conservative rounding, 4 → 6 → 8 (DESIGN.md §5). Buttons,
+   * inputs, and badges share the 4px small tier; nav containers
+   * and dropdown shells take 6px; featured cards and hero
+   * elements take 8px. No pill shapes on cards or buttons —
+   * DESIGN.md §7 Don't list. `--radius-pill` is kept as a schema
+   * slot (avatars only) but is never used on interactive
+   * surfaces. */
+  --radius-sm:   4px;        /* buttons, inputs, badges, cards */
+  --radius-md:   6px;        /* nav container, comfortable cards */
+  --radius-lg:   8px;        /* featured cards, hero elements */
+  --radius-pill: 9999px;     /* avatars only — never on buttons / cards */
+
+  /* ─── Elevation (3 levels — #Stripe 6) ──────────────────────────
+   * The single most brand-distinctive token in this file.
+   *
+   * Stripe's shadow philosophy is "chromatic depth": the primary
+   * shadow colour is a deep blue-gray (`rgba(50,50,93,0.25)`) that
+   * echoes the navy palette, paired with a pure-black secondary
+   * layer at a different offset for parallax. Negative spread
+   * values (-30px, -18px) keep the shadow vertical so cards don't
+   * fringe sideways.
+   *
+   * Rebinding `--elev-raised` to a neutral drop shadow strips
+   * Stripe's atmosphere even when every other colour is correct —
+   * the shadow IS part of the brand voice, not chrome around it.
+   * Brands forbidding chromatic shadows (kami) override; Stripe
+   * defines. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(50, 50, 93, 0.25)  0px 30px 45px -30px,
+    rgba(0,   0,  0, 0.10)  0px 18px 36px -18px;
+
+  /* ─── Focus ring (#Stripe 7) ────────────────────────────────────
+   * Layered purple halo — a 2px solid edge in `--accent` plus an
+   * outer translucent glow. DESIGN.md §6 specifies the solid 2px
+   * ring; we add the soft outer halo so keyboard focus is
+   * unambiguously visible against pale surfaces (payment flows
+   * are keyboard-heavy, the brand spec mandates clarity).
+   *
+   * Implemented as box-shadow stack so it layers outside the
+   * element without affecting layout. */
+  --focus-ring:
+    0 0 0 2px var(--accent),
+    0 0 0 5px color-mix(in oklab, var(--accent), transparent 75%);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * Two durations + one easing curve, per the anti-ai-slop
+   * "short, purposeful transitions (150–250ms) with stable
+   * easing" contract. Stripe's hover transitions colour and shadow
+   * but never transform — buttons do not nudge or scale on hover;
+   * cards lift via shadow intensity only. */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1080px container ceiling per DESIGN.md §5. Per-breakpoint
+   * gutter compresses 32 → 24 → 16 — generous on desktop because
+   * the white canvas wants air; tight on phone because every
+   * pixel is content. */
+  --container-max:            1080px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet:  24px;
+  --container-gutter-phone:   16px;
+}

@@ -1,0 +1,10 @@
+{
+  "id": "dentist",
+  "displayName": "Dentist",
+  "description": "A friendly stylized chibi dentist mascot in white dental scrubs and surgical mask.",
+  "spritesheetPath": "spritesheet.webp",
+  "author": "mario",
+  "tags": [],
+  "source": "local-hatch",
+  "sourceUrl": ""
+}

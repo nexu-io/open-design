@@ -1,0 +1,1281 @@
+import { readLauncherHost } from "@open-design/launcher-proto";
+import type { AmrEndpointBinding } from "@open-design/contracts";
+import { recordIncomingUpdateStageResults, recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
+export { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
+import { randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { BrowserWindow, Menu, app, dialog, globalShortcut, ipcMain, powerMonitor, shell, type MenuItemConstructorOptions } from "electron";
+import { attachStartupReadyIpc, createStartupTiming, type StartupTiming } from "./startup-timing.js";
+import { beginLaunchMarker } from "./launch-type.js";
+import { startMemorySampler } from "./memory-sampler.js";
+export { createStartupTiming, type StartupTiming } from "./startup-timing.js";
+
+import {
+  APP_KEYS,
+  OPEN_DESIGN_SIDECAR_CONTRACT,
+  SIDECAR_MESSAGES,
+  SIDECAR_MODES,
+  isSidecarMode,
+  isSidecarSource,
+  normalizeDesktopSidecarMessage,
+  type DesktopClickInput,
+  type DesktopEvalInput,
+  type DesktopExportArtifactInput,
+  type DesktopExportPdfInput,
+  type DesktopRenderFramesInput,
+  type DesktopRenderSlidesInput,
+  type DesktopScreenshotInput,
+  type DesktopStatusSnapshot,
+  type DesktopUpdateStatusSnapshot,
+  type DaemonStatusSnapshot,
+  type DesktopUpdateInput,
+  type RegisterDesktopAuthResult,
+  type LegacySidecarRuntimeLayout,
+  type WebStatusSnapshot,
+} from "@open-design/sidecar-proto";
+import { dirname, join } from "node:path";
+
+import {
+  resolveLogFilePath,
+  resolveRuntimeNamespaceRoot,
+  SidecarFactory,
+  type SidecarClient,
+  type SidecarRuntimeContext,
+} from "@open-design/sidecar";
+
+import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
+import { focusDesktopForDeeplink } from "./deeplink-focus.js";
+import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
+import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning, recordDesktopHostEvent, recordDesktopSessionExit } from "./session-lifecycle.js";
+import {
+  attachDesktopChildProcessCrashReporter,
+  reportDesktopObservabilityEvent,
+  attachDesktopHostLifecycleRecorder,
+  reportPriorDesktopUncleanExits,
+} from "./observability.js";
+import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
+import {
+  DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
+  deriveDesktopUpdateMenuItem,
+  desktopUpdateMenuItemKey,
+  type DesktopUpdateMenuLabels,
+} from "./update-menu.js";
+import {
+  createDesktopUpdater,
+  createDesktopUpdaterScheduler,
+  type DesktopUpdater,
+  type DesktopUpdaterScheduler,
+} from "./updater.js";
+import {
+  exportDiagnosticsToFile,
+  registerDesktopDiagnosticsIpc,
+} from "./diagnostics.js";
+import { notifyDesktopExternalShow } from "./external-show.js";
+
+// Re-export pure URL-policy helpers so the packaged workspace's
+// vitest can pin their behaviour without spinning up a full Electron
+// runtime. They are part of the security boundary for child-window
+// navigation (see `setWindowOpenHandler` in `runtime.ts`), so
+// pinning them is worth the small extra surface.
+export {
+  createSplashWindow,
+  isAllowedChildWindowUrl,
+  isAllowedEmbeddedBrowserUrl,
+  isHttpUrl,
+  registerSplashStageTracking,
+  resolveDesktopStatusUrl,
+  setSplashStage,
+  type SplashBootStage,
+  type SplashStageSurface,
+} from "./runtime.js";
+
+// Re-export the path-validation helpers for the same reason (#974).
+// shell.openPath is privileged main-process behaviour; pinning the
+// validation gate via tests is worth the extra surface.
+//
+// Round-5 (lefarcen P1, mrcfps) adds `pickAndImportFolder` and its
+// types so the lazy-retry-on-DESKTOP_AUTH_PENDING flow is testable in
+// the packaged workspace without booting Electron.
+export {
+  validateExistingDirectory,
+  fetchResolvedProjectDir,
+  isOpenPathAllowedForProject,
+  signDesktopImportToken,
+  pickAndImportFolder,
+  type PathValidationResult,
+  type ResolvedProjectDirContext,
+  type PickAndImportFolderDeps,
+  type PickAndImportFolderResult,
+} from "./runtime.js";
+
+const AMR_PROFILE_ENV_KEY = "OPEN_DESIGN_AMR_PROFILE";
+const AMR_PROFILE_AGENT_ID = "amr";
+const AMR_ENVIRONMENT_PROFILES = ["prod", "test", "feature-test", "local"] as const;
+const APP_CONFIG_CHANGED_IPC_CHANNEL = "od:app-config-changed";
+type AmrEnvironmentProfile = (typeof AMR_ENVIRONMENT_PROFILES)[number];
+type DesktopAppConfigPrefs = {
+  agentModels?: Record<string, { model?: string; reasoning?: string }>;
+  agentCliEnv?: Record<string, Record<string, string>>;
+  allowSilentUpdates?: boolean;
+  [key: string]: unknown;
+};
+
+// Argv prefix the preload uses to recover the OS locale main process
+// read at startup. The renderer wires `__od__.client.osLocale` from it.
+export const OS_LOCALE_PRELOAD_ARG_PREFIX = "--od-os-locale=";
+
+/**
+ * Read the OS preferred language and, when Electron has not yet
+ * emitted `ready`, point Chromium's `--lang` flag at it so the
+ * renderer's `navigator.language` follows the OS instead of falling
+ * back to en-US. Returns the resolved BCP-47 string so callers can
+ * forward it to `BrowserWindow.webPreferences.additionalArguments`
+ * for the preload to expose to the renderer.
+ *
+ * Safe to call multiple times: `appendSwitch('lang', ...)` is a no-op
+ * once `app.isReady()` is true. The packaged entry calls this once
+ * before its own `whenReady` (so the switch lands) and `runDesktopMain`
+ * calls it again later to recover the same string for the BrowserWindow.
+ */
+export function applyOsLocaleSwitch(electronApp: Electron.App): string {
+  const preferred = electronApp.getPreferredSystemLanguages?.() ?? [];
+  const osLocale = preferred[0] ?? "en";
+  if (!electronApp.isReady()) {
+    electronApp.commandLine.appendSwitch("lang", osLocale);
+  }
+  return osLocale;
+}
+
+/**
+ * Lift Chromium's hardcoded 6-connections-per-origin socket cap for the
+ * loopback hosts every OpenDesign renderer talks to (directly in dev,
+ * through the od:// proxy's main-process net.fetch when packaged).
+ *
+ * Long-lived SSE streams pin pool slots, and once the pool saturates,
+ * queued requests cannot even be aborted before a Response exists
+ * (electron/electron#47097), which deadlocked the packaged app until
+ * restart. `ignore-connections-limit` is Electron's own escape hatch:
+ * matching hosts get LOAD_IGNORE_LIMITS. Loopback-only, so the extra
+ * parallelism has no upstream cost.
+ *
+ * Must run before `app.whenReady()`; Chromium consumes the switch at
+ * network-service startup.
+ */
+export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): void {
+  if (!electronApp.isReady()) {
+    electronApp.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+    // 关掉内层滚动容器的橡皮筋回弹(产品裁决 2026-09-07:「直接关掉」)。
+    //
+    // ## 为什么
+    //
+    // Electron 40 → 41 把 Chromium 从 144 跳到 **146,整个跳过了 145**,而
+    // `kOverscrollEffectOnNonRootScrollers` 的默认值正好在 145 从 DISABLED 翻成
+    // ENABLED(已拉 branch-heads/7559 与 7680 的 `cc/base/features.cc` 逐字核实)。
+    // 它管的是「非根滚动容器撞到滚动边界时怎么表现」——145 之前只有整页会弹,
+    // 之后聊天区这类内层容器也会弹。
+    //
+    // 我们在追的缺陷是:聊天区的滚动范围被**永久冻**在某个早期内容高度上,
+    // 布局全对、JS 程序性滚动能到底,但**滚轮和键盘都到不了**(scroll unification
+    // 之后两者都走合成器)。位置(滚动边界)、平台(macOS 弹性 overscroll)、
+    // 版本窗口三样都对得上。
+    //
+    // ⚠️ **这是缓解不是根治**:合成页面 89 个用例没能复现,因果链没有建立。
+    // 判据仍然是 `client_chat_scroll_frozen` 的事件量 —— 带着这一行还在报,
+    // 说明这条线错了,该把这两个 feature 放回去再找别的。
+    //
+    // ## 代价
+    //
+    // macOS 上所有内层滚动区失去橡皮筋回弹(整页仍然弹)。产品知情并选择了它 ——
+    // 相对「滚不动」这个代价可以接受。
+    //
+    // 必须在 whenReady 之前:Chromium 在会话初始化时就消费这些开关。
+    electronApp.commandLine.appendSwitch(
+      "disable-features",
+      "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
+    );
+  }
+}
+
+export type DesktopMainOptions = {
+  /** Immutable endpoint binding supplied by the packaged runtime. */
+  amrEndpointBinding?: AmrEndpointBinding;
+  electronReadyAtMs?: number;
+  /** Carries the packaged process origin and sidecar phases into desktop. */
+  startupTiming?: StartupTiming | null;
+  beforeShutdown?: (record?: (event: UpdateLifecycleObservation) => Promise<void>) => Promise<void>;
+  /** Prevent packaged renderer traffic from reaching sidecars as they retire. */
+  quiesceRendererTransport?: () => void | Promise<void>;
+  onExternalShow?: () => void | Promise<void>;
+  discoverWebUrl: () => Promise<string | null>;
+  /**
+   * Round-7 (lefarcen P2 @ runtime.ts:336): packaged builds report the
+   * renderer URL (`od://app/`) over `discoverWebUrl`, but Node-side
+   * fetch can't resolve a custom Electron protocol. Optional. When
+   * provided, runtime API calls (`/api/import/folder`,
+   * `/api/projects/:id`) target this URL instead. tools-dev callers
+   * omit it because their web URL IS already an http://127.0.0.1 URL
+   * Node fetch can hit.
+   */
+  discoverDaemonUrl: () => Promise<string | null>;
+  registerDesktopAuth: (secret: Buffer) => Promise<boolean>;
+  /** Stable installed launcher used for Windows opendesign:// registration. */
+  inviteProtocolClientPath?: string | null;
+  preloadPath?: string;
+  windowTitle?: string;
+  onDesktopReady?: (controls: {
+    dispatchInviteDeeplink(url: string | null): void;
+    show(): void;
+  }) => void;
+  /**
+   * Optional pre-created splash window. The packaged entry creates it before
+   * awaiting the daemon/web sidecars so the brand animation overlaps the cold
+   * boot; forwarded straight to the runtime, which owns closing it once the
+   * main window is revealed. Omitted by tools-dev (the runtime makes its own).
+   */
+  splashWindow?: BrowserWindow | null;
+  /** Creation time of `splashWindow` (from `createSplashWindow().startedAt`), so
+   * the runtime measures the minimum splash hold from when it actually appeared. */
+  splashStartedAt?: number;
+  update?: {
+    currentVersion?: string | null;
+    downloadRoot?: string | null;
+    installerObservationRoot?: string | null;
+    launcherLaunchPath?: string | null;
+    launcherRoot?: string | null;
+    launcherPayloadExtractorPath?: string | null;
+    launcherRuntimePath?: string | null;
+  };
+};
+
+export type DesktopMainHandle = {
+  invoke(action: string, input: unknown): Promise<unknown>;
+  status(): Promise<DesktopStatusSnapshot>;
+  stop(): Promise<void>;
+};
+
+function isDirectEntry(): boolean {
+  const entryPath = process.argv[1];
+  if (entryPath == null || entryPath.length === 0 || entryPath.startsWith("--")) return false;
+
+  try {
+    return realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+type BaseUrlDiscovery = () => Promise<string | null | undefined>;
+
+export async function resolveFirstAvailableBaseUrl(
+  discoveries: readonly BaseUrlDiscovery[],
+): Promise<string> {
+  for (const discover of discoveries) {
+    try {
+      const baseUrl = await discover();
+      if (baseUrl?.trim()) return baseUrl;
+    } catch {
+      // One sidecar may be starting or temporarily busy. Keep walking the
+      // ordered fallbacks instead of turning that transient into a menu error.
+    }
+  }
+  throw new Error("daemon URL is unavailable");
+}
+
+// Resolve the daemon base URL from explicit wiring or either sidecar. Prefer
+// the direct daemon before the web `/api/*` proxy so a compiling web renderer
+// cannot make native app-config actions temporarily unavailable.
+function resolveDaemonBaseUrl(
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl">,
+): () => Promise<string> {
+  return () => resolveFirstAvailableBaseUrl([
+    options.discoverDaemonUrl,
+    options.discoverWebUrl,
+  ]);
+}
+
+export function normalizeAmrEnvironmentProfile(profile: unknown): AmrEnvironmentProfile {
+  if (typeof profile !== "string") return "prod";
+  const trimmed = profile.trim();
+  return AMR_ENVIRONMENT_PROFILES.includes(trimmed as AmrEnvironmentProfile)
+    ? (trimmed as AmrEnvironmentProfile)
+    : "prod";
+}
+
+export function mergeAmrEnvironmentProfileConfig(
+  config: DesktopAppConfigPrefs,
+  profile: AmrEnvironmentProfile,
+): DesktopAppConfigPrefs {
+  if (!AMR_ENVIRONMENT_PROFILES.includes(profile)) {
+    throw new Error(
+      `AMR Environment Profile must be prod, test, feature-test, or local: ${String(profile)}`,
+    );
+  }
+  const currentProfile = normalizeAmrEnvironmentProfile(
+    config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY],
+  );
+  const shouldClearAmrModel = currentProfile !== profile;
+  const hadAmrModel =
+    shouldClearAmrModel && Object.prototype.hasOwnProperty.call(config.agentModels ?? {}, AMR_PROFILE_AGENT_ID);
+  const nextAgentModels = { ...(config.agentModels ?? {}) };
+  if (shouldClearAmrModel) {
+    delete nextAgentModels[AMR_PROFILE_AGENT_ID];
+  }
+  return {
+    ...config,
+    ...(Object.keys(nextAgentModels).length > 0
+      ? { agentModels: nextAgentModels }
+      : hadAmrModel
+        ? { agentModels: {} }
+        : {}),
+    agentCliEnv: {
+      ...(config.agentCliEnv ?? {}),
+      [AMR_PROFILE_AGENT_ID]: {
+        ...(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID] ?? {}),
+        [AMR_PROFILE_ENV_KEY]: profile,
+      },
+    },
+  };
+}
+
+export function createAmrEnvironmentProfileMenuItems(
+  selectedProfile: AmrEnvironmentProfile,
+  onSelect: (profile: AmrEnvironmentProfile) => void,
+  binding?: AmrEndpointBinding,
+): MenuItemConstructorOptions[] {
+  if (binding) {
+    return [{ label: "AMR Profile", submenu: [{ label: binding.webUrl, enabled: false }] }];
+  }
+  return [
+    {
+      label: "AMR Profile",
+      submenu: AMR_ENVIRONMENT_PROFILES.map((profile) => ({
+        label: profile,
+        type: "radio" as const,
+        checked: selectedProfile === profile,
+        click: () => onSelect(profile),
+      })),
+    },
+  ];
+}
+
+export function resolveAboutPanelVersion(options: Pick<DesktopMainOptions, "update">): string | null {
+  const version = options.update?.currentVersion?.trim();
+  return version == null || version.length === 0 ? null : version;
+}
+
+function configureAboutPanel(options: DesktopMainOptions): void {
+  const version = resolveAboutPanelVersion(options);
+  if (version == null) return;
+  app.setAboutPanelOptions({ version });
+}
+
+function appConfigUrl(baseUrl: string): string {
+  return new URL("/api/app-config", baseUrl).toString();
+}
+
+async function readAppConfigFromDaemon(baseUrl: string): Promise<DesktopAppConfigPrefs> {
+  const response = await fetch(appConfigUrl(baseUrl));
+  if (!response.ok) {
+    throw new Error(`GET /api/app-config failed with HTTP ${response.status}`);
+  }
+  const payload = await response.json() as { config?: DesktopAppConfigPrefs };
+  if (payload.config == null || typeof payload.config !== "object") {
+    throw new Error("GET /api/app-config returned an invalid config payload");
+  }
+  return payload.config;
+}
+
+async function writeAppConfigToDaemon(
+  baseUrl: string,
+  config: DesktopAppConfigPrefs,
+): Promise<DesktopAppConfigPrefs> {
+  const response = await fetch(appConfigUrl(baseUrl), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) {
+    throw new Error(`PUT /api/app-config failed with HTTP ${response.status}`);
+  }
+  const payload = await response.json() as { config?: DesktopAppConfigPrefs };
+  if (payload.config == null || typeof payload.config !== "object") {
+    throw new Error("PUT /api/app-config returned an invalid config payload");
+  }
+  return payload.config;
+}
+
+export async function writeAmrEnvironmentProfile(
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding">,
+  profile: AmrEnvironmentProfile,
+): Promise<AmrEnvironmentProfile> {
+  if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
+  const baseUrl = await resolveDaemonBaseUrl(options)();
+  const config = await readAppConfigFromDaemon(baseUrl);
+  const writtenConfig = await writeAppConfigToDaemon(baseUrl, mergeAmrEnvironmentProfileConfig(config, profile));
+  return normalizeAmrEnvironmentProfile(writtenConfig.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
+}
+
+type DesktopMenuController = {
+  dispose(): void;
+  setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
+};
+
+function installDesktopMenu(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding"> & {
+    onOpenUpdateDialog?: () => void;
+    updater: DesktopUpdater;
+  },
+): DesktopMenuController {
+  let developMenuVisible = false;
+  let lastKnownAmrProfile: AmrEnvironmentProfile = "prod";
+  let updateMenuLabels = DEFAULT_DESKTOP_UPDATE_MENU_LABELS;
+  let updateStatus = options.updater.snapshot();
+  const developMenuAccelerator = process.platform === "darwin" ? "Command+Option+Shift+D" : "Control+Alt+Shift+D";
+
+  const showDevelopMenuError = (message: string, error: unknown): void => {
+    const detail = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox(message, detail);
+  };
+
+  const discoverAppConfigBaseUrl = resolveDaemonBaseUrl(options);
+
+  const readCurrentAmrProfile = async (): Promise<AmrEnvironmentProfile> => {
+    if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
+    const baseUrl = await discoverAppConfigBaseUrl();
+    const config = await readAppConfigFromDaemon(baseUrl);
+    return normalizeAmrEnvironmentProfile(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
+  };
+
+  const selectAmrProfile = (profile: AmrEnvironmentProfile): void => {
+    if (options.amrEndpointBinding) return;
+    void writeAmrEnvironmentProfile(options, profile)
+      .then((writtenProfile) => {
+        lastKnownAmrProfile = writtenProfile;
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send(APP_CONFIG_CHANGED_IPC_CHANNEL);
+        }
+        rebuild();
+      })
+      .catch((error: unknown) => {
+        showDevelopMenuError("AMR Environment Profile switch failed", error);
+      });
+  };
+
+  const toggleDevelopMenu = (): void => {
+    if (developMenuVisible) {
+      developMenuVisible = false;
+      rebuild();
+      return;
+    }
+    void readCurrentAmrProfile()
+      .then((profile) => {
+        lastKnownAmrProfile = profile;
+        developMenuVisible = true;
+        rebuild();
+      })
+      .catch((error: unknown) => {
+        showDevelopMenuError("Develop menu unavailable", error);
+      });
+  };
+
+  const exportDiagnostics = () => {
+    const focused = BrowserWindow.getFocusedWindow();
+    void exportDiagnosticsToFile(
+      { discoverDaemonBaseUrl: discoverAppConfigBaseUrl },
+      focused,
+    ).catch((error: unknown) => {
+      console.error("desktop diagnostics export from menu failed", error);
+    });
+  };
+  let lastUpdateMenuItemKey: string | null = null;
+  const rebuild = () => {
+    const updateMenuItem = deriveDesktopUpdateMenuItem({
+      labels: updateMenuLabels,
+      platform: process.platform,
+      status: updateStatus,
+    });
+    lastUpdateMenuItemKey = desktopUpdateMenuItemKey(updateMenuItem);
+    const template: MenuItemConstructorOptions[] = [
+      ...(process.platform === "darwin"
+        ? [
+            {
+              label: app.name,
+              submenu: [
+                { role: "about" as const },
+                ...(updateMenuItem.visible
+                  ? [{
+                      click: options.onOpenUpdateDialog,
+                      enabled: updateMenuItem.enabled,
+                      id: "check-for-updates",
+                      label: updateMenuItem.label,
+                    }]
+                  : []),
+                { type: "separator" as const },
+                { role: "services" as const },
+                { type: "separator" as const },
+                { role: "hide" as const },
+                { role: "hideOthers" as const },
+                { role: "unhide" as const },
+                { type: "separator" as const },
+                { role: "quit" as const },
+              ],
+            },
+          ]
+        : [
+            {
+              label: "File",
+              submenu: [
+                { role: "quit" as const },
+              ],
+            },
+          ]),
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+      {
+        label: "View",
+        submenu: [
+          { role: "reload" },
+          { role: "forceReload" },
+          { role: "toggleDevTools" },
+          { type: "separator" },
+          {
+            accelerator: developMenuAccelerator,
+            label: developMenuVisible ? "Hide Develop Menu" : "Show Develop Menu",
+            click: toggleDevelopMenu,
+          },
+          { type: "separator" },
+          { role: "resetZoom" },
+          { role: "zoomIn" },
+          { role: "zoomOut" },
+          { type: "separator" },
+          { role: "togglefullscreen" },
+        ],
+      },
+      ...(developMenuVisible
+        ? [
+            {
+              label: "Develop",
+              submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile, options.amrEndpointBinding),
+            },
+          ]
+        : []),
+      {
+        label: "Window",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          ...(process.platform === "darwin"
+            ? [{ type: "separator" as const }, { role: "front" as const }]
+            : [{ role: "close" as const }]),
+        ],
+      },
+      {
+        label: "Help",
+        role: "help",
+        submenu: [
+          {
+            label: "Documentation",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design#readme");
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Contact Us",
+            click() {
+              void shell.openExternal("https://x.com/OpenDesignHQ");
+            },
+          },
+          {
+            label: "Report Issue",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design/issues/new");
+            },
+          },
+          {
+            label: "Join Discord",
+            click() {
+              void shell.openExternal("https://discord.gg/mHAjSMV6gz");
+            },
+          },
+          { type: "separator" },
+          { label: "Export Diagnostics…", click: exportDiagnostics },
+        ],
+      },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  };
+
+  rebuild();
+  const unsubscribeUpdater = options.updater.subscribe(() => {
+    updateStatus = options.updater.snapshot();
+    // Updater status ticks frequently during downloads (progress updates),
+    // but Menu.setApplicationMenu drops open menus and burns main-process
+    // work. Rebuild only when the derived update item actually changes.
+    const nextKey = desktopUpdateMenuItemKey(deriveDesktopUpdateMenuItem({
+      labels: updateMenuLabels,
+      platform: process.platform,
+      status: updateStatus,
+    }));
+    if (nextKey === lastUpdateMenuItemKey) return;
+    rebuild();
+  });
+  const registered = globalShortcut.register(developMenuAccelerator, toggleDevelopMenu);
+  if (!registered) {
+    console.warn("[open-design desktop] develop menu shortcut unavailable", { accelerator: developMenuAccelerator });
+  }
+  return {
+    dispose() {
+      unsubscribeUpdater();
+      if (registered) {
+        globalShortcut.unregister(developMenuAccelerator);
+      }
+    },
+    setUpdateLabels(labels) {
+      updateMenuLabels = labels;
+      rebuild();
+    },
+  };
+}
+
+const REGISTER_DESKTOP_AUTH_TIMEOUT_MS = 800;
+
+function summarizeDesktopIpcInput(input: unknown): Record<string, unknown> | null {
+  if (input == null || typeof input !== "object") return null;
+  if ("expression" in input && typeof (input as { expression?: unknown }).expression === "string") {
+    const expression = (input as { expression: string }).expression;
+    return {
+      expressionLength: expression.length,
+      expressionPreview: expression.length > 120 ? `${expression.slice(0, 120)}...` : expression,
+    };
+  }
+  if ("path" in input && typeof (input as { path?: unknown }).path === "string") {
+    return { path: (input as { path: string }).path };
+  }
+  if ("action" in input && typeof (input as { action?: unknown }).action === "string") {
+    return { action: (input as { action: string }).action };
+  }
+  if ("selector" in input && typeof (input as { selector?: unknown }).selector === "string") {
+    return { selector: (input as { selector: string }).selector };
+  }
+  return null;
+}
+
+/** Keep classification independent of the process-origin measurement. */
+export function createDesktopStartupTiming(options: Parameters<typeof createStartupTiming>[0] & { appVersion?: string | null } = { startupType: "cold" }): StartupTiming {
+  const { appVersion, ...timingOptions } = options;
+  if (timingOptions.enabled === false) return createStartupTiming(timingOptions);
+  const marker = beginLaunchMarker(app.getPath("userData"), appVersion ?? app.getVersion());
+  app.once("will-quit", marker.end);
+  process.once("exit", marker.end);
+  return createStartupTiming({ ...timingOptions, startupType: marker.launchType, startTime: 0, launchType: marker.launchType });
+}
+
+
+/**
+ * Sends a fresh, per-process secret to the daemon over its sidecar IPC
+ * before any BrowserWindow is created. The daemon stores the secret
+ * and from this point on requires every `POST /api/import/folder`
+ * request to carry an HMAC token signed with it (PR #974). On a clean
+ * orchestrator startup the daemon is already up — but desktop and
+ * daemon are sibling processes spawned by `tools-dev` / `tools-pack`,
+ * so we retry the IPC call a few times before giving up. A failed
+ * registration is *not* a hard error: the desktop runtime continues
+ * and the import-folder bridge will simply refuse pickAndImport calls
+ * (because no secret is in scope), instead of opening a renderer-
+ * bypassable path. We log the failure so the operator can investigate.
+ */
+
+export async function runDesktopMain(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
+  options: DesktopMainOptions,
+): Promise<DesktopMainHandle> {
+  const startupTiming = options.startupTiming ?? createDesktopStartupTiming({
+    startupType: "cold", appVersion: options.update?.currentVersion, enabled: options.startupTiming !== null,
+  });
+  try {
+    return await runDesktopMainWithTiming(runtime, options, startupTiming);
+  } catch (error) {
+    startupTiming.finish("failed", "desktop_start_failed");
+    throw error;
+  }
+}
+
+async function runDesktopMainWithTiming(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
+  options: DesktopMainOptions,
+  initialStartupTiming: StartupTiming,
+): Promise<DesktopMainHandle> {
+  const startupTiming = initialStartupTiming;
+  startupTiming.setReporter((event, properties) => reportDesktopObservabilityEvent(resolveDaemonBaseUrl(options),
+    event, { ...properties, client_type: "desktop", capture_source: "desktop/startup",
+      os_version: process.getSystemVersion(), platform: process.platform, arch: process.arch }));
+  startupTiming.mark("desktop_entry");
+  // Install the defensive uncaughtException filter BEFORE awaiting
+  // app.whenReady, so a setTypeOfService EINVAL thrown by undici during
+  // the renderer's first fetch is intercepted rather than surfacing as
+  // Electron's "JavaScript error in main process" dialog (issue #647).
+  // The packaged entry has the parallel filter wired in
+  // apps/packaged/src/logging.ts; both must stay in sync until the
+  // helper is promoted to a shared workspace package.
+  attachDesktopProcessErrorFilter();
+
+  // dev (tools-dev) enters here without a prior `whenReady` — so this
+  // is where the `--lang` switch actually lands. In packaged builds
+  // `apps/packaged/src/index.ts` has already applied the switch before
+  // its own `whenReady`; this call is then a no-op for the switch and
+  // only recovers the locale string for the BrowserWindow below.
+  const osLocale = applyOsLocaleSwitch(app);
+  // Same dev-vs-packaged split as the locale switch above: dev lands the
+  // switch here, packaged has already applied it pre-whenReady.
+  applyLoopbackConnectionLimitSwitch(app);
+
+  await app.whenReady();
+  startupTiming.mark("electron_ready");
+  const memorySampler = startMemorySampler({
+    readyAtMs: options.electronReadyAtMs ?? performance.now(),
+    context: { app_session_id: startupTiming.context().app_session_id, app_version: options.update?.currentVersion ?? app.getVersion(),
+      environment: null, platform: process.platform, arch: process.arch, os_version: process.getSystemVersion() },
+    app,
+    getManagedRendererPids: () => BrowserWindow.getAllWindows()
+      .filter(window => !window.isDestroyed() && !window.webContents.isDestroyed())
+      .map(window => window.webContents.getOSProcessId()),
+    report: async (samples, signal) => {
+      for (const sample of samples) {
+        if (signal.aborted) break;
+        await reportDesktopObservabilityEvent(resolveDaemonBaseUrl(options),
+          "client_process_memory_sample", { ...sample, metric_schema_version: 1, telemetry_capability: "supported",
+          client_type: "desktop", capture_source: "desktop/memory", occurred_at: sample.sampled_at }, signal);
+      }
+    },
+  });
+  app.on("before-quit", () => memorySampler.stop());
+  app.on("will-quit", () => memorySampler.stop());
+  configureAboutPanel(options);
+
+  // PR #974: mint a per-process auth secret and hand it to the daemon
+  // BEFORE the BrowserWindow loads. The daemon uses it to verify the
+  // HMAC tokens that the `dialog:pick-and-import` IPC mints for
+  // `POST /api/import/folder`. Doing this before the window load is
+  // load-bearing: it closes the race where a compromised renderer
+  // races to call /api/import/folder with an arbitrary baseDir before
+  // the gate is armed.
+  //
+  // Round-5 (lefarcen P1, mrcfps): if the initial registration fails
+  // (daemon slow to listen, missed startup window, or daemon restarted
+  // mid-session), we still pass the secret to the runtime so the lazy
+  // re-registration path inside `dialog:pick-and-import` can recover.
+  // The runtime's first import attempt under a daemon that doesn't yet
+  // know the secret gets a `503 DESKTOP_AUTH_PENDING`, the runtime
+  // re-invokes the registration callback below, and the import retries
+  // once with a fresh token. A persistent failure surfaces in the
+  // renderer toast rather than silently dropping forever.
+  const desktopAuthSecret = randomBytes(32);
+  const registered = await options.registerDesktopAuth(desktopAuthSecret);
+  if (!registered) {
+    console.warn(
+      "[open-design desktop] initial import-token handshake with daemon did not complete; " +
+        "first folder-import attempt will lazily retry registration before failing",
+    );
+  }
+
+  const updater = createDesktopUpdater(
+    {
+      currentVersion: options.update?.currentVersion,
+      downloadRoot: options.update?.downloadRoot,
+      installerObservationRoot: options.update?.installerObservationRoot,
+      launcherLaunchPath: options.update?.launcherLaunchPath,
+      launcherRoot: options.update?.launcherRoot,
+      launcherPayloadExtractorPath: options.update?.launcherPayloadExtractorPath,
+      launcherRuntimePath: options.update?.launcherRuntimePath,
+      namespace: runtime.namespace,
+      runtimeBase: runtime.base,
+      source: runtime.source,
+    },
+    {
+      openPath: (path) => shell.openPath(path),
+      appSessionId: startupTiming.context().app_session_id,
+      osVersion: process.getSystemVersion(),
+    },
+  );
+  // Resolve the namespace root the same way the daemon diagnostics export does
+  // (apps/daemon/src/diagnostics-export.ts buildSidecarLogSources). In packaged
+  // builds `runtime.base` is `<namespaceRoot>/runtime`, so re-appending the
+  // namespace via `resolveNamespaceRoot` would write renderer.log to a phantom
+  // `<namespaceRoot>/runtime/<namespace>/logs/desktop` dir that the export
+  // reader never looks in. Keeping both sides on `resolveRuntimeNamespaceRoot`
+  // co-locates renderer.log with the desktop log dir AND keeps it captured.
+  const namespaceRoot = resolveRuntimeNamespaceRoot({
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    runtime,
+    runtimeMode: SIDECAR_MODES.RUNTIME,
+  });
+  const desktopLogPath = resolveLogFilePath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    runtimeRoot: namespaceRoot,
+  });
+  const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
+
+  // Start local crash-dump collection before the main window (and its renderer)
+  // is created, directing minidumps into the desktop log tree the diagnostics
+  // export bundles, and snapshot GPU info. Together these make a "Save logs…"
+  // bundle enough to root-cause a native renderer crash (e.g. 0x80000003).
+  setUpDesktopCrashReporter(join(dirname(desktopLogPath), "crashes"));
+  void writeDesktopGpuInfo(join(dirname(desktopLogPath), "gpu-info.json"));
+  // Abnormal-exit detection: read the previous run's marker (unclean if the app
+  // died without a graceful quit — a main-process crash, OS kill, force-quit
+  // after a hang, or power loss), then stamp a fresh dirty marker for this run.
+  // The renderer-crash and startup-crash events don't cover this "runtime 闪退"
+  // class, and a dead process can't report itself, so this is the only way to
+  // observe it. Reported below once the daemon is reachable; marked clean on a
+  // graceful shutdown.
+  const sessionStatePath = join(dirname(desktopLogPath), "session-state.json");
+  const { previousUncleanSessions } = beginDesktopSession({
+    stateFilePath: sessionStatePath,
+    sessionId: startupTiming.context().app_session_id,
+    version: options.update?.currentVersion ?? app.getVersion(),
+    launchAttemptId: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id,
+    now: () => new Date(),
+  });
+  process.once("exit", code => recordDesktopSessionExit({ stateFilePath: sessionStatePath }, code));
+  // Sleep, shutdown, session end and an unfinished quit are recorded into this
+  // run's marker, so a later unclean exit can say how the run ended.
+  attachDesktopHostLifecycleRecorder({
+    powerMonitor,
+    window: {
+      // Windows delivers `session-end` per window; cover current and later ones.
+      on(event, listener) {
+        for (const window of BrowserWindow.getAllWindows()) window.on(event as "session-end", listener);
+        app.on("browser-window-created", (_created, window) => window.on(event as "session-end", listener));
+      },
+    },
+    record: (event) => recordDesktopHostEvent({ stateFilePath: sessionStatePath }, event),
+  });
+
+  let desktop: DesktopRuntime | null = null;
+  let disposeMenu: () => void = () => undefined;
+  let updateScheduler: DesktopUpdaterScheduler | null = null;
+  let removeDiagnosticsIpc: () => void = () => undefined;
+  let removeStartupIpc: () => void = () => undefined;
+  let shutdownPromise: Promise<void> | null = null;
+  let shutdownComplete = false;
+  let shutdownRequestCount = 0;
+  let pendingUpdateDialogRequest = false;
+
+  async function snapshotUpdateForStatus(): Promise<{
+    update: DesktopUpdateStatusSnapshot;
+    updateStatusError?: string;
+  }> {
+    const timeoutMs = 250;
+    let timeout: NodeJS.Timeout | null = null;
+    try {
+      const update = await Promise.race([
+        updater.status(),
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`desktop updater status timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+      return { update };
+    } catch (error) {
+      return {
+        update: updater.snapshot(),
+        updateStatusError: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      if (timeout != null) clearTimeout(timeout);
+    }
+  }
+
+  async function desktopStatusSnapshot(activeDesktop: DesktopRuntime | null): Promise<DesktopStatusSnapshot> {
+    const update = await snapshotUpdateForStatus();
+    // A launcher-hosted payload reports its logical payload identity,
+    // not the installed outer it physically runs on.
+    const executablePath = readLauncherHost()?.running.executablePath ?? process.execPath;
+    if (activeDesktop == null) {
+      return {
+        executablePath,
+        capabilities: { frameRenderer: true },
+        pid: process.pid,
+        state: "idle",
+        updatedAt: new Date().toISOString(),
+        url: null,
+        windowVisible: false,
+        ...update,
+      };
+    }
+    return {
+      executablePath,
+      ...activeDesktop.status(),
+      capabilities: { frameRenderer: true },
+      ...update,
+    };
+  }
+
+  // Every quit entry point joins the same cleanup, including repeated updater
+  // requests while sidecars are still draining.
+  function shutdown(): Promise<void> {
+    memorySampler.stop();
+    startupTiming.finish("cancelled", "quit_before_ready");
+    shutdownRequestCount += 1;
+    if (shutdownPromise == null) recordDesktopHostEvent({ stateFilePath: sessionStatePath }, { kind: "quit-requested" });
+    shutdownPromise ??= Promise.resolve().then(async () => {
+      const startedAt = Date.now();
+      let shutdownFailed = false;
+      console.info("[open-design desktop] shutdown started");
+      updateScheduler?.stop("shutdown");
+      await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
+      // Stop the request-producing renderer before retiring its web/daemon
+      // targets. Keeping the window alive while packaged sidecars drain leaves
+      // polling, SSE reconnects, and ordinary fetches aimed at an origin that
+      // has already gone away for the entire graceful-stop window.
+      disposeMenu();
+      removeDiagnosticsIpc();
+      removeStartupIpc();
+      let rendererQuiesceFailed = false;
+      await desktop?.close().catch(() => {
+        rendererQuiesceFailed = true;
+        shutdownFailed = true;
+      });
+      try {
+        await options.quiesceRendererTransport?.();
+      } catch {
+        rendererQuiesceFailed = true;
+        shutdownFailed = true;
+      }
+      await updater.recordLifecycle?.({
+        stage: "renderer_quiesced",
+        outcome: rendererQuiesceFailed ? "failed" : "completed",
+      });
+      await options.beforeShutdown?.((event) => updater.recordLifecycle?.(event) ?? Promise.resolve()).catch((error: unknown) => {
+        shutdownFailed = true;
+        console.error("desktop beforeShutdown failed", error);
+      });
+      console.info("[open-design desktop] shutdown sidecars settled", { durationMs: Date.now() - startedAt });
+      // Mark clean only after teardown; a stalled cleanup is not a clean exit.
+      endDesktopSessionCleanly({ stateFilePath: sessionStatePath });
+      console.info("[open-design desktop] shutdown completed", { durationMs: Date.now() - startedAt });
+      await updater.recordLifecycle?.({ stage: "shutdown_completed", outcome: shutdownFailed ? "failed" : "completed", duration_ms: Date.now() - startedAt, repeated_quit_count: shutdownRequestCount - 1 });
+      shutdownComplete = true;
+      app.quit();
+    });
+    return shutdownPromise;
+  }
+
+  function shutdownAndExit(): void {
+    void shutdown().finally(() => process.exit(0));
+  }
+
+  async function invoke(action: string, messageInput: unknown): Promise<unknown> {
+      const request = normalizeDesktopSidecarMessage({
+        ...(messageInput === undefined ? {} : { input: messageInput }),
+        type: action,
+      });
+      const startedAt = Date.now();
+      const input = "input" in request ? summarizeDesktopIpcInput(request.input) : null;
+      console.info("[open-design desktop] sidecar action start", { input, type: request.type });
+      try {
+        const activeDesktop = desktop;
+        switch (request.type) {
+          case SIDECAR_MESSAGES.STATUS:
+            return await desktopStatusSnapshot(activeDesktop);
+          case SIDECAR_MESSAGES.SHUTDOWN:
+            throw new Error("sidecar lifecycle messages are private");
+        }
+        if (activeDesktop == null) {
+          throw new Error("desktop runtime is not initialized");
+        }
+        switch (request.type) {
+          case SIDECAR_MESSAGES.EVAL:
+            return await activeDesktop.eval(request.input as DesktopEvalInput);
+          case SIDECAR_MESSAGES.SCREENSHOT:
+            return await activeDesktop.screenshot(request.input as DesktopScreenshotInput);
+          case SIDECAR_MESSAGES.CONSOLE:
+            return activeDesktop.console();
+          case SIDECAR_MESSAGES.SHOW:
+            activeDesktop.show();
+            dispatchInviteDeeplink(request.input?.deeplinkUrl ?? null);
+            notifyDesktopExternalShow(options.onExternalShow);
+            return { accepted: true };
+          case SIDECAR_MESSAGES.CLICK:
+            return await activeDesktop.click(request.input as DesktopClickInput);
+          case SIDECAR_MESSAGES.EXPORT_PDF:
+            return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
+          case SIDECAR_MESSAGES.RENDER_FRAMES:
+            return await activeDesktop.renderFrames(request.input as DesktopRenderFramesInput);
+          case SIDECAR_MESSAGES.RENDER_SLIDES:
+            return await activeDesktop.renderSlides(request.input as DesktopRenderSlidesInput);
+          case SIDECAR_MESSAGES.EXPORT_ARTIFACT:
+            return await activeDesktop.exportArtifact(request.input as DesktopExportArtifactInput);
+          case SIDECAR_MESSAGES.UPDATE:
+            return await updater.handle((request.input as DesktopUpdateInput).action);
+        }
+      } catch (error) {
+        console.error("[open-design desktop] sidecar action failed", {
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+          type: request.type,
+        });
+        throw error;
+      } finally {
+        console.info("[open-design desktop] sidecar action end", {
+          durationMs: Date.now() - startedAt,
+          type: request.type,
+        });
+      }
+  }
+
+  const menuController = installDesktopMenu(runtime, {
+    ...options,
+    onOpenUpdateDialog: () => {
+      if (desktop == null) {
+        pendingUpdateDialogRequest = true;
+        return;
+      }
+      desktop.openUpdateDialog({ source: "mac-app-menu" });
+    },
+    updater,
+  });
+  disposeMenu = menuController.dispose;
+
+  console.info("[open-design desktop] creating desktop runtime");
+  startupTiming.mark("window_creating");
+  desktop = await createDesktopRuntime({
+    desktopAuthSecret,
+    telemetryContext: { ...startupTiming.context(), launch_attempt_id: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id, app_version: options.update?.currentVersion ?? app.getVersion() },
+    discoverUrl: options.discoverWebUrl,
+    discoverDaemonUrl: options.discoverDaemonUrl,
+    osLocale,
+    preloadPath: options.preloadPath,
+    // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
+    // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
+    // (after a daemon restart, or after a missed startup window). The
+    // runtime then mints a FRESH token (new nonce + new exp — replay
+    // protection still works) and POSTs once more.
+    registerDesktopAuthWithDaemon: () => options.registerDesktopAuth(desktopAuthSecret),
+    rendererLogPath,
+    // Mark "reached running" only when the window is ACTUALLY revealed (web app
+    // mounted + shown), not when createDesktopRuntime returns — it starts async
+    // bootstrap via `void tick()` and returns before the first load. Until this
+    // fires, a crash is still a startup failure (covered by
+    // packaged_runtime_failed), not a runtime abnormal exit.
+    onRevealed: () => {
+      startupTiming.mark("window_revealed");
+      markDesktopSessionRunning({ stateFilePath: sessionStatePath });
+    },
+    onUpdateMenuLabels: menuController.setUpdateLabels,
+    requestQuit: shutdownAndExit,
+    onMainWindowReady: () => {
+      startupTiming.mark("window_revealed");
+      void recordIncomingUpdateLifecycle({ root: options.update?.installerObservationRoot, namespace: updater.config.namespace ?? "default", channel: updater.config.channel, version: updater.config.currentVersion }, { stage: "desktop_ready", outcome: "completed" });
+      void recordIncomingUpdateStageResults({
+        root: options.update?.installerObservationRoot, namespace: updater.config.namespace ?? "default",
+        channel: updater.config.channel, version: updater.config.currentVersion,
+        sessionId: startupTiming.context().app_session_id, osVersion: process.getSystemVersion(),
+        platform: process.platform, arch: process.arch,
+      });
+    },
+    splashWindow: options.splashWindow,
+    splashStartedAt: options.splashStartedAt,
+    updater,
+    windowTitle: options.windowTitle,
+  });
+  removeStartupIpc = attachStartupReadyIpc({
+    ipc: ipcMain,
+    timing: () => startupTiming,
+    authorize: (event) => {
+      if (event.sender.isDestroyed() || event.senderFrame !== event.sender.mainFrame) return false;
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner.webContents !== event.sender || !desktop?.ownsWebContents(event.sender.id)) return false;
+      // The pet, splash, guest webviews and child frames cannot finish launch.
+      const expectedUrl = desktop?.status().url;
+      if (!expectedUrl) return false;
+      try {
+        const expected = new URL(expectedUrl);
+        const actual = new URL(event.sender.getURL());
+        return actual.protocol === expected.protocol && actual.host === expected.host;
+      } catch { return false; }
+    },
+  });
+
+  if (pendingUpdateDialogRequest) {
+    pendingUpdateDialogRequest = false;
+    desktop.openUpdateDialog({ source: "mac-app-menu" });
+  }
+  console.info("[open-design desktop] desktop runtime created");
+  options.onDesktopReady?.({
+    dispatchInviteDeeplink,
+    show: () => {
+      void Promise.resolve(options.onExternalShow?.()).finally(() => desktop?.show());
+    },
+  });
+
+  const discoverDaemonBaseUrl = resolveDaemonBaseUrl(options);
+  // Report each abnormal exit of a prior run now that the daemon is up to relay
+  // it (best-effort; the events carry no user content). Each is dropped from the
+  // queue only once the daemon acks it, so a failed report is retried next launch.
+  if (previousUncleanSessions.length > 0) {
+    console.warn("[open-design desktop] prior session(s) ended abnormally (no clean shutdown)", {
+      count: previousUncleanSessions.length,
+    });
+    void reportPriorDesktopUncleanExits({
+      previousUncleanSessions,
+      currentVersion: options.update?.currentVersion ?? app.getVersion(),
+      stateFilePath: sessionStatePath,
+      report: (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
+      clearReported: clearReportedCrash,
+    });
+  }
+  // GPU / utility child-process crashes: the window keeps running but degraded
+  // (a GPU-process crash is a common cause of a window that then goes blank or
+  // vanishes), and the child can't report itself. `clean-exit` is normal teardown.
+  attachDesktopChildProcessCrashReporter(
+    app,
+    (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, {
+      ...startupTiming.context(), launch_attempt_id: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id, app_version: options.update?.currentVersion ?? app.getVersion(), ...properties,
+    }),
+  );
+  removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
+    discoverDaemonBaseUrl: resolveDaemonBaseUrl(options),
+  });
+  // Route opendesign:// team-invite deeplinks to the daemon (desktop wake-up).
+  registerInviteDeeplink({
+    resolveDaemonBaseUrl: resolveDaemonBaseUrl(options),
+    focus: () => focusDesktopForDeeplink(desktop),
+    onCompleted: (outcome) => {
+      console.info("[open-design desktop] invite deeplink continuation completed", outcome);
+    },
+    protocolClientPath: options.inviteProtocolClientPath,
+  });
+  const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(options);
+  updateScheduler = createDesktopUpdaterScheduler(updater, {
+    backoffInitialMs: updater.config.checkBackoffInitialMs,
+    backoffMaxMs: updater.config.checkBackoffMaxMs,
+    initialDelayMs: updater.config.checkInitialDelayMs,
+    intervalMs: updater.config.checkIntervalMs,
+    startupSilentPayloadUpdate: {
+      isEnabled: async () => {
+        const baseUrl = await discoverUpdaterAppConfigBaseUrl();
+        const config = await readAppConfigFromDaemon(baseUrl);
+        return config.allowSilentUpdates === true;
+      },
+      requestQuit: shutdownAndExit,
+    },
+  });
+  if (updater.shouldAutoCheck()) updateScheduler.start();
+
+  app.on("before-quit", (event) => {
+    if (shutdownComplete) return;
+    event.preventDefault();
+    void shutdown().finally(() => process.exit(0));
+  });
+
+  app.on("window-all-closed", () => {
+    shutdownAndExit();
+  });
+
+  app.on("activate", () => {
+    desktop?.show();
+  });
+
+  return {
+    invoke,
+    status: () => desktopStatusSnapshot(desktop),
+    stop: shutdown,
+  };
+}
+
+if (isDirectEntry()) {
+  let runtimeHandle: DesktopMainHandle | null = null;
+  const invoke = async (action: string, input: unknown) => {
+    if (runtimeHandle == null) throw new Error("desktop sidecar is not running");
+    return await runtimeHandle.invoke(action, input);
+  };
+  let client!: SidecarClient<DesktopMainHandle>;
+  client = SidecarFactory.create<DesktopMainHandle>({
+    handlers: Object.fromEntries([
+      SIDECAR_MESSAGES.CLICK,
+      SIDECAR_MESSAGES.CONSOLE,
+      SIDECAR_MESSAGES.EVAL,
+      SIDECAR_MESSAGES.EXPORT_ARTIFACT,
+      SIDECAR_MESSAGES.EXPORT_PDF,
+      SIDECAR_MESSAGES.RENDER_FRAMES,
+      SIDECAR_MESSAGES.RENDER_SLIDES,
+      SIDECAR_MESSAGES.SCREENSHOT,
+      SIDECAR_MESSAGES.SHOW,
+      SIDECAR_MESSAGES.UPDATE,
+    ].map((action) => [action, (input: unknown) => invoke(action, input)])),
+    lifecycle: {
+      async start(resources) {
+        if (client.stamp.app !== APP_KEYS.DESKTOP) throw new Error(`desktop sidecar cannot run stamp app ${client.stamp.app}`);
+        if (!isSidecarMode(client.stamp.mode)) throw new Error(`unsupported desktop sidecar mode: ${client.stamp.mode}`);
+        if (!isSidecarSource(client.stamp.source)) throw new Error(`unsupported desktop sidecar source: ${client.stamp.source}`);
+        const runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> = {
+          app: APP_KEYS.DESKTOP,
+          base: resources.runtimeRoot,
+          mode: client.stamp.mode,
+          namespace: client.stamp.namespace,
+          source: client.stamp.source,
+        };
+        const started = await runDesktopMain(runtime, {
+          discoverDaemonUrl: async () => {
+            try {
+              return (await client.status<DaemonStatusSnapshot>(APP_KEYS.DAEMON, { timeoutMs: 600 })).url ?? null;
+            } catch {
+              return null;
+            }
+          },
+          discoverWebUrl: async () => {
+            try {
+              return (await client.status<WebStatusSnapshot>(APP_KEYS.WEB, { timeoutMs: 600 })).url ?? null;
+            } catch {
+              return null;
+            }
+          },
+          registerDesktopAuth: async (secret) => {
+            try {
+              const result = await client.invoke<RegisterDesktopAuthResult>(
+                APP_KEYS.DAEMON,
+                SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+                { secret: secret.toString("base64") },
+                { timeoutMs: REGISTER_DESKTOP_AUTH_TIMEOUT_MS },
+              );
+              return result.accepted === true;
+            } catch {
+              return false;
+            }
+          },
+        });
+        runtimeHandle = started;
+        return started;
+      },
+      async status(runtime) {
+        return await runtime.status();
+      },
+      async stop(runtime) {
+        await runtime.stop();
+        runtimeHandle = null;
+      },
+    },
+  });
+  void client.start().then(() => client.waitUntilStopped()).catch((error: unknown) => {
+    console.error(error instanceof Error ? error.stack || error.message : String(error));
+    process.exit(1);
+  });
+}

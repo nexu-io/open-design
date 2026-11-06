@@ -1,0 +1,13 @@
+{{- /*
+  Non-secret env. Mirrors the values.yaml `env:` block.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-design.fullname" . }}-config
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

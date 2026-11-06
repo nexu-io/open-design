@@ -1,0 +1,14 @@
+/* theme: soft-pastel — 柔和马卡龙 */
+:root{
+  --bg:#fdf7fb;--bg-soft:#fbeef3;--surface:#ffffff;--surface-2:#fdf0f5;
+  --border:rgba(120,70,110,.12);--border-strong:rgba(120,70,110,.22);
+  --text-1:#3a1f33;--text-2:#6b4d62;--text-3:#a28a99;
+  --accent:#f49bb8;--accent-2:#b5d5f0;--accent-3:#f7d08a;
+  --good:#9dd9a3;--warn:#f7d08a;--bad:#ef9a9a;
+  --grad:linear-gradient(135deg,#f49bb8,#b5d5f0 55%,#c4a0e8);
+  --grad-soft:linear-gradient(135deg,#fbeef3,#eaf4fc);
+  --radius:24px;--radius-sm:16px;--radius-lg:32px;
+  --shadow:0 8px 28px rgba(244,155,184,.18);
+  --shadow-lg:0 24px 70px rgba(181,213,240,.3);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+}

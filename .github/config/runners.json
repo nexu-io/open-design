@@ -1,0 +1,50 @@
+{
+  "schema": { "version": 1 },
+  "defaultMode": "default",
+  "aliases": { "performance": "default" },
+  "profiles": {
+    "github.ubuntu": ["ubuntu-24.04"],
+    "github.windows": ["windows-latest"],
+    "blacksmith.small": ["blacksmith-4vcpu-ubuntu-2404"],
+    "blacksmith.large": ["blacksmith-8vcpu-ubuntu-2404"],
+    "nexu.small": ["nexu-runners-small"],
+    "nexu.medium": ["nexu-runners-medium"],
+    "nexu.large": ["nexu-runners-large"],
+    "nexu.xlarge": ["nexu-runners-xlarge"]
+  },
+  "modes": {
+    "default": {
+      "control": "nexu.small",
+      "general_medium": "nexu.medium",
+      "workspace_unit": "nexu.medium",
+      "windows_tools": "github.windows",
+      "js_hot": "nexu.medium",
+      "ui_hot": "nexu.large",
+      "ui_p0": "nexu.medium",
+      "ui_p0_heavy": "nexu.xlarge",
+      "visual_hot": "nexu.large"
+    },
+    "economic": {
+      "control": "github.ubuntu",
+      "general_medium": "github.ubuntu",
+      "workspace_unit": "github.ubuntu",
+      "windows_tools": "github.windows",
+      "js_hot": "github.ubuntu",
+      "ui_hot": "github.ubuntu",
+      "ui_p0": "github.ubuntu",
+      "ui_p0_heavy": "github.ubuntu",
+      "visual_hot": "github.ubuntu"
+    },
+    "blacksmith": {
+      "control": "blacksmith.small",
+      "general_medium": "blacksmith.small",
+      "workspace_unit": "blacksmith.small",
+      "windows_tools": "github.windows",
+      "js_hot": "blacksmith.small",
+      "ui_hot": "blacksmith.large",
+      "ui_p0": "blacksmith.large",
+      "ui_p0_heavy": "blacksmith.large",
+      "visual_hot": "blacksmith.large"
+    }
+  }
+}

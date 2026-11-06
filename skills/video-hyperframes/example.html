@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Hyperframes · AI workflow 三件套</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;800;900&family=Noto+Sans+SC:wght@600;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#000; font-family:'Inter Tight','Noto Sans SC',sans-serif; color:#fff; -webkit-font-smoothing:antialiased; }
+  .frame { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:96px; opacity:0; transition:opacity 0.6s ease; pointer-events:none; }
+  .frame.active { opacity:1; pointer-events:auto; }
+  .grid-bg::before { content:""; position:absolute; inset:0; opacity:0.08; background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px); background-size:64px 64px; }
+  .glow { position:absolute; width:1000px; height:1000px; border-radius:50%; filter:blur(180px); pointer-events:none; }
+  .num { position:absolute; top:48px; left:48px; font-family:'JetBrains Mono',monospace; font-size:14px; letter-spacing:0.18em; opacity:0.55; }
+  .controls { position:fixed; bottom:32px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:14px; padding:10px 18px; border-radius:999px; background:rgba(255,255,255,0.06); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.12); font-family:'JetBrains Mono',monospace; font-size:12px; z-index:50; }
+  .controls button { background:none; border:none; color:#fff; cursor:pointer; opacity:0.7; }
+  .controls button:hover { opacity:1; }
+  .progress { position:fixed; top:0; left:0; height:3px; background:#e9b94a; transition:width 0.2s linear; z-index:50; }
+  h1 { font-family:'Inter Tight',sans-serif; font-weight:900; line-height:0.95; letter-spacing:-0.04em; margin:0; text-align:center; }
+  .hook  h1 { font-size:160px; }
+  .em    { font-family:Georgia,serif; font-style:italic; font-weight:700; color:#e9b94a; }
+  .label { font-size:14px; font-weight:600; letter-spacing:0.28em; text-transform:uppercase; opacity:0.55; margin-bottom:32px; }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress" style="width:0%"></div>
+
+<section class="frame active hook" data-duration="3000">
+  <div class="num">FRAME 01 / 08 · HOOK</div>
+  <div class="glow" style="background:#c96442; top:-200px; left:-200px"></div>
+  <div class="label">观察</div>
+  <h1>80% 的 AI 工具用户,<br/>都<span class="em">没用对</span> prompt。</h1>
+</section>
+
+<section class="frame" data-duration="3000">
+  <div class="num">FRAME 02 / 08</div>
+  <h1 style="font-size:128px">不是因为<br/><span class="em">prompt 难写</span>。</h1>
+</section>
+
+<section class="frame" data-duration="3000">
+  <div class="num">FRAME 03 / 08</div>
+  <h1 style="font-size:128px">是因为他们<br/>一直在 <span class="em">重写</span>。</h1>
+</section>
+
+<section class="frame" data-duration="4000">
+  <div class="num">FRAME 04 / 08</div>
+  <div class="label" style="color:#e9b94a">解</div>
+  <h1 style="font-size:140px">真正高效的人,<br/>用<span class="em">模板</span>。</h1>
+</section>
+
+<section class="frame grid-bg" data-duration="4000">
+  <div class="num">FRAME 05 / 08</div>
+  <div class="label">公式</div>
+  <h1 style="font-size:88px; max-width:24ch">
+    模板 = <span style="color:#c96442">提示词</span><br/>
+    + <span style="color:#e9b94a">设计 system</span><br/>
+    + <span style="color:#6c3aa6">输出格式</span>
+  </h1>
+</section>
+
+<section class="frame" data-duration="5000">
+  <div class="num">FRAME 06 / 08</div>
+  <div class="glow" style="background:#e9b94a; bottom:-300px; right:-200px"></div>
+  <h1 style="font-size:120px">HTML <span class="em">Anything</span><br/>把这三件事<br/>打包好了。</h1>
+</section>
+
+<section class="frame" data-duration="5000">
+  <div class="num">FRAME 07 / 08</div>
+  <div class="label" style="color:#e9b94a">行动</div>
+  <h1 style="font-size:160px"><span class="em">9 套模板,</span><br/>一个动作:<br/><span style="font-family:'JetBrains Mono',monospace; font-style:normal; color:#fff">⌘+Enter</span></h1>
+</section>
+
+<section class="frame" data-duration="3000">
+  <div class="num">FRAME 08 / 08 · CTA</div>
+  <div class="glow" style="background:#c96442; top:50%; left:50%; transform:translate(-50%,-50%); opacity:0.6"></div>
+  <h1 style="font-size:96px">现在试试 →</h1>
+  <div style="font-family:'JetBrains Mono',monospace; font-size:24px; margin-top:36px; opacity:0.85">github.com/your-org/html-anything</div>
+</section>
+
+<div class="controls">
+  <button id="prev" title="上一帧">‹</button>
+  <button id="play" title="播放 / 暂停">⏸</button>
+  <button id="next" title="下一帧">›</button>
+  <span id="counter" style="opacity:0.55">01 / 08</span>
+</div>
+
+<!-- HYPERFRAMES_META: {"frames":[
+  {"i":1,"duration":3000,"transition":"fade","scene":"Hook: 80% 的人没用对 prompt"},
+  {"i":2,"duration":3000,"transition":"fade","scene":"不是因为难写"},
+  {"i":3,"duration":3000,"transition":"fade","scene":"是因为重写"},
+  {"i":4,"duration":4000,"transition":"fade","scene":"真正高效的用模板"},
+  {"i":5,"duration":4000,"transition":"fade","scene":"模板 = 提示词 + 设计 + 格式"},
+  {"i":6,"duration":5000,"transition":"fade","scene":"HTML Anything 打包"},
+  {"i":7,"duration":5000,"transition":"fade","scene":"9 套模板, ⌘+Enter"},
+  {"i":8,"duration":3000,"transition":"fade","scene":"CTA: github.com/your-org/html-anything"}
+]} -->
+
+<script>
+const frames = Array.from(document.querySelectorAll('.frame'));
+const total = frames.length;
+const counter = document.getElementById('counter');
+const playBtn = document.getElementById('play');
+const progress = document.getElementById('progress');
+let i = 0;
+let playing = true;
+let frameStart = Date.now();
+let timer;
+
+function show(n) {
+  i = (n + total) % total;
+  frames.forEach((f,k)=>f.classList.toggle('active', k===i));
+  counter.textContent = String(i+1).padStart(2,'0') + ' / ' + String(total).padStart(2,'0');
+  frameStart = Date.now();
+  if (playing) schedule();
+}
+function schedule() {
+  clearTimeout(timer);
+  const d = Number(frames[i].dataset.duration) || 3000;
+  timer = setTimeout(()=> show(i+1), d);
+}
+function tick() {
+  const d = Number(frames[i].dataset.duration) || 3000;
+  const pct = Math.min(1, (Date.now()-frameStart)/d) * 100;
+  progress.style.width = pct + '%';
+  requestAnimationFrame(tick);
+}
+document.getElementById('prev').onclick = ()=>show(i-1);
+document.getElementById('next').onclick = ()=>show(i+1);
+playBtn.onclick = ()=> { playing=!playing; playBtn.textContent = playing?'⏸':'▶'; if(playing){schedule(); frameStart=Date.now();} else clearTimeout(timer); };
+document.addEventListener('keydown', e => {
+  if (e.key==='ArrowRight') show(i+1);
+  else if (e.key==='ArrowLeft') show(i-1);
+  else if (e.key===' ') { e.preventDefault(); playBtn.click(); }
+});
+show(0);
+tick();
+</script>
+</body>
+</html>

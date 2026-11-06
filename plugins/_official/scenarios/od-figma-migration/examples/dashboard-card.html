@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>od-figma-migration · Dashboard card from Figma</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafafa;
+      --fg: #111114;
+      --muted: #6b6b73;
+      --line: #e7e7eb;
+      --accent: #5b54ff;
+      --accent-soft: #efeeff;
+      --good: #14803c;
+      --good-soft: #e6f4ea;
+      --warn: #c2410c;
+      --warn-soft: #fff1e7;
+      --card: #ffffff;
+      --code-bg: #0e0e10;
+      --code-fg: #f4f4f5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0e10;
+        --fg: #f4f4f5;
+        --muted: #a1a1aa;
+        --line: #2a2a30;
+        --accent: #8a83ff;
+        --accent-soft: #1d1b40;
+        --good-soft: #0f3a21;
+        --warn-soft: #3a1f0d;
+        --card: #17171b;
+      }
+    }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); }
+    body {
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 13px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+    }
+    .pill.ok { background: var(--good-soft); color: var(--good); }
+    .pill.acc { background: var(--accent-soft); color: var(--accent); }
+    .pill.warn { background: var(--warn-soft); color: var(--warn); }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    section { margin-top: 28px; }
+    h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; letter-spacing: 0.01em; text-transform: uppercase; color: var(--muted); }
+
+    .preview {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.02), 0 8px 24px rgba(0,0,0,.04);
+    }
+    .preview .title { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    .preview .value { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; }
+    .preview .delta { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; margin-left: 8px; vertical-align: middle; background: var(--good-soft); color: var(--good); }
+    .preview .chart { margin-top: 18px; height: 88px; border-radius: 8px; background:
+      linear-gradient(180deg, rgba(91,84,255,0.18), rgba(91,84,255,0));
+      position: relative; overflow: hidden; }
+    .preview .chart svg { display: block; width: 100%; height: 100%; }
+    .preview .footer { display: flex; justify-content: space-between; margin-top: 16px; color: var(--muted); font-size: 12px; }
+
+    .tokens-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .token { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; }
+    .swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); }
+
+    pre.code {
+      background: var(--code-bg); color: var(--code-fg);
+      border-radius: 10px; padding: 14px 16px;
+      font: 12.5px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
+      overflow-x: auto; margin: 0;
+    }
+    pre.code .k { color: #ff8a8a; }
+    pre.code .s { color: #b6e88d; }
+    pre.code .c { color: #82a9ff; }
+    pre.code .m { color: #c4b5fd; }
+
+    footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dashboard card · Figma → React</h1>
+    <div class="sub">od-figma-migration · scenario · 4 stages · critique score 4.6/5</div>
+    <div class="row">
+      <span class="pill ok">extract ok</span>
+      <span class="pill acc">12 tokens mapped</span>
+      <span class="pill ok">build passing</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Generated component</h2>
+    <div class="preview">
+      <div class="title">Active sessions</div>
+      <div>
+        <span class="value">12,489</span>
+        <span class="delta">+8.2%</span>
+      </div>
+      <div class="chart">
+        <svg viewBox="0 0 320 88" preserveAspectRatio="none">
+          <path d="M0,70 L40,62 L80,68 L120,48 L160,52 L200,38 L240,42 L280,24 L320,30 L320,88 L0,88 Z" fill="rgba(91,84,255,0.25)" />
+          <path d="M0,70 L40,62 L80,68 L120,48 L160,52 L200,38 L240,42 L280,24 L320,30" fill="none" stroke="#5b54ff" stroke-width="2" />
+        </svg>
+      </div>
+      <div class="footer"><span>Last 24h</span><span>updated 2 min ago</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Token map · 12 of 12 resolved</h2>
+    <div class="tokens-grid">
+      <div class="token"><span class="swatch" style="background:#5b54ff"></span>--color-accent · #5B54FF</div>
+      <div class="token"><span class="swatch" style="background:#14803c"></span>--color-success · #14803C</div>
+      <div class="token"><span class="swatch" style="background:#111114"></span>--color-fg · #111114</div>
+      <div class="token"><span class="swatch" style="background:#fafafa;border-color:#ddd"></span>--color-bg · #FAFAFA</div>
+      <div class="token"><span class="swatch" style="background:#ffffff;border-color:#ddd"></span>--surface-card · #FFFFFF</div>
+      <div class="token"><span class="swatch" style="background:#e7e7eb"></span>--border-default · #E7E7EB</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Generated TSX</h2>
+    <pre class="code"><span class="k">export function</span> <span class="m">DashboardCard</span>({ value, deltaPct, points }: <span class="m">CardProps</span>) {
+  <span class="k">return</span> (
+    &lt;<span class="m">Card</span> className=<span class="s">"dashboard-card"</span>&gt;
+      &lt;<span class="m">Card.Title</span>&gt;Active sessions&lt;/<span class="m">Card.Title</span>&gt;
+      &lt;<span class="m">Stat</span> value={value} delta={deltaPct} /&gt;
+      &lt;<span class="m">Sparkline</span> points={points} stroke=<span class="s">"var(--color-accent)"</span> /&gt;
+    &lt;/<span class="m">Card</span>&gt;
+  );
+}</pre>
+  </section>
+
+  <footer>
+    Example artifact rendered for the <code>od-figma-migration</code> scenario.
+    Real runs persist <code>figma/tree.json</code> + <code>token-map/colors.json</code>
+    under the project cwd before generating the component.
+  </footer>
+</body>
+</html>

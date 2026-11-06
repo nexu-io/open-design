@@ -1,0 +1,21 @@
+{
+  "id": "profile-avatar-old-photo-restoration-to-dslr-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Old Photo Restoration to DSLR Portrait",
+  "summary": "This prompt restores a damaged vintage 4-person family photo into a clean, colorized, high-resolution realistic portrait for photo repair and enhancement.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "Using the provided reference image, restore the damaged old family photo into a natural-looking modern high-resolution portrait while keeping the same 4 people, pose, framing, clothing, and outdoor rural setting unchanged. Remove all visible age damage including tears, cracks, creases, stains, worn paper edges, scratches, and fading. Convert the black-and-white sepia image into realistic soft color, preserving accurate skin tones and neutral earth-toned clothing. Enhance fine detail, sharpen fabric and hair texture, improve contrast and dynamic range, and upscale it to professional DSLR-quality realism with clean focus and a subtle shallow depth of field, as if photographed on a {argument name=\"camera model\" default=\"Canon EOS R6 II\"}. Keep the result highly realistic, natural, and faithful to the original faces and proportions.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453186815_er6vgp_HG-IvNXaIAALR4b.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "摆烂程序媛",
+    "url": "https://x.com/wanerfu/status/2049006709692359015#reversed-1"
+  }
+}

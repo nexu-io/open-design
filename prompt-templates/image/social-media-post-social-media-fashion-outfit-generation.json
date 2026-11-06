@@ -1,0 +1,20 @@
+{
+  "id": "social-media-post-social-media-fashion-outfit-generation",
+  "surface": "image",
+  "title": "Social Media Post - Social Media Fashion Outfit Generation",
+  "summary": "A prompt to generate a week's worth of fashion blogger-style outfit recommendations based on a character profile, complete with item labels and prices.",
+  "category": "Social Media Post",
+  "tags": [
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "Based on this character info card for a {argument name=\"subject\" default=\"girl\"}, generate a 7-day outfit recommendation guide suitable for her appearance, height, and weight. Use a {argument name=\"platform style\" default=\"Xiaohongshu\"} fashion blogger presentation style. Generate 7 images at once (one for each day), specifically labeling the styles and prices of accessories, shoes, hats, pendants, tops, pants, socks, and other items for easy reference.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453151822_tkaefc_HG_wnqGbAAAq416.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "Rion Wu",
+    "url": "https://x.com/rionaifantasy/status/2049122261249204626"
+  }
+}

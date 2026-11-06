@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Humanize PPT Slide Plan",
+  "description": "Each slide carries Humanize's per-page media decision (image/diagram/video) and a non-binding layout hint. Downstream skills consume this and produce their own native HTML deck or editable PPTX.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "slide_id",
+      "role",
+      "title",
+      "message",
+      "speaker_intent",
+      "media",
+      "layout_hint"
+    ],
+    "properties": {
+      "slide_id": {
+        "type": "string",
+        "pattern": "^S[0-9]{2}$"
+      },
+      "role": {
+        "type": "string",
+        "enum": ["hook", "context", "tension", "method", "proof", "takeaway"]
+      },
+      "title": {
+        "type": "string"
+      },
+      "message": {
+        "type": "string"
+      },
+      "visible_content": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "speaker_intent": {
+        "type": "string"
+      },
+      "media": {
+        "type": "object",
+        "description": "v0.6.7: per-page media decision with machine-actionable fields. Humanize decides what materials the page needs AND where they should land. The downstream media subagent reads asset_path + prompt_hint and produces the file. Without asset_path, the media slot is a label, not a task (v0.6.5 gap).",
+        "required": ["image", "diagram", "video"],
+        "properties": {
+          "image": {
+            "type": "object",
+            "properties": {
+              "needed": {"type": "boolean"},
+              "kind": {
+                "type": "string",
+                "enum": ["gpt-photo", "svg-html", "screenshot", "none"]
+              },
+              "purpose": {"type": "string"},
+              "slot": {"type": "string"},
+              "asset_path": {
+                "type": ["string", "null"],
+                "description": "v0.6.7: where the downstream media subagent should write the file, e.g. 'assets/s01-hero-gpt-photo.png'. null means 'no asset needed'."
+              },
+              "prompt_hint": {
+                "type": "string",
+                "description": "v0.6.7: human-readable prompt for the image model. e.g. 'AI Agent 概念入门 封面图，10 分钟课程'."
+              },
+              "aspect_ratio": {
+                "type": "string",
+                "enum": ["16:9", "21:9", "4:3", "1:1", "9:16"]
+              },
+              "max_size_kb": {"type": "number"}
+            }
+          },
+          "diagram": {
+            "type": "object",
+            "properties": {
+              "needed": {"type": "boolean"},
+              "kind": {
+                "type": "string",
+                "enum": ["svg-html", "html-table", "none"]
+              },
+              "purpose": {"type": "string"},
+              "slot": {"type": "string"},
+              "asset_path": {
+                "type": ["string", "null"],
+                "description": "v0.6.7: where the SVG/HTML file should land. e.g. 'assets/s05-context-diagram.svg'."
+              },
+              "prompt_hint": {
+                "type": "string",
+                "description": "v0.6.7: what the diagram should depict, in plain language. The downstream subagent renders it as inline SVG or HTML."
+              }
+            }
+          },
+          "video": {
+            "type": "object",
+            "properties": {
+              "needed": {"type": "boolean"},
+              "kind": {
+                "type": "string",
+                "enum": ["remotion-clip", "hyperframes", "none"]
+              },
+              "purpose": {"type": "string"},
+              "slot": {"type": "string"},
+              "duration_s": {"type": "number"},
+              "asset_path": {
+                "type": ["string", "null"],
+                "description": "v0.6.7: where the rendered video file should land. e.g. 'assets/s04-method-remotion.mp4'."
+              },
+              "prompt_hint": {
+                "type": "string",
+                "description": "v0.6.7: what the video should depict / what motion should it have."
+              }
+            }
+          }
+        }
+      },
+      "layout_hint": {
+        "type": ["string", "null"],
+        "description": "A registered layout ID (e.g. 'S07-process-21x9') or template slug suggestion. Downstream skills must pick from their own registered set, not from this hint."
+      },
+      "recommended_renderer": {
+        "type": "string"
+      }
+    }
+  }
+}

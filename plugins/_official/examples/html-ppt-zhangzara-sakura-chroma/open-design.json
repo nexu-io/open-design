@@ -1,0 +1,115 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-sakura-chroma",
+  "title": "Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director",
+  "title_i18n": {
+    "en": "Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director",
+    "zh-CN": "像旅行内容总监一样把樱花之旅做成影像散文",
+    "zh-TW": "像旅行内容总监一样把樱花之旅做成影像散文"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. Built as a decision-grade story deck for friends, travel readers.",
+  "description_i18n": {
+    "en": "A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. Built as a decision-grade story deck for friends, travel readers.",
+    "zh-CN": "像旅行内容总监一样把樱花之旅做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像旅行内容总监一样把樱花之旅做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-sakura-chroma",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "sakura-chroma",
+    "zhangzara-sakura-chroma",
+    "retro",
+    "playful",
+    "confident",
+    "product-launch-or-catalogue",
+    "indie-hardware-or-analog-studio-brand",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "launch",
+    "campaign",
+    "pipeline",
+    "html-ppt-zhangzara-sakura-chroma",
+    "marketing-and-gtm",
+    "life",
+    "travel-photo-essay-deck",
+    "personal",
+    "story",
+    "photo-essay",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director\" as a decision-grade Life & story deck in this template's own visual system. Subject: A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. Audience: friends, travel readers. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: would someone retell the story after seeing it once.",
+        "zh-CN": "像旅行内容总监一样把樱花之旅做成影像散文。像旅行内容总监一样把樱花之旅做成影像散文——一份可商业交付的生活故事 Deck，围绕真实主题、证据链与决策目标组织。 主题：A cherry-blossom-season travel photo essay through Kyoto — the arrival, the peak bloom, and the moment that made the trip. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director",
+          "title_i18n": {
+            "en": "Turn a Cherry-Blossom Trip into a Photo Essay like a Travel Editorial Director",
+            "zh-CN": "像旅行内容总监一样把樱花之旅做成影像散文",
+            "zh-TW": "像旅行内容总监一样把樱花之旅做成影像散文"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "life"
+  }
+}

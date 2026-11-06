@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Liquid Hero · Aurora Violet</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;700;800;900&family=Noto+Sans+SC:wght@400;700;900&family=Source+Serif+Pro:ital,wght@1,400;1,600&display=swap" rel="stylesheet" />
+<style>
+  body { font-family:'Inter Tight','Noto Sans SC',system-ui,sans-serif; background:#1e1b4b; margin:0; min-height:100vh; overflow:hidden; color:#fafaf8; position:relative; }
+  .blob { position:absolute; border-radius:50%; mix-blend-mode:screen; filter:blur(70px); will-change: transform; }
+  @keyframes float1 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(80px,-60px) scale(1.15) } }
+  @keyframes float2 { 0%,100% { transform: translate(0,0) scale(1.1) } 50% { transform: translate(-100px,40px) scale(0.9) } }
+  @keyframes float3 { 0%,100% { transform: translate(0,0) scale(0.95) } 50% { transform: translate(50px,80px) scale(1.2) } }
+  .b1 { width:600px; height:600px; background:#a78bfa; top:-100px; left:-100px; animation: float1 12s ease-in-out infinite; }
+  .b2 { width:520px; height:520px; background:#7c5cff; top:30%; right:-100px; animation: float2 10s ease-in-out infinite; }
+  .b3 { width:480px; height:480px; background:#ec4899; bottom:-100px; left:30%; animation: float3 14s ease-in-out infinite; }
+  .b4 { width:380px; height:380px; background:#06b6d4; top:60%; left:10%; animation: float1 16s ease-in-out infinite; opacity:0.6 }
+  .text-diff { mix-blend-mode: difference; color:#fafaf8; }
+  .chip { font-family:'Inter Tight',sans-serif; font-size:11px; letter-spacing:0.18em; text-transform:uppercase; }
+  .serif-em { font-family:'Source Serif Pro',serif; font-style:italic; font-weight:600; }
+  /* faint grid overlay */
+  body::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg,rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 64px 64px; z-index:1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .blob { animation: none }
+  }
+</style>
+</head>
+<body class="flex flex-col items-center justify-center p-16">
+
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="blob b4"></div>
+
+  <header class="absolute top-12 left-12 right-12 flex items-baseline justify-between chip opacity-70 z-10">
+    <span class="text-diff">HTML ANYTHING · FRAME · LIQUID HERO</span>
+    <span class="text-diff">AURORA VIOLET</span>
+    <span class="text-diff">2026 · 1920 × 1080</span>
+  </header>
+
+  <main class="relative z-10 text-center max-w-[1100px]">
+    <h1 class="text-diff font-black leading-[0.95] tracking-[-0.03em]" style="font-size:clamp(48px,7.5vw,128px)">
+      最好的 HTML, <span class="serif-em">是</span><br/>
+      让读者忘了它是 HTML。
+    </h1>
+    <p class="mt-8 text-diff opacity-80 text-[24px] font-medium">
+      HTML Anything · 75 个世界级模板, 0 个 API key
+    </p>
+    <div class="mt-10 inline-flex items-center gap-3 text-[13px] font-semibold chip px-5 py-2 rounded-full text-diff" style="border:1px solid rgba(255,255,255,0.4)">
+      ⌘ Try at localhost:3456
+    </div>
+  </main>
+
+  <footer class="absolute bottom-12 left-12 right-12 flex items-baseline justify-between chip opacity-60 z-10">
+    <span class="text-diff">FRAME-LIQUID-BG-HERO</span>
+    <span class="text-diff">PREFERS-REDUCED-MOTION SAFE</span>
+    <span class="text-diff">HTMLANYTHING.DEV</span>
+  </footer>
+</body>
+</html>

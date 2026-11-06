@@ -1,0 +1,21 @@
+{
+  "id": "social-media-post-psg-transfer-announcement-poster",
+  "surface": "image",
+  "title": "Social Media Post - PSG Transfer Announcement Poster",
+  "summary": "A bold, professional football signing poster for announcing a player's move to Paris Saint-Germain on social media or sports promo graphics.",
+  "category": "Social Media Post",
+  "tags": [
+    "cinematic",
+    "typography"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "Create a dramatic football transfer announcement poster in a vertical social-media format, centered on a photorealistic adult male soccer player wearing a modern Paris Saint-Germain home jersey, arms crossed, chest-up framing, strong athletic build, face mostly obscured by a soft rectangular blur block for anonymity, short close-cropped hair visible around the edges. Use a deep navy blue PSG-themed color palette with bold red and white accents. The jersey should feature a central red vertical stripe bordered by white, a red swoosh-style sports logo on the left side from the viewer's perspective, the PSG crest on the opposite chest, and faint sponsor lettering across the torso. Place the player in front of a layered graphic background featuring an oversized faded PSG crest filling most of the upper-right background, a dark Eiffel Tower silhouette on the right side, painterly brush-stroke textures, subtle grunge, and a white vertical paint strip on the left with a rough red brush accent near the middle. Include the PSG club badge near the upper left. Add left-side stacked slogan text in bold uppercase sans serif reading: \"NEW CLUB. NEW CHAPTER. PARIS.\" with the last word in red. Add a huge distressed white block headline across the lower middle reading \"{argument name=\"player surname\" default=\"MBAPPE\"}\", with smaller spaced uppercase first name above it reading \"{argument name=\"player first name\" default=\"KYLIAN\"}\". Overlay a red handwritten script across the big surname saying \"{argument name=\"welcome text\" default=\"Welcome To Paris\"}\". At the bottom center, add small uppercase text \"PARIS SAINT-GERMAIN\" and beneath it the year \"{argument name=\"year\" default=\"2026\"}\" in red with thin divider lines on each side. In the lower left, include small stacked text \"ICI C'EST PARIS\" with \"PARIS\" in red. In the lower right, add a circular stamp-style badge reading \"PARIS IS MAGIQUE\". Use cinematic lighting, high contrast, premium sports-brand poster design, sharp fabric texture, moody shadows, gritty editorial finish, and polished transfer-window announcement aesthetics.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453173788_tb78r0_HHDu7nUWQAAWH7O.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "UxUi Tega (Design & Ai)",
+    "url": "https://x.com/Tegadesigns/status/2049400556578382190#reversed-0"
+  }
+}

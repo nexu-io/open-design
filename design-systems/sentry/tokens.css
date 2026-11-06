@@ -1,0 +1,219 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/sentry/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Sentry".
+ * Dark-mode-first developer tool aesthetic: deep purple-black canvas
+ * (#1f1633, #150f23) lit by warm purples (#6a5fc1, #79628c, #422082)
+ * and punctuated by a signature lime-green pop (#c2ef4e).
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents generating an artifact for Sentry should paste
+ * the `:root` block verbatim into the first `<style>` of the artifact,
+ * then reference everything via `var(--*)`.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Sentry's "monitoring for developers" voice):
+ *
+ *   1. `--bg` is `#1f1633` — DESIGN.md §2 names this "the defining
+ *      color of the brand". Never `#000000` — the warm purple-black
+ *      is what separates Sentry from a generic terminal-dark UI
+ *      ("Warm purple tones replace the typical cool grays of
+ *      developer tools" — DESIGN.md §1). `--surface` recesses to
+ *      `#150f23` (the documented "deeper sections, footer" tier).
+ *      Cards visually lift via inset/ambient shadow and frosted
+ *      glass overlays, not via a lighter solid surface — Sentry's
+ *      depth language is light-on-dark, not paper-on-paper.
+ *
+ *   2. `--accent` is Sentry Purple `#6a5fc1` (the documented link /
+ *      hover / focus color from DESIGN.md §2 + §9), not the famous
+ *      lime green `#c2ef4e`. The schema's `--accent` slot is the
+ *      cross-brand interactive anchor — links, focus rings, hover
+ *      states — and DESIGN.md explicitly maps that role to Sentry
+ *      Purple. Lime green is the brand's "pop" highlight ("once per
+ *      section maximum" per DESIGN.md §9), which appears as a
+ *      single deliberate hex in components.html where the design
+ *      intent justifies it; it does not earn a shared schema slot.
+ *
+ *   3. `--focus-ring` is a sharp 2px solid ring at `var(--accent)`,
+ *      not the schema's 3px alpha glow. DESIGN.md §4 documents the
+ *      focus outline as `rgb(106, 95, 193) solid 0.125rem` — a
+ *      crisp engineered indicator. The atmospheric glow form would
+ *      blur into the warm purple bg and lose legibility against
+ *      `#1f1633`.
+ *
+ *   4. `--font-display` leads with "Dammit Sans" — Sentry's
+ *      irreverent display face used "ONLY for hero/display headings"
+ *      (DESIGN.md §7). Rubik sits second in the stack as the
+ *      workhorse fallback so any heading that loses Dammit Sans
+ *      degrades to Rubik (the brand's primary UI face), not to a
+ *      generic sans. `--font-body` is Rubik-first with the
+ *      DESIGN.md §3 fallback chain. `--font-mono` is Monaco-first
+ *      because Sentry's "developer-tool trinity" (DESIGN.md §1)
+ *      explicitly chose Monaco over the schema's SF Mono default.
+ *
+ *   5. Type scale tops at 88px (`--text-4xl`) with `--text-3xl` at
+ *      60px. DESIGN.md §3 documents Display Hero at 88px Dammit
+ *      Sans weight 700 and Display Secondary at 60px — the brand's
+ *      voice ("Code breaks. Fix it faster.") reads BIG by px count,
+ *      not just by tracking compression. `--tracking-display` is
+ *      `normal` because DESIGN.md §3 explicitly specifies
+ *      "letter-spacing: normal" at hero scale; the typographic
+ *      drama lives in size and weight, not in negative tracking.
+ *
+ *   6. `--leading-tight` is `1.2` (the upper end of DESIGN.md §3's
+ *      documented "1.10–1.25" heading range). `--leading-body` is
+ *      `1.5` per the body row of the same hierarchy table.
+ *
+ *   7. Radius scale spans 6 → 8 → 12 → 9999 to honor DESIGN.md §5's
+ *      five-step ladder (6 inputs → 8 buttons/cards → 10–12
+ *      containers → 13 primary muted → 18 pill containers).
+ *      `--radius-sm` recesses to 6px (form input floor) instead of
+ *      the schema's 8px default; per-component 13px and 18px values
+ *      remain inline where DESIGN.md is explicit about a specific
+ *      shape.
+ *
+ *   8. `--elev-raised` reproduces DESIGN.md §6 Level 2
+ *      ("rgba(0, 0, 0, 0.1) 0px 10px 15px -3px" — the standard
+ *      card elevation). The signature ambient purple glow
+ *      (`rgba(22, 15, 36, 0.9) 0px 4px 4px 9px`) is hero-specific
+ *      and inlined per-component; encoding it into the shared
+ *      raised tier would over-shadow every card.
+ *
+ *   9. Section rhythm is 80/64/48 (desktop/tablet/phone),
+ *      matching DESIGN.md §5's "dark breathing room" floor of
+ *      64–80px+ vertical padding between sections. Container caps
+ *      at 1152px — Sentry's documented XL breakpoint max-width.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Warm purple-black void: every background sits between #1f1633
+   * (canvas) and #150f23 (deeper). Never pure black. */
+  --bg: #1f1633;                       /* Deep Purple — the defining brand canvas */
+  --surface: #150f23;                  /* Darker Purple — deeper sections, recessed wells */
+  --surface-warm: var(--surface);      /* alias — Sentry has no warm tier (palette is purple-cool) */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Pure white primary with progressively dimmed purple-grays for
+   * tertiary text. The mid-tier (#9d96b3) is purple-mauve so meta
+   * text stays on-brand even when small. */
+  --fg: #ffffff;                       /* Pure White — primary text on dark bg */
+  --fg-2: #e5e7eb;                     /* Light Gray — secondary text, descriptions */
+  --muted: #9d96b3;                    /* Purple-mauve — captions, tertiary text (warm-tinted, never neutral gray) */
+  --meta: var(--muted);                /* alias — no separate placeholder/disabled tier */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Border Purple anchors all structural lines — DESIGN.md §7
+   * explicitly forbids neutral grays (#666, #999) for borders. */
+  --border: #362d59;                   /* Border Purple — dividers, card edges */
+  --border-soft: var(--border);        /* alias — no softer separator tier documented */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Sentry Purple — the brand's interactive anchor. Links, focus
+   * rings, hover states. Lime green (#c2ef4e) is the once-per-screen
+   * pop highlight and lives inline in components, not in the shared
+   * accent slot. */
+  --accent: #6a5fc1;                   /* Sentry Purple — links, hover, focus */
+  --accent-on: #ffffff;                /* white text on accent backgrounds */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Sentry's monitoring surface uses standard semantic colors —
+   * status pills must remain unambiguous against the warm purple
+   * palette and not collapse into the brand spectrum. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * The "developer-tool trinity" — Dammit Sans for irreverent
+   * display, Rubik for everything functional, Monaco for code.
+   * Dammit Sans is hero-only; Rubik covers 90% of the type system. */
+  --font-display: "Dammit Sans", "Rubik", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-body: "Rubik", -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: Monaco, Menlo, "Ubuntu Mono", ui-monospace, monospace;
+
+  /* Type scale — DESIGN.md §3 hierarchy. 88px display hero, 60px
+   * display secondary, 30px section heading. Sentry reads BIG by
+   * px count, not by tracking compression. */
+  --text-xs: 12px;                     /* Small Caption */
+  --text-sm: 14px;                     /* Button / Caption */
+  --text-base: 16px;                   /* Body / Code */
+  --text-lg: 20px;                     /* Feature Title */
+  --text-xl: 24px;                     /* Card Title */
+  --text-2xl: 30px;                    /* Section Heading */
+  --text-3xl: 60px;                    /* Display Secondary */
+  --text-4xl: 88px;                    /* Display Hero — billboard scale */
+
+  /* Body 1.50, headings 1.20 (upper end of DESIGN.md's 1.10–1.25).
+   * Display letter-spacing is `normal` — DESIGN.md §3 explicitly
+   * specifies normal tracking at hero scale. */
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: normal;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. Mid-tier values (5/12/40/etc.)
+   * appear inline per-component where DESIGN.md is specific. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 "dark breathing room" of 64–80px+
+   * between sections. The dark canvas IS the visual rest. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 radius ladder: 6 (inputs) → 8 (buttons/cards) →
+   * 12 (containers/glass) → 9999 (pills). The 13px primary-button
+   * radius and 18px image-container radius stay inline per-component
+   * since they're shape-specific, not structural. */
+  --radius-sm: 6px;                    /* Minimal — form inputs */
+  --radius-md: 8px;                    /* Standard — buttons, cards */
+  --radius-lg: 12px;                   /* Comfortable — containers, glass panels */
+  --radius-pill: 9999px;               /* Full pill — badges, status chips */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Level 2 card stack per DESIGN.md §6. The signature ambient
+   * purple glow (Level 4) and inset button shadow (Level -1) are
+   * inlined per-component — they're brand-signature treatments,
+   * not generic card chrome. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 10px 15px -3px rgba(0, 0, 0, 0.1);  /* card float */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Sharp 2px solid ring at Sentry Purple — DESIGN.md §4 documents
+   * `rgb(106, 95, 193) solid 0.125rem` as the focus outline. An
+   * atmospheric alpha glow would dilute against the warm purple bg. */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — Sentry's drama lives in shadow and color,
+   * not in choreographed motion. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1152px max content width — Sentry's documented XL breakpoint.
+   * Gutters tighten on smaller breakpoints; DESIGN.md describes
+   * "Responsive padding: 2rem (mobile) → 4rem (tablet+)". */
+  --container-max: 1152px;
+  --container-gutter-desktop: 64px;
+  --container-gutter-tablet: 32px;
+  --container-gutter-phone: 24px;
+}

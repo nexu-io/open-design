@@ -1,0 +1,120 @@
+# Safety constraint for SQLite data consistency
+replicaCount: 1
+
+commonLabels:
+  app.kubernetes.io/environment: "production"
+
+image:
+  repository: ghcr.io/nexu-io/od
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+config:
+# The runtime environment for the Node.js process. 
+# Must be either "production" or "development". 
+# For Staging clusters, leave this as "production".
+  nodeEnv: "production"
+  allowedOrigins: ""
+  publicBaseUrl: ""
+  nodeOptions: "--max-old-space-size=192"
+  webPort: 7456
+  bindHost: "127.0.0.1"
+  apiToken: "secure-default-token-change-me"
+
+service:
+  type: ClusterIP
+  port: 80
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    # Critical: Disables proxy buffering so Server-Sent Events (SSE) stream in real-time
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+  hosts:
+    - host: open-design.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  ## example for tls configuration:
+  #  - secretName: open-design-tls
+  #    hosts:
+  #      - open-design.local
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+containerSecurityContext:
+  seLinuxOptions: {}
+  runAsUser: 1001
+  runAsGroup: 1001
+  runAsNonRoot: true
+  privileged: false
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: "RuntimeDefault"
+
+podSecurityContext:
+  fsGroupChangePolicy: Always
+  sysctls: []
+  supplementalGroups: []
+  fsGroup: 1001
+
+authProxy:
+  image: "nginxinc/nginx-unprivileged:1.25-alpine-slim"
+  port: 8080
+  securityContext:
+    runAsUser: 101
+    runAsGroup: 101
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 20
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# WARNING: Do not enable HPA if using the default SQLite storage. 
+# Concurrent writes from multiple pods will corrupt the database file.
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+initContainers: []
+sidecars: []

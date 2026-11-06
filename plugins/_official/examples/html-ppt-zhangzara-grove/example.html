@@ -1,0 +1,1749 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Write an Urban Green-Space Policy Brief like a City Sustainability Director - Government &amp; policy</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Grove style uses four font families:
+        1. Playfair Display    — editorial serif for headlines, italic in coral for accent emphasis
+        2. Jost                — clean light grotesque for body copy (weight 300 — the "good paper" feel)
+        3. JetBrains Mono      — labels, metadata, vertical sidebar text
+        4. Noto Serif SC / Noto Sans SC — Chinese fallbacks for every role
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400&family=Playfair+Display:ital,wght@0,400;1,400&family=JetBrains+Mono:wght@300;400&family=Noto+Serif+SC:wght@400&family=Noto+Sans+SC:wght@300;400&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE A · TOKENS  —  GROVE STYLE                                     ║
+   ║                                                                      ║
+   ║  Replace this block to change the visual style entirely.             ║
+   ║  Every color, font, and size in this file reads from these vars.     ║
+   ║  Never write raw hex values, font names, or px sizes outside here.   ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+      :root {
+        /* ── Palette ──────────────────────────────────────────────────────── */
+        /* Deep forest green: grounded, considered, editorial — the Grove base */
+        --c-bg: #192b1b;
+        /* Slightly lighter forest green for secondary dark surfaces */
+        --c-bg-alt: #1e3221;
+        /* Warm parchment: light slide background — feels like good paper */
+        --c-bg-light: #e8e4d6;
+        /* Slightly cooler parchment for secondary light surfaces */
+        --c-bg-light-alt: #dedad0;
+
+        /* Primary text on dark: warm cream, never pure white */
+        --c-fg: #d4cfbf;
+        /* Secondary text on dark: muted cream at 66% opacity (AA on forest) */
+        --c-fg-2: rgba(212, 207, 191, 0.66);
+        /* Tertiary / hint text on dark: 32% opacity — near-invisible */
+        --c-fg-3: rgba(212, 207, 191, 0.32);
+        /* Primary text on light: forest green near-black */
+        --c-fg-light: #192b1b;
+        /* Secondary text on light: 68% green clears AA on parchment */
+        --c-fg-light-2: rgba(25, 43, 27, 0.68);
+        /* Tertiary text on light */
+        --c-fg-light-3: rgba(25, 43, 27, 0.33);
+
+        /* Accent: terracotta coral — the single warm note; used sparingly */
+        --c-accent: #c8524a;
+        /* Lifted coral for SMALL text on dark surfaces (kickers, mono labels).
+           Base coral reads ~3.5:1 on forest green; this variant clears AA. */
+        --c-accent-up: #dd7f72;
+        /* Deepened coral for SMALL text on parchment; clears AA on light. */
+        --c-accent-down: #a63f38;
+        /* Dividers on dark: faint cream border at 12% opacity */
+        --c-border: rgba(212, 207, 191, 0.12);
+        /* Dividers on light: faint green border at 14% opacity */
+        --c-border-light: rgba(25, 43, 27, 0.14);
+
+        /* ── Typography ──────────────────────────────────────────────────── */
+        /* Display + Heading: Playfair Display — editorial serif.
+           Italic in accent coral is the Grove signature move.
+           NEVER use weight 700 or bold on a serif in Grove. */
+        --f-display: "Playfair Display", "Noto Serif SC", Georgia, serif;
+        --f-heading: "Playfair Display", "Noto Serif SC", Georgia, serif;
+        /* Body: Jost weight 300 — light grotesque that steps back so the serif leads */
+        --f-body: "Jost", "Noto Sans SC", system-ui, sans-serif;
+        /* Mono: JetBrains Mono — labels, vertical sidebar text, metadata */
+        --f-mono: "JetBrains Mono", monospace;
+
+        /* ── Type Scale ───────────────────────────────────────────────────── */
+        /* vw units keep all sizes proportional regardless of window width */
+        --sz-display: 10vw; /* hero cover title — very large, commanding */
+        --sz-h1: 5.5vw; /* chapter and statement titles */
+        --sz-h2: 3.2vw; /* slide headlines */
+        --sz-h3: 2vw; /* sub-headlines, compare panel titles */
+        /* px floors keep small text legible on narrow viewports */
+        --sz-lead: max(1.45vw, 16px); /* lead paragraph */
+        --sz-body: max(1.05vw, 14px); /* body text, bullets */
+        --sz-caption: max(0.82vw, 11px); /* captions, footnotes, chart sources */
+        --sz-label: max(0.7vw, 10px); /* chrome labels, kickers, mono metadata */
+
+        /* ── Spacing ─────────────────────────────────────────────────────── */
+        /* Grove is intentionally spacious — breathing room is the aesthetic */
+        --pad-x: 8vw; /* horizontal slide padding */
+        --pad-y: 6.5vh; /* vertical slide padding */
+        --gap-lg: 4.5vh; /* between major content sections */
+        --gap-md: 2.8vh; /* between related elements */
+        --gap-sm: 1.4vh; /* between tightly coupled elements */
+
+        /* ── Motion ──────────────────────────────────────────────────────── */
+        /* Slide pan: sharp and deliberate — Grove moves with intention */
+        --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
+        --dur-slide: 0.9s;
+        /* Element entrance: spring-y ease-out for content reveals */
+        --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur-enter: 0.7s;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE B · ENGINE — DO NOT MODIFY                                     ║
+   ║                                                                      ║
+   ║  Layout engine, transitions, animation system, navigation.           ║
+   ║  Touching this breaks the mechanics.                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Deck container — all slides sit side by side in one horizontal strip */
+      #deck {
+        display: flex;
+        height: 100vh;
+        transition: transform var(--dur-slide) var(--ease-slide);
+        will-change: transform;
+      }
+
+      /* Slide base — each slide occupies exactly one full viewport */
+      .slide {
+        flex: 0 0 100vw;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        padding: var(--pad-y) var(--pad-x);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      .slide-body {
+        min-height: 0;
+      }
+
+      /* Slide themes */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+      }
+
+      /* ── Animation system ─────────────────────────────────────────────── */
+      /* Elements start invisible; become visible only when slide is active */
+      [data-anim] {
+        opacity: 0;
+      }
+      .slide.is-active [data-anim] {
+        animation-duration: var(--dur-enter);
+        animation-timing-function: var(--ease-enter);
+        animation-fill-mode: forwards;
+      }
+      .slide.is-active [data-anim="fade-up"] {
+        animation-name: kFadeUp;
+      }
+      .slide.is-active [data-anim="fade-in"] {
+        animation-name: kFadeIn;
+      }
+      .slide.is-active [data-anim="reveal-right"] {
+        animation-name: kRevealRight;
+      }
+      .slide.is-active [data-anim="reveal-left"] {
+        animation-name: kRevealLeft;
+      }
+      .slide.is-active [data-anim="scale-in"] {
+        animation-name: kScaleIn;
+      }
+
+      /* Staggered delays via data-delay attribute (0–6) */
+      [data-delay="0"] {
+        animation-delay: 0s;
+      }
+      [data-delay="1"] {
+        animation-delay: 0.08s;
+      }
+      [data-delay="2"] {
+        animation-delay: 0.18s;
+      }
+      [data-delay="3"] {
+        animation-delay: 0.3s;
+      }
+      [data-delay="4"] {
+        animation-delay: 0.44s;
+      }
+      [data-delay="5"] {
+        animation-delay: 0.6s;
+      }
+      [data-delay="6"] {
+        animation-delay: 0.78s;
+      }
+
+      @keyframes kFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(28px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes kFadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealRight {
+        from {
+          clip-path: inset(0 100% 0 0);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0% 0 0);
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealLeft {
+        from {
+          clip-path: inset(0 0 0 100%);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0 0 0%);
+          opacity: 1;
+        }
+      }
+      @keyframes kScaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── Navigation UI ───────────────────────────────────────────────── */
+      #nav-dots {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        z-index: 100;
+      }
+      /* Neutral olive reads on both forest and parchment slides;
+         the active dot takes the coral accent (visible on both). */
+      .nav-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(141, 139, 117, 0.55);
+        cursor: pointer;
+        transition:
+          background 0.3s,
+          transform 0.3s;
+        padding: 0;
+      }
+      .nav-dot.is-active {
+        background: var(--c-accent);
+        transform: scale(1.4);
+      }
+
+      /* Disabled: the slide-foot bar already shows "NN / TT" on every
+         slide; the fixed counter at the viewport edge was a duplicate. */
+      #slide-counter {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE C · TYPOGRAPHY                                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Display: Playfair 400 — the Grove rule: never bold on serif */
+      .display {
+        font-family: var(--f-display);
+        font-size: var(--sz-display);
+        font-weight: 400;
+        line-height: 1;
+        letter-spacing: -0.01em;
+      }
+      .h1 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h1);
+        font-weight: 400;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+      }
+      .h2 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 400;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+      }
+      .h3 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        line-height: 1.3;
+      }
+
+      /* Grove signature: italic serif in terracotta coral for em inside headings */
+      .h1 em,
+      .h2 em,
+      .h3 em {
+        font-style: italic;
+        color: var(--c-accent);
+      }
+
+      .lead {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 300;
+        line-height: 1.65;
+      }
+      .body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        line-height: 1.75;
+      }
+      .caption {
+        font-family: var(--f-body);
+        font-size: var(--sz-caption);
+        font-weight: 300;
+        line-height: 1.55;
+      }
+      .label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 300;
+        letter-spacing: 0.12em;
+      }
+
+      /* Muted text — adapts to dark/light context automatically */
+      .muted {
+        color: var(--c-fg-2);
+      }
+      /* Small accent text uses the lifted/deepened coral for AA contrast */
+      .accent {
+        color: var(--c-accent-up);
+      }
+      .light .accent {
+        color: var(--c-accent-down);
+      }
+      .light .muted {
+        color: var(--c-fg-light-2);
+      }
+
+      /* Bullet list — clean coral dash leaders, Jost 300 */
+      .bullet-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        line-height: 1.65;
+        padding-left: 0;
+      }
+      .bullet-list li {
+        display: grid;
+        grid-template-columns: 2em 1fr;
+        gap: 0.5em;
+      }
+      /* Coral hairline leader replaces the bullet point: drawn as a rule,
+         not an em-dash glyph, so the leader stays crisp at every size */
+      .bullet-list li::before {
+        content: "";
+        width: 1.25em;
+        height: 1px;
+        background: var(--c-accent);
+        margin-top: 0.8em;
+        justify-self: start;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE D · CHROME                                                     ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Chrome (top bar) and footer */
+      .slide-chrome,
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .slide-chrome {
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-md);
+      }
+      .slide-foot {
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        margin-top: var(--gap-md);
+      }
+      .light .slide-chrome,
+      .light .slide-foot {
+        border-color: var(--c-border-light);
+      }
+
+      /* Layouts that are chromeless — no top bar or footer */
+      .slide--cover .slide-chrome,
+      .slide--cover .slide-foot,
+      .slide--chapter .slide-chrome,
+      .slide--chapter .slide-foot,
+      .slide--quote .slide-chrome,
+      .slide--quote .slide-foot,
+      .slide--end .slide-chrome,
+      .slide--end .slide-foot {
+        display: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE E · GROVE COMPONENTS + LAYOUT PATTERNS                        ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* ── Grove: large decorative watermark number ────────────────────────── */
+      /* Massive serif digit in the background — compositional texture, not UI.
+         Near-invisible: only 6% opacity. Positions in bottom-right corner. */
+      .grove-num {
+        font-family: var(--f-display);
+        font-size: 18vw;
+        font-weight: 400;
+        line-height: 1;
+        color: rgba(212, 207, 191, 0.06); /* near-invisible watermark on dark */
+        position: absolute;
+        right: var(--pad-x);
+        bottom: -0.15em;
+        pointer-events: none;
+        user-select: none;
+        letter-spacing: -0.03em;
+      }
+      /* Same watermark effect on light slides uses forest green tint */
+      .light .grove-num {
+        color: rgba(25, 43, 27, 0.06);
+      }
+
+      /* ── Grove: vertical sidebar label ──────────────────────────────────── */
+      /* Disabled: vertical/rotated sidebar text was added as a chapter-tab
+         decoration but read as overflow / clutter on most viewports.
+         Hidden across the deck; the slide-chrome bar and slide-foot already
+         provide section name and page number. */
+      .grove-sidebar {
+        display: none !important;
+      }
+
+      /* ── Grove: stat card ────────────────────────────────────────────────── */
+      /* Spacious layout: large serif number in coral, mono label beneath, border-bottom rule */
+      .grove-stat {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border);
+      }
+      /* Large serif stat value in terracotta coral.
+         Raised from 4.5vw: at that size the three numbers read as body
+         furniture and the stats slide's lower half sat empty. min() caps
+         against viewport height so short windows can't clip the row. */
+      .grove-stat-val {
+        font-family: var(--f-display);
+        font-size: min(7vw, 13vh);
+        font-weight: 400;
+        line-height: 1;
+        color: var(--c-accent);
+        letter-spacing: -0.02em;
+      }
+      /* Italic suffix within stat values: e.g. 73<em>%</em> */
+      .grove-stat-val em {
+        font-style: italic;
+      }
+      /* Mono uppercase label beneath the number */
+      .grove-stat-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--c-fg-2);
+      }
+      .light .grove-stat-label {
+        color: var(--c-fg-light-2);
+      }
+      .light .grove-stat {
+        border-color: var(--c-border-light);
+      }
+
+      /* ── Image placeholder ────────────────────────────────────────────── */
+      /* Used in place of <img> tags — marks where real images will go.
+         Hairline border + centered mono label; the label was lifted from
+         the 32% tertiary tone (illegible) to the secondary tone. */
+      .img-placeholder {
+        background: var(--c-bg-alt);
+        border: 1px solid var(--c-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-2);
+        width: 100%;
+        flex: 1;
+        min-height: 30vh;
+      }
+      .light .img-placeholder {
+        background: var(--c-bg-light-alt);
+        border-color: var(--c-border-light);
+        color: var(--c-fg-light-2);
+      }
+
+      /* ── Decorative rule lines ────────────────────────────────────────── */
+      /* Short coral horizontal rule — a compositional beat between kicker and headline */
+      .rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+      }
+      .rule.full {
+        width: 100%;
+        background: var(--c-border);
+      }
+      .light .rule.full {
+        background: var(--c-border-light);
+      }
+
+      /* ── Kicker label (above headlines) ──────────────────────────────── */
+      /* Small mono text takes the lifted coral on dark, deepened on light */
+      .kicker {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-accent-up);
+      }
+      .light .kicker {
+        color: var(--c-accent-down);
+      }
+
+      /* ── 1. COVER ───────────────────────────────────────────────────────── */
+      /* Chromeless — flex column, fills full viewport height */
+      .slide--cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      /* ── 2. CHAPTER ─────────────────────────────────────────────────────── */
+      .slide--chapter {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      /* Mono kicker above chapter title — lifted coral for AA on forest */
+      .chapter-num {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--c-accent-up);
+        margin-bottom: var(--gap-md);
+      }
+      /* Short coral rule between kicker and title */
+      .chapter-rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+
+      /* ── 3. STATEMENT ───────────────────────────────────────────────────── */
+      .slide--statement .statement-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+      /* Cap the statement headline so a 3-line thesis can't overflow on
+         shorter viewports. min() takes the smallest of width-based, height-
+         based, and absolute caps, ensuring the line-stack always fits. */
+      .slide--statement .h1 {
+        font-size: min(4.5vw, 7.5vh, 88px);
+        line-height: 1.15;
+      }
+
+      /* ── 4. SPLIT ───────────────────────────────────────────────────────── */
+      /* Two columns: text left, image right */
+      .slide--split .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+      }
+      .split-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .split-image {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        height: 100%;
+      }
+
+      /* ── 5. STATS ───────────────────────────────────────────────────────── */
+      .slide--stats .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+      }
+      /* Three grove-stat cards in a row — generous spacing between them */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: calc(var(--pad-x) * 0.6);
+      }
+
+      /* ── 6. LIST ────────────────────────────────────────────────────────── */
+      /* Two-column: intro left, bullets right */
+      .slide--list .slide-body {
+        display: grid;
+        grid-template-columns: 2fr 3fr;
+        gap: calc(var(--pad-x) * 0.8);
+        align-items: center;
+      }
+      .list-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-top: var(--gap-sm);
+      }
+      /* Body copy on the list slide: bumped up for legibility. The default
+         --sz-body of 1.05vw reads as ~12px on typical laptop viewports. */
+      .slide--list .body,
+      .slide--list .bullet-list {
+        font-size: max(1.4vw, 17px);
+        line-height: 1.6;
+      }
+
+      /* ── 7. QUOTE ───────────────────────────────────────────────────────── */
+      /* Chromeless — the emotional centerpiece of the deck */
+      .slide--quote {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: calc(var(--pad-y) * 1.2) calc(var(--pad-x) * 1.1);
+      }
+      /* Large decorative opening quote mark in coral */
+      .quote-mark {
+        font-family: var(--f-display);
+        font-size: 8vw;
+        line-height: 0.6;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+        font-weight: 400;
+      }
+      /* Large italic serif quote body.
+         Raised from 3.2vw: the quote is the deck's emotional centerpiece and
+         deserves the register of a chapter title. Height-capped so a 3-line
+         quote still clears the attribution on short viewports. */
+      .quote-text {
+        font-family: var(--f-display);
+        font-size: min(4vw, 7vh);
+        font-weight: 400;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+        max-width: 82%;
+        margin-bottom: var(--gap-lg);
+        font-style: italic;
+      }
+      .quote-attr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+      }
+
+      /* ── 8. COMPARE ─────────────────────────────────────────────────────── */
+      /* Two panels divided by a vertical line */
+      .slide--compare .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+      }
+      .compare-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: var(--gap-md) 0;
+      }
+      .compare-panel.left {
+        padding-right: calc(var(--pad-x) * 0.55);
+        border-right: 1px solid var(--c-border);
+      }
+      .compare-panel.right {
+        padding-left: calc(var(--pad-x) * 0.55);
+      }
+      .light .compare-panel.left {
+        border-color: var(--c-border-light);
+      }
+      /* Panel label: coral on the "after" side */
+      .compare-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+      }
+      .compare-label.after {
+        color: var(--c-accent-up);
+      }
+      .light .compare-label.after {
+        color: var(--c-accent-down);
+      }
+      .light .compare-label {
+        border-color: var(--c-border-light);
+      }
+
+      /* ── 9. END ─────────────────────────────────────────────────────────── */
+      /* Chromeless — closes the deck with generosity of space */
+      .slide--end {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* ── CHART ──────────────────────────────────────────────────────────── */
+      .slide--chart .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-shrink: 0;
+      }
+      .chart-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 0;
+      }
+      /* Bars aligned to a left spine line.
+         Track height raised from 30vh: at 30vh the bars filled barely a third
+         of the slide and left a dead zone between headline and chart. Bar
+         heights below scale proportionally (0.55vh per plugin), so the data
+         relationships are unchanged — the chart simply uses its room. */
+      .bar-track {
+        height: 42vh;
+        display: flex;
+        align-items: flex-end;
+        gap: 4vw;
+        border-left: 1px solid var(--c-border);
+        padding-left: 0.5vw;
+      }
+      .light .bar-track {
+        border-color: var(--c-border-light);
+      }
+      .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 1vh;
+        height: 100%;
+      }
+      /* Default bar: muted fg-3 color */
+      .bar-fill {
+        width: 100%;
+        background: var(--c-fg-3);
+      }
+      /* Accent bar: terracotta coral highlight for the featured value */
+      .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .light .bar-fill {
+        background: var(--c-fg-light-3);
+      }
+      .light .bar-fill.accent {
+        background: var(--c-accent);
+      }
+      .bar-x-label {
+        font-family: var(--f-mono);
+        /* Bumped from var(--sz-caption) (~10px on laptop) so the category
+           labels are actually readable. */
+        font-size: max(1.1vw, 13px);
+        letter-spacing: 0.1em;
+        /* Lifted from --c-fg-3 (32% opacity) to --c-fg-2 (60% opacity);
+           the 32% reading was nearly invisible on the dark background. */
+        color: var(--c-fg-2);
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+      .light .bar-x-label {
+        color: var(--c-fg-light-2);
+      }
+      .bar-val {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-2);
+      }
+      /* Highlighted bar value: lifted coral, slightly bolder */
+      .bar-val.hi {
+        color: var(--c-accent-up);
+        font-weight: 400;
+      }
+      .light .bar-val {
+        color: var(--c-fg-light-2);
+      }
+      /* Thin baseline rule below bars */
+      .chart-baseline {
+        height: 1px;
+        background: var(--c-border);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .light .chart-baseline {
+        background: var(--c-border-light);
+      }
+      /* Source attribution below chart.
+         Lifted from --c-fg-3 (32% opacity) to --c-fg-2: at caption size the
+         32% reading fell well below AA and was effectively invisible,
+         the same problem already fixed on .bar-x-label above. */
+      .chart-source {
+        flex-shrink: 0;
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        color: var(--c-fg-2);
+        letter-spacing: 0.06em;
+        margin-top: var(--gap-sm);
+      }
+      .light .chart-source {
+        color: var(--c-fg-light-2);
+      }
+
+      /* ── Reduced motion ──────────────────────────────────────────────── */
+      /* Honor the OS preference: no slide pan, no entrance keyframes.
+         Content appears immediately; navigation still works. */
+      @media (prefers-reduced-motion: reduce) {
+        #deck {
+          transition: none;
+        }
+        [data-anim] {
+          opacity: 1;
+        }
+        .slide.is-active [data-anim] {
+          animation: none;
+        }
+        .nav-dot {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- NAV DOTS: generated by JS -->
+    <nav id="nav-dots"></nav>
+    <!-- SLIDE COUNTER: generated by JS -->
+    <div id="slide-counter"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         DECK — all slides live here, side by side in one horizontal strip
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div id="deck">
+      <!-- ═══════ SLIDE 1 · COVER dark ══════════════════════════════════════
+           Chromeless. grove-sidebar rotated along left edge.
+           grove-num watermark "01" in bottom-right corner.
+           Display title in Playfair 400 with italic coral emphasis word.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--cover">
+        <!-- Vertical sidebar label: rotated text on the left edge -->
+        <div class="grove-sidebar" data-anim="fade-in" data-delay="0">
+          Government &amp; Policy · Council Briefing
+        </div>
+        <!-- Watermark number: near-invisible serif "01" in background -->
+        <div class="grove-num">01</div>
+
+        <!-- Main content: grows to fill, centers vertically -->
+        <div
+          style="
+            padding-top: calc(var(--pad-y) * 1.5);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          "
+        >
+          <!-- Studio name kicker: mono uppercase, coral -->
+          <div class="kicker" data-anim="fade-in" data-delay="1">
+            Office of Sustainability · City of Riverton · 2026
+          </div>
+          <!-- Short coral rule revealing right -->
+          <div
+            class="rule"
+            data-anim="reveal-right"
+            data-delay="2"
+            style="margin: var(--gap-sm) 0"
+          ></div>
+          <!-- h1 headline: Playfair 400, max 55% width, italic em in coral -->
+          <h1
+            class="h1"
+            style="max-width: 55%; margin-top: var(--gap-md)"
+            data-anim="fade-up"
+            data-delay="3"
+          >
+            Closing the canopy gap: a <em>funded</em> path to 30% tree cover by
+            2032
+          </h1>
+          <!-- Lead subtitle: Jost 300, muted, generous line-height -->
+          <p
+            class="lead muted"
+            style="max-width: 46%; margin-top: var(--gap-md)"
+            data-anim="fade-up"
+            data-delay="4"
+          >
+            An urban tree-canopy ordinance and funding package for Council
+            review — the public need, the evidence, and the decision ahead.
+          </p>
+        </div>
+
+        <!-- Bottom meta bar: thin top border, two mono labels -->
+        <div
+          style="
+            border-top: 1px solid var(--c-border);
+            padding-top: var(--gap-sm);
+            display: flex;
+            justify-content: space-between;
+          "
+          data-anim="fade-in"
+          data-delay="5"
+        >
+          <span class="label muted">Prepared by Dept. of Sustainability</span>
+          <span class="label muted">Council Session · July 14, 2026</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 2 · CHAPTER dark ════════════════════════════════════
+           Section 01 divider. Giant watermark number creates depth.
+           Kicker shows "01 / CONTEXT" then rule then h1 title.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--chapter">
+        <!-- Watermark: massive near-invisible "01" in background -->
+        <div class="grove-num">01</div>
+        <!-- Section kicker: "01 / CONTEXT" in mono coral -->
+        <div class="chapter-num" data-anim="fade-in" data-delay="0">
+          01 / Context
+        </div>
+        <!-- Short coral rule -->
+        <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
+        <!-- Chapter title: Playfair 400, max 62% width -->
+        <h1
+          class="h1"
+          style="max-width: 62%; margin-bottom: var(--gap-md)"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          Riverton's canopy has fallen to 19% while heat-related ER visits
+          are up <em>41%</em> in five years.
+        </h1>
+        <!-- Supporting line: Jost 300 muted -->
+        <p
+          class="lead muted"
+          style="max-width: 48%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          An honest look at where the city's tree canopy stands in 2026, and
+          why the current voluntary-planting model can't close the gap.
+        </p>
+      </section>
+
+      <!-- ═══════ SLIDE 3 · STATEMENT dark ══════════════════════════════════
+           Single bold thesis — the most important idea in the deck.
+           One sentence, max 62% width. Italic coral emphasis word.
+           grove-sidebar provides category context.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--statement">
+        <!-- Vertical sidebar label -->
+        <div class="grove-sidebar">The Thesis</div>
+        <!-- Chrome bar: section name left, page number right -->
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >Public Need</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">03</span>
+        </div>
+
+        <div class="slide-body">
+          <div class="statement-body">
+            <div class="kicker" data-anim="fade-in" data-delay="1">
+              The Public Need
+            </div>
+            <div class="rule" data-anim="reveal-right" data-delay="2"></div>
+            <!-- Main thesis: large serif, generous white space around it -->
+            <h1
+              class="h1"
+              style="max-width: 62%"
+              data-anim="fade-up"
+              data-delay="3"
+            >
+              Neighborhoods below 15% canopy run 8°F hotter and see twice the
+              heat-related ED visits. The deficit tracks income, not
+              <em>geography</em>.
+            </h1>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">03 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 4 · SPLIT light ═════════════════════════════════════
+           Text left, image placeholder right.
+           Warm parchment background — editorial, considered.
+           grove-sidebar provides section context.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--split">
+        <div class="grove-sidebar">The Evidence</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Canopy Survey · 2025</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >04</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left: text content -->
+          <div class="split-text" data-anim="fade-up" data-delay="1">
+            <div class="kicker">What The LiDAR Survey Found</div>
+            <h2 class="h2">
+              The canopy gap tracks income, not <em>geography</em>
+            </h2>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              The 2025 citywide LiDAR canopy survey, cross-referenced against
+              census tracts, shows the same pattern in every ward: the
+              lowest-canopy blocks are also the lowest-income blocks.
+            </p>
+            <ul class="bullet-list" style="color: var(--c-fg-light)">
+              <li>
+                East Riverton and the Mill District average 12% canopy versus
+                34% in the northern hillside wards
+              </li>
+              <li>
+                Surface temperatures in low-canopy tracts run 6–8°F hotter on
+                summer afternoons than the citywide average
+              </li>
+              <li>
+                Zip codes below 15% canopy account for 61% of heat-related
+                emergency-department visits despite holding 38% of the
+                population
+              </li>
+            </ul>
+          </div>
+
+          <!-- Right: image placeholder fills the column -->
+          <div class="split-image" data-anim="fade-in" data-delay="3">
+            <div class="img-placeholder">[IMAGE PLACEHOLDER]</div>
+            <!-- Caption lifted from the 33% tertiary tone (below AA, near
+                 invisible on parchment) to the secondary tone, matching the
+                 contrast fixes already applied to .bar-x-label and
+                 .chart-source. -->
+            <p
+              class="caption"
+              style="
+                color: var(--c-fg-light-2);
+                font-family: var(--f-mono);
+                letter-spacing: 0.08em;
+              "
+            >
+              2025 citywide canopy LiDAR overlay — Dept. of Sustainability GIS
+              team
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">04 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 5 · STATS dark ═══════════════════════════════════════
+           Three grove-stat cards in a row.
+           Large serif numbers in terracotta coral — let them breathe.
+           grove-sidebar provides section context.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--stats">
+        <div class="grove-sidebar">By The Numbers</div>
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >Canopy · Cost · Health</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">05</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Section headline above stats -->
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            Three numbers that define the <em>case</em>
+          </h2>
+
+          <!-- Three stat cards — spacious, no crowding.
+               Staggered individually (delays 2/3/4) so the row reads as a
+               left-to-right cadence instead of one monolithic fade. -->
+          <div class="stats-row">
+            <div class="grove-stat" data-anim="fade-up" data-delay="2">
+              <!-- Serif stat value in coral: 19% citywide canopy -->
+              <div class="grove-stat-val">19<em>%</em></div>
+              <div class="grove-stat-label">
+                Citywide canopy · down from 26% in 2010
+              </div>
+            </div>
+            <div class="grove-stat" data-anim="fade-up" data-delay="3">
+              <div class="grove-stat-val">8<em>°F</em></div>
+              <div class="grove-stat-label">
+                Summer surface-temp gap, lowest- vs. highest-canopy tracts
+              </div>
+            </div>
+            <div class="grove-stat" data-anim="fade-up" data-delay="4">
+              <div class="grove-stat-val">$3.20</div>
+              <div class="grove-stat-label">
+                Return per $1 of canopy investment over 20 years
+              </div>
+            </div>
+          </div>
+
+          <!-- Source line below stats — lands after the last stat card -->
+          <p
+            class="caption muted"
+            style="font-family: var(--f-mono); letter-spacing: 0.08em"
+            data-anim="fade-in"
+            data-delay="5"
+          >
+            Source: Dept. of Sustainability 2025 canopy survey · Riverton
+            Public Health Dept. · county stormwater cost-benefit study
+          </p>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted"></span>
+          <span class="label muted">05 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 6 · LIST light ══════════════════════════════════════
+           Two-column layout: intro heading left, bullet list right.
+           grove-sidebar on left edge.
+           Light parchment — feels like a printed document.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--list">
+        <div class="grove-sidebar">The Policy Option</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Ordinance Package</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >06</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left: heading and intro -->
+          <div class="list-head" data-anim="fade-up" data-delay="1">
+            <div class="kicker">The Proposed Ordinance</div>
+            <h2 class="h2">
+              One package, <em>five</em> provisions
+            </h2>
+            <p class="body" style="color: var(--c-fg-light-2)">
+              Each provision targets a specific failure of the current
+              voluntary program — together they replace hope with a funded
+              plan.
+            </p>
+          </div>
+
+          <!-- Right: bullet list with coral dash leaders -->
+          <ul
+            class="bullet-list"
+            style="color: var(--c-fg-light)"
+            data-anim="fade-up"
+            data-delay="2"
+          >
+            <li>
+              Canopy overlay zoning — mandatory minimum canopy ratios for new
+              development in the eight lowest-canopy wards
+            </li>
+            <li>
+              Dedicated funding — a $0.35 monthly stormwater-fee surcharge
+              feeding a ring-fenced Urban Forest Fund
+            </li>
+            <li>
+              Priority planting — 6,000 trees per year targeted first to the
+              eight wards below 15% canopy
+            </li>
+            <li>
+              Maintenance endowment — three years of contracted watering and
+              pruning per tree, ending the "plant and abandon" pattern
+            </li>
+            <li>
+              Public canopy dashboard — ward-level tracking published
+              annually, reviewed by Council each budget cycle
+            </li>
+          </ul>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">06 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 7 · QUOTE dark ═══════════════════════════════════════
+           Long italic serif quote — emotional centerpiece of the deck.
+           Chromeless. Large coral opening quote mark.
+           Attribution below: coral name, muted role/year.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--quote">
+        <!-- Large decorative opening quote mark in terracotta coral -->
+        <div class="quote-mark" data-anim="fade-in" data-delay="0">&#8220;</div>
+
+        <!-- Quote body: italic Playfair, spacious line-height -->
+        <p class="quote-text" data-anim="fade-up" data-delay="1">
+          We treat heat like weather. It isn't. It's infrastructure — and
+          right now, half this city doesn't have it.
+        </p>
+
+        <!-- Attribution: coral name, muted role -->
+        <div class="quote-attr" data-anim="fade-up" data-delay="3">
+          <span class="label accent">Dr. Marisol Ferrante</span>
+          <span class="label muted">Riverton Public Health Dept. · 2026</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 8 · COMPARE light ════════════════════════════════════
+           Before and after in two panels, divided by vertical rule.
+           Light parchment — document-like, considered.
+           Left panel: old model (no coral). Right panel: new model (coral label).
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--compare">
+        <div class="grove-sidebar">Before / After</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Risk Control</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >08</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <!-- Left panel: the old way — muted label, no coral -->
+          <div class="compare-panel left" data-anim="fade-up" data-delay="1">
+            <div class="compare-label" style="color: var(--c-fg-light-2)">
+              Status Quo · Voluntary Program
+            </div>
+            <h3 class="h3">Grants and goodwill — canopy shrinks anyway</h3>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              Trees go where nonprofits already have relationships, not where
+              heat risk is highest. No dedicated fund means planting stalls
+              whenever the general fund tightens.
+            </p>
+            <ul
+              class="bullet-list"
+              style="font-size: var(--sz-body); color: var(--c-fg-light)"
+            >
+              <li>No maintenance budget — 1-in-3 saplings die within 2 years</li>
+              <li>Funding competes yearly against every other line item</li>
+              <li>No enforcement on new-development canopy loss</li>
+            </ul>
+          </div>
+
+          <!-- Right panel: the new way — coral label, italic emphasis -->
+          <div class="compare-panel right" data-anim="fade-up" data-delay="2">
+            <div class="compare-label after">Proposed Ordinance</div>
+            <h3 class="h3">
+              Funded, targeted, and <em>reviewed</em> every year
+            </h3>
+            <p class="lead" style="color: var(--c-fg-light-2)">
+              A ring-fenced fee funds planting and three years of maintenance
+              per tree. A sunset clause and annual Council review cap the
+              city's exposure if results fall short.
+            </p>
+            <ul
+              class="bullet-list"
+              style="font-size: var(--sz-body); color: var(--c-fg-light)"
+            >
+              <li>Fee is capped at $0.35/month and reviewed every 3 years</li>
+              <li>Phased rollout — 2 wards in Year 1, citywide by Year 4</li>
+              <li>5-year sunset clause forces a re-authorization vote</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">08 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 9 · CHAPTER dark ════════════════════════════════════
+           Section 02 divider — same pattern as slide 2, watermark "02".
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--chapter">
+        <!-- Watermark: massive near-invisible "02" -->
+        <div class="grove-num">02</div>
+        <div class="chapter-num" data-anim="fade-in" data-delay="0">
+          02 / Decision
+        </div>
+        <div class="chapter-rule" data-anim="reveal-right" data-delay="1"></div>
+        <h1
+          class="h1"
+          style="max-width: 58%; margin-bottom: var(--gap-md)"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          What we're asking Council to <em>approve</em>
+        </h1>
+        <p
+          class="lead muted"
+          style="max-width: 45%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          A funding ordinance, a zoning overlay, and a phased four-year
+          rollout — with risk controlled at every step.
+        </p>
+      </section>
+
+      <!-- ═══════ SLIDE 10 · STATEMENT light ════════════════════════════════
+           Strong thesis on warm parchment — a change of emotional register.
+           Light version of the statement slide. Same structure, different texture.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide light slide--statement">
+        <div class="grove-sidebar">The Recommendation</div>
+        <div class="slide-chrome">
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >Council Decision</span
+          >
+          <span
+            class="label"
+            style="color: var(--c-fg-light-2)"
+            data-anim="fade-in"
+            data-delay="0"
+            >10</span
+          >
+        </div>
+
+        <div class="slide-body">
+          <div class="statement-body">
+            <div class="kicker" data-anim="fade-in" data-delay="1">
+              The Path Forward
+            </div>
+            <div class="rule" data-anim="reveal-right" data-delay="2"></div>
+            <!-- Forest green text on parchment, coral italic emphasis -->
+            <h1
+              class="h1"
+              style="max-width: 65%; color: var(--c-fg-light)"
+              data-anim="fade-up"
+              data-delay="3"
+            >
+              Stop planting reactively. Start budgeting for canopy like
+              <em>infrastructure</em>.
+            </h1>
+            <p
+              class="lead"
+              style="
+                max-width: 52%;
+                color: var(--c-fg-light-2);
+                margin-top: var(--gap-md);
+              "
+              data-anim="fade-up"
+              data-delay="4"
+            >
+              We're asking Council to adopt Ordinance 26-114, establishing the
+              Urban Forest Fund and the canopy overlay zoning district for a
+              first vote on July 14.
+            </p>
+          </div>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label" style="color: var(--c-fg-light-2)"></span>
+          <span class="label" style="color: var(--c-fg-light-2)">10 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 11 · CHART dark ═════════════════════════════════════
+           Simple bar chart using grove design tokens.
+           Muted bars for most values, accent coral bar for the highlight.
+           All colors from CSS vars — no raw hex values.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--chart">
+        <div class="grove-sidebar">The Data</div>
+        <div class="slide-chrome">
+          <span class="label muted" data-anim="fade-in" data-delay="0"
+            >Urban Forest Fund · $8.6M over 4 Years</span
+          >
+          <span class="label muted" data-anim="fade-in" data-delay="0">11</span>
+        </div>
+
+        <div class="slide-body">
+          <!-- Chart header: headline left, unit annotation right -->
+          <div class="chart-header">
+            <h2 class="h2" data-anim="fade-up" data-delay="1">
+              Funding by <em>source</em>
+            </h2>
+            <span class="caption muted" data-anim="fade-in" data-delay="1"
+              >$ millions, 4-year total · FY2027–FY2030</span
+            >
+          </div>
+
+          <!-- Bar chart: 5 categories, coral accent on the highest bar -->
+          <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
+            <div class="bar-track">
+              <div class="bar-col">
+                <span class="bar-val">0.4</span>
+                <div class="bar-fill" style="height: 3vh"></div>
+                <span class="bar-x-label">State Grant</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">0.9</span>
+                <div class="bar-fill" style="height: 6.5vh"></div>
+                <span class="bar-x-label">Federal Grant</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">1.6</span>
+                <div class="bar-fill" style="height: 11.5vh"></div>
+                <span class="bar-x-label">Development Fee</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">1.7</span>
+                <div class="bar-fill" style="height: 12.2vh"></div>
+                <span class="bar-x-label">General Fund</span>
+              </div>
+              <!-- Highest bar: coral accent fill, coral value label -->
+              <div class="bar-col">
+                <span class="bar-val hi">4.0</span>
+                <div class="bar-fill accent" style="height: 28.5vh"></div>
+                <span class="bar-x-label">Stormwater Fee</span>
+              </div>
+            </div>
+            <!-- Thin baseline rule below all bars -->
+            <div class="chart-baseline"></div>
+          </div>
+
+          <!-- Source attribution -->
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: Ordinance 26-114 fiscal note · Office of Budget & Finance ·
+            2026
+          </p>
+        </div>
+
+        <div class="slide-foot">
+          <span class="label muted">Dept. of Sustainability · 2026</span>
+          <span class="label muted">11 / 12</span>
+        </div>
+      </section>
+
+      <!-- ═══════ SLIDE 12 · END dark ════════════════════════════════════════
+           Closing thought + contact information. Chromeless.
+           The deck ends as it began: with generosity of space.
+           Watermark "12" in the background grounds the composition.
+           ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide dark slide--end">
+        <!-- Watermark number in the background -->
+        <div class="grove-num">12</div>
+
+        <!-- Organization kicker -->
+        <div class="kicker" data-anim="fade-in" data-delay="0">
+          Office of Sustainability
+        </div>
+
+        <!-- Short coral rule -->
+        <div class="rule" data-anim="reveal-right" data-delay="1"></div>
+
+        <!-- Closing headline: the last thing they read -->
+        <h1
+          class="h1"
+          style="max-width: 55%"
+          data-anim="fade-up"
+          data-delay="2"
+        >
+          The ordinance takes effect the day it's <em>signed</em>.
+        </h1>
+
+        <!-- Contact information: lead size, muted, spacious -->
+        <p
+          class="lead muted"
+          style="max-width: 45%"
+          data-anim="fade-up"
+          data-delay="3"
+        >
+          Requesting a first vote at the July 14 session — questions to
+          sustainability@riverton.gov
+        </p>
+
+        <!-- Small follow-up line: mono, very muted -->
+        <p
+          class="label muted"
+          style="margin-top: var(--gap-lg)"
+          data-anim="fade-in"
+          data-delay="4"
+        >
+          Ordinance 26-114 · Council Briefing · July 2026
+        </p>
+      </section>
+    </div>
+    <!-- /deck -->
+
+    <script>
+      /* ══════════════════════════════════════════════════════════════════════
+         GROVE PRESENTATION ENGINE
+         Self-contained navigation: keyboard, touch, mouse-wheel, nav-dots.
+         No external dependencies.
+         ══════════════════════════════════════════════════════════════════════ */
+      (function () {
+        "use strict";
+
+        /* ── State ─────────────────────────────────────────────────────────── */
+        const deck = document.getElementById("deck");
+        const slides = Array.from(document.querySelectorAll(".slide"));
+        const dotsEl = document.getElementById("nav-dots");
+        const counter = document.getElementById("slide-counter");
+        const total = slides.length;
+        let current = 0;
+        let animating = false;
+
+        /* ── Bootstrap: set deck width, build nav dots ─────────────────────── */
+        function init() {
+          // The deck is one wide strip — width equals N full viewports
+          deck.style.width = total + "00vw";
+
+          // Build one dot per slide
+          slides.forEach(function (_, i) {
+            const btn = document.createElement("button");
+            btn.className = "nav-dot";
+            btn.setAttribute("aria-label", "Go to slide " + (i + 1));
+            btn.addEventListener("click", function () {
+              goTo(i);
+            });
+            dotsEl.appendChild(btn);
+          });
+
+          // Activate the first slide immediately
+          goTo(0, true); // true = skip transition on load
+        }
+
+        /* ── goTo: the single source of truth for navigation ───────────────── */
+        function goTo(index, instant) {
+          // Clamp to valid range
+          index = Math.max(0, Math.min(total - 1, index));
+          if (index === current && !instant) return;
+
+          // Mark animating to block rapid key/swipe spam
+          animating = true;
+
+          // Deactivate current slide: reset animations by toggling is-active
+          const prev = slides[current];
+          prev.classList.remove("is-active");
+          // Force a reflow so removing then re-adding is-active (on same slide)
+          // actually re-triggers the keyframe animations
+          void prev.offsetWidth; // eslint-disable-line no-void
+
+          // Translate the deck
+          if (instant) {
+            // Remove transition temporarily for the initial load snap
+            deck.style.transition = "none";
+            deck.style.transform = "translateX(-" + index + "00vw)";
+            void deck.offsetWidth; // force reflow
+            deck.style.transition = "";
+          } else {
+            deck.style.transform = "translateX(-" + index + "00vw)";
+          }
+
+          // Activate new slide
+          current = index;
+          const next = slides[current];
+          next.classList.add("is-active");
+
+          // Update nav dots
+          Array.from(dotsEl.children).forEach(function (dot, i) {
+            dot.classList.toggle("is-active", i === current);
+          });
+
+          // Update counter: "3 / 12"
+          counter.textContent = current + 1 + " / " + total;
+
+          // Unlock after transition completes
+          const delay = instant
+            ? 0
+            : parseFloat(getComputedStyle(deck).transitionDuration) * 1000;
+          setTimeout(function () {
+            animating = false;
+          }, delay);
+        }
+
+        /* ── Keyboard navigation ──────────────────────────────────────────── */
+        document.addEventListener("keydown", function (e) {
+          if (animating) return;
+          if (
+            e.key === "ArrowRight" ||
+            e.key === "ArrowDown" ||
+            e.key === " "
+          ) {
+            e.preventDefault();
+            goTo(current + 1);
+          } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            goTo(current - 1);
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            goTo(0);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            goTo(total - 1);
+          }
+        });
+
+        /* ── Mouse-wheel navigation ───────────────────────────────────────── */
+        let wheelCooldown = false;
+        document.addEventListener(
+          "wheel",
+          function (e) {
+            e.preventDefault();
+            if (animating || wheelCooldown) return;
+            wheelCooldown = true;
+            setTimeout(function () {
+              wheelCooldown = false;
+            }, 900);
+            if (e.deltaY > 0 || e.deltaX > 0) {
+              goTo(current + 1);
+            } else {
+              goTo(current - 1);
+            }
+          },
+          { passive: false },
+        );
+
+        /* ── Touch swipe navigation ───────────────────────────────────────── */
+        let touchStartX = null;
+        let touchStartY = null;
+
+        document.addEventListener(
+          "touchstart",
+          function (e) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+          },
+          { passive: true },
+        );
+
+        document.addEventListener(
+          "touchend",
+          function (e) {
+            if (touchStartX === null) return;
+            const dx = touchStartX - e.changedTouches[0].clientX;
+            const dy = touchStartY - e.changedTouches[0].clientY;
+            // Only respond if horizontal swipe is dominant
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+              if (animating) return;
+              if (dx > 0) {
+                goTo(current + 1); // swipe left: next
+              } else {
+                goTo(current - 1); // swipe right: prev
+              }
+            }
+            touchStartX = null;
+            touchStartY = null;
+          },
+          { passive: true },
+        );
+
+        /* ── Boot ─────────────────────────────────────────────────────────── */
+        init();
+      })();
+    </script>
+
+
+</body>
+</html>

@@ -1,0 +1,127 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/elevenlabs/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by ElevenLabs".
+ * Premium audio product brochure: achromatic, whisper-thin headings,
+ * multi-layered sub-0.1 shadows, warm stone accent surfaces.
+ *
+ * Key brand decisions encoded here:
+ *   - Intentionally achromatic — no brand colors; warmth from shadows/surfaces
+ *   - Waldenburg weight 300 for display — lightness IS the brand
+ *   - Positive letter-spacing on Inter body (+0.16–0.18px) for airy reading
+ *   - Multi-layer shadows at sub-0.1 opacity — surfaces barely exist
+ *   - Warm stone (#f5f2ef) as the signature warm accent surface
+ *   - Warm shadows (rgba(78,50,23,...)) — shadows have color, not just darkness
+ *   - Pill buttons (9999px) as primary shape for CTAs
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Near-white canvas — the warmth comes from shadows and stone surfaces,
+   * not from background tinting. */
+  --bg: #ffffff;             /* Pure White — primary background */
+  --surface: #f5f5f5;        /* Light Gray — subtle section differentiation */
+  --surface-warm: #f5f2ef;   /* Warm Stone — the signature warm accent surface */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Achromatic with a hint of warmth via the stone gray (#777169). */
+  --fg: #000000;             /* Black — primary text and headings */
+  --fg-2: #4e4e4e;           /* Dark Gray — secondary text, descriptions */
+  --muted: #777169;          /* Warm Gray — tertiary text, warm undertone */
+  --meta: var(--muted);      /* alias — same warm gray for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Explicit borders are rare. Most edges are defined by shadow rings. */
+  --border: #e5e5e5;         /* Border Light — explicit borders when needed */
+  --border-soft: rgba(0, 0, 0, 0.05); /* Ultra-subtle — bottom borders, dividers */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Black is the primary CTA color — the palette is intentionally achromatic.
+   * DO NOT introduce brand colors — warmth comes from shadows and stone. */
+  --accent: #000000;         /* Black — primary CTA background */
+  --accent-on: #ffffff;
+  --accent-hover: #1a1a1a;   /* Slightly softer black for hover */
+  --accent-active: #333333;
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Standard semantic palette — used very sparingly in this system. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Waldenburg weight 300 (light) for display — ethereal, whisper-thin.
+   * This is the defining typographic choice: lightness creates intrigue.
+   * Inter for all body/UI with positive letter-spacing for airy reading.
+   * WaldenburgFH bold uppercase ONLY for specific CTA button labels. */
+  --font-display: "Waldenburg", "Waldenburg Fallback", system-ui, sans-serif;
+  --font-body: "Inter", "Inter Fallback", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. 48px display hero, 36px section, 32px card. */
+  --text-xs: 12px;           /* Micro */
+  --text-sm: 13px;           /* Small — tags, badges */
+  --text-base: 16px;         /* Body Standard */
+  --text-lg: 20px;           /* Body Large — introductions */
+  --text-xl: 24px;           /* Mid display */
+  --text-2xl: 32px;          /* Card Heading — weight 300 Waldenburg */
+  --text-3xl: 36px;          /* Section Heading */
+  --text-4xl: 48px;          /* Display Hero — whisper-thin at large scale */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.08;     /* Tight display for ethereal quality */
+  --tracking-display: -0.02em; /* ≈ -0.96px at 48px — slight compression */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Apple-like generosity: massive vertical spacing between sections.
+   * Each section is an exhibit. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 96px; /* Premium, unhurried pace — Apple-like generosity */
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Pill (9999px) for primary buttons. Generous (16–24px) for cards.
+   * Do not use sharp corners (<8px) — the generous radius is structural. */
+  --radius-sm: 8px;          /* Standard containers, nav elements */
+  --radius-md: 16px;         /* Standard cards */
+  --radius-lg: 24px;         /* Section containers, large panels */
+  --radius-pill: 9999px;     /* Primary pill buttons — THE ElevenLabs shape */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * The most refined shadow system: multi-layer at sub-0.1 opacity.
+   * --elev-ring: shadow-as-border (outline ring + soft lift)
+   * --elev-raised: button/card elevation with both outward + warm layers
+   *
+   * The inset half-pixel borders (0px 0px 0px 0.5px inset) that
+   * define edges so subtle they're felt rather than seen are applied
+   * inline in components, not captured as tokens (too component-specific). */
+  --elev-flat: none;
+  --elev-ring: rgba(0, 0, 0, 0.06) 0px 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 1px 2px, rgba(0, 0, 0, 0.04) 0px 2px 4px;
+  --elev-raised: rgba(0, 0, 0, 0.4) 0px 0px 1px, rgba(0, 0, 0, 0.04) 0px 4px 4px;
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Ring Blue — the only cool color moment in the system (accessibility). */
+  --focus-ring: 0 0 0 3px rgba(147, 197, 253, 0.5);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Premium feel — interactions should feel like sound: precise and brief. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Centered content with generous max-width. Single-column hero. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

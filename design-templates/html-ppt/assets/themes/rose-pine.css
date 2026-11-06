@@ -1,0 +1,14 @@
+/* theme: rose-pine */
+:root{
+  --bg:#191724;--bg-soft:#1f1d2e;--surface:#26233a;--surface-2:#2a2740;
+  --border:rgba(224,222,244,.12);--border-strong:rgba(224,222,244,.24);
+  --text-1:#e0def4;--text-2:#c4b8d8;--text-3:#6e6a86;
+  --accent:#ebbcba;--accent-2:#c4a7e7;--accent-3:#9ccfd8;
+  --good:#31748f;--warn:#f6c177;--bad:#eb6f92;
+  --grad:linear-gradient(135deg,#ebbcba,#c4a7e7 55%,#9ccfd8);
+  --grad-soft:linear-gradient(135deg,#26233a,#2a2740);
+  --radius:14px;--radius-sm:10px;--radius-lg:22px;
+  --shadow:0 10px 30px rgba(0,0,0,.4);
+  --shadow-lg:0 22px 58px rgba(0,0,0,.55);
+  --font-sans:'Inter','Noto Sans SC',sans-serif;
+}

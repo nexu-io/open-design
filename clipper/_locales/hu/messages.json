@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "OpenDesign Web Clipper"
+  },
+  "extensionDescription": {
+    "message": "Oldalak, designrendszerek, képernyőképek, képek és Figma import JSON mentése az OpenDesign Librarybe."
+  }
+}

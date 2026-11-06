@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>36 themes showcase</title>
+<style>
+  :root{--ink:#0b0b10;--muted:#6b6b78;--line:#e7e7ef}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1920px;height:1080px;overflow:hidden}
+  body{background:#f6f7fa;font-family:"PingFang SC","Noto Sans SC","Inter","SF Pro Display",-apple-system,sans-serif;color:var(--ink);padding:48px 56px 44px;display:flex;flex-direction:column;gap:28px}
+  .hdr{display:flex;align-items:flex-end;justify-content:space-between}
+  .hdr h2{font:900 48px/1 "Inter",sans-serif;letter-spacing:-.02em}
+  .hdr h2 b{display:inline-block;font-size:58px;padding-right:14px;background:linear-gradient(90deg,#7c5cff,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hdr .sub{font:600 16px/1 "JetBrains Mono","SF Mono",monospace;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:18px;min-height:0}
+  .cell{position:relative;border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:0 16px 48px rgba(10,10,30,.1);background:#fff;min-height:0}
+  .cell iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none}
+  .cell .label{position:absolute;left:14px;bottom:12px;z-index:5;font:700 11px/1 "JetBrains Mono","SF Mono",monospace;letter-spacing:.1em;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.94);color:#1a1a22;text-transform:uppercase;border:1px solid rgba(0,0,0,.06)}
+  .cell.dark .label{background:rgba(10,10,20,.78);color:#fff;border-color:rgba(255,255,255,.14)}
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <h2><b>36</b>Themes — one keyword, new identity</h2>
+    <div class="sub">html-ppt · assets/themes/*.css · pick 8 of 36</div>
+  </div>
+  <div class="grid">
+    <div class="cell"><iframe src="_theme-cell.html?theme=minimal-white"></iframe><span class="label">minimal-white</span></div>
+    <div class="cell dark"><iframe src="_theme-cell.html?theme=tokyo-night"></iframe><span class="label">tokyo-night</span></div>
+    <div class="cell dark"><iframe src="_theme-cell.html?theme=aurora"></iframe><span class="label">aurora</span></div>
+    <div class="cell"><iframe src="_theme-cell.html?theme=xiaohongshu-white"></iframe><span class="label">xiaohongshu-white</span></div>
+    <div class="cell dark"><iframe src="_theme-cell.html?theme=cyberpunk-neon"></iframe><span class="label">cyberpunk-neon</span></div>
+    <div class="cell dark"><iframe src="_theme-cell.html?theme=dracula"></iframe><span class="label">dracula</span></div>
+    <div class="cell"><iframe src="_theme-cell.html?theme=soft-pastel"></iframe><span class="label">soft-pastel</span></div>
+    <div class="cell"><iframe src="_theme-cell.html?theme=magazine-bold"></iframe><span class="label">magazine-bold</span></div>
+  </div>
+</body>
+</html>

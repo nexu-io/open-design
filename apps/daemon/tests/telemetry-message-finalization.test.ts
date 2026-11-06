@@ -1,0 +1,1145 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  FORM_ANSWERED_GENERIC_OVERRIDE,
+  composeChatUserRequestForAgent,
+  createFinalizedMessageTelemetryReporter,
+  shouldReportRunCompletedFromMessage,
+  shouldReportRunCompletionTelemetryFallbackStatus,
+  telemetryPromptFromRunRequest,
+} from '../src/server.js';
+
+describe('Langfuse message finalization gate', () => {
+  const terminalMessage = {
+    id: 'assistant-1',
+    role: 'assistant',
+    content: 'final answer',
+    runId: 'run-1',
+    runStatus: 'succeeded',
+  };
+
+  it('does not report when only terminal runStatus has been persisted', () => {
+    expect(
+      shouldReportRunCompletedFromMessage(terminalMessage, {
+        ...terminalMessage,
+      }),
+    ).toBe(false);
+  });
+
+  it('reports only on the final telemetry-marked message write', () => {
+    expect(
+      shouldReportRunCompletedFromMessage(terminalMessage, {
+        ...terminalMessage,
+        producedFiles: [],
+        telemetryFinalized: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('ignores non-terminal run statuses even if marked finalized', () => {
+    expect(
+      shouldReportRunCompletedFromMessage(
+        { ...terminalMessage, runStatus: 'running' },
+        { telemetryFinalized: true },
+      ),
+    ).toBe(false);
+  });
+
+  it('schedules terminal fallback only for failed and canceled runs', () => {
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('failed')).toBe(true);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('canceled')).toBe(true);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('succeeded')).toBe(false);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('running')).toBe(false);
+  });
+
+  it('also schedules successful Task-owned runs without a client final-message write', () => {
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('succeeded', true)).toBe(true);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('succeeded', false)).toBe(false);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('running', true)).toBe(false);
+  });
+
+  it('uses the explicit current prompt for telemetry instead of the full transcript', () => {
+    expect(
+      telemetryPromptFromRunRequest(
+        '## user\npre-consent brief\n\n## assistant\ndraft\n\n## user\npost-consent revision',
+        'post-consent revision',
+      ),
+    ).toBe('post-consent revision');
+  });
+
+  it('falls back to the legacy message when currentPrompt is absent', () => {
+    expect(telemetryPromptFromRunRequest('legacy prompt', undefined)).toBe(
+      'legacy prompt',
+    );
+  });
+
+  it('promotes discovery form answers without suppressing new material clarification', () => {
+    const currentPrompt = [
+      '[form answers \u2014 discovery]',
+      '- output: Dashboard / tool UI',
+      '- brand: Pick a direction for me [value: pick_direction]',
+    ].join('\n');
+    const prompt = composeChatUserRequestForAgent(
+      '## user\ninitial brief\n\n## assistant\n<form/>',
+      currentPrompt,
+    );
+
+    expect(prompt).toContain('## Latest user turn - form answers submitted');
+    expect(prompt).toContain(currentPrompt);
+    expect(prompt).toContain('The user has answered the discovery form.');
+    expect(prompt).toContain(
+      'Do not re-emit the answered form or repeat fields it already answered.',
+    );
+    expect(prompt).toContain(
+      'Only if a new, materially blocking requirement remains unresolved',
+    );
+    expect(prompt.indexOf('## Full conversation transcript')).toBeGreaterThan(
+      prompt.indexOf(currentPrompt),
+    );
+  });
+
+  it('task-type form answers trigger the build transition just like discovery', () => {
+    const prompt = composeChatUserRequestForAgent(
+      '## user\ninitial brief',
+      '[form answers - task-type]\n- taskType: Slide deck',
+    );
+
+    expect(prompt).toContain('The user has answered the task-type form.');
+    expect(prompt).toContain('continue with RULE 2 / RULE 3 or the matching active workflow');
+    expect(prompt).not.toContain('Treat these form answers as the active user turn');
+  });
+
+  it.each([
+    {
+      header: '[form answers: task-type]',
+      expectedFormId: 'task-type',
+      expectedTransition: 'continue with RULE 2 / RULE 3',
+    },
+    {
+      header: '[form answers]',
+      expectedFormId: 'form',
+      expectedTransition: 'Treat these form answers as the active user turn',
+    },
+  ])(
+    'accepts the supported $header form-answer header',
+    ({ header, expectedFormId, expectedTransition }) => {
+      const prompt = composeChatUserRequestForAgent(
+        '## user\ninitial brief',
+        `${header}\n- taskType: Slide deck`,
+      );
+
+      expect(prompt).toContain(`The user has answered the ${expectedFormId} form.`);
+      expect(prompt).toContain(expectedTransition);
+    },
+  );
+
+  it('unknown form ids get the generic transition without forcing the build', () => {
+    const prompt = composeChatUserRequestForAgent(
+      '## user\ninitial brief',
+      '[form answers - preferences]\n- theme: dark',
+    );
+
+    expect(prompt).toContain('The user has answered the preferences form.');
+    expect(prompt).toContain('Treat these form answers as the active user turn');
+    expect(prompt).not.toContain('continue with RULE 2 / RULE 3');
+  });
+
+  // `agy -c` carries its own conversation memory, so packing the
+  // rendered web transcript (the `## user` / `## assistant` blocks)
+  // into the user request duplicates context the upstream CLI already
+  // has — AND the embedded copy includes the literal `<question-form>`
+  // markup the agent emitted earlier, which the model can then re-emit
+  // after it is answered, looking like the discovery form loop never breaks.
+  // With `skipTranscript: true`, only the latest user turn ships and
+  // the misleading "## Full conversation transcript" header is dropped.
+  it('drops the transcript and transcript header when skipTranscript is true', () => {
+    const currentPrompt = [
+      '[form answers — discovery]',
+      '- output: Dashboard / tool UI',
+      '- brand: Pick a direction for me [value: pick_direction]',
+    ].join('\n');
+    const transcript = [
+      '## user',
+      '初始需求',
+      '',
+      '## assistant',
+      '<question-form id="discovery">…</question-form>',
+      '',
+      '## user',
+      currentPrompt,
+    ].join('\n');
+
+    const prompt = composeChatUserRequestForAgent(transcript, currentPrompt, {
+      skipTranscript: true,
+    });
+
+    // The form-answer transition still fires — that drives RULE 2 / 3.
+    expect(prompt).toContain('The user has answered the discovery form.');
+    // The latest user turn is preserved verbatim.
+    expect(prompt).toContain(currentPrompt);
+    // The transcript header is dropped — it was misleading because the
+    // body underneath is no longer a transcript.
+    expect(prompt).not.toContain('## Full conversation transcript');
+    // The prior assistant turn's `<question-form>` markup must NOT
+    // leak in — that's the form-loop regression we're guarding.
+    // (The transition block legitimately mentions "<question-form>"
+    // in prose, so the assertion targets the opening tag the prior
+    // turn carried, not the bare substring.)
+    expect(prompt).not.toContain('<question-form id="discovery">');
+    expect(prompt).not.toContain('## assistant');
+  });
+
+  // Issue #6239: the form-answer transition block already embeds the
+  // trimmed `currentPrompt` verbatim, so appending `body = currentPrompt`
+  // after it on the resume (skipTranscript) path shipped the submitted
+  // answers twice in the same `# User request`.
+  it('ships the submitted form answers exactly once on the resume (skipTranscript) path', () => {
+    const currentPrompt = [
+      '[form answers — discovery]',
+      '- output: Dashboard / tool UI',
+      '- brand: Pick a direction for me [value: pick_direction]',
+    ].join('\n');
+    const transcript = [
+      '## user',
+      'initial brief',
+      '',
+      '## assistant',
+      '<question-form id="discovery">…</question-form>',
+      '',
+      '## user',
+      currentPrompt,
+    ].join('\n');
+
+    const prompt = composeChatUserRequestForAgent(transcript, currentPrompt, {
+      skipTranscript: true,
+    });
+
+    expect(prompt.split(currentPrompt).length - 1).toBe(1);
+  });
+
+  // The aggressive form-answered OVERRIDE block is what tells weak
+  // plain agents (GPT-OSS-120B Medium, Gemini 3.5 Flash) to skip
+  // RULE 1's form example on follow-up turns. We pin the trigger
+  // condition AND the specific anti-patterns the literal carries,
+  // because silently weakening any of them — e.g. dropping the
+  // markdown-fence ban or the "subagents stopped" hallucination ban —
+  // reintroduces the form-echo regression we hit in PR #3157 on GPT-OSS.
+  it('FORM_ANSWERED_SYSTEM_OVERRIDE pins the anti-patterns weak plain agents need spelled out', async () => {
+    const { FORM_ANSWERED_SYSTEM_OVERRIDE } = await import('../src/server.js');
+
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      '## OVERRIDE — submitted form answers are authoritative',
+    );
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).not.toContain('turn 2 or later');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      'RULE 1 does not require another form merely because its\nexample appears',
+    );
+
+    // Forbidden anti-patterns observed in real captures:
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      'Re-emitting the answered `discovery` or `task-type` form',
+    );
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('```json fenced block');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('Form-asking prose that repeats');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('"subagents stopped"');
+
+    // Required path: use the submitted answers and keep moving, while
+    // preserving on-demand clarification for a genuinely new blocker.
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('RULE 2');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain('RULE 3');
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).toContain(
+      'Only if a new, materially blocking requirement remains unresolved',
+    );
+    expect(FORM_ANSWERED_SYSTEM_OVERRIDE).not.toContain(
+      'A `<question-form>` tag of any id',
+    );
+  });
+
+  it('FORM_ANSWERED_GENERIC_OVERRIDE is used for non-discovery/task-type form ids', () => {
+    // Non-build-transition forms should get a smaller override that only
+    // suppresses re-asking — not the RULE 2 / RULE 3 / artifact directive.
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain(
+      '## OVERRIDE — submitted form answers are authoritative',
+    );
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('turn 2 or later');
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain('Do not ask the same form again');
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).toContain('new, materially');
+    // Must NOT contain the artifact-build directive that only applies to
+    // discovery / task-type — sending it for an unrelated form id would give
+    // the model contradictory instructions.
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('RULE 2');
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('RULE 3');
+    expect(FORM_ANSWERED_GENERIC_OVERRIDE).not.toContain('`<artifact>`');
+  });
+
+  it('FORM_ANSWERED_SYSTEM_OVERRIDE only fires through composeChatUserRequestForAgent\'s transition gate', async () => {
+    // Defense-in-depth check: a turn that is NOT a form-answer follow-up
+    // (no `[form answers — …]` header in `currentPrompt`) must not
+    // surface any of the OVERRIDE language, even when `message` carries
+    // a transcript that mentions question-form. Otherwise we'd suppress
+    // the legitimate turn-1 form ask.
+    const transcript = '## user\n初始需求\n\n## assistant\n<question-form id="discovery">...</question-form>';
+    const currentPrompt = '继续做点修改';
+
+    const prompt = composeChatUserRequestForAgent(transcript, currentPrompt);
+    expect(prompt).not.toContain('OVERRIDE — submitted form answers are authoritative');
+    expect(prompt).not.toContain('RULE 1 does not require another form');
+  });
+
+  it('also drops the transcript on a non-form turn when skipTranscript is true', () => {
+    // Without a form-answer transition, the function previously returned
+    // `message` verbatim. With skipTranscript the body must come from
+    // `currentPrompt` instead so a follow-up `agy -c` turn doesn't carry
+    // the duplicate transcript.
+    const transcript = '## user\n第一轮\n\n## assistant\n回答\n\n## user\n第二轮 follow-up';
+    const currentPrompt = '第二轮 follow-up';
+
+    const skipped = composeChatUserRequestForAgent(transcript, currentPrompt, {
+      skipTranscript: true,
+    });
+    expect(skipped).toBe(currentPrompt);
+
+    // Default behavior unchanged (backward compatibility for every
+    // adapter that doesn't set resumesSessionViaCli).
+    const kept = composeChatUserRequestForAgent(transcript, currentPrompt);
+    expect(kept).toBe(transcript);
+  });
+
+  it('uses a headless message as the latest native-resume turn when currentPrompt is absent', () => {
+    const message = 'Revise index.html from Arca to Moonleaf.';
+
+    expect(composeChatUserRequestForAgent(message, undefined, {
+      skipTranscript: true,
+    })).toBe(message);
+  });
+
+  it('preserves an explicitly empty currentPrompt on native resume', () => {
+    expect(composeChatUserRequestForAgent('legacy fallback must not leak', '', {
+      skipTranscript: true,
+    })).toBe('(No extra typed instruction.)');
+  });
+
+  it('invokes Langfuse reporting once when the final message write is marked', () => {
+    const run = {
+      id: 'run-1',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const report = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: { runs: { get: vi.fn(() => run) } },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    reporter(
+      { ...terminalMessage, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report).toHaveBeenCalledWith({
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      run,
+      persistedRunStatus: 'succeeded',
+      persistedEndedAt: 1234,
+      appVersion: { version: '0.7.0', channel: 'beta', packaged: true },
+    });
+  });
+
+  it('does not send again when a final message arrives after terminal fallback reporting', async () => {
+    const run = {
+      id: 'run-failed-late-final',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'failed',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const capture = vi.fn<(event: { insertId?: string }) => void>();
+    const report = vi.fn(async (_args: any) => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, runStatus: 'failed', endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        reportTrigger: 'terminal_fallback',
+      },
+    );
+    reporter(
+      { ...terminalMessage, runId: run.id, runStatus: 'failed', endedAt: 1235 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        reportTrigger: 'final_message',
+      },
+    );
+    reporter(
+      { ...terminalMessage, runId: run.id, runStatus: 'failed', endedAt: 1236 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        reportTrigger: 'final_message',
+      },
+    );
+    await Promise.resolve();
+
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls.map(([call]) => call.persistedEndedAt)).toEqual([
+      1234,
+    ]);
+    expect(capture).toHaveBeenCalledTimes(3);
+    expect(capture.mock.calls.map(([call]) => call.insertId)).toEqual(expect.arrayContaining([
+      'run-failed-late-final-langfuse-report-terminal_fallback-accepted',
+      'run-failed-late-final-langfuse-report-final_message-skipped-duplicate_run',
+      'run-failed-late-final-langfuse-report-final_message-skipped-duplicate_run',
+    ]));
+  });
+
+  it('captures Langfuse report acceptance after final message reporting resolves', async () => {
+    const run = {
+      id: 'run-accepted',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'codex',
+      model: 'default',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const capture = vi.fn();
+    const beginTelemetryDelivery = vi.fn(() => ({
+      version: 1,
+      idempotencyKey: 'od-run-telemetry-v1-fixture',
+      status: 'in_flight',
+      attemptCount: 1,
+      crashWindow: true,
+      startedAt: 1,
+    }));
+    const finalizeTelemetryDelivery = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: {
+          get: vi.fn(() => run),
+          beginTelemetryDelivery,
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+        reportTrigger: 'terminal_fallback',
+      },
+    );
+    await Promise.resolve();
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        insertId: 'run-accepted-langfuse-report-terminal_fallback-accepted',
+        properties: expect.objectContaining({
+          run_id: 'run-accepted',
+          langfuse_trace_id: 'run-accepted',
+          langfuse_expected: true,
+          langfuse_delivery_status: 'accepted',
+          langfuse_report_result: 'accepted',
+          langfuse_report_trigger: 'terminal_fallback',
+        }),
+      }),
+    );
+    expect(beginTelemetryDelivery).toHaveBeenCalledWith(run);
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+    expect(beginTelemetryDelivery.mock.invocationCallOrder[0]).toBeLessThan(
+      report.mock.invocationCallOrder[0]!,
+    );
+    expect(report).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryIdempotencyKey: 'od-run-telemetry-v1-fixture',
+    }));
+  });
+
+  it('routes mapped send-mode runs to one task hierarchy without changing execution outcome', async () => {
+    const run = {
+      id: 'run-task-hierarchy',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const beginTelemetryDelivery = vi.fn(() => ({
+      version: 1,
+      idempotencyKey: 'od-run-telemetry-v1-task-hierarchy',
+      status: 'in_flight',
+      attemptCount: 1,
+      crashWindow: true,
+      startedAt: 1,
+    }));
+    const finalizeTelemetryDelivery = vi.fn();
+    const completion = Promise.resolve({ action: 'sent' });
+    const beginFinalizeForRun = vi.fn(() => ({
+      durableTaskTruth: true,
+      suppressSingleRun: true,
+      completion,
+    }));
+    const finalizeForRun = vi.fn(async () => ({ action: 'sent' }));
+    const report = vi.fn();
+    const reportedRuns = new Set<string>();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        runs: {
+          get: vi.fn(() => run),
+          beginTelemetryDelivery,
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns,
+      taskObservationRollout: {
+        modeForRun: vi.fn(() => 'send' as const),
+        representationForRun: vi.fn(() => 'task_accepted' as const),
+        beginFinalizeForRun,
+        finalizeForRun,
+      },
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+
+    expect(report).not.toHaveBeenCalled();
+    expect(beginFinalizeForRun).toHaveBeenCalledWith(run.id);
+    expect(finalizeForRun).not.toHaveBeenCalled();
+    expect(beginTelemetryDelivery).not.toHaveBeenCalled();
+    expect(finalizeTelemetryDelivery).not.toHaveBeenCalled();
+    expect(reportedRuns).toContain(run.id);
+    expect(run.status).toBe('succeeded');
+  });
+
+  it('does not upgrade an observed task to hierarchy send after restart', async () => {
+    const run: any = {
+      id: 'run-observe-then-send',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const legacyReport = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const taskNetwork = vi.fn();
+    let observed = false;
+    const beginTelemetryDelivery = vi.fn(() =>
+      run.telemetryDelivery ?? {
+        version: 1,
+        idempotencyKey: 'od-run-telemetry-v1-observe-then-send',
+        status: 'in_flight',
+        attemptCount: 0,
+        crashWindow: true,
+        startedAt: 1,
+      });
+    const finalizeTelemetryDelivery = vi.fn((_run: any, delivery: any) => {
+      if (run.telemetryDelivery?.finalizedAt) return;
+      run.telemetryDelivery = {
+        version: 1,
+        idempotencyKey: 'od-run-telemetry-v1-observe-then-send',
+        status: delivery.langfuse_delivery_status,
+        attemptCount: delivery.langfuse_attempt_count ?? 1,
+        crashWindow: false,
+        finalizedAt: 2,
+      };
+    });
+    const design = {
+      runs: {
+        get: vi.fn(() => run),
+        beginTelemetryDelivery,
+        finalizeTelemetryDelivery,
+      },
+    };
+    const observeReporter = createFinalizedMessageTelemetryReporter({
+      design,
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      taskObservationRollout: {
+        modeForRun: () => 'observe',
+        representationForRun: () => 'single_run',
+        beginFinalizeForRun: vi.fn(),
+        finalizeForRun: vi.fn(async () => {
+          observed = true;
+          return { action: 'observed' };
+        }),
+      },
+      report: legacyReport,
+    });
+
+    observeReporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(observed).toBe(true);
+    expect(legacyReport).toHaveBeenCalledOnce();
+    expect(run.telemetryDelivery).toMatchObject({
+      status: 'accepted',
+      finalizedAt: 2,
+    });
+
+    const beginFinalizeForRun = vi.fn(() => ({
+      durableTaskTruth: observed,
+      suppressSingleRun: observed,
+      completion: observed
+        ? Promise.resolve({ action: 'already_finalized' })
+        : Promise.resolve(taskNetwork()),
+    }));
+    const sendReporter = createFinalizedMessageTelemetryReporter({
+      design,
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      taskObservationRollout: {
+        modeForRun: () => 'send',
+        representationForRun: () => 'task_accepted',
+        beginFinalizeForRun,
+        finalizeForRun: vi.fn(async () => ({ action: 'already_finalized' })),
+      },
+      report: legacyReport,
+    });
+
+    sendReporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1235 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+
+    expect(taskNetwork).not.toHaveBeenCalled();
+    expect(beginFinalizeForRun).toHaveBeenCalledWith(run.id);
+    expect(legacyReport).toHaveBeenCalledOnce();
+    expect(run.telemetryDelivery).toMatchObject({
+      status: 'accepted',
+      finalizedAt: 2,
+    });
+  });
+
+  it('keeps the single-run compatibility obligation when the task claim fails', async () => {
+    const run = {
+      id: 'run-task-claim-failed',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const beginTelemetryDelivery = vi.fn(() => ({
+      version: 1,
+      idempotencyKey: 'od-run-telemetry-v1-claim-fallback',
+      status: 'in_flight',
+      attemptCount: 0,
+      crashWindow: true,
+      startedAt: 1,
+    }));
+    const finalizeTelemetryDelivery = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        runs: {
+          get: vi.fn(() => run),
+          beginTelemetryDelivery,
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      taskObservationRollout: {
+        modeForRun: () => 'send',
+        representationForRun: () => 'single_run',
+        beginFinalizeForRun: () => {
+          throw new Error('synthetic task store unavailable');
+        },
+        finalizeForRun: vi.fn(),
+      },
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(report).toHaveBeenCalledOnce();
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+    expect(finalizeTelemetryDelivery).not.toHaveBeenCalledWith(
+      run,
+      expect.objectContaining({ langfuse_drop_reason: 'task_hierarchy_rollout' }),
+    );
+    expect(run.status).toBe('succeeded');
+  });
+
+  it('keeps the single-run compatibility obligation when Task mode lookup fails', async () => {
+    const run = {
+      id: 'run-task-mode-failed',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const beginTelemetryDelivery = vi.fn(() => ({
+      version: 1,
+      idempotencyKey: 'od-run-telemetry-v1-mode-fallback',
+      status: 'in_flight',
+      attemptCount: 0,
+      crashWindow: true,
+      startedAt: 1,
+    }));
+    const finalizeTelemetryDelivery = vi.fn();
+    const beginFinalizeForRun = vi.fn(() => ({
+      durableTaskTruth: true,
+      suppressSingleRun: true,
+      completion: Promise.resolve({ action: 'sent' }),
+    }));
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        runs: {
+          get: vi.fn(() => run),
+          beginTelemetryDelivery,
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      taskObservationRollout: {
+        modeForRun: () => {
+          throw new Error('synthetic representation insert failure');
+        },
+        representationForRun: () => 'single_run',
+        beginFinalizeForRun,
+        finalizeForRun: vi.fn(),
+      },
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(warn).toHaveBeenCalledWith(
+      '[telemetry] task observation representation failed',
+      'Error: synthetic representation insert failure',
+    );
+    expect(beginFinalizeForRun).not.toHaveBeenCalled();
+    expect(report).toHaveBeenCalledOnce();
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+  });
+
+  it('resumes single-run delivery in the same boot after a pre-network compatibility release', async () => {
+    const run = {
+      id: 'run-task-pre-network-release',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const earlierRun = { ...run, id: 'run-task-pre-network-release-earlier' };
+    const runsById = new Map([
+      [run.id, run],
+      [earlierRun.id, earlierRun],
+    ]);
+    let representation: 'task_pending' | 'single_run' = 'task_pending';
+    const beginTelemetryDelivery = vi.fn(() => ({
+      version: 1,
+      idempotencyKey: 'od-run-telemetry-v1-release',
+      status: 'in_flight',
+      attemptCount: 0,
+      crashWindow: true,
+      startedAt: 1,
+    }));
+    const finalizeTelemetryDelivery = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        runs: {
+          get: vi.fn((runId: string) => runsById.get(runId)),
+          beginTelemetryDelivery,
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      taskObservationRollout: {
+        modeForRun: () => representation === 'task_pending' ? 'send' : 'off',
+        representationForRun: () => representation,
+        beginFinalizeForRun: () => ({
+          durableTaskTruth: true,
+          suppressSingleRun: true,
+          completion: Promise.resolve().then(() => {
+            representation = 'single_run';
+            return { action: 'compatibility' };
+          }),
+        }),
+        finalizeForRun: vi.fn(),
+      },
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: earlierRun.id, endedAt: 1233 },
+      { telemetryFinalized: true },
+    );
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(beginTelemetryDelivery).toHaveBeenCalledTimes(2);
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(earlierRun, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted',
+    });
+  });
+
+  it.each([
+    {
+      label: 'not_expected',
+      delivery: {
+        langfuse_expected: false,
+        langfuse_delivery_status: 'not_expected' as const,
+        langfuse_drop_reason: 'content_consent_off' as const,
+      },
+    },
+    {
+      label: 'failed',
+      delivery: {
+        langfuse_expected: true,
+        langfuse_delivery_status: 'failed' as const,
+        langfuse_drop_reason: 'network_error' as const,
+      },
+    },
+  ])('finalizes a terminal $label delivery without changing the run outcome', async ({ delivery }) => {
+    const run = {
+      id: `run-${delivery.langfuse_delivery_status}`,
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const beginTelemetryDelivery = vi.fn();
+    const finalizeTelemetryDelivery = vi.fn();
+    const report = vi.fn(async () => delivery);
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        runs: {
+          get: vi.fn(() => run),
+          beginTelemetryDelivery,
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+
+    expect(beginTelemetryDelivery).toHaveBeenCalledWith(run);
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(run, delivery);
+    expect(run.status).toBe('succeeded');
+  });
+
+  it('turns an unexpected reporter rejection into a terminal non-blocking failure', async () => {
+    const run = {
+      id: 'run-unexpected-rejection',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+    };
+    const finalizeTelemetryDelivery = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        runs: {
+          get: vi.fn(() => run),
+          beginTelemetryDelivery: vi.fn(() => ({
+            version: 1,
+            idempotencyKey: 'od-run-telemetry-v1-rejection',
+            status: 'in_flight',
+            attemptCount: 1,
+            crashWindow: true,
+            startedAt: 1,
+          })),
+          finalizeTelemetryDelivery,
+        },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report: vi.fn(async () => {
+        throw new Error('injected reporter rejection');
+      }),
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(finalizeTelemetryDelivery).toHaveBeenCalledWith(run, {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'network_error',
+      langfuse_attempt_count: 0,
+      langfuse_idempotency_key: 'od-run-telemetry-v1-rejection',
+    });
+    expect(run.status).toBe('succeeded');
+  });
+
+  it('falls back to the run analytics context when final message headers are missing', async () => {
+    const run = {
+      id: 'run-accepted-headerless-finalize',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'codex',
+      model: 'default',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+      analyticsContext: {
+        deviceId: 'device-from-run',
+        sessionId: 'session-from-run',
+        clientType: 'desktop',
+        locale: 'zh-CN',
+        requestId: 'request-from-run',
+      },
+    };
+    const capture = vi.fn();
+    const report = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'accepted' as const,
+    }));
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id, endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+    await Promise.resolve();
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        context: run.analyticsContext,
+        insertId: 'run-accepted-headerless-finalize-langfuse-report-final_message-accepted',
+        properties: expect.objectContaining({
+          run_id: 'run-accepted-headerless-finalize',
+          langfuse_delivery_status: 'accepted',
+          langfuse_report_result: 'accepted',
+          langfuse_report_trigger: 'final_message',
+        }),
+      }),
+    );
+  });
+
+  it('captures skipped Langfuse reporting when a finalized message references a missing run', () => {
+    const capture = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => undefined) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      getAppVersion: () => ({ version: '0.7.0', channel: 'beta', packaged: true }),
+      report: vi.fn(),
+    });
+
+    reporter(
+      { ...terminalMessage, runId: 'run-missing', endedAt: 1234 },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+      },
+    );
+
+    expect(capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'langfuse_report_result',
+        insertId: 'run-missing-langfuse-report-final_message-skipped-run_not_found',
+        properties: expect.objectContaining({
+          project_id: 'project-1',
+          conversation_id: 'conv-1',
+          run_id: 'run-missing',
+          langfuse_report_result: 'skipped',
+          langfuse_report_skip_reason: 'run_not_found',
+        }),
+      }),
+    );
+  });
+});

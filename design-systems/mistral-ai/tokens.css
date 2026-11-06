@@ -1,0 +1,125 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/mistral-ai/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Mistral AI".
+ * Sun-drenched French engineering: golden amber universe, billboard typography,
+ * sharp architectural geometry, warm golden shadows.
+ *
+ * Key brand decisions encoded here:
+ *   - Warm Ivory (#fffaeb) as the lightest canvas — never pure white
+ *   - Mistral Orange (#fa520f) — vivid brand signal, declarative
+ *   - Weight 400 throughout — even at 82px; size alone carries authority
+ *   - Near-zero border-radius — sharp, architectural European geometry
+ *   - Golden amber shadows (rgba(127,99,21,...)) instead of gray
+ *   - Ultra-tight line-heights (1.0 at display) — billboard-like text blocks
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Warm void: empty space feels warm because backgrounds are tinted.
+   * Ivory → Cream → never pure white. */
+  --bg: #fffaeb;             /* Warm Ivory — the foundation canvas, barely warm */
+  --surface: #fff0c2;        /* Cream — primary warm surface, secondary button bg */
+  --surface-warm: var(--surface); /* alias — surface already is the warm tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Mistral Black is a near-black warmer than #000. Even neutrals
+   * carry warmth — no cool grays anywhere. */
+  --fg: #1f1f1f;             /* Mistral Black — primary text */
+  --fg-2: var(--fg);         /* alias — single text weight throughout */
+  --muted: #3d3d3d;          /* Warm dark gray — secondary text */
+  --meta: var(--muted);      /* alias — same warm gray for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Containers are primarily defined by background color, not borders.
+   * When borders appear, they're warm-tinted. */
+  --border: #f0e8c8;         /* Warm parchment border */
+  --border-soft: var(--border); /* alias — no inner separator distinction */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Mistral Orange — burns through the page like a signal fire.
+   * Used exclusively for primary CTAs and highest-signal brand moments. */
+  --accent: #fa520f;
+  --accent-on: #ffffff;
+  --accent-hover: #fb6424;   /* Mistral Flame — slightly warmer lighter variant */
+  --accent-active: color-mix(in oklab, var(--accent), black 12%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Standard semantic colors — they must remain distinguishable from the
+   * warm amber palette. No warm-tinted semantic overrides needed. */
+  --success: #17a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Arial (custom font uses Arial as fallback) at a single weight (400).
+   * Single weight, maximum impact — size alone carries hierarchy.
+   * No bold anywhere — the billboard scale speaks for itself. */
+  --font-display: Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-body: Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. 82px display, 56px section, 48px sub.
+   * Ultra-tight at scale (lh 0.95-1.0) — ascenders nearly touch descenders. */
+  --text-xs: 12px;
+  --text-sm: 14px;           /* Caption / Link */
+  --text-base: 16px;         /* Body / Button */
+  --text-lg: 24px;           /* Feature Title */
+  --text-xl: 32px;           /* Card / Sub-heading */
+  --text-2xl: 48px;          /* Sub-heading Large */
+  --text-3xl: 56px;          /* Section Heading */
+  --text-4xl: 82px;          /* Display Hero — billboard scale */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.0;      /* Ultra-tight — text blocks feel like billboards */
+  --tracking-display: -0.025em; /* ≈ -2.05px at 82px — monolithic block */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit. Section vertical spacing 80–100px. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Near-zero: the dominant radius. Sharp, architectural corners on
+   * everything. The sharpness contrasts with the softness of the colors,
+   * creating tension between warm color and hard geometry. */
+  --radius-sm: 2px;          /* Near-zero — all standard elements */
+  --radius-md: 2px;          /* Same — no rounding variation */
+  --radius-lg: 4px;          /* Slight variation for larger containers */
+  --radius-pill: 9999px;     /* Pill reserved for chips/badges only */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Golden hour shadows — amber-tinted, warm, multi-layered.
+   * Primary layer of the cascade (subsequent layers in components). */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: -8px 16px 39px rgba(127, 99, 21, 0.12); /* Golden float */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Orange-tinted focus ring consistent with the warm brand. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — Mistral's boldness is in type and color,
+   * not in animation. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1280px container — wide-format layouts for dramatic imagery. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

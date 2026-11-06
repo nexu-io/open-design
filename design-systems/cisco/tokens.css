@@ -1,0 +1,64 @@
+/* design-systems/cisco/tokens.css
+ *
+ * Structured token bindings for Cisco.
+ * navy-charcoal infrastructure surfaces with one electric Cisco Blue signal.
+ */
+
+:root {
+  --bg: #0f1720;
+  --surface: #1b2530;
+  --surface-warm: #243447;
+  --fg: #ffffff;
+  --fg-2: #e8ebf1;
+  --muted: #9e9ea2;
+  --meta: #64bbe3;
+  --border: #58585b;
+  --border-soft: rgba(232, 235, 241, 0.14);
+  --accent: #049fd9;
+  --accent-on: #001923;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #6cc04a;
+  --warn: #ffcc00;
+  --danger: #cf2030;
+  --font-display: "CiscoSansTT", Inter, Arial, sans-serif;
+  --font-body: "CiscoSansTT", Inter, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 56px;
+  --text-4xl: 72px;
+  --leading-body: 1.55;
+  --leading-tight: 1.05;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 76px;
+  --section-y-phone: 52px;
+  --radius-sm: 12px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 80px rgba(0, 0, 0, 0.32);
+  --focus-ring: 0 0 0 4px rgba(100, 187, 227, 0.32);
+  --motion-fast: 160ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1240px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 20px;
+}

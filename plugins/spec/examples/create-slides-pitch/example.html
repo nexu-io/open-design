@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Example Pitch Slides</title>
+  <style>
+    :root {
+      --ink: #101219;
+      --muted: #6d7280;
+      --paper: #f6f2e9;
+      --blue: #264fbb;
+      --green: #08755f;
+      --rose: #b8405a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #ded8cb;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      display: grid;
+      gap: 18px;
+      padding: 22px;
+    }
+    .slide {
+      width: min(1120px, 100%);
+      min-height: 630px;
+      margin: 0 auto;
+      background: var(--paper);
+      border: 1px solid #cfc7b7;
+      border-radius: 8px;
+      padding: 52px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      box-shadow: 0 18px 45px rgba(35, 31, 24, .12);
+      break-after: page;
+    }
+    .eyebrow {
+      color: var(--blue);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-weight: 850;
+      font-size: 13px;
+    }
+    h1, h2 {
+      margin: 14px 0 0;
+      letter-spacing: 0;
+      line-height: .98;
+    }
+    h1 { font-size: clamp(48px, 8vw, 88px); max-width: 920px; }
+    h2 { font-size: clamp(38px, 5vw, 62px); max-width: 880px; }
+    p {
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.45;
+      max-width: 780px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      align-self: center;
+      margin-top: 34px;
+    }
+    .tile {
+      border: 1px solid #d7cfbf;
+      background: #fffaf0;
+      border-radius: 8px;
+      padding: 22px;
+      min-height: 150px;
+    }
+    .num {
+      font-size: 46px;
+      font-weight: 880;
+      color: var(--green);
+      line-height: 1;
+    }
+    .tile span {
+      display: block;
+      color: var(--muted);
+      margin-top: 10px;
+      font-weight: 650;
+    }
+    .diagram {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-self: center;
+    }
+    .panel {
+      border-radius: 8px;
+      padding: 28px;
+      min-height: 260px;
+      border: 1px solid #d7cfbf;
+      background: #fffaf0;
+    }
+    .panel strong {
+      display: block;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+    footer {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 720;
+    }
+    @media print {
+      body { background: white; }
+      main { padding: 0; gap: 0; }
+      .slide { width: 100vw; min-height: 100vh; box-shadow: none; border: 0; border-radius: 0; }
+    }
+    @media (max-width: 760px) {
+      .slide { min-height: auto; padding: 28px; }
+      .grid, .diagram { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="slide">
+      <div>
+        <div class="eyebrow">Atlas Desk seed deck</div>
+        <h1>The operating layer for design-led customer teams.</h1>
+        <p>Atlas Desk turns messy launch work into one shared, measurable command surface.</p>
+      </div>
+      <footer><span>01</span><span>Confidential</span></footer>
+    </section>
+    <section class="slide">
+      <div>
+        <div class="eyebrow">Problem</div>
+        <h2>Teams ship through scattered tabs, stale docs, and invisible owner drift.</h2>
+      </div>
+      <div class="grid">
+        <div class="tile"><div class="num">37%</div><span>of launch work is duplicated across tools.</span></div>
+        <div class="tile"><div class="num">4.6h</div><span>lost weekly to status reconstruction.</span></div>
+        <div class="tile"><div class="num">2x</div><span>more escalations when owners are unclear.</span></div>
+      </div>
+      <footer><span>02</span><span>Problem</span></footer>
+    </section>
+    <section class="slide">
+      <div>
+        <div class="eyebrow">Solution</div>
+        <h2>A live workspace that converts work signals into launch decisions.</h2>
+      </div>
+      <div class="diagram">
+        <div class="panel"><strong>Before</strong><p>Manual status docs, fragmented charts, and late risk reviews.</p></div>
+        <div class="panel"><strong>After</strong><p>One dashboard for owners, blockers, tasks, customer impact, and next actions.</p></div>
+      </div>
+      <footer><span>03</span><span>Product</span></footer>
+    </section>
+    <section class="slide">
+      <div>
+        <div class="eyebrow">Traction</div>
+        <h2>Early teams use Atlas Desk as their daily launch room.</h2>
+      </div>
+      <div class="grid">
+        <div class="tile"><div class="num">18</div><span>design-partner teams</span></div>
+        <div class="tile"><div class="num">42k</div><span>workflow events processed</span></div>
+        <div class="tile"><div class="num">91%</div><span>weekly active operators</span></div>
+      </div>
+      <footer><span>04</span><span>Traction</span></footer>
+    </section>
+    <section class="slide">
+      <div>
+        <div class="eyebrow">Ask</div>
+        <h2>Raising $2.5M to turn design-partner pull into a repeatable sales motion.</h2>
+        <p>Use of funds: product integrations, enterprise readiness, founder-led sales, and customer success playbooks.</p>
+      </div>
+      <footer><span>05</span><span>Ask</span></footer>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>x-ai — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/x-ai. Every visible value
+        comes from tokens.css. xAI's signature moves: #1f2228 warm near-black
+        canvas, pure-white text on opacity-based foreground tiers, GeistMono
+        as the display + button face, uppercase tracked-out CTAs, zero
+        shadows, near-zero radii, blue-only focus ring."
+    />
+
+    <style>
+      :root {
+        --bg:           #1f2228;
+        --surface:      rgba(255, 255, 255, 0.03);
+        --surface-warm: rgba(255, 255, 255, 0.05);
+
+        --fg:    #ffffff;
+        --fg-2:  rgba(255, 255, 255, 0.7);
+        --muted: rgba(255, 255, 255, 0.5);
+        --meta:  rgba(255, 255, 255, 0.3);
+
+        --border:      rgba(255, 255, 255, 0.1);
+        --border-soft: rgba(255, 255, 255, 0.05);
+
+        --accent:        #ffffff;
+        --accent-on:     #1f2228;
+        --accent-hover:  rgba(255, 255, 255, 0.9);
+        --accent-active: rgba(255, 255, 255, 0.8);
+
+        --success: #16a34a;
+        --warn:    #eab308;
+        --danger:  #dc2626;
+
+        --font-display: "GeistMono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+        --font-body:    "universalSans", "universalSans Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-mono:    "GeistMono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Monaco, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+
+        --text-xs:   12px;
+        --text-sm:   14px;
+        --text-base: 16px;
+        --text-lg:   20px;
+        --text-xl:   24px;
+        --text-2xl:  30px;
+        --text-3xl:  40px;
+        --text-4xl:  64px;
+
+        --leading-body:     1.5;
+        --leading-tight:    1.2;
+        --tracking-display: normal;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet:  64px;
+        --section-y-phone:   48px;
+
+        --radius-sm:   0px;
+        --radius-md:   0px;
+        --radius-lg:   4px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised: none;
+
+        --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max:            1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet:  16px;
+        --container-gutter-phone:   12px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg-2);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ────────────────────────────────────────────── */
+      h1, h2, h3 {
+        margin: 0;
+        color: var(--fg);
+        line-height: var(--leading-tight);
+      }
+      h1 {
+        font-family: var(--font-display);
+        font-size: var(--text-4xl);
+        font-weight: 300;
+        letter-spacing: var(--tracking-display);
+      }
+      /* The 320px hero treatment from DESIGN.md §3 is a one-off, not a
+         token tier. We render the hero headline at clamp(--text-4xl,
+         16vw, 320px) so it scales down from the cinematic 320px on
+         ultrawide canvases to ~48–64px on phones (DESIGN.md §8 collapsing
+         strategy: "320px monospace headline scales down dramatically"). */
+      h1.hero-display {
+        font-size: clamp(var(--text-4xl), 16vw, 320px);
+        line-height: 1.5;
+      }
+      h2 {
+        font-family: var(--font-body);
+        font-size: var(--text-2xl);
+        font-weight: 400;
+      }
+      h3 {
+        font-family: var(--font-body);
+        font-size: var(--text-xl);
+        font-weight: 400;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--fg-2);
+        max-width: 60ch;
+      }
+      .body-muted { color: var(--fg-2); }
+      .body-sm { font-size: var(--text-sm); color: var(--fg-2); }
+      .meta { font-size: var(--text-xs); color: var(--meta); }
+      /* Uppercase monospace eyebrow — the brand's signature label voice.
+         The 1.4px tracking matches the button treatment from DESIGN.md
+         §3, expressed in em so it scales proportionally with size. */
+      .eyebrow {
+        font-family: var(--font-display);
+        font-size: var(--text-xs);
+        font-weight: 400;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      .stack-2 > * + * { margin-block-start: var(--space-2); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ───────────────────────────────────────────────────
+         DESIGN.md §4: GeistMono 14px, uppercase, 1.4px letter-spacing,
+         12px 24px padding, 0px radius. Hover DIMS rather than brightens
+         — the convention is reversed (DESIGN.md §7 "Don't brighten
+         elements on hover — xAI dims to 0.5 opacity instead"). */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-3) var(--space-6);
+        border-radius: var(--radius-sm);
+        font-family: var(--font-display);
+        font-size: var(--text-sm);
+        font-weight: 400;
+        line-height: 1;
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    color var(--motion-fast) var(--ease-standard),
+                    border-color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-ghost {
+        background: transparent;
+        color: var(--fg);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .btn-ghost:hover {
+        background: var(--surface);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      /* ─── Monospace tag / badge ─────────────────────────────────────
+         DESIGN.md §4 "Monospace Tag": GeistMono 12px uppercase, 1px
+         letter-spacing, 4px 8px padding, sharp corners. */
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: transparent;
+        font-family: var(--font-display);
+        font-size: var(--text-xs);
+        font-weight: 400;
+        color: var(--fg);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        line-height: 1.4;
+      }
+
+      /* ─── Cards ─────────────────────────────────────────────────────
+         DESIGN.md §4: surface 0.03 background, 1px solid 0.1 border,
+         0px radius, NO shadow. Hover lifts the border alpha to 0.2
+         — depth through edge brightness, not shadow simulation. */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        box-shadow: var(--elev-flat);
+        transition: background-color var(--motion-base) var(--ease-standard),
+                    border-color var(--motion-base) var(--ease-standard);
+      }
+      .card:hover {
+        background: var(--surface-warm);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .card .card-title {
+        font-family: var(--font-body);
+        font-size: var(--text-xl);
+        font-weight: 400;
+        color: var(--fg);
+        margin: 0;
+      }
+      .card .card-body {
+        font-size: var(--text-base);
+        color: var(--fg-2);
+      }
+
+      /* ─── Inputs ────────────────────────────────────────────────────
+         DESIGN.md §4 "Inputs & Forms": transparent / 0.05 bg, 0.2
+         border, 0px radius, white 16px universalSans text, 0.3
+         placeholder. Focus uses the blue ring (the lone chromatic
+         move in the system). */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 400;
+        color: var(--fg-2);
+      }
+      .field input,
+      .field textarea {
+        background: var(--surface);
+        color: var(--fg);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--radius-sm);
+        padding: var(--space-3) var(--space-4);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field textarea { resize: vertical; min-height: 96px; }
+      .field input::placeholder,
+      .field textarea::placeholder { color: var(--meta); }
+      .field input:focus,
+      .field textarea:focus {
+        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: var(--focus-ring);
+      }
+
+      /* ─── Layout ────────────────────────────────────────────────── */
+      .hero {
+        text-align: center;
+      }
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        justify-content: center;
+        margin-block-start: var(--space-8);
+        flex-wrap: wrap;
+      }
+      .tag-row {
+        display: flex;
+        gap: var(--space-2);
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-block-end: var(--space-8);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-6);
+        margin-block-start: var(--space-12);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+      .feature-meta {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--meta);
+        font-family: var(--font-display);
+        font-size: var(--text-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      .feature-meta .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: var(--radius-pill);
+        background: var(--fg);
+        opacity: 0.5;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) { .form-grid { grid-template-columns: 1fr; } }
+      form { display: flex; flex-direction: column; gap: var(--space-4); max-width: 480px; }
+      form .actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-2);
+        flex-wrap: wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO -->
+      <section data-od-id="hero" class="hero">
+        <div class="tag-row">
+          <span class="tag">Grok 3</span>
+          <span class="tag">API</span>
+          <span class="tag">Frontier</span>
+        </div>
+        <h1 class="hero-display">xAI</h1>
+        <p class="lead" style="margin: var(--space-6) auto 0; color: var(--fg-2)">
+          Understand the universe. We are a frontier AI lab building the
+          tools to accelerate human scientific discovery — and the
+          monospace-on-warm-black voice that says so without decoration.
+        </p>
+        <div class="hero-actions">
+          <a href="./tokens.css" class="btn btn-primary">Try Grok</a>
+          <a href="./DESIGN.md" class="btn btn-ghost">View API</a>
+        </div>
+      </section>
+
+      <!-- FEATURES -->
+      <section data-od-id="features">
+        <div class="stack-3" style="text-align: center">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 32ch; margin-inline: auto">
+            Restraint as sophistication.
+          </h2>
+          <p class="lead" style="margin-inline: auto; color: var(--muted)">
+            Three cards. Sharp corners, opacity-based borders, zero
+            shadows. Depth through contrast — never simulated light.
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <article class="card stack-4">
+            <div class="feature-meta"><span class="dot"></span><span>01 / Voice</span></div>
+            <h3 class="card-title">Monospace as luxury</h3>
+            <p class="card-body">
+              GeistMono at display sizes positions xAI as infrastructure,
+              not product. Fixed-width characters at scale create a
+              rhythmic, architectural quality no proportional font can
+              match. universalSans handles the reading.
+            </p>
+          </article>
+          <article class="card stack-4">
+            <div class="feature-meta"><span class="dot"></span><span>02 / Canvas</span></div>
+            <h3 class="card-title">#1f2228, never #000</h3>
+            <p class="card-body">
+              The warm near-black with a subtle blue undertone prevents
+              the harsh eye strain of pure black while maintaining deep
+              darkness. The canvas is the foundation — every surface
+              renders against it directly.
+            </p>
+          </article>
+          <article class="card stack-4">
+            <div class="feature-meta"><span class="dot"></span><span>03 / Depth</span></div>
+            <h3 class="card-title">Zero shadows</h3>
+            <p class="card-body">
+              Elevation through opacity-based borders that brighten on
+              interaction, subtle background tints (0.03 → 0.08), and
+              the massive typographic scale contrast. No simulated
+              light. No drop shadows. Ever.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- FORM -->
+      <section data-od-id="form">
+        <div class="form-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs on the dark canvas.</h2>
+            <p class="lead">
+              Transparent ground, hairline borders at 20% white. Focus
+              halos the field with Tailwind's default ring blue — the
+              single chromatic exception in an otherwise monochromatic
+              system. Placeholders dim to 30% white. Labels to 70%.
+            </p>
+            <p class="meta">All values from tokens.css — no raw hex.</p>
+          </div>
+          <form onsubmit="event.preventDefault()">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input id="email" type="email" placeholder="you@xai.com" />
+            </div>
+            <div class="field">
+              <label for="org">Organization</label>
+              <input id="org" type="text" placeholder="Frontier AI Lab" />
+            </div>
+            <div class="field">
+              <label for="msg">Use case</label>
+              <textarea id="msg" placeholder="Describe the workload — training, inference, evaluation, or something we have not built yet."></textarea>
+            </div>
+            <div class="actions">
+              <button type="submit" class="btn btn-primary">Request access</button>
+              <button type="button" class="btn btn-ghost">Read the docs</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

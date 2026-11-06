@@ -1,0 +1,262 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/pinterest/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Pinterest".
+ * Warm visual-discovery canvas: olive/sand neutrals, signature Pinterest
+ * Red (#e60023) as the singular bold accent, Pin Sans across the entire
+ * type hierarchy, generous 12–28px radii, and minimal shadow because
+ * the photography is the elevation.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * schema shared with every OD design system. Agents should paste the
+ * `:root { … }` block verbatim into the first `<style>` of an artifact,
+ * then resolve every value via `var(--*)` from that point on.
+ *
+ * Key brand decisions encoded here:
+ *
+ *   #Bind 1  — --bg is Canvas White (#ffffff) per DESIGN.md §9. The
+ *              warm-white reading the brand gives off comes from its
+ *              olive/sand neutrals (#e5e5e0, #e0e0d9, #91918c), never
+ *              from tinting the page background itself. --surface is
+ *              Fog (#f6f6f3) — the warm light tier used for cards,
+ *              search bars, and elevated containers; one subtle step
+ *              warmer than the page so masonry pin cards earn a
+ *              recognizable shape even without a border.
+ *
+ *   #Bind 2  — --surface-warm is Sand Gray (#e5e5e0), Pinterest's
+ *              warmest published surface — the secondary button
+ *              background, the saved-pin chip background, the warm
+ *              shelf behind clustered metadata (DESIGN.md §2 Surface).
+ *
+ *   #Bind 3  — --fg is Plum Black (#211922), NOT pure black. DESIGN.md
+ *              §7 explicitly forbids #000000 as primary text because
+ *              Pinterest's near-black carries a plum/warm undertone
+ *              that holds together with the olive neutrals. --fg-2
+ *              binds to #000000 — the brand reserves pure black for
+ *              button labels and high-emphasis secondary text only.
+ *
+ *   #Bind 4  — --accent-on is #000000, not white. Pinterest's primary
+ *              red button (#e60023) carries black text — DESIGN.md §4
+ *              calls this out as "an unusual choice for contrast on
+ *              red". White-on-red would over-saturate the canvas and
+ *              read as alarm; black-on-red reads as confident, lifestyle-
+ *              magazine punch. Honor the brand value over schema default.
+ *
+ *   #Bind 5  — Radius scale follows the brand's signature generous
+ *              soft-circle geometry. 12px (--radius-sm) is the brand's
+ *              "Standard" radius for small chips and links; 16px
+ *              (--radius-md) is the workhorse — every button, every
+ *              input, every secondary card; 28px (--radius-lg) is the
+ *              "Large" container radius for tab elements and hero
+ *              panels. The brand also publishes a 20px "Comfortable"
+ *              and a 40px "Hero" tier but those collapse into the
+ *              shared md/lg slots without losing identity (§5).
+ *
+ *   #Bind 6  — --focus-ring uses Focus Blue (#435ee5) at 30% opacity,
+ *              NOT the schema's accent-tinted default. DESIGN.md §2
+ *              binds focus to a dedicated blue (--comp-button-color-
+ *              border-focus-outer-transparent: #435ee5) so the ring
+ *              survives both the warm-red CTA fill and the warm-sand
+ *              secondary surface — a red-tinted ring would disappear
+ *              into Pinterest Red.
+ *
+ *   #Bind 7  — --leading-body is 1.40 (DESIGN.md §3 Body) — tighter
+ *              than the schema default 1.5 because Pinterest's
+ *              information-dense pin grid pairs short body strings
+ *              with image-first layouts; longer leading would shred
+ *              the rhythm of pin metadata under photographs.
+ *
+ *   #Bind 8  — --elev-raised is a plum-tinted whisper rather than a
+ *              cool gray drop. DESIGN.md §6 commits to "minimal shadows
+ *              — Pinterest is flat by design, depth from content".
+ *              When a shadow is necessary (sticky panels, overlays),
+ *              the tint matches the warm plum --fg so the elevation
+ *              reads as part of the warm system instead of a cold
+ *              halo.
+ *
+ * Brand-specific extensions: none in this revision. The Performance
+ * Purple (#6845ab) and Recommendation Purple (#7e238b) product-tier
+ * accents from DESIGN.md §2 stay inline at the tier-specific
+ * components that need them; promoting them to schema slots would
+ * encourage non-tier surfaces to reach for them.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ────────────────────────────────────────
+   * Canvas White is the page; Fog (#f6f6f3) is the warm light card
+   * tier; Sand Gray (#e5e5e0) is the warm secondary surface (the
+   * brand's named "secondary button" background). The neutrals lean
+   * olive/sand, never cool steel — that warmth is the identity. */
+  --bg: #ffffff;
+  --surface: #f6f6f3;
+  --surface-warm: #e5e5e0;
+
+  /* ─── Foreground ramp (4 levels) ────────────────────────────────
+   * Plum Black (#211922) carries every heading and primary body
+   * string — a warm near-black with a plum undertone. Pure black
+   * (#000000) is reserved for the secondary tier (button labels,
+   * high-contrast captions). Olive Gray (#62625b) is the muted
+   * description tone; Warm Silver (#91918c) is the disabled /
+   * metadata tone — also the brand's input-border color. */
+  --fg: #211922;
+  --fg-2: #000000;
+  --muted: #62625b;
+  --meta: #91918c;
+
+  /* ─── Border (2 levels) ─────────────────────────────────────────
+   * Pinterest is flat-by-design; borders appear sparingly. The
+   * default --border is the published "Border Disabled" tone
+   * (#c8c8c1) — soft, warm, doesn't compete with the photography.
+   * --border-soft is Warm Light (#e0e0d9), an even softer hairline
+   * for inner row separators. */
+  --border: #c8c8c1;
+  --border-soft: #e0e0d9;
+
+  /* ─── Accent ────────────────────────────────────────────────────
+   * Pinterest Red — the only brand accent, used for primary CTAs
+   * and the highest-signal brand moments. Cap at two visible uses
+   * per screen; when a third red element appears, neutralize one.
+   * Note that --accent-on is #000000 (not white): the brand's
+   * primary red button carries black text per DESIGN.md §4. */
+  --accent: #e60023;
+  --accent-on: #000000;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ──────────────────────────────────────────────────
+   * Error Red is the published Pinterest error value (DESIGN.md §2,
+   * #9e0a0a). Success and warn are not specified by the brand;
+   * they bind to desaturated warm values that survive the olive/
+   * sand canvas without competing with Pinterest Red. Keep total
+   * semantic-color pixels under five percent of any page. */
+  --success: #103c25;     /* Green 700 — the brand's published green */
+  --warn: #c47700;        /* burnt amber — warm-aligned, never tailwind yellow */
+  --danger: #9e0a0a;      /* Error Red — DESIGN.md §2 */
+
+  /* ─── Typography — fonts ────────────────────────────────────────
+   * Pin Sans is the proprietary face that carries everything from
+   * 12px caption to 70px hero — no secondary display family, no
+   * monospace need beyond kbd. The fallback chain mirrors the
+   * brand's global stack including Japanese fallbacks
+   * (ヒラギノ角ゴ / メイリオ / ＭＳ Ｐゴシック) reflecting
+   * Pinterest's CJK reach. Display and body share the same stack
+   * — visual identity comes from the family itself. */
+  --font-display:
+    "Pin Sans", -apple-system, system-ui, "Segoe UI", Roboto, "Oxygen-Sans",
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Ubuntu, Cantarell,
+    "Fira Sans", "Droid Sans", "Helvetica Neue", Helvetica,
+    "ヒラギノ角ゴ Pro W3", メイリオ, Meiryo, "ＭＳ Ｐゴシック", Arial,
+    sans-serif;
+  --font-body:
+    "Pin Sans", -apple-system, system-ui, "Segoe UI", Roboto, "Oxygen-Sans",
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Ubuntu, Cantarell,
+    "Fira Sans", "Droid Sans", "Helvetica Neue", Helvetica,
+    "ヒラギノ角ゴ Pro W3", メイリオ, Meiryo, "ＭＳ Ｐゴシック", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco,
+    Consolas, monospace;
+
+  /* ─── Typography — type scale (px) ──────────────────────────────
+   * Derived from DESIGN.md §3 Hierarchy. The system clusters
+   * tightly between 12 and 16px for app-like density, jumps to
+   * 28px for the published Section Heading, and explodes to 70px
+   * for the Display Hero — the dramatic gap is the brand's voice.
+   * The intermediate lg/xl/3xl tiers fill in the curve so generic
+   * components have somewhere to land. */
+  --text-xs: 12px;        /* Caption — small tags, footer disclaimer */
+  --text-sm: 14px;        /* Caption Bold — metadata, button labels */
+  --text-base: 16px;      /* Body — standard reading, nav links */
+  --text-lg: 18px;        /* H3 / featured body */
+  --text-xl: 22px;        /* H2 / subsection title */
+  --text-2xl: 28px;       /* Section Heading — DESIGN.md §3 */
+  --text-3xl: 44px;       /* H1 — hero subtitles, large numerals */
+  --text-4xl: 70px;       /* Display Hero — DESIGN.md §3 */
+
+  /* ─── Typography — leading & tracking ───────────────────────────
+   * Body leads at 1.40 per DESIGN.md §3 — tighter than the schema
+   * default 1.5 because Pinterest's pin metadata is short and
+   * sits under photography. Display headings carry negative
+   * tracking (DESIGN.md "-1.2px at 28px" → -0.02em scales evenly
+   * across the display sizes); body and caption hold at zero. */
+  --leading-body: 1.4;
+  --leading-tight: 1.15;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing — base scale ──────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. The brand publishes off-grid
+   * sub-pixel values (5.5, 7, 10, 11, 22) for fine icon alignment;
+   * the shared scale stays on the standard 4px grid — off-grid
+   * spacing belongs inline at the component level. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ────────────────────────────────────────────
+   * DESIGN.md §5 commits to "Large jumps: 32px → 80px → 100px for
+   * section spacing". 80px is the desktop default — generous
+   * breathing room between content blocks; the pin grid itself
+   * stays dense within the block. 32px is the phone floor. */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ────────────────────────────────────────────────────
+   * The brand's signature soft-circle geometry. 16px is the
+   * workhorse (every button, every input — DESIGN.md §4) and
+   * lands on --radius-md. 12px (--radius-sm) is the brand's
+   * "Standard" small-card radius; 28px (--radius-lg) is the brand
+   * "Large" container radius for tab elements and hero panels.
+   * --radius-pill (9999px) carries circular action buttons and
+   * avatars (DESIGN.md §5 "Circle: 50%"). */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ─────────────────────────────────────────────────
+   * Pinterest is flat-by-design — most surfaces sit on the canvas
+   * with no shadow at all (DESIGN.md §6). When elevation is
+   * necessary (overlays, sticky panels), the shadow is a plum-
+   * tinted whisper rather than a cool gray drop — the warmth of
+   * the system carries through into the elevation. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 4px 16px rgba(33, 25, 34, 0.06);
+
+  /* ─── Focus ring ────────────────────────────────────────────────
+   * Focus Blue (#435ee5) at 30% opacity — the brand's published
+   * focus color (DESIGN.md §2 --comp-button-color-border-focus-
+   * outer-transparent). A blue ring survives both the warm-red
+   * primary CTA fill and the warm-sand secondary surface; an
+   * accent-tinted ring would vanish into Pinterest Red. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, #435ee5, transparent 70%);
+
+  /* ─── Motion ────────────────────────────────────────────────────
+   * DESIGN.md did not specify transition timings (static
+   * extraction scope). We bind defaults consistent with the
+   * brand's friendly tactile feel: 150ms for micro-states, 200ms
+   * for general state changes. Standard easing — short,
+   * purposeful, no overshoot. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ────────────────────────────────────────────────────
+   * 1280px container — the standard magazine-y content width for
+   * hero, feature, and form sections. The masonry pin grid itself
+   * breathes wider on ultra-wide screens via its own column rules,
+   * but the shared container stays at 1280 because that is the
+   * geometry agents will most often generate (lifestyle landing
+   * pages, signup flows, marketing sections). Gutters tighten
+   * progressively per DESIGN.md §8 small-mobile clause. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

@@ -1,0 +1,63 @@
+/* design-systems/claymorphism/tokens.css
+ * Structured token bindings for Claymorphism.
+ * claymorphism visual language with rounded molded panels and soft relief.
+ */
+
+:root {
+  --bg: #f7eee6;
+  --surface: #fff8f1;
+  --surface-warm: #ead6c7;
+  --fg: #2b211c;
+  --fg-2: #5a4b43;
+  --muted: #8a7a70;
+  --meta: #b46a46;
+  --border: #dac8b9;
+  --border-soft: #eaded4;
+  --accent: #b46a46;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #4d8f5a;
+  --warn: #c88735;
+  --danger: #b84c4c;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.52;
+  --leading-tight: 1.06;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 14px;
+  --radius-md: 22px;
+  --radius-lg: 34px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 8px 10px 24px rgba(128, 92, 70, 0.18), -8px -8px 20px rgba(255, 255, 255, 0.70);
+  --focus-ring: 0 0 0 4px rgba(180, 106, 70, 0.24);
+  --motion-fast: 150ms;
+  --motion-base: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

@@ -1,0 +1,139 @@
+<!doctype html>
+<!--
+  Shared frame: MacBook Pro 14" with display + lid + bottom keyboard hint.
+  The lid renders a 1440×900 viewport scaled to 720×450 (50%) so the
+  whole laptop fits in a typical 880×600 layout cell. Pass the actual
+  desktop screen via ?screen= and it renders at full 1440×900 inside.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MacBook frame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+    body {
+      display: grid;
+      place-items: center;
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    }
+
+    .laptop {
+      position: relative;
+      width: 880px;
+    }
+
+    /* lid */
+    .lid {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1440 / 900;
+      background: #1a1a1a;
+      border-radius: 18px 18px 4px 4px;
+      padding: 14px 14px 18px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.05) inset,
+        0 8px 20px -8px rgba(0,0,0,0.4);
+    }
+
+    /* notch */
+    .lid::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 156px;
+      height: 18px;
+      background: #1a1a1a;
+      border-radius: 0 0 12px 12px;
+      z-index: 5;
+    }
+    /* camera dot */
+    .lid::after {
+      content: '';
+      position: absolute;
+      top: 7px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 5px; height: 5px;
+      background: #0a0a0a;
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+      z-index: 6;
+    }
+
+    .display {
+      width: 100%;
+      height: 100%;
+      background: #fafaf7;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .display iframe {
+      width: 1440px;
+      height: 900px;
+      border: 0;
+      background: #fafaf7;
+      transform: scale(calc(852 / 1440)); /* 880 - 28 padding = 852 inner */
+      transform-origin: top left;
+    }
+
+    /* base / chin */
+    .base {
+      position: relative;
+      width: 100%;
+      height: 14px;
+      margin-top: -1px;
+      background:
+        linear-gradient(to bottom, #c0c0c4 0%, #9a9a9e 70%, #7a7a7e 100%);
+      border-radius: 0 0 6px 6px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.4) inset,
+        0 6px 12px -4px rgba(0,0,0,0.25);
+    }
+    .base::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 96px;
+      height: 4px;
+      background: rgba(0,0,0,0.18);
+      border-radius: 0 0 6px 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="laptop">
+    <div class="lid">
+      <div class="display">
+        <iframe
+          id="screen"
+          title="Inner screen"
+          sandbox="allow-scripts allow-same-origin"
+          loading="lazy"
+          src="about:blank"
+        ></iframe>
+      </div>
+    </div>
+    <div class="base" aria-hidden></div>
+  </div>
+
+  <script>
+    (function () {
+      var qs = new URLSearchParams(location.search);
+      var raw = qs.get('screen');
+      var iframe = document.getElementById('screen');
+      if (!raw) return;
+      var isAbsolute = /^[a-zA-Z][a-zA-Z\d+.\-]*:/.test(raw) || raw.charAt(0) === '/';
+      iframe.src = isAbsolute
+        ? raw
+        : new URL(raw, document.referrer || location.href).toString();
+    })();
+  </script>
+</body>
+</html>

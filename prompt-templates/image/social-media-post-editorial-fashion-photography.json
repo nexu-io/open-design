@@ -1,0 +1,18 @@
+{
+  "id": "social-media-post-editorial-fashion-photography",
+  "surface": "image",
+  "title": "Social Media Post - Editorial Fashion Photography",
+  "summary": "A moody, fashion-focused prompt for a minimalist studio scene with soft lighting and warm tones.",
+  "category": "Social Media Post",
+  "tags": [],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A woman with {argument name=\"hair color\" default=\"long red hair\"} crouching in a minimalist studio setting with a {argument name=\"background color\" default=\"soft pink background\"}. She is wearing a {argument name=\"dress style\" default=\"fitted black dress\"} and black high heels. She holds a lit match in one hand, looking at it thoughtfully, while a small decorated cake with a single lit candle sits on the floor in front of her. The lighting is soft and warm, casting gentle highlights and subtle shadows, creating a moody, editorial atmosphere.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453137877_aqjk7l_HHAumFda4AAVbjJ.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "Miz",
+    "url": "https://x.com/mizq06/status/2049189070732157408"
+  }
+}

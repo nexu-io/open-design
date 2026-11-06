@@ -1,0 +1,348 @@
+/* ============================================================
+   OpenDesign — neutral product workspace
+   ============================================================ */
+:root {
+  /* 选中记号:盘底 + 挖空的勾,两枚同大的圆叠出来(底圆 r=9,不然边缘透深色)。
+     执行记录的完成勾和意图澄清的选项勾是同一张,所以放全局。 */
+  --tick-img: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBmaWxsPSIjMjAyMDIwIi8+PHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+PC9zdmc+");
+  /* 选中项的字色 —— 比正文重一档,产品指定的色号 */
+  --select-ink: #353535;
+  /* OpenDesign system palette. Neutrals carry the interface; brand green is
+     reserved for sparse feedback, selected assists, and brand emphasis. */
+  --bg: #fff;
+  --bg-app: #fff;
+  --bg-panel: #fafafa;
+  --bg-subtle: #ededed;
+  --bg-muted: #dbdbdb;
+  --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
+  --bg-fill-secondary: rgba(0, 0, 0, 0.06);
+  --bg-fill: rgba(0, 0, 0, 0.12);
+  --bg-elevated: #fafafa;
+  /* Liquid Glass — frosted "regular" material for floating functional layers
+     (nav rail, toolbars, popovers) per the material spec. Translucent surface
+     + backdrop blur; falls back to a solid --bg-panel where unsupported. */
+  --glass-regular: rgba(250, 250, 250, 0.66);
+  --glass-regular-blur: 28px;
+  /* Bright top-edge sheen that reads as glass thickness on a frosted pane. */
+  --glass-edge-highlight: color-mix(in srgb, #fff 65%, transparent);
+  /* Entry ground shares the app surface — the nav rail is a solid panel now,
+     so the page behind it no longer needs a tinted ground to float on. */
+  --entry-ground: var(--bg);
+  --border: #dbdbdb;
+  --border-strong: #bdbdbd;
+  --border-selected: #a3a3a3;
+  --border-soft: #ededed;
+
+  --text: #494949;
+  --text-strong: #202020;
+  --text-muted: #5c5c5c;
+  --text-soft: #848484;
+  --text-faint: #bdbdbd;
+
+  --accent: #353535;
+  --accent-contrast: #fafafa;
+  --accent-strong: #202020;
+  --accent-soft: #ededed;
+  --accent-tint: #f7f7f7;
+  --accent-hover: #202020;
+  --brand: #87ea5c;
+  --brand-weak: #d0ffb5;
+  --brand-soft: #ebffde;
+  --brand-text: #0d5400;
+  /* Selected-assist pair: deep brand ink on a whisper brand surface (the Home
+     composer's selected template pill / chip, the radial picker's hovered
+     wedge). Was hardcoded #2f781d / #f9fff4 at every call site, which meant the
+     light values also shipped to the dark theme. */
+  /* Per product 2026-08-26, read off the composer's selected 类型 pill:
+     #2f781d/#f9fff4 → #00D007/#D7FFD8 → #007106/#EAFFEB. Both moved on the
+     TOKENS rather than on the one rule that was inspected, so the pair stays
+     one object — the type list's active pill, the selected template pill, the
+     in-input skill chip and the radial picker's hovered wedge all paint from
+     here. The landing pair is also the readable one: the #00D007 step sat at
+     ~2.0:1 on its ground, under WCAG AA for the 13px/600 labels that wear it;
+     this one clears AA comfortably (the surface has since gone one step
+     lighter again, #EAFFEB → #F2FFF2, which only widens that margin). */
+  --brand-ink: #007106;
+  --brand-surface: #F2FFF2;
+  /* Composer send button: saturated green glyph on a near-black disc (the
+     supplied mark, 发送按钮.svg). Theme-independent — the pair is the mark
+     itself. */
+  --send-ground: #00ff08;
+  --send-ink: #202020;
+  /* Free-plan upgrade pill (entry top-right cluster): the same saturated green
+     as a GROUND, with near-black ink on it (per product #00FF08 / #121212).
+     Its own pair rather than borrowing --send-*: that one is the send mark's
+     glyph-on-disc and inverts the roles, and the inks differ. Theme-
+     independent — the pair carries its own contrast either way. */
+  --upgrade-ground: #00ff08;
+  --upgrade-ink: #121212;
+
+  /* Composer send button: saturated green glyph on a near-black disc (the
+     supplied mark, 发送按钮.svg / Group 2147224569.svg). Theme-independent —
+     the pair IS the mark, so it does not swap in dark mode.
+
+     ⚠️ 合并 main 的 revert(#7843)时,main 侧把这一对连同它自己的使用者一起
+     撤掉了,但**聊天面板仍在用**:`chat.css` 的 `.composer-send.stop
+     .admission-pending` 和 `viewer/routines.css` 的 `.app / .chat-skin /
+     .chat-composer-fixed-layer .composer-send` 一共四处。CSS 对未定义变量不
+     报错、只会静默画错(`background: var(--send-ink)` 整条声明作废,按钮退回
+     继承色),所以这一对必须留在这里 —— 它不是首页遗留,是发送键的字面配色。
+     四处引用都跨 `.app` / `.chat-skin` / `.chat-composer-fixed-layer` 三个不
+     同的根,没有共同祖先能挂,所以留在 `:root` 而不是收进面板作用域。 */
+  --send-ground: #00ff08;
+  --send-ink: #202020;
+
+  /* Semantic accent tints used by tool / status pills. */
+  --green: #00AA54;
+  --green-bg: #f5ffee;
+  --green-border: #adf788;
+  --blue: #1A74FF;
+  --blue-bg: color-mix(in srgb, #1A74FF 10%, #fafafa);
+  --blue-border: color-mix(in srgb, #1A74FF 24%, #dbdbdb);
+  --purple: #353535;
+  --purple-bg: #ededed;
+  --purple-border: #dbdbdb;
+  --red: #F04142;
+  --red-bg: color-mix(in srgb, #F04142 10%, #fafafa);
+  --red-border: color-mix(in srgb, #F04142 24%, #dbdbdb);
+  --amber: #FF7528;
+  --amber-bg: color-mix(in srgb, #FFBA12 18%, #fafafa);
+
+  /* Project-kind tag hues (see `.design-card-tag.tag-*`). Each kind carries an
+     ink; the three whose tint is a lighter sibling of that ink also carry a
+     `-tint` the pill's fill/border are mixed from. `tag-brand` /
+     `tag-design-system` reuse --purple / --red and need no entry here. */
+  --tag-prototype-ink: #2348b8;
+  --tag-prototype-tint: #e8efff;
+  --tag-live-artifact-ink: #6d4ff5;
+  --tag-live-artifact-tint: #745cff;
+  --tag-web-clone-ink: #0a7ea4;
+  --tag-slide-ink: #b15e00;
+  --tag-slide-tint: #ff9f40;
+  --tag-media-ink: #1c8a73;
+
+  --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
+  --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
+  --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
+  --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
+
+  /* Floating-layer ladder — the two tiers that already exist in
+     `primitives.css`, named so a new floating surface can be placed by
+     MEANING instead of by picking a number that happens to clear whatever it
+     collided with today.
+
+       --z-hint  a transient hint about something else on screen. Nobody
+                 opened it, `pointer-events: none`, it goes away on its own.
+                 `.od-tooltip-layer` is the only member.
+       --z-menu  a surface the user deliberately opened from a trigger and
+                 must be able to read and click. `.od-select-menu` has been
+                 here since it was written, and the artifact card's
+                 publish / export popovers join it.
+
+     menu ABOVE hint is the point, not an accident: a hint that paints over
+     the menu you just opened is never what you wanted — reported 2026-08-27
+     with a tooltip covering the lower half of the export menu.
+
+     These two do NOT describe the whole app. Roughly forty other z-index
+     literals (chrome 150, viewer popovers 220, dialogs 1500…) are still
+     ad-hoc; naming them is a separate job. Do not invent a third token here
+     without deciding what tier it means. */
+  --z-hint: 4000;
+  --z-menu: 9000;
+
+  /* Corner-radius scale — the only radii UI should reach for (Shape
+     Consistency Lock). xs for inline code / micro-chips, sm for controls,
+     base for cards/menus, md for medium containers, lg for large surfaces,
+     pill for fully-rounded interactive. Off-scale values (7px, 9px, 10px
+     literals) are drift; collapse them to the nearest token. */
+  --radius-none: 0px;
+  --radius-small: 2px;
+  --radius-medium: 4px;
+  --radius-large: 8px;
+  --radius-xlarge: 12px;
+  --radius-2xlarge: 16px;
+  /* Both names for the 16px step stay defined: `--radius-2xlarge` is the
+     chat seam token (`--chat-radius-2xl`, `chat-seam-radius-tokens.test.ts`)
+     and `--radius-xxlarge` is what the entry rail's recent-project preview
+     reads (`entry-layout.css`, `entry-rail-recent.test.ts`). */
+  --radius-xxlarge: var(--radius-2xlarge);
+  --radius-circular: 50%;
+  --stroke-thin: 1px;
+  --stroke-thick: 2px;
+  --stroke-thicker: 3px;
+  --stroke-thickest: 4px;
+  --radius-xs: var(--radius-small);
+  --radius-sm: var(--radius-medium);
+  --radius: var(--radius-large);
+  --radius-md: var(--radius-large);
+  --radius-lg: var(--radius-xlarge);
+  --radius-2xl: var(--radius-2xlarge);
+  --radius-xl: var(--radius-2xlarge);
+  --radius-pill: 999px;
+
+  --duration-ultra-fast: 50ms;
+  --duration-faster: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-gentle: 250ms;
+  --duration-slow: 300ms;
+  --duration-slower: 400ms;
+  --duration-ultra-slow: 500ms;
+  --curve-linear: cubic-bezier(0, 0, 1, 1);
+  --curve-accelerate-mid: cubic-bezier(1, 0, 1, 1);
+  --curve-decelerate-mid: cubic-bezier(0, 0, 0, 1);
+  --curve-easy-ease: cubic-bezier(0.33, 0, 0.67, 1);
+  --ease-out: var(--curve-decelerate-mid);
+  --dur-quick: var(--duration-faster);
+  --dur-enter: var(--duration-normal);
+  --dur-exit: var(--duration-fast);
+
+  /* "Active option" indicator color, intentionally separate from --accent
+     (brand orange used by primary CTAs like Create / Save). Use --selected
+     for "this option is the one currently picked" affordances — selected
+     fidelity card, focused input ring, active filter pill — so a primary
+     CTA and a selected state can coexist on the same screen without
+     competing. --selected-soft is the 16% tint for outer rings / fills. */
+  --selected: #353535;
+  --selected-soft: color-mix(in srgb, #353535 12%, transparent);
+
+  --serif: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --sans: "Albert Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JiduMono Pro", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Chat prose scale: body 13, headings 14, top-level emphasis 16 — the
+     whole message module stays inside the 12–16px band. */
+  --prose-font-size: 13px;
+  --prose-line-height: 1.7;
+  --code-header-bg: #ededed;
+  --code-body-bg: #fafafa;
+  --code-font-size: 13px;
+  --code-line-height: 1.65;
+}
+
+/* Dark theme variables — shared between explicit [data-theme="dark"] and the
+   OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #202020;
+  --bg-app: #202020;
+  --bg-panel: #353535;
+  --bg-subtle: #494949;
+  --bg-muted: #5c5c5c;
+  --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+  --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+  --bg-fill: rgba(255, 255, 255, 0.16);
+  --bg-elevated: #353535;
+  --glass-regular: rgba(53, 53, 53, 0.66);
+  --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
+  --border: #5c5c5c;
+  --border-strong: #848484;
+  --border-selected: #a3a3a3;
+  --border-soft: #494949;
+
+  --text: #ededed;
+  --text-strong: #fafafa;
+  --text-muted: #bdbdbd;
+  --text-soft: #848484;
+  --text-faint: #5c5c5c;
+
+  --accent: #ededed;
+  --accent-contrast: #202020;
+  --accent-strong: #fafafa;
+  --accent-soft: #494949;
+  --accent-tint: #353535;
+  --accent-hover: #fafafa;
+  --brand: #87ea5c;
+  --brand-weak: #2f781d;
+  --brand-soft: #164111;
+  --brand-text: #adf788;
+  --brand-ink: #adf788;
+  --brand-surface: #164111;
+
+  --green: #3BBF7D;
+  --green-bg: #164111;
+  --green-border: #2f781d;
+  --blue: #3AA5F0;
+  --blue-bg: color-mix(in srgb, #1A74FF 22%, #202020);
+  --blue-border: color-mix(in srgb, #3AA5F0 34%, #5c5c5c);
+  --purple: #ededed;
+  --purple-bg: #494949;
+  --purple-border: #5c5c5c;
+  --red: #FF5E5E;
+  --red-bg: color-mix(in srgb, #F04142 24%, #202020);
+  --red-border: color-mix(in srgb, #FF5E5E 34%, #5c5c5c);
+  --amber: #FFC740;
+  --amber-bg: color-mix(in srgb, #FFBA12 22%, #202020);
+
+  --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+  --code-header-bg: #1e1e20;
+  --code-body-bg: #18181b;
+}
+
+/* System mode: follow OS preference when no explicit data-theme is set. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #202020;
+    --bg-app: #202020;
+    --bg-panel: #353535;
+    --bg-subtle: #494949;
+    --bg-muted: #5c5c5c;
+    --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
+    --bg-fill-secondary: rgba(255, 255, 255, 0.10);
+    --bg-fill: rgba(255, 255, 255, 0.16);
+    --bg-elevated: #353535;
+    --glass-regular: rgba(53, 53, 53, 0.66);
+    --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
+    --border: #5c5c5c;
+    --border-strong: #848484;
+    --border-selected: #a3a3a3;
+    --border-soft: #494949;
+
+    --text: #ededed;
+    --text-strong: #fafafa;
+    --text-muted: #bdbdbd;
+    --text-soft: #848484;
+    --text-faint: #5c5c5c;
+
+    --accent: #ededed;
+    --accent-contrast: #202020;
+    --accent-strong: #fafafa;
+    --accent-soft: #494949;
+    --accent-tint: #353535;
+    --accent-hover: #fafafa;
+    --brand: #87ea5c;
+    --brand-weak: #2f781d;
+    --brand-soft: #164111;
+    --brand-text: #adf788;
+    --brand-ink: #adf788;
+    --brand-surface: #164111;
+
+    --green: #3BBF7D;
+    --green-bg: #164111;
+    --green-border: #2f781d;
+    --blue: #3AA5F0;
+    --blue-bg: color-mix(in srgb, #1A74FF 22%, #202020);
+    --blue-border: color-mix(in srgb, #3AA5F0 34%, #5c5c5c);
+    --purple: #ededed;
+    --purple-bg: #494949;
+    --purple-border: #5c5c5c;
+    --red: #FF5E5E;
+    --red-bg: color-mix(in srgb, #F04142 24%, #202020);
+    --red-border: color-mix(in srgb, #FF5E5E 34%, #5c5c5c);
+    --amber: #FFC740;
+    --amber-bg: color-mix(in srgb, #FFBA12 22%, #202020);
+
+    --shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.2);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6), 0 8px 16px rgba(0, 0, 0, 0.3);
+
+    --code-header-bg: #1e1e20;
+    --code-body-bg: #18181b;
+  }
+}

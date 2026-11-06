@@ -1,0 +1,63 @@
+/* design-systems/ant/tokens.css
+ * Structured token bindings for Ant.
+ * enterprise fintech clarity, white work surfaces, sharp red intent, and compact data controls.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --surface-warm: #fff1f0;
+  --fg: #1f1f1f;
+  --fg-2: #4b5563;
+  --muted: #697386;
+  --meta: #d32029;
+  --border: #d9dce3;
+  --border-soft: #eef0f4;
+  --accent: #d32029;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #22a06b;
+  --warn: #faad14;
+  --danger: #cf1322;
+  --font-display: "Ant Sans", "Alibaba PuHuiTi", Inter, Arial, sans-serif;
+  --font-body: "Ant Sans", "Alibaba PuHuiTi", Inter, Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.52;
+  --leading-tight: 1.08;
+  --tracking-display: -0.018em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 18px 42px rgba(31, 31, 31, 0.10);
+  --focus-ring: 0 0 0 4px rgba(211, 32, 41, 0.22);
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

@@ -1,0 +1,13 @@
+{
+  "name": "bird-search",
+  "version": "0.8.0",
+  "description": "Vendored Bird CLI search subset for /last30days",
+  "type": "module",
+  "main": "bird-search.mjs",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "attribution": "Based on @steipete/bird v0.8.0 by Peter Steinberger (MIT License)"
+}

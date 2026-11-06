@@ -1,0 +1,242 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-distilbook-explainer",
+  "title": "DistilBook Explainer",
+  "title_i18n": {
+    "en": "DistilBook Explainer",
+    "id": "DistilBook Penjelasan",
+    "de": "DistilBook Erklärer",
+    "zh-CN": "DistilBook 手绘讲解宣传片",
+    "zh-TW": "DistilBook 解說員",
+    "pt-BR": "DistilBook Explicador",
+    "es-ES": "DistilBook Explicador",
+    "ru": "DistilBook Объяснитель",
+    "fa": "DistilBook توضیح دهنده",
+    "ar": "DistilBook شارح",
+    "ja": "DistilBook 説明者",
+    "ko": "DistilBook 설명자",
+    "pl": "DistilBook Wyjaśnienie",
+    "hu": "DistilBook Magyarázat",
+    "fr": "DistilBook Explication",
+    "uk": "DistilBook Пояснення",
+    "tr": "DistilBook Açıklayıcı",
+    "th": "DistilBook อธิบาย",
+    "it": "DistilBook Spiegatore"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "DistilBook turns source material into illustrated explainer videos through upload, script editing and synchronized drawing.",
+  "description_i18n": {
+    "en": "DistilBook turns source material into illustrated explainer videos through upload, script editing and synchronized drawing.",
+    "id": "DistilBook mengubah materi sumber menjadi video penjelasan bergambar melalui pengunggahan, pengeditan skrip, dan gambar yang disinkronkan.",
+    "de": "DistilBook verwandelt Quellmaterial durch Hochladen, Skriptbearbeitung und synchronisiertes Zeichnen in illustrierte Erklärvideos.",
+    "zh-CN": "DistilBook 通过上传资料、编辑脚本和同步绘图，将文档变成手绘讲解视频。",
+    "zh-TW": "DistilBook 通過上傳、腳本編輯和同步繪圖，將源材料轉化爲圖文並茂的講解視頻。",
+    "pt-BR": "DistilBook transforma material de origem em vídeos explicativos ilustrados por meio de upload, edição de roteiro e desenho sincronizado.",
+    "es-ES": "DistilBook convierte el material original en videos explicativos ilustrados mediante carga, edición de guiones y dibujo sincronizado.",
+    "ru": "DistilBook превращает исходный материал в иллюстрированные поясняющие видеоролики посредством загрузки, редактирования сценария и синхронизированного рисования.",
+    "fa": "DistilBook از طریق آپلود، ویرایش اسکریپت و طراحی همگام، مطالب منبع را به ویدیوهای توضیح دهنده مصور تبدیل می کند.",
+    "ar": "DistilBook يحول المادة المصدر إلى مقاطع فيديو توضيحية توضيحية من خلال التحميل وتحرير البرنامج النصي والرسم المتزامن.",
+    "ja": "DistilBook は、アップロード、スクリプト編集、同期描画を通じて、ソース素材をイラスト入りの説明ビデオに変換します。",
+    "ko": "DistilBook는 업로드, 스크립트 편집 및 동기화된 그리기를 통해 소스 자료를 설명 설명 비디오로 변환합니다.",
+    "pl": "DistilBook zamienia materiał źródłowy w ilustrowane filmy objaśniające poprzez przesyłanie, edytowanie skryptów i zsynchronizowane rysowanie.",
+    "hu": "DistilBook a forrásanyagot illusztrált magyarázó videókká alakítja a feltöltés, a forgatókönyv szerkesztése és a szinkronizált rajzolás révén.",
+    "fr": "DistilBook transforme le matériel source en vidéos explicatives illustrées via le téléchargement, l'édition de scripts et le dessin synchronisé.",
+    "uk": "DistilBook перетворює вихідний матеріал на ілюстроване пояснювальне відео за допомогою завантаження, редагування сценарію та синхронізованого малювання.",
+    "tr": "DistilBook, yükleme, komut dosyası düzenleme ve senkronize çizim yoluyla kaynak materyali resimli açıklayıcı videolara dönüştürür.",
+    "th": "DistilBook เปลี่ยนแหล่งข้อมูลให้เป็นวิดีโออธิบายพร้อมภาพประกอบผ่านการอัปโหลด การแก้ไขสคริปต์ และการวาดภาพที่ซิงโครไนซ์",
+    "it": "DistilBook trasforma il materiale originale in video esplicativi illustrati tramite caricamento, modifica di script e disegno sincronizzato."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "product-demo",
+    "education",
+    "whiteboard",
+    "saas"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "brand",
+        "type": "string",
+        "label": "brand name",
+        "default": "DistilBook",
+        "label_i18n": {
+          "en": "brand name",
+          "id": "nama merek",
+          "de": "Markenname",
+          "zh-CN": "品牌名称",
+          "zh-TW": "品牌名稱",
+          "pt-BR": "marca",
+          "es-ES": "nombre de marca",
+          "ru": "торговая марка",
+          "fa": "نام تجاری",
+          "ar": "اسم العلامة التجارية",
+          "ja": "ブランド名",
+          "ko": "브랜드 이름",
+          "pl": "nazwa marki",
+          "hu": "márkanév",
+          "fr": "nom de marque",
+          "uk": "торгова марка",
+          "tr": "marka adı",
+          "th": "ชื่อแบรนด์",
+          "it": "marchio"
+        }
+      },
+      {
+        "name": "tagline",
+        "type": "string",
+        "label": "product description",
+        "default": "Turn any PDF into a hand-illustrated explainer video.",
+        "label_i18n": {
+          "en": "product description",
+          "id": "deskripsi produk",
+          "de": "Produktbeschreibung",
+          "zh-CN": "产品描述",
+          "zh-TW": "產品描述",
+          "pt-BR": "descrição do produto",
+          "es-ES": "descripción del producto",
+          "ru": "описание продукта",
+          "fa": "توضیحات محصول",
+          "ar": "وصف المنتج",
+          "ja": "製品説明",
+          "ko": "제품 설명",
+          "pl": "opis produktu",
+          "hu": "termékleírás",
+          "fr": "description du produit",
+          "uk": "опис товару",
+          "tr": "ürün açıklaması",
+          "th": "รายละเอียดสินค้า",
+          "it": "descrizione del prodotto"
+        }
+      },
+      {
+        "name": "domain",
+        "type": "string",
+        "label": "URL",
+        "default": "distilbook.com",
+        "label_i18n": {
+          "en": "URL",
+          "id": "URL",
+          "de": "URL",
+          "zh-CN": "网址",
+          "zh-TW": "網址",
+          "pt-BR": "URL",
+          "es-ES": "URL",
+          "ru": "URL-адрес",
+          "fa": "URL",
+          "ar": "عنوان URL",
+          "ja": "URL",
+          "ko": "URL",
+          "pl": "Adres URL",
+          "hu": "URL",
+          "fr": "URL",
+          "uk": "URL",
+          "tr": "URL'si",
+          "th": "URL",
+          "it": "URL"
+        }
+      },
+      {
+        "name": "price",
+        "type": "string",
+        "label": "monthly fee",
+        "default": "$15",
+        "label_i18n": {
+          "en": "monthly fee",
+          "id": "biaya bulanan",
+          "de": "monatliche Gebühr",
+          "zh-CN": "月费",
+          "zh-TW": "月費",
+          "pt-BR": "taxa mensal",
+          "es-ES": "cuota mensual",
+          "ru": "ежемесячная плата",
+          "fa": "هزینه ماهانه",
+          "ar": "رسوم شهرية",
+          "ja": "月額料金",
+          "ko": "월 사용료",
+          "pl": "opłata miesięczna",
+          "hu": "havi díj",
+          "fr": "frais mensuels",
+          "uk": "щомісячна плата",
+          "tr": "aylık ücret",
+          "th": "ค่าธรรมเนียมรายเดือน",
+          "it": "canone mensile"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create an illustrated product demo for {{brand}} with the message {{tagline}}, a plan from {{price}} per month, and {{domain}} as the call to action.",
+        "id": "Buat demo produk bergambar untuk {{brand}} dengan pesan {{tagline}}, paket dari {{price}} per bulan, dan {{domain}} sebagai ajakan bertindak.",
+        "de": "Erstellen Sie eine illustrierte Produktdemo für {{brand}} mit der Nachricht {{tagline}}, einem Plan von {{price}} pro Monat und {{domain}} als Call-to-Action.",
+        "zh-CN": "为 {{brand}} 制作手绘讲解产品宣传片，介绍“{{tagline}}”，展示每月 {{price}} 起的方案，并引导访问 {{domain}}。",
+        "zh-TW": "爲 {{brand}} 創建一個帶插圖的產品演示，其中包含消息 {{tagline}}、每月 {{price}} 的計劃以及 {{domain}} 作爲號召性用語。",
+        "pt-BR": "Crie uma demonstração ilustrada do produto para {{brand}} com a mensagem {{tagline}}, um plano de {{price}} por mês e {{domain}} como apelo à ação.",
+        "es-ES": "Cree una demostración ilustrada del producto para {{brand}} con el mensaje {{tagline}}, un plan de {{price}} por mes y {{domain}} como llamado a la acción.",
+        "ru": "Создайте иллюстрированную демо-версию продукта для номера {{brand}} с сообщением {{tagline}}, планом от {{price}} в месяц и номером {{domain}} в качестве призыва к действию.",
+        "fa": "یک نسخه نمایشی محصول مصور ایجاد کنید {{brand}} با پیام {{tagline}}، طرحی از {{price}} در ماه، و {{domain}} به عنوان فراخوان اقدام",
+        "ar": "قم بإنشاء عرض توضيحي مصور للمنتج لـ {{brand}} مع الرسالة {{tagline}}، وخطة من {{price}} شهريًا، و{{domain}} كدعوة للعمل.",
+        "ja": "メッセージ {{tagline}}、月額 {{price}} からのプラン、行動喚起として {{domain}} を含む、{{brand}} の図入りの製品デモを作成します。",
+        "ko": "메시지 {{tagline}}, 월별 {{price}}의 계획 및 행동 촉구로 {{domain}}을 사용하여 {{brand}}에 대한 그림이 있는 제품 데모를 만듭니다.",
+        "pl": "Utwórz ilustrowaną prezentację produktu dla {{brand}} z wiadomością {{tagline}}, planem od {{price}} na miesiąc i {{domain}} jako wezwaniem do działania.",
+        "hu": "Hozzon létre egy illusztrált termékbemutatót {{brand}} az üzenettel {{tagline}}, egy terv a {{price}} havonta, és {{domain}} mint a cselekvésre való felhívás.",
+        "fr": "Créez une démo de produit illustrée pour {{brand}} avec le message {{tagline}}, un forfait à partir de {{price}} par mois et {{domain}} comme appel à l'action.",
+        "uk": "Створіть ілюстровану демонстрацію продукту для {{brand}} із повідомленням {{tagline}}, планом від {{price}} на місяць і {{domain}} як заклик до дії.",
+        "tr": "{{tagline}} mesajıyla, aylık {{price}} tutarında bir planla ve harekete geçirici mesaj olarak {{domain}} ile {{brand}} için resimli bir ürün demosu oluşturun.",
+        "th": "สร้างภาพสาธิตผลิตภัณฑ์สำหรับ {{brand}} โดยมีข้อความ {{tagline}} แผนจาก {{price}} ต่อเดือน และ {{domain}} เป็นคำกระตุ้นการตัดสินใจ",
+        "it": "Crea una demo illustrata del prodotto per {{brand}} con il messaggio {{tagline}}, un piano da {{price}} al mese e {{domain}} come invito all'azione."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "DistilBook Explainer"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "author": "@ajith_io",
+      "url": "https://x.com/ajith_io/status/2103469807375208546",
+      "note": "参考影片来源，仅供内部复刻评测"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "candidateId": "fac45c04-0d8e-4cc8-ba38-7ccb32fde405",
+  "projectId": "d389383b-e5b1-444c-8a76-2b6c2b9972f0",
+  "runId": "34fd6569-ce88-40e2-9dca-750ba58ab8c7",
+  "conversationId": "b46bbf07-8034-4cd5-a1dd-e5a92a7f90a8",
+  "provenance": {
+    "summary": "Detected from assets/imagegen-prompts.md after a successful run.",
+    "detectedAt": 1784471589516
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "assets/imagegen-prompts.md",
+      "label": "assets/imagegen-prompts.md",
+      "size": 9931,
+      "copied": true
+    }
+  ]
+}

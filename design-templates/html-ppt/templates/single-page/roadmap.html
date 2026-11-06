@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Roadmap</title>
+<link rel="stylesheet" href="../../assets/fonts.css">
+<link rel="stylesheet" href="../../assets/base.css">
+<link rel="stylesheet" id="theme-link" href="../../assets/themes/minimal-white.css">
+<link rel="stylesheet" href="../../assets/animations/animations.css">
+<style>
+.rm{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:28px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.rm .col{padding:20px 22px;border-right:1px solid var(--border);background:var(--surface);position:relative}
+.rm .col:last-child{border-right:none}
+.rm .col .tag{display:inline-block;padding:3px 12px;border-radius:999px;font-size:11px;background:var(--surface-2);color:var(--text-2);margin-bottom:10px}
+.rm .col.now{background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.rm .col.now .tag{background:var(--accent);color:#fff}
+.rm h4{font-size:15px;margin:8px 0 4px}
+.rm ul{padding-left:18px;margin:8px 0 0;font-size:13px;color:var(--text-2)}
+.rm li{margin-bottom:6px;line-height:1.5}
+</style>
+</head><body class="single">
+<div class="deck"><section class="slide is-active" data-title="Roadmap">
+  <p class="kicker">Roadmap · 2026</p>
+  <h2 class="h2">接下来四个季度，我们会做什么</h2>
+  <div class="rm">
+    <div class="col now">
+      <span class="tag">NOW · Q2</span>
+      <h4>主题系统</h4>
+      <ul><li>24 个官方主题</li><li>tokens 语义文档</li><li>T 键循环切换</li></ul>
+    </div>
+    <div class="col">
+      <span class="tag">NEXT · Q3</span>
+      <h4>导出</h4>
+      <ul><li>PNG 批量</li><li>PDF 打包</li><li>小红书 3:4 切片</li></ul>
+    </div>
+    <div class="col">
+      <span class="tag">LATER · Q4</span>
+      <h4>交互</h4>
+      <ul><li>Presenter 模式</li><li>Notes 同屏</li><li>遥控器配对</li></ul>
+    </div>
+    <div class="col">
+      <span class="tag">VISION</span>
+      <h4>AI 写稿</h4>
+      <ul><li>从 md 自动分页</li><li>智能选版式</li><li>智能选主题</li></ul>
+    </div>
+  </div>
+</section></div>
+<script src="../../assets/runtime.js"></script>
+</body></html>

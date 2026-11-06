@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neutral Modern app preview</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+      }
+      main {
+        max-width: var(--container-max);
+        margin: 0 auto;
+        padding: var(--space-8) var(--space-6);
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-6);
+      }
+      h1 {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: var(--space-5);
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        padding: var(--space-5);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .btn {
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-sm);
+        padding: 10px 16px;
+        background: var(--accent);
+        color: var(--accent-on);
+        font: 600 var(--text-sm) / 1 var(--font-body);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--text-sm);
+      }
+      th,
+      td {
+        padding: var(--space-3) 0;
+        border-bottom: 1px solid var(--border-soft);
+        text-align: left;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Review workspace</h1>
+          <p class="muted">A quiet operational layout using the default system.</p>
+        </div>
+        <button class="btn">New review</button>
+      </header>
+      <section class="grid">
+        <article class="card">
+          <table>
+            <thead><tr><th>Artifact</th><th>Status</th><th>Owner</th></tr></thead>
+            <tbody>
+              <tr><td>Dashboard shell</td><td>Ready</td><td>Design</td></tr>
+              <tr><td>Import flow</td><td>Review</td><td>Platform</td></tr>
+              <tr><td>Token audit</td><td>Queued</td><td>Quality</td></tr>
+            </tbody>
+          </table>
+        </article>
+        <aside class="card">
+          <h2>Quality note</h2>
+          <p class="muted">Use borders, spacing, and restrained accent color before reaching for extra chrome.</p>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

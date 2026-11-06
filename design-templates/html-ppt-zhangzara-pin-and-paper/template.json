@@ -1,0 +1,46 @@
+{
+  "slug": "zhangzara-pin-and-paper",
+  "name": "Pin & Paper",
+  "tagline": "Yellow paper with safety-pin illustrations, ink-blue handwritten Caveat, paper-grain texture.",
+  "mood": [
+    "crafted",
+    "handmade",
+    "warm",
+    "thoughtful",
+    "literary"
+  ],
+  "occasion": [
+    "research findings with personality",
+    "qualitative report",
+    "founder reflection",
+    "creator essay deck",
+    "workshop debrief"
+  ],
+  "tone": [
+    "literary",
+    "intimate",
+    "warm",
+    "grounded"
+  ],
+  "formality": "medium",
+  "density": "medium",
+  "palette": {
+    "paper": "#EFE56A",
+    "cream": "#F8F1D6",
+    "ink": "#1F3A8A",
+    "red": "#C2342B",
+    "description": "saturated yellow paper, soft cream alternate, deep ink-blue type, plus rust red, kraft, and olive accents; visible paper grain texture"
+  },
+  "typography": {
+    "display": "Caveat",
+    "body": "Space Grotesk",
+    "mono": "DM Mono",
+    "style": "handwritten script for warmth + grotesk for legibility + mono for captions; textbook annotation feel"
+  },
+  "scheme": "light",
+  "best_for": "Anything that should feel hand-crafted, warm, and literary: qualitative research findings, founder reflections, longform brand stories, workshop debriefs. The signature safety-pin illustrations and paper-grain texture make it especially good for any deck — including tech or business — that wants personality and warmth over polish.",
+  "avoid_for": "Decks that need to feel digital-native polished or rigorously data-driven — handwritten Caveat is intentionally informal.",
+  "slide_count": 11,
+  "navigation": "deck-stage runtime (arrow keys, space, PgUp/PgDn, Home/End)",
+  "source": "https://github.com/zarazhangrui/beautiful-html-templates/tree/main/templates/pin-and-paper"
+}

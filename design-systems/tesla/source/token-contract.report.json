@@ -1,0 +1,641 @@
+{
+  "schemaVersion": 1,
+  "contract": "TOKEN_SCHEMA",
+  "generatedAt": "2026-06-06T00:00:00.000Z",
+  "sourceScope": "open-design-bundled-fixture",
+  "summary": {
+    "totalTokens": 56,
+    "declaredTokens": 56,
+    "sourceBackedTokens": 56,
+    "sourceBackedA1": 26,
+    "fallbackTokens": 26,
+    "aliasTokens": 1,
+    "layerCounts": {
+      "A1-identity": 8,
+      "B-slot": 4,
+      "A2": 26,
+      "A1-structure": 18
+    },
+    "score": 100,
+    "grade": "excellent",
+    "recommendRebuild": false
+  },
+  "tokens": [
+    {
+      "name": "--bg",
+      "layer": "A1-identity",
+      "value": "#ffffff",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --bg; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:108"
+      ],
+      "sourceName": "--bg"
+    },
+    {
+      "name": "--surface",
+      "layer": "A1-identity",
+      "value": "#f4f4f4",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --surface; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:109"
+      ],
+      "sourceName": "--surface"
+    },
+    {
+      "name": "--surface-warm",
+      "layer": "B-slot",
+      "value": "var(--surface)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --surface-warm; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:110"
+      ],
+      "sourceName": "--surface-warm"
+    },
+    {
+      "name": "--fg",
+      "layer": "A1-identity",
+      "value": "#171a20",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --fg; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:119"
+      ],
+      "sourceName": "--fg"
+    },
+    {
+      "name": "--fg-2",
+      "layer": "B-slot",
+      "value": "#393c41",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --fg-2; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:120"
+      ],
+      "sourceName": "--fg-2"
+    },
+    {
+      "name": "--muted",
+      "layer": "A1-identity",
+      "value": "#5c5e62",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --muted; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:121"
+      ],
+      "sourceName": "--muted"
+    },
+    {
+      "name": "--meta",
+      "layer": "B-slot",
+      "value": "#8e8e8e",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --meta; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:122"
+      ],
+      "sourceName": "--meta"
+    },
+    {
+      "name": "--border",
+      "layer": "A1-identity",
+      "value": "#d0d1d2",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --border; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:131"
+      ],
+      "sourceName": "--border"
+    },
+    {
+      "name": "--border-soft",
+      "layer": "B-slot",
+      "value": "#eeeeee",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --border-soft; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:132"
+      ],
+      "sourceName": "--border-soft"
+    },
+    {
+      "name": "--accent",
+      "layer": "A1-identity",
+      "value": "#3e6ae1",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --accent; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:141"
+      ],
+      "sourceName": "--accent"
+    },
+    {
+      "name": "--accent-on",
+      "layer": "A2",
+      "value": "#ffffff",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --accent-on; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:142"
+      ],
+      "sourceName": "--accent-on"
+    },
+    {
+      "name": "--accent-hover",
+      "layer": "A2",
+      "value": "color-mix(in oklab, var(--accent), black 8%)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --accent-hover; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:149"
+      ],
+      "sourceName": "--accent-hover"
+    },
+    {
+      "name": "--accent-active",
+      "layer": "A2",
+      "value": "color-mix(in oklab, var(--accent), black 14%)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --accent-active; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:150"
+      ],
+      "sourceName": "--accent-active"
+    },
+    {
+      "name": "--success",
+      "layer": "A2",
+      "value": "#16a34a",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --success; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:158"
+      ],
+      "sourceName": "--success"
+    },
+    {
+      "name": "--warn",
+      "layer": "A2",
+      "value": "#eab308",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --warn; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:159"
+      ],
+      "sourceName": "--warn"
+    },
+    {
+      "name": "--danger",
+      "layer": "A2",
+      "value": "#dc2626",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --danger; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:160"
+      ],
+      "sourceName": "--danger"
+    },
+    {
+      "name": "--font-display",
+      "layer": "A1-identity",
+      "value": "\"Universal Sans Display\", -apple-system, Arial, sans-serif",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --font-display; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:168"
+      ],
+      "sourceName": "--font-display"
+    },
+    {
+      "name": "--font-body",
+      "layer": "A1-identity",
+      "value": "\"Universal Sans Text\", -apple-system, Arial, sans-serif",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --font-body; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:169"
+      ],
+      "sourceName": "--font-body"
+    },
+    {
+      "name": "--font-mono",
+      "layer": "A2",
+      "value": "ui-monospace, \"SF Mono\", \"JetBrains Mono\", Menlo, Monaco, Consolas, monospace",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --font-mono; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:170"
+      ],
+      "sourceName": "--font-mono"
+    },
+    {
+      "name": "--text-xs",
+      "layer": "A1-structure",
+      "value": "11px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-xs; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:179"
+      ],
+      "sourceName": "--text-xs"
+    },
+    {
+      "name": "--text-sm",
+      "layer": "A1-structure",
+      "value": "12px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-sm; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:180"
+      ],
+      "sourceName": "--text-sm"
+    },
+    {
+      "name": "--text-base",
+      "layer": "A1-structure",
+      "value": "14px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-base; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:181"
+      ],
+      "sourceName": "--text-base"
+    },
+    {
+      "name": "--text-lg",
+      "layer": "A1-structure",
+      "value": "16px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-lg; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:182"
+      ],
+      "sourceName": "--text-lg"
+    },
+    {
+      "name": "--text-xl",
+      "layer": "A1-structure",
+      "value": "17px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-xl; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:183"
+      ],
+      "sourceName": "--text-xl"
+    },
+    {
+      "name": "--text-2xl",
+      "layer": "A1-structure",
+      "value": "22px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-2xl; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:184"
+      ],
+      "sourceName": "--text-2xl"
+    },
+    {
+      "name": "--text-3xl",
+      "layer": "A1-structure",
+      "value": "28px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-3xl; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:185"
+      ],
+      "sourceName": "--text-3xl"
+    },
+    {
+      "name": "--text-4xl",
+      "layer": "A1-structure",
+      "value": "40px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --text-4xl; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:186"
+      ],
+      "sourceName": "--text-4xl"
+    },
+    {
+      "name": "--leading-body",
+      "layer": "A1-structure",
+      "value": "1.43",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --leading-body; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:191"
+      ],
+      "sourceName": "--leading-body"
+    },
+    {
+      "name": "--leading-tight",
+      "layer": "A1-structure",
+      "value": "1.20",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --leading-tight; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:192"
+      ],
+      "sourceName": "--leading-tight"
+    },
+    {
+      "name": "--tracking-display",
+      "layer": "A1-structure",
+      "value": "normal",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --tracking-display; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:199"
+      ],
+      "sourceName": "--tracking-display"
+    },
+    {
+      "name": "--space-1",
+      "layer": "A2",
+      "value": "4px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-1; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:204"
+      ],
+      "sourceName": "--space-1"
+    },
+    {
+      "name": "--space-2",
+      "layer": "A2",
+      "value": "8px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-2; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:205"
+      ],
+      "sourceName": "--space-2"
+    },
+    {
+      "name": "--space-3",
+      "layer": "A2",
+      "value": "12px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-3; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:206"
+      ],
+      "sourceName": "--space-3"
+    },
+    {
+      "name": "--space-4",
+      "layer": "A2",
+      "value": "16px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-4; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:207"
+      ],
+      "sourceName": "--space-4"
+    },
+    {
+      "name": "--space-5",
+      "layer": "A2",
+      "value": "20px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-5; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:208"
+      ],
+      "sourceName": "--space-5"
+    },
+    {
+      "name": "--space-6",
+      "layer": "A2",
+      "value": "24px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-6; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:209"
+      ],
+      "sourceName": "--space-6"
+    },
+    {
+      "name": "--space-8",
+      "layer": "A2",
+      "value": "32px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-8; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:210"
+      ],
+      "sourceName": "--space-8"
+    },
+    {
+      "name": "--space-12",
+      "layer": "A2",
+      "value": "48px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --space-12; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:211"
+      ],
+      "sourceName": "--space-12"
+    },
+    {
+      "name": "--section-y-desktop",
+      "layer": "A1-structure",
+      "value": "120px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --section-y-desktop; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:219"
+      ],
+      "sourceName": "--section-y-desktop"
+    },
+    {
+      "name": "--section-y-tablet",
+      "layer": "A1-structure",
+      "value": "72px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --section-y-tablet; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:220"
+      ],
+      "sourceName": "--section-y-tablet"
+    },
+    {
+      "name": "--section-y-phone",
+      "layer": "A1-structure",
+      "value": "48px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --section-y-phone; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:221"
+      ],
+      "sourceName": "--section-y-phone"
+    },
+    {
+      "name": "--radius-sm",
+      "layer": "A2",
+      "value": "4px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --radius-sm; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:234"
+      ],
+      "sourceName": "--radius-sm"
+    },
+    {
+      "name": "--radius-md",
+      "layer": "A2",
+      "value": "12px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --radius-md; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:235"
+      ],
+      "sourceName": "--radius-md"
+    },
+    {
+      "name": "--radius-lg",
+      "layer": "A2",
+      "value": "12px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --radius-lg; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:236"
+      ],
+      "sourceName": "--radius-lg"
+    },
+    {
+      "name": "--radius-pill",
+      "layer": "A2",
+      "value": "9999px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --radius-pill; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:237"
+      ],
+      "sourceName": "--radius-pill"
+    },
+    {
+      "name": "--elev-flat",
+      "layer": "A2",
+      "value": "none",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --elev-flat; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:250"
+      ],
+      "sourceName": "--elev-flat"
+    },
+    {
+      "name": "--elev-ring",
+      "layer": "A2",
+      "value": "0 0 0 1px var(--border)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --elev-ring; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:251"
+      ],
+      "sourceName": "--elev-ring"
+    },
+    {
+      "name": "--elev-raised",
+      "layer": "A2",
+      "value": "0 2px 8px rgba(0, 0, 0, 0.05)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --elev-raised; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:252"
+      ],
+      "sourceName": "--elev-raised"
+    },
+    {
+      "name": "--focus-ring",
+      "layer": "A2",
+      "value": "0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --focus-ring; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:258"
+      ],
+      "sourceName": "--focus-ring"
+    },
+    {
+      "name": "--motion-fast",
+      "layer": "A2",
+      "value": "250ms",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --motion-fast; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:271"
+      ],
+      "sourceName": "--motion-fast"
+    },
+    {
+      "name": "--motion-base",
+      "layer": "A2",
+      "value": "330ms",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --motion-base; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:272"
+      ],
+      "sourceName": "--motion-base"
+    },
+    {
+      "name": "--ease-standard",
+      "layer": "A2",
+      "value": "cubic-bezier(0.5, 0, 0, 0.75)",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --ease-standard; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:273"
+      ],
+      "sourceName": "--ease-standard"
+    },
+    {
+      "name": "--container-max",
+      "layer": "A1-structure",
+      "value": "1383px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --container-max; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:281"
+      ],
+      "sourceName": "--container-max"
+    },
+    {
+      "name": "--container-gutter-desktop",
+      "layer": "A1-structure",
+      "value": "24px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --container-gutter-desktop; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:282"
+      ],
+      "sourceName": "--container-gutter-desktop"
+    },
+    {
+      "name": "--container-gutter-tablet",
+      "layer": "A1-structure",
+      "value": "16px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --container-gutter-tablet; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:283"
+      ],
+      "sourceName": "--container-gutter-tablet"
+    },
+    {
+      "name": "--container-gutter-phone",
+      "layer": "A1-structure",
+      "value": "12px",
+      "confidence": "high",
+      "reason": "Bundled tokens.css declares --container-gutter-phone; no upstream recrawl was performed for this backfill.",
+      "sources": [
+        "tokens.css:284"
+      ],
+      "sourceName": "--container-gutter-phone"
+    }
+  ]
+}

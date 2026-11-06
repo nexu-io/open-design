@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "open-design.fullname" . }}
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "open-design.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "open-design.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Force a re-roll when the configmap or secret change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: od
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "open-design.fullname" . }}-config
+            - secretRef:
+                name: {{ include "open-design.fullname" . }}-secrets
+          # /api/daemon/status is the canonical lifecycle probe (Phase 1.5).
+          # We keep it open without a bearer (server.ts excludes it from
+          # the bearer middleware) so kubelet probes never need a secret.
+          livenessProbe:
+            httpGet:
+              path: /api/daemon/status
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/daemon/status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.env.OD_DATA_DIR | default "/data/od" }}
+            - name: config
+              mountPath: {{ .Values.env.OD_MEDIA_CONFIG_DIR | default "/data/config" }}
+          {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "open-design.fullname" . }}-data
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ include "open-design.fullname" . }}-config
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

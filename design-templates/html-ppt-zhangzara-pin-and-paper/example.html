@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Turn a Field-Study Capstone into a Defense Deck like a Star Biology Major - Student coursework</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/styles.css" />
+<script src="assets/deck-stage.js"></script>
+
+<!-- reusable safety pin svg, used via <use href="#pin"> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- closed safety pin: coil on right, shaft sweeping left, clasp cap on the left holding the point -->
+    <symbol id="pin" viewBox="0 0 360 110">
+      <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- coiled spring (one continuous loop) -->
+        <path d="M312 38 C 296 32, 290 50, 304 58 C 320 66, 340 60, 342 44 C 344 28, 322 18, 300 24"/>
+        <!-- top shaft running from coil to clasp -->
+        <path d="M300 24 C 240 14, 140 14, 70 30"/>
+        <!-- bottom shaft (the part holding the point) curving back under -->
+        <path d="M312 56 C 250 78, 150 82, 80 70"/>
+        <!-- clasp cap (oval) covering where the two shafts meet on the left -->
+        <ellipse cx="58" cy="50" rx="24" ry="14"/>
+      </g>
+    </symbol>
+
+    <!-- open safety pin: clasp lifted, sharp point exposed pointing left -->
+    <symbol id="pin-open" viewBox="0 0 360 130">
+      <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- coiled spring -->
+        <path d="M312 48 C 296 42, 290 60, 304 68 C 320 76, 340 70, 342 54 C 344 38, 322 28, 300 34"/>
+        <!-- top shaft -->
+        <path d="M300 34 C 240 24, 140 24, 70 40"/>
+        <!-- bottom shaft (the pointed one), now extending past where the clasp would be, into a sharp point -->
+        <path d="M312 66 C 250 90, 150 96, 80 86 L 24 78 L 38 70 M24 78 L 38 88"/>
+        <!-- clasp, lifted above where the point used to sit -->
+        <ellipse cx="82" cy="32" rx="22" ry="12" transform="rotate(-18 82 32)"/>
+      </g>
+    </symbol>
+
+    <!-- arrow for process flow -->
+    <symbol id="arr" viewBox="0 0 32 32">
+      <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 16 H26 M19 9 L26 16 L19 23"/>
+      </g>
+    </symbol>
+
+    <!-- small inline mark for the top-chrome lockup -->
+    <symbol id="mark" viewBox="0 0 32 16">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="26" cy="8" r="5"/>
+        <path d="M21 8 H 6 M6 5 L 3 8 L 6 11"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<script type="application/json" id="speaker-notes">[]</script>
+</head>
+<body>
+
+<deck-stage>
+
+  <!-- ============ 01 COVER ============ -->
+  <section class="slide s-cover" data-screen-label="01 Cover" data-om-validate="false">
+    <svg class="pin-1" viewBox="0 0 360 110"><use href="#pin"/></svg>
+    <svg class="pin-2" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+    <div class="stage">
+      <div class="super">A senior capstone in field biology</div>
+      <h1>Pollinators,<br/><em>priced out.</em></h1>
+      <div class="row">
+        <div class="who">Presented by <span class="underline-thin">Maya Ortiz, B.S. Biology '26</span>
+          <small>Advised by Dr. Elena Cho · Dept. of Ecology &amp; Evolutionary Biology</small>
+        </div>
+        <div class="date">14 · V · 2026</div>
+      </div>
+    </div>
+    <div class="handwritten">
+      <span class="underline">For:</span> the defense committee.<br/>
+      Six sites. Seven visits. One clear signal.
+    </div>
+  </section>
+
+  <!-- ============ 02 AGENDA ============ -->
+  <section class="slide s-agenda" data-screen-label="02 Agenda" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Capstone Defense</span>
+      <span class="meta"><span>Bio 4900</span><span>Spring 2026</span></span>
+    </div>
+    <h2>What's<br/><em>inside.</em></h2>
+    <div class="list">
+      <div class="row">
+        <span class="num">01</span>
+        <span class="lab">The open question</span>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="meta">Context · 3 min</span>
+      </div>
+      <div class="row">
+        <span class="num">02</span>
+        <span class="lab">Survey design</span>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="meta">Method · 4 min</span>
+      </div>
+      <div class="row">
+        <span class="num">03</span>
+        <span class="lab">What the data show</span>
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <span class="meta">Evidence · 5 min</span>
+      </div>
+      <div class="row">
+        <span class="num">04</span>
+        <span class="lab">Contribution &amp; what's next</span>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="meta">Close · 3 min</span>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>02 / 11</span></div>
+  </section>
+
+  <!-- ============ 03 NOTECARDS ============ -->
+  <section class="slide s-notes" data-screen-label="03 Principles" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Principles</span>
+      <span class="meta"><span>Ortiz Capstone</span><span>Phase II</span></span>
+    </div>
+    <div class="head">
+      <h2>Three commitments we <em>held to.</em></h2>
+      <div class="sub">Pinned above the field notebook. Every transect walked and every bee logged got checked against these three before it went in the dataset.</div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="num">Rule · 01</span>
+        <h3>Standardize<br/>the transect.</h3>
+        <p>Same 200m walk, same 10am&ndash;2pm window, same six urban sites &mdash; from a fenced community garden to a highway median planting.</p>
+        <div class="scribble">&mdash; same route, <span class="underline">every time</span>.</div>
+      </div>
+      <div class="card alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <span class="num">Rule · 02</span>
+        <h3>Log every<br/>visit, not just hits.</h3>
+        <p>Zero-count observations are recorded with the same rigor as sightings, so absence carries real weight in the model.</p>
+        <div class="scribble">seven visits per site, logged.</div>
+      </div>
+      <div class="card alt2">
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <span class="num">Rule · 03</span>
+        <h3>Verify the<br/>ID twice.</h3>
+        <p>Every specimen photo gets a second call from Dr. Cho's lab before a species label is locked into the dataset.</p>
+        <div class="scribble">412 specimens, double-checked.</div>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>03 / 11</span></div>
+  </section>
+
+  <!-- ============ 04 SECTION DIVIDER ============ -->
+  <section class="slide s-sec ink" data-screen-label="04 Section · Direction" data-om-validate="false">
+    <div class="marker">Section II</div>
+    <div class="label">Why urban<br/>bees are thinning</div>
+    <svg class="pin-big" viewBox="0 0 360 110"><use href="#pin"/></svg>
+    <h2>Show the<br/>decline<br/><em>clearly.</em></h2>
+    <div class="scribble">&mdash; turn the page &mdash;</div>
+    <div class="footer"><span>Ortiz Capstone</span><span>04 / 11</span></div>
+  </section>
+
+  <!-- ============ 05 NOTICE ============ -->
+  <section class="slide s-notice" data-screen-label="05 Findings · Detail" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Findings · detail</span>
+      <span class="meta"><span>Ortiz Capstone</span><span>Phase III</span></span>
+    </div>
+    <div class="head">
+      <div class="pre">Notice · 05<br/>Why this matters</div>
+      <h2>Since 2019, three citywide surveys have shown pollinator counts falling &mdash; but none isolated <em>which</em> urban feature drives the drop.</h2>
+    </div>
+    <div class="grid">
+      <div class="col">
+        <h3>What's known</h3>
+        <p><strong>Regional counts are falling</strong> &mdash; three consecutive citywide surveys point the same direction, but at a resolution too coarse to explain why.</p>
+        <ul>
+          <li><strong>Citywide surveys (2019, 2021, 2023)</strong> show a steady decline in wild bee sightings.</li>
+          <li><strong>Native plant cover is shrinking</strong> as infill development replaces yards with turf and pavement.</li>
+          <li><strong>Warmer, drier summers</strong> are shifting bloom timing across the whole city.</li>
+        </ul>
+        <div class="src">Three prior surveys, one open question</div>
+      </div>
+      <div class="col b">
+        <h3>Where the evidence falls short</h3>
+        <div class="meta">Coarse · citywide · one visit a year.</div>
+        <p>Existing surveys sample once a year at the city scale, so they can't tell a fenced pocket garden from a highway median &mdash; the two ends of the urban gradient get averaged together.</p>
+        <p>That means no one can say whether it's plant diversity, paved cover, or something else driving the decline.</p>
+        <div class="src">No site-level resolution, no repeated visits</div>
+      </div>
+      <div class="col">
+        <h3>What this capstone contributes</h3>
+        <ul>
+          <li><strong>Six sites spanning the full urban gradient</strong>, walked seven times each over ten weeks.</li>
+          <li><strong>A model that separates</strong> impervious-surface cover from bloom diversity as distinct predictors.</li>
+          <li><strong>A replicable protocol</strong> the next cohort can pick up and repeat next spring.</li>
+        </ul>
+        <div class="src">Six sites · seven visits · one growing season</div>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>05 / 11</span></div>
+  </section>
+
+  <!-- ============ 06 CHART ============ -->
+  <section class="slide s-chart ink" data-screen-label="06 Visitation Curve" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Visitation rate, by site</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <svg class="pin-deco" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+    <div class="left">
+      <h2>Visits drop<br/>63 percent<br/><em>by midsummer.</em></h2>
+      <p>Across the six sites, pollinator visits per ten-minute observation fall from an average of 14 in early May to about 5 by mid-July &mdash; and the paved, high-traffic sites lead the decline.</p>
+      <div class="legend">
+        <div class="li"><i style="background:rgba(239,229,106,.5)"></i> Community garden (least paved)</div>
+        <div class="li"><i style="background:#F5ECA0"></i> Mixed residential yards</div>
+        <div class="li"><i style="background:#EFE56A"></i> Highway median &amp; lot (most paved)</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="yhead">Pollinator visits per 10-min count</div>
+      <div class="plot">
+        <div class="yticks">
+          <span>14</span><span>10.5</span><span>7</span><span>3.5</span><span>0</span>
+        </div>
+        <div class="gline" style="top:0%"></div>
+        <div class="gline" style="top:25%"></div>
+        <div class="gline" style="top:50%"></div>
+        <div class="gline" style="top:75%"></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polyline fill="none" stroke="#1F3A8A" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2,1.5"
+            points="0,8 16,8 32,7 48,8 64,7 80,8 100,8" />
+          <polyline fill="none" stroke="#2D4FB8" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+            points="0,8 16,24 32,36 48,44 64,50 80,54 100,56" />
+          <polyline fill="none" stroke="#1F3A8A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+            points="0,8 16,40 32,58 48,70 64,78 80,82 100,85" />
+        </svg>
+      </div>
+      <div class="xticks">
+        <span>V1</span><span>V2</span><span>V3</span><span>V4</span><span>V5</span><span>V6</span><span>V7</span>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>06 / 11</span></div>
+  </section>
+
+  <!-- ============ 07 PROCESS ============ -->
+  <section class="slide s-process" data-screen-label="07 Process" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Field protocol</span>
+      <span class="meta"><span>Ortiz Capstone</span><span>Phase IV</span></span>
+    </div>
+    <div class="head">
+      <h2>From <em>transect</em><br/>to dataset,<br/>in five steps.</h2>
+      <div class="sub">The same protocol repeated at all six sites, seven times each, from early May to mid-July.</div>
+    </div>
+    <div class="flow">
+      <div class="node">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">1</div>
+        <h3>Scout</h3>
+        <p>Walk the 200m transect once to flag flowering patches and set fixed observation points.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">2</div>
+        <h3>Observe</h3>
+        <p>Ten-minute timed counts at each point, recording every visit and species where identifiable in the field.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node alt2">
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <div class="n">3</div>
+        <h3>Collect</h3>
+        <p>Net and photograph unclear specimens for lab confirmation; release healthy insects on site.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">4</div>
+        <h3>Verify</h3>
+        <p>Dr. Cho's lab cross-checks every photographed specimen before a species label is locked in.</p>
+        <svg class="arr" viewBox="0 0 32 32"><use href="#arr"/></svg>
+      </div>
+      <div class="node">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="n">5</div>
+        <h3>Model</h3>
+        <p>Counts feed a generalized linear model with impervious cover and bloom diversity as predictors.</p>
+      </div>
+    </div>
+    <div class="timeline">
+      <span>Step 1 · Scout</span>
+      <span>Step 2 · Observe</span>
+      <span>Step 3 · Collect</span>
+      <span>Step 4 · Verify</span>
+      <span>Step 5 · Model</span>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>07 / 11</span></div>
+  </section>
+
+  <!-- ============ 08 LEDGER ============ -->
+  <section class="slide s-matrix" data-screen-label="08 Comparison" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Three study designs, side by side</span>
+      <span class="meta"><span>Ortiz Capstone</span><span>Phase IV</span></span>
+    </div>
+    <div class="head">
+      <h2>Where this<br/><em>design</em> earns<br/>its keep.</h2>
+      <div class="sub">Scored against the four levers that decide whether a survey can actually isolate cause from correlation.</div>
+    </div>
+    <div class="table">
+      <div class="cell head-row">Lever</div>
+      <div class="cell head-row">Citywide surveys</div>
+      <div class="cell head-row">Single-site study</div>
+      <div class="cell head-row">This capstone</div>
+
+      <div class="cell row-label">Site-level resolution</div>
+      <div class="cell"><span class="pill no">city-averaged</span></div>
+      <div class="cell"><span class="pill no">one site only</span></div>
+      <div class="cell"><span class="pill yes">six-site gradient</span></div>
+
+      <div class="cell row-label">Repeated visits per site</div>
+      <div class="cell"><span class="pill no">once a year</span></div>
+      <div class="cell"><span class="pill yes">weekly</span></div>
+      <div class="cell"><span class="pill yes">7 visits, 10 weeks</span></div>
+
+      <div class="cell row-label">Blind ID verification</div>
+      <div class="cell"><span class="pill no">field call only</span></div>
+      <div class="cell"><span class="pill part">single reviewer</span></div>
+      <div class="cell"><span class="pill yes">double-checked in lab</span></div>
+
+      <div class="cell row-label last">Controls for pavement cover</div>
+      <div class="cell last"><span class="pill no">not modeled</span></div>
+      <div class="cell last"><span class="pill no">not modeled</span></div>
+      <div class="cell last"><span class="pill yes">GLM covariate</span></div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>08 / 11</span></div>
+  </section>
+
+  <!-- ============ 09 STATS ============ -->
+  <section class="slide s-stats" data-screen-label="09 In Numbers" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> In numbers</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="head">
+      <h2>The case,<br/><em>by the numbers.</em></h2>
+      <div class="sub">Three figures from ten weeks of fieldwork across six urban sites &mdash; every count logged the same day it was taken.</div>
+    </div>
+    <div class="grid">
+      <div class="stat">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="big">6</div>
+        <h3>Urban sites<br/>surveyed</h3>
+        <p>From a fenced community garden to a highway median planting, spanning the full paved-to-planted gradient.</p>
+      </div>
+      <div class="stat alt">
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+        <div class="big">412</div>
+        <h3>Specimens<br/>logged &amp; ID'd</h3>
+        <p>Every photographed specimen cross-checked in Dr. Cho's lab before its species label was locked in.</p>
+      </div>
+      <div class="stat alt2">
+        <svg class="pin" viewBox="0 0 360 130"><use href="#pin-open"/></svg>
+        <div class="big">63<small>%</small></div>
+        <h3>Drop in visits,<br/>May to July</h3>
+        <p>Pollinator visits per ten-minute count fell from 14 to about 5 at the most paved sites.</p>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>09 / 11</span></div>
+  </section>
+
+  <!-- ============ 10 QUOTE ============ -->
+  <section class="slide s-quote" data-screen-label="10 Voice" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> Committee feedback</span>
+      <span class="meta"><span>Phase III</span><span>Evidence</span></span>
+    </div>
+    <div class="panel">
+      <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+      <div class="qmark">"</div>
+      <div>
+        <blockquote>This is the first dataset from our program to actually separate pavement cover from bloom diversity &mdash; that's a real methodological contribution, not just a nice survey.</blockquote>
+        <div class="who">Dr. Elena Cho
+          <small>Faculty advisor · Dept. of Ecology &amp; Evolutionary Biology</small>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>10 / 11</span></div>
+  </section>
+
+  <!-- ============ 11 CTA ============ -->
+  <section class="slide s-cta" data-screen-label="11 Next" data-om-validate="false">
+    <div class="top">
+      <span class="lockup"><svg><use href="#mark"/></svg> What's next</span>
+      <span class="meta"><span>Ortiz Capstone</span><span>Phase V</span></span>
+    </div>
+    <div class="stage">
+      <div class="pane l">
+        <div class="super">Six sites · Ten weeks · One clear signal</div>
+        <h2>The answer:<br/>pavement,<br/><em>not plants.</em></h2>
+        <p>Impervious surface cover &mdash; not bloom diversity &mdash; is the strongest predictor of pollinator decline at these six sites. More paved cover means fewer visits, independent of how many flowering species were present.</p>
+        <svg class="pin" viewBox="0 0 360 110"><use href="#pin"/></svg>
+      </div>
+      <div class="pane r">
+        <h3>Where this goes next</h3>
+        <div class="step">
+          <div class="n">1</div>
+          <div>
+            <h4>Submit to the Undergraduate Research Journal</h4>
+            <p>Manuscript draft due to Dr. Cho by June 1; targeting the campus journal's fall issue.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <div>
+            <h4>Present at the spring symposium</h4>
+            <p>Poster session, May 22 &mdash; same six-site figure and GLM, condensed to a three-foot board.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <div>
+            <h4>Hand the protocol to next year's cohort</h4>
+            <p>Limitation: one growing season, six sites, a single city &mdash; the next cohort repeats the transects to test if the pattern holds.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>Ortiz Capstone</span><span>11 / 11</span></div>
+  </section>
+
+</deck-stage>
+
+</body>
+</html>

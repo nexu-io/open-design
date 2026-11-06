@@ -1,0 +1,1216 @@
+import { workspaceContextHasWorkspaceIdentity } from '@open-design/contracts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { Button } from '@open-design/components';
+import { useI18n, useT, type Locale } from '../i18n';
+import {
+  localizeSkillDescription,
+  localizeSkillName,
+} from '../i18n/content';
+import { Icon } from './Icon';
+import type { AppConfig } from '../types';
+import type { SkillSummary } from '@open-design/contracts';
+import {
+  deleteSkill,
+  fetchSkill,
+  fetchSkillFiles,
+  fetchSkills,
+  importSkill,
+  updateSkill,
+  type SkillFileEntry,
+} from '../providers/registry';
+import {
+  beginWorkspaceScopedRead,
+  currentWorkspaceAccountGeneration,
+  useWorkspaceContext,
+  workspaceIdentityCacheKey,
+} from '../collab/useWorkspaceContext';
+import { useWorkspaceInvalidation } from '../collab/workspace-events';
+import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
+
+// Functional skills only — design templates render in EntryView's
+// Templates tab and are managed under their own daemon registry. See
+// specs/current/skills-and-design-templates.md.
+//
+// Layout mirrors the External MCP servers panel: a single vertical
+// stack of collapsible rows. Each row is a skill — the header is
+// always visible (enable toggle, name, mode badge, source badge,
+// actions); the body (SKILL.md preview, file tree, inline edit form)
+// is revealed only when the row is expanded. Replaces the previous
+// left-list / right-detail two-column workspace, which felt cramped
+// inside the settings dialog content column and left a wasteful empty
+// detail panel whenever no skill was selected.
+
+interface Props {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+  onSkillsRefresh?: () => Promise<void> | void;
+  /**
+   * Fires after every successful skill registry mutation so the App
+   * shell can refresh derived state and evict any preview iframe whose
+   * project depends on the affected skill — body-only edits do not move
+   * any SkillSummary field, so ProjectView's signature-based eviction
+   * cannot see them on its own.
+   */
+  onSkillsChanged?: (affectedSkillId?: string) => void;
+}
+
+type SourceFilter = 'all' | 'user' | 'built-in';
+type SkillSource = Exclude<SourceFilter, 'all'>;
+
+const SOURCE_FILTERS = ['user', 'built-in'] as const satisfies readonly SkillSource[];
+
+function getSkillSource(skill: Pick<SkillSummary, 'source'>): SkillSource {
+  // Older or alternate registry responses may omit source. Skills without
+  // explicit user ownership are built-in and should stay in that bucket.
+  return skill.source ?? 'built-in';
+}
+
+interface DraftState {
+  name: string;
+  description: string;
+  triggers: string;
+  body: string;
+}
+
+const EMPTY_DRAFT: DraftState = {
+  name: '',
+  description: '',
+  triggers: '',
+  body: '',
+};
+
+function summaryToDraft(skill: SkillSummary, body: string): DraftState {
+  return {
+    name: skill.name,
+    description: skill.description,
+    triggers: Array.isArray(skill.triggers) ? skill.triggers.join(', ') : '',
+    body,
+  };
+}
+
+function parseTriggers(raw: string): string[] {
+  return raw
+    .split(/[,\n]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function skillMatchesSearch(skill: SkillSummary, q: string, locale: Locale): boolean {
+  if (!q) return true;
+  const hay = `${skill.name}\n${localizeSkillName(locale, skill)}\n${skill.description}\n${localizeSkillDescription(locale, skill)}\n${(skill.triggers ?? []).join(
+    ' ',
+  )}\n${skill.category ?? ''}`;
+  return hay.toLowerCase().includes(q);
+}
+
+export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }: Props) {
+  const { locale, t } = useI18n();
+  const workspaceContextState = useWorkspaceContext();
+  const { context: workspaceContext } = workspaceContextState;
+  const workspaceContextRef = useRef(workspaceContext);
+  workspaceContextRef.current = workspaceContext;
+  const accountGeneration = currentWorkspaceAccountGeneration();
+  const workspaceReadMode = workspaceContextState.identityChangePending
+    || (!workspaceContext && workspaceContextState.loading)
+    ? 'pending'
+    : workspaceContextState.failure === 'unavailable'
+      ? 'blocked'
+      : workspaceContext
+        ? 'scoped'
+        : 'headerless';
+  const workspaceCatalogIdentity = JSON.stringify([
+    accountGeneration,
+    workspaceIdentityCacheKey(workspaceContext),
+    workspaceReadMode,
+  ]);
+  const workspaceCatalogIdentityRef = useRef(workspaceCatalogIdentity);
+  workspaceCatalogIdentityRef.current = workspaceCatalogIdentity;
+  const skillsRequestGenerationRef = useRef(0);
+  const workspaceWriteBlocked = workspaceReadMode === 'pending' || workspaceReadMode === 'blocked';
+
+  const [skillsCatalog, setSkillsCatalog] = useState<{
+    identity: string | null;
+    items: SkillSummary[];
+  }>({ identity: null, items: [] });
+  const skills = skillsCatalog.identity === workspaceCatalogIdentity
+    ? skillsCatalog.items
+    : [];
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [modeFilter, setModeFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  // Body for the currently-expanded skill — fetched lazily so the
+  // initial list payload stays small. `undefined` means 'not yet
+  // fetched'; `''` means 'fetched but empty'.
+  const [bodyById, setBodyById] = useState<Record<string, string>>({});
+  const [bodyLoadingId, setBodyLoadingId] = useState<string | null>(null);
+
+  // File tree, cached the same way as bodies so re-expanding the same
+  // row is instant after the first fetch.
+  const [filesById, setFilesById] = useState<Record<string, SkillFileEntry[]>>({});
+  const [filesLoadingId, setFilesLoadingId] = useState<string | null>(null);
+
+  // One row expanded at a time — keeps the section scannable. `null`
+  // means every row is collapsed.
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Editing happens inline inside an expanded row. Holds the id of the
+  // skill currently being edited, or `null` when no edit is in flight.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // Top-of-list create form. Toggled by the header 'New skill' button.
+  const [creating, setCreating] = useState(false);
+
+  // Editing draft + status. The draft is held in local state so the
+  // user can collapse a row and come back without losing progress
+  // (we drop it only on Save / Cancel).
+  const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
+  const [draftIdentity, setDraftIdentity] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftSaving, setDraftSaving] = useState(false);
+
+  // Inline delete confirmation — replaces the old window.confirm() call.
+  // Only one skill can be in the 'confirm pending' state at a time; the
+  // user clicks once to arm, twice to commit.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Editing a built-in skill writes a user-owned shadow copy and hides
+  // the built-in entry from the list. Arm an inline confirmation first
+  // so the listing change doesn't feel like a silent conversion (#1378).
+  const [confirmBuiltInEditId, setConfirmBuiltInEditId] = useState<
+    string | null
+  >(null);
+
+  const previousWorkspaceIdentityRef = useRef(workspaceCatalogIdentity);
+  useEffect(() => {
+    if (previousWorkspaceIdentityRef.current === workspaceCatalogIdentity) return;
+    previousWorkspaceIdentityRef.current = workspaceCatalogIdentity;
+    setBodyById({});
+    setFilesById({});
+    setBodyLoadingId(null);
+    setFilesLoadingId(null);
+    setExpandedId(null);
+    setEditingId(null);
+    setCreating(false);
+    setDraft(EMPTY_DRAFT);
+    setDraftIdentity(null);
+    setDraftError(null);
+    setDraftSaving(false);
+    setConfirmDeleteId(null);
+    setConfirmBuiltInEditId(null);
+  }, [workspaceCatalogIdentity]);
+
+  const refresh = useCallback(async () => {
+    if (workspaceReadMode === 'pending' || workspaceReadMode === 'blocked') return [];
+    const requestGeneration = ++skillsRequestGenerationRef.current;
+    const issuedGeneration = currentWorkspaceAccountGeneration();
+    const issuedIdentity = workspaceCatalogIdentity;
+    const read = beginWorkspaceScopedRead(workspaceContext);
+    const list = await fetchSkills(read.context);
+    if (
+      skillsRequestGenerationRef.current !== requestGeneration
+      || currentWorkspaceAccountGeneration() !== issuedGeneration
+      || workspaceCatalogIdentityRef.current !== issuedIdentity
+      || !read.isStillCurrent(workspaceContextRef.current)
+    ) return [];
+    setSkillsCatalog({ identity: issuedIdentity, items: list });
+    return list;
+  }, [workspaceCatalogIdentity, workspaceContext, workspaceReadMode]);
+
+  useEffect(() => {
+    if (workspaceContextHasWorkspaceIdentity(workspaceContext)) return;
+    void refresh();
+  }, [refresh, workspaceContext?.workspaceType]);
+
+  const handleSkillStreamActive = useWorkspaceSnapshotActivation({
+    enabled: workspaceReadMode === 'scoped' && workspaceContextHasWorkspaceIdentity(workspaceContext),
+    identity: workspaceCatalogIdentity,
+    refresh: () => { void refresh(); },
+  });
+
+  useWorkspaceInvalidation(
+    {
+      'team-resources-changed': (payload) => {
+        if (!payload.resourceKind || payload.resourceKind === 'skill') void refresh();
+      },
+    },
+    {
+      workspaceContext: workspaceReadMode === 'scoped' ? workspaceContext : null,
+      enabled: workspaceReadMode === 'scoped',
+      onActive: handleSkillStreamActive,
+    },
+  );
+
+  const disabledSkills = useMemo(
+    () => new Set(cfg.disabledSkills ?? []),
+    [cfg.disabledSkills],
+  );
+
+  const searchQuery = search.toLowerCase().trim();
+
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<SourceFilter, number>([
+      ['all', 0],
+      ['user', 0],
+      ['built-in', 0],
+    ]);
+    for (const s of skills) {
+      if (modeFilter !== 'all' && s.mode !== modeFilter) continue;
+      if (categoryFilter !== 'all' && s.category !== categoryFilter) continue;
+      if (!skillMatchesSearch(s, searchQuery, locale)) continue;
+      counts.set('all', (counts.get('all') ?? 0) + 1);
+      const source = getSkillSource(s);
+      counts.set(source, (counts.get(source) ?? 0) + 1);
+    }
+    return counts;
+  }, [skills, modeFilter, categoryFilter, searchQuery, locale]);
+
+  const sourceCatalogCounts = useMemo(() => {
+    const counts = new Map<SkillSource, number>([
+      ['user', 0],
+      ['built-in', 0],
+    ]);
+    for (const skill of skills) {
+      const source = getSkillSource(skill);
+      counts.set(source, (counts.get(source) ?? 0) + 1);
+    }
+    return counts;
+  }, [skills]);
+
+  // Do not leave the select pointing at a source that disappeared after a
+  // refresh (for example, when the last user skill is deleted).
+  useEffect(() => {
+    if (
+      sourceFilter !== 'all'
+      && (sourceCatalogCounts.get(sourceFilter) ?? 0) === 0
+    ) {
+      setSourceFilter('all');
+    }
+  }, [sourceCatalogCounts, sourceFilter]);
+
+  const modeOptions = useMemo(() => {
+    const modes = new Set(skills.map((s) => s.mode));
+    const counts = new Map<string, number>();
+    for (const s of skills) {
+      if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter) continue;
+      if (categoryFilter !== 'all' && s.category !== categoryFilter) continue;
+      if (!skillMatchesSearch(s, searchQuery, locale)) continue;
+      counts.set(s.mode, (counts.get(s.mode) ?? 0) + 1);
+    }
+    return Array.from(modes, (mode) => [mode, counts.get(mode) ?? 0] as const).sort(
+      (a, b) => a[0].localeCompare(b[0]),
+    );
+  }, [skills, sourceFilter, categoryFilter, searchQuery, locale]);
+
+  const modeAllCount = useMemo(
+    () =>
+      skills.filter((s) => {
+        if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter)
+          return false;
+        if (categoryFilter !== 'all' && s.category !== categoryFilter)
+          return false;
+        return skillMatchesSearch(s, searchQuery, locale);
+      }).length,
+    [skills, sourceFilter, categoryFilter, searchQuery, locale],
+  );
+
+  // Categories are optional per-skill metadata (`od.category` in the
+  // SKILL.md frontmatter). The pill row only renders when at least one
+  // skill in the listing carries one, so a project that ships only the
+  // baseline functional skills doesn't see an empty filter row.
+  const categoryOptions = useMemo(() => {
+    const categories = new Set(
+      skills
+        .map((s) => s.category)
+        .filter((cat): cat is string => typeof cat === 'string' && cat.length > 0),
+    );
+    const counts = new Map<string, number>();
+    for (const s of skills) {
+      const cat = s.category;
+      if (typeof cat !== 'string' || !cat) continue;
+      if (modeFilter !== 'all' && s.mode !== modeFilter) continue;
+      if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter) continue;
+      if (!skillMatchesSearch(s, searchQuery, locale)) continue;
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
+    }
+    return Array.from(categories, (cat) => [cat, counts.get(cat) ?? 0] as const).sort(
+      (a, b) => a[0].localeCompare(b[0]),
+    );
+  }, [skills, modeFilter, sourceFilter, searchQuery, locale]);
+
+  const categoryAllCount = useMemo(
+    () =>
+      skills.filter((s) => {
+        if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
+        if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter)
+          return false;
+        return skillMatchesSearch(s, searchQuery, locale);
+      }).length,
+    [skills, modeFilter, sourceFilter, searchQuery, locale],
+  );
+
+  const filteredSkills = useMemo(() => {
+    return skills.filter((s) => {
+      if (modeFilter !== 'all' && s.mode !== modeFilter) return false;
+      if (sourceFilter !== 'all' && getSkillSource(s) !== sourceFilter) return false;
+      if (categoryFilter !== 'all' && s.category !== categoryFilter)
+        return false;
+      return skillMatchesSearch(s, searchQuery, locale);
+    });
+  }, [skills, modeFilter, sourceFilter, categoryFilter, searchQuery, locale]);
+
+  const ensureBody = useCallback(
+    async (id: string) => {
+      if (workspaceWriteBlocked) return undefined;
+      if (bodyById[id] !== undefined) return bodyById[id];
+      const issuedGeneration = currentWorkspaceAccountGeneration();
+      const issuedIdentity = workspaceCatalogIdentity;
+      const read = beginWorkspaceScopedRead(workspaceContextRef.current);
+      setBodyLoadingId(id);
+      try {
+        const detail = await fetchSkill(id, read.context);
+        if (
+          currentWorkspaceAccountGeneration() !== issuedGeneration
+          || workspaceCatalogIdentityRef.current !== issuedIdentity
+          || !read.isStillCurrent(workspaceContextRef.current)
+        ) return undefined;
+        const body = detail?.body ?? '';
+        setBodyById((cur) => ({ ...cur, [id]: body }));
+        return body;
+      } finally {
+        if (workspaceCatalogIdentityRef.current === issuedIdentity) {
+          setBodyLoadingId((cur) => (cur === id ? null : cur));
+        }
+      }
+    },
+    [bodyById, workspaceCatalogIdentity, workspaceWriteBlocked],
+  );
+
+  const ensureFiles = useCallback(
+    async (id: string) => {
+      if (workspaceWriteBlocked) return undefined;
+      if (filesById[id]) return filesById[id]!;
+      const issuedGeneration = currentWorkspaceAccountGeneration();
+      const issuedIdentity = workspaceCatalogIdentity;
+      const read = beginWorkspaceScopedRead(workspaceContextRef.current);
+      setFilesLoadingId(id);
+      try {
+        const files = await fetchSkillFiles(id, read.context);
+        if (
+          currentWorkspaceAccountGeneration() !== issuedGeneration
+          || workspaceCatalogIdentityRef.current !== issuedIdentity
+          || !read.isStillCurrent(workspaceContextRef.current)
+        ) return undefined;
+        setFilesById((cur) => ({ ...cur, [id]: files }));
+        return files;
+      } finally {
+        if (workspaceCatalogIdentityRef.current === issuedIdentity) {
+          setFilesLoadingId((cur) => (cur === id ? null : cur));
+        }
+      }
+    },
+    [filesById, workspaceCatalogIdentity, workspaceWriteBlocked],
+  );
+
+  const toggleExpanded = useCallback(
+    (id: string) => {
+      setExpandedId((cur) => {
+        if (cur === id) return null;
+        void ensureBody(id);
+        void ensureFiles(id);
+        return id;
+      });
+      // Switching rows aborts any in-flight edit on the previous row.
+      setEditingId((cur) => (cur === id ? cur : null));
+      setConfirmDeleteId(null);
+      setConfirmBuiltInEditId(null);
+    },
+    [ensureBody, ensureFiles],
+  );
+
+  const startCreate = useCallback(() => {
+    if (workspaceWriteBlocked) return;
+    setCreating(true);
+    setDraft(EMPTY_DRAFT);
+    setDraftIdentity(workspaceCatalogIdentity);
+    setDraftError(null);
+    setEditingId(null);
+    setConfirmDeleteId(null);
+    setConfirmBuiltInEditId(null);
+  }, [workspaceCatalogIdentity, workspaceWriteBlocked]);
+
+  const startEdit = useCallback(
+    async (skill: SkillSummary) => {
+      const issuedIdentity = workspaceCatalogIdentity;
+      const body = await ensureBody(skill.id);
+      if (body === undefined || workspaceCatalogIdentityRef.current !== issuedIdentity) return;
+      setDraft(summaryToDraft(skill, body ?? ''));
+      setDraftIdentity(issuedIdentity);
+      setDraftError(null);
+      setEditingId(skill.id);
+      setExpandedId(skill.id);
+      setCreating(false);
+      setConfirmDeleteId(null);
+      setConfirmBuiltInEditId(null);
+    },
+    [ensureBody, workspaceCatalogIdentity],
+  );
+
+  const requestEdit = useCallback(
+    (skill: SkillSummary) => {
+      if (getSkillSource(skill) === 'built-in') {
+        setConfirmBuiltInEditId(skill.id);
+        setConfirmDeleteId(null);
+        return;
+      }
+      void startEdit(skill);
+    },
+    [startEdit],
+  );
+
+  const cancelBuiltInEdit = useCallback(() => {
+    setConfirmBuiltInEditId(null);
+  }, []);
+
+  const cancelDraft = useCallback(() => {
+    setDraft(EMPTY_DRAFT);
+    setDraftIdentity(null);
+    setDraftError(null);
+    setEditingId(null);
+    setCreating(false);
+  }, []);
+
+  const submitDraft = useCallback(async () => {
+    if (
+      draftSaving
+      || workspaceWriteBlocked
+      || draftIdentity !== workspaceCatalogIdentity
+    ) return;
+    const name = draft.name.trim();
+    const body = draft.body.trim();
+    if (!name) {
+      setDraftError(t('settings.skillsNameRequired'));
+      return;
+    }
+    if (!body) {
+      setDraftError(t('settings.skillsBodyRequired'));
+      return;
+    }
+    const triggers = parseTriggers(draft.triggers);
+    const payload = {
+      name,
+      description: draft.description.trim() || undefined,
+      body,
+      triggers,
+    };
+    const issuedGeneration = currentWorkspaceAccountGeneration();
+    const issuedIdentity = workspaceCatalogIdentity;
+    const issuedContext = workspaceContextRef.current;
+    setDraftSaving(true);
+    setDraftError(null);
+    const result =
+      editingId
+        ? await updateSkill(editingId, payload, issuedContext)
+        : await importSkill(payload, issuedContext);
+    if (
+      currentWorkspaceAccountGeneration() !== issuedGeneration
+      || workspaceCatalogIdentityRef.current !== issuedIdentity
+    ) return;
+    setDraftSaving(false);
+    if ('error' in result) {
+      setDraftError(result.error.message);
+      return;
+    }
+    const updated = result.skill;
+    await refresh();
+    if (
+      currentWorkspaceAccountGeneration() !== issuedGeneration
+      || workspaceCatalogIdentityRef.current !== issuedIdentity
+    ) return;
+    await onSkillsRefresh?.();
+    if (
+      currentWorkspaceAccountGeneration() !== issuedGeneration
+      || workspaceCatalogIdentityRef.current !== issuedIdentity
+    ) return;
+    setBodyById((cur) => ({ ...cur, [updated.id]: body }));
+    // Drop the cached file tree for this id so the next expand
+    // re-walks the on-disk folder; SKILL.md may have been the only
+    // file before, but the user might have meant to add more.
+    setFilesById((cur) => {
+      const next = { ...cur };
+      delete next[updated.id];
+      return next;
+    });
+    setExpandedId(updated.id);
+    setEditingId(null);
+    setCreating(false);
+    setDraft(EMPTY_DRAFT);
+    setDraftIdentity(null);
+    setFilesLoadingId(updated.id);
+    try {
+      const files = await fetchSkillFiles(updated.id, issuedContext);
+      if (
+        currentWorkspaceAccountGeneration() !== issuedGeneration
+        || workspaceCatalogIdentityRef.current !== issuedIdentity
+      ) return;
+      setFilesById((cur) => ({ ...cur, [updated.id]: files }));
+    } finally {
+      if (workspaceCatalogIdentityRef.current === issuedIdentity) {
+        setFilesLoadingId((cur) => (cur === updated.id ? null : cur));
+      }
+    }
+    onSkillsChanged?.(updated.id);
+  }, [
+    draft,
+    draftIdentity,
+    draftSaving,
+    editingId,
+    onSkillsChanged,
+    onSkillsRefresh,
+    refresh,
+    workspaceCatalogIdentity,
+    workspaceWriteBlocked,
+  ]);
+
+  const armDelete = useCallback((id: string) => {
+    setConfirmDeleteId(id);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setConfirmDeleteId(null);
+  }, []);
+
+  const commitDelete = useCallback(
+    async (id: string) => {
+      if (workspaceWriteBlocked) return;
+      const issuedGeneration = currentWorkspaceAccountGeneration();
+      const issuedIdentity = workspaceCatalogIdentity;
+      const result = await deleteSkill(id, workspaceContextRef.current);
+      if (
+        currentWorkspaceAccountGeneration() !== issuedGeneration
+        || workspaceCatalogIdentityRef.current !== issuedIdentity
+      ) return;
+      if ('error' in result) {
+        setDraftError(result.error.message);
+        return;
+      }
+      setConfirmDeleteId(null);
+      await refresh();
+      if (
+        currentWorkspaceAccountGeneration() !== issuedGeneration
+        || workspaceCatalogIdentityRef.current !== issuedIdentity
+      ) return;
+      await onSkillsRefresh?.();
+      if (
+        currentWorkspaceAccountGeneration() !== issuedGeneration
+        || workspaceCatalogIdentityRef.current !== issuedIdentity
+      ) return;
+      setBodyById((cur) => {
+        const next = { ...cur };
+        delete next[id];
+        return next;
+      });
+      setFilesById((cur) => {
+        const next = { ...cur };
+        delete next[id];
+        return next;
+      });
+      // Clear the disabled-skill flag so deleting a skill that was
+      // toggled off doesn't leave dangling preferences behind.
+      setCfg((c) => {
+        const set = new Set(c.disabledSkills ?? []);
+        set.delete(id);
+        return { ...c, disabledSkills: [...set] };
+      });
+      if (expandedId === id) setExpandedId(null);
+      if (editingId === id) {
+        setEditingId(null);
+        setDraft(EMPTY_DRAFT);
+        setDraftIdentity(null);
+      }
+      onSkillsChanged?.(id);
+    },
+    [
+      editingId,
+      expandedId,
+      onSkillsChanged,
+      onSkillsRefresh,
+      refresh,
+      setCfg,
+      workspaceCatalogIdentity,
+      workspaceWriteBlocked,
+    ],
+  );
+
+  const toggleEnabled = useCallback(
+    (id: string, enabled: boolean) => {
+      setCfg((c) => {
+        const set = new Set(c.disabledSkills ?? []);
+        if (enabled) set.delete(id);
+        else set.add(id);
+        return { ...c, disabledSkills: [...set] };
+      });
+    },
+    [setCfg],
+  );
+
+  return (
+    <section className="settings-section settings-skills">
+      <div className="library-toolbar skills-toolbar">
+        {/* Row 1: search + New skill button */}
+        <div className="skills-toolbar-top">
+          <input
+            type="search"
+            className="library-search"
+            placeholder={t('settings.librarySearch')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button
+            type="button"
+            className="primary skills-add-btn"
+            onClick={startCreate}
+            disabled={workspaceWriteBlocked}
+            data-testid="skills-new"
+          >
+            <Icon name="plus" size={14} />
+            <span>{t('settings.skillsNew')}</span>
+          </button>
+        </div>
+        {/* Row 2: filter dropdowns */}
+        <div className="library-filter-selects">
+          <label className="library-filter-select">
+            <span className="library-filter-select-label">Source</span>
+            <select
+              value={sourceFilter}
+              data-active={sourceFilter !== 'all' ? 'true' : undefined}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+            >
+              <option value="all">
+                {t('settings.libraryAll')} ({sourceCounts.get('all') ?? 0})
+              </option>
+              {SOURCE_FILTERS.map((s) => {
+                const count = sourceCounts.get(s) ?? 0;
+                if ((sourceCatalogCounts.get(s) ?? 0) === 0) return null;
+                return (
+                  <option key={s} value={s}>
+                    {s} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          <label className="library-filter-select">
+            <span className="library-filter-select-label">Type</span>
+            <select
+              value={modeFilter}
+              data-active={modeFilter !== 'all' ? 'true' : undefined}
+              onChange={(e) => setModeFilter(e.target.value)}
+            >
+              <option value="all">
+                {t('settings.libraryAll')} ({modeAllCount})
+              </option>
+              {modeOptions.map(([mode, count]) => (
+                <option key={mode} value={mode}>
+                  {mode} ({count})
+                </option>
+              ))}
+            </select>
+          </label>
+          {categoryOptions.length > 0 ? (
+            <label
+              className="library-filter-select"
+              data-testid="skills-category-filters"
+            >
+              <span className="library-filter-select-label">Category</span>
+              <select
+                value={categoryFilter}
+                data-active={categoryFilter !== 'all' ? 'true' : undefined}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="all">
+                  {t('settings.libraryAll')} ({categoryAllCount})
+                </option>
+                {categoryOptions.map(([cat, count]) => (
+                  <option key={cat} value={cat}>
+                    {humanizeCategory(cat)} ({count})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      </div>
+
+      {creating ? (
+        <SkillDraftForm
+          heading={t('settings.skillsNew')}
+          subheading={null}
+          draft={draft}
+          setDraft={setDraft}
+          error={draftError}
+          saving={draftSaving}
+          isEdit={false}
+          onCancel={cancelDraft}
+          onSubmit={() => void submitDraft()}
+        />
+      ) : null}
+
+      {filteredSkills.length === 0 ? (
+        <div className="empty-card">
+          <strong>{t('settings.libraryNoResults')}</strong>
+        </div>
+      ) : (
+        <div className="skills-rows" data-testid="skills-list">
+          {filteredSkills.map((skill) => {
+            const enabled = !disabledSkills.has(skill.id);
+            const isExpanded = expandedId === skill.id;
+            const isEditing = editingId === skill.id;
+            return (
+              <SkillRow
+                key={skill.id}
+                skill={skill}
+                enabled={enabled}
+                expanded={isExpanded}
+                editing={isEditing}
+                body={bodyById[skill.id]}
+                bodyLoading={bodyLoadingId === skill.id}
+                files={filesById[skill.id] ?? null}
+                filesLoading={filesLoadingId === skill.id}
+                confirmDelete={confirmDeleteId === skill.id}
+                confirmBuiltInEdit={confirmBuiltInEditId === skill.id}
+                draft={isEditing ? draft : null}
+                draftError={isEditing ? draftError : null}
+                draftSaving={isEditing && draftSaving}
+                setDraft={setDraft}
+                onToggleExpanded={() => toggleExpanded(skill.id)}
+                onToggleEnabled={(e) => toggleEnabled(skill.id, e)}
+                onStartEdit={() => requestEdit(skill)}
+                onConfirmBuiltInEdit={() => void startEdit(skill)}
+                onCancelBuiltInEdit={cancelBuiltInEdit}
+                onArmDelete={() => armDelete(skill.id)}
+                onCancelDelete={cancelDelete}
+                onCommitDelete={() => void commitDelete(skill.id)}
+                onCancelEdit={cancelDraft}
+                onSubmitEdit={() => void submitDraft()}
+              />
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface SkillRowProps {
+  skill: SkillSummary;
+  enabled: boolean;
+  expanded: boolean;
+  editing: boolean;
+  body: string | undefined;
+  bodyLoading: boolean;
+  files: SkillFileEntry[] | null;
+  filesLoading: boolean;
+  confirmDelete: boolean;
+  confirmBuiltInEdit: boolean;
+  draft: DraftState | null;
+  draftError: string | null;
+  draftSaving: boolean;
+  setDraft: Dispatch<SetStateAction<DraftState>>;
+  onToggleExpanded: () => void;
+  onToggleEnabled: (enabled: boolean) => void;
+  onStartEdit: () => void;
+  onConfirmBuiltInEdit: () => void;
+  onCancelBuiltInEdit: () => void;
+  onArmDelete: () => void;
+  onCancelDelete: () => void;
+  onCommitDelete: () => void;
+  onCancelEdit: () => void;
+  onSubmitEdit: () => void;
+}
+
+function SkillRow({
+  skill,
+  enabled,
+  expanded,
+  editing,
+  body,
+  bodyLoading,
+  files,
+  filesLoading,
+  confirmDelete,
+  confirmBuiltInEdit,
+  draft,
+  draftError,
+  draftSaving,
+  setDraft,
+  onToggleExpanded,
+  onToggleEnabled,
+  onStartEdit,
+  onConfirmBuiltInEdit,
+  onCancelBuiltInEdit,
+  onArmDelete,
+  onCancelDelete,
+  onCommitDelete,
+  onCancelEdit,
+  onSubmitEdit,
+}: SkillRowProps) {
+  const t = useT();
+  const { locale } = useI18n();
+  const summaryName = localizeSkillName(locale, skill) || skill.id;
+  const summaryDescription = localizeSkillDescription(locale, skill);
+  const isTeamMirror = skill.teamSynced === true;
+  const canDelete = getSkillSource(skill) === 'user' && !isTeamMirror;
+  // Editing a built-in skill does not modify it in place — it writes a
+  // user-owned shadow copy. Frame the affordance as creating a user override
+  // so the built-in → user transition is not a surprise.
+  const isBuiltIn = getSkillSource(skill) !== 'user';
+  return (
+    <div
+      className={`skills-row${enabled ? '' : ' skills-row-disabled'}${
+        expanded ? ' skills-row-expanded' : ''
+      }${editing ? ' skills-row-editing' : ''}`}
+      data-testid={`skill-row-${skill.id}`}
+    >
+      <div className="skills-row-head">
+        <button
+          type="button"
+          className="skills-row-summary-btn"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          title={expanded ? 'Collapse' : 'Expand'}
+        >
+          <span className="skills-row-icon" aria-hidden>
+            <Icon name="grid" size={14} />
+          </span>
+          <span className="skills-row-summary">
+            <span className="skills-row-summary-line">
+              <span className="skills-row-summary-name">{summaryName}</span>
+              <span className="skills-row-summary-mode">{skill.mode}</span>
+              {skill.category ? (
+                <span
+                  className="skills-row-summary-category"
+                  title={`Category: ${humanizeCategory(skill.category)}`}
+                >
+                  {humanizeCategory(skill.category)}
+                </span>
+              ) : null}
+              {skill.source === 'user' ? (
+                <span
+                  className="skills-row-summary-source"
+                  title="User-imported skill"
+                >
+                  user
+                </span>
+              ) : null}
+            </span>
+            {summaryDescription ? (
+              <span className="skills-row-summary-desc">{summaryDescription}</span>
+            ) : null}
+          </span>
+          <span className="skills-row-chevron" aria-hidden>
+            <Icon name="chevron-down" size={14} />
+          </span>
+        </button>
+        <div className="skills-row-actions">
+          {canDelete && confirmDelete ? (
+            <span className="skills-delete-confirm" role="group">
+              <button
+                type="button"
+                className="btn danger"
+                onClick={onCommitDelete}
+                data-testid="skills-delete-confirm"
+              >
+                {t('settings.skillsDeleteConfirm')}
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={onCancelDelete}
+              >
+                {t('common.cancel')}
+              </button>
+            </span>
+          ) : (
+            <>
+              {!isTeamMirror ? (
+                <Button
+                  size="icon"
+                  onClick={onStartEdit}
+                  title={
+                    isBuiltIn
+                      ? t('settings.skillsOverrideCreate')
+                      : t('settings.skillsEdit')
+                  }
+                  data-testid="skills-edit"
+                >
+                  <Icon name="edit" size={14} />
+                </Button>
+              ) : null}
+              {canDelete ? (
+                <Button
+                  size="icon"
+                  onClick={onArmDelete}
+                  title={t('settings.skillsDelete')}
+                  data-testid="skills-delete"
+                >
+                  <Icon name="close" size={14} />
+                </Button>
+              ) : null}
+            </>
+          )}
+          <label
+            className="toggle-switch toggle-switch-sm skills-row-enable"
+            title={t('settings.libraryToggleLabel')}
+          >
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => onToggleEnabled(e.target.checked)}
+              aria-label={t('settings.libraryToggleLabel')}
+            />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+      </div>
+
+      {confirmBuiltInEdit ? (
+        <div
+          className="skills-edit-builtin-warning"
+          role="alert"
+          data-testid="skills-edit-builtin-warning"
+        >
+          <p>{t('settings.skillsBuiltInOverrideWarning')}</p>
+          <div className="skills-edit-builtin-actions">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={onCancelBuiltInEdit}
+              data-testid="skills-edit-builtin-cancel"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={onConfirmBuiltInEdit}
+              data-testid="skills-edit-builtin-confirm"
+            >
+              {t('settings.skillsOverrideCreate')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {expanded && !editing ? (
+        <div className="skills-row-detail">
+          <div className="skills-row-section">
+            <h5>SKILL.md</h5>
+            {bodyLoading ? (
+              <p className="library-empty">{t('settings.libraryLoading')}</p>
+            ) : (
+              <pre className="library-preview-body">{body ?? ''}</pre>
+            )}
+          </div>
+          <div className="skills-row-section">
+            <h5>{t('settings.skillsFiles')}</h5>
+            {filesLoading ? (
+              <p className="library-empty">{t('settings.libraryLoading')}</p>
+            ) : !files || files.length === 0 ? (
+              <p className="library-empty">{t('settings.skillsNoFiles')}</p>
+            ) : (
+              <ul className="skills-file-tree">
+                {files.map((entry) => (
+                  <li
+                    key={entry.path}
+                    className={`skills-file-entry skills-file-entry-${entry.kind}`}
+                    style={{ paddingLeft: depthIndent(entry.path) }}
+                  >
+                    <Icon
+                      name={entry.kind === 'directory' ? 'folder' : 'file'}
+                      size={14}
+                    />
+                    <span>{leafName(entry.path)}</span>
+                    {entry.kind === 'file' && typeof entry.size === 'number' ? (
+                      <span className="skills-file-size">
+                        {formatSize(entry.size)}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {editing && draft ? (
+        <SkillDraftForm
+          heading={
+            isBuiltIn
+              ? t('settings.skillsOverrideCreate')
+              : t('settings.skillsEdit')
+          }
+          subheading={skill.id}
+          draft={draft}
+          setDraft={setDraft}
+          error={draftError}
+          saving={draftSaving}
+          isEdit
+          isBuiltInOverride={isBuiltIn}
+          onCancel={onCancelEdit}
+          onSubmit={onSubmitEdit}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface SkillDraftFormProps {
+  heading: string;
+  subheading: string | null;
+  draft: DraftState;
+  setDraft: Dispatch<SetStateAction<DraftState>>;
+  error: string | null;
+  saving: boolean;
+  isEdit: boolean;
+  /** Editing a built-in skill: the submit reads "Save as user override". */
+  isBuiltInOverride?: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
+function SkillDraftForm({
+  heading,
+  subheading,
+  draft,
+  setDraft,
+  error,
+  saving,
+  isEdit,
+  isBuiltInOverride = false,
+  onCancel,
+  onSubmit,
+}: SkillDraftFormProps) {
+  const t = useT();
+  return (
+    <div
+      className="skills-draft library-import-form"
+      data-testid={isEdit ? 'skills-edit-form' : 'skills-create-form'}
+    >
+      <header className="skills-draft-head">
+        <div>
+          <h4>{heading}</h4>
+          {subheading ? <p className="skills-draft-sub">{subheading}</p> : null}
+        </div>
+      </header>
+      <div className="library-import-row">
+        <label>
+          <span>{t('settings.skillsName')}</span>
+          <input
+            type="text"
+            value={draft.name}
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+            placeholder="my-skill"
+            disabled={isEdit}
+          />
+        </label>
+        <label>
+          <span>{t('settings.skillsTriggers')}</span>
+          <input
+            type="text"
+            value={draft.triggers}
+            onChange={(e) =>
+              setDraft((d) => ({ ...d, triggers: e.target.value }))
+            }
+            placeholder="search the web, summarize"
+          />
+        </label>
+      </div>
+      <label className="library-import-block">
+        <span>{t('settings.skillsDescription')}</span>
+        <textarea
+          rows={2}
+          value={draft.description}
+          onChange={(e) =>
+            setDraft((d) => ({ ...d, description: e.target.value }))
+          }
+          placeholder="What does this skill do? When should the agent reach for it?"
+        />
+      </label>
+      <label className="library-import-block">
+        <span>{t('settings.skillsBody')}</span>
+        <textarea
+          rows={14}
+          value={draft.body}
+          onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
+          placeholder={'# My skill\n\n1. Explain the workflow.\n2. Describe the inputs and outputs.'}
+        />
+      </label>
+      {error ? (
+        <div className="library-import-error" role="alert">
+          {error}
+        </div>
+      ) : null}
+      <div className="library-import-actions">
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={onCancel}
+          disabled={saving}
+        >
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={onSubmit}
+          disabled={saving}
+          data-testid="skills-save"
+        >
+          {saving
+            ? t('settings.skillsSaving')
+            : isEdit
+              ? isBuiltInOverride
+                ? t('settings.skillsOverrideSave')
+                : t('settings.skillsSave')
+              : t('settings.skillsCreate')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Each `/`-separated segment indents by 12px so a small assets/ tree
+// reads as a tree without us building a nested list. Capped at 4 levels
+// so bundles with deep folder hierarchies don't push the file label
+// past the panel.
+function depthIndent(p: string): number {
+  const depth = Math.min(4, p.split('/').length - 1);
+  return depth * 12;
+}
+
+function leafName(p: string): string {
+  const idx = p.lastIndexOf('/');
+  return idx >= 0 ? p.slice(idx + 1) : p;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Frontmatter-style category slugs come in as kebab-case
+// ("image-generation"). Render them as Title Case in the filter pill so
+// the row reads as a category list rather than a raw enum dump.
+export function humanizeCategory(slug: string): string {
+  if (!slug) return slug;
+  return slug
+    .split('-')
+    .map((word) =>
+      word.length === 0
+        ? word
+        : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join(' ');
+}

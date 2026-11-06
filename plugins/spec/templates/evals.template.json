@@ -1,0 +1,26 @@
+{
+  "skill_name": "plugin-id",
+  "evals": [
+    {
+      "id": "happy-path",
+      "prompt": "Create a polished artifact for a realistic user request.",
+      "expected_output": "A usable artifact plus a concise summary.",
+      "assertions": [
+        "The expected output file exists",
+        "The output directly addresses the user request",
+        "The output includes no obvious placeholder text",
+        "The final response names the produced artifact"
+      ]
+    },
+    {
+      "id": "missing-inputs",
+      "prompt": "Create the artifact, but omit one critical input.",
+      "expected_output": "The agent asks only for the missing required input or chooses a safe default when the plugin allows it.",
+      "assertions": [
+        "The agent does not fabricate external facts",
+        "The follow-up question is specific and minimal"
+      ]
+    }
+  ]
+}
+

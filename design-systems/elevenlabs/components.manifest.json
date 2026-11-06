@@ -1,0 +1,463 @@
+{
+  "schemaVersion": 1,
+  "brandId": "elevenlabs",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "ElevenLabs — reference components",
+    "description": "Reference fixture for design-systems/elevenlabs. Achromatic premium: Waldenburg weight 300 headings, warm stone surfaces, multi-layer whisper shadows.",
+    "styleBlockCount": 1,
+    "selectorCount": 48,
+    "classCount": 24,
+    "elementCount": 23
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--ease-standard",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--text-2xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display"
+    ],
+    "unusedDeclared": [
+      "--accent-active",
+      "--border-soft",
+      "--danger",
+      "--elev-flat",
+      "--elev-raised",
+      "--meta",
+      "--motion-base",
+      "--space-1",
+      "--surface-warm",
+      "--text-3xl",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".badge",
+    ".badge-dot",
+    ".badge-muted",
+    ".badge-success",
+    ".body-muted",
+    ".body-sm",
+    ".btn",
+    ".btn-primary",
+    ".btn-primary:hover",
+    ".btn-secondary",
+    ".btn-secondary:hover",
+    ".btn:focus-visible",
+    ".card",
+    ".container",
+    ".eyebrow",
+    ".features-grid",
+    ".field",
+    ".field input",
+    ".field input::placeholder",
+    ".field input:focus-visible",
+    ".field label",
+    ".field-help",
+    ".form",
+    ".form-actions",
+    ".form-row",
+    ".hero-actions",
+    ".hero-grid",
+    ".hero-meta",
+    ".icon",
+    ".lead",
+    ".row-between",
+    ".stack-3 > * + *",
+    ".stack-4 > * + *",
+    ".stack-6 > * + *",
+    "*",
+    "*::after",
+    "*::before",
+    "a",
+    "a:hover",
+    "body",
+    "h1",
+    "h2",
+    "h3",
+    "html",
+    "kbd",
+    "p",
+    "section",
+    "section + section"
+  ],
+  "classes": [
+    "badge",
+    "badge-dot",
+    "badge-success",
+    "body-muted",
+    "body-sm",
+    "btn",
+    "btn-primary",
+    "btn-secondary",
+    "card",
+    "container",
+    "eyebrow",
+    "features-grid",
+    "field",
+    "field-help",
+    "form",
+    "form-actions",
+    "form-row",
+    "hero-actions",
+    "hero-grid",
+    "hero-meta",
+    "lead",
+    "row-between",
+    "stack-3",
+    "stack-4"
+  ],
+  "elements": [
+    "a",
+    "article",
+    "aside",
+    "body",
+    "button",
+    "div",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "head",
+    "html",
+    "input",
+    "kbd",
+    "label",
+    "main",
+    "meta",
+    "p",
+    "section",
+    "span",
+    "style",
+    "time",
+    "title"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        ".btn",
+        ".btn-primary",
+        ".btn-primary:hover",
+        ".btn-secondary",
+        ".btn-secondary:hover",
+        ".btn:focus-visible"
+      ],
+      "classes": [
+        "btn",
+        "btn-primary",
+        "btn-secondary"
+      ],
+      "elements": [
+        "button"
+      ],
+      "tokenReferences": [
+        "--accent",
+        "--accent-on",
+        "--bg",
+        "--ease-standard",
+        "--fg",
+        "--font-body",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2"
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        ".field",
+        ".field input",
+        ".field input::placeholder",
+        ".field input:focus-visible",
+        ".field label",
+        ".field-help"
+      ],
+      "classes": [
+        "field",
+        "field-help",
+        "form",
+        "form-actions",
+        "form-row"
+      ],
+      "elements": [
+        "form",
+        "input",
+        "label"
+      ],
+      "tokenReferences": [
+        "--bg",
+        "--border",
+        "--ease-standard",
+        "--fg",
+        "--font-body",
+        "--motion-fast",
+        "--muted",
+        "--radius-md",
+        "--space-2",
+        "--text-sm"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".card"
+      ],
+      "classes": [
+        "card"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--bg",
+        "--elev-ring",
+        "--radius-md",
+        "--space-3",
+        "--space-6"
+      ]
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": true,
+      "selectors": [
+        ".badge",
+        ".badge-dot",
+        ".badge-muted",
+        ".badge-success"
+      ],
+      "classes": [
+        "badge",
+        "badge-dot",
+        "badge-success"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--success"
+      ]
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": true,
+      "selectors": [
+        "a",
+        "a:hover"
+      ],
+      "classes": [],
+      "elements": [
+        "a"
+      ],
+      "tokenReferences": [
+        "--muted"
+      ]
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": true,
+      "selectors": [
+        "kbd"
+      ],
+      "classes": [],
+      "elements": [
+        "kbd"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": true,
+      "selectors": [
+        ".icon"
+      ],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        ".body-muted",
+        ".body-sm",
+        ".eyebrow",
+        ".lead",
+        "h1",
+        "h2",
+        "h3"
+      ],
+      "classes": [
+        "body-muted",
+        "body-sm",
+        "eyebrow",
+        "lead"
+      ],
+      "elements": [
+        "h1",
+        "h2",
+        "h3",
+        "p"
+      ],
+      "tokenReferences": [
+        "--fg-2",
+        "--font-body",
+        "--font-display",
+        "--leading-tight",
+        "--muted",
+        "--text-2xl",
+        "--text-xs",
+        "--tracking-display"
+      ]
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        ".container",
+        ".row-between",
+        ".stack-3 > * + *",
+        ".stack-4 > * + *",
+        ".stack-6 > * + *",
+        "section",
+        "section + section"
+      ],
+      "classes": [
+        "container",
+        "features-grid",
+        "hero-grid",
+        "row-between",
+        "stack-3",
+        "stack-4"
+      ],
+      "elements": [
+        "main",
+        "section"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--container-gutter-desktop",
+        "--container-gutter-phone",
+        "--container-gutter-tablet",
+        "--container-max",
+        "--space-4"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 7,
+    "pixelValues": 44,
+    "hardcodedFontFamilies": 6
+  }
+}

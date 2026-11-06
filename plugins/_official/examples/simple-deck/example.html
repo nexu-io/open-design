@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Write an Operating Review like a Disciplined COO - Corporate strategy</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Geist+Mono:wght@400;500&display=swap');
+
+    /* warm editorial: Fraunces display serif, paper ground, burnt-orange accent */
+    :root {
+      --bg: #faf7f2;
+      --fg: #211d18;
+      --muted: #5d564c;
+      --faint: #6f6859;
+      --accent: #b3431b;
+      --accent-bright: #e8703d;
+      --line: rgba(33, 29, 24, 0.14);
+      --line-strong: rgba(33, 29, 24, 0.32);
+      --surface: #fffdfa;
+      --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --ease: cubic-bezier(.16, 1, .3, 1);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 18px/1.55 var(--sans);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+    }
+    body::-webkit-scrollbar { display: none; }
+    .slide {
+      flex: 0 0 100vw;
+      height: 100vh;
+      scroll-snap-align: start;
+      padding: 88px 104px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+    }
+    .slide + .slide { border-left: 1px solid var(--line); }
+
+    /* entrance: transform + opacity only, staggered, ease-out */
+    @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+    .slide > * { animation: rise .7s var(--ease) both; }
+    .slide > *:nth-child(2) { animation-delay: .07s; }
+    .slide > *:nth-child(3) { animation-delay: .14s; }
+    @media (prefers-reduced-motion: reduce) { .slide > * { animation: none; } }
+
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      font-weight: 500;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 30px;
+    }
+    .slide h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(56px, 8.5vw, 124px);
+      line-height: 1.0;
+      letter-spacing: -0.015em;
+      margin: 0 0 26px;
+      max-width: 16ch;
+      text-wrap: balance;
+    }
+    .slide h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(36px, 4.4vw, 58px);
+      line-height: 1.08;
+      letter-spacing: -0.01em;
+      margin: 0 0 24px;
+      max-width: 22ch;
+      text-wrap: balance;
+    }
+    .slide .body { font-size: 20px; line-height: 1.6; color: var(--muted); max-width: 56ch; }
+
+    /* cover stays on paper; a thick accent rule is its signature */
+    .slide.cover::before {
+      content: '';
+      position: absolute;
+      top: 88px;
+      left: 104px;
+      width: 72px;
+      height: 6px;
+      background: var(--accent);
+    }
+    .slide.cover h1 { font-size: clamp(64px, 10vw, 148px); }
+
+    /* single deliberate inversion: the closing CTA slide */
+    .slide.title { background: var(--fg); color: var(--bg); }
+    .slide.title .eyebrow { color: var(--accent-bright); }
+    .slide.title .body { color: rgba(250, 247, 242, 0.72); }
+    /* the closing line is a full sentence, not a wordmark: step the scale down so it can't clip at 720p */
+    .slide.title h1 { font-size: clamp(46px, 6.8vw, 100px); max-width: 18ch; }
+
+    .slide.big-stat .number {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: clamp(140px, 24vw, 300px);
+      line-height: 0.85;
+      letter-spacing: -0.02em;
+      color: var(--accent);
+      margin-bottom: 28px;
+    }
+    .slide.big-stat .caption {
+      font-size: 22px;
+      color: var(--muted);
+      max-width: 26ch;
+      border-top: 1px solid var(--line-strong);
+      padding-top: 18px;
+    }
+
+    .quote-mark {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 96px;
+      line-height: 0.6;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+    .quote-text {
+      font-family: var(--serif);
+      font-style: italic;
+      font-weight: 400;
+      font-size: clamp(30px, 3.6vw, 46px);
+      line-height: 1.25;
+      letter-spacing: -0.005em;
+      max-width: 26ch;
+      margin: 0 0 34px;
+    }
+    .quote-author { font-family: var(--mono); font-size: 13px; letter-spacing: 0.03em; color: var(--faint); }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 48px; }
+    .grid-3 .pt { border-top: 1px solid var(--line-strong); padding-top: 18px; }
+    .grid-3 .pt .h { font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: -0.005em; margin: 0 0 10px; }
+    .grid-3 .pt .p { color: var(--muted); margin: 0; font-size: 15.5px; line-height: 1.55; }
+
+    .counter {
+      position: fixed;
+      bottom: 26px;
+      right: 32px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      letter-spacing: 0.05em;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      background: var(--surface);
+      padding: 5px 12px;
+      border: 1px solid var(--line);
+    }
+    /* chip ground matches .counter so the hint stays legible on the inverted CTA slide */
+    .hint {
+      position: fixed;
+      bottom: 26px;
+      left: 32px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      background: var(--surface);
+      padding: 5px 12px;
+      border: 1px solid var(--line);
+    }
+
+    @media print { .slide { page-break-after: always; border-left: none; } }
+  </style>
+</head>
+<body>
+  <section class="slide cover" data-od-id="slide-1">
+    <div class="eyebrow">Corporate Strategy · Operating Review · Board Pre-Read</div>
+    <h1>Approve the plan: cut burn 35%, protect the open core.</h1>
+    <p class="body">OpenDesign's Q2 operating review — growth, burn, and the concrete path to sustainability, without gating the Apache-2.0 project that got us here.</p>
+  </section>
+  <section class="slide" data-od-id="slide-2">
+    <div class="eyebrow">Recommendation</div>
+    <h2>Extend runway to 22 months without touching the open core.</h2>
+    <p class="body">Growth is not the problem — 76K GitHub stars and 200+ community plugins prove demand. The gap is cost structure: we're subsidizing every user's model calls. The fix is to make BYOK the default, license self-hosted enterprise deployments, and leave the open-source desktop app untouched.</p>
+  </section>
+  <section class="slide big-stat" data-od-id="slide-3">
+    <div class="number">42%</div>
+    <div class="caption">Cloud inference spend cut, from $187K to $109K/month, since local-first agent routing shipped in Q1.</div>
+  </section>
+  <section class="slide" data-od-id="slide-4">
+    <div class="eyebrow">Options considered</div>
+    <h2>Three paths to sustainability.</h2>
+    <div class="grid-3">
+      <div class="pt"><h3 class="h">A — Hold course</h3><p class="p">Keep subsidizing hosted inference. Burn stays flat at $187K/mo; runway closes to 9 months by Q4.</p></div>
+      <div class="pt"><h3 class="h">B — BYOK default (recommended)</h3><p class="p">Users bring their own model keys by default. Cuts hosted inference cost ~40% with zero change to the open-source app.</p></div>
+      <div class="pt"><h3 class="h">C — Enterprise self-host license</h3><p class="p">Charge for managed self-hosted deployments and support, on top of B, without paywalling any existing feature.</p></div>
+    </div>
+  </section>
+  <section class="slide" data-od-id="slide-5">
+    <div class="quote-mark">"</div>
+    <p class="quote-text">If we gate any existing plugin or feature behind a paywall to hit these numbers, we break the open-source flywheel that built the 200+ plugin ecosystem — that risk isn't worth the savings.</p>
+    <p class="quote-author">— Risk flagged jointly by Engineering and Community leads</p>
+  </section>
+  <section class="slide title" data-od-id="slide-6">
+    <div class="eyebrow">Decision needed by July 23 board meeting</div>
+    <h1>Approve BYOK-default plus the enterprise self-host license.</h1>
+    <p class="body">Owners: Maria Chen (CFO) runs the burn-down plan · Alex Osei (Head of Platform) ships BYOK-default in Q3 · Community leads keep plugin governance fully open throughout.</p>
+  </section>
+
+  <div class="counter" id="counter">1 / 6</div>
+  <div class="hint">← / → to navigate</div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const counter = document.getElementById('counter');
+    let active = 0;
+
+    // Detect the real scroller — when body has `display: flex` + `overflow-x: auto`
+    // the scroller can be body OR documentElement depending on the host (in
+    // particular, the OD srcdoc iframe). Pick whichever actually overflows.
+    function scroller() {
+      if (document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
+      return document.scrollingElement || document.documentElement;
+    }
+
+    function go(i) {
+      const next = Math.max(0, Math.min(slides.length - 1, i));
+      active = next;
+      counter.textContent = (next + 1) + ' / ' + slides.length;
+      scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    }
+    function syncFromScroll() {
+      const i = Math.round(scroller().scrollLeft / window.innerWidth);
+      if (i !== active && i >= 0 && i < slides.length) {
+        active = i;
+        counter.textContent = (i + 1) + ' / ' + slides.length;
+      }
+    }
+    function onKey(e) {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(active - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); go(0); }
+      else if (e.key === 'End') { e.preventDefault(); go(slides.length - 1); }
+    }
+    // Listen on both window and document in capture phase so the handler
+    // fires regardless of which element holds focus inside the iframe.
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('keydown', onKey, true);
+    // And listen for scroll on both surfaces — same reason.
+    document.addEventListener('scroll', syncFromScroll, { passive: true, capture: true });
+    window.addEventListener('scroll', syncFromScroll, { passive: true });
+
+    // Auto-focus body so arrow keys work without a click.
+    document.body.setAttribute('tabindex', '-1');
+    document.body.style.outline = 'none';
+    function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+    document.addEventListener('mousedown', focusDeck);
+    window.addEventListener('load', focusDeck);
+    focusDeck();
+  </script>
+
+</body>
+</html>

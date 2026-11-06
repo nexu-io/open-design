@@ -1,0 +1,762 @@
+/**
+ * @module analytics/events/shared-enums
+ * Shared tracking enums and value unions used across analytics events.
+ */
+// ---- Shared enums --------------------------------------------------------
+
+// Persisted product intent is independent of execution strategy or video engine.
+// Unknown preserves old projects without guessing their scene from discovery.
+export type TrackingProjectIntent =
+  | 'live-artifact'
+  | 'web-clone'
+  | 'document'
+  | 'webgl-experience'
+  | 'worker-visualizer'
+  | 'marketing'
+  | 'hyperframes'
+  | 'motion-design'
+  | 'unknown';
+
+export type TrackingProjectKind =
+  | 'prototype'
+  // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind
+  // projects the Home task rail (task_chip) offers as their own cards. They all
+  // reuse the web-prototype seed (so the product `metadata.kind` stays
+  // `prototype`), but the analytics dimension splits them out so a created
+  // project's `project_kind` lines up 1:1 with the card the user picked:
+  //   - `web_clone`     ← metadata.intent === 'web-clone'
+  //   - `wireframe`     ← metadata.fidelity === 'wireframe'
+  //   - `mobile`        ← metadata.platform/platformTargets is a mobile surface
+  //   - `live_artifact` ← metadata.intent === 'live-artifact'
+  // Derivation precedence (a prototype that matches several): web_clone >
+  // live_artifact > wireframe > mobile. See `projectKindToTracking`.
+  | 'web_clone'
+  | 'wireframe'
+  | 'mobile'
+  | 'live_artifact'
+  | 'slide_deck'
+  | 'template'
+  // `document` is an `other`-kind project (resumes / reports / PDFs) the Home
+  // `document` card creates. Tagged via `metadata.intent === 'document'` so it
+  // splits out of generic `other` and matches its task_chip.
+  | 'document'
+  | 'image'
+  | 'video'
+  // `hyperframes` is a `video` project rendered by the local HyperFrames
+  // HTML→MP4 engine (`videoModel === 'hyperframes-html'`). The product
+  // routes it as its own task type (a peer of Video, with its own Home
+  // chip), and its cost/latency/success profile differs sharply from AI
+  // video providers, so it is surfaced as a first-class project_kind
+  // rather than collapsed into generic `video`. `model_id` still carries
+  // `hyperframes-html` as a secondary anchor.
+  | 'hyperframes'
+  | 'audio'
+  | 'brand'
+  // Orbit runs create dedicated projects (`metadata.kind === 'orbit'`) so
+  // their editing and artifact funnels must not be folded into prototypes.
+  | 'orbit'
+  // `design_system` covers DS-as-project runs (creation + regeneration).
+  // The dashboard reads it on run_created / run_finished to split the
+  // DS generation funnel from regular artifact runs.
+  | 'design_system'
+  | 'other';
+
+// Where a project originated. Matches CSV row 9 / row 17 enum.
+export type TrackingProjectSource =
+  | 'create_button'
+  | 'import_claude_design_zip'
+  | 'open_folder'
+  | 'template'
+  | 'chat_composer'
+  | 'unknown';
+
+export type TrackingAmrEntrySource =
+  | 'onboarding_amr_card'
+  | 'onboarding_amr_sign_in_continue'
+  | 'inline_model_switcher_amr_row'
+  | 'settings_amr_agent_card'
+  | 'settings_amr_authorize'
+  // The 'use OpenDesign Cloud' callout on the execution tab. Same device-auth
+  // flow as settings_amr_authorize, kept distinct so the two entry points stay
+  // separable in funnel analysis.
+  | 'settings_cloud_callout'
+  | 'settings_amr_console'
+  | 'settings_amr_install'
+  | 'avatar_amr_console'
+  | 'handoff_amr_website'
+  | 'chat_error_authorize_retry'
+  | 'chat_error_recharge'
+  | 'chat_error_upgrade'
+  | 'chat_balance_gate_upgrade'
+  // 流水里的升级卡(交付稿第 75 / 76 格)。与 `chat_balance_gate_upgrade` 分开:
+  // 告警档现在**只出卡不弹窗**,两者是不同的出站面,合并会让漏斗读不出
+  // 「卡带来的升级」和「弹窗带来的升级」哪个在起作用。
+  | 'chat_upgrade_card'
+  // 同一张卡,但落点是 vela 的自动充值设置而不是 Pricing —— Max 档的所有者
+  // 没有更高的套餐可买,充值才是解法(规格 §6.V)。和上面分开记,否则漏斗会把
+  // 「卖套餐」和「劝充值」算成同一件事。
+  | 'chat_upgrade_card_auto_recharge'
+  | 'home_balance_gate_upgrade'
+  | 'chat_low_balance_warn_recharge'
+  | 'home_low_balance_warn_recharge'
+  | 'chat_balance_gate_sign_in'
+  | 'home_balance_gate_sign_in'
+  | 'chat_error_switch_retry_card'
+  | 'generation_preview_authorize_retry'
+  | 'generation_preview_recharge'
+  | 'generation_preview_switch_retry_card'
+  | 'settings_amr_upgrade'
+  | 'inline_amr_upgrade'
+  | 'go_plan_sunset_modal'
+  | 'deepseek_unpaid_modal'
+  | 'deepseek_workbench_badge'
+  | 'deepseek_model_switcher_upgrade'
+  | 'avatar_amr_upgrade'
+  | 'avatar_amr_agent_card'
+  | 'artifact_success_upgrade'
+  | 'home_artifact_upgrade';
+
+// `deepseek_v4_flash` is the finished 8/6-8/13 free week; `deepseek_v4_pro`
+// is the 8/13-8/27 two-model window that follows it. Both stay declared so
+// the finished campaign's rows keep a valid id in the warehouse.
+export type TrackingCampaignId =
+  | 'deepseek_v4_flash'
+  | 'deepseek_v4_pro'
+  | 'go_plan_sunset_202608';
+export type TrackingCampaignUserState = 'paid' | 'unpaid';
+export type TrackingCampaignDeliveryMode = 'demo' | 'targeted';
+export type TrackingCampaignConversionSource =
+  | 'go_plan_sunset_modal'
+  | 'deepseek_unpaid_modal'
+  | 'deepseek_workbench_badge'
+  | 'deepseek_model_switcher_upgrade'
+  | 'landing_home_banner'
+  | 'landing_pricing_personal_plan'
+  | 'landing_pricing_team_plan';
+
+export interface AmrEntryAttribution {
+  entryId: string;
+  sourceProduct: 'open_design';
+  sourceDetail: TrackingAmrEntrySource;
+  occurredAt: string;
+  // Campaign joins keep the first entry source stable and record the final
+  // conversion touch separately. Both fields are forwarded to Vela so a
+  // Stripe payment result can be attributed without replacing first touch.
+  campaignId?: TrackingCampaignId;
+  conversionSource?: TrackingCampaignConversionSource;
+  // OpenDesign install/device id forwarded only on consent-gated AMR handoffs.
+  odDeviceId?: string;
+  // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
+  // AMR can segment paid conversion by who the visitor is. Open strings, not a
+  // union: onboarding keeps these open so a new option never forces a contract
+  // bump. Absent when the visitor skipped or never reached onboarding. useCase
+  // is multi-select, hence an array.
+  odRole?: string;
+  odOrgSize?: string;
+  odUseCase?: string[];
+  odSource?: string;
+}
+
+// The six tabs inside the New project modal (CSV row 7 tab_name).
+export type TrackingNewProjectTab =
+  | 'prototype'
+  | 'live_artifact'
+  | 'slide_deck'
+  | 'from_template'
+  | 'media'
+  | 'other';
+
+export type TrackingFidelity =
+  | 'wireframe'
+  | 'high_fidelity'
+  | 'not_applicable';
+
+export type TrackingExecutionMode = 'local_cli' | 'byok';
+
+export type TrackingByokPreflightBlockReason =
+  | 'api_key_required'
+  | 'api_key_invalid'
+  | 'base_url_required'
+  | 'base_url_invalid'
+  | 'model_required'
+  | 'model_default'
+  | 'multiple'
+  | 'config_invalid';
+
+// v2 BYOK provider catalogue (CSV row 65). Replaces v1's
+// `anthropic|openai|azure|ollama|google`. `senseaudio` was added on
+// `main` after the v2 doc was published; we forward it verbatim so
+// dashboards can split it out even though the product CSV does not yet
+// list it.
+export type TrackingByokProviderId =
+  | 'anthropic'
+  | 'openai'
+  | 'azure_openai'
+  | 'google_gemini'
+  | 'ollama_cloud'
+  | 'senseaudio'
+  | 'aihubmix';
+
+// v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
+// `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
+// fold into the `other` catch-all bucket.
+// Every agent the daemon can detect needs its own id here. An agent that falls
+// through to `other` is invisible to any breakdown or alert that asks *which*
+// CLI failed — which is the only question worth asking when an install someone
+// followed our own instructions for cannot be used.
+export type TrackingCliProviderId =
+  | 'claude_code'
+  | 'codex_cli'
+  | 'devin_for_terminal'
+  | 'gemini_cli'
+  | 'opencode'
+  | 'byok_opencode'
+  | 'hermes'
+  | 'kimi_cli'
+  | 'cursor_agent'
+  | 'qwen_code'
+  | 'qoder_cli'
+  | 'github_copilot_cli'
+  | 'pi'
+  | 'kilo'
+  | 'kiro'
+  | 'vibe'
+  | 'amp'
+  | 'aider'
+  | 'trae_cli'
+  | 'grok_build'
+  | 'antigravity'
+  | 'codebuddy'
+  | 'reasonix'
+  | 'mimo'
+  | 'atomcode'
+  | 'deepseek'
+  | 'deepseek_harness'
+  | 'amr'
+  | 'other';
+
+export type TrackingFeedbackProviderId =
+  | TrackingCliProviderId
+  | TrackingByokProviderId;
+
+export type TrackingArtifactKind =
+  | 'html'
+  | 'markdown'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'doc'
+  | 'unknown';
+
+// NOTE: vercel / cloudflare_pages are intentionally NOT here. Deploy attempts
+// used to ride artifact_export_result with those formats, but that only ever
+// meant "deploy popover opened", never a real publish. Real deploys are now
+// tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).
+export type TrackingExportFormat =
+  | 'pdf'
+  | 'pptx'
+  | 'zip'
+  | 'html'
+  | 'image'
+  | 'markdown'
+  | 'template'
+  | 'share_link'
+  | 'share_page';
+
+export type TrackingResult = 'success' | 'failed';
+export type TrackingRunResult = 'success' | 'failed' | 'cancelled';
+export type TrackingRunCancelOrigin =
+  | 'user_stop'
+  | 'project_cleanup'
+  | 'daemon_shutdown'
+  | 'unknown';
+export type TrackingRunTerminalTrigger =
+  | TrackingRunCancelOrigin
+  | 'first_output_deadline'
+  | 'inactivity_watchdog'
+  // The ACP bridge's own per-stage watchdog gave up waiting for the agent's
+  // next JSON-RPC line. Distinct from `inactivity_watchdog` (the outer
+  // chat-run clock) because the two have different budgets and different
+  // blind spots, and because the ACP path ends the child itself — the run
+  // then carries the CHILD's exit code (typically AGENT_EXIT_130), which
+  // reads like a user interrupt unless this trigger says otherwise.
+  | 'acp_stage_timeout'
+  | 'daemon_restart';
+export type TrackingExportResult = 'success' | 'failed' | 'cancelled';
+// Stable codes for artifact_publish_result.error_code. Deliberately a CLOSED
+// set — unlike artifact_deploy_result's open-ended provider/HTTP codes — so no
+// free-form message text can ever be passed as an analytics error code.
+export type TrackingPublishErrorCode = 'workspace_identity_required' | 'publish_failed';
+export type TrackingTestResult = 'success' | 'failed' | 'timeout';
+export type TrackingRunFailureCategory =
+  | 'auth'
+  | 'rate_limit'
+  | 'insufficient_balance'
+  | 'entitlement_required'
+  | 'model_unavailable'
+  | 'prompt_too_large'
+  | 'upstream_unavailable'
+  | 'timeout'
+  | 'empty_output'
+  | 'tool_error'
+  | 'process_exit'
+  | 'user_cancel'
+  | 'unknown';
+export type TrackingRunFailureDetail =
+  | 'auth_required'
+  | 'stale_profile'
+  | 'refresh_token_reused'
+  | 'missing_api_key'
+  | 'invalid_api_key'
+  | 'hard_quota'
+  // A rolling per-model usage window (vela's 5-hour `model_limit_exceeded`)
+  // that resets on its own at a known instant. Distinct from `hard_quota`:
+  // nothing was charged, nothing needs topping up, and the same request
+  // succeeds once the window rolls over — so it stays retryable and must not
+  // be counted as a quota exhaustion in reliability reporting.
+  | 'model_window_limit'
+  // Vela membership policy concurrency is temporarily full. The upstream
+  // reset instant makes this waitable, but it is deliberately non-retryable
+  // for automation so the daemon cannot create an immediate retry storm.
+  | 'membership_concurrency_limit'
+  | 'workspace_credits_exhausted'
+  | 'rate_limit_429'
+  | 'amr_insufficient_balance'
+  | 'amr_tier_upgrade_required'
+  | 'model_not_found'
+  | 'model_not_supported'
+  | 'model_disabled'
+  | 'local_model_not_loaded'
+  | 'cli_version_incompatible'
+  | 'prompt_too_large'
+  | 'request_too_large'
+  | 'attachment_media_type_unsupported'
+  | 'tool_schema_invalid'
+  | 'prompt_tokenization_failed'
+  | 'provider_resource_not_found'
+  | 'upstream_5xx'
+  | 'upstream_client_error'
+  | 'region_not_supported'
+  | 'stream_disconnected'
+  | 'network_error'
+  | 'provider_high_demand'
+  | 'provider_routing_error'
+  | 'inactivity_timeout'
+  | 'timeout'
+  | 'empty_output'
+  | 'tool_error'
+  | 'plugin_artifact_missing'
+  | 'cli_not_installed'
+  | 'bundled_binary_missing'
+  | 'host_policy_block'
+  | 'local_storage_failure'
+  | 'certificate_failure'
+  | 'proxy_configuration'
+  | 'network_configuration'
+  | 'git_bash_missing'
+  | 'agent_config_invalid'
+  | 'spawn_failed'
+  | 'spawn_enoexec'
+  | 'spawn_ebadf'
+  | 'spawn_eperm'
+  | 'stdin_write_eof'
+  | 'agent_protocol_error'
+  | 'acp_frame_too_large'
+  | 'session_resume_expired'
+  // Two local processes raced to refresh the same stored OAuth credential and
+  // one lost the lock (Claude Code: "another Claude Code process is refreshing
+  // it or exited mid-refresh"). The credential itself is valid — nothing is
+  // expired, revoked or misconfigured — so this must not land in `auth`, whose
+  // verdict prescribes a sign-in the user does not need. The contending holder
+  // releases the lock within seconds, which is why the agent itself calls the
+  // condition transient; named here so it stays retryable rather than falling
+  // through to an opaque exit.
+  | 'credential_refresh_contention'
+  | 'fabricated_role_marker'
+  | 'permission_request_not_found'
+  | 'qoder_stop_sequence'
+  | 'signal_killed'
+  | 'process_crashed'
+  | 'cpu_unsupported'
+  // The bundled Bun-compiled runtime cannot load on this OS version (Windows
+  // builds older than 10 1809 exit with STATUS_ENTRYPOINT_NOT_FOUND before
+  // readiness). Deterministic, so never retried.
+  | 'os_unsupported'
+  // Risk control suspended the account (vela returns JSON-RPC -32600 with
+  // `data.kind: "account_suspended"`, `retryable: false`). Named because
+  // retrying is guaranteed to fail the same way: without this it lands in
+  // `fatal_rpc_error` and the card offers a Retry the user can only burn on.
+  | 'account_suspended'
+  | 'interrupted'
+  | 'exit_code'
+  | 'terminated_unknown'
+  | 'stream_error'
+  | 'exit_nonzero'
+  | 'fatal_rpc_error'
+  | 'continuation_incomplete'
+  | 'execution_failed'
+  | 'user_cancelled'
+  | 'unknown';
+export type TrackingRunFailureStage =
+  | 'preflight'
+  | 'spawn'
+  | 'session_init'
+  | 'model_select'
+  | 'prompt_send'
+  | 'first_token_wait'
+  | 'tool_execution'
+  | 'tool_outstanding'
+  | 'post_tool_resume'
+  | 'artifact_write'
+  | 'child_close'
+  | 'finalize';
+export type TrackingRunFailureMechanism =
+  | 'policy_rejection'
+  | 'provider_rejection'
+  | 'model_route_unavailable'
+  | 'invalid_model_selection'
+  | 'protocol_violation'
+  | 'frame_too_large'
+  | 'startup_readiness_timeout'
+  | 'first_output_deadline'
+  | 'acp_response_deadline'
+  | 'post_tool_resume_timeout'
+  | 'tool_execution_failure'
+  | 'child_exit'
+  | 'stream_idle_timeout'
+  | 'empty_completion'
+  | 'transport_failure'
+  | 'unknown';
+export type TrackingRunFailureDomain =
+  | 'client_product'
+  | 'client_environment'
+  | 'provider_control_plane'
+  | 'policy_admission'
+  | 'cross_boundary'
+  | 'unknown';
+export type TrackingRunEvidenceLevel =
+  | 'structured_error'
+  | 'structured_code'
+  | 'protocol_error'
+  | 'lifecycle_signal'
+  | 'stderr_fallback'
+  | 'close_reason'
+  | 'legacy_text'
+  | 'unknown';
+export type TrackingRunRepairOwner =
+  | 'open_design'
+  | 'client_environment'
+  | 'provider_owner'
+  | 'policy_owner'
+  | 'shared_boundary'
+  | 'unknown';
+/** v3 describes the terminal attempt; absent evidence remains unknown. */
+export type TrackingRunAdmissionPhase = 'before_execution' | 'during_execution' | 'unknown';
+/** `none` means no affirmative policy evidence, not proof that no policy applied. */
+export type TrackingRunPolicyReason =
+  | 'model_window_limit'
+  | 'membership_concurrency_limit'
+  | 'hard_quota'
+  | 'workspace_credits_exhausted'
+  | 'amr_insufficient_balance'
+  | 'amr_tier_upgrade_required'
+  | 'entitlement_required'
+  | 'none';
+/** v2 values were defaults, not phase evidence. Use admission_phase on v3. */
+export type TrackingRunAdmissionStatus =
+  | 'admitted'
+  | 'rejected_policy'
+  | 'unknown';
+export type TrackingRunTerminalIntegrity =
+  | 'canonical'
+  | 'duplicate'
+  | 'late'
+  | 'reconciled'
+  | 'overwritten'
+  | 'permanently_missing'
+  | 'post_terminal_activity';
+export type TrackingRunTerminationOrigin =
+  | 'user_cancel'
+  | 'project_cleanup'
+  | 'watchdog_cleanup'
+  | 'daemon_quit'
+  | 'update_apply'
+  | 'unknown';
+export type TrackingRunTerminalPersistenceStatus =
+  | 'acknowledged'
+  | 'failed'
+  | 'unknown';
+export type TrackingRunTerminalPersistenceErrorType =
+  | 'permission_denied'
+  | 'read_only_storage'
+  | 'storage_full'
+  | 'storage_unavailable'
+  | 'serialization_failed'
+  | 'unknown';
+export type TrackingRunPosthogDeliveryStatus =
+  | 'unknown'
+  | 'in_flight'
+  | 'queued'
+  | 'not_expected'
+  | 'failed';
+export type TrackingRunPosthogAcknowledgement =
+  | 'unknown'
+  | 'local_buffer'
+  | 'none';
+export type TrackingRunPosthogErrorType =
+  | 'not_configured'
+  | 'metrics_consent_disabled'
+  | 'config_read_failed'
+  | 'enqueue_failed';
+export type TrackingRunMatureUnfinishedState =
+  | 'still_running'
+  | 'terminated_persistence_missing'
+  | 'terminal_persisted_posthog_failed'
+  | 'recovery_pending'
+  | 'permanently_missing'
+  | 'unknown';
+export type TrackingRunReconciliationIntegrity = 'recovered';
+export type TrackingRunLifecyclePhase =
+  | 'queued'
+  | 'prompt_build'
+  | 'launch_preflight'
+  | 'process_spawn'
+  | 'stdin_write'
+  | 'runtime_init'
+  | 'first_token_wait'
+  | 'stream_output'
+  | 'tool_execution'
+  | 'artifact_write'
+  | 'finalize'
+  | 'complete'
+  | 'unknown';
+export type TrackingRunPhaseTimingStatus =
+  | 'complete'
+  | 'partial'
+  | 'missing';
+export type TrackingArtifactWriteStatus =
+  | 'none'
+  | 'started'
+  | 'completed'
+  | 'failed';
+export type TrackingArtifactWriteSource =
+  | 'write_tool'
+  | 'live_artifact'
+  | 'design_system_file'
+  | 'artifact_event'
+  | 'unknown';
+export type TrackingFirstModelEventType =
+  | 'text_delta'
+  | 'thinking_delta'
+  | 'tool_use'
+  | 'artifact';
+export type TrackingRunFailureUserAction =
+  | 'retry'
+  | 'login'
+  | 'recharge'
+  | 'upgrade'
+  | 'switch_model'
+  | 'reduce_context'
+  | 'install_cli'
+  | 'fix_config'
+  | 'none';
+export type TrackingRunRetryStrategy =
+  | 'same_run_transient'
+  | 'native_session_continue';
+export type TrackingRunRetryFinalResult =
+  | 'not_attempted'
+  | 'success'
+  | 'failed'
+  | 'suppressed';
+export type TrackingRunRetrySuppressedReason =
+  | 'not_failed'
+  | 'not_retryable'
+  | 'unsupported_category'
+  | 'non_retryable_category'
+  | 'unsafe_failure_stage'
+  | 'missing_failure_signal'
+  | 'hard_quota'
+  | 'attempt_limit_reached'
+  | 'cancel_requested'
+  | 'user_visible_output_seen'
+  | 'tool_call_seen'
+  | 'artifact_write_seen'
+  | 'live_artifact_seen';
+export type TrackingRunDiagnosticSource =
+  | 'error_event'
+  | 'stderr'
+  | 'exit_code'
+  | 'signal'
+  | 'unknown';
+export type TrackingStderrLineCountBucket =
+  | 'none'
+  | '1_5'
+  | '6_20'
+  | '21_100'
+  | 'gt_100';
+export type TrackingRunCloseReason =
+  | 'exit_0'
+  | 'exit_nonzero'
+  | 'signal'
+  | 'cancel_requested'
+  | 'stream_error'
+  | 'fatal_rpc_error'
+  | 'empty_output'
+  | 'unknown';
+export type TrackingAmrOpenCodeErrorPhase =
+  | 'timeout'
+  | 'event_stream_start'
+  | 'event_stream'
+  | 'prompt_async'
+  | 'other';
+export type TrackingAmrOpenCodeLastEventType =
+  | 'tool_call'
+  | 'tool_call_update'
+  | 'agent_message_chunk'
+  | 'agent_thought_chunk'
+  | 'done'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolKind =
+  | 'read'
+  | 'write'
+  | 'edit'
+  | 'search'
+  | 'execute'
+  | 'fetch'
+  | 'other';
+export type TrackingLangfuseDeliveryStatus =
+  | 'not_expected'
+  | 'queued'
+  | 'accepted'
+  | 'failed';
+export type TrackingLangfuseDropReason =
+  | 'metrics_consent_off'
+  | 'content_consent_off'
+  | 'missing_sink_config'
+  | 'payload_too_large'
+  | 'task_hierarchy_rollout'
+  | 'relay_429'
+  | 'relay_413'
+  | 'relay_5xx'
+  | 'langfuse_4xx'
+  | 'langfuse_5xx'
+  | 'vela_400'
+  | 'vela_401'
+  | 'vela_403'
+  | 'vela_413'
+  | 'vela_429'
+  | 'vela_5xx'
+  | 'network_error';
+export type TrackingLangfuseReportResult =
+  | 'accepted'
+  | 'failed'
+  | 'skipped';
+export type TrackingLangfuseReportSkipReason =
+  | 'run_not_found'
+  | 'duplicate_run'
+  | 'not_expected';
+
+export type TrackingFeedbackRating = 'positive' | 'negative';
+// Click events emit `none` when the user clears a previously-set rating, so
+// `rating` (post-state) and `rating_before` (pre-state) on click both use
+// this widened union. Reason events still require a concrete rating.
+export type TrackingFeedbackRatingWithNone = 'positive' | 'negative' | 'none';
+export type TrackingFeedbackAction =
+  | 'submit_feedback_rating'
+  | 'clear_feedback_rating';
+
+// Mirrors ChatMessageFeedbackReasonCode in packages/contracts/src/api/chat.ts.
+// Kept independent so the analytics wire format can evolve without forcing
+// a contract bump on the chat persistence shape.
+export type TrackingFeedbackReasonCode =
+  | 'matched_request'
+  | 'strong_visual'
+  | 'useful_structure'
+  | 'easy_to_continue'
+  | 'followed_design_system'
+  | 'missed_request'
+  | 'weak_visual'
+  | 'could_not_run'
+  | 'too_slow'
+  | 'incomplete_output'
+  | 'hard_to_use'
+  | 'missed_design_system'
+  | 'other';
+
+// Product confirmed on 2026-05-13: custom_reason ships the raw text so
+// analysts can read the actual feedback. The earlier length-bucket approach
+// from the tracking doc draft is no longer in effect.
+
+export type TrackingTokenCountSource =
+  | 'provider_usage'
+  | 'estimated'
+  | 'unknown';
+
+export type TrackingDesignSystemSource =
+  | 'default'
+  | 'user_selected'
+  | 'template_inherited'
+  | 'project_saved'
+  | 'not_applicable'
+  | 'unknown';
+
+export type TrackingFileType =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'zip'
+  | 'folder'
+  | 'other';
+
+export type TrackingFileSizeBucket =
+  | '0_1mb'
+  | '1_10mb'
+  | '10_100mb'
+  | '100mb_plus';
+
+/**
+ * Which agent harness actually produced a run.
+ *
+ * Deliberately a value, not an event-name suffix: a third harness is one more
+ * member here and every existing query keeps working. `ordinary` means the run
+ * took the pre-existing strategy route, whatever the user's Labs switch said —
+ * see `harness_fallback_reason` for why.
+ */
+export type TrackingHarness = 'od_next' | 'ordinary';
+
+/**
+ * A Labs experiment. Carried as a property so the toggle event stays generic:
+ * a second experiment adds one member here and reuses the same event.
+ */
+export type TrackingLabsItemId = 'design_harness';
+
+/** Who moved a Labs switch. `system` is not a user action — see `TrackingLabsSystemReason`. */
+export type TrackingLabsToggleSource = 'settings' | 'cli' | 'system';
+
+/**
+ * Why the system moved a Labs switch on the user's behalf. Kept separate from
+ * the opt-out reasons so "the user turned this off" and "we turned it off for
+ * them" can never be summed together by accident.
+ */
+export type TrackingLabsSystemReason = 'env_override' | 'latched' | 'restored';
+
+/**
+ * Why a user turned a Labs experiment off.
+ *
+ * `skipped` is not a reason — it is the absence of one, recorded so the share
+ * of people who declined to answer is visible instead of missing. A timeout and
+ * an explicit "skip" record the same value on purpose.
+ */
+export type TrackingLabsOptOutReason =
+  | 'worse_output'
+  | 'too_slow'
+  | 'not_what_i_wanted'
+  | 'other'
+  | 'skipped';

@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-05-06T19:32:18.000Z",
+  "generatedBy": "agent",
+  "notes": "Personal trading portfolio dashboard — total value, today's P&L, featured ticker chart, holdings table, watchlist, news/signals, and an AI-generated investment recommendation. Designed to be refreshable on demand: price/holdings/news fields can be rewritten in data.json without re-authoring the template. All numbers, percentages, and SVG polyline points are pre-formatted into display-ready strings so the template stays free of formatting/expression logic; direction is encoded via an explicit dirClass field. External links (exchange, Yahoo, TradingView, per-row exchange page) are bound as plain attribute interpolations — no inline scripting. Refresh runner should write a fresh data.json that matches the template's binding shape; daemon validates against bounded JSON limits and re-derives index.html from template.html + data.json. No credentials, OAuth tokens, cookies, raw provider responses, or HTTP envelopes are persisted; forbidden keys (raw, payload, body, headers, cookie, authorization, token, secret, credential, password) are not present in data.json.",
+  "sources": [
+    {
+      "label": "Brokerage holdings (mocked)",
+      "type": "connector"
+    },
+    {
+      "label": "Quotes (mocked)",
+      "type": "connector"
+    },
+    {
+      "label": "AI recommendation",
+      "type": "derived"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "节奏感电子配乐，合成器与打击乐；音色判断未完成听验",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "spacing",
+        "energy": "mid"
+      },
+      {
+        "scene": "type",
+        "energy": "mid"
+      },
+      {
+        "scene": "actions",
+        "energy": "mid"
+      },
+      {
+        "scene": "easing",
+        "energy": "mid"
+      },
+      {
+        "scene": "follow",
+        "energy": "mid"
+      },
+      {
+        "scene": "anticipation",
+        "energy": "mid"
+      },
+      {
+        "scene": "hello",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

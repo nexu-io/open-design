@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-website-to-video-promo",
+  "surface": "video",
+  "title": "HyperFrames: Website-to-Video Pipeline (15-Second Marketing Cut)",
+  "summary": "A 15-second 16:9 HyperFrames composition that captures a live website at three viewport sizes, then animates between them with a chromatic radial split between scenes. Mirrors the hyperframes-sizzle student-kit archetype where the site is the source asset.",
+  "category": "Marketing",
+  "tags": ["hyperframes", "website-to-video", "marketing", "pipeline"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 15-second HyperFrames marketing cut (1920×1080, 30fps) that turns a real website into a video. The pipeline: capture the site headlessly at three viewport sizes, drop the captures into the composition, animate between them. Pull `npx hyperframes add chromatic-radial-split`, `npx hyperframes add flash-through-white`, `npx hyperframes add logo-outro`. Use the website-to-video guide from the HF docs to capture the source frames into `assets/site-{desktop,tablet,mobile}.png` before authoring the timeline.\n\nVisual identity: cool canvas #0a0c12, off-white #f5f7fa, single accent #6cf3c0 on UI ring frames. Display: \"General Sans\" 96px for the kicker title, body \"Inter\" 22px for captions, mono \"JetBrains Mono\" 18px for url overlays. Tabular-nums on any digit row.\n\nThree scenes, 5s each, separated by transitions:\n\nScene 1 (0–5s) DESKTOP — captured screenshot (1440×900) inside a stylized browser chrome (use the OD `assets/frames/browser-chrome.html` look as inspiration if available). The screenshot scales 1.04 → 1.0 over 0.7s ease expo.out, then a 1.5s slow Ken-Burns pan across its hero section. A monospace url chip in the top-left fades in at 1.0s. At 4.5s a kicker line types in below the frame.\nTransition at 5.0s → flash-through-white, 0.3s.\n\nScene 2 (5.3–10s) TABLET — captured screenshot (1024×768) tilted slightly in 3D (rotateY=-8°) over the canvas, with the previous chrome floating off via the transition. Same Ken-Burns + url chip pattern. A second kicker line at 8.5s.\nTransition at 10.0s → chromatic-radial-split, 0.5s.\n\nScene 3 (10.5–15s) MOBILE — captured screenshot (390×844) inside an iPhone-15-pro-like chrome, vertical, rotateY=+8°. Animated hand cursor taps once at 12.0s on the primary CTA region, with a small ripple ring expanding over 0.8s. At 13.5s the logo-outro block fires in the lower-right.\n\nNon-negotiables: never animate the dimensions of an <img> directly — wrap each screenshot in a non-timed div and animate the wrapper; entrance-only motion; transitions handle scene exits; deterministic; all timelines paused:true; root data-duration=15. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 15`.\n\nOutput: `website-to-video-15s.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/ui-3d-reveal.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/ui-3d-reveal.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://x.com/HeyGen/status/2048155061751288197"
+  }
+}

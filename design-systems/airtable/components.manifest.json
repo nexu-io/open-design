@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 1,
+  "brandId": "airtable",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "Airtable — reference components",
+    "description": "Reference fixture for design-systems/airtable. White canvas, Deep Navy text, Airtable Blue accent, Haas typography, blue-tinted multi-layer card shadow.",
+    "styleBlockCount": 1,
+    "selectorCount": 62,
+    "classCount": 35,
+    "elementCount": 27
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--ease-standard",
+      "--elev-raised",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display"
+    ],
+    "unusedDeclared": [
+      "--danger",
+      "--elev-flat",
+      "--elev-ring",
+      "--meta",
+      "--radius-lg",
+      "--space-1",
+      "--surface-warm",
+      "--text-2xl",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".badge",
+    ".badge-dot",
+    ".badge-muted",
+    ".badge-success",
+    ".base-chip",
+    ".base-chip-design::before",
+    ".base-chip-marketing::before",
+    ".base-chip-product::before",
+    ".base-chip-sales::before",
+    ".base-chip::before",
+    ".base-chips",
+    ".body-muted",
+    ".body-sm",
+    ".btn",
+    ".btn-primary",
+    ".btn-primary:active",
+    ".btn-primary:hover",
+    ".btn-secondary",
+    ".btn-secondary:hover",
+    ".btn:focus-visible",
+    ".card",
+    ".card .card-icon",
+    ".card-link",
+    ".card-link:hover",
+    ".card:hover",
+    ".container",
+    ".divider",
+    ".eyebrow",
+    ".features-grid",
+    ".field",
+    ".field input",
+    ".field input::placeholder",
+    ".field input:focus-visible",
+    ".field label",
+    ".field-help",
+    ".form",
+    ".form-actions",
+    ".form-row",
+    ".hero-actions",
+    ".hero-grid",
+    ".hero-meta",
+    ".icon",
+    ".icon-lg",
+    ".lead",
+    ".row-between",
+    ".stack-3 > * + *",
+    ".stack-4 > * + *",
+    ".stack-6 > * + *",
+    "*",
+    "*::after",
+    "*::before",
+    "a",
+    "a:hover",
+    "body",
+    "h1",
+    "h2",
+    "h3",
+    "html",
+    "kbd",
+    "p",
+    "section",
+    "section + section"
+  ],
+  "classes": [
+    "badge",
+    "badge-dot",
+    "badge-success",
+    "base-chip",
+    "base-chip-design",
+    "base-chip-marketing",
+    "base-chip-product",
+    "base-chip-sales",
+    "base-chips",
+    "body-muted",
+    "body-sm",
+    "btn",
+    "btn-primary",
+    "btn-secondary",
+    "card",
+    "card-icon",
+    "card-link",
+    "container",
+    "divider",
+    "eyebrow",
+    "features-grid",
+    "field",
+    "field-help",
+    "form",
+    "form-actions",
+    "form-row",
+    "hero-actions",
+    "hero-grid",
+    "hero-meta",
+    "icon",
+    "icon-lg",
+    "lead",
+    "row-between",
+    "stack-3",
+    "stack-4"
+  ],
+  "elements": [
+    "a",
+    "article",
+    "aside",
+    "body",
+    "button",
+    "div",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "head",
+    "html",
+    "input",
+    "kbd",
+    "label",
+    "li",
+    "main",
+    "meta",
+    "p",
+    "path",
+    "rect",
+    "section",
+    "span",
+    "style",
+    "svg",
+    "title",
+    "ul"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        ".btn",
+        ".btn-primary",
+        ".btn-primary:active",
+        ".btn-primary:hover",
+        ".btn-secondary",
+        ".btn-secondary:hover",
+        ".btn:focus-visible"
+      ],
+      "classes": [
+        "btn",
+        "btn-primary",
+        "btn-secondary"
+      ],
+      "elements": [
+        "button"
+      ],
+      "tokenReferences": [
+        "--accent",
+        "--accent-active",
+        "--accent-on",
+        "--ease-standard",
+        "--fg",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base"
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        ".field",
+        ".field input",
+        ".field input::placeholder",
+        ".field input:focus-visible",
+        ".field label",
+        ".field-help"
+      ],
+      "classes": [
+        "field",
+        "field-help",
+        "form",
+        "form-actions",
+        "form-row"
+      ],
+      "elements": [
+        "form",
+        "input",
+        "label"
+      ],
+      "tokenReferences": [
+        "--accent",
+        "--fg",
+        "--focus-ring",
+        "--muted",
+        "--text-sm",
+        "--text-xs"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".card",
+        ".card .card-icon",
+        ".card-link",
+        ".card-link:hover",
+        ".card:hover"
+      ],
+      "classes": [
+        "card",
+        "card-icon",
+        "card-link"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--accent",
+        "--space-2",
+        "--text-sm"
+      ]
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": true,
+      "selectors": [
+        ".badge",
+        ".badge-dot",
+        ".badge-muted",
+        ".badge-success"
+      ],
+      "classes": [
+        "badge",
+        "badge-dot",
+        "badge-success"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--fg",
+        "--fg-2",
+        "--radius-pill",
+        "--space-2",
+        "--text-xs"
+      ]
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": true,
+      "selectors": [
+        "a",
+        "a:hover"
+      ],
+      "classes": [],
+      "elements": [
+        "a"
+      ],
+      "tokenReferences": [
+        "--accent-hover"
+      ]
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": true,
+      "selectors": [
+        "kbd"
+      ],
+      "classes": [],
+      "elements": [
+        "kbd"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": true,
+      "selectors": [
+        ".icon",
+        ".icon-lg"
+      ],
+      "classes": [
+        "icon",
+        "icon-lg"
+      ],
+      "elements": [
+        "svg"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        ".body-muted",
+        ".body-sm",
+        ".eyebrow",
+        ".lead",
+        "h1",
+        "h2",
+        "h3"
+      ],
+      "classes": [
+        "body-muted",
+        "body-sm",
+        "eyebrow",
+        "lead"
+      ],
+      "elements": [
+        "h1",
+        "h2",
+        "h3",
+        "p"
+      ],
+      "tokenReferences": [
+        "--accent",
+        "--fg",
+        "--font-display",
+        "--leading-tight",
+        "--muted",
+        "--text-3xl",
+        "--text-xs",
+        "--tracking-display"
+      ]
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        ".container",
+        ".row-between",
+        ".stack-3 > * + *",
+        ".stack-4 > * + *",
+        ".stack-6 > * + *",
+        "section",
+        "section + section"
+      ],
+      "classes": [
+        "container",
+        "features-grid",
+        "hero-grid",
+        "row-between",
+        "stack-3",
+        "stack-4"
+      ],
+      "elements": [
+        "main",
+        "section"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--container-gutter-desktop",
+        "--container-gutter-phone",
+        "--container-gutter-tablet",
+        "--container-max",
+        "--space-3",
+        "--space-4"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 8,
+    "pixelValues": 47,
+    "hardcodedFontFamilies": 5
+  }
+}

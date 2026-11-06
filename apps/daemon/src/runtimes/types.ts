@@ -1,0 +1,383 @@
+import type { ExecFileOptions } from 'node:child_process';
+import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
+
+export type { AgentDiagnostic } from '@open-design/contracts';
+
+export type RuntimeEnv = NodeJS.ProcessEnv | Record<string, string>;
+
+export type RuntimeModelOption = {
+  id: string;
+  label: string;
+  enabled?: boolean;
+  default?: boolean;
+  inputPriceUsdPerMillion?: number;
+  outputPriceUsdPerMillion?: number;
+  metadata?: ModelMetadata;
+  additionalSpeedTiers?: string[];
+  serviceTierOptions?: RuntimeModelOption[];
+  reasoningOptions?: RuntimeModelOption[];
+};
+
+export type RuntimeModelSource = 'live' | 'fallback';
+
+export type RuntimeReasoningOption = RuntimeModelOption;
+
+export type RuntimeBuildOptions = {
+  model?: string | null;
+  reasoning?: string | null;
+  serviceTier?: string | null;
+};
+
+export type RuntimeContext = {
+  cwd?: string;
+  // True when the current chat run has at least one prior persisted
+  // assistant message in the same conversation — i.e. this isn't the
+  // first user turn. Plain-streaming adapters that support a "continue
+  // the most recent conversation" CLI flag (e.g. `agy -c`) read this to
+  // decide whether to resume the upstream agent's own session state
+  // instead of spawning a fresh, context-free turn. Adapters that
+  // either have no resume flag or recompose history into the prompt
+  // themselves ignore this field.
+  hasPriorAssistantTurn?: boolean;
+  // Daemon-owned path to a temp file where the adapter should write
+  // its diagnostic log. Today only antigravity consumes this: agy in
+  // print mode is silent on stdout/stderr for both missing-auth AND
+  // quota-exhausted failures (verified via `agy --log-file` capture
+  // during PR #3157), so post-exit log inspection is the only way to
+  // tell them apart. Adapters that don't have a `--log-file` flag
+  // ignore this field; the daemon cleans the file up after reading.
+  agentLogFilePath?: string;
+  // Override for the antigravity model-selection settings file path.
+  // Production code leaves this undefined (falls back to the default
+  // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
+  // so unit assertions against buildArgs do not touch the real home dir.
+  antigravitySettingsPath?: string;
+  // Daemon-owned path to a temp file containing the composed prompt.
+  // Adapters with `promptViaFile: true` read this instead of receiving
+  // the prompt via argv or stdin. The daemon creates the file before
+  // buildArgs and removes it after the child exits.
+  promptFilePath?: string;
+  // Native-resume adapters read these to decide whether to continue the
+  // external runtime's own session. `resumeSessionId` is the stored id for
+  // this (conversation, agent) when a prior session exists; the adapter sends
+  // it through its transport and the daemon sends only the latest user turn.
+  // When it is null/absent the adapter starts a new session; specify-style CLI
+  // adapters may use `newSessionId` (a freshly minted UUID the daemon also
+  // persists), while capture-style transports report their own id.
+  resumeSessionId?: string | null;
+  newSessionId?: string;
+  // Per-run plugin isolation for agent subprocesses. External Plugin entry
+  // points use this for Local Codex so the child cannot recursively load the
+  // same Codex Plugin and route itself into another OpenDesign workflow.
+  // Operator-wide overrides remain owned by each runtime definition.
+  disablePlugins?: boolean;
+  /**
+   * Enables provider-owned native Child behavior frames for an OD Next mapped
+   * Run. Runtime definitions must keep this off for ordinary Runs, and stream
+   * handlers must consume the frames as an evidence-only side channel rather
+   * than forwarding Child text into the parent UI stream.
+   */
+  observeNativeChildBehavior?: boolean;
+};
+
+// Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
+// its own multi-turn conversation memory and the daemon should NOT also
+// pack the rendered web transcript (the `## user` / `## assistant` blocks
+// `buildDaemonTranscript` produces) into the user request. Today only
+// `agy -c` qualifies; other plain-stream adapters have no upstream
+// session storage and still rely on the daemon-side transcript injection
+// for multi-turn coherence.
+//
+// Without this opt-out, agy with `-c` receives the same prior turn
+// twice — once from its own conversation memory, once embedded in the
+// composed user request — and the embedded copy includes the literal
+// `<question-form>` markup it emitted on turn 1. The model then
+// pattern-matches that and re-emits the form on turn 2, looking like
+// the discovery loop never breaks.
+
+export type RuntimeCapabilityMap = Record<string, boolean>;
+
+export type RuntimeListModels = {
+  args: string[];
+  timeoutMs?: number;
+  parse: (stdout: string) => RuntimeModelOption[] | null;
+};
+
+export type RuntimeVersionPolicy = {
+  /** Exact version strings exercised by this OpenDesign build. */
+  supportedVersions: string[];
+  /**
+   * Optional shape of versions this build accepts without having exercised
+   * each one. Some agent CLIs ship as a stream of release candidates that
+   * moves faster than our releases do, so naming individual ones warns every
+   * user who followed our own install instructions the week after we bump
+   * them. Matching the line keeps the check meaningful instead of removing
+   * it — a version off that line still warns.
+   *
+   * Must not carry the `g` flag: `RegExp.test` is stateful with it, so the
+   * same version would alternate between supported and untested.
+   */
+  supportedVersionPattern?: RegExp;
+  /** Fail closed when the version probe fails or returns no usable version. */
+  requireVersion: true;
+  /** Normalize and validate the first output line; null means unusable. */
+  parse?: (raw: string) => string | null;
+};
+
+export type RuntimeCompatibilityProbe = {
+  /** Arguments for a side-effect-free runtime/profile handshake. */
+  args: string[];
+  timeoutMs?: number;
+  /** Optional read-only gate used when invoking the probe would create state. */
+  preflight?: (env: NodeJS.ProcessEnv) => boolean;
+  /** Returns the companion/profile version when the output is compatible. */
+  parse: (stdout: string) => string;
+};
+
+export type RuntimePromptBudgetError = {
+  code: 'AGENT_PROMPT_TOO_LARGE';
+  message: string;
+  bytes?: number;
+  commandLineLength?: number;
+  limit: number;
+};
+
+export type RuntimeAgentDef = {
+  id: string;
+  name: string;
+  bin: string;
+  versionArgs: string[];
+  fallbackModels: RuntimeModelOption[];
+  buildArgs: (
+    prompt: string,
+    imagePaths: string[],
+    extraAllowedDirs?: string[],
+    options?: RuntimeBuildOptions,
+    runtimeContext?: RuntimeContext,
+  ) => string[];
+  streamFormat: string;
+  fallbackBins?: string[];
+  versionProbeTimeoutMs?: number;
+  versionPolicy?: RuntimeVersionPolicy;
+  compatibilityProbe?: RuntimeCompatibilityProbe;
+  helpArgs?: string[];
+  capabilityFlags?: Record<string, string>;
+  // Flags the CLI accepts but omits from `--help`, so the substring scan in
+  // `capabilityFlags` can never see them. Probed by invoking each flag with a
+  // value it cannot possibly accept: a build that knows the flag rejects the
+  // *value*, a build that does not rejects the *option*. Both fail before any
+  // model call, which keeps the probe free.
+  hiddenCapabilityFlags?: {
+    // Prefixed to every probe invocation, e.g. `['-p']` for flags that only
+    // exist under a subcommand.
+    probeArgsPrefix: string[];
+    // Flag string -> capability key, same shape as `capabilityFlags`.
+    flags: Record<string, string>;
+  };
+  // Adapter reads the composed prompt from a daemon-created temp file.
+  // This is intentionally opt-in: stdin-capable adapters keep using
+  // `promptViaStdin`, and argv-only adapters keep their argv budget guard
+  // unless their CLI exposes an explicit prompt-file flag.
+  promptViaFile?: boolean;
+  promptViaStdin?: boolean;
+  // Format for the user prompt fed via stdin. Default is plain text (the
+  // entire prompt buffer goes in raw, then stdin is closed). When set to
+  // 'stream-json' the daemon writes a single JSONL line wrapping the prompt
+  // as an Anthropic user message (so tool_result blocks can later be
+  // injected into the same stdin without re-spawning the child). Only
+  // honored for adapters that also set `promptViaStdin: true`.
+  promptInputFormat?: 'text' | 'stream-json';
+  // For whole-prompt stdin adapters (`promptViaStdin: true` with the default
+  // `'text'` input format): the exact bytes the CLI reads from stdin for the
+  // composed prompt, when it wants something other than the raw text (e.g.
+  // Antigravity's one-message NDJSON frame). The result is still handed over
+  // as a complete file-backed stdin at spawn and followed by EOF.
+  encodeStdinPrompt?: (prompt: string) => string;
+  eventParser?: string;
+  env?: Record<string, string>;
+  listModels?: RuntimeListModels;
+  fetchModels?: (
+    resolvedBin: string,
+    env: RuntimeEnv,
+  ) => Promise<RuntimeModelOption[] | null>;
+  reasoningOptions?: RuntimeReasoningOption[];
+  supportsImagePaths?: boolean;
+  maxPromptArgBytes?: number;
+  mcpDiscovery?: string;
+  // How the daemon forwards the user's `.od/mcp-config.json` external MCP
+  // servers to this runtime at spawn time. The shape of the injection
+  // is one of three strategies, each of which the server.ts spawn
+  // pipeline knows how to apply:
+  //
+  //   'claude-mcp-json'      — write `.mcp.json` into the managed
+  //                            project cwd (Claude Code auto-loads it).
+  //   'acp-merge'            — merge stdio entries into the existing
+  //                            `mcpServers` array of an ACP launch
+  //                            descriptor (Hermes / Kimi / Kilo / Kiro
+  //                            / Vibe / Devin).
+  //   'opencode-env-content' — serialise to OpenCode's `mcp` config
+  //                            schema and hand it through
+  //                            `OPENCODE_CONFIG_CONTENT` in the spawn
+  //                            env.
+  //   'mimo-env-content'      — same schema as opencode-env-content
+  //                            but emitted as `MIMOCODE_CONFIG_CONTENT`
+  //                            under MiMo's env namespace.
+  //
+  // Leave undefined for adapters that have no native MCP transport
+  // wired yet (codex, cursor-agent, copilot, qoder, pi). The
+  // settings UI reads this field to surface an explicit "external MCP
+  // is not forwarded to <agent>; configure servers in <agent>'s own
+  // config file instead" hint, replacing the previous silent-failure
+  // UX from issue #2142.
+  externalMcpInjection?:
+    | 'claude-mcp-json'
+    | 'acp-merge'
+    | 'opencode-env-content'
+    | 'mimo-env-content';
+  installUrl?: string;
+  docsUrl?: string;
+  // When `false`, the Settings model picker hides the "Custom (fill below)"
+  // option and the associated free-text input. Use this for agents whose
+  // CLI does not actually accept a model id (e.g. `agy` v1.0.3 has no
+  // `--model` flag yet — upstream issue #35 — and the model is chosen
+  // server-side; AMR routes model selection through ACP's
+  // `session/set_model` and rejects free-form ids). Defaults to allowing
+  // custom input (undefined === true) so most adapters keep today's UX.
+  supportsCustomModel?: boolean;
+  // When `true`, the daemon trusts this adapter's CLI to carry its own
+  // multi-turn conversation memory across spawn invocations (today only
+  // `agy -c`). The chat composer skips the rendered web transcript on
+  // follow-up turns and sends just the latest user message — see the
+  // RuntimeContext.hasPriorAssistantTurn comment for why double-context
+  // is the discovery-form loop's root cause.
+  resumesSessionViaCli?: boolean;
+  // Profile-stdio analogue of `resumesSessionViaCli`. The executable starts
+  // fresh for every OD run, while the profile wire protocol accepts and
+  // reports a durable session id. No CLI resume flag is involved.
+  resumesSessionViaProfileStdio?: boolean;
+  // How the resumable session id is obtained. For `resumesSessionViaCli`, the
+  // default (undefined/false) is "specify-style": the daemon
+  // mints `RuntimeContext.newSessionId` and the CLI is told to use it (claude
+  // `--session-id`), so the id the daemon stores is the id it generated. When
+  // `true` the adapter is "capture-style": the CLI generates its OWN session
+  // id and reports it on the stream (codex `thread.started.thread_id`), so the
+  // daemon must capture that id from the parsed stream (surfaced as a
+  // `status` event's `sessionId`) and persist THAT as the resume handle —
+  // `newSessionId` is not passed to the CLI. See server.ts capture-and-store
+  // path and `agent-cli-session-resume.md`. Profile-stdio transports can also
+  // capture the id from a validated protocol status frame.
+  capturesSessionIdFromStream?: boolean;
+  // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
+  // (today only AMR/vela) and supports resuming via `session/load`. The daemon
+  // captures the durable upstream session handle from the ACP session
+  // (`getDurableSessionId()`) and persists THAT, drives `session/load` on a
+  // resume turn, and maps the agent's structured `resume_failed` error onto the
+  // reseed path. Kept distinct from `resumesSessionViaCli` /
+  // `capturesSessionIdFromStream` because the capture + resume transport is the
+  // ACP result, not a `--session-id` flag or a stream `status` event.
+  resumesSessionViaAcpLoad?: boolean;
+  // Optional name of a daemon-process environment variable that overrides
+  // the default model id when the chat run reaches the spawn layer with
+  // null or the synthetic 'default'. Used by adapters whose CLI rejects
+  // 'default' (e.g. AMR / vela) so an operator can swap the hardcoded
+  // fallback without a code change — set the env var on the daemon
+  // process when launching `tools-dev` / `od` daemon. The value must be
+  // present in the daemon's `process.env`; Settings-UI per-agent env
+  // values only reach the spawned child and are NOT consulted here.
+  defaultModelEnvVar?: string;
+  // Agent-recommended override for the chat-run inactivity watchdog.
+  // The watchdog observes child stdout/stderr/SSE activity, not real
+  // CPU progress, so agents whose CLIs go silent for long stretches
+  // during legitimate work (e.g. Copilot's deck-generation thinking
+  // phase from #2467) need a longer ceiling than the 10-minute global
+  // default. Operators can still override per-process via
+  // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
+  inactivityTimeoutMs?: number;
+  // Absolute ceiling between the runtime announcing that it is waiting for
+  // model output and the first substantive text/thinking/tool/artifact event.
+  // Unlike `inactivityTimeoutMs`, transport heartbeats and status events do not
+  // extend this deadline. Disabled when omitted; operators can override via
+  // `OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS`.
+  firstOutputTimeoutMs?: number;
+  // Opt-in compatibility for ACP adapters that terminate a prompt with a
+  // `turn_end` session update rather than a session/prompt RPC response.
+  acpTurnEndCompletesPrompt?: boolean;
+  // Declarative authentication probe. When set, detection spawns
+  // `<bin> <args>` after the version check and classifies the combined
+  // stdout/stderr to derive `authStatus`. This replaces the previous
+  // hardcoded "only cursor-agent gets an auth probe" gate: an adapter
+  // opts in by declaring a cheap, side-effect-free status/whoami command
+  // (e.g. cursor-agent `status`). Adapters WITHOUT this field are never
+  // actively probed for auth — their auth status is only inferred later
+  // from a real chat failure's error text (see classifyAgentServiceFailure).
+  authProbe?: {
+    args: string[];
+    timeoutMs?: number;
+    // Agent id whose tailored auth classifier + API-key short-circuit should
+    // be used for this probe when it differs from the runtime agent id. Local
+    // profiles (local-profiles.ts) inherit a base adapter's `authProbe` but run
+    // under the profile id; carrying the base id here keeps the base adapter's
+    // auth semantics (e.g. Claude's JSON-aware parser) instead of falling
+    // through to the generic classifier. Defaults to the def id when unset.
+    classifierAgentId?: string;
+  };
+  // Format for the `env` field in ACP `session/new` → `mcpServers[].env`.
+  // `'array'` (default) emits `[{name, value}]` — used by Hermes, Kimi,
+  // Kilo, Kiro, Vibe, and Devin.  `'map'` emits `{"KEY": "val"}` — used
+  // by reasonix ≥ 1.0 (Go) whose ACP implementation expects the standard
+  // MCP `map[string]string` shape. Leave `undefined` (defaults to 'array')
+  // for all other agents — the existing behavior is unchanged.
+  acpMcpEnvFormat?: 'array' | 'map';
+  // First version of this agent whose ACP `session/new` handler rejects stdio
+  // MCP servers, e.g. `'0.37.0'` for Kimi Code CLI. When set, the ACP session
+  // withholds stdio entries from any build at or above it and sends only the
+  // transports that build still accepts. Leave `undefined` for every agent that
+  // still ingests stdio MCP servers at all versions — the existing behavior is
+  // unchanged. See `agent-protocol/acp/stdio-mcp.ts` for the mechanism.
+  acpStdioMcpRemovedInVersion?: string;
+};
+
+export type DetectedAgent = Omit<
+  RuntimeAgentDef,
+  | 'buildArgs'
+  | 'listModels'
+  | 'fetchModels'
+  | 'fallbackModels'
+  | 'helpArgs'
+  | 'capabilityFlags'
+  | 'hiddenCapabilityFlags'
+  | 'fallbackBins'
+  | 'versionProbeTimeoutMs'
+  | 'versionPolicy'
+  | 'maxPromptArgBytes'
+  | 'encodeStdinPrompt'
+  | 'env'
+  // Runtime timeout fields are spawn-time-only hints consumed by chat-run
+  // watchdogs. They are not part of the public `/api/agents`
+  // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so
+  // omitting them here keeps the daemon response aligned with that
+  // shared web/CLI shape — agents pick it up by reading the runtime
+  // def directly, the registry payload stays unchanged.
+  | 'inactivityTimeoutMs'
+  | 'firstOutputTimeoutMs'
+  | 'authProbe'
+> & {
+  models: RuntimeModelOption[];
+  modelsSource: RuntimeModelSource;
+  available: boolean;
+  authStatus?: 'ok' | 'missing' | 'unknown';
+  authMessage?: string;
+  path?: string;
+  version?: string | null;
+  diagnostics?: AgentDiagnostic[];
+};
+
+export type RuntimeExecOptions = ExecFileOptions & {
+  env?: NodeJS.ProcessEnv;
+};
+
+export function runtimeResumesSessionById(
+  def: Pick<RuntimeAgentDef, 'resumesSessionViaCli' | 'resumesSessionViaProfileStdio'>,
+): boolean {
+  return def.resumesSessionViaCli === true || def.resumesSessionViaProfileStdio === true;
+}

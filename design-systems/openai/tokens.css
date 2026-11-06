@@ -1,0 +1,133 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/openai/tokens.css
+ *
+ * Structured token bindings for the "OpenAI" brand — calm, near-monochrome
+ * system anchored in deep teal-black with editorial serif display.
+ *
+ * Brand identity in three sentences:
+ *   1. True white canvas (#ffffff) against deep teal-black ink (#0d0d0d)
+ *      with a subtle cool undertone; chromatic neutrality that puts model
+ *      output front and center rather than the chrome around it.
+ *   2. Söhne / Inter at restrained weights (400/500/600 — never 700+)
+ *      paired with Signifier serif for editorial display moments only;
+ *      generous line-height (1.55–1.65) and near-zero tracking.
+ *   3. Single brand color: OpenAI Teal (#10a37f) — the lone accent in an
+ *      otherwise neutral system; hairline borders (#e5e5e5) used sparingly;
+ *      whitespace as the primary section divider.
+ *
+ * Schema decisions:
+ *   - --bg: #ffffff; --surface: #f5f5f5 (pearl — card surface).
+ *   - --surface-warm: #fafafa (mist — section break bg, footer).
+ *   - --fg: #0d0d0d (ink black); --fg-2: #1a1a1a (soft black).
+ *   - --muted: #6e6e6e (slate — secondary text, captions).
+ *   - --accent: #10a37f (OpenAI Teal); --accent-hover: #0a7a5e.
+ *   - --font-display: Signifier (serif — editorial hero moments only).
+ *   - --font-body: Söhne / Inter (sans — all UI and body text).
+ *   - --tracking-display: -0.02em (display 56px per DESIGN.md).
+ *   - --leading-tight: 1.08 (Signifier display hero rhythm).
+ *   - h2 (28px sans) → 1.20; h3 (20px) → 1.30 per DESIGN.md.
+ *   - --radius-md: 16px (cards); --radius-sm: 12px (buttons, inputs).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #ffffff;
+  --surface:      #f5f5f5;             /* pearl — card surface, elevated panel */
+  --surface-warm: #fafafa;             /* mist — section break, footer */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #0d0d0d;                     /* ink black — primary text, brand mark */
+  --fg-2: #1a1a1a;                     /* soft black — alternative headings */
+  --muted: #6e6e6e;                    /* slate — secondary text, captions */
+  --meta:  #9b9b9b;                    /* ash — tertiary, placeholder */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #e5e5e5;             /* hairline — standard separator */
+  --border-soft: #ededed;             /* card outline on white surface */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #10a37f;           /* OpenAI Teal — links, highlight, CTA */
+  --accent-on:     #ffffff;
+  --accent-hover:  #0a7a5e;           /* teal deep — hover/pressed */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #10a37f;                 /* teal — success path */
+  --warn:    #f5a623;                 /* amber — advisory */
+  --danger:  #ef4146;                 /* error — validation, destructive */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  /* --font-display binds to Signifier — editorial serif for display only.
+     --font-body binds to Söhne/Inter — all UI and reading text. */
+  --font-display: "Signifier", "Source Serif Pro", Georgia, ui-serif, serif;
+  --font-body:    "Söhne", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "Söhne Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §Typography Hierarchy.
+   * Signifier at 56px display; Söhne from 40px H1 down to 12px label.
+   * Schema spine maps the key stops. */
+  --text-xs:   12px;                  /* label — eyebrow, uppercase nav */
+  --text-sm:   13px;                  /* caption — metadata, badges */
+  --text-base: 16px;                  /* body — standard reading */
+  --text-lg:   18px;                  /* body large — lede paragraphs */
+  --text-xl:   20px;                  /* h3 — sub-section */
+  --text-2xl:  28px;                  /* h2 — section heading */
+  --text-3xl:  40px;                  /* h1 — page heading */
+  --text-4xl:  56px;                  /* display — Signifier editorial hero */
+
+  /* Leading + tracking.
+   * --leading-tight=1.08: Signifier display compression.
+   * h2 (Söhne 28px) → 1.20; h3 (20px) → 1.30 per DESIGN.md.
+   * --tracking-display: -0.02em (display size negative tracking). */
+  --leading-body:     1.65;
+  --leading-tight:    1.08;
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 4px base grid; schema spine: --space-N = N×4 px.
+     OpenAI's DESIGN.md §5 scale (4 8 12 16 24 32 48 64 96 128) maps
+     naturally onto the spine — 64px lives in --space-16 (brand ext). */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Brand extension — 64px gap used between major page sections. */
+  --space-16: 64px;
+
+  /* Section rhythm — generous whitespace is the primary divider. */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   48px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* Uniformly soft: 12px buttons/inputs; 16px cards; 9999px chips/pills. */
+  --radius-sm:   12px;
+  --radius-md:   16px;
+  --radius-lg:   16px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* No shadow by default; hover reveals a whisper lift. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 4px 16px rgba(13, 13, 13, 0.06);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 3px rgba(16, 163, 127, 0.12);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 48px;
+  --container-gutter-tablet:  24px;
+  --container-gutter-phone:   24px;
+}

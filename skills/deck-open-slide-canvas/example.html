@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>Open-Slide Canvas · 一句问题</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { font-family:'Inter Tight','Noto Sans SC',system-ui,sans-serif; background:#020306; margin:0; min-height:100vh; }
+  .slide-frame { width:1280px; height:720px; transform:scale(0.78); transform-origin: top left; }
+  .canvas { background:#0a0e1a; color:#f5f5f7; }
+  .accent { color:#5ac8fa; }
+  .mono { font-family:'JetBrains Mono',ui-monospace,monospace; }
+  /* hairline diag bg */
+  .grain {
+    background-image:
+      radial-gradient(circle at 20% 80%, rgba(90,200,250,0.10) 0%, transparent 50%),
+      radial-gradient(circle at 80% 30%, rgba(124,92,255,0.08) 0%, transparent 55%);
+  }
+</style>
+</head>
+<body class="p-10 overflow-hidden">
+<div class="slide-frame canvas grain relative">
+  <div class="absolute inset-0 p-32 flex flex-col justify-between">
+    <header class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-60">
+      <span>HTML-ANYTHING · DECK · OPEN-SLIDE CANVAS</span>
+      <span>SEA INDIGO</span>
+      <span>№05 / 12</span>
+    </header>
+
+    <div>
+      <div class="mono text-[12px] uppercase tracking-[0.22em] accent">Question 03</div>
+      <h1 class="mt-6 font-black leading-[0.95] tracking-[-0.025em]" style="font-size:120px">
+        当生成内容的成本<br/>
+        逼近 <span class="accent">零</span>, 留下的<br/>
+        只有 <em class="not-italic" style="font-family:'Source Serif Pro',serif;font-style:italic;font-weight:500">品味</em>。
+      </h1>
+      <p class="mt-10 text-[28px] opacity-70 max-w-[820px] leading-snug">
+        你打算在哪一帧上, 让读者停下来?
+      </p>
+    </div>
+
+    <footer class="flex items-baseline justify-between mono text-[11px] uppercase tracking-[0.18em] opacity-50">
+      <span>1920 × 1080 · CANVAS · KBD ← →</span>
+      <span class="accent">github.com/1weiho/open-slide</span>
+      <span>00 : 03 : 21</span>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "declaration": true,
+    "declarationMap": true,
+    "lib": ["ES2024"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "target": "ES2024",
+    "types": ["node"]
+  },
+  "include": ["sidecar/**/*.ts"],
+  "exclude": ["node_modules", ".next", "out"]
+}

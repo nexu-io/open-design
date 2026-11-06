@@ -1,0 +1,73 @@
+/* A log, not a list: the oldest line dissolves at the TOP as the feed scrolls
+   itself down. `overflow: hidden` (never `auto`) keeps `scrollTop` writable
+   from script while giving the user nothing to grab — the surface above stays
+   click-through so the pane's drop target keeps working. */
+.feed {
+  /* No top margin: the host (the build preview's dock) sets its own gap. */
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 100%;
+  /* About six lines at this size; hosts cap it further (the dock keeps it to
+     about four). */
+  max-height: 112px;
+  overflow: hidden;
+}
+
+/* The top fade is the log DISSOLVING its oldest line as it scrolls past the
+   box — it is a scroll edge, not a treatment of the type. A feed that fits has
+   nothing scrolling out of it, and masking it anyway washed the one status
+   line ("thinking") into a gradient. So it is painted only while the feed
+   actually overflows; see the layout effect in RunStepFeed. */
+.feed[data-overflowing='true'] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 24px);
+}
+
+.item {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-soft);
+  max-width: 100%;
+  /* The feed is a column flex box with a capped height, and a flex item whose
+     `overflow` is not `visible` has a `min-height: auto` of 0 — so without
+     this the lines SHRANK to fit instead of scrolling. At ten steps each 16px
+     line was squeezed to 9px and its text overlapped the line under it, which
+     read as a "folded" stack. Lines keep their height; the feed scrolls past
+     them. */
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Only a newly mounted line animates: items are keyed by tool-use id and the
+     list is append-only, so React never remounts the ones already up. */
+  animation: df-feed-enter 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* The bottom line is the step happening now; it wears the weight the old
+   standalone status line had. */
+.item[data-current='true'] {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+@keyframes df-feed-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    animation: none;
+  }
+}

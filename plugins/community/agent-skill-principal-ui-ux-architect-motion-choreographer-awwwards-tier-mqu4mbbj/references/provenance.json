@@ -1,0 +1,19 @@
+{
+  "candidateId": "29c1e7dd-dc71-4ec1-8516-48d972c308d2",
+  "projectId": "706f2a80-7788-4fa9-952a-947709c3bc92",
+  "runId": "b65da065-b5d9-4343-9309-f00ac3d28357",
+  "conversationId": "95a4fe49-2159-4d91-ad63-f650a40bf73b",
+  "provenance": {
+    "summary": "Detected from mqu4amf4-SKILL.md after a successful run.",
+    "detectedAt": 1782429441799
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "mqu4amf4-SKILL.md",
+      "label": "mqu4amf4-SKILL.md",
+      "size": 10561,
+      "copied": true
+    }
+  ]
+}

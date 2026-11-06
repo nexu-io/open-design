@@ -1,0 +1,330 @@
+name: agent-pr-explore-sandbox
+
+# Trusted-orchestrator workflow for PR exploration on the self-hosted runner.
+# Triggered by manual workflow_dispatch, or by a maintainer commenting
+# "/explore" on a PR (write-access gated). It deliberately does not auto-run on
+# every PR, so ordinary PRs do not accumulate waiting checks; PR code only ever
+# runs inside the Docker sandbox without secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to explore.
+        required: true
+        type: string
+      skip_comment:
+        description: Skip posting the exploration report comment on the PR (the report is still uploaded as an artifact). Use for validation/dry runs.
+        required: false
+        default: false
+        type: boolean
+  # A maintainer commenting "/explore" on a PR explores that PR. issue_comment
+  # runs in the base (trusted) context with secrets, so the job `if` gate below
+  # restricts it to users with write access; untrusted PR code still runs only
+  # inside the Docker sandbox without secrets.
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: agent-pr-explore-sandbox-${{ github.event.issue.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  sandbox:
+    name: Sandbox PR runtime
+    runs-on: [self-hosted, agent-pr-explore]
+    # No environment approval gate: both triggers are already write-access
+    # gated (workflow_dispatch needs repo write; the "/explore" comment path is
+    # gated on author_association below), and PR code runs only in the sandbox.
+    # R2 credentials are repo-level secrets, so they remain available here.
+    timeout-minutes: 45
+    # Manual dispatch is always allowed. A "/explore" PR comment is allowed only
+    # from a user with write access (OWNER/MEMBER/COLLABORATOR), never on issues.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/explore') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+
+    steps:
+      - name: Acknowledge /explore command
+        if: ${{ github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # 👀 on the command comment = picked up.
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes --silent || true
+          # Post a placeholder carrying the report marker; the report step later
+          # PATCHes this same comment, so the run produces one evolving comment.
+          marker="<!-- agent-pr-explore-sandbox:${PR_NUMBER} -->"
+          body="🔍 Exploring this PR in an isolated sandbox — [follow the run]($RUN_URL). The report will replace this comment when it is ready.
+
+          $marker"
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$marker\"))) | .id" | tail -n 1)"
+          if [ -n "$existing" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -X PATCH -f body="$body" --silent || true
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body" --silent || true
+          fi
+
+      - name: Fetch trusted base script
+        # Only the self-contained sandbox script is needed on the trusted host;
+        # PR code is checked out inside Docker. A full actions/checkout of this
+        # large repo stalled on the self-hosted runner before the agent ever
+        # ran, so fetch just the one trusted file via the API instead. The ref
+        # is pinned to the trusted base/dispatch commit, never PR head.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_REF: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p .github/scripts
+          gh api \
+            -H 'Accept: application/vnd.github.raw' \
+            "repos/$GITHUB_REPOSITORY/contents/.github/scripts/agent-pr-explore-sandbox.sh?ref=$TRUSTED_REF" \
+            > .github/scripts/agent-pr-explore-sandbox.sh
+          chmod +x .github/scripts/agent-pr-explore-sandbox.sh
+          echo "Fetched trusted agent-pr-explore-sandbox.sh at $TRUSTED_REF"
+
+      - name: Resolve PR metadata
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PR_NUMBER: ${{ inputs.pr_number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$EVENT_PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid PR number: $EVENT_PR_NUMBER"
+            exit 1
+          fi
+
+          state="$(gh pr view "$EVENT_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq '.state')"
+          draft="$(gh pr view "$EVENT_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+          author="$(gh pr view "$EVENT_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json author --jq '.author.login')"
+          head_sha="$(gh pr view "$EVENT_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          head_repo="$(gh pr view "$EVENT_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRepositoryOwner,headRepository --jq '.headRepositoryOwner.login + "/" + .headRepository.name')"
+          base_repo="$GITHUB_REPOSITORY"
+          base_sha="$(gh pr view "$EVENT_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefOid --jq '.baseRefOid')"
+
+          if [ "$state" != "OPEN" ]; then
+            echo "::error::Refusing to explore PR $EVENT_PR_NUMBER because state is $state."
+            exit 1
+          fi
+          if [ "$draft" != "false" ]; then
+            echo "::error::Refusing to explore draft PR $EVENT_PR_NUMBER."
+            exit 1
+          fi
+          if [ "$base_repo" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::Unexpected base repo $base_repo."
+            exit 1
+          fi
+          if ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ && "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid PR SHA metadata."
+            exit 1
+          fi
+
+          {
+            echo "number=$EVENT_PR_NUMBER"
+            echo "author=$author"
+            echo "head_sha=$head_sha"
+            echo "head_repo=$head_repo"
+            echo "base_sha=$base_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run expect against Docker-isolated PR app
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          HEAD_REPO: ${{ steps.pr.outputs.head_repo }}
+          BASE_REPO: ${{ github.repository }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          OD_SANDBOX_CPUS: "4"
+          OD_SANDBOX_MEMORY: "8g"
+          OD_SANDBOX_READY_TIMEOUT_SECONDS: "900"
+          OD_EXPECT_TIMEOUT_SECONDS: "1200"
+          OD_EXPECT_CONTEXT_MAX_BYTES: "120000"
+          OD_TRACE_R2_UPLOAD: "1"
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET || secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT || secrets.CLOUDFLARE_R2_RELEASES_URL }}
+        run: .github/scripts/agent-pr-explore-sandbox.sh
+
+      - name: Upload sandbox artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-pr-explore-sandbox-${{ steps.pr.outputs.number }}-${{ steps.pr.outputs.head_sha }}
+          # The trace zips (~28MB) and videos are already published to R2; keep
+          # them out of the GitHub artifact so it stays small (report + logs).
+          path: |
+            ${{ runner.temp }}/agent-pr-explore-sandbox/artifacts/
+            !${{ runner.temp }}/agent-pr-explore-sandbox/artifacts/**/*.zip
+            !${{ runner.temp }}/agent-pr-explore-sandbox/artifacts/**/*.webm
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Comment exploration report
+        if: ${{ always() && !inputs.skip_comment }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          PR_AUTHOR: ${{ steps.pr.outputs.author }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/agent-pr-explore-sandbox/artifacts/agent-pr-exploration-report.md"
+          if [ ! -s "$report" ]; then
+            echo "No agent exploration report was produced; skipping PR comment."
+            exit 0
+          fi
+
+          marker="<!-- agent-pr-explore-sandbox:${PR_NUMBER} -->"
+          body_file="$(mktemp)"
+          {
+            cat "$report"
+            echo
+            echo "$marker"
+          } > "$body_file"
+
+          comment_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+              --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$marker\"))) | .id" \
+              | tail -n 1
+          )"
+          body="$(cat "$body_file")"
+          if [ -n "$comment_id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -X PATCH -f body="$body" --silent
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body" --silent
+          fi
+
+          pr_author_lc="$(printf '%s' "$PR_AUTHOR" | tr '[:upper:]' '[:lower:]')"
+          case "$pr_author_lc" in
+            nettee|mrcfps|alchemistklk|siri-ray)
+              ;;
+            *)
+              echo "PR author $PR_AUTHOR is not configured for inline agent reports; skipping inline review comment."
+              exit 0
+              ;;
+          esac
+
+          files_json="$(mktemp)"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" > "$files_json"
+          inline_target="$(
+            FILES_JSON="$files_json" node <<'NODE'
+          const fs = require("node:fs");
+          const pages = JSON.parse(fs.readFileSync(process.env.FILES_JSON, "utf8"));
+          const files = pages.flat();
+
+          function firstAddedLine(file) {
+            if (typeof file.patch !== "string") return null;
+            let newLine = null;
+            for (const line of file.patch.split("\n")) {
+              const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+              if (hunk) {
+                newLine = Number(hunk[1]);
+                continue;
+              }
+              if (newLine == null) continue;
+              if (line.startsWith("+") && !line.startsWith("+++")) return newLine;
+              if (!line.startsWith("-")) newLine += 1;
+            }
+            return null;
+          }
+
+          for (const file of files) {
+            if (!file || file.status === "removed") continue;
+            const line = firstAddedLine(file);
+            if (line != null) {
+              process.stdout.write(JSON.stringify({ path: file.filename, line }));
+              process.exit(0);
+            }
+          }
+          NODE
+          )"
+          if [ -z "$inline_target" ]; then
+            echo "No added diff line was available for an inline agent report; skipping inline review comment."
+            exit 0
+          fi
+
+          inline_path="$(node -e 'const target = JSON.parse(process.argv[1]); process.stdout.write(target.path)' "$inline_target")"
+          inline_line="$(node -e 'const target = JSON.parse(process.argv[1]); process.stdout.write(String(target.line))' "$inline_target")"
+          inline_marker="<!-- agent-pr-explore-inline:${PR_NUMBER} -->"
+          inline_body_file="$(mktemp)"
+          {
+            cat "$report"
+            echo
+            echo "$inline_marker"
+          } > "$inline_body_file"
+          inline_body="$(cat "$inline_body_file")"
+
+          inline_comment_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/comments" --paginate \
+              --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$inline_marker\"))) | .id" \
+              | tail -n 1
+          )"
+          if [ -n "$inline_comment_id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/pulls/comments/$inline_comment_id" -X PATCH -f body="$inline_body" --silent
+          else
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/comments" \
+              -f body="$inline_body" \
+              -f commit_id="$HEAD_SHA" \
+              -f path="$inline_path" \
+              -F line="$inline_line" \
+              -f side=RIGHT \
+              --silent
+          fi
+
+      - name: React done on /explore command
+        if: ${{ success() && github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=rocket --silent || true
+
+      - name: Report /explore command failure
+        if: ${{ failure() && github.event_name == 'issue_comment' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # If a report was produced before the non-zero exit, the report step
+          # already posted it — leave it rather than clobbering useful output.
+          if [ -s "$RUNNER_TEMP/agent-pr-explore-sandbox/artifacts/agent-pr-exploration-report.md" ]; then
+            echo "A report exists despite the non-zero exit; leaving it in place."
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content="-1" --silent || true
+          marker="<!-- agent-pr-explore-sandbox:${PR_NUMBER} -->"
+          body="⚠️ Exploration run failed before producing a report — see [the run]($RUN_URL).
+
+          $marker"
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$marker\"))) | .id" | tail -n 1)"
+          if [ -n "$existing" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -X PATCH -f body="$body" --silent || true
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body" --silent || true
+          fi

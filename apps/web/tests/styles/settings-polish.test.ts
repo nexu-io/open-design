@@ -1,0 +1,92 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+import { readExpandedIndexCss } from '../helpers/read-expanded-css';
+
+const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), 'utf8');
+const expandedIndexCss = readExpandedIndexCss();
+const mentionHomeCss = readFileSync(new URL('../../src/styles/workspace/mention-home.css', import.meta.url), 'utf8');
+const artifactsCss = readFileSync(new URL('../../src/styles/workspace/artifacts.css', import.meta.url), 'utf8');
+
+function cssBlock(css: string, selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(css);
+  if (!match) throw new Error(`Missing CSS block for ${selector}`);
+  return match[1] ?? '';
+}
+
+function ruleValue(block: string, property: string): string {
+  const match = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+);`).exec(block);
+  if (!match) throw new Error(`Missing CSS property ${property}`);
+  return match[1]!.trim();
+}
+
+describe('settings polish CSS', () => {
+  it('keeps the global stylesheet as an import manifest after the CSS split', () => {
+    const nonImportLines = indexCss
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('@import'));
+
+    expect(nonImportLines).toEqual([]);
+  });
+
+  it('paints selected select options as a full-row state, not text-only emphasis', () => {
+    const option = cssBlock(expandedIndexCss, '.od-select-option');
+    const selected = cssBlock(expandedIndexCss, '.od-select-option.selected');
+    const selectedHover = cssBlock(expandedIndexCss, '.od-select-option.selected:hover:not(:disabled),\n.od-select-option.selected.active:not(:disabled)');
+
+    expect(ruleValue(option, 'width')).toBe('100%');
+    expect(ruleValue(option, 'display')).toBe('grid');
+    expect(ruleValue(selected, 'background')).toBe('color-mix(in srgb, var(--selected) 9%, var(--bg-subtle))');
+    expect(ruleValue(selectedHover, 'background')).toBe('color-mix(in srgb, var(--selected) 13%, var(--bg-subtle))');
+  });
+
+  it('keeps the settings header above scrolling content rows', () => {
+    const head = cssBlock(mentionHomeCss, '.modal-settings .modal-head');
+    const body = cssBlock(mentionHomeCss, '.modal-settings .modal-body');
+    const content = cssBlock(mentionHomeCss, '.settings-content');
+
+    expect(ruleValue(body, 'overflow')).toBe('hidden');
+    expect(ruleValue(head, 'position')).toBe('relative');
+    expect(ruleValue(head, 'z-index')).toBe('2');
+    expect(ruleValue(head, 'background')).toBe('var(--bg-elevated)');
+    expect(ruleValue(content, 'position')).toBe('relative');
+    expect(ruleValue(content, 'z-index')).toBe('1');
+  });
+
+  it('keeps the silent-update checkbox native-sized and aligned horizontally', () => {
+    const row = cssBlock(artifactsCss, '.settings-about-diagnostics > .settings-about-toggle');
+    const checkbox = cssBlock(artifactsCss, '.settings-about-toggle input');
+
+    expect(ruleValue(row, 'flex-direction')).toBe('row');
+    expect(ruleValue(row, 'gap')).toBe('10px');
+    expect(ruleValue(checkbox, 'appearance')).toBe('auto');
+    expect(ruleValue(checkbox, 'width')).toBe('14px');
+    expect(ruleValue(checkbox, 'height')).toBe('14px');
+    expect(ruleValue(checkbox, 'padding')).toBe('0');
+    expect(ruleValue(checkbox, 'margin')).toBe('2px 0 0');
+  });
+
+  it('stacks the updater popup checkbox above an evenly split action row', () => {
+    const footer = cssBlock(mentionHomeCss, '.updater-popup__footer');
+    const preference = cssBlock(mentionHomeCss, '.updater-popup__preference');
+    const label = cssBlock(mentionHomeCss, '.updater-popup__checkbox span');
+    const actions = cssBlock(mentionHomeCss, '.updater-popup__actions');
+
+    // The popup adopted the update-reminder dialog layout: the silent-update
+    // checkbox gets the full panel width on its own row, and the two action
+    // pills split the row below 50/50. The single-row predecessor squeezed the
+    // checkbox label into a skinny always-wrapping column once the pill
+    // buttons widened.
+    expect(ruleValue(footer, 'display')).toBe('flex');
+    expect(ruleValue(footer, 'flex-direction')).toBe('column');
+    expect(ruleValue(footer, 'align-items')).toBe('stretch');
+    // Long en labels still have to wrap inside the checkbox column rather than
+    // overflow the panel.
+    expect(ruleValue(preference, 'min-width')).toBe('0');
+    expect(ruleValue(label, 'white-space')).toBe('normal');
+    expect(ruleValue(actions, 'display')).toBe('grid');
+    expect(ruleValue(actions, 'grid-template-columns')).toBe('1fr 1fr');
+  });
+});

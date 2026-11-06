@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Humanize PPT Video Slots",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "video_id": {
+        "type": "string"
+      },
+      "slide_id": {
+        "type": "string"
+      },
+      "purpose": {
+        "type": "string"
+      },
+      "duration_seconds": {
+        "type": "number"
+      },
+      "aspect_ratio": {
+        "type": "string"
+      },
+      "fallback_static": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-html-in-canvas-liquid-glass",
+  "surface": "video",
+  "title": "HyperFrames HTML-in-Canvas: Liquid Glass Landing Reveal",
+  "summary": "A 20-second voronoi liquid-glass reveal of a real product landing page — DOM is captured live via drawElementImage, shattered into refracting glass cells, then settles into a clean hero shot. Built on the vfx-liquid-glass catalog block.",
+  "category": "VFX / HTML-in-Canvas",
+  "tags": ["hyperframes", "html-in-canvas", "liquid-glass", "webgl", "product-promo"],
+  "model": "hyperframes-html",
+  "aspect": "16:9",
+  "prompt": "Build a 20-second HyperFrames composition (1920×1080, 30fps) titled \"liquid-glass-landing-reveal\". Pull the catalog block first: `npx hyperframes add vfx-liquid-glass` (or `npx hyperframes add html-in-canvas` to grab the full set).\n\nVisual identity: deep-space canvas #0a0d14, single warm accent #ff8a4c for refraction tint, secondary cool #6cf3c0 for chromatic edge highlights, off-white text #f5f7fa. Display face: \"Migra\" 140px for the headline; body \"Söhne\" 24px; mono \"JetBrains Mono\" 18px. Tabular-nums on any numerals.\n\nTwo nested compositions:\n\n1. `landing-source` — a `<canvas layoutsubtree width=\"1920\" height=\"1080\">` containing the actual product landing-page DOM: a tall hero (\"Ship faster. Stay calm.\"), a 3-column feature grid with rounded cards using `backdrop-filter: blur(24px)`, a soft radial accent glow behind the headline, and a CTA pill (\"start free\"). Real CSS, real web fonts — this gets captured live by the WebGL pass.\n2. `theater` — the WebGL canvas that runs the vfx-liquid-glass shader on the captured texture.\n\nTimeline (single root composition, paused: true, registered as window.__timelines.main, data-duration=20):\n\n0.0–6.0s ENTRY — voronoi cells start fully fractured at scale 1.6, opacity 0.2, with strong chromatic aberration (0.04 offset). Easing: expo.out. Cells coalesce inward, refraction strength tapers from 1.0 → 0.18, parallax reveals the underlying landing-page shot.\n\n6.0–13.5s SETTLE — full landing page resolves crisp behind a thin glass sheen. Add a slow lateral parallax (drift the texture x by 24px over 7s, ease sine.inOut). Tween a subtle highlight sweep across the hero using the `shimmer-sweep` component at 9.0s.\n\n13.5–20.0s OUTRO — gentle re-fracture: refraction strength 0.18 → 0.42, voronoi scale 1.0 → 1.08, slight rotation 0 → -2deg, opacity hold. Final 0.6s fades the entire theater canvas to black via the root container only — never animate the source DOM out.\n\nFeature detection (mandatory): inside the theater script tag, before instantiating Three.js, check `('layoutSubtree' in document.createElement('canvas')) && typeof CanvasRenderingContext2D.prototype.drawElementImage === 'function'`. If false, hide the theater canvas and let the source DOM display directly — the rendered MP4 always has the flag enabled, but Studio preview without it must not show black.\n\nNon-negotiables: deterministic motion (seeded mulberry32 if any noise needed), no Math.random / Date.now, no `repeat: -1`, no async timeline construction. All entrances via `gsap.from()` against the hero CSS layout. Run `npx hyperframes lint` and `npx hyperframes inspect --samples 12 --at 2,4,6,9,13,17` before render. Output: `liquid-glass-landing-reveal.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-liquid-glass.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/vfx-liquid-glass.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/blocks/vfx-liquid-glass"
+  }
+}

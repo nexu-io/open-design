@@ -1,0 +1,78 @@
+// Shared builder for the plugin detail modal's "Use plugin" split-button
+// menu. Mirrors the home plugin-card use-menu (`plugins-home/PluginCard`):
+// when a plugin ships an `od.useCase.query`, the primary CTA grows a caret
+// that offers two variants:
+//   • "Use"                 → attach the chip AND load the example prompt into
+//                             the composer (action 'use-with-query')
+//   • "Use without prompt"  → attach the plugin chip only (action 'use')
+// Plugins without a usable query keep the plain single-action button, so the
+// menu is `undefined` in that case.
+
+import type { InstalledPluginRecord } from '@open-design/contracts';
+import { canDuplicatePluginPreview } from '../plugins-home/duplicate';
+import type { PluginUseAction } from '../plugins-home/useActions';
+import type { PreviewPrimaryActionMenuItem } from '../PreviewModal';
+
+type TranslateUseMenu = (
+  key:
+    | 'preview.duplicateTemplate'
+    | 'preview.duplicateTemplateDesc'
+    | 'preview.usePlugin'
+    | 'preview.usePluginOnly'
+    | 'preview.usePluginOnlyDesc'
+    | 'preview.replicateContent'
+    | 'preview.replicateContentDesc',
+) => string;
+
+// Primary CTA for the detail modal's Use split button. When the plugin
+// ships an example query the headline action loads the prompt. The
+// caret menu still offers both variants, with structure-only Use as the
+// secondary path. Querless plugins keep the plain "Use plugin" button.
+export function pluginUsePrimaryAction(
+  record: InstalledPluginRecord,
+  t: TranslateUseMenu,
+): { label: string; action: PluginUseAction } {
+  const hasQuery = Boolean(record.manifest?.od?.useCase?.query);
+  return hasQuery
+    ? { label: t('preview.replicateContent'), action: 'use-with-query' }
+    : { label: t('preview.usePlugin'), action: 'use' };
+}
+
+export function buildPluginUseMenu(
+  record: InstalledPluginRecord,
+  onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void,
+  t: TranslateUseMenu,
+  onDuplicate?: (record: InstalledPluginRecord) => void,
+): PreviewPrimaryActionMenuItem[] | undefined {
+  const hasQuery = Boolean(record.manifest?.od?.useCase?.query);
+  const canDuplicate = Boolean(onDuplicate) && canDuplicatePluginPreview(record);
+  if (!hasQuery && !canDuplicate) return undefined;
+  // Prompt-loading Use leads: the menu only exists when the plugin ships an
+  // example query, and reproducing the previewed result is what most users
+  // open it for — structure-only use is the secondary path.
+  const items: PreviewPrimaryActionMenuItem[] = hasQuery
+    ? [
+        {
+          label: t('preview.replicateContent'),
+          description: t('preview.replicateContentDesc'),
+          onClick: () => onUse(record, 'use-with-query'),
+          testId: `plugin-details-use-with-query-${record.id}`,
+        },
+        {
+          label: t('preview.usePluginOnly'),
+          description: t('preview.usePluginOnlyDesc'),
+          onClick: () => onUse(record, 'use'),
+          testId: `plugin-details-use-option-${record.id}`,
+        },
+      ]
+    : [];
+  if (canDuplicate) {
+    items.push({
+      label: t('preview.duplicateTemplate'),
+      description: t('preview.duplicateTemplateDesc'),
+      onClick: () => onDuplicate?.(record),
+      testId: `plugin-details-duplicate-${record.id}`,
+    });
+  }
+  return items;
+}

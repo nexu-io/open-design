@@ -1,0 +1,37 @@
+{
+  "id": "frame-vignelli",
+  "surface": "hyperframes",
+  "title": "Vignelli",
+  "summary": "Bold typography with red accents",
+  "category": "Social-shorts",
+  "tags": [
+    "vignelli",
+    "red",
+    "bold",
+    "portrait",
+    "9:16"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "9:16",
+  "fps": 30,
+  "durationSec": 10,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Portrait social",
+    "Bold statement card",
+    "Red-accent promo"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-vignelli",
+    "license": "Apache-2.0",
+    "author": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/vignelli",
+    "notes": "Forked from heygen-com/hyperframes registry/examples/vignelli (Apache-2.0)."
+  }
+}

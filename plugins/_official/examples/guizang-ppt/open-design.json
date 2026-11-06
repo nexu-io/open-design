@@ -1,0 +1,116 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-guizang-ppt",
+  "title": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+  "title_i18n": {
+    "en": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+    "zh-CN": "像增长策略负责人一样写品牌到收入故事",
+    "zh-TW": "像增长策略负责人一样写品牌到收入故事"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query \"annual-marketing-plan\", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.",
+  "description_i18n": {
+    "en": "For marketing and gtm work: bind launches, campaigns, events, and brand plans to growth and pipeline outcomes. Built around the core query \"annual-marketing-plan\", with GTM strategy lead judgment, buyer-ready proof, and this outcome: approve launch plan, campaign budget, or GTM motion.",
+    "zh-CN": "市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。",
+    "zh-TW": "市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/guizang-ppt",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "ppt",
+    "slides",
+    "presentation",
+    "magazine",
+    "untitled",
+    "horizontal-swipe",
+    "horizontal-swipe-deck",
+    "editorial-magazine",
+    "e-ink-presentation",
+    "marketing-gtm",
+    "annual-marketing-plan",
+    "launch",
+    "campaign",
+    "pipeline",
+    "decision-deck",
+    "commercial-slide-agent",
+    "guizang-ppt",
+    "marketing-and-gtm"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "marketing",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a Brand-to-Revenue Story like a Growth Strategy Lead\" as a Marketing and GTM deck in the Guizang Ppt visual system. Scene: annual-marketing-plan. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce a commercial-grade slide plan, written slides, visual direction, speaker-ready structure, and critic pass against this rubric: can the plan connect creative choices to measurable growth.",
+        "zh-CN": "像增长策略负责人一样写品牌到收入故事。市场/增长/GTM场景：围绕 core query「annual-marketing-plan」把粗糙材料整理成“像增长策略负责人一样写品牌到收入故事”这类可购买、可复用的专业 Deck；突出受众、决策目标、证据链、风险取舍和评审标准。 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+          "title_i18n": {
+            "en": "Write a Brand-to-Revenue Story like a Growth Strategy Lead",
+            "zh-CN": "像增长策略负责人一样写品牌到收入故事",
+            "zh-TW": "像增长策略负责人一样写品牌到收入故事"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/example-slides.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/components.md",
+        "./references/layouts.md",
+        "./references/styles.md",
+        "./references/themes.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

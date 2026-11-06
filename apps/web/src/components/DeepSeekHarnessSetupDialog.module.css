@@ -1,0 +1,42 @@
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.heading {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+
+.note {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--bg-subtle);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.error {
+  margin: 12px 0 0;
+  color: var(--danger-text, #b42318);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.actions {
+  margin-top: 20px;
+}

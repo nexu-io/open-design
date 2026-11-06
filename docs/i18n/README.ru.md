@@ -1,0 +1,713 @@
+<h1 align="center">OpenDesign: первое совместное рабочее пространство с ИИ-дизайн-агентами</h1>
+
+> ✨ **[Отмечаем 100K звёзд на GitHub с OpenDesign Go](https://open-design.ai/pricing/)** — Кредиты Go удвоены: **8 долларов США за первый месяц и до 120 долларов США в ежемесячных кредитах для доступных в Design Plan моделей**. Используйте их с более чем 10 моделями, включая GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X и MiMo V2.6 Flash. Все персональные тарифы включают доступ к API для Codex, Claude Code, DSH, OpenCode и других инструментов.
+
+<p align="center">
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: первое совместное рабочее пространство с ИИ-дизайн-агентами" width="100%" />
+</p>
+
+<p align="center">
+  <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_website">Сайт</a> ·
+  <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download">Скачать</a> ·
+  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">OpenDesign Cloud</a> ·
+  <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
+  <a href="https://x.com/OpenDesignHQ">Подписаться @OpenDesignHQ</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nexu-io/open-design/releases"><img alt="релиз" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
+  <a href="../../LICENSE"><img alt="лицензия" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat" /></a>
+  <a href="https://discord.gg/mHAjSMV6gz"><img alt="discord" src="https://img.shields.io/discord/1479002485040480266?style=flat&logo=discord&logoColor=white&label=discord&color=5865F2&cacheSeconds=3600" /></a>
+  <a href="../../QUICKSTART.md"><img alt="быстрый старт" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat" /></a>
+</p>
+
+<p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <b>Русский</b> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.th.md">ภาษาไทย</a></p>
+
+---
+
+## Что такое OpenDesign
+
+OpenDesign — **первое совместное рабочее пространство с ИИ-дизайн-агентами**. Начните с описания задачи и используйте привычного агента для разработки или OpenDesign Cloud, чтобы создать прототип в соответствии с вашей дизайн-системой. Поделитесь им с командой, соберите отзывы и попросите агента доработать результат в том же проекте.
+
+Этот процесс открыт и расширяем. OpenDesign распространяется по лицензии Apache 2.0: команды могут изучать и адаптировать навыки, шаблоны, дизайн-системы и плагины под свои процессы.
+
+
+---
+
+## Обзор продукта
+
+### Основные страницы
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png"><img src="../../docs/screenshots/product-tour/home-workspace-2026-09-30-220844.png" alt="Home — Начните с описания задачи или примера." width="500" /></a><br/>
+<sub><b>Home</b> — Начните с описания задачи или примера.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp"><img src="../../docs/screenshots/product-tour/all-projects-2026-09-30-220900.webp" alt="All projects — Вернитесь к дизайн-системам, медиафайлам и прототипам." width="500" /></a><br/>
+<sub><b>All projects</b> — Вернитесь к дизайн-системам, медиафайлам и прототипам.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png"><img src="../../docs/screenshots/product-tour/design-systems-stripe-2026-09-30-220910.png" alt="Design Systems — Изучайте фирменные материалы и дорабатывайте их с агентом." width="500" /></a><br/>
+<sub><b>Design Systems</b> — Изучайте фирменные материалы и дорабатывайте их с агентом.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png"><img src="../../docs/screenshots/product-tour/plugins-skills-2026-09-30-220917.png" alt="Plugins — Находите навыки и запускайте их через Try it." width="500" /></a><br/>
+<sub><b>Plugins</b> — Находите навыки и запускайте их через Try it.</sub>
+</td>
+</tr>
+</table>
+
+### Studio — создание и доработка в одном проекте
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-prototype-2026.webp" alt="Prototype — Создавайте и улучшайте интерактивные сайты вместе с агентом и просматривайте результат в реальном времени." /><br/>
+<sub><b>Prototype</b> — Создавайте и улучшайте интерактивные сайты вместе с агентом и просматривайте результат в реальном времени.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-slides-2026.png" alt="Slides — Создавайте презентации, проверяйте слайды и заметки докладчика, затем экспортируйте результат." /><br/>
+<sub><b>Slides</b> — Создавайте презентации, проверяйте слайды и заметки докладчика, затем экспортируйте результат.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-image-2026.webp" alt="Image — Создавайте изображения из переписки, проверяйте результат, затем скачивайте или открывайте его." /><br/>
+<sub><b>Image</b> — Создавайте изображения из переписки, проверяйте результат, затем скачивайте или открывайте его.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4"><img src="../../docs/screenshots/product-tour/studio-hyperframes-poster-2026.png" alt="HyperFrames — Создавайте анимированную графику с агентом и экспортируйте её в MP4." /></a><br/>
+<sub><b>HyperFrames</b> — Создавайте анимированную графику с агентом и экспортируйте её в MP4. <a href="../../docs/screenshots/product-tour/studio-hyperframes-2026.mp4">Смотреть видео</a>.</sub>
+</td>
+</tr>
+</table>
+
+---
+
+## Совместимость с платформами
+
+> OpenDesign поставляется как **навыки, CLI и MCP-сервер**, которые мейнстримные кодинг-агенты потребляют нативно. После установки OD одна команда `od mcp install <agent>` подключает MCP-сервер в конфигурацию этого агента, и вы вызываете одни и те же инструменты изнутри любого агента.
+
+| Кодинг-агент / платформа &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Статус &nbsp;&nbsp; | Установка MCP-сервера одной строкой &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+|---|:---:|---|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Поддерживается | `od mcp install claude` |
+| [Codex CLI](https://github.com/openai/codex) | ✅ Поддерживается | `od mcp install codex` |
+| [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Поддерживается | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Поддерживается | `od mcp install raven` |
+| [Cursor](https://www.cursor.com/cli) | ✅ Поддерживается | `od mcp install cursor` |
+| [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Поддерживается | `od mcp install copilot` |
+| [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Поддерживается | `od mcp install copilot` |
+| [OpenCode](https://opencode.ai/) | ✅ Поддерживается | `od mcp install opencode` |
+| [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Поддерживается | `od mcp install openclaw` |
+| [Antigravity](https://antigravity.google) | ✅ Поддерживается | `od mcp install antigravity` |
+| [Cline](https://github.com/cline/cline) | ✅ Поддерживается | `od mcp install cline` |
+| [Trae](https://www.trae.ai/) | ✅ Поддерживается | `od mcp install trae` |
+| [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Поддерживается | `od mcp install kimi` |
+| [Kiro](https://kiro.dev) | ✅ Поддерживается | `od mcp install kiro` |
+| [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Поддерживается | `od mcp install pi` |
+| [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Поддерживается | `od mcp install vibe` |
+| [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Поддерживается | `od mcp install hermes` |
+
+`od mcp install <agent> --print` для предпросмотра без изменений · `--uninstall` для удаления · полный список через `od mcp install --help`.
+
+<p align="center">
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="25 CLI кодинг-агента, которые поддерживает OpenDesign — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+</p>
+
+**Нет установленного CLI?** BYOK-прокси по адресу `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` даёт вам тот же цикл (без запуска процессов) — вставьте `baseUrl` + `apiKey` + `model`, с поддержкой OpenAI, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM или любого OpenAI-совместимого эндпоинта. Защита от SSRF для каждой цели блокирует внутренние IP / link-local / CGNAT на границе демона.
+
+Определения runtime находятся в [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) и регистрируются в `runtimes/registry.ts`. Новый парсер нужен только для нового wire-формата — см. [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
+
+---
+
+## Демо
+
+Четыре основные категории продукта, все отрендерены кодинг-агентом, работающим на вашем ноутбуке. Нажмите на миниатюру, чтобы увидеть реальный пример.
+
+### 1 · Прототипы — веб · десктоп · мобильные
+
+Поверхность вывода по умолчанию. Одностраничные HTML-артефакты, которые читают ваш `DESIGN.md` и рендерятся в изолированном iframe.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/dating-web.png" alt="Веб-прототип dating-web" /><br/>
+<sub><b>Веб-прототип</b> — редакционный дашборд со скроллбарами, KPI и графиками. Отрендерен напрямую из <code>design-templates/dating-web/</code>.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/gamified-app.png" alt="Геймифицированное приложение" /><br/>
+<sub><b>Прототип мобильного приложения</b> — трёхэкранный геймифицированный поток с лентами XP и деталями квеста. Передавайте напрямую в Cursor / Codex / Claude Code, чтобы превратить в React/Next/Vue.</sub>
+</td>
+</tr>
+</table>
+
+### 2 · Живые артефакты и дашборды
+
+Живые дашборды, комнаты принятия решений, KPI-стены — одностраничные артефакты, которые подтягивают данные через панель настроек и остаются редактируемыми на месте.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/live-dashboard.png" alt="Живой дашборд" /><br/>
+<sub><b>Живой дашборд</b> — редактируемая KPI-стена, чья панель настроек выводит параметры, которые стоит подкручивать. Агент выдаёт манифест, и iframe перерисовывается без перезагрузки.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/research-decision-room.png" alt="Комната принятия решений" /><br/>
+<sub><b>Комната принятия решений</b> — артефакт-брифинг из множества источников для встреч по продукту / исследованиям / операциям.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/github-dashboard.png" alt="Дашборд GitHub" /><br/>
+<sub><b>Дашборд в стиле GitHub</b> — метрики репозитория, представленные как живой артефакт.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/flowai-live-dashboard-template.png" alt="Живой дашборд Flow" /><br/>
+<sub><b>Шаблон живого дашборда Flow</b> — доменно-специфичный KPI-шаблон, оформленный через активный <code>DESIGN.md</code>.</sub>
+</td>
+</tr>
+</table>
+
+### 3 · Презентации — журнальные презентации, еженедельные апдейты, питчи
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/07-magazine-deck.png" alt="Журнальная презентация (guizang-ppt)" /><br/>
+<sub><b>Режим презентации (guizang-ppt)</b> — журнальные макеты, WebGL-герой, чек-листы P0/P1/P2. Включён дословно из <a href="https://github.com/op7418/guizang-ppt-skill"><code>op7418/guizang-ppt-skill</code></a> с сохранением оригинальной лицензии.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/skills/deck-swiss-international.png" alt="Швейцарская презентация" /><br/>
+<sub><b>Презентация в швейцарском интернациональном стиле</b> — привязанная к сетке, монохромные акценты. Один из <b>15 шаблонов презентаций</b> и <b>36 тем</b> в <code>design-templates/html-ppt-*/</code>.</sub>
+</td>
+</tr>
+</table>
+
+Каждая презентация экспортируется в **HTML** (один файл, встроенные ассеты), **PDF** (печать из браузера, с учётом презентации), **PPTX** (навык, управляемый агентом), **ZIP** (архив) или **Markdown**.
+
+### 4 · Изображения — `gpt-image-2`, ImageRouter, кастомный API
+
+<table>
+<tr>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776662673014_nf0taw_HGRMNDybsAAGG88.jpg" alt="Иллюстрированная гастрономическая карта города" /><br/><sub><b>Иллюстрированная гастрономическая карта города</b><br/>Рисованный от руки редакционный туристический постер</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453149026_gd2k50_HHCSvymboAAVscc.jpg" alt="Кинематографичная сцена в лифте" /><br/><sub><b>Кинематографичная сцена в лифте</b><br/>Однокадровый редакционный стоп-кадр</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453164993_mt5b69_HHDoWfeaUAEA6Vt.jpg" alt="Киберпанк-портрет" /><br/><sub><b>Киберпанк-портрет</b><br/>Аватар профиля — неоновый текст на лице</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1776661968404_8a5flm_HGQc_KOaMAA2vt0.jpg" alt="Эволюция 3D-каменной лестницы" /><br/><sub><b>3D-каменная лестница</b><br/>Инфографика из тёсаного камня</sub></td>
+<td width="20%" valign="top"><img src="https://cms-assets.youmind.com/media/1777453184257_vb9hvl_HG9tAkOa4AAuRrn.jpg" alt="Гламурный портрет" /><br/><sub><b>Гламурный портрет</b><br/>Редакционная студийная съёмка</sub></td>
+</tr>
+</table>
+
+**93 готовых к воспроизведению промпта** находятся в [`prompt-templates/`](../../prompt-templates/) — миниатюры предпросмотра, полное тело промпта, целевая модель, соотношение сторон и указание источника. Один клик помещает бриф в композер.
+
+### 5 · Видео и HyperFrames — агентно-нативная моушн-графика
+
+**[HyperFrames][hyperframes]** — это открытый, агентно-нативный видеофреймворк от HeyGen, интегрированный как полноправный участник в OpenDesign. Агент пишет HTML + CSS + GSAP, а HyperFrames рендерит это в детерминированный MP4 через headless Chrome + FFmpeg. Сочетайте его с **Seedance 2.0** для кинематографичного t2v / i2v, **Veo 3 / Sora 2 / Kling 2** для маршрутизируемых вариантов моделей и **Suno v5 / Lyria 2** для аудиослоя.
+
+<table>
+<tr>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-saas-product-promo-30s.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/app-showcase.png" alt="Промо SaaS-продукта" /></a><br/><sub><b>30-секундное промо SaaS-продукта</b> · 16:9 · 3D-раскрытие UI</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-tiktok-karaoke-talking-head.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/tiktok-follow.png" alt="TikTok-караоке" /></a><br/><sub><b>TikTok-караоке с говорящей головой</b> · 9:16 · TTS + субтитры с синхронизацией по словам</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-brand-sizzle-reel.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Динамичный брендовый ролик" /></a><br/><sub><b>30-секундный брендовый sizzle reel</b> · 16:9 · аудиореактивная кинетическая типографика</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-data-bar-chart-race.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/data-chart.png" alt="Гонка столбчатых диаграмм" /></a><br/><sub><b>Гонка столбчатых диаграмм</b> · 16:9 · инфографика данных в стиле NYT</sub></td>
+</tr>
+<tr>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-flight-map-route.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/nyc-paris-flight.png" alt="Карта полёта" /></a><br/><sub><b>Карта полёта</b> · 16:9 · раскрытие маршрута в стиле Apple</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-logo-outro-cinematic.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/logo-outro.png" alt="Заставка логотипа" /></a><br/><sub><b>4-секундная кинематографичная заставка логотипа</b> · 16:9 · посборочная сборка + bloom</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-money-counter-hype.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/apple-money-count.png" alt="Счётчик денег" /></a><br/><sub><b>Счётчик денег $0 → $10K</b> · 9:16 · хайп в стиле Apple</sub></td>
+<td width="25%" valign="top"><a href="../../prompt-templates/video/hyperframes-website-to-video-promo.json"><img src="https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png" alt="Сайт в видео" /></a><br/><sub><b>Сайт в видео</b> · 16:9 · снимает сайт в 3 вьюпортах</sub></td>
+</tr>
+</table>
+
+11 шаблонов HyperFrames + 39 промптов Seedance поставляются с репозиторием. Миниатюры каталога © HeyGen; фреймворк под Apache-2.0. Специфичный для OD рабочий процесс рендеринга (кэш композиций, обход sandbox-exec, MP4-как-чип) подробно описан в [`design-templates/hyperframes/`](../../design-templates/hyperframes/).
+
+[hyperframes]: https://github.com/heygen-com/hyperframes
+
+---
+
+## Почему OpenDesign
+
+- 🤖 **Агентно-нативный, не зависящий от модели.** Мы не поставляем агента. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`, уже находящиеся в вашем `PATH`, — это дизайн-движок. Переключайтесь одним кликом.
+- 🧠 **Брендовый уровень по умолчанию.** Каждый рендер читает `DESIGN.md` активного пакета как основной контракт бренда. Репозиторий содержит 151 пакет дизайн-систем; старые пакеты могут состоять только из `DESIGN.md`, а новые — добавлять `manifest.json`, `tokens.css`, компоненты, ресурсы и сведения о происхождении. Положите папку — и выбор её найдёт.
+- 🖥️ **Локальный по умолчанию, BYOK на каждом уровне.** Нативные десктопные приложения ориентированы на локальную работу. Аналитика продукта и воспроизведение сессий требуют согласия; очищенная телеметрия безопасности и надёжности всегда включена. Перед описанием путей данных демона необходимо прочитать корневой `AGENTS.md`, раздел **Daemon data directory contract**.
+- 🌍 **Компонуемый в четырёх плоскостях.** **Плагины** несут workflow · **функциональные навыки** — поведение агента · **шаблоны дизайна** — чертежи рендеринга · **дизайн-системы** — бренд.
+- 🔁 **Обновляйте существующую кодовую базу.** Передайте `git`-репозиторий + `DESIGN.md` агенту, и он отрефакторит ваши реальные компоненты под спецификацию бренда.
+- 🔒 **Конфиденциальность по убеждению.** Проекты могут работать локально или в собственном развёртывании. Запросы к облачным моделям и OpenDesign Cloud отправляются соответствующим сервисам. BYOK-прокси включает защиту от SSRF.
+
+---
+
+## Быстрый старт
+
+### 🖥️ Скачайте десктопное приложение (рекомендуется — без настройки)
+
+Самый быстрый способ использовать OpenDesign. Никакого Node, никакого pnpm, никакого клонирования.
+
+- **macOS** (Apple Silicon · Intel x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_macos) или [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+- **Windows** (x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) или [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+- **Linux** (AppImage, опциональная линия) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
+
+После установки: приложение автоматически обнаруживает каждый CLI кодинг-агента в вашем `PATH`, загружает 100+ функциональных навыков, отдельный каталог шаблонов рендеринга и 151 пакет дизайн-систем и позволяет вам ввести бриф на экране входа.
+
+### 🤖 Установка в ваш кодинг-агент (без UI)
+
+Вы можете использовать OpenDesign, ни разу не открыв GUI — вызывайте его как навык, плагин или MCP-сервер внутри Claude Code, Codex, Cursor, Copilot, OpenClaw, Antigravity, Hermes, Kimi и других.
+
+```bash
+# Установка одной командой в агент, которым вы пользуетесь:
+od mcp install <agent>
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
+
+# Аналогичная установка через hosted shell-скрипт:
+curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
+```
+
+`install.sh` — тонкая shell-обертка вокруг `od mcp install`. Она нужна, чтобы hosted URL возвращал shell-скрипт вместо HTML-fallback лендинга и быстро падал, если ваша оболочка находит не OpenDesign, а другой бинарник `od`.
+
+> **Пользователям WSL2:** если CLI ваших кодинг-агентов запускаются внутри WSL2, сначала выполните шаги из [`гайда по настройке WSL2`](../../docs/wsl-setup.md). Linux-команда `/usr/bin/od` может перекрывать команду `od` из OpenDesign.
+
+Затем, внутри агента:
+
+```
+> Use open-design to generate a landing page with the Linear design system
+```
+
+В локальном CLI-запуске с файловой системой агент компонует выбранный функциональный навык или шаблон с `DESIGN.md`, пишет канонические файлы, а OpenDesign показывает их. BYOK/API-запуск без файловых инструментов возвращает один полный блок `<artifact>`.
+
+### 🐳 Запуск с Docker
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design/deploy
+cp .env.example .env
+echo "OD_API_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up -d
+# open http://127.0.0.1:7456
+```
+
+Если браузер запрашивает учётные данные, укажите `open-design` как имя пользователя и значение `OD_API_TOKEN` из `deploy/.env` как пароль. Трафик Docker bridge останется защищённым без включения host networking.
+
+### 🚀 Развертывание на Sealos
+
+[![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
+
+Шаблон Sealos App Store запускает опубликованный Docker-образ OpenDesign с постоянным хранилищем рабочей области и Basic Auth на публичном прокси. Для пользовательских публичных или совместных Docker-развертываний следуйте рекомендациям по обратному прокси и `OPEN_DESIGN_ALLOWED_ORIGINS` в [`deploy/README.md`](../../deploy/README.md#local-compose).
+
+### 🧑‍💻 Запуск из исходников
+
+```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design
+corepack enable && pnpm install
+pnpm tools-dev run web
+```
+
+Откройте URL, напечатанный `tools-dev`; без явных флагов порты разработки назначаются динамически.
+
+Node `~24`, pnpm `10.33.x`. Пользователям WSL2 см. [`docs/wsl-setup.md`](../../docs/wsl-setup.md); пользователям нативной Windows — [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Полный быстрый старт, переменные окружения и процесс упакованной сборки → [`QUICKSTART.md`](../../QUICKSTART.md).
+
+### Полный рабочий процесс — от брифа до артефакта
+
+`brief → plugin → direction → design system → artifact → handoff → memory`
+
+1. **PM подаёт бриф.** Выбор плагина предлагает лендинг · питч-презентацию · дашборд · пост для соцсетей · PM-спецификацию · OKR-карту…
+2. **Дизайнер (или агент) фиксирует направление.** Нет бренда? Выберите одно из 5 кураторских направлений. Есть бренд? Добавьте скриншот или URL → агент подключит GitHub и кодифицирует переиспользуемый `DESIGN.md`.
+3. **Агент создаёт первый результат.** CLI-запуски с файловой системой пишут канонические файлы; BYOK/API без файловых инструментов возвращает полный `<artifact>`.
+4. **Передача в разработку.** Артефакт — это настоящий HTML/CSS. Откройте его в Cursor, Codex или Claude Code, чтобы продолжать сборку как код, либо сразу экспортируйте PPTX / PDF / MP4 для маркетинга.
+5. **OpenDesign становится умнее по мере использования.** Ваши скриншоты, шрифты, палитры и подтверждённые артефакты накапливаются как значения по умолчанию для следующей сессии. Меньше переделок, меньше дрейфа.
+
+---
+
+## Используйте OpenDesign из вашего кодинг-агента
+
+OpenDesign поставляет **stdio MCP-сервер** и **скрипты установки** для каждого агента. Любой MCP-совместимый агент в другом репозитории может читать файлы из ваших локальных проектов OpenDesign напрямую — токены CSS, JSX-компоненты, входной HTML — как структурированный API, запрашиваемый по имени. Агент всегда видит живой файл, а не устаревший экспорт.
+
+```bash
+# Установка одной командой (поддерживается 16+ CLI):
+od mcp install <agent>
+
+# После этого агент может:
+od project list --json
+od files list <project-id> --json
+od files read <project-id> <relative-path>
+od plugin list --json
+od skills list --json
+```
+
+**Почему MCP?** Экспорт и повторное прикрепление zip на каждой итерации ломает поток. MCP открывает дизайн-источник напрямую — агент всегда видит живой файл.
+
+**Для агента, начинающего с нуля,** установщик размещает `~/.config/<agent>/open-design.json` (или эквивалент для платформы) плюс готовый к копированию MCP-сниппет. Cursor получает диплинк в один клик; Claude Code получает однострочник `claude mcp add-json`; каждый другой агент получает JSON в той схеме, которую ожидает его конфигурация. Полный процесс для каждого агента → **Settings → MCP server** в десктопном приложении или [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
+
+**Модель безопасности.** Только для чтения по умолчанию, демон привязывается к `127.0.0.1`, а SSRF блокируется на границе прокси. Доступ из LAN требует явного `OD_BIND_HOST` плюс `OD_ALLOWED_ORIGINS`. Учётные данные коннекторов и маршруты предпросмотра живых артефактов остаются только loopback в любом случае.
+
+**Внутренние эндпоинты моделей.** Чтобы предотвратить SSRF, демон по умолчанию блокирует базовые URL провайдеров, которые резолвятся в приватные или внутренние диапазоны адресов (RFC1918, link-local, CGNAT и IP cloud-metadata), и показывает `Internal IPs blocked`. Если вы запускаете внутренний gateway, например LiteLLM или Ollama на доступном только через VPN адресе `10.x` / `192.168.x`, разрешите этот хост через `OD_ALLOWED_INTERNAL_HOSTS=<host1>,<host2>,...` — список голых hostnames или IP через запятую либо пробел (`10.0.0.5`, `litellm.internal.corp`; `host:port` или полный URL принимаются и сводятся к hostname; IPv6 нужно писать в квадратных скобках, например `[fd00::1]`). Allowlist строго opt-in (пустой по умолчанию), exact-host (без сопоставления поддоменов или подстрок) и применяется **только** к настроенным вами provider endpoints: проверке соединения, обнаружению моделей и BYOK-чату. Он намеренно **не** ослабляет защиту для download URL, возвращённых в ответах upstream: они остаются заблокированными. Некорректная запись — как и CIDR-нотация, которая не поддерживается — отбрасывается с предупреждением, а не молча считается доверенной, поэтому опечатка не расширит (и не сузит) защиту незаметно. Разрешая hostname, вы доверяете тому, во что он резолвится (как и с `OD_ALLOWED_ORIGINS`); если хотите повторно проверять DNS-результат, добавьте в allowlist уже разрешённый IP.
+
+---
+
+## Навыки и шаблоны дизайна
+
+**100+ функциональных навыков находятся в [`skills/`](../../skills/)** и дают повторно используемое поведение, справки или утилиты. Рендеримые стартеры отделены в [`design-templates/`](../../design-templates/) и попадают в каталог шаблонов, а не в реестр функциональных навыков.
+
+Два **режима** закрепляют каталог шаблонов: `prototype` и `deck`; другие шаблоны покрывают `image`, `video`, `audio` и utility.
+
+| Шаблон дизайна | Режим | Сценарий | Что производит |
+|---|---|---|---|
+| [`web-prototype`](../../design-templates/web-prototype/) | prototype | design | Лендинг / герой по умолчанию |
+| [`saas-landing`](../../design-templates/saas-landing/) | prototype | marketing | Герой / фичи / прайсинг / CTA |
+| [`dashboard`](../../design-templates/dashboard/) | prototype | operation | Админка / аналитика (с сайдбаром) |
+| [`mobile-app`](../../design-templates/mobile-app/) | prototype | design | Приложение в рамке iPhone 15 Pro / Pixel |
+| [`mobile-onboarding`](../../design-templates/mobile-onboarding/) | prototype | design | Сплеш · ценностное предложение · поток входа |
+| [`social-carousel`](../../design-templates/social-carousel/) | prototype | marketing | Карусель из 3 карточек 1080×1080 |
+| [`email-marketing`](../../design-templates/email-marketing/) | prototype | marketing | Брендовое письмо с безопасным табличным фолбэком |
+| [`magazine-poster`](../../design-templates/magazine-poster/) | prototype | marketing | Одностраничный журнальный макет |
+| [`motion-frames`](../../design-templates/motion-frames/) | prototype | marketing | Зацикленный CSS-моушн-герой |
+| [`sprite-animation`](../../design-templates/sprite-animation/) | prototype | marketing | 8-битный пиксельный анимированный объяснитель |
+| [`pm-spec`](../../design-templates/pm-spec/) | prototype | product | PM-спецификация (с оглавлением + журналом решений) |
+| [`team-okrs`](../../design-templates/team-okrs/) | prototype | product | OKR-карта |
+| [`eng-runbook`](../../design-templates/eng-runbook/) | prototype | engineering | Runbook по инцидентам |
+| [`finance-report`](../../design-templates/finance-report/) | prototype | finance | Финансовая сводка для руководства |
+| [`hr-onboarding`](../../design-templates/hr-onboarding/) | prototype | hr | План онбординга на роль |
+| [`guizang-ppt`](../../design-templates/guizang-ppt/) | deck | marketing | Веб-PPT в журнальном стиле (презентация по умолчанию) |
+| [`html-ppt-*`](../../design-templates/) | deck | marketing | 15 шаблонов презентаций × 36 тем (мастер-шаблон в [`design-templates/html-ppt/`](../../design-templates/html-ppt/)) |
+| [`hyperframes`](../../design-templates/hyperframes/) | video | marketing | Моушн-графика HTML → MP4 (OSS-фреймворк HeyGen) |
+| [`critique`](../../design-templates/critique/) | utility | design | Пятимерный лист самокритики с оценками |
+| [`tweaks`](../../design-templates/tweaks/) | utility | design | Манифест панели настроек, выдаваемый ИИ |
+
+Протокол и разделение каталогов → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). `GET /api/skills` обслуживает навыки, `GET /api/design-templates` — шаблоны.
+
+---
+
+## Дизайн-системы
+
+**151 пакет дизайн-систем с `DESIGN.md` в центре** поставляется с репозиторием. Старые пакеты могут содержать только Markdown-контракт; новые также могут включать `manifest.json`, собранный `tokens.css`, fixtures, assets и доказательства происхождения. Каталог смешивает upstream-производные и собственные дополнения; [`design-systems/README.md`](../../design-systems/README.md) описывает форму и происхождение.
+
+<details>
+<summary><b>Полный каталог (нажмите, чтобы раскрыть)</b></summary>
+
+**AI и LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
+
+**Инструменты разработчика** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
+
+**Продуктивность** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+
+**Финтех** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
+
+**E-commerce** — `shopify` · `airbnb` · `uber` · `nike` · `starbucks` · `pinterest`
+
+**Медиа** — `spotify` · `playstation` · `wired` · `theverge` · `meta`
+
+**Автомобили** — `tesla` · `bmw` · `ferrari` · `lamborghini` · `bugatti` · `renault`
+
+**Прочее** — `apple` · `ibm` · `nvidia` · `vodafone` · `resend` · `spacex`
+
+**Стартеры** — `default` (Neutral Modern) · `warm-editorial`
+
+</details>
+
+Переимпортируйте библиотеку через [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts). Добавьте свой бренд → бросьте `DESIGN.md` в `design-systems/<brand>/`. Полное руководство → [`design-systems/README.md`](../../design-systems/README.md).
+
+[acd2]: https://github.com/VoltAgent/awesome-design-md
+
+---
+
+## Плагины
+
+**277 официальных плагинов и 183 ремиксуемых примера** находятся в [`plugins/_official/`](../../plugins/_official/). Каждый элемент — каталог с `open-design.json` и payload своего типа: `SKILL.md` для workflow, `template.json` для медиа-шаблонов или `DESIGN.md` для дизайн-систем.
+
+| Категория | Кол-во | Содержимое |
+|---|---|---|
+| [`scenarios/`](../../plugins/_official/scenarios/) | 13 | Полные дизайн-сценарии — [`od-default`](../../plugins/_official/scenarios/od-default/), [`od-design-refine`](../../plugins/_official/scenarios/od-design-refine/), [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/), [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/), [`od-react-export`](../../plugins/_official/scenarios/od-react-export/), [`od-nextjs-export`](../../plugins/_official/scenarios/od-nextjs-export/), [`od-vue-export`](../../plugins/_official/scenarios/od-vue-export/), [`od-media-generation`](../../plugins/_official/scenarios/od-media-generation/), [`od-new-generation`](../../plugins/_official/scenarios/od-new-generation/), [`od-tune-collab`](../../plugins/_official/scenarios/od-tune-collab/), [`od-plugin-authoring`](../../plugins/_official/scenarios/od-plugin-authoring/), [`od-share-to-community`](../../plugins/_official/scenarios/od-share-to-community/), [`od-web-effect-extractor`](../../plugins/_official/scenarios/od-web-effect-extractor/) |
+| [`image-templates/`](../../plugins/_official/image-templates/) | 45 | Одношаговые промпты для изображений — редакционные, кинематографичные, продуктовые, портретные |
+| [`video-templates/`](../../plugins/_official/video-templates/) | 63 | Моушн-шаблоны HyperFrames / Seedance / Veo |
+| [`design-systems/`](../../plugins/_official/design-systems/) | 143 | Брендовые `DESIGN.md`, обёрнутые в плагины |
+| [`atoms/`](../../plugins/_official/atoms/) | 13 | Переиспользуемые UI-фрагменты (кнопки, герои, KPI-карточки) |
+| [`examples/`](../../plugins/_official/examples/) | 183 | Ремиксуемые эталонные результаты |
+
+Также [`plugins/community/`](../../plugins/community/) для плагинов сообщества и [`plugins/registry/`](../../plugins/registry/) для процесса публикации.
+
+### Что умеют плагины
+
+- 🤖 **Работают в любом кодинг-агенте** — [Claude Code](../../docs/agent-adapters.md), Codex, Cursor, Copilot, [OpenClaw](https://github.com/openclaw/openclaw), [Antigravity](https://antigravity.google), Hermes, Kimi… через тот же протокол навыков, который агент уже знает.
+- 🔁 **Мигрируют рабочие процессы Figma / Pencil** → исходники React, Next.js или Vue. См. [`od-figma-migration`](../../plugins/_official/scenarios/od-figma-migration/).
+- 🛠️ **Обновляют существующую кодовую базу под спецификацию бренда** — направьте плагин на `git`-репозиторий + `DESIGN.md`, получите PR. См. [`od-code-migration`](../../plugins/_official/scenarios/od-code-migration/).
+- 💾 **Сохраняют кастомные рабочие процессы** — переиспользуемые шаблоны вашей команды лежат рядом с поставляемыми.
+
+### Использование плагинов
+
+Плагины полностью равнозначны в **веб-UI** и **`od` CLI** — те же эндпоинты `/api/plugins`, выбирайте, что удобнее.
+
+**В десктопном / веб-приложении:** откройте страницу **Plugin**, чтобы просмотреть маркетплейс и нажать **Install**; внутри Studio проекта плагины появляются как чипы композера, по которым вы кликаете для применения (с входами, которые они декларируют).
+
+**В командной строке** (работает без UI — это путь, который используют внешние агенты):
+
+```bash
+od plugin list                       # список установленных плагинов (фильтры --task-kind / --mode / --tag)
+od plugin search "landing page"      # поиск по ключевым словам
+od plugin info od-default            # метаданные, входы и возможности плагина
+od plugin install od-default        # установка из registry; также принимает ./local-folder или ссылку https://…
+od plugin apply od-default --input brief="одностраничный питч для нашего seed-раунда"
+od plugin upgrade od-default         # обновление
+od plugin uninstall od-default       # удаление
+```
+
+Каждая команда поддерживает `--json`, так что вы можете пропускать вывод через `jq` / `xargs` в автоматизацию.
+
+### Создание плагина
+
+Плагину OpenDesign нужны `open-design.json` и payload его типа. Навыки и сценарии также содержат `SKILL.md`; остальные типы используют свой payload:
+
+```
+my-plugin/
+├── open-design.json    ← обязательно: метаданные + inputs + pipeline + capabilities
+├── SKILL.md            ← обязательно для agent-skill/scenario; для других типов не требуется
+├── README.md           ← опционально: использование, установка, ссылки на registry
+├── preview/            ← опционально: index.html / poster.png (очень желательно для визуальных плагинов)
+└── examples/           ← опционально: конкретные сценарии использования
+```
+
+Основные поля: `specVersion`, `name`, `version`, опциональный `compat.agentSkills[].path` только при экспорте Agent Skill, а также `od.kind`, `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode`, `od.capabilities[]` и `od.inputs[]`.
+
+Создайте каркас + проверьте локально:
+
+```bash
+od plugin scaffold --id my-plugin --title "My Plugin"   # сгенерировать каркас
+od plugin validate ./my-plugin                          # проверить манифест и структуру файлов
+pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
+```
+
+Полный набор полей и рантайм-контракт → [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md); разработка плагина с кодинг-агентом → [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md); готовые к копированию минимальные шаблоны → [`plugins/spec/examples/`](../../plugins/spec/examples/).
+
+### Вклад в виде плагина
+
+1. Поместите папку плагина в [`plugins/community/`](../../plugins/community/) (сторонние плагины), или — чтобы поставлять его вместе с OpenDesign — в соответствующий уровень [`plugins/_official/`](../../plugins/_official/).
+2. Пройдите валидацию: `od plugin validate`, `pnpm guard`, `pnpm --filter @open-design/plugin-runtime typecheck`.
+3. Заполните PR, используя шаблон в [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) (ID, версия, линия, режим, возможности, примеры триггеров; приложите скриншот / предпросмотр для визуальных плагинов).
+4. Чтобы опубликовать во внешнем реестре (skills.sh / ClawHub / отдельный GitHub) → [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md).
+
+Эндпоинт реестра плагинов: `GET /api/plugins`. Обзор директории → [`plugins/README.md`](../../plugins/README.md) ([简体中文](../../plugins/README.zh-CN.md)).
+
+---
+
+## Архитектура
+
+```
+┌────────────────── browser (Next.js 16) / Electron shell ──────────────┐
+│  chat · file workspace · iframe preview · settings · import · MCP     │
+└──────────────┬─────────────────────────────────────┬─────────────────┘
+               │ /api/*                              │
+               ▼                                     ▼
+   ┌─────────────────────────────────┐   /api/proxy/{provider}/stream (SSE)
+   │  local daemon (Express+SQLite)  │   ─→ any OpenAI-compatible BYOK,
+   │                                  │       SSRF-guarded at the edge
+   │  /api/skills    /api/design-templates    /api/plugins    │
+   │  /api/design-systems            │
+   │  /api/chat (SSE)   /api/proxy/* │
+   │  /api/projects/:id/files/...    │
+   │  /api/artifacts/{save,lint}     │
+   │  /api/import/claude-design      │
+   │  MCP stdio server                │
+   └─────────┬───────────────────────┘
+             │ spawn(cli, [...], { cwd: managed project cwd })
+             ▼
+   ┌──────────────────────────────────────────────────────────────────┐
+   │  Base registry: 26 runtime definitions (including byok-opencode),       │
+   │  backed by 25 distinct local CLI executables because byok-opencode      │
+   │  shares the OpenCode executable.                                        │
+   │  Composes a functional skill or design template + DESIGN.md; writes files │
+   └──────────────────────────────────────────────────────────────────┘
+```
+
+| Слой | Стек |
+|---|---|
+| Фронтенд | Next.js 16 App Router + React 18 + TypeScript |
+| Демон | Node 24 · Express · SSE-стриминг · `better-sqlite3` |
+| Хранилище | Перед изменением или документированием путей хранения демона необходимо прочитать корневой `AGENTS.md`, раздел **Daemon data directory contract**. Этот README НЕ ДОЛЖЕН пересказывать его. |
+| Предпросмотр | Filesystem-запуск рендерит канонические файлы; BYOK/API разбирает полный `<artifact>` в iframe `srcdoc` |
+| Экспорт | HTML (встроенный) · PDF (печать из браузера) · PPTX (управляемый агентом) · ZIP · Markdown · MP4 (HyperFrames) |
+| Десктоп | Electron-оболочка + изолированный рендерер + sidecar IPC (STATUS · EVAL · SCREENSHOT · CONSOLE · CLICK · SHUTDOWN) |
+| Жизненный цикл | Одна точка входа: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) |
+
+Полная архитектура → [`docs/architecture.md`](../../docs/architecture.md). Протокол навыков → [`docs/skills-protocol.md`](../../docs/skills-protocol.md). Контракт адаптера агента → [`docs/agent-adapters.md`](../../docs/agent-adapters.md).
+
+---
+
+## Дорожная карта
+
+- [x] Демон + 26 runtime-определений на 25 разных CLI + реестры навыков/шаблонов + каталог систем
+- [x] Веб-приложение + чат + форма вопросов + выбор из 5 направлений + прогресс задач + изолированный предпросмотр
+- [x] 100+ функциональных навыков · отдельный каталог шаблонов · 151 пакет дизайн-систем · 5 направлений · 5 рамок
+- [x] Проекты на SQLite · диалоги · сообщения · вкладки · шаблоны
+- [x] Мультипровайдерный BYOK-прокси (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + защита от SSRF
+- [x] Импорт ZIP из Claude Design (`/api/import/claude-design`)
+- [x] Sidecar-протокол + десктоп на Electron + IPC-автоматизация
+- [x] API линтинга артефактов + пятимерный гейт самокритики перед выдачей
+- [x] **0.8.0** — инфраструктура маркетплейса плагинов (261 официальный плагин, спецификация манифеста, скрипты установки для каждого агента)
+- [x] **0.9.0** — OpenDesign Cloud (официальный сервис моделей, встроенный в приложение: без настройки, вход в один клик)
+- [x] **0.10.0** — универсальное рабочее пространство дизайна: весь craft-цикл в одном окне (референсы → материалы → интерактивное редактирование → motion → handoff)
+- [x] **0.11.0** — _The Bazaar_: разработка в открытую — community-маркетплейс плагинов и дизайн-систем, которые можно выбирать и пополнять
+- [x] **0.12.0** — _Brand-backed Design System_: превращайте уже существующий бренд в переиспользуемую переносимую систему `DESIGN.md`
+- [x] **0.13.0** — _Stay in Flow_: нативное возобновление сессий, более быстрый выбор модели и экспорт сразу в PPTX / PDF со скриншотами
+- [x] Упакованные сборки Electron — macOS (Apple Silicon + Intel) + Windows (x64) + Linux AppImage (опциональная линия)
+- [ ] Хирургические правки в режиме комментариев — частично выпущено; надёжное точечное патчинг в процессе
+- [ ] UX панели настроек, выдаваемой ИИ — ещё не реализовано
+- [ ] `npx od init` для создания каркаса проекта с `DESIGN.md`
+- [ ] Plugin SDK + CLI `od plugin {add,list,remove,test,publish}`
+- [ ] Плагины миграции Figma / Pencil → React / Next / Vue (alpha)
+- [ ] Плагин обновления существующей кодовой базы (направить на git-репозиторий + `DESIGN.md`)
+
+Поэтапная поставка → [`docs/roadmap.md`](../../docs/roadmap.md).
+
+---
+
+## Сообщество
+
+За каждым каналом стоят настоящие люди.
+
+- 💬 **Discord** — ежедневный чат, обмен плагинами, вопросы → [**discord.gg/mHAjSMV6gz**](https://discord.gg/mHAjSMV6gz)
+- 🐦 **X / Twitter** — заметки о релизах, вехи, закулисье → [**@OpenDesignHQ**](https://x.com/OpenDesignHQ)
+- 🗣️ **GitHub Discussions** — глубокие Q&A, RFC, «покажи свою работу» → [**Discussions**](https://github.com/nexu-io/open-design/discussions)
+- 🐛 **GitHub Issues** — отчёты об ошибках, запросы функций → [**Issues**](https://github.com/nexu-io/open-design/issues)
+
+Метки [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) и [`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) — самый простой способ начать.
+
+---
+
+## Вклад в проект
+
+OpenDesign продолжает двигаться, потому что контрибьюторы — дизайнеры, инженеры, авторы промптов — продолжают появляться. Многие из самых используемых навыков, дизайн-систем и плагинов были написаны людьми вне основной команды.
+
+### 🎯 С чего начать (максимум пользы, минимум изменений)
+
+| Хотите выпустить… | Как | Где |
+|---|---|---|
+| Новый **навык** | Бросьте папку с `SKILL.md` + `assets/` + `references/` | [`skills/`](../../skills/) · спецификация в [`docs/skills-protocol.md`](../../docs/skills-protocol.md) |
+| Новую **дизайн-систему** | Бросьте пакет с `DESIGN.md` в основе; при необходимости добавьте `manifest.json`, `tokens.css`, компоненты, ресурсы или сведения о происхождении | [`design-systems/<brand>/`](../../design-systems/) |
+| Новый **плагин** | Бросьте `open-design.json` + полезную нагрузку соответствующего типа в папку категории | [`plugins/community/`](../../plugins/community/) · спецификация в [`plugins/spec/SPEC.md`](../../plugins/spec/SPEC.md) · руководство по разработке для агентов в [`plugins/spec/AGENT-DEVELOPMENT.md`](../../plugins/spec/AGENT-DEVELOPMENT.md) |
+| Поддержку нового **CLI кодинг-агента** | Определение runtime + регистрация; парсер только для нового формата | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) |
+| Исправить баг или отполировать UI | Просмотрите метку [`good-first-issue`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) | [Issues →](https://github.com/nexu-io/open-design/issues) |
+| Перевести документацию | Обновите файлы `README.<lang>.md` | [`TRANSLATIONS.md`](../../TRANSLATIONS.md) |
+
+### 🤖 Вклад в роли агента
+
+Если *вы — агент, читающий это*, самый быстрый путь:
+
+```bash
+# 1. Запустите проект локально
+git clone https://github.com/nexu-io/open-design.git
+cd open-design && corepack enable && pnpm install
+pnpm tools-dev run web
+
+# 2. Найдите good-first-issue и назначьте себя
+gh issue list --label "good first issue" --state open --limit 20
+gh issue develop <number>   # создать ветку и worktree
+
+# 3. Внесите изменение и запустите проверки
+pnpm guard && pnpm typecheck
+pnpm --filter @open-design/<package> test
+
+# 4. Откройте PR
+gh pr create --fill
+```
+
+Полный процесс вклада, дружественный к агентам, стиль кода и планка PR → [`CONTRIBUTING.md`](../../CONTRIBUTING.md) ([Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [한국어](CONTRIBUTING.ko.md) · [Português](CONTRIBUTING.pt-BR.md) · [ภาษาไทย](CONTRIBUTING.th.md)).
+
+### 🏅 Программа OpenDesign Fellow
+
+Мы набираем **OpenDesign Fellows** по всему миру — Fellows формируют продукт вместе с основной командой, официально представляют OpenDesign в своём регионе и развивают сообщество локально, при финансовой поддержке ($1,000 / MR), бесплатных кредитах на LLM и прямом треке ревью. Подробности → [`MAINTAINERS.md`](../../MAINTAINERS.md) и анонс в [Discord](https://discord.gg/mHAjSMV6gz).
+
+---
+
+## Мейнтейнеры
+
+Они несут на себе значительную часть нагрузки — ежедневное обслуживание, ревью и поддержку сообщества.
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/Nagendhra-web">
+        <img src="https://github.com/Nagendhra-web.png" width="96" alt="@Nagendhra-web" /><br/>
+        <sub><b>@Nagendhra-web</b></sub>
+      </a><br/>
+      <sub>Мейнтейнер</sub>
+    </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/Sid-Qin">
+        <img src="https://github.com/Sid-Qin.png" width="96" alt="@Sid-Qin" /><br/>
+        <sub><b>@Sid-Qin</b></sub>
+      </a><br/>
+      <sub>Мейнтейнер</sub>
+    </td>
+    <td align="center" valign="top" width="200">
+      <a href="https://github.com/YOMXXX">
+        <img src="https://github.com/YOMXXX.png" width="96" alt="@YOMXXX" /><br/>
+        <sub><b>@YOMXXX</b></sub>
+      </a><br/>
+      <sub>Мейнтейнер</sub>
+    </td>
+  </tr>
+</table>
+
+Правила мейнтейнеров, критерии повышения и протокол выхода → [`MAINTAINERS.md`](../../MAINTAINERS.md) (также [Deutsch](MAINTAINERS.de.md) · [Français](MAINTAINERS.fr.md) · [简体中文](MAINTAINERS.zh-CN.md) · [日本語](MAINTAINERS.ja-JP.md) · [한국어](MAINTAINERS.ko.md) · [Português](MAINTAINERS.pt-BR.md) · [ภาษาไทย](MAINTAINERS.th.md)).
+
+## Контрибьюторы
+
+Спасибо всем, кто принял участие — код, документация, обратная связь, точный issue, новый навык, новая дизайн-система.
+
+<a href="https://github.com/nexu-io/open-design/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="Контрибьюторы OpenDesign" />
+</a>
+
+---
+
+## Активность репозитория
+
+<picture>
+  <img alt="OpenDesign — метрики репозитория" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+</picture>
+
+SVG выше регенерируется ежедневно через [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) с помощью [`lowlighter/metrics`](https://github.com/lowlighter/metrics).
+
+---
+
+## Поставьте нам звезду
+
+<p align="center">
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Поставьте звезду OpenDesign на GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+</p>
+
+Если это сэкономило вам тридцать минут, поставьте ★. Звёзды не платят за аренду — но они говорят следующему дизайнеру, агенту и контрибьютору, что этот эксперимент достоин их внимания. Один клик, три секунды, настоящий сигнал.
+
+<a href="https://star-history.dera.page/#nexu-io/open-design&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="История звёзд OpenDesign" src="https://star-history.dera.page/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+  </picture>
+</a>
+
+---
+
+## Ссылки и происхождение
+
+| Проект | Роль |
+|---|---|
+| [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | Компас дизайн-философии — рабочий процесс джуниор-дизайнера, протокол брендовых ассетов, чек-лист против AI-слопа, пятимерная критика. |
+| [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Навык веб-PPT в журнальном стиле, включённый дословно в [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). По умолчанию для режима презентаций. |
+| [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | Семейство HTML PPT Studio — 15 шаблонов презентаций, 36 тем, 31 макет страниц, рантайм анимации, режим презентера с магнитными карточками. |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | UX-паттерны, которые мы заимствуем (цикл стриминга артефактов, изолированный iframe, живая панель агента). |
+| [`multica-ai/multica`](https://github.com/multica-ai/multica) | Архитектура демона + адаптеров — обнаружение агентов сканированием PATH, локальный демон как единственный привилегированный процесс. |
+| [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Исторический источник исходной 9-раздельной схемы `DESIGN.md` и 70 систем, производных от upstream; современные пакеты могут расширять эту основу. |
+| [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Источник 57 дизайн-навыков, добавленных в `design-systems/`. |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | Фреймворк моушн-графики HTML→MP4, интегрированный как полноправный `hyperframes-html` в OpenDesign. |
+| [Claude Code skills][skill] | Конвенция `SKILL.md`, которую мы перенимаем дословно. |
+
+Подробное происхождение → [`docs/references.md`](../../docs/references.md).
+
+[skill]: https://docs.anthropic.com/en/docs/claude-code/skills
+
+## Лицензия
+
+Apache-2.0. Включённые навыки и шаблоны со своими файлами `LICENSE` сохраняют собственные лицензии, включая `design-templates/guizang-ppt/` (MIT, [@op7418](https://github.com/op7418)), `design-templates/html-ppt/` (MIT, [@lewislulu](https://github.com/lewislulu)) и `skills/web-clone/` (MIT, [@Jane-xiaoer](https://github.com/Jane-xiaoer)).

@@ -1,0 +1,1559 @@
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import * as ts from "@typescript/native/unstable/ast";
+import { parseSource, withNativeSourceParser, forEachNativeSource } from "./lib/typescript/source.ts";
+
+import { checkCrossAppImports } from "./check-cross-app-imports.ts";
+import { checkTsNocheckImports } from "./check-ts-nocheck-imports.ts";
+import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
+import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
+import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
+import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
+import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
+import { checkHtmlPluginPreviewContracts } from "./check-html-plugin-preview-contracts.ts";
+import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
+import {
+  checkDesignSystemA1RequiredTokens,
+  checkDesignSystemA2DefaultsParity,
+  checkDesignSystemA2RequiredTokens,
+  checkDesignSystemBSlotRequiredTokens,
+  checkDesignSystemTokenFixtureSync,
+  checkDesignSystemUnknownTokens,
+} from "./check-tokens-fixture-sync.ts";
+import { checkCraftReferences } from "./lint-craft-references.ts";
+import { checkWhatsNewDocument } from "./check-whats-new-document.ts";
+import { checkWhatsNewPublishWorkflow } from "./check-whats-new-publish-workflow.ts";
+import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
+import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
+import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
+const allowedE2eScripts = new Set([
+  "e2e/scripts/artifact-render-parity.ts",
+  "e2e/scripts/playwright.ts",
+  "e2e/scripts/release-smoke.ts",
+  // Explicit opt-in local daemon acceptance; not part of hermetic CI test discovery.
+  "e2e/scripts/syntax-acceptance.ts",
+  "e2e/scripts/visual-report.ts",
+  // Cross-version real Vela / synthetic OpenCode protocol acceptance.
+  "e2e/scripts/vela-contract.ts",
+]);
+
+function toRepositoryPath(filePath: string): string {
+  return path.relative(repoRoot, filePath).split(path.sep).join("/");
+}
+
+const residualExtensions = new Set([".js", ".mjs", ".cjs"]);
+
+const residualSkippedDirectories = new Set([
+  ".agents",
+  ".astro",
+  ".claude",
+  ".claude-sessions",
+  ".codex",
+  ".cursor",
+  ".git",
+  ".od",
+  ".od-e2e",
+  ".opencode",
+  // Local agent deepwork/worktree scratch (git-ignored; not product source).
+  ".slim",
+  ".task",
+  ".tmp",
+  ".vite",
+  "dist",
+  "node_modules",
+  "out",
+]);
+
+const residualAllowedExactPaths = new Set([
+  // esbuild config entrypoints are executed directly by Node before package
+  // dist output exists.
+  "packages/agui-adapter/esbuild.config.mjs",
+  "packages/contracts/esbuild.config.mjs",
+  "packages/diagnostics/esbuild.config.mjs",
+  "packages/download/esbuild.config.mjs",
+  "packages/host/esbuild.config.mjs",
+  "packages/launcher-proto/esbuild.config.mjs",
+  "packages/metatool/esbuild.config.mjs",
+  "packages/platform/esbuild.config.mjs",
+  "packages/plugin-runtime/esbuild.config.mjs",
+  "packages/registry-protocol/esbuild.config.mjs",
+  "packages/sidecar/esbuild.config.mjs",
+  "packages/sidecar-proto/esbuild.config.mjs",
+  // Maintainer utility scripts ported from the media branch. They are
+  // executed directly by Node and are not loaded by the app runtime.
+  "scripts/import-prompt-templates.mjs",
+  "scripts/postinstall.mjs",
+  // Checked-in bin shim so pnpm can link `od` before daemon dist output exists.
+  "apps/daemon/bin/od.mjs",
+  "apps/packaged/esbuild.config.mjs",
+  // Browser service workers must be served as JavaScript files.
+  "apps/web/public/od-notifications-sw.js",
+  // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
+  // for editable PPTX export. It is loaded into the off-screen Chromium page as
+  // an upstream browser asset, not compiled as project-owned TypeScript.
+  "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
+  // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
+  "apps/web/postcss.config.mjs",
+  "scripts/bake-html-ppt-examples.mjs",
+  // CI-only plugin-preview renderer. Kept .mjs and run directly by Node so its
+  // runtime deps (puppeteer-core + a headless Chrome + ffmpeg) are provided by
+  // the CI environment and never pulled into the daemon/web TS build or bundle.
+  "scripts/bake-plugin-previews.mjs",
+  // Manifest diff guard + its node:test coverage. Run directly by Node from the
+  // bake workflows (no TS build step there) to decide whether a `previews` entry
+  // actually changed, ignoring the per-run `generatedAt` timestamp.
+  "scripts/plugin-previews-diff.mjs",
+  "scripts/plugin-previews-diff.test.mjs",
+  // CI-only R2 garbage collector for orphaned preview clips + its node:test.
+  "scripts/plugin-previews-gc.mjs",
+  "scripts/plugin-previews-gc.test.mjs",
+  "scripts/scaffold-html-ppt-skills.mjs",
+  "scripts/sync-hyperframes-skill.mjs",
+  "scripts/verify-media-models.mjs",
+  // AMR (vela) verifier: ad-hoc dev runner that imports the daemon's compiled
+  // `dist/acp.js` and drives a real `vela agent run` against a live model.
+  // Kept as .mjs so it can be invoked directly via Node without any transform.
+  "apps/daemon/scripts/verify-amr-real-vela.mjs",
+  // Fake `vela agent run` ACP stdio stub used by the AMR
+  // integration tests. The Vitest test spawns it via `child_process.spawn`,
+  // which needs a directly-executable file (shebang + .mjs).
+  "apps/daemon/tests/fixtures/fake-vela.mjs",
+  // Fake ACP agent CLI that answers `initialize` and then rejects
+  // `session/new`, used by the ACP handshake-rejection wiring tests. Same
+  // precedent as `fake-vela.mjs`: Vitest puts it on PATH and the daemon
+  // spawns it, so it must be directly executable (shebang + .mjs).
+  "apps/daemon/tests/fixtures/fake-acp-handshake-cli.mjs",
+  // Fake `kimi acp` ACP stdio stub used by the stdio-MCP wiring test. It
+  // records the `session/new` params the daemon actually sends, and the test
+  // spawns it through a PATH shim, so it must be directly executable by Node
+  // without a transform — same precedent as `fake-vela.mjs` above.
+  "apps/daemon/tests/fixtures/fake-kimi-acp-cli.mjs",
+  "tools/dev/bin/tools-dev.mjs",
+  "tools/dev/esbuild.config.mjs",
+  "tools/pack/bin/tools-pack.mjs",
+  "tools/pack/esbuild.config.mjs",
+  // Checked-in bin shim so pnpm can link `tools-release` before dist output exists.
+  "tools/release/bin/tools-release.mjs",
+  "tools/release/esbuild.config.mjs",
+  "tools/serve/bin/tools-serve.mjs",
+  "tools/serve/esbuild.config.mjs",
+  // Terminal distributions execute these native runtime entrypoints with the
+  // verified embedded Node after leaving the pnpm/TypeScript workspace.
+  "shells/terminal/runtime/fixture-lifecycle.mjs",
+  "shells/terminal/runtime/fixture-shell-updater.mjs",
+  "shells/terminal/runtime/fossil.mjs",
+  "shells/terminal/runtime/sidecar-bootstrap.mjs",
+  "shells/terminal/runtime/sidecar-host.mjs",
+  "tools/pack/resources/mac/notarize.cjs",
+  // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
+  "tools/pack/resources/web-standalone-after-pack.cjs",
+]);
+
+const residualAllowedPathPrefixes = [
+  "apps/daemon/dist/",
+  "apps/web/.next/",
+  "apps/web/out/",
+  "generated/",
+  "e2e/playwright-report/",
+  "e2e/reports/html/",
+  "e2e/reports/playwright-html-report/",
+  "e2e/reports/test-results/",
+  "e2e/ui/.od-data/",
+  "e2e/ui/reports/playwright-html-report/",
+  "e2e/ui/reports/test-results/",
+  "e2e/ui/test-results/",
+  // Vendored upstream HyperFrames helper scripts (design template).
+  "design-templates/hyperframes/scripts/",
+  // Vendored upstream Web Clone skill helper scripts. These are portable
+  // Node-run skill utilities executed from user workspaces via explicit script
+  // paths, and stay as `.mjs` to preserve the upstream skill packaging.
+  "skills/web-clone/scripts/",
+  // Vendored upstream Last30Days runtime helper used by the engine (design template).
+  "design-templates/last30days/scripts/lib/vendor/",
+  // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
+  "design-templates/html-ppt/assets/",
+  // Vendored upstream website-clone recon/mirror/audit helpers
+  // (Jane-xiaoer/claude-skill-web-clone). Global skill assets staged into the
+  // project cwd for direct `node scripts/...` execution by the agent.
+  "skills/web-clone/scripts/",
+  // Replay-based mock CLIs that impersonate the agent CLIs OD spawns
+  // (opencode/claude/codex/gemini/cursor-agent + ACP family). Need to
+  // be directly executable via Node so `child_process.spawn` from test
+  // harnesses and PATH-overlay shells work without any transform step.
+  // `mocks/scripts/` holds the maintainer-facing helpers (manifest math,
+  // fetch from R2) which are also pure-node single-file modules — same
+  // precedent as `apps/daemon/tests/fixtures/fake-vela.mjs` (an ACP
+  // stdio stub, allowlisted individually above). See `mocks/README.md`.
+  "mocks/lib/",
+  "mocks/mock-agent.mjs",
+  "mocks/scripts/",
+  // OD Clipper - a standalone Chrome MV3 extension subproject (not a pnpm
+  // workspace package, no build step). It ships hand-written browser-loadable
+  // JavaScript (service worker, content script, popup) the same way as the
+  // web notifications service worker; it must not be retypecast to TypeScript.
+  "clipper/",
+  // OD Figma Import - a standalone Figma plugin subproject (no build step,
+  // not a pnpm workspace package). Figma plugins load hand-written
+  // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
+  // precedent as the clipper, and it must not be retypecast to TypeScript.
+  "figma-plugin/",
+  // ChatPanel 评审载体:场景模拟器与它的出图脚本(`docs/design/chat-sim/`、
+  // `docs/design/chat-panel-diagrams/`)。模拟器是**双击即开的浏览器页面** ——
+  // 设计与产品要在没有构建步骤、没有服务的情况下打开单文件 HTML 评审,
+  // 所以那些脚本必须是浏览器可直接加载的 JS,不能改成 TypeScript(改了就得先编译,
+  // 评审载体也就没法直接发人了)。出图脚本(`shoot.mjs` / `topng.mjs`)是同一批
+  // 一次性工具,用 Node 直接跑、只读 mermaid 源码出 SVG/PNG。
+  // 这批是 docs 下的设计评审产物,不参与产品运行时。见
+  // `docs/design/chat-sim/README.md` 与 `docs/design/chat-panel-diagrams/README.md`。
+  // `docs/design/chat-mirror/` 是同一批里的第三个:用我们的组件渲染的镜像陈列页
+  // 与它的逐格出图脚本(`shoot.mjs`,走无头 Chrome 的 CDP)。
+  // 见 `docs/design/chat-mirror/README.md`。
+  "docs/design/chat-sim/",
+  "docs/design/chat-panel-diagrams/",
+  "docs/design/chat-mirror/",
+  "test-results/",
+  "vendor/",
+];
+
+const residualAllowedPathPatterns: RegExp[] = [
+  // Vendored upstream Zara template runtimes — one design template per template,
+  // name prefix `html-ppt-zhangzara-` (zarazhangrui/beautiful-html-templates).
+  // Only the vendored deck-stage runtime asset is allowlisted; any other
+  // JavaScript under these design-template directories must still be converted
+  // to TypeScript or explicitly listed in `residualAllowedExactPaths`.
+  /^design-templates\/html-ppt-zhangzara-[^/]+\/assets\/deck-stage\.js$/,
+  // Bundled example/skill plugins copy the upstream skill's `assets/`
+  // and `references/` directories verbatim so the daemon's preview
+  // surface can render the baked HTML without staging detours. Those
+  // assets are vendored runtime, never project-owned code, and must
+  // not be retypecasted to TypeScript.
+  /^plugins\/_official\/examples\/[^/]+\/(assets|references)\/.+$/,
+];
+
+function isResidualAllowedPath(repositoryPath: string): boolean {
+  if (residualAllowedExactPaths.has(repositoryPath)) return true;
+  if (residualAllowedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix))) return true;
+  return residualAllowedPathPatterns.some((pattern) => pattern.test(repositoryPath));
+}
+
+function isResidualSkippedDirectoryName(directoryName: string): boolean {
+  return (
+    residualSkippedDirectories.has(directoryName) || directoryName === ".next" || directoryName.startsWith(".next-")
+  );
+}
+
+async function collectResidualJavaScript(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const residualFiles: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    const repositoryPath = toRepositoryPath(fullPath);
+
+    if (entry.isDirectory()) {
+      if (isResidualSkippedDirectoryName(entry.name) || isResidualAllowedPath(`${repositoryPath}/`)) {
+        continue;
+      }
+
+      residualFiles.push(...(await collectResidualJavaScript(fullPath)));
+      continue;
+    }
+
+    if (!entry.isFile() || !residualExtensions.has(path.extname(entry.name))) {
+      continue;
+    }
+
+    if (isResidualAllowedPath(repositoryPath)) {
+      continue;
+    }
+
+    residualFiles.push(repositoryPath);
+  }
+
+  return residualFiles;
+}
+
+async function checkResidualJavaScript(): Promise<boolean> {
+  const residualFiles = await collectResidualJavaScript(repoRoot);
+
+  if (residualFiles.length > 0) {
+    console.error("Residual project-owned JavaScript files found:");
+    for (const filePath of residualFiles) {
+      console.error(`- ${filePath}`);
+    }
+    console.error("Convert these files to TypeScript or add a documented generated/vendor/output allowlist entry.");
+    return false;
+  }
+
+  console.log("Residual JavaScript check passed: project-owned code is TypeScript-only.");
+  return true;
+}
+
+export async function checkRootPackageManagerLockfiles(root: string = repoRoot): Promise<boolean> {
+  const entries = await readdir(root);
+  if (entries.includes("bun.lock")) {
+    console.error("Unexpected root bun.lock found.");
+    console.error("pnpm-lock.yaml is the repository's only dependency lockfile; remove bun.lock.");
+    return false;
+  }
+
+  console.log("Root package-manager lockfile check passed: no bun.lock found.");
+  return true;
+}
+
+const sourcePackageManifestRootPaths = ["package.json", "e2e/package.json"];
+const sourcePackageManifestScopedDirectories = ["apps", "packages", "tools"];
+const packageDependencySections = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+];
+const packageManagerOverridePaths = ["pnpm.overrides", "overrides", "resolutions"];
+const exactVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const exactNpmAliasPattern = /^npm:(?:@[^/]+\/)?[^@]+@\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+type DependencySpecViolation = {
+  filePath: string;
+  fieldPath: string;
+  name: string;
+  spec: unknown;
+  reason: string;
+};
+
+type DependencySpecStats = {
+  exact: number;
+  externalHostPeer: number;
+  manifests: number;
+  total: number;
+  workspace: number;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isAllowedDependencySpec(spec: string): boolean {
+  return spec === "workspace:*" || exactVersionPattern.test(spec) || exactNpmAliasPattern.test(spec);
+}
+
+// Manifests published for an EXTERNAL host to load as a plugin, where
+// `peerDependencies` describes packages the host supplies rather than
+// anything this repository installs or can pin.
+//
+// Exact specs are right everywhere else: they keep our own installs
+// reproducible. A peer range aimed at a third-party host is the opposite
+// case — the host's version is chosen by the user, so an exact peer means
+// any host upgrade leaves the peer unsatisfiable and the plugin refuses to
+// install at all. `@open-design/dsh-runtime` hit exactly that: pinned to a
+// single DeepSeek Harness release candidate, it became uninstallable the
+// moment the upstream shipped the next one.
+//
+// This exemption covers `peerDependencies` only. `dependencies` and
+// `devDependencies` in these manifests are still installed by us and still
+// have to be exact.
+const externalHostPluginManifests = new Set(["packages/dsh-runtime/package.json"]);
+
+function isExternalHostPeerSpec(filePath: string, fieldPath: string): boolean {
+  return (
+    externalHostPluginManifests.has(filePath) &&
+    fieldPath.split(".")[0] === "peerDependencies"
+  );
+}
+
+function dependencySpecReason(spec: string): string {
+  if (spec.startsWith("workspace:") && spec !== "workspace:*") {
+    return "workspace dependencies must use exactly workspace:*";
+  }
+
+  return "dependency specs must be exact versions like 1.2.3 or workspace:*";
+}
+
+function dependencySpecFieldValue(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+async function collectScopedPackageManifestPaths(scopeDirectory: string): Promise<string[]> {
+  const scopeRoot = path.join(repoRoot, scopeDirectory);
+  const entries = await readdir(scopeRoot, { withFileTypes: true });
+  const manifestPaths: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const packageDirectory = path.join(scopeRoot, entry.name);
+    const packageEntries = await readdir(packageDirectory, { withFileTypes: true });
+    if (packageEntries.some((packageEntry) => packageEntry.isFile() && packageEntry.name === "package.json")) {
+      manifestPaths.push(`${scopeDirectory}/${entry.name}/package.json`);
+    }
+  }
+
+  return manifestPaths;
+}
+
+async function collectSourcePackageManifestPaths(): Promise<string[]> {
+  const scopedManifestPaths = (
+    await Promise.all(sourcePackageManifestScopedDirectories.map((scope) => collectScopedPackageManifestPaths(scope)))
+  ).flat();
+
+  return [...sourcePackageManifestRootPaths, ...scopedManifestPaths].sort();
+}
+
+function getPackageJsonField(packageJson: Record<string, unknown>, fieldPath: string): unknown {
+  let current: unknown = packageJson;
+  for (const part of fieldPath.split(".")) {
+    if (!isRecord(current)) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
+function checkDependencySpecRecord(
+  record: Record<string, unknown>,
+  filePath: string,
+  fieldPath: string,
+  violations: DependencySpecViolation[],
+  stats: DependencySpecStats,
+): void {
+  for (const [name, spec] of Object.entries(record).sort(([left], [right]) => left.localeCompare(right))) {
+    if (isRecord(spec)) {
+      checkDependencySpecRecord(spec, filePath, `${fieldPath}.${name}`, violations, stats);
+      continue;
+    }
+
+    stats.total += 1;
+    if (typeof spec !== "string") {
+      violations.push({
+        filePath,
+        fieldPath,
+        name,
+        spec,
+        reason: "dependency specs must be strings",
+      });
+      continue;
+    }
+
+    if (spec === "workspace:*") {
+      stats.workspace += 1;
+      continue;
+    }
+
+    if (isAllowedDependencySpec(spec)) {
+      stats.exact += 1;
+      continue;
+    }
+
+    if (isExternalHostPeerSpec(filePath, fieldPath)) {
+      stats.externalHostPeer += 1;
+      continue;
+    }
+
+    violations.push({
+      filePath,
+      fieldPath,
+      name,
+      spec,
+      reason: dependencySpecReason(spec),
+    });
+  }
+}
+
+async function checkPackageDependencySpecs(): Promise<boolean> {
+  const manifestPaths = await collectSourcePackageManifestPaths();
+  const violations: DependencySpecViolation[] = [];
+  const stats: DependencySpecStats = {
+    exact: 0,
+    externalHostPeer: 0,
+    manifests: manifestPaths.length,
+    total: 0,
+    workspace: 0,
+  };
+
+  for (const manifestPath of manifestPaths) {
+    const packageJson = JSON.parse(await readFile(path.join(repoRoot, manifestPath), "utf8")) as Record<string, unknown>;
+
+    for (const section of packageDependencySections) {
+      const value = packageJson[section];
+      if (value === undefined) continue;
+      if (!isRecord(value)) {
+        violations.push({
+          filePath: manifestPath,
+          fieldPath: section,
+          name: section,
+          spec: value,
+          reason: "dependency sections must be objects",
+        });
+        continue;
+      }
+
+      checkDependencySpecRecord(value, manifestPath, section, violations, stats);
+    }
+
+    for (const overridePath of packageManagerOverridePaths) {
+      const value = getPackageJsonField(packageJson, overridePath);
+      if (value === undefined) continue;
+      if (!isRecord(value)) {
+        violations.push({
+          filePath: manifestPath,
+          fieldPath: overridePath,
+          name: overridePath,
+          spec: value,
+          reason: "package-manager override sections must be objects",
+        });
+        continue;
+      }
+
+      checkDependencySpecRecord(value, manifestPath, overridePath, violations, stats);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Package dependency spec violations found:");
+    for (const violation of violations) {
+      console.error(
+        `- ${violation.filePath} ${violation.fieldPath}.${violation.name}=${dependencySpecFieldValue(violation.spec)} -> ${violation.reason}`,
+      );
+    }
+    return false;
+  }
+
+  console.log(
+    `Package dependency spec check passed: ${stats.manifests} package.json files, ${stats.exact} exact specs, ${stats.workspace} workspace:* specs, ${stats.externalHostPeer} external-host peer ranges.`,
+  );
+  return true;
+}
+
+const testLayoutScopedDirectories = ["apps", "packages", "tools"];
+const testLayoutSkippedDirectories = new Set([".next", ".od-data", "dist", "node_modules", "out", "reports", "test-results"]);
+
+function isTestFile(fileName: string): boolean {
+  return /\.test\.tsx?$/.test(fileName);
+}
+
+function expectedTestPath(repositoryPath: string): string {
+  const [scope, project, ...relativeParts] = repositoryPath.split("/");
+  if (!testLayoutScopedDirectories.includes(scope ?? "") || project == null || relativeParts.length === 0) {
+    return repositoryPath;
+  }
+
+  const normalizedRelativeParts = relativeParts[0] === "src" ? relativeParts.slice(1) : relativeParts;
+  return [scope, project, "tests", ...normalizedRelativeParts].join("/");
+}
+
+function isAllowedScopedTestPath(repositoryPath: string): boolean {
+  const [scope, project, directory] = repositoryPath.split("/");
+  return testLayoutScopedDirectories.includes(scope ?? "") && project != null && directory === "tests";
+}
+
+async function collectTestLayoutViolations(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const violations: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      if (testLayoutSkippedDirectories.has(entry.name)) {
+        continue;
+      }
+
+      violations.push(...(await collectTestLayoutViolations(fullPath)));
+      continue;
+    }
+
+    if (!entry.isFile() || !isTestFile(entry.name)) {
+      continue;
+    }
+
+    const repositoryPath = toRepositoryPath(fullPath);
+    if (!isAllowedScopedTestPath(repositoryPath)) {
+      violations.push(repositoryPath);
+    }
+  }
+
+  return violations;
+}
+
+async function checkScriptsTestFree(): Promise<boolean> {
+  const scriptsFiles = await collectRepositoryFiles(path.join(repoRoot, "scripts"), testLayoutSkippedDirectories);
+  const violations = scriptsFiles.filter(isScriptTestFile);
+
+  if (violations.length > 0) {
+    console.error(
+      "Root scripts/ is test-free: move behavior-contract coverage to e2e/tests/scripts/ (see e2e/AGENTS.md):",
+    );
+    for (const violation of violations) {
+      console.error(`- ${violation}`);
+    }
+    return false;
+  }
+
+  console.log("Scripts test-free check passed: no test files under root scripts/.");
+  return true;
+}
+
+export function isScriptTestFile(repositoryPath: string): boolean {
+  return /\.test\.[^/]+$/.test(repositoryPath);
+}
+
+async function checkTestLayout(): Promise<boolean> {
+  const violations = (
+    await Promise.all(
+      testLayoutScopedDirectories.map((directory) => collectTestLayoutViolations(path.join(repoRoot, directory))),
+    )
+  ).flat();
+
+  if (violations.length > 0) {
+    console.error("Test files under apps/, packages/, and tools/ must live in tests/ sibling to src/:");
+    for (const violation of violations) {
+      console.error(`- ${violation} -> ${expectedTestPath(violation)}`);
+    }
+    return false;
+  }
+
+  console.log("Test layout check passed: apps/packages/tools tests live in sibling tests directories.");
+  return true;
+}
+
+const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
+const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
+const e2eAllowedScripts = [
+  "test",
+  "test:p0",
+  "test:p0p1",
+  "test:p1",
+  "test:p2",
+  "test:ui",
+  "test:ui:critical",
+  "test:ui:extended",
+  "test:ui:p0",
+  "test:ui:p0p1",
+  "test:ui:p1",
+  "test:ui:p2",
+  "typecheck",
+];
+
+async function collectRepositoryFiles(directory: string, skippedDirectoryNames = new Set<string>()): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (skippedDirectoryNames.has(entry.name)) continue;
+      files.push(...(await collectRepositoryFiles(fullPath, skippedDirectoryNames)));
+      continue;
+    }
+    if (entry.isFile()) files.push(toRepositoryPath(fullPath));
+  }
+
+  return files;
+}
+
+const productNeutralitySkippedDirectories = new Set([
+  ".git",
+  ".od",
+  ".tmp",
+  "dist",
+  "node_modules",
+  "out",
+  "test-results",
+]);
+// Public contracts, help/prompt strings, docs, and shipped content should
+// describe the integration role, not name a private deployment. The default
+// check blocks named "orchestrator such as ..." examples; private forks can
+// add stricter local terms through OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS.
+const productNeutralityCheckedPathPrefixes = [
+  "apps/daemon/src/",
+  "apps/web/app/",
+  "apps/web/src/",
+  "craft/",
+  "design-systems/",
+  "design-templates/",
+  "docs/",
+  "packages/contracts/src/",
+  "skills/",
+];
+const productNeutralityTextExtensions = new Set([".md", ".mdx", ".ts", ".tsx"]);
+const productNeutralityDocFilePattern =
+  /(?:^|\/)(?:AGENTS|CLAUDE|CONTRIBUTING(?:\.[^.]+)?|QUICKSTART|README(?:\.[^.]+)?)\.md$/;
+const namedOrchestratorExamplePattern =
+  /\borchestrator\s+(?:such as|like|for example,?)\s+[`"']?[A-Z][A-Za-z0-9_-]+/gi;
+
+type ProductNeutralityViolation = {
+  filePath: string;
+  lineNumber: number;
+  reason: string;
+};
+
+export function isProductNeutralityCheckedPath(repositoryPath: string): boolean {
+  return (
+    productNeutralityCheckedPathPrefixes.some((prefix) => repositoryPath.startsWith(prefix)) ||
+    productNeutralityDocFilePattern.test(repositoryPath)
+  );
+}
+
+function isProductNeutralityTextFile(repositoryPath: string): boolean {
+  return productNeutralityTextExtensions.has(path.extname(repositoryPath));
+}
+
+function productNeutralityForbiddenTerms(): string[] {
+  return String(process.env.OD_PRODUCT_NEUTRALITY_FORBIDDEN_TERMS ?? "")
+    .split(",")
+    .map((term) => term.trim())
+    .filter((term) => term.length > 0);
+}
+
+export function collectProductNeutralityViolationsFromSource(
+  repositoryPath: string,
+  source: string,
+  forbiddenTerms = productNeutralityForbiddenTerms(),
+): ProductNeutralityViolation[] {
+  if (!isProductNeutralityCheckedPath(repositoryPath) || !isProductNeutralityTextFile(repositoryPath)) {
+    return [];
+  }
+
+  const lowerSource = source.toLowerCase();
+  const violations: ProductNeutralityViolation[] = [];
+
+  for (const match of source.matchAll(namedOrchestratorExamplePattern)) {
+    violations.push({
+      filePath: repositoryPath,
+      lineNumber: lineNumberForIndex(source, match.index ?? 0),
+      reason: "use generic \"external orchestrator\" phrasing instead of named orchestrator examples",
+    });
+  }
+
+  for (const term of forbiddenTerms) {
+    const lowerTerm = term.toLowerCase();
+    let index = lowerSource.indexOf(lowerTerm);
+
+    while (index !== -1) {
+      violations.push({
+        filePath: repositoryPath,
+        lineNumber: lineNumberForIndex(source, index),
+        reason: "use generic \"external orchestrator\" phrasing instead of private deployment names",
+      });
+      index = lowerSource.indexOf(lowerTerm, index + lowerTerm.length);
+    }
+  }
+
+  return violations;
+}
+
+async function checkProductNeutrality(): Promise<boolean> {
+  const violations: ProductNeutralityViolation[] = [];
+
+  for (const repositoryPath of await collectRepositoryFiles(repoRoot, productNeutralitySkippedDirectories)) {
+    if (!isProductNeutralityCheckedPath(repositoryPath) || !isProductNeutralityTextFile(repositoryPath)) {
+      continue;
+    }
+    const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+    violations.push(...collectProductNeutralityViolationsFromSource(repositoryPath, source));
+  }
+
+  if (violations.length > 0) {
+    console.error("Product-neutrality violations found:");
+    for (const violation of violations) {
+      console.error(`${violation.filePath}:${violation.lineNumber} -> ${violation.reason}`);
+    }
+    return false;
+  }
+
+  console.log("Product-neutrality check passed: public docs, contracts, and prompts use generic orchestrator naming.");
+  return true;
+}
+
+async function checkE2eLayout(): Promise<boolean> {
+  const violations: string[] = [];
+  const packageJson = JSON.parse(await readFile(e2ePackageJsonPath, "utf8")) as {
+    scripts?: Record<string, unknown>;
+  };
+  const scriptNames = Object.keys(packageJson.scripts ?? {}).sort();
+  if (scriptNames.join("\0") !== e2eAllowedScripts.join("\0")) {
+    violations.push(
+      `e2e/package.json scripts must be exactly ${e2eAllowedScripts.join(", ")} (found: ${scriptNames.join(", ")})`,
+    );
+  }
+
+  const e2eRoot = path.join(repoRoot, "e2e");
+  for (const repositoryPath of await collectRepositoryFiles(e2eRoot, e2eSkippedDirectories)) {
+    if (
+      repositoryPath === "e2e/package.json" ||
+      repositoryPath === "e2e/tsconfig.json" ||
+      repositoryPath === "e2e/vitest.config.ts" ||
+      repositoryPath === "e2e/playwright.config.ts" ||
+      repositoryPath === "e2e/playwright.visual.config.ts" ||
+      repositoryPath === "e2e/AGENTS.md"
+    ) {
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/specs/")) {
+      if (!/\.spec\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e specs must be *.spec.ts`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/tests/")) {
+      if (!/\.test\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e tests must be *.test.ts`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/ui/")) {
+      const relativePath = repositoryPath.slice("e2e/ui/".length);
+      if (relativePath.includes("/") || !/\.test\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e UI files must be flat Playwright *.test.ts files under ui/`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/resources/")) {
+      const relativePath = repositoryPath.slice("e2e/resources/".length);
+      if (relativePath.includes("/") || !/\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e resources must be flat TypeScript files under resources/`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/lib/")) {
+      if (!/\.ts$/.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e lib files must be TypeScript`);
+      }
+      continue;
+    }
+
+    if (repositoryPath.startsWith("e2e/scripts/")) {
+      if (!allowedE2eScripts.has(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e scripts must be an approved package-owned entrypoint`);
+      }
+      continue;
+    }
+
+    violations.push(`${repositoryPath} -> e2e source files must live in specs/, tests/, ui/, resources/, lib/, or approved scripts`);
+  }
+
+  if (violations.length > 0) {
+    console.error("E2E package layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("E2E layout check passed: Vitest, Playwright UI, resources, lib, and scripts stay in their lanes.");
+  return true;
+}
+
+const webTestSkippedDirectories = new Set([".od-data", "reports", "test-results"]);
+
+async function checkWebTestLayout(): Promise<boolean> {
+  const violations: string[] = [];
+  const webTestsRoot = path.join(repoRoot, "apps", "web", "tests");
+
+  for (const repositoryPath of await collectRepositoryFiles(webTestsRoot, webTestSkippedDirectories)) {
+    if (repositoryPath.startsWith("apps/web/tests/vitest/") || repositoryPath.startsWith("apps/web/tests/playwright/")) {
+      violations.push(`${repositoryPath} -> web tests should stay lightweight under apps/web/tests/ without vitest/playwright nesting`);
+      continue;
+    }
+
+    if (/\.(spec|test)\.tsx?$/.test(repositoryPath) && !/\.test\.tsx?$/.test(repositoryPath)) {
+      violations.push(`${repositoryPath} -> web Vitest test files must be *.test.ts or *.test.tsx`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Web test layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Web test layout check passed: web tests stay lightweight and Vitest-only.");
+  return true;
+}
+
+const webImportIsolationSourcePrefixes = ["apps/web/app/", "apps/web/src/"];
+const webImportIsolationExtensions = new Set([".ts", ".tsx"]);
+const webImportIsolationSkippedDirectories = new Set([
+  ".next",
+  "dist",
+  "node_modules",
+  "out",
+  "reports",
+  "test-results",
+]);
+const webImportIsolationForbiddenPackages = [
+  "@open-design/platform",
+  "@open-design/sidecar",
+  "@open-design/sidecar-proto",
+];
+const webImportIsolationForbiddenDaemonRoots = [
+  "apps/daemon/src",
+  "apps/daemon/tests",
+];
+const webImportIsolationForbiddenPackageRoots = [
+  "packages/platform",
+  "packages/sidecar",
+  "packages/sidecar-proto",
+];
+
+type WebImportIsolationViolation = {
+  filePath: string;
+  lineNumber: number;
+  specifier: string;
+  reason: string;
+};
+
+type SourceImportSpecifier = {
+  lineNumber: number;
+  specifier: string;
+};
+
+export function isWebImportIsolationSourcePath(repositoryPath: string): boolean {
+  return (
+    webImportIsolationSourcePrefixes.some((prefix) => repositoryPath.startsWith(prefix)) &&
+    webImportIsolationExtensions.has(path.extname(repositoryPath))
+  );
+}
+
+function pushStringSpecifier(
+  imports: SourceImportSpecifier[],
+  sourceFile: ts.SourceFile,
+  node: ts.Node | undefined,
+): void {
+  if (!node) return;
+  if (!ts.isStringLiteral(node) && !ts.isNoSubstitutionTemplateLiteral(node)) return;
+
+  imports.push({
+    lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
+    specifier: node.text,
+  });
+}
+
+function collectImportSpecifiersFromSource(repositoryPath: string, source: string): SourceImportSpecifier[] {
+  const sourceFile = parseSource(repositoryPath, source);
+  const imports: SourceImportSpecifier[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      pushStringSpecifier(imports, sourceFile, node.moduleSpecifier);
+    } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+      pushStringSpecifier(imports, sourceFile, node.argument.literal);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(node.expression) && node.expression.text === "require"))
+    ) {
+      pushStringSpecifier(imports, sourceFile, node.arguments[0]);
+    }
+
+    node.forEachChild(visit);
+  };
+
+  visit(sourceFile);
+  return imports;
+}
+
+function isPackageOrSubpath(specifier: string, packageName: string): boolean {
+  return specifier === packageName || specifier.startsWith(`${packageName}/`);
+}
+
+function isPathOrDescendant(repositoryPath: string, root: string): boolean {
+  return repositoryPath === root || repositoryPath.startsWith(`${root}/`);
+}
+
+function resolveWebImportRepositoryPath(fromRepositoryPath: string, specifier: string): string | null {
+  const pathOnly = specifier.split(/[?#]/, 1)[0];
+  if (!pathOnly) return null;
+
+  if (pathOnly.startsWith("@/")) {
+    return path.posix.normalize(path.posix.join("apps/web", pathOnly.slice("@/".length)));
+  }
+
+  if (!pathOnly.startsWith(".")) return null;
+  return path.posix.normalize(path.posix.join(path.posix.dirname(fromRepositoryPath), pathOnly));
+}
+
+function webImportIsolationViolationReason(fromRepositoryPath: string, specifier: string): string | null {
+  if (webImportIsolationForbiddenPackages.some((packageName) => isPackageOrSubpath(specifier, packageName))) {
+    return "apps/web must not import sidecar or platform control-plane packages directly";
+  }
+
+  const resolvedPath = resolveWebImportRepositoryPath(fromRepositoryPath, specifier);
+  if (!resolvedPath) return null;
+
+  if (webImportIsolationForbiddenDaemonRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
+    return "apps/web must use daemon HTTP APIs or @open-design/contracts instead of daemon private source";
+  }
+
+  if (webImportIsolationForbiddenPackageRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
+    return "apps/web must not import sidecar or platform control-plane source directly";
+  }
+
+  return null;
+}
+
+export function collectWebImportIsolationViolationsFromSource(
+  repositoryPath: string,
+  source: string,
+): WebImportIsolationViolation[] {
+  if (!isWebImportIsolationSourcePath(repositoryPath)) return [];
+
+  return collectImportSpecifiersFromSource(repositoryPath, source).flatMap((sourceImport) => {
+    const reason = webImportIsolationViolationReason(repositoryPath, sourceImport.specifier);
+    if (!reason) return [];
+    return [{
+      filePath: repositoryPath,
+      lineNumber: sourceImport.lineNumber,
+      specifier: sourceImport.specifier,
+      reason,
+    }];
+  });
+}
+
+async function checkWebImportIsolation(): Promise<boolean> {
+  const violations: WebImportIsolationViolation[] = [];
+  const sources = new Map<string, string>();
+
+  for (const repositoryPrefix of webImportIsolationSourcePrefixes) {
+    const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
+    if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
+
+    for (const repositoryPath of await collectRepositoryFiles(
+      path.join(repoRoot, repositoryDirectory),
+      webImportIsolationSkippedDirectories,
+    )) {
+      if (!isWebImportIsolationSourcePath(repositoryPath)) continue;
+      const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+      sources.set(repositoryPath, source);
+    }
+  }
+
+  await forEachNativeSource(sources, (repositoryPath, source) => {
+    violations.push(...collectWebImportIsolationViolationsFromSource(repositoryPath, source));
+  });
+
+  if (violations.length > 0) {
+    console.error("Web import isolation violations found:");
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.specifier}\` -> ${violation.reason}`);
+    }
+    return false;
+  }
+
+  console.log("Web import isolation check passed: web runtime imports stay behind contracts and daemon HTTP APIs.");
+  return true;
+}
+
+const toolsRootAllowlist = new Map<string, "directory" | "file">([
+  // Keep top-level tools intentionally small. `tools/launcher` was an incoming
+  // Windows shim experiment from PR #683 and is not an active repo boundary.
+  ["AGENTS.md", "file"],
+  ["dev", "directory"],
+  ["pack", "directory"],
+  ["release", "directory"],
+  ["serve", "directory"],
+]);
+
+async function checkToolsLayout(): Promise<boolean> {
+  const toolsRoot = path.join(repoRoot, "tools");
+  const entries = await readdir(toolsRoot, { withFileTypes: true });
+  const seen = new Set<string>();
+  const violations: string[] = [];
+
+  for (const entry of entries) {
+    const expected = toolsRootAllowlist.get(entry.name);
+    const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
+
+    if (expected == null) {
+      violations.push(`${repositoryPath} -> tools/ top-level entries are allowlisted; expected only AGENTS.md, dev/, pack/, release/, and serve/`);
+      continue;
+    }
+
+    seen.add(entry.name);
+    if (expected === "directory" && !entry.isDirectory()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name}/ to be a directory`);
+    }
+    if (expected === "file" && !entry.isFile()) {
+      violations.push(`${repositoryPath} -> expected tools/${entry.name} to be a file`);
+    }
+  }
+
+  for (const [entryName, expected] of toolsRootAllowlist) {
+    if (!seen.has(entryName)) {
+      violations.push(`tools/${entryName}${expected === "directory" ? "/" : ""} -> required tools boundary is missing`);
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("Tools layout violations found:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Tools layout check passed: tools/ top-level entries match the active boundary allowlist.");
+  return true;
+}
+
+const stylePolicySkippedDirectories = new Set([
+  ".next",
+  ".od-data",
+  "dist",
+  "node_modules",
+  "out",
+  "reports",
+  "test-results",
+]);
+
+const stylePolicySourcePrefixes = ["apps/web/app/", "apps/web/src/"];
+const stylePolicyHardcodedColorEnforcedPrefixes = ["scripts/guard-style-policy-fixtures/"];
+const stylePolicyCheckedDirectoryPrefixes = [
+  ...new Set([...stylePolicySourcePrefixes, ...stylePolicyHardcodedColorEnforcedPrefixes]),
+];
+const stylePolicyExtensions = new Set([".css", ".ts", ".tsx"]);
+const tailwindDefaultColorNames = [
+  "slate",
+  "gray",
+  "zinc",
+  "neutral",
+  "stone",
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
+  "white",
+  "black",
+].join("|");
+const tailwindDefaultPaletteClassPrefixes = [
+  "bg",
+  "text",
+  "border(?:-(?:x|y|s|e|t|r|b|l))?",
+  "divide",
+  "placeholder",
+  "marker",
+  "from",
+  "via",
+  "to",
+  "ring(?:-offset)?",
+  "outline",
+  "decoration",
+  "(?:inset-|text-|drop-)?shadow",
+  "accent",
+  "caret",
+  "fill",
+  "stroke",
+].join("|");
+const defaultTailwindPaletteClassPattern = new RegExp(
+  `\\b(?:${tailwindDefaultPaletteClassPrefixes})-(?:${tailwindDefaultColorNames})(?:-\\d{2,3})?\\b`,
+  "g",
+);
+
+const hardcodedColorPattern = new RegExp(
+  `#[0-9a-fA-F]{3,8}\\b|rgba?\\([^)]*\\)|hsla?\\([^)]*\\)|(?<quote>['"])\\s*(?<named>${realNamedColors.join("|")}|transparent|currentColor|currentcolor|inherit|initial|unset|revert)\\s*\\k<quote>`,
+  "g",
+);
+
+type StylePolicyAllowlistEntry = {
+  pathPattern: RegExp;
+  valuePattern: RegExp;
+  reason: string;
+};
+
+const hardcodedColorAllowlist: StylePolicyAllowlistEntry[] = [
+  {
+    pathPattern: /^apps\/web\/src\/index\.css$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "global token definitions, shadows, overlays, and retained migration inventory live in the CSS source of truth",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:AgentIcon|PetSettings|SettingsDialog)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "brand accents, user accent choices, and legacy token fallbacks are classified as Phase 1 migration inventory",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:SketchEditor|SketchPreview|NewProjectPanel)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|['\"](?:none|currentColor|currentcolor|transparent)['\"])$/,
+    reason: "sketch/canvas data and SVG illustrations keep narrow hardcoded color exceptions until their migration slice",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:FileViewer|ManualEditPanel)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "user-authored file, inspect, and editable style colors are handled by the file/viewer migration slice",
+  },
+  {
+    pathPattern: /^apps\/web\/src\/components\/(?:MemorySection|MemoryModelInline|MemoryToast)\.tsx$/,
+    valuePattern: /^(?:#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\))$/,
+    reason: "memory UI legacy color fallbacks are classified as Phase 1 migration inventory",
+  },
+  {
+    pathPattern: /^apps\/web\/tests\//,
+    valuePattern: /.*/,
+    reason: "tests and fixtures may assert rejected colors explicitly",
+  },
+];
+
+type StylePolicyViolation = {
+  filePath: string;
+  lineNumber: number;
+  match: string;
+  reason: string;
+};
+
+function lineNumberForIndex(source: string, index: number): number {
+  return source.slice(0, index).split("\n").length;
+}
+
+function isStylePolicySource(repositoryPath: string): boolean {
+  return stylePolicySourcePrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+}
+
+function isHardcodedColorEnforcedPath(repositoryPath: string): boolean {
+  return stylePolicyHardcodedColorEnforcedPrefixes.some((prefix) => repositoryPath.startsWith(prefix));
+}
+
+function isHardcodedColorAllowlisted(repositoryPath: string, match: string): boolean {
+  const normalizedMatch = match.trim();
+  const unquotedMatch = normalizedMatch.replace(/^['"]|['"]$/g, "");
+  if (cssWideAndSpecialColorKeywords.has(unquotedMatch.toLowerCase())) return true;
+
+  return hardcodedColorAllowlist.some(
+    (entry) => entry.pathPattern.test(repositoryPath) && entry.valuePattern.test(normalizedMatch),
+  );
+}
+
+function addStylePolicyViolation(
+  violations: StylePolicyViolation[],
+  repositoryPath: string,
+  source: string,
+  index: number,
+  match: string,
+  reason: string,
+): void {
+  violations.push({
+    filePath: repositoryPath,
+    lineNumber: lineNumberForIndex(source, index),
+    match,
+    reason,
+  });
+}
+
+function collectStylePolicyViolationsFromSource(repositoryPath: string, source: string): StylePolicyViolation[] {
+  const violations: StylePolicyViolation[] = [];
+
+  if (isStylePolicySource(repositoryPath)) {
+    for (const match of source.matchAll(defaultTailwindPaletteClassPattern)) {
+      violations.push({
+        filePath: repositoryPath,
+        lineNumber: lineNumberForIndex(source, match.index ?? 0),
+        match: match[0],
+        reason: "default Tailwind palette classes must use OpenDesign token utilities instead",
+      });
+    }
+  }
+
+  if (isStylePolicySource(repositoryPath) || isHardcodedColorEnforcedPath(repositoryPath)) {
+    if (repositoryPath.endsWith(".css") && isHardcodedColorEnforcedPath(repositoryPath)) {
+      for (const match of collectCssHardcodedColorMatches(source)) {
+        const value = match.value;
+        if (value === undefined || isHardcodedColorAllowlisted(repositoryPath, value)) continue;
+
+        addStylePolicyViolation(
+          violations,
+          repositoryPath,
+          source,
+          match.index,
+          value,
+          "unregistered hardcoded UI colors must use OpenDesign tokens or an explicit allowlist entry",
+        );
+      }
+    } else {
+      for (const match of source.matchAll(hardcodedColorPattern)) {
+        const value = match[0];
+        if (isHardcodedColorAllowlisted(repositoryPath, value)) continue;
+        if (!isHardcodedColorEnforcedPath(repositoryPath)) continue;
+
+        addStylePolicyViolation(
+          violations,
+          repositoryPath,
+          source,
+          match.index ?? 0,
+          value,
+          "unregistered hardcoded UI colors must use OpenDesign tokens or an explicit allowlist entry",
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+async function collectStylePolicyViolations(directory: string): Promise<StylePolicyViolation[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const violations: StylePolicyViolation[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (stylePolicySkippedDirectories.has(entry.name)) continue;
+      violations.push(...(await collectStylePolicyViolations(fullPath)));
+      continue;
+    }
+
+    if (!entry.isFile() || !stylePolicyExtensions.has(path.extname(entry.name))) continue;
+
+    const repositoryPath = toRepositoryPath(fullPath);
+    if (!isStylePolicySource(repositoryPath) && !isHardcodedColorEnforcedPath(repositoryPath)) continue;
+
+    violations.push(...collectStylePolicyViolationsFromSource(repositoryPath, await readFile(fullPath, "utf8")));
+  }
+
+  return violations;
+}
+
+async function repositoryDirectoryExists(repositoryPath: string): Promise<boolean> {
+  const parentPath = path.join(repoRoot, path.dirname(repositoryPath));
+  const directoryName = path.basename(repositoryPath);
+  const entries = await readdir(parentPath, { withFileTypes: true });
+
+  return entries.some((entry) => entry.name === directoryName && entry.isDirectory());
+}
+
+async function collectStylePolicyViolationsFromCheckedPaths(): Promise<StylePolicyViolation[]> {
+  const violations: StylePolicyViolation[] = [];
+
+  for (const repositoryPrefix of stylePolicyCheckedDirectoryPrefixes) {
+    const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
+    if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
+
+    violations.push(...(await collectStylePolicyViolations(path.join(repoRoot, repositoryDirectory))));
+  }
+
+  return violations;
+}
+
+async function checkStylePolicy(): Promise<boolean> {
+  const violations = await collectStylePolicyViolationsFromCheckedPaths();
+
+  if (violations.length > 0) {
+    console.error("Style policy violations found:");
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber} \`${violation.match}\` -> ${violation.reason}`);
+    }
+    console.error("Use OpenDesign token utilities/CSS variables or add a narrow allowlist entry with a reason.");
+    return false;
+  }
+
+  console.log("Style policy check passed: Tailwind palette classes and enforced hardcoded UI colors stay token-first.");
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// HTML structural boundary lookups
+//
+// Preview and export splice bridges into an artifact's own bytes, so they need
+// the offset of a real `<head>` / `</body>` / `<base>` / `<title>`. Finding one
+// with a plain text match is what broke nexu-io/open-design#7410: those tags
+// are also ordinary content, and any prototype that builds an HTML document
+// string writes them into a script or an attribute. The injected markup then
+// lands inside the author's string and silently truncates their page.
+//
+// That defect reappeared in six separate files because each one hand-rolled its
+// own lookup. `@open-design/contracts/runtime/html-injection-points` is now the
+// single implementation, and this check is what keeps the next one from being
+// written: a grep-driven sweep already missed an entire app once.
+// ---------------------------------------------------------------------------
+
+const htmlBoundaryOwnerPath = "packages/contracts/src/runtime/html-injection-points.ts";
+const htmlBoundarySkippedDirectories = new Set([".git", ".od", ".tmp", "dist", "node_modules", "out", "test-results"]);
+const htmlBoundaryCheckedPathPrefixes = [
+  "apps/daemon/src/",
+  "apps/desktop/src/",
+  "apps/packaged/src/",
+  "apps/web/src/",
+  "packages/",
+  "tools/",
+];
+const htmlBoundarySourceExtensions = new Set([".ts", ".tsx", ".mjs", ".cjs", ".js"]);
+/**
+ * A boundary tag reached by pattern-matching the raw text. These are always
+ * wrong: the match lands wherever the tag first appears, content or not.
+ */
+const htmlBoundaryPatternOpPattern = new RegExp(
+  [
+    // `html.replace(/<\/body>/i, …)` — operation first, literal second. The
+    // escaped slash matters: a close-tag regex is always written `<\/body`,
+    // and that backslash is what an earlier version of this check missed,
+    // leaving the exact shape of #7410 invisible to it.
+    String.raw`(?:replace|replaceAll|split|search|exec|match|test)\s*\(\s*(?:\/|['"\`])\s*<\s*\\?\/?\s*(?:body|head|html|base|title)\b`,
+    // `/<\/body>/i.test(html)` — literal first, operation second.
+    String.raw`(?:\/|['"\`])\s*<\s*\\?\/?\s*(?:body|head|html|base|title)\b[^/\n]*\/[gimsuy]*\s*\.\s*(?:test|exec)`,
+  ].join("|"),
+  "i",
+);
+/**
+ * A boundary tag reached by a plain index scan. Legitimate as a *continuation*
+ * — once the shared locator has found an element's start, walking forward to
+ * its close tag is correct — so this only fires in files that never import the
+ * locator at all.
+ */
+const htmlBoundaryIndexOpPattern =
+  /(?:indexOf|lastIndexOf)\s*\(\s*['"`]\s*<\s*\/?\s*(?:body|head|html|base|title)\b/i;
+const htmlBoundaryLocatorImport = "runtime/html-injection-points";
+/**
+ * An anchored pattern asks "does this text start/end with the tag", which is a
+ * shape assertion on a buffer, not a search for a boundary inside a document.
+ * It cannot find the wrong one, because the anchor pins the position.
+ */
+const htmlBoundaryAnchoredPattern = /\/\^|\$\s*\/[gimsuy]*/;
+
+async function checkHtmlBoundaryLookups(): Promise<boolean> {
+  const files = await collectRepositoryFiles(repoRoot, htmlBoundarySkippedDirectories);
+  const violations: { filePath: string; lineNumber: number; line: string }[] = [];
+
+  for (const filePath of files) {
+    if (filePath === htmlBoundaryOwnerPath) continue;
+    if (!htmlBoundaryCheckedPathPrefixes.some((prefix) => filePath.startsWith(prefix))) continue;
+    if (!htmlBoundarySourceExtensions.has(path.extname(filePath))) continue;
+    // Tests are where these shapes get *asserted against*, so they may say them.
+    if (isTestFile(path.basename(filePath)) || filePath.includes("/tests/")) continue;
+
+    const contents = await readFile(path.join(repoRoot, filePath), "utf8");
+    const usesLocator = contents.includes(htmlBoundaryLocatorImport);
+    contents.split("\n").forEach((line, index) => {
+      const offending =
+        !htmlBoundaryAnchoredPattern.test(line) &&
+        (htmlBoundaryPatternOpPattern.test(line) || (!usesLocator && htmlBoundaryIndexOpPattern.test(line)));
+      if (offending) {
+        violations.push({ filePath, lineNumber: index + 1, line: line.trim().slice(0, 120) });
+      }
+    });
+  }
+
+  if (violations.length > 0) {
+    console.error("HTML structural boundary check failed.");
+    console.error(
+      "These locate a `<head>`/`</body>`/`<base>`/`<title>` by text match. A tag an author",
+    );
+    console.error(
+      "wrote into a script string or an attribute would match first, and the injection would",
+    );
+    console.error("land inside their content (nexu-io/open-design#7410). Use findRealTagOffset /");
+    console.error(`findRealTagEnd from ${htmlBoundaryOwnerPath} instead.`);
+    for (const violation of violations) {
+      console.error(`- ${violation.filePath}:${violation.lineNumber}: ${violation.line}`);
+    }
+    return false;
+  }
+
+  console.log(`HTML structural boundary check passed: no hand-rolled boundary lookups outside ${htmlBoundaryOwnerPath}.`);
+  return true;
+}
+
+let crossAppImportsResult: Promise<boolean> | undefined;
+
+function checkCrossAppImportsOnce(): Promise<boolean> {
+  crossAppImportsResult ??= Promise.resolve(checkCrossAppImports());
+  return crossAppImportsResult;
+}
+
+
+// Only the internal run-creation service may start a physical Run.
+//
+// The run analytics lifecycle is installed there, once, for every Run. Four
+// daemon-internal callers used to reach past it and call the run registry
+// directly; each of those Runs reported no `run_created` and no `run_finished`,
+// and nothing said so (OPEND-2365). The service's `start` now requires the
+// caller to declare its analytics identity, but that only binds callers who go
+// through it — this check is what keeps the bypass from coming back.
+const RUN_START_BYPASS_ALLOWLIST = new Set([
+  "apps/daemon/src/services/internal-run-service.ts",
+]);
+
+async function checkRunStartChokePoint(): Promise<boolean> {
+  const violations: string[] = [];
+  const daemonSource = path.join(repoRoot, "apps", "daemon", "src");
+  if (!(await repositoryDirectoryExists("apps/daemon/src"))) return true;
+
+  for (const repositoryPath of await collectRepositoryFiles(daemonSource)) {
+    if (!repositoryPath.endsWith(".ts")) continue;
+    if (RUN_START_BYPASS_ALLOWLIST.has(repositoryPath)) continue;
+    const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
+    source.split("\n").forEach((line, index) => {
+      if (!/\.runs\.start\s*\(/.test(line)) return;
+      violations.push(`${repositoryPath}:${index + 1} ${line.trim()}`);
+    });
+  }
+
+  if (violations.length > 0) {
+    console.error("Run start choke-point violations found:");
+    console.error("Start physical Runs through `internalRunCreation.start(run, analytics, starter)`");
+    console.error("so the Run analytics lifecycle is installed. See AGENTS.md -> Starting a physical Run.");
+    for (const violation of violations) console.error(`- ${violation}`);
+    return false;
+  }
+
+  console.log("Run start choke-point check passed: every physical Run starts through the internal run-creation service.");
+  return true;
+}
+
+const checks: GuardCheck[] = [
+  { name: "residual JavaScript", run: checkResidualJavaScript },
+  { name: "root package-manager lockfile", run: ({ repoRoot: root }) => checkRootPackageManagerLockfiles(root) },
+  { name: "package dependency specs", run: checkPackageDependencySpecs },
+  { name: "product neutrality", run: checkProductNeutrality },
+  { name: "cross-app imports", run: checkCrossAppImportsOnce },
+  { name: "HTML structural boundaries", run: checkHtmlBoundaryLookups },
+  { name: "@ts-nocheck import resolution", run: checkTsNocheckImports },
+  { name: "test layout", run: checkTestLayout },
+  { name: "scripts test-free", run: checkScriptsTestFree },
+  { name: "scripts library architecture", run: checkScriptsLibraryArchitecture },
+  { name: "e2e layout", run: checkE2eLayout },
+  { name: "web test layout", run: checkWebTestLayout },
+  { name: "web import isolation", run: checkWebImportIsolation },
+  { name: "run start choke point", run: checkRunStartChokePoint },
+  { name: "tools layout", run: checkToolsLayout },
+  { name: "style policy", run: checkStylePolicy },
+  { name: "craft references", run: checkCraftReferences },
+  { name: "what's new document", run: ({ repoRoot: root }) => checkWhatsNewDocument(root) },
+  { name: "what's new publish workflow", run: ({ repoRoot: root }) => checkWhatsNewPublishWorkflow(root) },
+  { name: "HTML plugin preview contracts", run: ({ repoRoot: root }) => checkHtmlPluginPreviewContracts(root) },
+  { name: "plugin preview manifest", run: checkPluginPreviewManifest },
+  { name: "design system manifests", run: checkDesignSystemManifests },
+  { name: "design system package quality", run: checkDesignSystemPackageQuality },
+  { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
+  { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
+  { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },
+  { name: "design system A2 required tokens", run: checkDesignSystemA2RequiredTokens },
+  { name: "design system B-slot required tokens", run: checkDesignSystemBSlotRequiredTokens },
+  { name: "design system unknown token allowlist", run: checkDesignSystemUnknownTokens },
+  { name: "design system A2 defaults parity", run: checkDesignSystemA2DefaultsParity },
+  { name: "design system flag parity", run: checkDesignSystemFlagParity },
+  { name: "design system component manifest extraction", run: checkComponentsManifestExtraction },
+];
+
+const isMain = process.argv[1] ? import.meta.url === pathToFileURL(process.argv[1]).href : false;
+if (isMain) {
+  // `--list-checks` is the machine-readable registry of repository guard checks.
+  if (process.argv[2] === "--list-checks") {
+    for (const check of checks) console.log(check.name);
+  } else if (!(await withNativeSourceParser(() => runGuardChecks(checks, { repoRoot })))) {
+    process.exitCode = 1;
+  }
+}

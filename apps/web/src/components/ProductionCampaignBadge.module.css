@@ -1,0 +1,11 @@
+.badge {
+  display: block;
+  max-width: min(240px, calc(100vw - 88px));
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.badge > :global(opend-touchpoint) {
+  display: block;
+  max-width: 100%;
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "community-hallmark",
+  "title": "Hallmark",
+  "version": "1.0.0",
+  "description": "Anti-AI-slop design skill for greenfield pages, audits, redesigns, and design extraction from URLs or screenshots.",
+  "license": "MIT",
+  "author": {
+    "name": "Nutlope",
+    "url": "https://github.com/Nutlope"
+  },
+  "homepage": "https://github.com/Nutlope/hallmark",
+  "plugin": {
+    "repo": "https://github.com/Nutlope/hallmark/tree/main/skills/hallmark"
+  },
+  "tags": [
+    "community",
+    "design",
+    "frontend",
+    "audit",
+    "redesign",
+    "anti-ai-slop"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "frontend-design",
+    "useCase": {
+      "query": {
+        "en": "Use Hallmark to design or redesign a page with strong structure, project-aware tokens, responsive checks, and an anti-AI-slop critique pass.",
+        "zh-CN": "使用 Hallmark 设计或重设计页面，保持结构变化、项目级 token、响应式检查，并进行 anti-AI-slop 自检。"
+      }
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./references"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

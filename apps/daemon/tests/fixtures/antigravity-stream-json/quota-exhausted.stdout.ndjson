@@ -1,0 +1,4 @@
+{"event":"init","conversation_id":"ec0eed48-e03f-4319-adbb-839f4f7a5177","init":{"cwd":"/tmp/agy-empty-cwd","tools":["ask_permission","run_command","view_file","write_to_file"],"permission_mode":"request-review"}}
+{"event":"step_update","step_update":{"conversation_id":"ec0eed48-e03f-4319-adbb-839f4f7a5177","step_index":0,"state":"DONE","step_type":"user_input"}}
+{"event":"step_update","step_update":{"conversation_id":"ec0eed48-e03f-4319-adbb-839f4f7a5177","step_index":1,"state":"DONE","step_type":"error_message"}}
+{"event":"result","result":{"conversation_id":"ec0eed48-e03f-4319-adbb-839f4f7a5177","status":"ERROR","response":"","error":"Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 148h43m22s.","duration_seconds":0,"num_turns":1,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0}}}

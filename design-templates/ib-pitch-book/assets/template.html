@@ -1,0 +1,436 @@
+<!doctype html>
+<!--
+  OD ib-pitch-book seed.
+
+  Copy this file to index.html for live work. Keep the IB-specific masthead,
+  source-status footer, disclosure slide, system-font defaults, and keyboard
+  navigation. Use example.html only as a completed fictional reference.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>[CLIENT] - Strategic Alternatives Review</title>
+<style>
+  :root {
+    --paper: oklch(98.5% 0.008 80);
+    --paper-warm: oklch(96% 0.012 78);
+    --ink: oklch(18% 0.012 70);
+    --ink-mid: oklch(38% 0.010 70);
+    --ink-soft: oklch(56% 0.008 70);
+    --rule: oklch(86% 0.008 75);
+    --accent: oklch(48% 0.18 28);
+    --pos: oklch(45% 0.10 165);
+    --serif: 'Iowan Old Style', 'Charter', Georgia, serif;
+    --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--ink); color: var(--ink); }
+  body {
+    font-family: var(--sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .deck {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    background: linear-gradient(180deg, oklch(14% 0.012 70), oklch(20% 0.012 70));
+    display: flex;
+    flex-direction: column;
+  }
+  .source-status {
+    flex: 0 0 auto;
+    z-index: 50;
+    padding: 9px 18px;
+    font-size: 11px;
+    line-height: 1.35;
+    text-align: center;
+    color: oklch(90% 0.02 85);
+    background: oklch(22% 0.04 55);
+    border-bottom: 1px solid oklch(35% 0.03 70);
+  }
+  .source-status strong { color: oklch(96% 0.03 85); }
+  .stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  .slide {
+    min-width: 100vw;
+    height: 100%;
+    background: var(--paper);
+    display: grid;
+    place-items: stretch;
+    position: relative;
+    overflow: hidden;
+  }
+  .slide-inner {
+    width: min(1320px, 92vw);
+    height: min(820px, 86vh);
+    margin: auto;
+    padding: 56px 64px 48px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+    background: var(--paper);
+    border-top: 6px solid var(--ink);
+    box-shadow: 0 30px 80px -30px rgba(0,0,0,0.35);
+  }
+  .mast {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+  }
+  .mast .brand {
+    font-family: var(--serif);
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+    text-transform: none;
+  }
+  .mast .meta { display: flex; gap: 22px; }
+  .body { min-height: 0; padding: 28px 0 22px; }
+  .body.fit {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 18px;
+    padding-top: 22px;
+  }
+  .ribbon,
+  .eyebrow {
+    display: inline-flex;
+    width: max-content;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .display {
+    margin-top: 28px;
+    max-width: 920px;
+    font-family: var(--serif);
+    font-size: clamp(64px, 10vw, 132px);
+    font-weight: 400;
+    line-height: 0.9;
+    letter-spacing: -0.06em;
+  }
+  .section {
+    max-width: 900px;
+    font-family: var(--serif);
+    font-size: clamp(38px, 5vw, 68px);
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: -0.045em;
+  }
+  .display em,
+  .section em { color: var(--accent); font-style: italic; }
+  .body-text {
+    max-width: 680px;
+    color: var(--ink-mid);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: start;
+    min-height: 0;
+  }
+  .grid-2.compact {
+    gap: 28px;
+  }
+  .metric-strip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+  }
+  .metric {
+    min-width: 0;
+    padding: 12px 14px;
+    border-right: 1px solid var(--rule);
+  }
+  .metric:last-child { border-right: 0; }
+  .metric .label {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+  .metric .value {
+    display: block;
+    margin-top: 5px;
+    font-family: var(--serif);
+    font-size: 31px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric .delta {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-mid);
+  }
+  .chart-card {
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+    padding: 14px 16px 12px;
+    border: 1px solid var(--rule);
+    background: var(--paper-warm);
+  }
+  .chart-card .chart {
+    min-height: 0;
+    height: min(150px, 22vh);
+  }
+  .chart-card svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .compact-copy {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    min-height: 0;
+  }
+  .compact-copy .body-text {
+    font-size: 12.8px;
+    line-height: 1.48;
+  }
+  table.fin {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .fin th {
+    text-align: left;
+    padding: 8px 7px;
+    border-bottom: 1px solid var(--ink);
+    color: var(--ink-mid);
+    font-weight: 500;
+  }
+  .fin td {
+    padding: 7px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .fin tr.target td {
+    background: color-mix(in oklch, var(--accent) 8%, transparent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .fin tr.summary td {
+    border-top: 1px solid var(--ink);
+    background: var(--paper-warm);
+    font-weight: 600;
+  }
+  .source-line {
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-soft);
+  }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: center;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-soft);
+  }
+  .foot .conf {
+    font-family: var(--sans);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .chrome {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: oklch(98% 0.005 80 / 0.92);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 6px 8px;
+    z-index: 60;
+  }
+  .chrome button {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .chrome button:hover { background: oklch(94% 0.008 75); }
+  .chrome .counter { font-family: var(--mono); font-size: 11px; padding: 0 10px; }
+
+  @media (max-width: 760px) {
+    body { overflow: auto; }
+    .deck { height: auto; min-height: 100vh; overflow: visible; }
+    .stage { display: block; transform: none !important; }
+    .slide { min-width: 0; width: 100%; height: auto; min-height: 100vh; }
+    .slide-inner { width: 100%; height: auto; min-height: 100vh; padding: 36px 22px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .chrome { display: none; }
+  }
+  @media print {
+    html, body, .deck { height: auto; overflow: visible; background: white; }
+    .source-status, .chrome { display: none; }
+    .stage { display: block; transform: none !important; transition: none; }
+    .slide { page-break-after: always; height: 100vh; }
+    .slide-inner { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+  <div class="source-status" role="note">
+    <strong>[SOURCE STATUS]</strong> Replace with live citation status. If placeholders remain, say DEMO DATA / FICTIONAL SAMPLE here and in every footer.
+  </div>
+  <div class="stage" id="stage">
+    <section class="slide cover">
+      <div class="slide-inner">
+        <header class="mast">
+          <div class="brand">[Bank / Advisor]</div>
+          <div class="meta"><span>[Project]</span><span>[Date]</span><span>01 / 03</span></div>
+        </header>
+        <div class="body">
+          <span class="ribbon">Discussion Materials</span>
+          <h1 class="display">[Strategic <em>Alternatives</em> Review]</h1>
+          <p class="body-text" style="margin-top:22px;">[Audience, subject company, scope, and source-status note.]</p>
+        </div>
+        <footer class="foot">
+          <span class="conf">[CONFIDENTIAL OR DEMO DATA]</span>
+          <span>01 / 03</span>
+        </footer>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <header class="mast">
+          <div class="brand">[Bank / Advisor]</div>
+          <div class="meta"><span>[Project]</span><span>Analysis</span><span>02 / 03</span></div>
+        </header>
+        <div class="body">
+          <span class="eyebrow">Trading comparables</span>
+          <h2 class="section">[One precise takeaway tied to the table.]</h2>
+          <div style="margin-top:26px; overflow:auto;">
+            <table class="fin">
+              <thead>
+                <tr><th>Company</th><th>EV</th><th>Revenue</th><th>EBITDA</th><th>EV/Revenue</th><th>EV/EBITDA</th><th>Source</th></tr>
+              </thead>
+              <tbody>
+                <tr class="target"><td>[Subject]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[citation id]</td></tr>
+                <tr><td>[Peer]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[citation id]</td></tr>
+                <tr class="summary"><td>Median</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[x]</td><td>[method]</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="source-line">Source: [public filing / licensed vendor / management provided / assumption], as of [date].</p>
+        </div>
+        <footer class="foot">
+          <span class="conf">[CONFIDENTIAL OR DEMO DATA]</span>
+          <span>02 / 03</span>
+        </footer>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="slide-inner">
+        <header class="mast">
+          <div class="brand">[Bank / Advisor]</div>
+          <div class="meta"><span>[Project]</span><span>Disclosures</span><span>03 / 03</span></div>
+        </header>
+        <div class="body grid-2">
+          <div>
+            <span class="eyebrow">Disclaimers</span>
+            <h2 class="section">Required <em>review</em> status.</h2>
+          </div>
+          <div class="body-text">
+            <p>[Purpose / non-reliance disclosure.]</p>
+            <p>[Sources, verification, licensing, conflicts, compensation, MNPI, and external-distribution review status.]</p>
+            <p>[Legal, tax, accounting, fairness-opinion, and supervisory / FINRA status.]</p>
+          </div>
+        </div>
+        <footer class="foot">
+          <span class="conf">[CONFIDENTIAL OR DEMO DATA]</span>
+          <span>03 / 03</span>
+        </footer>
+      </div>
+    </section>
+  </div>
+
+  <div class="chrome">
+    <button id="prev" aria-label="Previous slide">&#8592;</button>
+    <span class="counter"><span id="now">01</span> / <span id="total">03</span></span>
+    <button id="next" aria-label="Next slide">&#8594;</button>
+    <button id="print" aria-label="Print as PDF" title="Print / save as PDF">PDF</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const stage = document.getElementById('stage');
+  const slides = Array.from(stage.querySelectorAll('.slide'));
+  const now = document.getElementById('now');
+  const total = document.getElementById('total');
+  let i = 0;
+  total.textContent = String(slides.length).padStart(2, '0');
+
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    stage.style.transform = `translateX(-${i * 100}vw)`;
+    now.textContent = String(i + 1).padStart(2, '0');
+  }
+
+  document.getElementById('prev').addEventListener('click', () => go(i - 1));
+  document.getElementById('next').addEventListener('click', () => go(i + 1));
+  document.getElementById('print').addEventListener('click', () => window.print());
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+      event.preventDefault();
+      go(i + 1);
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      event.preventDefault();
+      go(i - 1);
+    }
+    if (event.key === 'Home') go(0);
+    if (event.key === 'End') go(slides.length - 1);
+  });
+}());
+</script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+name: release-stable-docker
+run-name: Docker stable ${{ inputs.release_version }} · origin ${{ inputs.origin_run_id || 'manual' }}
+
+# Independent reconciler for the desired Docker state committed by
+# release-stable. A run may be repeated safely: the immutable version tag is a
+# no-op when complete, repaired when incomplete, and rejected on identity
+# conflict. The mutable latest tag only moves to the authoritative stable
+# version and never moves backward.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Exact published stable version to reconcile, for example 0.24.1."
+        required: true
+        type: string
+      origin_run_id:
+        description: "Optional release-stable run id. Automatic dispatches always provide it."
+        required: false
+        type: string
+        default: ""
+      origin_run_attempt:
+        description: "Optional release-stable run attempt. Automatic dispatches always provide it."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: open-design-release-stable-docker
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve authoritative stable identity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+      release_run_attempt: ${{ steps.identity.outputs.release_run_attempt }}
+      release_run_id: ${{ steps.identity.outputs.release_run_id }}
+      version_metadata_url: ${{ steps.identity.outputs.version_metadata_url }}
+      version_tag: ${{ steps.identity.outputs.version_tag }}
+    steps:
+      - name: Checkout trusted reconciler
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+
+      - name: Download immutable stable metadata
+        id: download
+        env:
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::release_version must be an exact x.y.z stable version"
+            exit 1
+          fi
+          metadata_url="${PUBLIC_ORIGIN%/}/stable/versions/${RELEASE_VERSION}/metadata.json"
+          curl -fsSL --retry 4 --retry-all-errors \
+            -o "$RUNNER_TEMP/stable-version-metadata.json" \
+            "${metadata_url}?docker_reconcile=$GITHUB_RUN_ID"
+          echo "metadata_url=$metadata_url" >> "$GITHUB_OUTPUT"
+
+      - name: Validate authoritative identity
+        id: identity
+        env:
+          ORIGIN_RUN_ATTEMPT: ${{ inputs.origin_run_attempt }}
+          ORIGIN_RUN_ID: ${{ inputs.origin_run_id }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          python3 .github/scripts/release/stable-docker.py resolve \
+            --metadata "$RUNNER_TEMP/stable-version-metadata.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --release-version "$RELEASE_VERSION" \
+            --origin-run-id "$ORIGIN_RUN_ID" \
+            --origin-run-attempt "$ORIGIN_RUN_ATTEMPT" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Publish identity summary
+        env:
+          COMMIT: ${{ steps.identity.outputs.commit }}
+          METADATA_URL: ${{ steps.identity.outputs.version_metadata_url }}
+          RELEASE_RUN_ID: ${{ steps.identity.outputs.release_run_id }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          {
+            echo "## Stable Docker desired state"
+            echo
+            echo "- Version: \`$RELEASE_VERSION\`"
+            echo "- Commit: \`$COMMIT\`"
+            echo "- Release run: [\`$RELEASE_RUN_ID\`]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID)"
+            echo "- Metadata: $METADATA_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish_version:
+    name: Reconcile immutable version tag
+    needs: resolve
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-image.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit }}
+      release_version: ${{ inputs.release_version }}
+      expected_revision: ${{ needs.resolve.outputs.commit }}
+
+  promote_latest:
+    name: Reconcile latest alias
+    needs:
+      - resolve
+      - publish_version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout trusted reconciler
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch || 'main' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-read authoritative latest metadata
+        id: latest
+        env:
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          latest_url="${PUBLIC_ORIGIN%/}/stable/latest/metadata.json"
+          curl -fsSL --retry 4 --retry-all-errors \
+            -o "$RUNNER_TEMP/stable-latest-metadata.json" \
+            "${latest_url}?docker_reconcile=$GITHUB_RUN_ID"
+          python3 .github/scripts/release/stable-docker.py resolve \
+            --metadata "$RUNNER_TEMP/stable-latest-metadata.json" \
+            --repository "$GITHUB_REPOSITORY" \
+            --release-version "$RELEASE_VERSION" \
+            --allow-version-mismatch \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Inspect current latest image
+        id: current
+        if: ${{ steps.latest.outputs.is_target_version == 'true' }}
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/od
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          TARGET_DIGEST: ${{ needs.publish_version.outputs.version_digest }}
+        run: |
+          set -euo pipefail
+          inspection="$RUNNER_TEMP/stable-docker-latest.json"
+          error="$RUNNER_TEMP/stable-docker-latest.err"
+          if docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .}}' > "$inspection" 2> "$error"; then
+            python3 .github/scripts/release/stable-docker.py latest-action \
+              --inspection "$inspection" \
+              --target-digest "$TARGET_DIGEST" \
+              --target-version "$RELEASE_VERSION" \
+              --github-output "$GITHUB_OUTPUT"
+          elif grep -Eqi 'manifest unknown|not found|does not exist' "$error"; then
+            {
+              echo "action=promote"
+              echo "current_digest="
+              echo "current_version="
+            } >> "$GITHUB_OUTPUT"
+          else
+            cat "$error" >&2
+            echo "::error::could not determine the current latest image state"
+            exit 1
+          fi
+
+      - name: Promote verified version digest to latest
+        if: ${{ steps.latest.outputs.is_target_version == 'true' && steps.current.outputs.action == 'promote' }}
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/od
+          TARGET_DIGEST: ${{ needs.publish_version.outputs.version_digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "$IMAGE:latest" \
+            "$IMAGE@$TARGET_DIGEST"
+
+      - name: Verify public latest alias
+        if: >-
+          ${{
+            steps.latest.outputs.is_target_version == 'true' &&
+            steps.current.outputs.action != 'skip-newer'
+          }}
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/od
+          TARGET_DIGEST: ${{ needs.publish_version.outputs.version_digest }}
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          inspection="$RUNNER_TEMP/stable-docker-latest-verified.json"
+          verified=false
+          for attempt in 1 2 3 4 5; do
+            if docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .}}' > "$inspection"; then
+              digest=$(jq -r '.manifest.digest // empty' "$inspection")
+              if [ "$digest" = "$TARGET_DIGEST" ]; then
+                verified=true
+                break
+              fi
+            fi
+            echo "public latest verification attempt $attempt failed; retrying"
+            sleep 15
+          done
+          if [ "$verified" != "true" ]; then
+            echo "::error::$IMAGE:latest did not converge to $TARGET_DIGEST"
+            exit 1
+          fi
+
+      - name: Publish latest summary
+        if: ${{ always() }}
+        env:
+          AUTHORITATIVE_VERSION: ${{ steps.latest.outputs.release_version }}
+          CURRENT_VERSION: ${{ steps.current.outputs.current_version }}
+          IS_TARGET_VERSION: ${{ steps.latest.outputs.is_target_version }}
+          LATEST_ACTION: ${{ steps.current.outputs.action }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          TARGET_DIGEST: ${{ needs.publish_version.outputs.version_digest }}
+          VERSION_ACTION: ${{ needs.publish_version.outputs.reconciliation }}
+        run: |
+          if [ "$IS_TARGET_VERSION" != "true" ]; then
+            latest_action="skip-not-current"
+          else
+            latest_action="${LATEST_ACTION:-unknown}"
+          fi
+          {
+            echo "## Stable Docker reconciliation"
+            echo
+            echo "- Version tag action: \`$VERSION_ACTION\`"
+            echo "- Version digest: \`$TARGET_DIGEST\`"
+            echo "- Authoritative latest version: \`$AUTHORITATIVE_VERSION\`"
+            echo "- Previous Docker latest version: \`${CURRENT_VERSION:-missing}\`"
+            echo "- Latest action: \`$latest_action\`"
+          } >> "$GITHUB_STEP_SUMMARY"

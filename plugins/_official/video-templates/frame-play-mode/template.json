@@ -1,0 +1,37 @@
+{
+  "id": "frame-play-mode",
+  "surface": "hyperframes",
+  "title": "Play Mode",
+  "summary": "Playful elastic animations",
+  "category": "Social-shorts",
+  "tags": [
+    "playful",
+    "elastic",
+    "fun",
+    "bouncy",
+    "social"
+  ],
+  "engine": "hyperframes",
+  "engineVersion": "^0.4.0",
+  "sourceEntry": "source/index.html",
+  "aspect": "16:9",
+  "fps": 30,
+  "durationSec": 10,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "Playful social ad",
+    "Casual intro",
+    "Fun product"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-play-mode",
+    "license": "Apache-2.0",
+    "author": "heygen-com / Hyperframes",
+    "url": "https://github.com/heygen-com/hyperframes/tree/main/registry/examples/play-mode",
+    "notes": "Forked from heygen-com/hyperframes registry/examples/play-mode (Apache-2.0)."
+  }
+}

@@ -1,0 +1,87 @@
+name: Contributor Card Bot
+
+# Triggers chosen for fork-safety: every event below either targets the base
+# repo directly (issues, discussions, discussion_comment) or is the GitHub-
+# blessed fork-safe variant (pull_request_target).
+#
+# Intentionally NOT included: pull_request_review, pull_request_review_comment,
+# issue_comment. GitHub withholds repository secrets from these events when
+# they originate on forked PRs, so the relay secret would fail-closed there too.
+# They can be re-added later via a workflow_run handoff.
+on:
+  pull_request_target:
+    types: [closed]
+  issues:
+    types: [opened]
+  discussion:
+    types: [created]
+  discussion_comment:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize all relay runs across the whole repository. The Cloudflare worker
+# owns durable state now, but queuing still keeps identical GitHub events from
+# racing each other and producing duplicate comments during bursty merge windows.
+concurrency:
+  group: contributor-card-bot
+  cancel-in-progress: false
+
+jobs:
+  recognize:
+    name: Relay contributor event to Cloudflare worker
+    if: |
+      github.repository == 'nexu-io/open-design' &&
+      (
+        (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+        (github.event_name == 'issues' && github.event.action == 'opened') ||
+        (github.event_name == 'discussion' && github.event.action == 'created') ||
+        (github.event_name == 'discussion_comment' && github.event.action == 'created') ||
+        github.event_name == 'workflow_dispatch'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Relay event payload
+        env:
+          CONTRIBUTOR_CARD_WORKER_URL: ${{ secrets.CONTRIBUTOR_CARD_WORKER_URL }}
+          CONTRIBUTOR_CARD_WORKER_SECRET: ${{ secrets.CONTRIBUTOR_CARD_WORKER_SECRET }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_ACTION: ${{ github.event.action }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+          envelope = {
+            "repository": os.environ["GITHUB_REPOSITORY"],
+            "eventName": os.environ["GITHUB_EVENT_NAME"],
+            "action": os.environ.get("GITHUB_EVENT_ACTION") or payload.get("action"),
+            "deliveryId": f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
+            "triggeredAt": __import__("datetime").datetime.utcnow().isoformat(timespec="milliseconds") + "Z",
+            "payload": payload,
+          }
+          Path("body.json").write_text(json.dumps(envelope, separators=(",", ":")))
+          PY
+          python - <<'PY'
+          import hashlib, hmac, os
+          from pathlib import Path
+
+          body = Path("body.json").read_bytes()
+          digest = hmac.new(os.environ["CONTRIBUTOR_CARD_WORKER_SECRET"].encode(), body, hashlib.sha256).hexdigest()
+          Path("signature.txt").write_text(f"sha256={digest}")
+          PY
+          curl --fail --silent --show-error \
+            -X POST \
+            -H "content-type: application/json" \
+            -H "x-open-design-signature: $(cat signature.txt)" \
+            --data-binary @body.json \
+            "$CONTRIBUTOR_CARD_WORKER_URL/api/github/events"

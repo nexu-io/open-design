@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-showreel",
+  "title": "Motion Designer Showreel",
+  "title_i18n": {
+    "en": "Motion Designer Showreel",
+    "id": "Showreel Desainer Motion",
+    "de": "Motion-Designer-Showreel",
+    "zh-CN": "动效设计师自荐片",
+    "zh-TW": "動效設計師自薦片",
+    "pt-BR": "Showreel de Motion Designer",
+    "es-ES": "Showreel de motion designer",
+    "ru": "Шоурил моушн-дизайнера",
+    "fa": "شوریل طراح موشن",
+    "ar": "شوريل مصمم موشن",
+    "ja": "モーションデザイナーのショーリール",
+    "ko": "모션 디자이너 쇼릴",
+    "pl": "Showreel motion designera",
+    "hu": "Motion designer showreel",
+    "fr": "Showreel de motion designer",
+    "uk": "Шоурил моушн-дизайнера",
+    "tr": "Motion tasarımcısı showreel",
+    "th": "โชว์รีลนักออกแบบโมชัน",
+    "it": "Showreel da motion designer"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-09T00:00:00Z",
+  "description": "A 15-second motion designer showreel at 128 BPM, rebuilt from the viral original: an Open Design mark opener, a stretching wordmark, six easing curves, a morphing shape, a truchet field, a 3D point cloud, kinetic type and an end card.",
+  "description_i18n": {
+    "en": "A 15-second motion designer showreel at 128 BPM, rebuilt from the viral original: an Open Design mark opener, a stretching wordmark, six easing curves, a morphing shape, a truchet field, a 3D point cloud, kinetic type and an end card.",
+    "id": "Showreel desainer motion 15 detik pada 128 BPM, dibuat ulang dari versi viral aslinya: pembuka logo Open Design, wordmark yang meregang, enam kurva easing, bentuk yang bermorf, pola truchet, awan titik 3D, tipografi kinetik, dan kartu penutup.",
+    "de": "Ein 15-sekündiges Motion-Designer-Showreel mit 128 BPM, nachgebaut nach dem viralen Original: Opener mit dem Open-Design-Logo, gestrecktes Wortlogo, sechs Easing-Kurven, ein morphende Form, ein Truchet-Muster, eine 3D-Punktwolke, kinetische Typo und eine Endkarte.",
+    "zh-CN": "按爆款原片复刻的 15 秒动效设计师自荐片，128 BPM：Open Design 标志开场、拉伸变形的大字标识、六种缓动曲线、形状变形、Truchet 花纹、3D 点云、动态文字和结尾署名卡。",
+    "zh-TW": "按爆款原片復刻的 15 秒動效設計師自薦片，128 BPM：Open Design 標誌開場、拉伸變形的大字標識、六種緩動曲線、形狀變形、Truchet 花紋、3D 點雲、動態文字和結尾署名卡。",
+    "pt-BR": "Um showreel de motion designer de 15 segundos a 128 BPM, recriado a partir do original viral: abertura com a marca Open Design, logotipo que se estica, seis curvas de easing, forma em morph, padrão truchet, nuvem de pontos 3D, tipografia cinética e cartela final.",
+    "es-ES": "Un showreel de motion designer de 15 segundos a 128 BPM, recreado a partir del original viral: apertura con la marca de Open Design, logotipo que se estira, seis curvas de easing, una forma que muta, un patrón truchet, una nube de puntos 3D, tipografía cinética y cierre.",
+    "ru": "15-секундный шоурил моушн-дизайнера в темпе 128 BPM, воссозданный по вирусному оригиналу: логотип Open Design в начале, растягивающийся логотип, шесть кривых изинга, морфинг формы, узор трюше, 3D-облако точек, кинетическая типографика и финальная карточка.",
+    "fa": "شوریل ۱۵ ثانیه‌ای طراح موشن با ضرب ۱۲۸ BPM که از روی نسخهٔ اصلی پربازدید بازسازی شده: شروع با نشان Open Design، لوگوی کش‌آمده، شش منحنی easing، شکلی که دگردیس می‌شود، الگوی تروشه، ابر نقاط سه‌بعدی، تایپوگرافی متحرک و کارت پایانی.",
+    "ar": "شوريل مصمم موشن مدته 15 ثانية على إيقاع 128 BPM، أُعيد بناؤه من الأصل الفيروسي: افتتاحية بشعار Open Design، شعار نصي يتمدد، ست منحنيات easing، شكل يتحول، نمط تروشيه، سحابة نقاط ثلاثية الأبعاد، طباعة حركية وبطاقة ختام.",
+    "ja": "バズった原作を再現した 128 BPM・15 秒のモーションデザイナーのショーリール。Open Design のロゴで始まる開幕、伸び縮みするロゴ、6 種類のイージングカーブ、モーフする図形、トルシェ模様、3D 点群、キネティックタイポ、エンドカード。",
+    "ko": "바이럴 원본을 재현한 128 BPM, 15초 모션 디자이너 쇼릴: Open Design 로고 오프닝, 늘어나는 워드마크, 여섯 가지 이징 커브, 모핑 도형, 트루셰 패턴, 3D 포인트 클라우드, 키네틱 타이포, 엔드 카드.",
+    "pl": "15-sekundowy showreel motion designera w tempie 128 BPM, odtworzony z wiralowego oryginału: otwarcie z logo Open Design, rozciągający się logotyp, sześć krzywych easingu, morfujący kształt, wzór truchet, chmura punktów 3D, typografia kinetyczna i plansza końcowa.",
+    "hu": "15 másodperces, 128 BPM-es motion designer showreel a virális eredeti alapján újraépítve: nyitás az Open Design logóval, nyúló logó, hat easing-görbe, alakváltó forma, truchet-minta, 3D pontfelhő, kinetikus tipográfia és záró kártya.",
+    "fr": "Un showreel de motion designer de 15 secondes à 128 BPM, reconstruit d’après l’original viral : ouverture sur le logo Open Design, logotype qui s’étire, six courbes d’easing, une forme qui se transforme, un motif truchet, un nuage de points 3D, de la typographie cinétique et une carte de fin.",
+    "uk": "15-секундний шоурил моушн-дизайнера в темпі 128 BPM, відтворений за вірусним оригіналом: логотип Open Design на початку, логотип, що розтягується, шість кривих ізингу, морфінг форми, візерунок трюше, 3D-хмара точок, кінетична типографіка та фінальна картка.",
+    "tr": "Viral orijinalden yeniden kurulan, 128 BPM’de 15 saniyelik motion tasarımcısı showreel’i: Open Design logolu açılış, esneyen logo, altı easing eğrisi, biçim değiştiren şekil, truchet deseni, 3D nokta bulutu, kinetik tipografi ve kapanış kartı.",
+    "th": "โชว์รีลนักออกแบบโมชันยาว 15 วินาทีที่ 128 BPM สร้างใหม่ตามต้นฉบับไวรัล: เปิดด้วยโลโก้ Open Design โลโก้ที่ยืดหด เส้นโค้ง easing หกแบบ รูปทรงที่มอร์ฟ ลายทรูเชต์ กลุ่มจุด 3D ตัวอักษรเคลื่อนไหว และการ์ดปิดท้าย",
+    "it": "Uno showreel da motion designer di 15 secondi a 128 BPM, ricostruito dall’originale virale: apertura con il logo Open Design, logotipo che si allunga, sei curve di easing, una forma che muta, un motivo truchet, una nuvola di punti 3D, tipografia cinetica e card finale."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "showreel",
+    "kinetic-typography",
+    "shape-morph",
+    "viral-remake"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "make a dynamic 15-second motion graphics video that shows what an incredible motion designer you are, like it's your showreel for a résumé. go all out.",
+        "id": "buat video motion graphics dinamis 15 detik yang menunjukkan betapa hebatnya kamu sebagai desainer motion, seperti showreel untuk CV-mu. kerahkan semuanya.",
+        "de": "Mach ein dynamisches 15-Sekunden-Motion-Graphics-Video, das zeigt, was für ein unglaublicher Motion Designer du bist – wie dein Showreel für den Lebenslauf. Gib alles.",
+        "zh-CN": "做一段动感的 15 秒动效视频，展示你是一位多么出色的动效设计师，就像放进简历里的作品集自荐片。全力以赴。",
+        "zh-TW": "做一段動感的 15 秒動效影片，展示你是一位多麼出色的動效設計師，就像放進履歷裡的作品集自薦片。全力以赴。",
+        "pt-BR": "faça um vídeo de motion graphics dinâmico de 15 segundos que mostre o motion designer incrível que você é, como o seu showreel para o currículo. capriche ao máximo.",
+        "es-ES": "haz un vídeo de motion graphics dinámico de 15 segundos que muestre el increíble motion designer que eres, como tu showreel para el currículum. dalo todo.",
+        "ru": "сделай динамичное 15-секундное моушн-видео, которое покажет, какой ты потрясающий моушн-дизайнер, — как шоурил для резюме. выложись на полную.",
+        "fa": "یک ویدیوی موشن‌گرافیک پویا و ۱۵ ثانیه‌ای بساز که نشان دهد چه طراح موشن فوق‌العاده‌ای هستی، مثل شوریل رزومه‌ات. سنگ تمام بگذار.",
+        "ar": "اصنع فيديو موشن جرافيك ديناميكيًا مدته 15 ثانية يُظهر كم أنت مصمم موشن مذهل، كأنه الشوريل الخاص بسيرتك الذاتية. ابذل أقصى ما لديك.",
+        "ja": "あなたがどれほどすごいモーションデザイナーかを見せる、ダイナミックな 15 秒のモーショングラフィックス動画を作って。履歴書に添えるショーリールのように。全力で。",
+        "ko": "당신이 얼마나 뛰어난 모션 디자이너인지 보여 주는 역동적인 15초 모션 그래픽 영상을 만들어 줘. 이력서용 쇼릴처럼. 전력을 다해서.",
+        "pl": "zrób dynamiczny, 15-sekundowy film motion graphics, który pokaże, jak niesamowitym motion designerem jesteś — jak showreel do CV. daj z siebie wszystko.",
+        "hu": "készíts egy dinamikus, 15 másodperces motion graphics videót, ami megmutatja, milyen elképesztő motion designer vagy — mint egy showreel az önéletrajzodhoz. hozd ki belőle a maximumot.",
+        "fr": "fais une vidéo de motion design dynamique de 15 secondes qui montre quel motion designer incroyable tu es, comme ton showreel pour un CV. donne tout.",
+        "uk": "зроби динамічне 15-секундне моушн-відео, яке покаже, який ти неймовірний моушн-дизайнер, — як шоурил для резюме. викладись на повну.",
+        "tr": "ne kadar inanılmaz bir motion tasarımcısı olduğunu gösteren, özgeçmişin için bir showreel gibi dinamik, 15 saniyelik bir motion graphics videosu yap. elinden gelenin en iyisini yap.",
+        "th": "ทำวิดีโอโมชันกราฟิกไดนามิกยาว 15 วินาทีที่แสดงให้เห็นว่าคุณเป็นนักออกแบบโมชันที่เก่งแค่ไหน เหมือนโชว์รีลสำหรับเรซูเม่ ทุ่มให้สุด",
+        "it": "crea un video di motion graphics dinamico di 15 secondi che mostri che motion designer incredibile sei, come il tuo showreel per il curriculum. dai il massimo."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Motion Designer Showreel"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "profile-avatar-poetic-woman-in-garden-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Poetic Woman in Garden Portrait",
+  "summary": "This prompt generates a realistic editorial-style portrait of a bookish young woman in a sunlit garden, ideal for lifestyle photography, literary branding, or elegant character imagery.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A realistic outdoor portrait of a thoughtful, naturally beautiful young woman standing on a garden path in soft golden-hour light. She is framed from about mid-thigh upward, centered in the image, facing the camera with a relaxed upright posture. She has {argument name=\"hair color\" default=\"dark brown\"} long, voluminous, loosely curly hair with a slightly tousled texture, falling around her shoulders. Dress her in an oversized cream-white knit sweater with long sleeves and dark high-waisted loose trousers or a flowing skirt-like bottom in deep navy or black. A pair of thin round eyeglasses hangs from the neckline of the sweater. In one hand she holds a sharpened yellow pencil, and in the other she carries an open sketchbook or notebook with slightly worn pages, suggesting she is writing, sketching, or observing nature. The mood should feel literary, artistic, intelligent, and understated rather than glamorous. Place her in a lush garden with 1 visible stone pathway, abundant soft greenery, and blurred flowers in the foreground and background. Use shallow depth of field with creamy bokeh, warm sunlight filtering through trees behind her, and gentle natural highlights on her hair and sweater. The image should look like a candid editorial photograph, highly realistic, soft and tasteful, with muted natural colors, subtle texture, and an atmosphere of calm, cultured beauty. Vertical composition, 4:5 portrait orientation.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453183422_nu32e1_HG9s-kFbMAACMYA.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "LJ",
+    "url": "https://x.com/XLOOP37/status/2048976490575155202#reversed-0"
+  }
+}

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wise — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/wise. Spring-green CTAs on warm-neutral
+        canvas, billboard Wise Sans at 0.85 line-height, pill buttons, ring-only shadows."
+    />
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #e8ebe6;
+        --surface-warm: var(--surface);
+
+        --fg: #0e0f0c;
+        --fg-2: var(--fg);
+        --muted: #868685;
+        --meta: var(--muted);
+
+        --border: rgba(14, 15, 12, 0.12);
+        --border-soft: var(--border);
+
+        --accent: #9fe870;
+        --accent-on: #163300;
+        --accent-hover: #cdffad;
+        --accent-active: color-mix(in oklab, var(--accent), black 12%);
+
+        --success: #054d28;
+        --warn: #ffd11a;
+        --danger: #d03238;
+
+        --font-display: "Wise Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+        --font-body: Inter, Helvetica, Arial, ui-sans-serif, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs: 12px;
+        --text-sm: 14px;
+        --text-base: 18px;
+        --text-lg: 22px;
+        --text-xl: 26px;
+        --text-2xl: 40px;
+        --text-3xl: 64px;
+        --text-4xl: 96px;
+
+        --leading-body: 1.44;
+        --leading-tight: 0.85;
+        --tracking-display: normal;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+
+        --radius-sm: 16px;
+        --radius-md: 30px;
+        --radius-lg: 40px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 0 0 1px var(--border), 0 2px 8px rgba(14, 15, 12, 0.04);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1280px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        font-weight: 600;                       /* Inter 600 as body default — DESIGN.md §3 */
+        font-feature-settings: "calt" 1;        /* "calt" on everything */
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout ─────────────────────────────────────────────── */
+      .container { max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-gutter-desktop); }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — Wise Sans 900 at 0.85, "calt" everywhere ─ */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 900;                       /* Wise Sans Black — the brand identity */
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+        font-feature-settings: "calt" 1;
+        margin: 0;
+        color: var(--fg);
+      }
+      h1 { font-size: var(--text-4xl); }
+      h2 { font-size: var(--text-3xl); }
+      h3 { font-size: var(--text-xl); letter-spacing: -0.015em; line-height: 1.23; }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--fg);
+        line-height: var(--leading-body);
+        font-weight: 600;
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .eyebrow {
+        font-size: var(--text-sm);
+        color: var(--muted);
+        font-weight: 600;
+        letter-spacing: -0.006em;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — pill, green-on-green, scale(1.05) hover ─── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 12px 22px;
+        border-radius: var(--radius-pill);      /* 9999px — all buttons are pills */
+        font-family: var(--font-body);
+        font-size: var(--text-lg);
+        font-weight: 600;                       /* Inter 600 — confident, not light */
+        line-height: 1;
+        cursor: pointer;
+        border: none;
+        font-feature-settings: "calt" 1;
+        letter-spacing: -0.006em;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    transform var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:hover { transform: scale(1.05); }    /* DESIGN.md §4 — buttons physically grow */
+      .btn:active { transform: scale(0.95); }   /* DESIGN.md §4 — compresses on press */
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      /* Primary: Wise Green pill with Dark Green text — the signature CTA */
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      /* Secondary: subtle dark-green tint pill */
+      .btn-secondary {
+        background: rgba(22, 51, 0, 0.08);      /* DESIGN.md §4 — dark green at 8% */
+        color: var(--fg);
+      }
+      .btn-secondary:hover { background: rgba(22, 51, 0, 0.14); }
+
+      /* ─── Inputs — pill borders, ring focus ──────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label { font-size: var(--text-sm); font-weight: 600; }
+      .field input {
+        padding: 14px 18px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 600;
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input:focus-visible {
+        border-color: var(--accent-on);
+        box-shadow: var(--focus-ring);
+      }
+      .field input::placeholder { color: var(--muted); font-weight: 400; }
+      .field-help { font-size: var(--text-xs); color: var(--muted); }
+
+      /* ─── Cards — 30px radius, ring elevation only ──────────── */
+      .card {
+        background: var(--bg);
+        border-radius: var(--radius-md);        /* 30px — Wise's medium feature radius */
+        padding: var(--space-8);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        box-shadow: var(--elev-ring);           /* Ring shadow only — DESIGN.md §6 */
+      }
+      .card-accent {
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        padding: var(--space-8);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex; align-items: center; gap: var(--space-2);
+        padding: 4px var(--space-3);
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs); font-weight: 600; line-height: 1.6;
+      }
+      .badge-success {
+        color: var(--success);
+        background: #e2f6d5;                    /* Light Mint surface — DESIGN.md §2 */
+      }
+      .badge-muted { color: var(--muted); background: var(--surface); }
+      .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+      /* ─── Links ─────────────────────────────────────────────── */
+      a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 2px; }
+      a:hover { color: var(--accent-on); text-decoration-color: var(--accent); }
+      kbd {
+        font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 400;
+        padding: 2px 6px; border-radius: var(--radius-sm);
+        border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+      }
+
+      /* ─── Layout helpers ────────────────────────────────────── */
+      .hero-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--space-12); align-items: end; }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); flex-wrap: wrap; }
+      .hero-meta {
+        display: flex; flex-direction: column; gap: var(--space-3);
+        padding: var(--space-6); border: 1px solid var(--border);
+        border-radius: var(--radius-md); background: var(--surface);
+      }
+      .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px) { .features-grid { grid-template-columns: 1fr; } }
+      .form-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--space-12); align-items: start; }
+      @media (max-width: 1023px) { .form-row { grid-template-columns: 1fr; } }
+      .form { display: flex; flex-direction: column; gap: var(--space-4); max-width: 460px; }
+      .form-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-2); }
+      .icon { width: 18px; height: 18px; flex-shrink: 0; }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+
+      /* Hero headline gets the most extreme Wise treatment */
+      .hero-headline { max-width: 14ch; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-6">
+            <p class="eyebrow">Reference fixture · wise</p>
+            <h1 class="hero-headline">The international account for everyone.</h1>
+            <p class="lead" style="max-width: 50ch">
+              Hold 40+ currencies, send money across borders at the real exchange
+              rate, and get paid like a local — no hidden fees, no fine print.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                Open an account
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the spec</a>
+            </div>
+          </div>
+          <aside class="hero-meta" aria-label="Transfer status">
+            <div class="row-between">
+              <span class="body-sm">Transfer status</span>
+              <span class="badge badge-success">
+                <span class="badge-dot" aria-hidden="true"></span>
+                On its way
+              </span>
+            </div>
+            <p class="body-sm body-muted">Last reviewed <time datetime="2026-05-15">2026-05-15</time> · v1.0</p>
+            <p class="body-sm body-muted">Press <kbd>⌘</kbd> <kbd>K</kbd> to search tokens.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 18ch">Money without borders, by design.</h2>
+        </div>
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card">
+            <h3>Green-on-green CTAs</h3>
+            <p class="body-muted">
+              --accent (#9fe870) paired with --accent-on (#163300) — dark green text
+              on lime green is the Wise signature, not white. Pill radius 9999px.
+            </p>
+            <a href="./tokens.css">Inspect tokens →</a>
+          </article>
+          <article class="card-accent">
+            <h3>Billboard Wise Sans 900</h3>
+            <p class="body-muted">
+              Display headlines run at weight 900 with line-height 0.85 — letters
+              overlap vertically, creating dense text blocks that read like signage.
+            </p>
+            <a href="./DESIGN.md">Read the rule →</a>
+          </article>
+          <article class="card">
+            <h3>Ring-only elevation</h3>
+            <p class="body-muted">
+              --elev-ring (0 0 0 1px rgba(14,15,12,0.12)) is the only depth treatment.
+              No drop shadows; the green accent provides all the visual lift needed.
+            </p>
+            <a href="./tokens.css">Inspect elevation →</a>
+          </article>
+        </div>
+      </section>
+
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Sign up in seconds.</h2>
+            <p class="body-muted" style="max-width: 46ch">
+              Inputs sit on the white canvas with hairline ring borders. Focus pulls a
+              green-tinted ring (--focus-ring) and snaps the border to dark green —
+              the same brand family, never a competing color.
+            </p>
+          </div>
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Email address</label>
+              <input id="email" type="email" placeholder="you@example.com" autocomplete="email" required />
+              <p class="field-help">We'll send your account confirmation here.</p>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Get started</button>
+              <button type="button" class="btn btn-secondary">Learn more</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

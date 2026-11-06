@@ -1,0 +1,72 @@
+# Nightly Critique Theater conformance run (Phase 16).
+#
+# Feeds every registered adapter through the conformance harness and
+# writes one ConformanceDay row per adapter into the daemon's data
+# directory. The /api/critique/conformance route reads the rolling
+# 14-day window and surfaces the ratchet's promote / hold / demote
+# recommendation.
+#
+# Cadence: 03:00 UTC every day. The schedule is intentionally outside
+# the busy generation window so the cron does not contend with real
+# user runs for adapter rate-limit budgets.
+#
+# Operator workflow: a follow-up workflow consumes
+# /api/critique/conformance and either auto-flips
+# OD_CRITIQUE_ROLLOUT_PHASE or alerts a human. That step is deploy-
+# pipeline-specific and intentionally not built here.
+
+name: critique-conformance
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    name: nightly conformance + ratchet snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Build daemon
+        run: pnpm --filter @open-design/daemon build
+
+      # The full adapter sweep lives in a follow-up that wires every
+      # production agent CLI into the harness; here we drive the
+      # synthetic-good and synthetic-bad fixtures so the workflow
+      # proves the cron plumbing end-to-end (install + build + harness
+      # invocation + history write) without depending on every adapter
+      # binary being installable in the CI image. The runner exits
+      # non-zero on any thrown error so the workflow fails loudly
+      # instead of uploading an empty history snapshot.
+      - name: Run conformance harness (synthetic adapters)
+        run: |
+          node --import tsx apps/daemon/src/critique/__fixtures__/run-nightly.ts
+
+      - name: Upload history snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: critique-conformance-${{ github.run_id }}
+          path: .od/conformance/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HashiCorp — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/hashicorp. Dramatic near-black
+        canvas (#15181e), HashiCorp Sans at 82px display with kerning enabled,
+        whisper-level dual-layer shadows, single functional blue accent.
+        Every visible value comes from tokens.css."
+    />
+
+    <style>
+      :root {
+        --bg: #15181e;
+        --surface: #0d0e12;
+        --surface-warm: var(--surface);
+
+        --fg: #efeff1;
+        --fg-2: #d5d7db;
+        --muted: #b2b6bd;
+        --meta: #656a76;
+
+        --border: rgba(178, 182, 189, 0.4);
+        --border-soft: rgba(178, 182, 189, 0.15);
+
+        --accent: #1060ff;
+        --accent-on: #ffffff;
+        --accent-hover: #2b89ff;
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #16a34a;
+        --warn: #bb5a00;
+        --danger: #dc2626;
+
+        --font-display: "HashiCorp Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs: 13px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 20px;
+        --text-xl: 26px;
+        --text-2xl: 42px;
+        --text-3xl: 52px;
+        --text-4xl: 82px;
+
+        --leading-body: 1.63;
+        --leading-tight: 1.17;
+        --tracking-display: normal;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 80px;
+        --section-y-tablet: 56px;
+        --section-y-phone: 40px;
+
+        --radius-sm: 5px;
+        --radius-md: 8px;
+        --radius-lg: 8px;
+        --radius-pill: 5px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised:
+          rgba(97, 104, 117, 0.05) 0px 1px 1px,
+          rgba(97, 104, 117, 0.05) 0px 2px 2px;
+
+        --focus-ring: 0 0 0 3px var(--accent);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1150px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg-2);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout ─────────────────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border-soft); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — HashiCorp Sans for headings, system-ui for body ─ */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        color: var(--fg);
+        margin: 0;
+        line-height: var(--leading-tight);
+        font-feature-settings: "kern";       /* DESIGN.md §3: kern always on */
+      }
+      h1 {
+        font-size: var(--text-4xl);
+        font-weight: 600;                    /* DESIGN.md hero: 600 */
+        letter-spacing: var(--tracking-display);
+      }
+      h2 {
+        font-size: var(--text-3xl);
+        font-weight: 600;                    /* DESIGN.md section heading: 600 */
+        line-height: 1.19;
+      }
+      h3 {
+        font-size: var(--text-xl);
+        font-weight: 700;                    /* DESIGN.md card title: 700 */
+        line-height: 1.19;
+      }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        line-height: 1.50;
+        color: var(--fg-2);
+        font-weight: 400;
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .body-meta { color: var(--meta); font-size: var(--text-sm); }
+
+      /* DESIGN.md §3 uppercase wayfinding label.
+         13px HashiCorp Sans weight 600, 1.3px tracking. */
+      .eyebrow {
+        font-family: var(--font-display);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        line-height: 1.69;
+        letter-spacing: 1.3px;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-feature-settings: "kern";
+      }
+
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons — DESIGN.md §4 ─────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        text-decoration: none;
+        transition:
+          background-color var(--motion-fast) var(--ease-standard),
+          border-color var(--motion-fast) var(--ease-standard),
+          color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn:active { transform: translateY(0.5px); }
+
+      /* Primary Dark — DESIGN.md §4: asymmetric 9px 9px 9px 15px padding,
+         5px radius, 1px border at rgba(178,182,189,0.4), whisper shadow. */
+      .btn-primary {
+        background: var(--bg);
+        color: var(--fg-2);
+        padding: 9px 9px 9px 15px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        box-shadow: var(--elev-raised);
+      }
+      .btn-primary:hover {
+        background: color-mix(in oklab, var(--bg), white 4%);
+        color: var(--fg);
+      }
+
+      /* Secondary White — DESIGN.md §4: 4px radius, 8px 12px padding,
+         clean white surface on the dark canvas. */
+      .btn-secondary {
+        background: #ffffff;
+        color: #3b3d45;                      /* DESIGN.md Charcoal text on white */
+        padding: 8px 12px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+      }
+      .btn-secondary:hover {
+        background: color-mix(in oklab, #ffffff, black 4%);
+        box-shadow: var(--elev-raised);
+      }
+
+      /* CTA Accent — Action Blue, reserved for the single highest-signal
+         CTA on the page. Hard cap of ≤2 visible accent uses per screen. */
+      .btn-accent {
+        background: var(--accent);
+        color: var(--accent-on);
+        padding: 9px 15px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        box-shadow: var(--elev-raised);
+      }
+      .btn-accent:hover { background: var(--accent-hover); }
+      .btn-accent:active { background: var(--accent-active); }
+
+      /* ─── Inputs — dark mode form fields ─────────────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label {
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg-2);
+      }
+      .field input {
+        background: var(--surface);
+        color: var(--fg);
+        border: 1px solid var(--meta);       /* DESIGN.md §4: rgb(97,104,117) — same hue as --meta */
+        border-radius: var(--radius-sm);
+        padding: 11px;
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:focus-visible {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help { font-size: var(--text-xs); color: var(--meta); }
+
+      /* ─── Cards — DESIGN.md §4 ───────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        box-shadow: var(--elev-raised);      /* whisper shadow — barely there */
+      }
+
+      /* ─── Badges — 5px radius, deep purple per DESIGN.md ─────── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 3px 7px;                    /* DESIGN.md §4 badge padding */
+        border-radius: var(--radius-pill);   /* 5px, not 9999px — see tokens.css */
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      .badge-status {
+        background: color-mix(in oklab, var(--success), transparent 80%);
+        color: color-mix(in oklab, var(--success), white 30%);
+        border: 1px solid color-mix(in oklab, var(--success), transparent 60%);
+      }
+      .badge-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+      }
+
+      /* ─── Links ──────────────────────────────────────────────── */
+      a {
+        color: var(--accent-hover);          /* Bright Blue — DESIGN.md links on dark */
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+        transition: border-color var(--motion-fast) var(--ease-standard);
+      }
+      a:hover { border-bottom-color: currentColor; }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 2px 6px;
+        border-radius: 3px;                  /* DESIGN.md "Subtle" 3px radius */
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--fg-2);
+      }
+
+      /* ─── Layout helpers ─────────────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: var(--space-12);
+        align-items: end;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
+        h1 { font-size: var(--text-3xl); }   /* 82 → 52 collapse per DESIGN.md §8 */
+      }
+      @media (max-width: 639px) {
+        h1 { font-size: var(--text-2xl); }   /* 52 → 42 collapse per DESIGN.md §8 */
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+        flex-wrap: wrap;
+      }
+
+      .hero-meta {
+        display: flex; flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-5);
+        background: var(--surface);
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-md);
+        box-shadow: var(--elev-raised);
+      }
+
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) { .form-row { grid-template-columns: 1fr; } }
+      .form {
+        display: flex; flex-direction: column;
+        gap: var(--space-4);
+        max-width: 420px;
+      }
+      .form-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-2); }
+
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: var(--space-3);
+      }
+      .mono { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO ───────────────────────────────────────────────── -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · hashicorp</p>
+            <h1>Infrastructure for any application, on any cloud.</h1>
+            <p class="lead" style="max-width: 52ch">
+              Provision, secure, connect, and run any application on any
+              infrastructure. The HashiCorp Cloud Platform unifies Terraform,
+              Vault, Consul, and Nomad behind one operating model — built for
+              the platform teams who run production.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-accent">
+                Try HCP free
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="1.75"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-primary">Talk to sales</a>
+            </div>
+          </div>
+
+          <aside class="hero-meta" aria-label="Platform status">
+            <p class="eyebrow">Platform status</p>
+            <div class="row-between">
+              <span class="body-sm">HCP control plane</span>
+              <span class="badge badge-status">
+                <span class="badge-dot" aria-hidden="true"></span>
+                Operational
+              </span>
+            </div>
+            <div class="row-between">
+              <span class="body-sm">Terraform Cloud</span>
+              <span class="badge badge-status">
+                <span class="badge-dot" aria-hidden="true"></span>
+                Operational
+              </span>
+            </div>
+            <p class="body-meta">
+              SOC 2 Type II · ISO 27001 · v1.0
+              · <time datetime="2026-05-15">2026-05-15</time>
+            </p>
+            <p class="body-meta">
+              Press <kbd>⌘</kbd> <kbd>K</kbd> to search the docs.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- FEATURES ────────────────────────────────────────────── -->
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 24ch">One operating model for cloud, not many.</h2>
+        </div>
+
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card stack-3">
+            <h3>Provision with Terraform</h3>
+            <p class="body-sm body-muted">
+              Infrastructure as code across AWS, Azure, GCP, and 3,000+
+              providers. Reproducible environments, drift detection, and
+              policy as code — the platform layer for every team.
+            </p>
+            <p class="mono">terraform apply</p>
+          </article>
+          <article class="card stack-3">
+            <h3>Secure with Vault</h3>
+            <p class="body-sm body-muted">
+              Identity-based secrets management and zero-trust security.
+              Dynamic credentials, automatic rotation, encryption as a
+              service — the same primitives behind production at scale.
+            </p>
+            <p class="mono">vault kv get secret/api</p>
+          </article>
+          <article class="card stack-3">
+            <h3>Connect with Consul</h3>
+            <p class="body-sm body-muted">
+              Service mesh and service discovery across any runtime and
+              any cloud. mTLS by default, intentions, and traffic shaping —
+              network automation without the YAML.
+            </p>
+            <p class="mono">consul services register</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- FORM ────────────────────────────────────────────────── -->
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Get started</p>
+            <h2>Spin up your first workspace.</h2>
+            <p class="body-muted" style="max-width: 48ch">
+              Free tier includes Terraform Cloud, Vault Secrets, and HCP
+              Boundary. Bring your own cloud account or use HCP-managed
+              infrastructure — production-grade defaults, day one.
+            </p>
+            <p class="body-meta">
+              By signing up you agree to the <a href="./DESIGN.md">terms</a>
+              and <a href="./DESIGN.md">privacy notice</a>.
+            </p>
+          </div>
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input id="email" type="email" placeholder="you@company.com"
+                     autocomplete="email" required />
+              <p class="field-help">We'll send a verification link — nothing else.</p>
+            </div>
+            <div class="field">
+              <label for="org">Organization name</label>
+              <input id="org" type="text" placeholder="acme-platform"
+                     autocomplete="organization" />
+              <p class="field-help">Lowercase, hyphen-separated. Used in resource paths.</p>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-accent">Create workspace</button>
+              <button type="button" class="btn btn-primary">View pricing</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

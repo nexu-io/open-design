@@ -1,0 +1,133 @@
+/*
+ * 联系支持弹窗(设计稿组件 19 · 第 80 格)。
+ *
+ * 稿子 `.ovl` + `.modal`:居中的小弹窗,标题一行(带关闭)+ 一条分割线 + 几行渠道。
+ * 每行是「图标 + 名字 + 一颗『加入』」。
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  /*
+   * 模态档。40 压不住任何东西 —— 真机 `elementFromPoint` 探到:
+   * 右上角 `.entry-top-right-cluster` 是 **150**、输入框
+   * `.chat-composer-fixed-layer` 是 **45**,于是蒙层像漏了两个洞,
+   * 输入框和右上角照常亮着(用户 2026-08-27 两次报到)。
+   * 取 1500 是和聊天区另一个真模态 `.staged-preview-modal` 同档,
+   * 不自立一个刚好够用的数字 —— 那种数字会在下一个人抬高某层 chrome 时再坏一次。
+   */
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, var(--chat-text-strong) 26%, transparent);
+}
+
+/*
+ * 就地形态(`inline`)—— 陈列页那一格,以及任何把弹窗摆进文档流里看的场合。
+ *
+ * 原来 `inline` 只是跳过 portal,遮罩仍然是 `position: fixed` ——
+ * 于是它铺满整张陈列页,把**每一格**都糊上一层灰(用户看到的「为啥半边灰色的」就是它)。
+ * 稿子的 `.ovl` 本来就不是 fixed:它是一个带圆角和内距的**在流盒子**,
+ * 只在自己那一格里画那层灰。这里照搬。
+ */
+.overlayInline {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  border-radius: var(--chat-radius);
+}
+
+/* 稿子 `.modal { width:100%; max-width:316px; border-radius: var(--radius-2xl);
+   background: var(--bg); box-shadow: var(--shadow-lg); overflow: hidden }` */
+.modal {
+  width: 100%;
+  max-width: 316px;
+  /* 16px 那一档(PR #7170:`.modal` 从 `--radius-lg` 换到 `--radius-2xl`)。
+     稿子把报错卡、升级卡、记忆卡和这个弹窗一起拉到同一档 —— 这不是弹窗自己的
+     装饰,是这一屏上「大卡片」这一族共同的外形。
+     chat 组件按 `components/chat/AGENTS.md` §2 只消费 `--chat-*` 接缝层,可这一档
+     今天在 `ChatRoot.module.css` 里还没有别名(那个文件属于另一条工作线),
+     所以先落到产品 token 上;别名补上的当天这里自动接管。写法和
+     `RunErrorCard.module.css` 的 `.card` 一致 —— 同一族同一个写法。
+     两种写法都不是写死的 16px —— 形状刻度整体调整时,写死的那一处会静静地
+     留在旧档上,而旁边走 token 的卡全都跟着动了。 */
+  border-radius: var(--chat-radius-2xl, var(--radius-2xl));
+  background: var(--chat-bg);
+  box-shadow: var(--chat-shadow-lg);
+  overflow: hidden;
+}
+
+/* 稿子 `.modal .mh` —— 分割线是 `::after` 画的,左右各留 13px,不是整条通到边 */
+.head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 11px 13px;
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-strong);
+}
+.head::after {
+  content: '';
+  position: absolute;
+  inset-inline: 13px;
+  bottom: 0;
+  height: 1px;
+  background: var(--chat-border-soft);
+}
+.head b {
+  font-weight: 600;
+}
+
+/* 稿子 `.modal .mh .x { margin-inline-start:auto; display:grid; place-items:center;
+   width:24px; height:24px; border-radius: var(--radius-sm); color: var(--text-soft) }` */
+.close {
+  margin-inline-start: auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: none;
+  color: var(--chat-text-soft);
+  cursor: pointer;
+  transition: background-color var(--chat-dur-quick) var(--chat-ease-out),
+    color var(--chat-dur-quick) var(--chat-ease-out);
+}
+.close:hover {
+  background: var(--chat-bg-fill-secondary);
+  color: var(--chat-text-strong);
+}
+
+/* 稿子 `.modal .mb { padding: 0 13px 13px }` */
+.body {
+  padding: 0 13px 13px;
+}
+
+/* 稿子 `.chan { display:flex; align-items:center; gap:9px; padding:7px 0 }` */
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 0;
+}
+.channelIcon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+}
+.channelIcon svg {
+  width: 24px;
+  height: 24px;
+}
+/* 稿子 `.chan .cn { flex:1; min-width:0; font-size: var(--t-mini); font-weight:500 }` */
+.channelName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--chat-t-mini);
+  font-weight: 500;
+  color: var(--chat-text-strong);
+}

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en" data-od-preview-ready="false">
+<head>
+<meta name="od-motion-output" content="video">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Future Is Already Here</title>
+<script src="assets/three.min.js"></script>
+<script src="assets/gsap.min.js"></script>
+<script src="assets/three-addons.js"></script>
+<script src="assets/unbounded-black-glyphs.js"></script>
+<style>
+@font-face{font-family:UB;src:url('assets/unbounded-subset.ttf') format('truetype');font-weight:200 900;font-display:block}
+@font-face{font-family:JBM;src:url('assets/jetbrains-mono-subset.ttf') format('truetype');font-weight:100 800;font-display:block}
+:root{--bg:#050507;--ink:#FFFFFF;--accent:#1A2BFF}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;overflow:hidden}
+#viewport{position:fixed;inset:0;overflow:hidden;background:var(--bg)}
+#main{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center;background:var(--bg);overflow:hidden}
+#main canvas{position:absolute;left:0;top:0;display:block;width:1920px;height:1080px}
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent);color:#FFFFFF;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px}
+#controls button:focus-visible,#scrub:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#scrub{flex:1;accent-color:var(--accent)}
+#tc{min-width:110px;text-align:right;font-variant-numeric:tabular-nums}
+/* The OD export bridge marks frame capture; keep preview controls out of the film. */
+html.od-export #controls{display:none!important}
+html.od-export #main{left:0!important;top:0!important;transform:none!important}
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="main" data-composition-id="main" data-start="0" data-duration="20" data-width="1920" data-height="1080">
+    <canvas id="gl" width="1920" height="1080"></canvas>
+    <canvas id="ui" width="1920" height="1080"></canvas>
+    <audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="20" data-track-index="2" data-volume="1" preload="auto"></audio>
+  </div>
+</div>
+<div id="controls">
+  <button id="playBtn" type="button" aria-label="Play or pause">PAUSE</button>
+  <input id="scrub" type="range" min="0" max="20" step="0.01" value="0" aria-label="Timeline position">
+  <span id="tc">0.00 / 20.00</span>
+</div>
+
+<script>
+/* ============================================================
+   The Future Is Already Here — a 20-second tech reel at 120 BPM.
+   Cubes → SIGNAL → retina → word tunnel → THE FUTURE → desktop →
+   countdown → four glass objects → vortex → chrome hero → end card.
+   Two stacked canvases: #gl (three.js) under #ui (2D type and HUD).
+   One clock: render(t) draws every frame from timeline time.
+   ============================================================ */
+const CFG = {
+  duration: 20, w: 1920, h: 1080, bpm: 120, reducedAt: 17.0,
+  // Copy: change these to retell the film for another brand or message.
+  // Every 3D word uses assets/unbounded-black-glyphs.js (A–Z, a–z, 0–9, common punctuation).
+  brand: 'FIH/2026',
+  headline: 'THE FUTURE IS ALREADY HERE',
+  hero: 'FUTURE',                       // chrome 3D word in the closing shot; long words scale to fit
+  heroLine: 'IS ALREADY HERE.',
+  date: '2026.09.27',
+  signal: 'SIGNAL',
+  wake: 'WAKE UP',
+  awaken: 'AWAKEN',
+  tags: ['FUTURE', 'ALREADY', 'HERE'],
+  objects: ['TOMORROW', 'POWER', 'WORLD', 'MIND'],   // type behind the four glass objects
+  endLine: 'END OF TRANSMISSION'
+};
+
+/* ======== core ======== */
+// Shared helpers for the replica: palette, easing, 2D type, HUD, three.js setup.
+
+const W = 1920, H = 1080, BPM = 120, BEAT = 60 / BPM;
+const C = { blue: '#1A2BFF', blue2: '#3344FF', deep: '#0B1060', ink: '#0A0A0F', paper: '#EDEDE8', white: '#FFFFFF', lav: '#C9C6FF', dim: '#8F97FF' };
+const UB = 'UB, "Arial Black", sans-serif';
+const CJK = UB; // the English cut uses no CJK glyphs
+const MONO = 'JBM, ui-monospace, Menlo, monospace';
+
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const TAU = Math.PI * 2;
+function rnd(i) { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+const EZ = {
+  o2: p => 1 - (1 - p) ** 2, o3: p => 1 - (1 - p) ** 3, o4: p => 1 - (1 - p) ** 4, i3: p => p ** 3, i2: p => p * p,
+  io3: p => p < .5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2, io2: p => p < .5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2,
+  expo: p => p >= 1 ? 1 : 1 - 2 ** (-10 * p), back: p => { const c = 1.70158 * 1.3, c3 = c + 1; return 1 + c3 * (p - 1) ** 3 + c * (p - 1) ** 2; },
+};
+
+/* ---------- 2D ---------- */
+const ui = document.getElementById('ui').getContext('2d');
+let CUR = ui; // helpers draw into CUR; target(g) redirects them to another canvas
+function target(g) { CUR = g || ui; }
+function text(s, x, y, size, color, o = {}) {
+  const g = o.g || CUR; g.save();
+  g.font = `${o.w || 900} ${size}px ${o.f || UB}`; g.textAlign = o.align || 'left'; g.textBaseline = o.base || 'alphabetic';
+  g.globalAlpha = o.a ?? 1; g.translate(x, y); if (o.rot) g.rotate(o.rot); g.scale(o.sx || 1, o.sy || 1); g.letterSpacing = (o.ls ?? 0) + 'px';
+  if (o.stroke) { g.lineWidth = o.stroke; g.strokeStyle = color; g.lineJoin = 'round'; g.strokeText(s, 0, 0); }
+  else { g.fillStyle = color; g.fillText(s, 0, 0); }
+  g.restore();
+}
+const mono = (s, x, y, size, color, o = {}) => text(s, x, y, size, color, { w: 600, ls: 1.5, ...o, f: o.f || MONO });
+function measure(s, size, o = {}) { ui.save(); ui.font = `${o.w || 900} ${size}px ${o.f || UB}`; ui.letterSpacing = (o.ls ?? 0) + 'px'; const m = ui.measureText(s).width; ui.restore(); return m; }
+function fill(c) { CUR.fillStyle = c; CUR.fillRect(0, 0, W, H); }
+function rect(x, y, w, h, c) { CUR.fillStyle = c; CUR.fillRect(x, y, w, h); }
+function line(x1, y1, x2, y2, c, w = 1.5) { CUR.strokeStyle = c; CUR.lineWidth = w; CUR.beginPath(); CUR.moveTo(x1, y1); CUR.lineTo(x2, y2); CUR.stroke(); }
+function barcode(x, y, w, h, seed, col, g = CUR) { g.fillStyle = col; let cx = x, k = 0; while (cx < x + w) { const bw = 1 + Math.floor(rnd(seed + k) * 4); if (k % 2 === 0) g.fillRect(cx, y, bw, h); cx += bw; k++; } }
+function brackets(x, y, w, h, col, l = 18, lw = 1.5) {
+  const g = CUR; g.strokeStyle = col; g.lineWidth = lw; g.beginPath();
+  [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]].forEach(([px, py, sx, sy]) => { g.moveTo(px + l * sx, py); g.lineTo(px, py); g.lineTo(px, py + l * sy); });
+  g.stroke();
+}
+function sparkle(x, y, r, col = '#fff', rot = 0, g = CUR) {
+  g.save(); g.translate(x, y); g.rotate(rot); g.fillStyle = col; g.beginPath();
+  for (let i = 0; i < 4; i++) { const a = i / 4 * TAU; g.quadraticCurveTo(Math.cos(a - TAU / 8) * r * .12, Math.sin(a - TAU / 8) * r * .12, Math.cos(a) * r, Math.sin(a) * r); }
+  g.quadraticCurveTo(Math.cos(-TAU / 8) * r * .12, Math.sin(-TAU / 8) * r * .12, r, 0); g.closePath(); g.fill(); g.restore();
+}
+function typed(s, p) { return s.slice(0, Math.floor([...s].length * clamp(p))); }
+function scramble(s, p, seed = 1) { const n = Math.floor(s.length * clamp(p)); const pool = '#&%$@01ABXZ'; return s.slice(0, n) + (n < s.length ? pool[Math.floor(rnd(seed + n) * pool.length)] : ''); }
+// Tag row under hero type: FUTURE · ALREADY · HERE, one boxed.
+function tagRow(cx, y, hi, fg, bg) {
+  const words = CFG.tags; const ws = words.map(w => measure(w, 26, { w: 900 }) + 16); const gap = 50;
+  let x = cx - (ws.reduce((a, b) => a + b, 0) + gap * 2) / 2;
+  words.forEach((w, i) => {
+    if (i === hi) rect(x - 4, y - 30, ws[i], 40, fg);
+    text(w, x + 4, y, 26, i === hi ? bg : fg, { w: 900 }); x += ws[i];
+    if (i < 2) { text('·', x + gap / 2 - 6, y, 26, fg, {}); x += gap; }
+  });
+}
+
+/* ---------- frame HUD that runs through the whole film ---------- */
+function hud(t, fg, chapter) {
+  mono('● ' + CFG.brand + ' — ' + CFG.headline, 56, 50, 15, fg);
+  mono(`00:${String(Math.floor(t)).padStart(2, '0')}:${String(Math.floor((t % 1) * 30)).padStart(2, '0')}`, W - 56, 50, 15, fg, { align: 'right' });
+  mono(chapter, 56, H - 34, 15, fg);
+  mono('120 BPM', W - 120, H - 34, 15, fg, { align: 'right' });
+  ui.fillStyle = fg; const b = Math.floor(t / BEAT) % 4; for (let i = 0; i < 4; i++) { ui.globalAlpha = b === i ? 1 : .35; ui.fillRect(W - 108 + i * 14, H - 46, 9, 9); }
+  ui.globalAlpha = 1;
+}
+
+/* ---------- three.js ---------- */
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true, preserveDrawingBuffer: true, alpha: false });
+renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+const pmrem = new THREE.PMREMGenerator(renderer);
+const ENV = pmrem.fromScene(new THREEAddons.RoomEnvironment(), 0.03).texture;
+const loader = new THREEAddons.FontLoader();
+const FONT3D = { lat: loader.parse(window.__FONTS.unbounded) };
+const geoCache = new Map();
+// Extruded glyph geometry, centered on its own box.
+function glyphGeo(s, font, size, depth, bevel = size * 0.03) {
+  const key = [s, font, size, depth, bevel].join('|'); if (geoCache.has(key)) return geoCache.get(key);
+  const g = new THREEAddons.TextGeometry(s, { font: FONT3D[font], size, depth, curveSegments: 6, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel * 0.7, bevelSegments: 3 });
+  g.computeBoundingBox(); const b = g.boundingBox; g.translate(-(b.max.x + b.min.x) / 2, -(b.max.y + b.min.y) / 2, -(b.max.z + b.min.z) / 2);
+  geoCache.set(key, g); return g;
+}
+function chromeMat(tint = '#E9E8FF', rough = 0.14) {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(tint), metalness: 1, roughness: rough, envMap: ENV, envMapIntensity: 1.25 });
+}
+function glassMat(o = {}) {
+  return new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0, roughness: 0.04, transmission: 1, thickness: 1.2, ior: 1.45, iridescence: 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 820], envMap: ENV, envMapIntensity: 1.4, transparent: true, ...o });
+}
+function clear3d(color) { renderer.setClearColor(new THREE.Color(color), 1); renderer.clear(); }
+// A word as one group of per-letter meshes laid out by the font's advances,
+// so letters can move individually while keeping real spacing.
+function wordGroup(str, font, size, depth, mat, o = {}) {
+  const f = FONT3D[font], k = size / f.data.resolution, track = (o.track ?? 0) * size; const g = new THREE.Group(); let x = 0;
+  for (const ch of str) { const gl = f.data.glyphs[ch]; const adv = (gl ? gl.ha : f.data.resolution * 0.3) * k;
+    if (ch !== ' ' && gl) { const m = new THREE.Mesh(glyphGeo(ch, font, size, depth, o.bevel ?? size * 0.03), mat); const cx = ((gl.x_min + gl.x_max) / 2) * k; m.position.x = x + cx; g.add(m); }
+    x += adv + track; }
+  g.children.forEach(m => m.position.x -= (x - track) / 2); g.userData.width = x - track; return g;
+}
+// A 2D canvas used as a three.js scene background, so 3D objects (and glass
+// transmission) sit in front of flat graphics.
+function bgCanvas(scene) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; scene.background = tex;
+  return { g, c, update() { tex.needsUpdate = true; } };
+}
+
+/* ======== seg1 ======== */
+// Segment 1 (0–16 s): signal → retina → awaken → THE FUTURE IS ALREADY HERE → FUTURE.EXE → TOMORROW
+
+/* ---------- A: one cube → four → sixty-four ---------- */
+const A = (() => {
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(28, W / H, 0.1, 200); cam.position.set(0, 0, 26);
+  scene.add(new THREE.HemisphereLight(0xdfe3ff, 0x0a0c30, 1.1)); const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(-6, 8, 10); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x8fa0ff, 1.2); rim.position.set(8, -2, -6); scene.add(rim);
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(C.blue), roughness: 0.42, metalness: 0.05, envMap: ENV, envMapIntensity: 0.35 });
+  const box = new THREE.BoxGeometry(1, 1, 1); const inst = new THREE.InstancedMesh(box, mat, 64); scene.add(inst);
+  const group = new THREE.Group(); group.add(inst); scene.add(group);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
+  const S = 7.2;
+  const cell = (n, ix, iy) => { const c = 8 / n; const cx = Math.floor(ix / c), cy = Math.floor(iy / c); const sz = S / n; return [((cx + 0.5) / n - 0.5) * S, ((cy + 0.5) / n - 0.5) * S, sz * (n === 1 ? 1 : n === 2 ? 0.94 : 0.9)]; };
+  function draw(lt) {
+    const born = EZ.back(seg(lt, 0.45, 0.8));
+    const p2 = EZ.io3(seg(lt, 1.05, 1.35)), p8 = EZ.io3(seg(lt, 1.55, 1.85));
+    for (let i = 0; i < 64; i++) {
+      const ix = i % 8, iy = Math.floor(i / 8);
+      const a = cell(1, ix, iy), b = cell(2, ix, iy), c = cell(8, ix, iy);
+      let x = lerp(lerp(a[0], b[0], p2), c[0], p8), y = lerp(lerp(a[1], b[1], p2), c[1], p8), sz = lerp(lerp(a[2], b[2], p2), c[2], p8);
+      const pop = p8 > 0 ? 1 + 0.25 * Math.sin(seg(lt, 1.55 + rnd(i) * 0.2, 1.9 + rnd(i) * 0.2) * Math.PI) : 1;
+      const z = p8 * (rnd(i * 3) - 0.5) * 0.4 * (1 - seg(lt, 1.9, 2.1));
+      m.compose(v.set(x, y, z), q.identity(), s.set(sz * born, sz * born * pop, sz * 0.9 * born)); inst.setMatrixAt(i, m);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    group.rotation.set(0.12 + 0.18 * p8, -0.42 + 0.1 * lt, 0.02);
+    cam.position.z = 26 - 3 * p8; cam.lookAt(0, 0, 0);
+    renderer.setClearColor(0x050507, 1); renderer.render(scene, cam);
+    ui.clearRect(0, 0, W, H);
+    line(0, 540, W, 540, 'rgba(255,255,255,.18)'); line(960, 0, 960, H, 'rgba(255,255,255,.18)');
+    if (lt < 0.5) { const k = 0.5 + 0.5 * Math.sin(lt * 30); rect(952, 524, 16, 32, `rgba(255,255,255,${k})`); }
+    const n = lt < 1.2 ? 1 : lt < 1.7 ? 4 : 64, bw = [440, 560, 900][[1, 4, 64].indexOf(n)];
+    if (lt > 0.45) { brackets(960 - bw / 2, 540 - bw / 2 * 0.95, bw, bw * 0.95, 'rgba(255,255,255,.75)', 18);
+      mono(`CELLS ${String(n).padStart(4, '0')}`, 960 - bw / 2, 540 - bw / 2 * 0.95 - 14, 14, '#fff');
+      mono('SIGNAL/01 · SOURCE', 960 + bw / 2, 540 - bw / 2 * 0.95 - 14, 14, '#9aa', { align: 'right' });
+      mono('KLEIN #1A2BFF', 960 - bw / 2, 540 + bw / 2 * 0.95 + 22, 14, '#9aa');
+      mono(`${633 + n * 2} × ${677 + n * 2} PX`, 960 + bw / 2, 540 + bw / 2 * 0.95 + 22, 14, '#9aa', { align: 'right' }); }
+    [-600, -300, 300, 600].forEach(d => mono(String(Math.abs(d) / 3 | 0).padStart(3, '0'), 960 + d, 534, 11, 'rgba(255,255,255,.35)', { align: 'center' }));
+  }
+  return { t0: 0, t1: 2.1, chapter: '00 SIGNAL', fg: '#fff', three: true, draw };
+})();
+
+/* ---------- B/C/D: the signal wall resolves into SIGNAL ---------- */
+const sigCells = (() => { const c = document.createElement('canvas'); c.width = 300; c.height = 70; const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.font = `900 64px ${UB}`; g.textBaseline = 'top'; g.letterSpacing = '-2px'; g.fillText(CFG.signal, 0, 0); return () => {
+    g.clearRect(0, 0, 300, 70); g.font = `900 64px ${UB}`; g.fillText(CFG.signal, 0, 0);
+    const d = g.getImageData(0, 0, 300, 70).data, out = []; for (let y = 0; y < 70; y += 2) for (let x = 0; x < 300; x += 2) if (d[(y * 300 + x) * 4 + 3] > 110) out.push([x / 2, y / 2]); return out; }; })();
+let SIG = null;
+function signalFrame(lt, blink = true) {
+  if (!SIG) SIG = sigCells();
+  fill('#050507'); ui.fillStyle = 'rgba(26,43,255,.13)'; for (let y = 4; y < H; y += 12) for (let x = 4; x < W; x += 12) ui.fillRect(x, y, 6, 6);
+  const cols = Math.max(...SIG.map(c => c[0])) + 1, rows = Math.max(...SIG.map(c => c[1])) + 1, cs = 1400 / cols, ox = 960 - cols * cs / 2, oy = 500 - rows * cs / 2;
+  SIG.forEach(([x, y], i) => { ui.fillStyle = rnd(i * 7 + Math.floor(lt * 8)) > 0.93 ? '#8A95FF' : C.blue; ui.fillRect(ox + x * cs, oy + y * cs, cs - 1.5, cs - 1.5); });
+  mono('CH.01 · CARRIER LOCKED · 2026.09.27', ox, oy - 26, 15, '#C8CCFF'); mono('SNR 97.2 DB · LAT 0.00 MS', ox + cols * cs, oy - 26, 15, '#C8CCFF', { align: 'right' });
+  const msg = 'INCOMING TRANSMISSION — STAND BY'; mono(typed(msg, seg(lt, 0, 0.45)) + (blink && Math.floor(lt * 6) % 2 ? '▌' : ''), ox + 10, oy + rows * cs + 52, 26, '#fff', { ls: 4 });
+  barcode(ox + cols * cs - 190, oy + rows * cs + 30, 190, 26, 5, '#fff');
+  ['+', '+'].forEach((s, i) => mono(s, i ? ox + cols * cs + 20 : ox - 30, oy + rows * cs + 44, 20, '#8A95FF'));
+}
+const B = {
+  t0: 2.1, t1: 3.1, chapter: '00 SIGNAL', fg: '#fff', draw(lt) {
+    const wx = lerp(-80, W + 120, EZ.io2(seg(lt, 0, 1)));
+    ui.save(); ui.beginPath(); ui.rect(0, 0, Math.max(0, wx), H); ui.clip(); signalFrame(lt + 0.3, false); ui.restore();
+    ui.save(); ui.beginPath(); ui.rect(wx, 0, W - wx, H); ui.clip(); fill('#060820');
+    for (let y = 0; y < H; y += 13) for (let x = Math.floor(wx / 13) * 13; x < W; x += 13) { const r = rnd(x * 0.37 + y * 1.31); ui.fillStyle = r > 0.992 ? '#fff' : C.blue; ui.fillRect(x, y, 11, 11); }
+    ui.restore();
+    for (let y = 0; y < H; y += 13) { const j = (rnd(y + Math.floor(lt * 20)) - 0.5) * 70; for (let k = 0; k < 6; k++) { const x = wx + j + k * 11 - 30; ui.fillStyle = `rgba(255,255,255,${0.25 + rnd(y * k + 3) * 0.75})`; ui.fillRect(x, y, 11, 11); } }
+    mono(`RECEIVING ${String(Math.round(lerp(62, 100, seg(lt, 0, 0.9)))).padStart(3, '0')}%`, 56, 96, 15, '#fff'); rect(56, 106, 300 * seg(lt, 0, 0.9), 3, '#fff');
+    mono('CH.01 · 31,000 CELLS · PITCH 14PX', 56, 128, 12, '#9aa');
+  } };
+const Csig = { t0: 3.1, t1: 3.72, chapter: '00 SIGNAL', fg: '#fff', draw(lt) { signalFrame(lt + 0.45); } };
+const Dsig = { t0: 3.72, t1: 4.0, chapter: '00 SIGNAL', fg: '#fff', draw(lt) {
+  const p = EZ.i3(seg(lt, 0, 0.22)); fill('#050507');
+  ui.save(); ui.translate(0, 540); ui.scale(1 + p * 0.1, Math.max(0.004, 1 - p)); ui.translate(0, -540); signalFrame(1.2, false); ui.restore();
+  rect(0, 538, W, 4 * (1 - seg(lt, 0.2, 0.28)), '#fff'); } };
+
+/* ---------- E/F: retinal handshake ---------- */
+const sclera = (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  g.fillStyle = '#fff'; for (let y = 0; y < H; y += 9) for (let x = 0; x < W; x += 9) { const d = Math.hypot((x - 960) / 1.6, y - 540) / 520; const r = 3.6 * clamp(1.15 - d * 0.9); if (r > 0.4) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); } } return c; })();
+function iris(cx, cy, R, lt, g = ui) {
+  g.save(); g.translate(cx, cy);
+  g.fillStyle = '#0B1180'; g.beginPath(); g.arc(0, 0, R, 0, TAU); g.fill();
+  for (let i = 0; i < 360; i++) { const a = i / 360 * TAU + lt * 0.05, r0 = R * (0.3 + rnd(i) * 0.1), r1 = R * (0.75 + rnd(i * 3) * 0.24);
+    g.strokeStyle = `hsl(${232 + rnd(i * 5) * 10},100%,${45 + rnd(i * 2) * 35}%)`; g.lineWidth = 1 + rnd(i * 9) * 2.2; g.beginPath(); g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); g.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); g.stroke(); }
+  g.strokeStyle = '#050520'; g.lineWidth = R * 0.07; g.beginPath(); g.arc(0, 0, R * 0.97, 0, TAU); g.stroke();
+  const rim = g.createConicGradient(0, 0, 0); ['#ff5ad6', '#7af0ff', '#ffe36a', '#ff5ad6'].forEach((c, i) => rim.addColorStop(i / 3, c));
+  g.strokeStyle = rim; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, R * 1.005, 0, TAU); g.stroke();
+  const pr = R * (0.33 + 0.02 * Math.sin(lt * 5)); g.fillStyle = '#000'; g.beginPath(); for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + 0.3; g.lineTo(Math.cos(a) * pr, Math.sin(a) * pr); } g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(160,170,255,.6)'; g.lineWidth = 2; g.stroke();
+  sparkle(-R * 0.36, -R * 0.3, R * 0.2, '#fff', 0, g); g.fillStyle = '#fff'; g.beginPath(); g.arc(R * 0.16, R * 0.18, R * 0.03, 0, TAU); g.fill();
+  g.restore();
+}
+const Eeye = { t0: 4.0, t1: 5.6, chapter: '00 SIGNAL', fg: '#fff', draw(lt) {
+  fill('#040406'); const open = EZ.o4(seg(lt, 0, 0.3)), ew = 720, eh = 300 * open, push = 1 + 0.1 * seg(lt, 0, 1.6);
+  ui.save(); ui.translate(960, 540); ui.scale(push, push); ui.translate(-960, -540);
+  const almond = () => { ui.beginPath(); ui.moveTo(960 - ew, 540); ui.bezierCurveTo(960 - ew * 0.45, 540 - eh * 1.25, 960 + ew * 0.45, 540 - eh * 1.25, 960 + ew, 540); ui.bezierCurveTo(960 + ew * 0.45, 540 + eh * 1.25, 960 - ew * 0.45, 540 + eh * 1.25, 960 - ew, 540); };
+  ui.save(); almond(); ui.clip(); fill('#2732ff'); ui.globalAlpha = 0.95; ui.drawImage(sclera, 0, 0); ui.globalAlpha = 1; iris(960, 540, 255, lt); ui.restore();
+  almond(); ui.strokeStyle = '#000'; ui.lineWidth = 8; ui.stroke();
+  ui.restore();
+  const a = EZ.o3(seg(lt, 0.25, 0.55));
+  ui.globalAlpha = a; ui.strokeStyle = 'rgba(255,255,255,.55)'; ui.lineWidth = 1.5;
+  [[420, -0.25, 1.1], [470, 1.9, 1.2], [520, 3.5, 0.8]].forEach(([r, s0, l], i) => { ui.beginPath(); ui.arc(960, 540, r, s0 + lt * (i % 2 ? -0.3 : 0.3), s0 + l + lt * (i % 2 ? -0.3 : 0.3)); ui.stroke(); });
+  brackets(560, 220, 800, 640, 'rgba(255,255,255,.6)', 16);
+  line(940, 540, 980, 540, '#fff'); line(960, 520, 960, 560, '#fff'); ui.globalAlpha = 1;
+  mono('RETINAL HANDSHAKE — SCAN ' + (lt < 0.9 ? 'SEARCHING' : 'TRACKING'), 960, 86, 15, '#fff', { align: 'center', a });
+  mono('01 IRIS', 300, 300, 17, '#fff', { a }); mono('Ø 11.6 MM · FIBERS 4096', 300, 324, 12, '#9aa', { a });
+  mono('PUPIL 02', 1620, 300, 17, '#fff', { a, align: 'right' }); mono('APERTURE 8 BLADES · Ø 3.1 MM', 1620, 324, 12, '#9aa', { a, align: 'right' });
+  const pct = (lerp(0, 7.1, seg(lt, 0.5, 1.5))).toFixed(1);
+  mono('MATCH 03', 1620, 760, 14, '#fff', { a: seg(lt, 0.5, 0.7), align: 'right' }); text(pct + '%', 1620, 830, 64, '#fff', { a: seg(lt, 0.5, 0.7), align: 'right' });
+  rect(1440, 845, 180, 3, `rgba(255,255,255,${0.3 * seg(lt, 0.5, 0.7)})`); rect(1440, 845, 180 * seg(lt, 0.5, 1.5), 3, '#fff');
+} };
+const Fpct = { t0: 5.6, t1: 6.0, chapter: '00 SIGNAL', fg: '#fff', draw(lt) {
+  fill('#040406'); ui.save(); ui.globalAlpha = 1; iris(1500, 560, 980, lt + 1.6); ui.restore();
+  ui.fillStyle = C.blue; for (let y = 6; y < H; y += 22) for (let x = 1700; x < W; x += 22) { const r = 7 * clamp((x - 1680) / 260); ui.beginPath(); ui.arc(x, y, r, 0, TAU); ui.fill(); }
+  const p = EZ.expo(seg(lt, 0, 0.2)); text('97.2', 70, 620, 270, '#fff', { a: p }); text('%', 70 + measure('97.2', 270), 470, 130, '#fff', { a: p });
+  mono('MACRO ×4.2 · IRIS FIBER SCAN · 7 BLADES', 70, 340, 14, '#fff'); mono('03 MATCH ■ LOCKED', 70, 372, 15, '#fff');
+  for (let i = 0; i < 40; i++) rect(80 + i * 15, 680, 10, 6, i < 36 ? '#fff' : 'rgba(255,255,255,.3)'); mono('SUBJECT = YOU', 700, 688, 12, '#fff');
+} };
+
+/* ---------- G: through the pupil — a tunnel of words ---------- */
+const TOK = ['WAKE UP', 'AWAKEN();', '<EYE/>', '0x1A2BFF', 'SIGNAL.OK', 'WAKE', 'UP', 'FUTURE IS HERE', 'FIH/2026', '2026.09.27', 'SEE', '{SEE();}', 'MATCH 97.2%', '01100110', '>>>', 'PUPIL', 'NOW==FUTURE', 'AWAKE', 'EYE', 'CONST', 'ENTER', 'TOMORROW'];
+const TUN = Array.from({ length: 170 }, (_, i) => ({ a: rnd(i * 1.7) * TAU, r: 0.55 + rnd(i * 2.3) * 0.5, z: rnd(i * 3.9), s: TOK[i % TOK.length], blue: rnd(i * 5.1) > 0.62, big: rnd(i * 6.3) > 0.85 }));
+const Gtun = { t0: 6.0, t1: 8.0, chapter: '00 SIGNAL', fg: '#fff', draw(lt) {
+  fill('#020206');
+  const irisA = 1 - seg(lt, 0.25, 0.75); if (irisA > 0) { ui.save(); ui.globalAlpha = irisA; const z = 1 + 4 * EZ.i2(seg(lt, 0, 0.8)); ui.translate(960, 540); ui.scale(z, z); ui.translate(-960, -540); iris(960, 540, 520, lt + 2); ui.restore(); }
+  const speed = 0.55;
+  const list = TUN.map(o => ({ ...o, zz: ((o.z - lt * speed) % 1 + 1) % 1 })).sort((a, b) => b.zz - a.zz);
+  list.forEach((o, i) => { const z = 0.08 + o.zz * 1.4, s = 1 / z, a = o.a + lt * 0.25, rr = o.r * 520 * s;
+    const x = 960 + Math.cos(a) * rr * 1.25, y = 540 + Math.sin(a) * rr; if (x < -400 || x > W + 400 || y < -300 || y > H + 300) return;
+    const size = (o.big ? 46 : 26) * s; const al = clamp((1.45 - z) * 2) * clamp(z * 6);
+    const cj = /[\u4e00-\u9fff]/.test(o.s);
+    text(o.s, x, y, size, o.blue ? '#3B49FF' : '#fff', { f: cj ? CJK : (o.big ? UB : MONO), w: cj ? 900 : (o.big ? 900 : 700), a: al, rot: a + Math.PI / 2, align: 'center', base: 'middle' });
+  });
+  const w1 = EZ.back(seg(lt, 0.55, 0.85)) * (1 - seg(lt, 1.05, 1.15));
+  if (w1 > 0) text(CFG.wake, 960, 560, 230 * w1, '#fff', { align: 'center', base: 'middle', ls: -6 });
+  const w2 = EZ.expo(seg(lt, 1.12, 1.3)) * (1 - seg(lt, 1.85, 2.0));
+  if (w2 > 0) text(CFG.awaken, 960, 560, 200 * (0.9 + 0.1 * w2), '#fff', { align: 'center', base: 'middle', a: w2, ls: -4 });
+  mono('WAKE SEQUENCE', 870, 82, 13, '#fff'); for (let i = 0; i < 8; i++) rect(990 + i * 10, 72, 7, 10, i < lt * 4 ? '#fff' : 'rgba(255,255,255,.3)');
+  mono(`ENTERING PUPIL · DEPTH ${String(Math.round(2465 + lt * 7000)).padStart(5, '0')}.${String(Math.round(lt * 97) % 100).padStart(2, '0')} μm`, 960, H - 70, 14, '#fff', { align: 'center' });
+} };
+
+/* ---------- H/I/J: THE FUTURE ---------- */
+const BLUEBG = () => { fill(C.blue); ui.strokeStyle = 'rgba(255,255,255,.1)'; ui.lineWidth = 1; for (let x = 64; x < W; x += 149) { ui.beginPath(); ui.moveTo(x, 0); ui.lineTo(x, H); ui.stroke(); } };
+const Hthe = { t0: 8.0, t1: 9.0, chapter: '01 ACCELERATE', fg: '#fff', draw(lt) {
+  BLUEBG(); const p1 = EZ.expo(seg(lt, 0, 0.18)), sz = 330;
+  line(0, 225, W, 225, 'rgba(255,255,255,.35)'); line(0, 470, W, 470, 'rgba(255,255,255,.35)'); line(0, 830, W, 830, 'rgba(255,255,255,.35)');
+  ui.save(); ui.beginPath(); ui.rect(0, 160, W, 680); ui.clip();
+  text('THE', 50, 470 + (1 - p1) * 300, sz, '#F2F2EE', { ls: -10 });
+  if (lt < 0.4) text(typed('FUTURE', seg(lt, 0.1, 0.35)), 50, 830, sz, 'rgba(255,255,255,.4)', { stroke: 3, ls: -10 });
+  else text('FUTURE', 50, 830 + (1 - EZ.expo(seg(lt, 0.4, 0.58))) * 360, sz, '#F2F2EE', { ls: -10 });
+  ui.restore();
+  const a = seg(lt, 0.1, 0.3);
+  mono('CAP-HEIGHT — 0.750 EM / 300 PX', 1150, 250, 13, '#fff', { a }); mono('SPECIMEN', 1150, 300, 15, '#fff', { a }); mono('01 OF 03', 1150, 324, 13, '#fff', { a }); mono('KINETIC TYPE STUDY', 1150, 346, 13, '#fff', { a });
+  text('01', 1860, 340, 150, '#fff', { w: 300, align: 'right', a });
+  barcode(1150, 395, 230, 34, 8, `rgba(255,255,255,${a})`);
+  ['UNBOUNDED BLACK 900 / 400 PX', 'TRACK -0.005 EM · LEAD 0.82', 'GRID 12 COL · MARGIN 64'].forEach((s, i) => mono(s, 1400, 402 + i * 18, 12, '#fff', { a }));
+  mono('BASELINE — 0.000', 1150, 500, 12, '#fff', { a }); mono('FIT → 1792 PX · 344.5 PX / 273 CAP', 1860, 520, 12, '#fff', { a, align: 'right' });
+  sparkle(1830, 440, 22, '#fff', 0);
+  'FUTURE'.split('').forEach((ch, i) => mono(`${ch}-0${i + 1}  0.${[791, 889, 849, 889, 876, 812][i]}`, 56 + i * 305, 865, 12, '#fff', { a: seg(lt, 0.5, 0.7) }));
+  line(56, 905, 1860, 905, 'rgba(255,255,255,.7)'); mono('1810 PX', 960, 912, 12, '#fff', { align: 'center' });
+  tagRow(960, 985, 0, '#fff', C.blue);
+} };
+const Ifut = { t0: 9.0, t1: 9.6, chapter: '01 ACCELERATE', fg: '#fff', draw(lt) {
+  BLUEBG(); const x = -lt * 400;
+  text('FUTURE', 60 + x * 0.3, 260, 300, '#F2F2EE', { ls: -10 }); sparkle(40 + x * 0.3, 160, 40, '#fff');
+  text('FUTURE', 120 - x * 0.4, 560, 300, '#F2F2EE', { stroke: 4, ls: -10 });
+  text('TURE  FUTURE', -500 + x, 870, 300, '#F2F2EE', { ls: -10 }); sparkle(-500 + x + measure('TURE ', 300, { ls: -10 }) + 30, 760, 60, '#fff');
+  mono('STATE: SOLID', 1300, 610, 14, '#fff'); rect(1300, 620, 280, 14, 'rgba(255,255,255,.2)'); rect(1300, 620, 280 * clamp(lt * 2), 14, '#000');
+  mono('RUN 01 / SOLID / 274 PX', 1220, 210, 12, '#fff'); mono('RUN 02 / OUTLINE / 274 PX', 40, 640, 12, '#fff');
+} };
+const J = (() => {
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 400); cam.position.set(0, 0, 60);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3)); const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(5, 10, 20); scene.add(d);
+  const mat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08, envMap: ENV, envMapIntensity: 1.6, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [200, 900] });
+  const rows = [0, 1, 2].map(r => { const g = wordGroup('FUTURE', 'lat', 9, 3.2, mat, { bevel: 1.1, track: -0.02 }); scene.add(g); return g; });
+  return { t0: 9.6, t1: 10.0, chapter: '01 ACCELERATE', fg: '#fff', three: true, draw(lt) {
+    rows.forEach((g, r) => { g.position.set((r === 1 ? 6 : -10) - lt * 14 * (r === 1 ? -1 : 1), 12 - r * 12, 0);
+      g.children.forEach((m, i) => { m.rotation.x = 0.25 * Math.sin(lt * 9 + i + r); m.rotation.y = 0.35 * Math.sin(lt * 7 + i * 0.7); m.scale.y = 1 + 0.12 * Math.sin(lt * 11 + i); }); });
+    renderer.setClearColor(new THREE.Color(C.blue), 1); renderer.render(scene, cam);
+    ui.clearRect(0, 0, W, H); mono('STATE: LIQUID 98%', 1300, 610, 14, '#fff'); rect(1300, 620, 280, 14, 'rgba(255,255,255,.25)'); rect(1300, 620, 274, 14, '#000');
+    sparkle(560, 760, 46, '#fff'); sparkle(1440, 330, 30, '#fff');
+  } };
+})();
+
+/* ---------- K/L: IS ALREADY / HERE ---------- */
+const Kis = { t0: 10.0, t1: 11.0, chapter: '01 ACCELERATE', fg: C.ink, draw(lt) {
+  fill(C.paper); const solid = lt > 0.48;
+  text('IS', 20, 300, 150, C.ink, { ls: -6 });
+  mono('02/03 — PRESENT TENSE', 470, 205, 15, C.ink); mono('HERE · TO BE · NOT "WILL BE"', 470, 230, 12, C.ink); sparkle(1890, 205, 18, C.ink);
+  line(0, 330, W, 330, 'rgba(0,0,0,.25)');
+  if (!solid) { text('AL', 20, 640, 320, C.ink, { stroke: 3, ls: -10 }); text('READY', 20, 960, 320, C.ink, { stroke: 3, ls: -10 }); }
+  else { const p = EZ.expo(seg(lt, 0.48, 0.62)); text('AL', 20 - (1 - p) * 120, 640, 320, C.ink, { ls: -10 }); text('READ', 20, 960, 320, C.ink, { ls: -10 });
+    rect(1700 - 1700 * EZ.expo(seg(lt, 0.55, 0.75)) + 1700, 700, 260, 270, C.blue); rect(1700, 690, 260 * EZ.expo(seg(lt, 0.55, 0.75)), 280, C.blue);
+    rect(560, 455, 1360 * EZ.expo(seg(lt, 0.5, 0.75)), 26, C.ink); barcode(560, 500, 300, 26, 3, C.ink); mono('FIH-2026-0927 / 02', 880, 520, 12, C.ink); }
+  tagRow(960, 1030, 1, C.ink, C.paper);
+} };
+const Lhere = { t0: 11.0, t1: 12.1, chapter: '01 ACCELERATE', fg: '#fff', draw(lt) {
+  BLUEBG(); text('R', 1180, 1050, 1150, 'rgba(255,255,255,.22)', { stroke: 3 }); text('HE', 300, 1050, 1150, 'rgba(255,255,255,.12)', { stroke: 3 });
+  const p = EZ.expo(seg(lt, 0, 0.2)); text('HERE', 960, 700, 420 * (1.1 - 0.1 * p), '#F2F2EE', { align: 'center', ls: -14, a: p });
+  if (lt > 0.45) { brackets(40, 230, 1840, 560, '#fff', 22, 2); line(940, 540, 980, 540, '#fff'); line(960, 520, 960, 560, '#fff'); ui.strokeStyle = '#fff'; ui.beginPath(); ui.arc(960, 540, 12, 0, TAU); ui.stroke();
+    mono('02/03 — LOCATION', 56, 190, 15, '#fff'); mono('SIGNAL LOCKED', 1860, 190, 15, '#fff', { align: 'right' }); mono('HERE = NOW', 170, 290, 15, '#fff');
+    mono('▲ YOU ARE HERE', 1130, 830, 14, '#fff'); mono('X 0960 · Y 0540 · Z 0.00', 1130, 852, 12, '#fff'); }
+  tagRow(960, 1030, 2, '#fff', C.blue);
+} };
+
+/* ---------- M/N: FUTURE.EXE desktop ---------- */
+const dots = (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#E9E9E4'; g.fillRect(0, 0, W, H); g.fillStyle = 'rgba(0,0,0,.35)'; for (let y = 14; y < H; y += 28) for (let x = 14; x < W; x += 28) { g.beginPath(); g.arc(x, y, 1.6, 0, TAU); g.fill(); } return c; })();
+function win(x, y, w, h, o, body) {
+  const p = EZ.back(seg(o.lt, o.at, o.at + 0.18)); if (p <= 0) return;
+  ui.save(); ui.translate(x + w / 2, y + h / 2); ui.rotate(o.rot || 0); ui.scale(p, p); ui.translate(-w / 2, -h / 2);
+  rect(10, 10, w, h, 'rgba(0,0,0,.18)'); rect(0, 0, w, h, o.bg || '#0B0B0E'); ui.strokeStyle = '#0B0B0E'; ui.lineWidth = 4; ui.strokeRect(0, 0, w, h);
+  rect(0, 0, w, 34, o.bar || '#F2F2EE'); for (let i = 0; i < 4; i++) { rect(46, 8 + i * 5, w * 0.28, 2, '#0B0B0E'); rect(w * 0.62, 8 + i * 5, w * 0.28, 2, '#0B0B0E'); }
+  ui.strokeStyle = '#0B0B0E'; ui.lineWidth = 2; ui.strokeRect(10, 8, 18, 18); ui.strokeRect(w - 54, 8, 18, 18); rect(w - 30, 8, 18, 18, '#0B0B0E');
+  mono(o.title || '', w / 2, 24, 13, '#0B0B0E', { align: 'center' });
+  ui.translate(0, 34); body(w, h - 34); ui.restore();
+}
+function desktop(lt, base = 0) {
+  ui.drawImage(dots, 0, 0); const o = (at, extra = {}) => ({ lt, at: at - base, ...extra });
+  ui.strokeStyle = C.blue; ui.lineWidth = 2; ui.strokeRect(-20, 300, 230, 330); ui.strokeRect(1560, 690, 300, 210);
+  win(220, 230, 1000, 560, o(0, { title: 'FUTURE.EXE', rot: -0.07 }), (w, h) => {
+    mono('C:\\FIH\\2026> RUN FUTURE.EXE /FORCE', 40, 60, 22, '#F2F2EE'); mono('V.2026.09.27', w - 40, 60, 15, '#F2F2EE', { align: 'right' });
+    text('FUTURE', 40, 300, 190, '#F2F2EE', { ls: -6 }); mono('> MODULES', 40, 400, 16, '#F2F2EE'); for (let i = 0; i < 14; i++) rect(190 + i * 13, 386, 9, 16, i < 10 ? '#F2F2EE' : 'rgba(255,255,255,.25)'); mono('74%', 390, 400, 16, '#F2F2EE');
+    mono('> PID 0X7EA · MEM 640K · STATUS RUNNING', 40, 430, 14, '#F2F2EE'); });
+  win(-10, 360, 330, 340, o(0.5, { title: 'NOW.APP', bg: C.blue }), (w, h) => { text('NOW', 24, 200, 130, '#fff', { ls: -4 }); sparkle(w - 40, 40, 20, '#fff'); mono('OPEN ▸', w - 20, h - 20, 13, '#fff', { align: 'right' }); });
+  win(1400, 120, 420, 200, o(0.5, { title: 'YEAR.SYS' }), (w, h) => { const yr = 2036 - Math.round(10 * EZ.o3(seg(lt + base, 0.5, 1.1))); text(String(yr), 30, 120, 120, '#F2F2EE'); mono(`Δ ${(10.1 - 10.1 * seg(lt + base, 0.5, 1.1)).toFixed(1)} YRS · CALIBRATED`, 30, 150, 13, '#F2F2EE'); });
+  win(120, 830, 560, 160, o(0.9, { title: 'AUDIO.WAV' }), (w, h) => { ui.fillStyle = C.blue; for (let i = 0; i < 90; i++) { const a = 10 + 40 * Math.abs(Math.sin(i * 0.7 + lt * 9) * Math.sin(i * 0.13)); ui.fillRect(20 + i * 5.8, 70 - a / 2, 3.5, a); } mono('120 BPM · 44.1K', w - 20, 112, 12, '#F2F2EE', { align: 'right' }); });
+  win(1240, 720, 620, 230, o(0.9, { title: 'INSTALL.EXE', bg: '#F2F2EE' }), (w, h) => { mono('INSTALLING TOMORROW…', 30, 50, 20, C.ink); text(`${Math.round(lerp(40, 64, seg(lt + base, 0.9, 1.9)))}%`, w - 30, 110, 74, C.ink, { align: 'right' });
+    for (let i = 0; i < 24; i++) ui.strokeRect(30 + i * 23, 140, 18, 30); for (let i = 0; i < 15; i++) rect(32 + i * 23, 142, 14, 26, C.ink); });
+  win(40, 90, 300, 260, o(1.4, { title: 'MOOD.EXE', bg: C.blue }), (w, h) => { ui.fillStyle = '#fff'; ui.fillRect(90, 60, 22, 40); ui.fillRect(180, 60, 22, 40); ui.strokeStyle = '#fff'; ui.lineWidth = 16; ui.beginPath(); ui.arc(146, 110, 70, 0.35, Math.PI - 0.35); ui.stroke(); });
+  win(380, 420, 470, 280, o(1.4, { title: 'ASSISTANT.EXE', bg: '#F2F2EE' }), (w, h) => { text('HOW CAN', 24, 100, 62, C.ink, { ls: -2 }); text('I HELP?', 24, 170, 62, C.ink, { ls: -2 }); mono('> SHOW ME TOMORROW▌', 24, 225, 14, C.ink); });
+  win(870, 380, 560, 300, o(1.45, { title: 'UPDATE.EXE', bg: '#F2F2EE' }), (w, h) => { mono('SOFTWARE UPDATE AVAILABLE', 24, 50, 15, C.ink); text('TOMORROW 1.0', 24, 125, 56, C.ink, { ls: -2 }); ui.strokeStyle = C.ink; ui.strokeRect(24, 170, 150, 40); mono('LATER', 99, 196, 14, C.ink, { align: 'center' }); rect(190, 170, 200, 40, C.ink); mono('INSTALL NOW', 290, 196, 14, '#fff', { align: 'center' }); });
+  win(1020, 20, 520, 230, o(1.5, { title: 'SYSTEM ALERT', bg: '#F2F2EE' }), (w, h) => { rect(24, 30, 70, 70, C.ink); text('!', 59, 92, 60, '#fff', { align: 'center' }); mono('FATAL ERROR 0X2026', 120, 52, 18, C.ink); mono('THE PAST IS NO LONGER SUPPORTED.', 120, 80, 13, C.ink); rect(w - 210, h - 60, 90, 36, C.ink); mono('IGNORE', w - 165, h - 37, 12, '#fff', { align: 'center' }); ui.strokeRect(w - 110, h - 60, 90, 36); mono('OK', w - 65, h - 37, 12, C.ink, { align: 'center' }); });
+  win(1600, 330, 260, 300, o(1.55, { title: 'STAR.OBJ' }), (w, h) => { sparkle(w / 2, h / 2, 100, '#C9C6FF', lt * 0.5); sparkle(w / 2 + 70, h - 40, 22, '#fff'); });
+}
+const Mexe = { t0: 12.1, t1: 14.0, chapter: '01 ACCELERATE', fg: C.ink, draw(lt) { desktop(lt); } };
+const Nload = { t0: 14.0, t1: 15.0, chapter: '01 ACCELERATE', fg: C.ink, draw(lt) {
+  desktop(lt + 1.9); ui.fillStyle = 'rgba(233,233,228,.35)'; ui.fillRect(0, 0, W, H);
+  win(60, 150, 1480, 780, { lt: lt + 1, at: 0.9, title: 'LOADING_TOMORROW.EXE — 88.DAT', bg: C.blue }, (w, h) => {
+    text('LOADING TOMORROW', 40, 110, 76, '#fff', { ls: -2 }); mono('FILE 01/01 · 88.DAT 3.4 MB · SECTOR 0X2026', w - 40, 70, 13, '#fff', { align: 'right' });
+    const n = Math.round(lerp(54, 99, EZ.io2(seg(lt, 0, 0.85)))); text('0', 40, 470, 330, '#fff', { stroke: 4, w: 300 }); text(String(n), 300, 470, 330, '#fff'); text('%', 950, 330, 160, '#fff', { stroke: 4, w: 300 });
+    mono(n >= 99 ? 'WAIT' : 'LOADING', 1110, 400, 14, '#fff');
+    for (let i = 0; i < 62; i++) rect(40 + i * 22, 540, 16, 34, i / 62 < n / 100 ? '#fff' : 'rgba(255,255,255,.25)');
+    text('PLEASE STAND BY', 40, 650, 34, '#fff'); barcode(470, 620, 220, 32, 12, '#fff'); mono('SYS 0.85 · SPEED 1.2 YR/S', w - 40, 640, 12, '#fff', { align: 'right' });
+  });
+} };
+
+/* ---------- O: TOMORROW in 3D over a grid floor ---------- */
+const O = (() => {
+  const scene = new THREE.Scene(); const cam = new THREE.PerspectiveCamera(32, W / H, 0.1, 600);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6)); const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(-8, 12, 20); scene.add(d);
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.35, metalness: 0.1, envMap: ENV, envMapIntensity: 0.5 });
+  const word = wordGroup('TOMORROW', 'lat', 6, 2.4, mat, { bevel: 0.4, track: -0.02 }); scene.add(word);
+  const grid = new THREE.GridHelper(400, 80, 0x1a2bff, 0x1a2bff); grid.material.transparent = true; grid.material.opacity = 0.55; grid.position.y = -8; scene.add(grid);
+  scene.fog = new THREE.Fog(0x05050a, 60, 220);
+  return { t0: 15.0, t1: 16.0, chapter: '01 ACCELERATE', fg: '#fff', three: true, draw(lt) {
+    const p = EZ.io3(seg(lt, 0, 1)); cam.position.set(0, 4 - 2 * p, 92 - 62 * p); cam.lookAt(0, 1, 0);
+    word.rotation.y = -0.18 * (1 - p); word.position.y = 2;
+    renderer.setClearColor(0x05050a, 1); renderer.render(scene, cam);
+    ui.clearRect(0, 0, W, H);
+    if (lt < 0.55) text('TOMORROW', 960, 360, 150, 'rgba(255,255,255,.55)', { align: 'center', stroke: 2, ls: -4 });
+    else { for (let i = 0; i < 120; i++) { const a = rnd(i) * TAU, r0 = 200 + rnd(i * 3) * 300, l = 100 + rnd(i * 7) * 500 * seg(lt, 0.55, 1); line(960 + Math.cos(a) * r0, 540 + Math.sin(a) * r0 * 0.7, 960 + Math.cos(a) * (r0 + l), 540 + Math.sin(a) * (r0 + l) * 0.7, 'rgba(255,255,255,.5)', 1); }
+      ui.strokeStyle = '#fff'; brackets(880, 470, 160, 140, '#fff', 14); mono('TARGET TOMORROW.EXE', 1060, 470, 12, '#fff'); mono('DIST 8.3 M · ETA 0.0S', 1060, 492, 12, '#fff'); }
+    const g = ui.createRadialGradient(960, 545, 0, 960, 545, 70); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(0.4, 'rgba(90,110,255,.9)'); g.addColorStop(1, 'rgba(26,43,255,0)');
+    ui.fillStyle = g; ui.beginPath(); ui.arc(960, 545, 70 * (0.6 + 0.4 * p), 0, TAU); ui.fill();
+  } };
+})();
+
+const SEG1 = [A, B, Csig, Dsig, Eeye, Fpct, Gtun, Hthe, Ifut, J, Kis, Lhere, Mexe, Nload, O];
+const S1 = { A, B, Csig, Dsig, Eeye, Fpct, Gtun, Hthe, Ifut, J, Kis, Lhere, Mexe, Nload, O };
+
+/* ======== cut ======== */
+// Scenes for the 20 s highlight cut that segment 1 does not cover:
+// countdown, four specimen objects, ring tunnel, checker grid, chrome hero, end card.
+
+function lights(scene, k = 1) {
+  scene.add(new THREE.HemisphereLight(0xe8eaff, 0x101030, 0.7 * k));
+  const d = new THREE.DirectionalLight(0xffffff, 2.2 * k); d.position.set(-8, 10, 14); scene.add(d);
+  const r = new THREE.DirectionalLight(0xb9b4ff, 1.4 * k); r.position.set(10, -4, -8); scene.add(r);
+}
+function labelBox(cn, en, x, y, dark = true) {
+  const w = measure(cn, 40) + measure(en, 26) + 70; rect(x, y - 54, w, 72, dark ? C.ink : '#F2F2EE');
+  text(cn, x + 20, y, 40, dark ? '#fff' : C.ink, { w: 300 }); text(en, x + 40 + measure(cn, 40), y - 4, 26, dark ? '#fff' : C.ink);
+}
+function specTable(x, y, title, rows, dark) {
+  const fg = dark ? '#fff' : C.ink, bg = dark ? C.ink : '#F2F2EE'; rect(x, y, 300, 34 + rows.length * 26, bg); ui.strokeStyle = fg; ui.lineWidth = 1.5; ui.strokeRect(x, y, 300, 34 + rows.length * 26);
+  mono(title, x + 12, y + 22, 12, fg); rows.forEach(([k, v], i) => { line(x, y + 32 + i * 26, x + 300, y + 32 + i * 26, dark ? 'rgba(255,255,255,.3)' : 'rgba(0,0,0,.25)', 1); mono(k, x + 12, y + 52 + i * 26, 11, fg); mono(v, x + 288, y + 52 + i * 26, 11, fg, { align: 'right' }); });
+}
+
+/* ---------- 3 · 2 · 1 ---------- */
+const Count = (() => {
+  const scene = new THREE.Scene(); lights(scene); const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 300); cam.position.set(0, 0, 70);
+  const bg = bgCanvas(scene);
+  const mats = [new THREE.MeshStandardMaterial({ color: 0x08080c, metalness: 0.7, roughness: 0.22, envMap: ENV, envMapIntensity: 1.2 }), chromeMat('#F4F3FF', 0.1), new THREE.MeshStandardMaterial({ color: new THREE.Color(C.blue), metalness: 0.55, roughness: 0.18, envMap: ENV, envMapIntensity: 1.1 })];
+  const digits = ['3', '2', '1'].map((d, i) => { const m = new THREE.Mesh(glyphGeo(d, 'lat', 24, 7, 1.4), mats[i]); m.visible = false; scene.add(m); return m; });
+  const L = [['READY', 'T-01.500'], ['SET', 'T-01.000'], ['GO', 'T-00.500']];
+  return { t0: 0, t1: 1.5, chapter: '02 IGNITION', fg: '#fff', three: true, draw(lt) {
+    const k = Math.min(2, Math.floor(lt / 0.5)), l = lt - k * 0.5;
+    target(bg.g);
+    if (k === 0) { fill(C.blue); rect(0, 0, 1120, H, C.paper); }
+    else if (k === 1) { fill(C.blue); rect(1260, 0, 660, H, C.ink); }
+    else { fill(C.ink); bg.g.fillStyle = C.blue; bg.g.beginPath(); bg.g.moveTo(1150, H); bg.g.lineTo(W, 520); bg.g.lineTo(W, H); bg.g.fill(); }
+    const fg = k === 0 ? C.ink : '#fff';
+    bg.g.strokeStyle = k === 2 ? '#ff8a3d' : 'rgba(255,255,255,.7)'; bg.g.lineWidth = 2; bg.g.beginPath(); bg.g.ellipse(960, 560, 520, k === 2 ? 130 : 500, 0, 0, TAU); bg.g.stroke();
+    if (k === 2) { bg.g.strokeStyle = '#4a5bff'; bg.g.beginPath(); bg.g.ellipse(960, 580, 480, 110, 0, 0, TAU); bg.g.stroke(); }
+    target(); bg.update();
+    digits.forEach((m, i) => { m.visible = i === k; });
+    const m = digits[k], p = EZ.back(seg(l, 0, 0.22)); m.scale.setScalar(0.6 + 0.4 * p); m.rotation.set(0.12, (1 - EZ.o3(seg(l, 0, 0.3))) * 1.6 - 0.25 + l * 0.3, 0); m.position.set(0, 0, 0);
+    renderer.render(scene, cam);
+    ui.clearRect(0, 0, W, H);
+    mono(`T-MINUS 0${3 - k}`, 230, 430, 15, fg); text(L[k][0], 230, 505, 70, fg); mono(`SEQ 0${k + 1} · ${k + 1}/3`, 230, 540, 13, fg); mono(L[k][1], 230, 565, 13, fg);
+    const fg2 = '#fff'; mono('IGNITION SEQUENCE', 1680, 450, 13, fg2, { align: 'right' }); mono(`SNARE ROLL ${k + 1}/3`, 1680, 472, 13, fg2, { align: 'right' });
+    for (let i = 0; i < 3; i++) { ui.strokeStyle = fg2; ui.strokeRect(1540 + i * 48, 490, 40, 16); if (i <= k) rect(1540 + i * 48, 490, 40, 16, fg2); }
+    line(560, 420, 1360, 680, k === 0 ? 'rgba(0,0,0,.4)' : 'rgba(255,255,255,.4)', 1);
+  } };
+})();
+
+/* ---------- four specimen objects ---------- */
+function typeRows(g, word, color, solidRows, t, size = 300) {
+  target(g); for (let r = 0; r < 4; r++) { const y = 230 + r * 270, x = -((t * 260 * (r % 2 ? -1 : 1)) % 1400) - 300;
+    const s = (word + ' ').repeat(5); text(s, x, y, size, color, solidRows.includes(r) ? { ls: -8 } : { stroke: 3, ls: -8 }); } target();
+}
+function objScene(build) { const scene = new THREE.Scene(); lights(scene); const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 300); cam.position.set(0, 0, 50); const bg = bgCanvas(scene); const obj = build(scene); return { scene, cam, bg, obj }; }
+const bolt = () => { const s = new THREE.Shape(); [[1.5, 6], [-3, -0.6], [0.2, -0.6], [-1.6, -6], [3.2, 1], [0, 1], [1.5, 6]].forEach(([x, y], i) => i ? s.lineTo(x, y) : s.moveTo(x, y));
+  const g = new THREE.ExtrudeGeometry(s, { depth: 1.4, bevelEnabled: true, bevelThickness: 0.35, bevelSize: 0.3, bevelSegments: 4 }); g.center(); return g; };
+const OBJS = [
+  { cn: '01', en: 'PRISM', word: CFG.objects[0], col: C.paper, fg: C.ink, rows: [0, 2], dark: false, ...objScene(sc => { const m = new THREE.Mesh(new THREE.BoxGeometry(11, 11, 11, 1, 1, 1), glassMat({ thickness: 6, iridescence: 0.8 })); sc.add(m); return m; }) },
+  { cn: '02', en: 'BOLT', word: CFG.objects[1], col: C.blue, fg: '#F2F2EE', rows: [1, 2], dark: true, ...objScene(sc => { const m = new THREE.Mesh(bolt(), new THREE.MeshPhysicalMaterial({ color: 0xf4c6ff, metalness: 1, roughness: 0.12, envMap: ENV, envMapIntensity: 1.5, iridescence: 1, iridescenceIOR: 1.9, iridescenceThicknessRange: [300, 900] })); m.scale.setScalar(1.55); sc.add(m); return m; }) },
+  { cn: '03', en: 'PLANET', word: CFG.objects[2], col: C.ink, fg: C.blue, rows: [0, 1, 3], dark: true, ...objScene(sc => { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.SphereGeometry(7.5, 64, 48), glassMat({ thickness: 4 })));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(12, 0.55, 24, 160), new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: 0.1, envMap: ENV, iridescence: 1, iridescenceThicknessRange: [200, 800] })); ring.scale.z = 0.25; ring.rotation.x = 1.25; g.add(ring); sc.add(g); return g; }) },
+  { cn: '04', en: 'MIND', word: CFG.objects[3], col: C.blue, fg: C.ink, rows: [0, 2, 3], dark: true, ...objScene(sc => { const g = new THREE.Group(); const ico = new THREE.IcosahedronGeometry(9, 0);
+      g.add(new THREE.LineSegments(new THREE.EdgesGeometry(ico), new THREE.LineBasicMaterial({ color: 0xffffff })));
+      const pos = ico.attributes.position; const seen = new Set(); for (let i = 0; i < pos.count; i++) { const k = [pos.getX(i), pos.getY(i), pos.getZ(i)].map(v => v.toFixed(2)).join(); if (seen.has(k)) continue; seen.add(k); const s = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x888888 })); s.position.set(pos.getX(i), pos.getY(i), pos.getZ(i)); g.add(s); }
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), glassMat({ thickness: 3, color: 0xc8fff0 })); g.add(cube); sc.add(g); return g; }) },
+];
+const Objects = { t0: 0, t1: 2.0, chapter: '03 ARCHIVE', fg: '#fff', three: true, draw(lt) {
+  const k = Math.min(3, Math.floor(lt / 0.5)), l = lt - k * 0.5, o = OBJS[k];
+  target(o.bg.g); fill(o.col); target(); typeRows(o.bg.g, o.word, o.fg, o.rows, lt); o.bg.update();
+  const p = EZ.back(seg(l, 0, 0.2)); o.obj.scale.setScalar((k === 1 ? 1.55 : 1) * (0.5 + 0.5 * p)); o.obj.rotation.set(0.5 + l * 0.8, 0.6 + l * 2.2, 0.2);
+  renderer.render(o.scene, o.cam);
+  ui.clearRect(0, 0, W, H);
+  mono(`OBJ.0${k + 1} / 04`, 56, 110, 15, o.dark ? '#fff' : C.ink); mono('FUTURE OBJECT ARCHIVE', 56, 134, 13, o.dark ? '#fff' : C.ink);
+  mono(`T+2${4 + k * 0.5}.${String(Math.round(l * 999)).padStart(3, '0')}`, 1860, 110, 15, o.dark ? '#fff' : C.ink, { align: 'right' });
+  specTable(1450, 150, `SPEC / ${o.en}`, [['MATERIAL', ['GLASS', 'CHROME', 'GLASS', 'WIRE'][k]], ['IOR', '1.450'], ['ROUGH', '0.04'], ['ROT/S', (1.2 + k * 0.3).toFixed(2)]], o.dark);
+  labelBox(o.cn, o.en, 56, 1010, o.dark); barcode(1560, 960, 260, 40, 31 + k, o.dark ? '#fff' : C.ink);
+} };
+
+/* ---------- ring tunnel ---------- */
+function ringText(g, r, s, size, rot, col) {
+  g.save(); g.rotate(rot); g.font = `900 ${size}px ${UB}`; g.fillStyle = col; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const chars = [...s]; let a = 0, i = 0; while (a < TAU - 0.02) { const ch = chars[i % chars.length]; const w = g.measureText(ch).width + size * 0.12; g.save(); g.rotate(a); g.translate(0, -r); g.fillText(ch, 0, 0); g.restore(); a += w / r; i++; } g.restore();
+}
+const Rings = { t0: 0, t1: 1.0, chapter: '03 ARCHIVE', fg: '#fff', draw(lt) {
+  fill('#050507'); const z = 1 + 0.5 * EZ.io2(lt);
+  ui.save(); ui.translate(960, 540); ui.scale(z, z);
+  for (let k = 9; k >= 0; k--) {
+    const r = 46 * Math.pow(1.36, k), cx = -Math.pow(1.36, k) * 6 * Math.sin(lt * 2 + k * 0.5), cy = -Math.pow(1.36, k) * 4;
+    ui.save(); ui.translate(cx * (9 - k) * 0.1, cy * 0.2);
+    const white = k % 2 === 0, band = r * 0.16;
+    ui.fillStyle = white ? '#EDEDE8' : '#060608'; ui.beginPath(); ui.arc(0, 0, r + band, 0, TAU); ui.arc(0, 0, r - band, 0, TAU, true); ui.fill();
+    const g = ui.createLinearGradient(-r, -r, r, r); g.addColorStop(0, '#fff'); g.addColorStop(0.45, '#8890b8'); g.addColorStop(0.55, '#f4f4ff'); g.addColorStop(1, '#5b6390');
+    ui.strokeStyle = g; ui.lineWidth = Math.max(2, r * 0.03); ui.beginPath(); ui.arc(0, 0, r + band, 0, TAU); ui.stroke();
+    ringText(ui, r, white ? 'FUTURE · IS · HERE · ' : 'THE FUTURE IS ALREADY HERE · ', band * 1.2, lt * (k % 2 ? 0.9 : -0.7) + k, white ? C.ink : '#fff');
+    ui.strokeStyle = C.blue; ui.lineWidth = Math.max(2, r * 0.05); ui.beginPath(); ui.arc(0, 0, r - band - r * 0.05, k + lt * 1.5, k + lt * 1.5 + 1.2); ui.stroke();
+    ui.restore();
+  }
+  ui.restore();
+  for (let i = 0; i < 40; i++) { const a = rnd(i) * TAU; line(960 + Math.cos(a) * 700, 540 + Math.sin(a) * 700, 960 + Math.cos(a) * 1100, 540 + Math.sin(a) * 1100, 'rgba(255,255,255,.35)', 1); }
+  mono('VORTEX · DEPTH ' + (lt * 999 | 0), 70, 520, 13, '#fff'); mono('RING 10/10 · RPM 042', 1850, 520, 13, '#fff', { align: 'right' });
+} };
+
+/* ---------- checker grid ---------- */
+const Checker = { t0: 0, t1: 0.5, chapter: '03 ARCHIVE', fg: '#fff', draw(lt) {
+  fill(C.ink); const tw = 480, th = 360;
+  const tiles = [
+    ['k', g => { for (let i = -6; i < 12; i++) { ui.fillStyle = '#EDEDE8'; ui.beginPath(); ui.moveTo(i * 60, 0); ui.lineTo(i * 60 + 30, 0); ui.lineTo(i * 60 + 30 + th, th); ui.lineTo(i * 60 + th, th); ui.fill(); } }],
+    ['w', () => text('THE', 240, 230, 120, C.ink, { align: 'center' })],
+    ['w', () => { ui.strokeStyle = C.ink; ui.lineWidth = 2; for (let i = 0; i < 6; i++) { ui.beginPath(); ui.ellipse(240, 180, Math.abs(120 * Math.cos(i / 6 * Math.PI + lt * 3)) + 0.1, 120, 0, 0, TAU); ui.stroke(); } for (let i = -2; i <= 2; i++) { ui.beginPath(); ui.ellipse(240, 180 + i * 45, Math.sqrt(1 - (i / 2.7) ** 2) * 120, 10, 0, 0, TAU); ui.stroke(); } }],
+    ['k', () => text('FUTURE', 240, 220, 92, '#EDEDE8', { align: 'center' })],
+    ['k', () => sparkle(240, 180, 120, '#EDEDE8', lt)],
+    ['w', () => { ui.strokeStyle = C.ink; ui.lineWidth = 3; ui.beginPath(); for (let x = 30; x < 450; x += 4) { const y = 180 + Math.sin(x * 0.05 + lt * 20) * 60 * Math.sin(x * 0.012); x === 30 ? ui.moveTo(x, y) : ui.lineTo(x, y); } ui.stroke(); }],
+    ['k', () => text('IS', 240, 240, 170, '#EDEDE8', { align: 'center' })],
+    ['w', () => { ui.fillStyle = C.ink; for (let y = 40; y < 340; y += 26) for (let x = 40; x < 450; x += 26) { const r = 10 * clamp(1 - Math.hypot(x - 240, y - 180) / 200); ui.beginPath(); ui.arc(x, y, r, 0, TAU); ui.fill(); } }],
+    ['k', () => text('>>>>', 240, 230, 120, '#EDEDE8', { align: 'center' })],
+    ['w', () => text('ALREADY', 240, 205, 58, C.ink, { align: 'center' })],
+    ['w', () => text('NOW', 240, 230, 130, C.ink, { align: 'center' })],
+    ['k', () => text('HERE', 240, 220, 110, '#EDEDE8', { align: 'center' })],
+  ];
+  tiles.forEach(([bgc, fn], i) => { const x = (i % 4) * tw, y = Math.floor(i / 4) * th; if (lt < i * 0.025) return;
+    ui.save(); ui.beginPath(); ui.rect(x, y, tw, th); ui.clip(); ui.translate(x, y); rect(0, 0, tw, th, bgc === 'k' ? C.ink : '#EDEDE8'); fn(); mono(`0${i + 1} / 12`, 16, th - 16, 11, bgc === 'k' ? '#fff' : C.ink); ui.restore(); });
+  ui.strokeStyle = 'rgba(128,128,128,.6)'; ui.lineWidth = 1; for (let i = 1; i < 4; i++) line(i * tw, 0, i * tw, H, 'rgba(128,128,128,.6)', 1); for (let i = 1; i < 3; i++) line(0, i * th, W, i * th, 'rgba(128,128,128,.6)', 1);
+} };
+
+/* ---------- chrome hero: FUTURE ---------- */
+const Hero = (() => {
+  const scene = new THREE.Scene(); lights(scene, 1.1); const cam = new THREE.PerspectiveCamera(28, W / H, 0.1, 400);
+  const bg = bgCanvas(scene); const mat = chromeMat('#E6E3FF', 0.12);
+  // The hero word scales down to fit when it is longer than FUTURE.
+  const word = wordGroup(CFG.hero, 'lat', 7.6, 3.0, mat, { bevel: 0.4, track: 0.05 }); const fitK = Math.min(1, wordGroup('FUTURE', 'lat', 7.6, 3.0, mat, { bevel: 0.4, track: 0.05 }).userData.width * 1.08 / word.userData.width);
+  const chars = word.children.slice(); const HX = chars.map(m => m.position.x * fitK); chars.forEach(m => { m.scale.setScalar(fitK); scene.add(m); });
+  const halo = (() => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = 'rgba(255,255,255,.55)';
+    for (let y = 6; y < H; y += 13) for (let x = 6; x < W; x += 13) { const d = Math.hypot((x - 960) / 1.7, (y - 470) / 1.05) / 360; const r = 4.2 * clamp(1 - Math.abs(d - 1) * 1.6); if (r > 0.5) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); } } return c; })();
+  return { t0: 0, t1: 4.0, chapter: '04 ARRIVAL', fg: '#fff', three: true, draw(lt) {
+    target(bg.g); fill(C.blue); bg.g.globalAlpha = EZ.o3(seg(lt, 0, 0.6)); bg.g.drawImage(halo, 0, 0); bg.g.globalAlpha = 1;
+    text('READY HERE  THE FUTURE IS AL', -200 - lt * 60, 860, 210, 'rgba(10,20,140,.35)', { ls: -6 });
+    bg.g.strokeStyle = 'rgba(255,255,255,.5)'; bg.g.lineWidth = 2; bg.g.beginPath(); bg.g.ellipse(960, 470, 860, 330, -0.08, 0.2 + lt * 0.2, 2.6 + lt * 0.2); bg.g.stroke();
+    target(); bg.update();
+    chars.forEach((m, i) => { const s = 0.15 + i * 0.09, p = EZ.o4(seg(lt, s, s + 0.65)), x = HX[i];
+      m.position.set(lerp(x + (rnd(i) - 0.5) * 60, x, p), lerp(1.5 + (rnd(i + 4) - 0.5) * 40, 1.5, p), lerp(-80, 0, p));
+      m.rotation.set(lerp((rnd(i + 2) - 0.5) * 6, 0, p) + 0.06 * Math.sin(lt * 1.3 + i), lerp((rnd(i + 3) - 0.5) * 7, 0, p) + (i === 2 ? TAU * EZ.io3(seg(lt, 2.0, 2.6)) : 0) + (i === 4 ? TAU * EZ.io3(seg(lt, 3.0, 3.5)) : 0), lerp((rnd(i + 5) - 0.5) * 2, 0, p)); });
+    cam.position.set(Math.sin(lt * 0.25) * 6, -1 + Math.cos(lt * 0.3) * 1.5, 62 - 6 * EZ.o3(seg(lt, 0, 1.2))); cam.lookAt(0, 1, 0);
+    renderer.render(scene, cam);
+    ui.clearRect(0, 0, W, H);
+    const a1 = seg(lt, 0.9, 1.4); text(typed(CFG.heroLine, seg(lt, 0.9, 1.3)), 960, 790, 80, '#fff', { align: 'center', ls: -1 });
+    if (lt > 1.6) { const a2 = EZ.o3(seg(lt, 1.6, 2.0)); { const ws = CFG.headline.split(' '), sz = 56, widths = ws.map(w => measure(w, sz, { ls: 6 })), gap = (W - 200 - widths.reduce((a, b) => a + b, 0)) / (ws.length - 1); let x = 100; ws.forEach((w, i) => { text(w, x, 150, sz, '#fff', { a: a2, ls: 6 }); x += widths[i] + gap; }); }
+      const letters = [...CFG.hero.replace(/\s/g, '')], span = Math.min(230, 1380 / letters.length); letters.forEach((c, i) => { const x = 960 + (i - (letters.length - 1) / 2) * span - 40; mono(`${c} ${String(i + 1).padStart(2, '0')}`, x, 690, 13, '#fff', { a: a2 }); mono(['FORM', 'UNIT', 'TIME', 'USE', 'RUN', 'EDGE', 'FLOW', 'NEXT'][i % 8], x, 708, 11, '#C8CCFF', { a: a2 }); });
+      text(CFG.date, 1860, 960, 70, '#fff', { align: 'right', a: a2 }); mono('ARRIVAL DATE', 1860, 880, 13, '#fff', { align: 'right', a: a2 });
+      barcode(1120, 905, 300, 54, 77, `rgba(255,255,255,${a2})`); mono('NO. 0927-FIH · EDITION 01', 1120, 980, 11, '#fff', { a: a2 });
+      ['THE FUTURE IS NOT TOMORROW.', 'IT IS A SIGNAL YOU ARE', 'ALREADY RECEIVING.', 'TRANSMISSION 23/24 — END'].forEach((s, i) => mono(s, 90, 890 + i * 20, 12, '#fff', { a: a2 }));
+      brackets(40, 70, W - 80, H - 140, `rgba(255,255,255,${0.7 * a2})`, 24, 1.5);
+      [[40, 70], [W - 40, 70], [40, H - 70], [W - 40, H - 70]].forEach(([x, y]) => { line(x - 12, y, x + 12, y, '#fff'); line(x, y - 12, x, y + 12, '#fff'); });
+      sparkle(1530, 260, 26 * EZ.back(seg(lt, 2.0, 2.3)), '#fff', lt); sparkle(400, 600, 18 * EZ.back(seg(lt, 2.2, 2.5)), '#fff', -lt); }
+    const sw = seg(lt, 3.1, 3.6); if (sw > 0 && sw < 1) { const x = lerp(-400, W + 400, sw); const g = ui.createLinearGradient(x - 200, 0, x + 200, 0); g.addColorStop(0, 'rgba(255,190,255,0)'); g.addColorStop(0.5, 'rgba(255,200,255,.35)'); g.addColorStop(1, 'rgba(255,190,255,0)'); ui.fillStyle = g; ui.save(); ui.transform(1, 0, -0.35, 1, 0, 0); ui.fillRect(x - 200 + 190, 0, 400, H); ui.restore(); }
+    if (lt < 0.08) { ui.fillStyle = `rgba(255,255,255,${1 - lt / 0.08})`; ui.fillRect(0, 0, W, H); }
+  } };
+})();
+
+/* ---------- end card ---------- */
+const End = { t0: 0, t1: 1.5, chapter: '04 ARRIVAL', fg: '#fff', three: false, draw(lt, t, heroCanvas) {
+  if (lt < 0.45) { // RGB tear over the last hero frame
+    fill(C.blue); const p = lt / 0.45;
+    for (let i = 0; i < 26; i++) { const y = Math.floor(rnd(i * 3 + Math.floor(lt * 30)) * H), h = 10 + rnd(i * 7) * 70, dx = (rnd(i * 5 + Math.floor(lt * 40)) - 0.5) * 400 * p;
+      ui.drawImage(heroCanvas, 0, y, W, h, dx, y, W, h); }
+    ui.globalCompositeOperation = 'screen'; ui.globalAlpha = 0.6; ui.drawImage(heroCanvas, 18 * p, 0); ui.globalCompositeOperation = 'source-over'; ui.globalAlpha = 1;
+    rect(lerp(300, 900, p), 0, 70, H, '#000'); rect(0, H * 0.4, W, 6, `rgba(255,0,80,${p})`);
+    return; }
+  fill('#050507'); const l = lt - 0.45;
+  if (l < 0.85) { const s = l < 0.25 ? scramble(CFG.endLine, seg(l, 0, 0.25) * 0.6, 3) + '#&' : CFG.endLine; mono(s.slice(0, 22) + '█', 960, 560, 46, '#fff', { align: 'center', ls: 8 });
+    if (l > 0.3) { line(700, 590, 1220, 590, 'rgba(255,255,255,.6)'); mono(`${CFG.headline} — ${CFG.brand} — EDITION 01 — ${CFG.date}`, 960, 625, 15, '#fff', { align: 'center' }); } }
+  else if (Math.floor(l * 6) % 2) rect(955, 540, 10, 18, '#fff');
+} };
+
+/* ======== main ======== */
+// 20 s highlight cut. Each entry plays a scene from `from` at `speed` (scene-local time).
+const EDIT = [
+  [0.0, 1.5, S1.A, 0.3, 1.2], [1.5, 2.1, S1.B, 0.4, 1], [2.1, 2.5, S1.Csig, 0, 1],
+  [2.5, 3.6, S1.Eeye, 0, 1.45], [3.6, 4.0, S1.Fpct, 0, 1], [4.0, 5.0, S1.Gtun, 0.5, 1.4],
+  [5.0, 6.0, S1.Hthe, 0, 1], [6.0, 6.5, S1.J, 0, 0.8], [6.5, 7.0, S1.Kis, 0.45, 1], [7.0, 7.5, S1.Lhere, 0.3, 1],
+  [7.5, 9.0, S1.Mexe, 0, 1.27], [9.0, 9.5, S1.Nload, 0.4, 1.2],
+  [9.5, 11.0, Count, 0, 1], [11.0, 13.0, Objects, 0, 1], [13.0, 14.0, Rings, 0, 1], [14.0, 14.5, Checker, 0, 1],
+  [14.5, 18.5, Hero, 0, 1], [18.5, 20.0, End, 0, 1],
+];
+const glcv = document.getElementById('gl'), uicv = document.getElementById('ui');
+const snap = document.createElement('canvas'); snap.width = W; snap.height = H; const sg = snap.getContext('2d');
+function render(t) {
+  const e = EDIT.find(x => t >= x[0] && t < x[1]) || EDIT[EDIT.length - 1];
+  const [t0, , sc, from, speed] = e; const cut = t - t0, lt = from + cut * speed;
+  ui.setTransform(1, 0, 0, 1, 0, 0); ui.globalAlpha = 1; ui.globalCompositeOperation = 'source-over';
+  if (sc === End) {
+    Hero.draw(3.95); sg.drawImage(glcv, 0, 0); sg.drawImage(uicv, 0, 0); ui.clearRect(0, 0, W, H);
+    glcv.style.visibility = 'hidden'; End.draw(cut, t, snap);
+  } else {
+    glcv.style.visibility = sc.three ? 'visible' : 'hidden';
+    if (!sc.three) { ui.clearRect(0, 0, W, H); renderer.setClearColor(0x000000, 1); renderer.clear(); }
+    sc.draw(lt, t);
+  }
+  ui.setTransform(1, 0, 0, 1, 0, 0); ui.globalAlpha = 1;
+  if (cut < 0.07 && t0 > 0 && sc !== End) {
+    if (sc.three) { sg.clearRect(0, 0, W, H); sg.drawImage(glcv, 0, 0); sg.drawImage(uicv, 0, 0); }
+    const src = sc.three ? snap : uicv;
+    for (let i = 0; i < 6; i++) { const y = Math.floor(rnd(t0 * 13 + i) * H), h = 16 + rnd(t0 * 7 + i) * 70, dx = (rnd(t0 * 5 + i) - 0.5) * 120 * (1 - cut / 0.07); ui.drawImage(src, 0, y, W, h, dx, y, W, h); }
+  }
+  hud(t, sc.fg, sc.chapter);
+}
+
+/* ---------- master timeline: the only clock ---------- */
+gsap.ticker.lagSmoothing(0);
+const tl = gsap.timeline({ paused: true });
+const clock = { t: 0 };
+tl.to(clock, { t: CFG.duration, duration: CFG.duration, ease: 'none' }, 0);
+tl.eventCallback('onUpdate', () => render(tl.time()));
+window.__timelines = { main: tl };
+render(0);
+// SIGNAL is sampled from the display font, so resample it once the font is in.
+const refresh = () => { SIG = null; render(tl.time()); };
+Promise.all(['900 100px UB', '600 20px JBM'].map(f => document.fonts.load(f))).then(refresh, refresh);
+
+/* ---------- preview shell (outside the composition) ---------- */
+const main = document.getElementById('main');
+const playBtn = document.getElementById('playBtn'), scrub = document.getElementById('scrub'), tcEl = document.getElementById('tc');
+function fit() {
+  const s = Math.min(window.innerWidth / CFG.w, window.innerHeight / CFG.h);
+  main.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+}
+// Inside an Open Design project the motion source player wraps the stage,
+// fits it and adds its own controls; leave both to it there.
+const hostPlayer = () => window.__odMotionSourcePlayer || main.parentElement.id !== 'viewport';
+const ownFit = fit;
+fit = function () { if (hostPlayer()) { main.style.transform = 'translate(-50%,-50%)'; return; } ownFit(); };
+window.addEventListener('resize', fit); fit();
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  fit(); if (hostPlayer()) document.getElementById('controls').style.display = 'none';
+}, 0));
+function sync() {
+  const t = tl.time();
+  scrub.value = t; tcEl.textContent = t.toFixed(2) + ' / ' + CFG.duration.toFixed(2);
+  playBtn.textContent = tl.isActive() ? 'PAUSE' : (t >= CFG.duration - 0.01 ? 'REPLAY' : 'PLAY');
+}
+gsap.ticker.add(sync);
+playBtn.addEventListener('click', () => {
+  if (tl.time() >= CFG.duration - 0.01) tl.restart(); else if (tl.paused()) tl.play(); else tl.pause();
+  sync();
+});
+scrub.addEventListener('input', () => { tl.pause(); tl.time(parseFloat(scrub.value)); sync(); });
+window.addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); playBtn.click(); } });
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { tl.pause(); tl.time(CFG.reducedAt); }
+else document.fonts.ready.then(() => tl.play(0));
+sync();
+</script>
+<script>
+// Video export seeks with timeline callbacks suppressed, so the onUpdate
+// drawing also runs from a per-frame loop whenever the timeline time moves.
+(function install() {
+  var tls = window.__timelines;
+  var tl = tls && tls[Object.keys(tls)[0]];
+  if (!tl) { setTimeout(install, 50); return; }
+  var draw = tl.eventCallback('onUpdate');
+  if (!draw) return;
+  var drawnAt = null;
+  tl.eventCallback('onUpdate', function () { drawnAt = tl.time(); return draw.apply(this, arguments); });
+  (function loop() {
+    if (window.__odFrameRenderer && !document.documentElement.classList.contains('od-export')) {
+      document.documentElement.classList.add('od-export');
+    }
+    requestAnimationFrame(loop);
+    var t = tl.time();
+    if (t !== drawnAt) { drawnAt = t; draw(); }
+  })();
+})();
+</script>
+<script>
+// Preview bake: mark ready once the timeline reaches the poster frame.
+(function () {
+  var POSTER_AT = 5.55;
+  function check() {
+    var tls = window.__timelines;
+    var tl = tls && tls[Object.keys(tls)[0]];
+    if (tl && tl.time() >= POSTER_AT) {
+      document.documentElement.setAttribute('data-od-preview-ready', 'true');
+      return;
+    }
+    requestAnimationFrame(check);
+  }
+  requestAnimationFrame(check);
+})();
+</script>
+<script>
+// Sound starts with the film. If the browser blocks unmuted autoplay, the first
+// gesture on the page turns it on; the master timeline owns play, pause and seek.
+(function() {
+  // BEGIN shared motion audio sync
+// A render stall is not a request to seek the soundtrack. Only correct drift
+// after fresh, stable samples; explicit transport actions bypass that filter.
+function createMotionAudioSync(audio) {
+  var sampledAt = null, driftSince = null, previousDrift = 0, correctedAt = -Infinity, align = false;
+  return function (target, moving, force) {
+    var now = performance.now(), gap = sampledAt === null ? Infinity : now - sampledAt;
+    sampledAt = now;
+    if (force) { align = true; driftSince = null; }
+    if (align) {
+      if (audio.readyState > 0) {
+        if (Math.abs(audio.currentTime - target) > .01) audio.currentTime = target;
+        align = false; correctedAt = now;
+      }
+      return;
+    }
+    var drift = target - audio.currentTime;
+    if (!moving || audio.paused || audio.seeking || audio.readyState < 3 || gap > 200 || Math.abs(drift) <= .3 || now - correctedAt < 1500) {
+      driftSince = null; previousDrift = drift; return;
+    }
+    if (driftSince === null || drift * previousDrift <= 0 || Math.abs(drift - previousDrift) > .1) driftSince = now;
+    previousDrift = drift;
+    if (now - driftSince >= 750) {
+      audio.currentTime = target; correctedAt = now; driftSince = null;
+    }
+  };
+}
+  // END shared motion audio sync
+  const audio=document.getElementById('soundtrack');
+  if (!audio || typeof audio.play !== 'function' || window.__odFrameRenderer) return;
+  const controls=document.getElementById('controls');
+  const button=document.createElement('button');button.type='button';controls.appendChild(button);
+  // Gallery thumbnails load the page in an opaque sandbox; those stay silent until asked.
+  let enabled=window.origin!=='null',pending=false,chosen=false;
+  const timeline=()=>window.__timelines&&window.__timelines.main;
+  const syncAudio=createMotionAudioSync(audio);
+  let wasPlaying=false,lastTime=0;
+  function label() { button.textContent=enabled?'Sound off':'Sound on';button.setAttribute('aria-label',enabled?'Mute sound':'Enable sound');button.setAttribute('aria-pressed',String(enabled)); }
+  function play() { if(pending||!audio.paused)return;pending=true;audio.play().catch(()=>{enabled=false;label();if(!chosen)waitForGesture();}).finally(()=>{pending=false;}); }
+  function waitForGesture() {
+    const start=event=>{
+      if(event.target===button)return;
+      document.removeEventListener('pointerdown',start,true);document.removeEventListener('keydown',start,true);
+      if(chosen||enabled)return;
+      const tl=timeline();enabled=true;label();if(tl)syncAudio(tl.time(),true,true);play();
+    };
+    document.addEventListener('pointerdown',start,true);document.addEventListener('keydown',start,true);
+  }
+  label();
+  button.onclick=()=>{chosen=true;enabled=!enabled;label();const tl=timeline();if(enabled&&tl){if(tl.progress()>=1)tl.restart();else tl.play();syncAudio(tl.time(),true,true);play();}else audio.pause();};
+  document.getElementById('scrub').addEventListener('input',event=>{if(enabled)syncAudio(Number(event.target.value),false,true);});
+  function sync() {
+    if (window.__odMotionSourcePlayer) return;
+    const tl=timeline();
+    if(tl&&enabled&&!window.__odFrameRenderer){
+      const time=tl.time(),moving=!tl.paused()&&tl.progress()<1;
+      syncAudio(time,moving,(moving&&!wasPlaying)||time<lastTime-.1);
+      wasPlaying=moving;lastTime=time;
+      if(moving)play();else audio.pause();
+    }else { audio.pause();wasPlaying=false; }
+    requestAnimationFrame(sync);
+  }sync();
+})();
+</script>
+</body>
+</html>

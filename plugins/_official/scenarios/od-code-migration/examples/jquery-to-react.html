@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>od-code-migration · jQuery → React migration summary</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafafa;
+      --fg: #1a1a1a;
+      --muted: #6b6b6b;
+      --line: #e5e5e5;
+      --ok: #14803c;
+      --ok-bg: #e6f4ea;
+      --warn: #8a4f00;
+      --warn-bg: #fff3df;
+      --code: #0f0f10;
+      --code-fg: #f4f4f5;
+      --add: #d6f3df;
+      --add-fg: #114b22;
+      --del: #fde0e3;
+      --del-fg: #7a0817;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0e10;
+        --fg: #f5f5f5;
+        --muted: #a1a1aa;
+        --line: #27272a;
+        --ok-bg: #0f3a21;
+        --warn-bg: #3a2810;
+        --add: #102d18;
+        --add-fg: #b8e8c4;
+        --del: #3a121a;
+        --del-fg: #f6c9cf;
+      }
+    }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); }
+    body {
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); font-size: 13px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+    }
+    .pill.ok { background: var(--ok-bg); color: var(--ok); }
+    .pill.warn { background: var(--warn-bg); color: var(--warn); }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    section { margin-top: 28px; }
+    h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px; letter-spacing: 0.01em; text-transform: uppercase; color: var(--muted); }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+    .stat .n { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+    .stat .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .file-list { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .file { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; }
+    .file:first-child { border-top: 0; }
+    .file .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file .delta { color: var(--muted); font-size: 11.5px; }
+    .file .delta .a { color: var(--ok); }
+    .file .delta .d { color: var(--warn); }
+    pre.diff {
+      background: var(--code); color: var(--code-fg);
+      border-radius: 10px; padding: 14px 16px;
+      font: 12.5px/1.55 ui-monospace, 'SF Mono', Menlo, monospace;
+      overflow-x: auto; margin: 0;
+    }
+    pre.diff .a { background: var(--add); color: var(--add-fg); display: block; padding: 0 4px; }
+    pre.diff .d { background: var(--del); color: var(--del-fg); display: block; padding: 0 4px; }
+    pre.diff .h { color: #82a9ff; display: block; padding: 0 4px; }
+    .checks { display: grid; gap: 6px; }
+    .check { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+    .check .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+    .check.fail .dot { background: var(--warn); }
+    footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>jQuery → React 18 migration</h1>
+    <div class="sub">od-code-migration · scenario · 6 stages · 4 verify iterations</div>
+    <div class="row">
+      <span class="pill ok">build passing</span>
+      <span class="pill ok">42/42 tests</span>
+      <span class="pill warn">1 review note</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Summary</h2>
+    <div class="stat-grid">
+      <div class="stat"><div class="n">17</div><div class="l">files changed</div></div>
+      <div class="stat"><div class="n">+812 / −419</div><div class="l">lines</div></div>
+      <div class="stat"><div class="n">4</div><div class="l">verify iterations</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Files</h2>
+    <div class="file-list">
+      <div class="file"><span class="path">src/components/Cart.tsx</span><span class="delta"><span class="a">+184</span> · <span class="d">−96</span></span></div>
+      <div class="file"><span class="path">src/components/Checkout.tsx</span><span class="delta"><span class="a">+212</span> · <span class="d">−108</span></span></div>
+      <div class="file"><span class="path">src/hooks/useCartStore.ts</span><span class="delta"><span class="a">+91</span> · <span class="d">−0</span></span></div>
+      <div class="file"><span class="path">src/lib/api.ts</span><span class="delta"><span class="a">+44</span> · <span class="d">−61</span></span></div>
+      <div class="file"><span class="path">tests/Cart.test.tsx</span><span class="delta"><span class="a">+148</span> · <span class="d">−0</span></span></div>
+      <div class="file"><span class="path">package.json</span><span class="delta"><span class="a">+8</span> · <span class="d">−12</span></span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Representative diff · Cart.tsx</h2>
+    <pre class="diff"><span class="h">@@ src/components/Cart.tsx</span>
+<span class="d">- $('#cart-list').on('click', '.remove', function () {</span>
+<span class="d">-   const id = $(this).data('id');</span>
+<span class="d">-   removeItem(id);</span>
+<span class="d">- });</span>
+<span class="a">+ function Cart({ items, onRemove }: CartProps) {</span>
+<span class="a">+   return (</span>
+<span class="a">+     &lt;ul className="cart-list"&gt;</span>
+<span class="a">+       {items.map((item) =&gt; (</span>
+<span class="a">+         &lt;CartRow key={item.id} item={item} onRemove={onRemove} /&gt;</span>
+<span class="a">+       ))}</span>
+<span class="a">+     &lt;/ul&gt;</span>
+<span class="a">+   );</span>
+<span class="a">+ }</span></pre>
+  </section>
+
+  <section>
+    <h2>Checks</h2>
+    <div class="checks">
+      <div class="check"><span class="dot"></span>tsc --noEmit · 0 errors</div>
+      <div class="check"><span class="dot"></span>vitest run · 42 passed</div>
+      <div class="check"><span class="dot"></span>vite build · 312 KiB · 1.4 s</div>
+      <div class="check"><span class="dot"></span>eslint . · 0 warnings</div>
+    </div>
+  </section>
+
+  <footer>
+    Example artifact rendered for the <code>od-code-migration</code> scenario.
+    Real runs are stored under <code>.od/artifacts/</code> and surfaced via
+    <code>diff-review</code>.
+  </footer>
+</body>
+</html>

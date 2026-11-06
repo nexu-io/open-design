@@ -1,0 +1,799 @@
+import { describe, expect, it, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
+import { DECK_STRUCTURED_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
+import { buildSrcdoc } from '../../src/runtime/srcdoc';
+
+const deckHtml = `<!doctype html>
+<html>
+  <head><title>Deck</title></head>
+  <body>
+    <section class="slide active">One</section>
+    <section class="slide">Two</section>
+    <section class="slide">Three</section>
+  </body>
+</html>`;
+
+const brokenDeckStageHtml = `<!doctype html>
+<html>
+  <body>
+    <deck-stage width="1920" height="1080">
+      <section class="slide">One</section>
+      <section class="slide">Two</section>
+    </deck-stage>
+    <script>
+    /**
+     * Original runtime was truncated while documenting a speaker notes tag.
+     * Example marker: <script type="application/json" id="speaker-notes">
+    []
+    </script>
+  </body>
+</html>`;
+
+describe('buildSrcdoc', () => {
+
+  it('seeds presentation storage before authored scripts without allowing script injection', () => {
+    const value = '</script><script>window.injected = true</script>';
+    const doc = buildSrcdoc('<html><body><script>window.saved = localStorage.getItem("task");</script></body></html>', {
+      previewStorage: true,
+      previewStorageSeed: { generation: 'presentation-1', values: { task: value } },
+    });
+    const dom = new JSDOM(doc, { runScripts: 'dangerously' });
+    expect((dom.window as any).saved).toBe(value);
+    expect((dom.window as any).injected).toBeUndefined();
+    expect((dom.window as any).__odPreviewStorageSeed).toBeUndefined();
+    dom.window.close();
+  });
+
+  it('preserves an artifact-authored base instead of overriding its navigation semantics', () => {
+    const authored = '<base href="https://cdn.example/assets/">';
+    const doc = buildSrcdoc(
+      `<!doctype html><html><head>${authored}</head><body></body></html>`,
+      { baseHref: '/api/projects/project-1/preview/scope-1/' },
+    );
+
+    const dom = new JSDOM(doc, {
+      url: 'http://open-design.local/',
+      runScripts: 'dangerously',
+    });
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      data: {
+        type: 'od:preview-base-update',
+        href: '/api/projects/project-1/preview/scope-2/',
+      },
+    }));
+
+    expect(doc).toContain(authored);
+    expect(doc).not.toContain('/api/projects/project-1/preview/scope-1/');
+    expect(dom.window.document.querySelectorAll('base')).toHaveLength(1);
+    expect(dom.window.document.querySelector('base')?.getAttribute('href'))
+      .toBe('https://cdn.example/assets/');
+    dom.window.close();
+  });
+
+  it('updates an injected preview base in place without navigating the document', () => {
+    const doc = buildSrcdoc(
+      '<!doctype html><html><head></head><body><main>Preview</main></body></html>',
+      { baseHref: 'od://app/api/projects/project-1/preview/scope-1/' },
+    );
+    const dom = new JSDOM(doc, {
+      url: 'http://open-design.local/',
+      runScripts: 'dangerously',
+    });
+    const before = dom.window.document.documentElement;
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      data: {
+        type: 'od:preview-base-update',
+        requestId: 'renew-1',
+        href: 'od://app/api/projects/project-1/preview/scope-2/',
+      },
+    }));
+
+    expect(dom.window.document.documentElement).toBe(before);
+    expect(dom.window.document.querySelector('base')?.getAttribute('href'))
+      .toBe('od://app/api/projects/project-1/preview/scope-2/');
+    dom.window.close();
+  });
+
+  it('keeps relative assets resolvable when Electron transports srcDoc through a Blob URL', () => {
+    const doc = buildSrcdoc(
+      '<!doctype html><html><head></head><body><img src="./asset.png"></body></html>',
+      { baseHref: 'od://app/api/projects/project-1/preview/scope-1/pages/' },
+    );
+    const dom = new JSDOM(doc, { url: 'blob:od://app/preview-document' });
+
+    expect(dom.window.document.baseURI)
+      .toBe('od://app/api/projects/project-1/preview/scope-1/pages/');
+    expect(new URL('./asset.png', dom.window.document.baseURI).href)
+      .toBe('od://app/api/projects/project-1/preview/scope-1/pages/asset.png');
+    dom.window.close();
+  });
+
+  it('echoes the witnessed content-size generation with separate scroll and client widths', () => {
+    const doc = buildSrcdoc('<main>Preview</main>', {
+      previewMeasurementEpoch: 'revision-42',
+    });
+
+    expect(doc).toContain('data-od-preview-content-size-bridge');
+    expect(doc).toContain('lastRequest.measurementId');
+    expect(doc).toContain('lastRequest.generation');
+    expect(doc).toContain('var documentEpoch = "revision-42"');
+    expect(doc).toContain('documentEpoch: documentEpoch');
+    expect(doc).toContain('scrollWidth: size && size.scrollWidth');
+    expect(doc).toContain('clientWidth: size && size.clientWidth');
+    expect(doc).toContain("typeof data.measurementId !== 'string'");
+    expect(doc).not.toContain("type: 'od:preview-content-size', width:");
+  });
+
+  it('injects an initial slide index for deck previews', () => {
+    const doc = buildSrcdoc(deckHtml, { deck: true, initialSlideIndex: 2 });
+
+    expect(doc).toContain('var initialSlideIndex = 2;');
+    expect(doc).toContain('setTimeout(restoreInitialSlide, 200)');
+    expect(doc).toContain('setTimeout(restoreInitialSlide, 100)');
+  });
+
+  it('clamps invalid initial slide indices before injecting deck bridge script', () => {
+    const doc = buildSrcdoc(deckHtml, { deck: true, initialSlideIndex: -4 });
+
+    expect(doc).toContain('var initialSlideIndex = 0;');
+  });
+
+  it('injects the motion-freeze style only when freezeMotion is set', () => {
+    const frozen = buildSrcdoc(deckHtml, { deck: true, freezeMotion: true });
+    expect(frozen).toContain('data-od-motion-freeze');
+    // End-state, not paused-at-t0: entry animations with fill-mode both must
+    // land on their final keyframe or thumbnails render as blank frames.
+    expect(frozen).toContain('animation-duration: 0.001s !important');
+    expect(frozen).toContain('animation-iteration-count: 1 !important');
+    expect(frozen).toContain('transition-duration: 0.001s !important');
+
+    const normal = buildSrcdoc(deckHtml, { deck: true });
+    expect(normal).not.toContain('data-od-motion-freeze');
+  });
+
+  it('injects the snapshot bridge used by draw annotations', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('data-od-snapshot-bridge');
+    expect(srcdoc).toContain("data.type !== 'od:snapshot'");
+    expect(srcdoc).toContain("type: 'od:snapshot:result'");
+    expect(srcdoc).toContain('copyComputedStyle');
+    expect(srcdoc).toContain('foreignObject');
+  });
+
+  it('injects preview observability before author scripts', () => {
+    const html = '<!doctype html><html><head><script>throw new Error("boot")</script></head><body></body></html>';
+    const srcdoc = buildSrcdoc(html, { previewObservability: true });
+
+    expect(srcdoc).toContain('data-od-preview-observability');
+    expect(srcdoc).toContain("send('runtime_error'");
+    expect(srcdoc).toContain("send('white_screen'");
+    expect(srcdoc.indexOf('data-od-preview-observability')).toBeLessThan(
+      srcdoc.indexOf('<script>throw new Error("boot")</script>'),
+    );
+    expect(buildSrcdoc(html)).not.toContain('data-od-preview-observability');
+  });
+
+  it('defers trusted font stylesheets without changing authored layout CSS', async () => {
+    const parserWindow = new JSDOM('').window;
+    vi.stubGlobal('DOMParser', parserWindow.DOMParser);
+    const fontHref = 'https://fonts.googleapis.com/css2?family=Inter&display=swap';
+    const html = `<!doctype html><html><head>
+      <link href="${fontHref}" rel="stylesheet">
+      <link href="/layout.css" rel="stylesheet">
+    </head><body><main>Preview</main></body></html>`;
+    try {
+      const srcdoc = buildSrcdoc(html, { deferFontStylesheets: true });
+      const document = new JSDOM(srcdoc).window.document;
+      const fontLink = document.querySelector<HTMLLinkElement>('link[href^="https://fonts.googleapis.com/"]');
+      const layoutLink = document.querySelector<HTMLLinkElement>('link[href="/layout.css"]');
+
+      expect(fontLink?.media).toBe('print');
+      expect(fontLink?.hasAttribute('data-od-deferred-font-stylesheet')).toBe(true);
+      expect(layoutLink?.media).toBe('');
+      expect(layoutLink?.hasAttribute('data-od-deferred-font-stylesheet')).toBe(false);
+      expect(srcdoc.indexOf('data-od-font-stylesheet-loader')).toBeLessThan(
+        srcdoc.indexOf('fonts.googleapis.com'),
+      );
+
+      const runtime = new JSDOM(srcdoc, { runScripts: 'dangerously' });
+      await new Promise<void>((resolve) => runtime.window.queueMicrotask(resolve));
+      const runtimeFontLink = runtime.window.document.querySelector<HTMLLinkElement>(
+        'link[href^="https://fonts.googleapis.com/"]',
+      );
+      runtimeFontLink?.dispatchEvent(new runtime.window.Event('load'));
+      expect(runtimeFontLink?.media).toBe('all');
+      expect(runtimeFontLink?.hasAttribute('data-od-deferred-font-stylesheet')).toBe(false);
+      runtime.window.close();
+
+      const unchanged = new JSDOM(buildSrcdoc(html)).window.document;
+      expect(unchanged.querySelector<HTMLLinkElement>('link[href^="https://fonts.googleapis.com/"]')?.media).toBe('');
+    } finally {
+      vi.unstubAllGlobals();
+      parserWindow.close();
+    }
+  });
+
+  it('echoes the host challenge token from the srcDoc transport readiness probe', () => {
+    const srcdoc = buildSrcdoc('<main>Preview</main>', {
+      transportActivationGeneration: 'generation-42',
+    });
+
+    expect(srcdoc).toContain("data.type === 'od:srcdoc-transport-ready-probe'");
+    expect(srcdoc).toContain('announceReady(data.probeId)');
+    expect(srcdoc).toContain('message.probeId = probeId');
+    expect(srcdoc).toContain('data-od-srcdoc-transport-body-complete="generation-42"');
+    expect(srcdoc).toContain('var bodyComplete = false');
+    expect(srcdoc).toContain('new MutationObserver(function(records)');
+    expect(srcdoc).toContain('message.bodyComplete = bodyComplete');
+    expect(srcdoc).not.toContain("document.querySelector('template[data-od-srcdoc-transport-body-complete]')");
+    expect(srcdoc).toContain('message.documentReadyState = document.readyState');
+    expect(srcdoc).toContain('message.bodyChildCount = document.body ? document.body.children.length : 0');
+  });
+
+  it('keeps parser completion latched after authored code removes the completed body', async () => {
+    const messages: Array<Record<string, unknown>> = [];
+    const generation = 'generation-remove-body';
+    const srcdoc = buildSrcdoc(
+      `<html><head></head><body><main>Ready</main><script>
+        window.addEventListener('DOMContentLoaded', function(){ document.body.remove(); });
+      </script></body></html>`,
+      { transportActivationGeneration: generation },
+    );
+    const dom = new JSDOM(srcdoc, {
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        Object.defineProperty(window, 'parent', {
+          value: { postMessage: (message: Record<string, unknown>) => messages.push(message) },
+        });
+      },
+    });
+    await new Promise<void>((resolve) => dom.window.addEventListener('load', () => resolve()));
+    await new Promise<void>((resolve) => dom.window.queueMicrotask(resolve));
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:srcdoc-transport-ready-probe',
+        generation,
+        probeId: 'probe-after-body-removal',
+      },
+    }));
+
+    expect(dom.window.document.body).toBeNull();
+    expect(messages).toContainEqual(expect.objectContaining({
+      type: 'od:srcdoc-transport-activated',
+      generation,
+      probeId: 'probe-after-body-removal',
+      bodyComplete: true,
+    }));
+    dom.window.close();
+  });
+
+  it('does not accept an authored lookalike before a truncated injected tail', async () => {
+    const messages: Array<Record<string, unknown>> = [];
+    const generation = 'generation-truncated-tail';
+    const completeSrcdoc = buildSrcdoc(
+      '<html><head></head><body><template data-od-srcdoc-transport-body-complete></template><main>Partial</main></body></html>',
+      { transportActivationGeneration: generation },
+    );
+    const injectedMarker = `<template data-od-srcdoc-transport-body-complete="${generation}"></template>`;
+    const markerIndex = completeSrcdoc.indexOf(injectedMarker);
+    expect(markerIndex).toBeGreaterThan(-1);
+    const srcdoc = completeSrcdoc.slice(0, markerIndex);
+    const dom = new JSDOM(srcdoc, {
+      runScripts: 'dangerously',
+      beforeParse(window) {
+        Object.defineProperty(window, 'parent', {
+          value: { postMessage: (message: Record<string, unknown>) => messages.push(message) },
+        });
+      },
+    });
+    await new Promise<void>((resolve) => dom.window.addEventListener('load', () => resolve()));
+    await new Promise<void>((resolve) => dom.window.queueMicrotask(resolve));
+
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
+      data: {
+        type: 'od:srcdoc-transport-ready-probe',
+        generation,
+        probeId: 'probe-truncated-tail',
+      },
+    }));
+
+    expect(messages).toContainEqual(expect.objectContaining({
+      type: 'od:srcdoc-transport-activated',
+      generation,
+      probeId: 'probe-truncated-tail',
+      bodyComplete: false,
+    }));
+    dom.window.close();
+  });
+
+  it('paints an opaque background before drawing so empty rasters never flatten to black', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    // A fresh 2D canvas is transparent black; without an opaque base, a
+    // foreignObject that paints nothing flattens to a solid BLACK PNG in
+    // clipboards/viewers (the reported bug). The bridge must fill first.
+    expect(srcdoc).toContain('function snapshotBackgroundColor()');
+    expect(srcdoc).toContain('ctx.fillStyle = bgColor;');
+    expect(srcdoc).toContain('ctx.fillRect(0, 0, capW, capH);');
+    // The fill happens before the rasterized image is drawn over it.
+    const fillIdx = srcdoc.indexOf('ctx.fillRect(0, 0, capW, capH);');
+    const drawIdx = srcdoc.indexOf('ctx.drawImage(img, 0, 0, capW, capH);');
+    expect(fillIdx).toBeGreaterThan(-1);
+    expect(drawIdx).toBeGreaterThan(fillIdx);
+  });
+
+  it('reports an empty-render error instead of shipping a blank capture', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    // When the foreignObject paints nothing the canvas is uniform; the bridge
+    // must surface that as an honest failure (rejected promise → od:snapshot:result
+    // error) so the host can fall back / show an error rather than copy a (now
+    // white-filled but still empty) frame.
+    expect(srcdoc).toContain('function canvasLooksBlank(');
+    expect(srcdoc).toContain("reject(new Error('empty-render'))");
+  });
+
+  it('renders snapshot SVGs through data URLs so canvas export stays origin-clean', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain("img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);");
+    expect(srcdoc).not.toContain('createObjectURL');
+    expect(srcdoc).not.toContain('snapshot too large');
+  });
+
+  it('crops snapshots with an XHTML wrapper instead of moving foreignObject offscreen', () => {
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function scrollOffset()');
+    expect(srcdoc).toContain('left:\' + (-scroll.x) + \'px;top:\' + (-scroll.y) + \'px;');
+    expect(srcdoc).toContain('<foreignObject x="0" y="0"');
+    expect(srcdoc).not.toContain('<foreignObject x="\' + (-window.scrollX || 0)');
+  });
+
+  it('removes external stylesheet dependencies from snapshot clones before rasterizing', () => {
+    const srcdoc = buildSrcdoc('<link rel="stylesheet" href="https://fonts.example/app.css"><style>@import "https://fonts.example/css"; @font-face { font-family: Remote; src: url(remote.woff2); } main { color: red; }</style><main>Hero</main>');
+
+    expect(srcdoc).toContain('link[rel~="stylesheet"], link[rel~="preload"], link[rel~="preconnect"]');
+    expect(srcdoc).toContain('.replace(/@import[^;]+;/gi,');
+    expect(srcdoc).toContain('.replace(/@font-face\\s*\\{[^}]*\\}/gi,');
+  });
+
+  it('prunes hidden snapshot clone nodes before rasterizing decks', () => {
+    const srcdoc = buildSrcdoc(deckHtml, { deck: true });
+
+    expect(srcdoc).toContain('function pruneHiddenSnapshotNodes');
+    expect(srcdoc).toContain("computed.display === 'none'");
+    expect(srcdoc).toContain("computed.visibility === 'hidden'");
+    expect(srcdoc).toContain('pruneHiddenSnapshotNodes(document.documentElement, clone)');
+  });
+
+  it('strips snapshot resources only AFTER pruning so the original/clone lists stay index-aligned', () => {
+    // Regression (#5444): prune pairs original/clone querySelectorAll('*')
+    // lists by index. Removing clone scripts/links first shifted every later
+    // clone under the wrong original and the misdirected removals deleted
+    // visible content (often the <body> itself), so any page containing a
+    // script or stylesheet link rasterized as a uniform frame → the capture
+    // failed with 'empty-render' ("Preview is still loading" toast) on every
+    // pure-web (no desktop compositor) deployment.
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function stripSnapshotResources');
+    const pruneCall = srcdoc.indexOf('pruneHiddenSnapshotNodes(document.documentElement, clone)');
+    const stripCall = srcdoc.indexOf('stripSnapshotResources(clone)');
+    expect(pruneCall).toBeGreaterThan(-1);
+    expect(stripCall).toBeGreaterThan(pruneCall);
+    // And inlineSnapshotStyles no longer removes nodes itself.
+    const inlineBody = srcdoc.slice(
+      srcdoc.indexOf('function inlineSnapshotStyles'),
+      srcdoc.indexOf('function stripSnapshotResources'),
+    );
+    expect(inlineBody).not.toContain('.remove()');
+  });
+
+  it('serializes snapshot content as XHTML so void elements do not break the SVG parse', () => {
+    // Regression (#5444): innerHTML emits void elements (<br>, <img>) without
+    // self-closing slashes — invalid XML inside foreignObject, so the SVG
+    // image fired onerror ('snapshot image failed') for any page containing
+    // one. XMLSerializer emits well-formed XHTML; XML-invalid attribute
+    // names (@click, :href) are dropped for the same reason.
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero<br><img alt="x"></main>');
+
+    expect(srcdoc).toContain('function serializeSnapshotXhtml');
+    expect(srcdoc).toContain('new XMLSerializer()');
+    expect(srcdoc).toContain('serializeSnapshotXhtml(cloneBody || clone)');
+    expect(srcdoc).not.toContain('cloneBody ? cloneBody.innerHTML : clone.innerHTML');
+    expect(srcdoc).toContain('XML_NAME');
+  });
+
+  it('injects a deck-stage fallback before the deck bridge for broken runtime decks', () => {
+    const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true });
+
+    expect(srcdoc).toContain('data-od-deck-stage-fallback');
+    expect(srcdoc).toContain("window.customElements.define('deck-stage'");
+    expect(srcdoc).toContain(
+      `document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)})`,
+    );
+    expect(srcdoc.indexOf('data-od-deck-stage-fallback')).toBeLessThan(
+      srcdoc.indexOf('data-od-deck-bridge'),
+    );
+  });
+
+  it('hides deck-stage shadow navigation when deck chrome is hidden', () => {
+    const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true, hideDeckChrome: true });
+
+    expect(srcdoc).toContain('data-od-deck-chrome-hidden');
+    expect(srcdoc).toContain('data-od-deck-stage-shadow-chrome-hidden');
+    expect(srcdoc).toContain('stage.shadowRoot');
+    expect(srcdoc).toContain('.overlay,.tapzones{display:none!important');
+  });
+
+  it('lets modified reset keys pass through the framework deck bridge', () => {
+    const srcdoc = buildSrcdoc(
+      '<!doctype html><html><body><div id="deck-stage"><section class="slide">One</section></div></body></html>',
+      { deck: true },
+    );
+    const modifierGuard = 'if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;';
+
+    expect(srcdoc).toContain(modifierGuard);
+    expect(srcdoc.indexOf(modifierGuard)).toBeLessThan(
+      srcdoc.indexOf("String(key).toLowerCase() !== 'r'"),
+    );
+  });
+
+  it('activates the first slide when the original deck-stage runtime is broken', async () => {
+    const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true, initialSlideIndex: 0 });
+    const dom = new JSDOM(srcdoc, {
+      pretendToBeVisual: true,
+      runScripts: 'dangerously',
+      url: 'https://example.test/deck.html',
+    });
+
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 80));
+
+    const slides = dom.window.document.querySelectorAll('deck-stage > .slide');
+    expect(slides).toHaveLength(2);
+    expect(slides[0]?.hasAttribute('data-od-deck-active')).toBe(true);
+    expect(slides[0]?.classList.contains('active')).toBe(true);
+    expect(slides[1]?.hasAttribute('data-od-deck-active')).toBe(false);
+
+    dom.window.close();
+  });
+
+  it('can guard preview iframes against load-time focus stealing', () => {
+    // This test would fail if injectPreviewFocusGuard were removed from
+    // buildSrcdoc — the guard script would be absent, and the assertions
+    // below would not find the data-od-preview-focus-guard marker.
+    const srcdoc = buildSrcdoc(
+      '<!doctype html><html><head><script>window.focus();document.body.focus();</script></head><body>Hero</body></html>',
+      { previewFocusGuard: true },
+    );
+
+    expect(srcdoc).toContain('data-od-preview-focus-guard');
+    expect(srcdoc).toContain("Object.defineProperty(window, 'focus'");
+    expect(srcdoc).toContain("Object.defineProperty(HTMLElement.prototype, 'focus'");
+    expect(srcdoc.indexOf('data-od-preview-focus-guard')).toBeLessThan(
+      srcdoc.indexOf('<script>window.focus();document.body.focus();</script>'),
+    );
+  });
+
+  it('only uses directly mutable slide conventions for setActive support', () => {
+    const srcdoc = buildSrcdoc(
+      '<section class="slide">One</section><section class="slide">Two</section>',
+      { deck: true }
+    );
+
+    const canSetActive = srcdoc.match(/function canSetActive\(list\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
+
+    expect(canSetActive).toContain('var active = findActiveByClass(list);');
+    expect(canSetActive).toContain('hasComputedHiddenSibling(list, active)');
+    expect(canSetActive).toContain("list[i].style.display === 'none'");
+    expect(canSetActive).toContain("list[i].style.visibility === 'hidden'");
+    expect(canSetActive).toContain("list[i].hasAttribute('hidden')");
+    expect(canSetActive).not.toContain('findActiveByVisibility');
+  });
+
+  it('injects the selection bridge for comment mode', () => {
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      commentBridge: true,
+    });
+
+    expect(srcdoc).toContain('data-od-selection-bridge');
+    // The bridge boots with the requested mode already on so a click
+    // immediately after srcdoc rebuild is not lost to the listener-install
+    // race against the host's `od:*-mode` postMessage.
+    expect(srcdoc).toContain('var commentEnabled = true;');
+    expect(srcdoc).toContain('var inspectEnabled = false;');
+    expect(srcdoc).toContain("type: 'od:comment-target'");
+    expect(srcdoc).toContain("type: 'od:comment-hover'");
+    expect(srcdoc).toContain("type: 'od:comment-leave'");
+    expect(srcdoc).toContain("type: 'od:comment-targets'");
+    expect(srcdoc).toContain("postStroke('od:pod-stroke')");
+    expect(srcdoc).toContain("postStroke('od:pod-select')");
+    expect(srcdoc).toContain('data-od-comment-mode-kind');
+    expect(srcdoc).toContain("body * { cursor: crosshair !important; }");
+    expect(srcdoc).toContain('MutationObserver(schedulePostTargets)');
+    expect(srcdoc).toContain('schedulePostPreviewScroll');
+    expect(srcdoc).toContain("type: 'od:preview-scroll'");
+    expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-capture'");
+    expect(srcdoc).toContain('postPreviewScroll(data.requestId)');
+    expect(srcdoc).toContain("data.type === 'od:preview-scroll-by'");
+    expect(srcdoc).toContain('previewScrollBy(data.left, data.top)');
+    expect(srcdoc).toContain('data-od-selection-bridge-style');
+    expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
+    expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');
+    expect(srcdoc).toContain('pointer-events: none !important');
+  });
+
+  it('emits free-pin fallback coordinates in viewport space', () => {
+    const srcdoc = buildSrcdoc('<main>Hero</main>', { commentBridge: true });
+    const freePinStart = srcdoc.indexOf('var pinX = Math.round(ev.clientX);');
+    const freePinEnd = srcdoc.indexOf('// Pod drawing', freePinStart);
+    const freePinBlock = srcdoc.slice(freePinStart, freePinEnd);
+
+    expect(freePinBlock).toContain('var pinX = Math.round(ev.clientX);');
+    expect(freePinBlock).toContain('var pinY = Math.round(ev.clientY);');
+    expect(freePinBlock).toContain('position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 }');
+    expect(freePinBlock).not.toContain('scrollX');
+    expect(freePinBlock).not.toContain('scrollY');
+    expect(freePinBlock).not.toContain('pageXOffset');
+    expect(freePinBlock).not.toContain('pageYOffset');
+  });
+
+  it('injects the selection bridge for inspect mode and exposes override hooks', () => {
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      inspectBridge: true,
+    });
+
+    expect(srcdoc).toContain('data-od-selection-bridge');
+    expect(srcdoc).toContain('var commentEnabled = false;');
+    expect(srcdoc).toContain('var inspectEnabled = true;');
+    expect(srcdoc).toContain("type: 'od:inspect-overrides'");
+    expect(srcdoc).toContain("data.type === 'od:inspect-mode'");
+    expect(srcdoc).toContain("data.type === 'od:inspect-set'");
+    expect(srcdoc).toContain("data.type === 'od:inspect-reset'");
+    expect(srcdoc).toContain("data.type === 'od:inspect-extract'");
+    expect(srcdoc).toContain("data-od-inspect-overrides");
+    expect(srcdoc).toContain('html[data-od-inspect-mode]');
+  });
+
+  it('hydrates inspect overrides from a persisted style block on bridge boot', () => {
+    // Without hydration, the first od:inspect-set rebuilds the override
+    // sheet from an empty in-memory map and silently drops every previously
+    // saved rule for other elements — Save-to-source would then erase them
+    // from the artifact too.
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      inspectBridge: true,
+    });
+    expect(srcdoc).toContain('function hydrateOverridesFromDom()');
+    expect(srcdoc).toContain('hydrateOverridesFromDom();');
+    expect(srcdoc).toContain("document.querySelector('style[data-od-inspect-overrides]')");
+    // After hydration, the bridge must seed the host's overrides state so a
+    // Save-to-source before the user has touched any control does not splice
+    // an empty CSS body that erases the persisted style block.
+    expect(srcdoc).toContain('if (Object.keys(overrides).length) setTimeout(postOverrides, 0);');
+  });
+
+  it('reflects the requested initial bridge modes on the documentElement attributes', () => {
+    const commentDoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      commentBridge: true,
+    });
+    expect(commentDoc).toContain("document.documentElement.toggleAttribute('data-od-comment-mode', true)");
+
+    const inspectDoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      inspectBridge: true,
+    });
+    expect(inspectDoc).toContain("document.documentElement.toggleAttribute('data-od-inspect-mode', true)");
+  });
+
+  it('omits the selection bridge entirely when neither comment nor inspect mode is on', () => {
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {});
+    expect(srcdoc).not.toContain('data-od-selection-bridge');
+  });
+
+  // Regression for nexu-io/open-design#362: the bridge must accept an
+  // od:inspect-replay message that replaces its in-memory override map
+  // with the host's authoritative set. Without this, toggling Inspect
+  // off/on or switching to Comment mode reloads the iframe from
+  // previewSource without the host's unsaved style block, leaving
+  // preview and persisted state out of sync — saveInspectToSource()
+  // could then commit CSS the user is no longer seeing.
+  it('accepts od:inspect-replay to rehydrate from the host map after a srcdoc rebuild', () => {
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      inspectBridge: true,
+    });
+    expect(srcdoc).toContain("data.type === 'od:inspect-replay'");
+    // Re-validates the inbound payload under the same allow-list and
+    // value sanitizer used for od:inspect-set. A parent able to post to
+    // this bridge is otherwise trusted, but applying its payload through
+    // the bridge's own contract keeps the override sheet under known
+    // rules instead of whatever the parent sent.
+    expect(srcdoc).toContain('Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)');
+    // The replay handler installs the host map atomically — clears the
+    // previous in-memory map first, then re-applies validated entries
+    // and rebuilds the sheet in a single pass so the user does not see
+    // a flash of unstyled preview between the two postMessages a
+    // per-prop replay would require.
+    expect(srcdoc).toContain('overrides = Object.create(null);');
+  });
+
+  it('hardens inspect overrides with a prop allow-list, value sanitizer, and trusted selector', () => {
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      inspectBridge: true,
+    });
+
+    // Allow-list rejects anything off the InspectPanel surface — without
+    // this a malicious parent could smuggle CSS via od:inspect-set.
+    expect(srcdoc).toContain('var ALLOWED_PROPS');
+    expect(srcdoc).toContain("'color': true");
+    expect(srcdoc).toContain("'background-color': true");
+    expect(srcdoc).toContain("'border-radius': true");
+    expect(srcdoc).toContain("Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, prop)");
+
+    // Value sanitizer drops any character that could close the declaration,
+    // the rule, or the <style> element.
+    expect(srcdoc).toContain('var UNSAFE_VALUE = /[;{}<>\\n\\r]/;');
+    expect(srcdoc).toContain('UNSAFE_VALUE.test(v)');
+
+    // Selector is recomputed from elementId, not echoed back from the
+    // inbound message — defends against a forged selector breaking out
+    // of the override <style> block. The inbound selector is still
+    // inspected to pick the attribute kind (data-od-id vs
+    // data-screen-label) the user clicked, so an artifact that carries
+    // both attributes on different nodes with the same id tunes the
+    // node the host serializer keys off, not whichever attribute
+    // happens to come first in safeSelectorFor's fallback order.
+    expect(srcdoc).toContain('function safeSelectorFor(elementId, hint)');
+    expect(srcdoc).toContain('var safeSelector = safeSelectorFor(elementId, selector)');
+    expect(srcdoc).toContain("hint.indexOf('[data-od-id=') === 0");
+    expect(srcdoc).toContain("hint.indexOf('[data-screen-label=') === 0");
+  });
+
+  it('marks source-authored edit targets before runtime scripts can add nodes', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<main><h1>Source title</h1><script>document.body.prepend(document.createElement("h1"));</script></main>',
+      { editBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-source-path="path-0"');
+    expect(srcdoc).toContain('data-od-source-path="path-0-0"');
+    expect(srcdoc).not.toContain('<script data-od-source-path=');
+    expect(srcdoc.indexOf('data-od-source-path="path-0"')).toBeLessThan(srcdoc.indexOf('document.body.prepend'));
+  });
+
+  it('injects only the manual edit bridge when edit mode is enabled without picker bridges', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
+      editBridge: true,
+    });
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).toContain('data-od-source-path=');
+    expect(srcdoc).toContain('data-od-edit-bridge');
+    expect(srcdoc).not.toContain('data-od-selection-bridge');
+    expect(srcdoc).not.toContain("type: 'od:comment-target'");
+    expect(srcdoc).not.toContain("type: 'od:inspect-overrides'");
+    expect(srcdoc).not.toContain('html[data-od-comment-mode] body iframe');
+  });
+
+  // Regression for nexu-io/open-design#892: imported designs (e.g. Claude
+  // Design ZIP) may not carry data-od-id annotations. The selection bridge
+  // depends on these attributes to identify clickable targets, so we
+  // auto-annotate structural elements when they are missing.
+  it('auto-annotates imported HTML that lacks data-od-id or data-screen-label', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><h1>Title</h1></div></section><article>Body</article>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Structural elements get path-based data-od-id
+    expect(srcdoc).toContain('data-od-id="');
+    // Script / style elements are skipped
+    expect(srcdoc).not.toContain('<script data-od-id=');
+  });
+
+  it('does not overwrite existing data-od-id or data-screen-label annotations', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section data-od-id="hero">Hero</section><div data-screen-label="cta">CTA</div>',
+      { commentBridge: true },
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Existing annotations must be preserved intact on their elements.
+    expect(srcdoc).toContain('<section data-od-id="hero">');
+    expect(srcdoc).toContain('<div data-screen-label="cta">');
+    // The div already has data-screen-label, so it must not get a fallback
+    // data-od-id injected by auto-annotation.
+    expect(srcdoc).not.toContain('<div data-od-id=');
+  });
+
+  it('auto-annotates direct-child divs with class or id under semantic containers', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><div class="wrapper">Wrapper</div><div id="named">Named</div></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Direct-child divs under section get data-od-id
+    expect(srcdoc).toContain('<div class="wrapper" data-od-id=');
+    expect(srcdoc).toContain('<div id="named" data-od-id=');
+  });
+
+  it('skips deeply nested divs to avoid layout-noise in the selection bridge', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><div class="outer"><div class="inner">Deep</div></div></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // The outer div is a direct child of section, so it gets annotated
+    expect(srcdoc).toContain('<div class="outer" data-od-id=');
+    // The inner div is nested two levels deep; it must NOT get annotated
+    expect(srcdoc).not.toContain('<div class="inner" data-od-id=');
+  });
+
+  it('auto-annotates even when no bridge flags are set (always-on for persistence)', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<article><h1>Title</h1></article>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // Without commentBridge or inspectBridge, annotation still runs so that
+    // saved inspect tweaks (which reference data-od-id selectors) survive
+    // when the user later leaves inspect mode.
+    expect(srcdoc).toContain('<article data-od-id=');
+    expect(srcdoc).toContain('<h1 data-od-id=');
+  });
+
+  it('skips iframe, object, and embed tags from auto-annotation even when they have id', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<section><iframe src="x"></iframe><object data="x"></object><embed src="x"></embed><iframe id="framed" src="y"></iframe></section>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    expect(srcdoc).not.toContain('<iframe data-od-id=');
+    expect(srcdoc).not.toContain('<object data-od-id=');
+    expect(srcdoc).not.toContain('<embed data-od-id=');
+    expect(srcdoc).not.toContain('<iframe id="framed" data-od-id=');
+  });
+
+  it('annotates div children of elements with id', () => {
+    const dom = new JSDOM('');
+    globalThis.DOMParser = dom.window.DOMParser;
+    const srcdoc = buildSrcdoc(
+      '<div id="wrapper"><div class="content">Content</div><div id="named">Named</div></div>',
+      {},
+    );
+    Reflect.deleteProperty(globalThis, 'DOMParser');
+
+    // The wrapper div itself is matched by [id] and gets annotated
+    expect(srcdoc).toContain('<div id="wrapper" data-od-id=');
+    // Its direct-child divs are matched by [id] > div[class] / [id] > div[id]
+    expect(srcdoc).toContain('<div class="content" data-od-id=');
+    expect(srcdoc).toContain('<div id="named" data-od-id=');
+  });
+});

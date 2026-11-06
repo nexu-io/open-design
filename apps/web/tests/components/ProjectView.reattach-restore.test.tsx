@@ -1,0 +1,2555 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  ProjectView,
+  computeProducedFiles,
+  computeTraceObjectFiles,
+  extractTouchedFilePathsFromEvents,
+  findSameTurnHtmlWriteForRecoveredArtifact,
+  mergeRecoveredArtifact,
+  resolveAgentTouchedFileNames,
+} from '../../src/components/ProjectView';
+import { resolvePersistedArtifactHtml } from '../../src/artifacts/recover';
+import type { ChatMessage, ProjectFile } from '../../src/types';
+
+const listConversations = vi.fn();
+const listMessages = vi.fn();
+const fetchPreviewComments = vi.fn();
+const loadTabs = vi.fn();
+const fetchProjectFiles = vi.fn();
+const fetchProjectDesignSystemPackageAudit = vi.fn();
+const fetchLiveArtifacts = vi.fn();
+const fetchSkill = vi.fn();
+const fetchDesignSystem = vi.fn();
+const getTemplate = vi.fn();
+const fetchChatRunStatus = vi.fn();
+const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
+const reattachDaemonRun = vi.fn();
+const publishDaemonRunFinishedEvent = vi.fn();
+const streamViaDaemon = vi.fn();
+const saveMessage = vi.fn();
+const createConversation = vi.fn();
+const patchConversation = vi.fn();
+const patchProject = vi.fn();
+const saveTabs = vi.fn();
+
+const chatPaneHarness = vi.hoisted(() => ({
+  onSend: null as null | ((
+    prompt: string,
+    attachments: unknown[],
+    commentAttachments?: unknown[],
+    meta?: unknown,
+  ) => unknown),
+  onStop: null as null | (() => void),
+  onTabsStateChange: null as null | ((state: { tabs: string[]; active: string | null }) => void),
+  activeTab: null as string | null,
+  openRequestNames: [] as string[],
+  messages: [] as ChatMessage[],
+}));
+
+vi.mock('../../src/i18n', () => ({
+  // ProjectView calls useI18n() (for locale/t); mock it like the other
+  // ProjectView suites so the render does not throw on a missing export.
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (value: string) => value,
+  }),
+  useT: () => ((value: string) => value),
+}));
+
+vi.mock('../../src/providers/anthropic', () => ({
+  streamMessage: vi.fn(),
+}));
+
+vi.mock('../../src/providers/daemon', () => ({
+  GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
+  GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
+  fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
+  // 一轮死在 `AMR_INSUFFICIENT_BALANCE` 上之后,`ProjectView` 会去查一次钱包读数
+  // 来点亮升级卡(用户 2026-09-02 裁决:钱的事只有那一张卡)。这一页不测那张卡,
+  // 只是要让那条路走得通 —— 少了这个 mock 会变成一条 unhandled rejection。
+  fetchAmrWalletSnapshot: vi.fn().mockResolvedValue(null),
+  listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
+  publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
+  reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
+  streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
+}));
+
+vi.mock('../../src/providers/registry', () => ({
+  deletePreviewComment: vi.fn(),
+  fetchPreviewComments: (...args: unknown[]) => fetchPreviewComments(...args),
+  fetchDesignSystem: (...args: unknown[]) => fetchDesignSystem(...args),
+  fetchProjectDesignSystemPackageAudit: (...args: unknown[]) =>
+    fetchProjectDesignSystemPackageAudit(...args),
+  fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
+  fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
+  fetchSkill: (...args: unknown[]) => fetchSkill(...args),
+  patchPreviewCommentStatus: vi.fn(),
+  upsertPreviewComment: vi.fn(),
+  writeProjectTextFile: vi.fn(),
+}));
+
+vi.mock('../../src/providers/project-events', () => ({
+  useProjectFileEvents: vi.fn(),
+}));
+
+vi.mock('../../src/router', () => ({
+  navigate: vi.fn(),
+}));
+
+vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
+  cacheTabsLocally: vi.fn((projectId: string, tabs: unknown) => ({ projectId, tabs })),
+  createConversation: (...args: unknown[]) => createConversation(...args),
+  deleteConversation: vi.fn(),
+  getTemplate: (...args: unknown[]) => getTemplate(...args),
+  listConversations: (...args: unknown[]) => listConversations(...args),
+  listMessages: (...args: unknown[]) => listMessages(...args),
+  loadTabs: (...args: unknown[]) => loadTabs(...args),
+  patchConversation: (...args: unknown[]) => patchConversation(...args),
+  patchProject: (...args: unknown[]) => patchProject(...args),
+  persistTabsToDaemonNow: vi.fn(),
+  saveMessage: (...args: unknown[]) => saveMessage(...args),
+  saveTabs: (...args: unknown[]) => saveTabs(...args),
+}));
+
+vi.mock('../../src/components/AppChromeHeader', () => ({
+  AppChromeHeader: () => null,
+}));
+
+vi.mock('../../src/components/AvatarMenu', () => ({
+  AvatarMenu: () => null,
+}));
+
+vi.mock('../../src/components/ChatPane', () => ({
+  ChatPane: ({
+    messages,
+    onSend,
+    onStop,
+  }: {
+    messages: ChatMessage[];
+    onSend: typeof chatPaneHarness.onSend;
+    onStop: typeof chatPaneHarness.onStop;
+  }) => {
+    chatPaneHarness.messages = messages;
+    chatPaneHarness.onSend = onSend;
+    chatPaneHarness.onStop = onStop;
+    return null;
+  },
+}));
+
+vi.mock('../../src/components/FileWorkspace', () => ({
+  DESIGN_SYSTEM_TAB: '__design_system__',
+  FileWorkspace: ({
+    openRequest,
+    onTabsStateChange,
+    tabsState,
+  }: {
+    openRequest?: { name?: string; openBatch?: readonly string[] } | null;
+    onTabsStateChange: NonNullable<typeof chatPaneHarness.onTabsStateChange>;
+    tabsState: { tabs: string[]; active: string | null };
+  }) => {
+    chatPaneHarness.onTabsStateChange = onTabsStateChange;
+    chatPaneHarness.activeTab = tabsState.active;
+    const name = openRequest?.name;
+    // A finished turn's other artifacts ride in `openBatch` (OPEND-2588).
+    // Recording only `.name` would quietly make the "never opened ghost.html"
+    // assertion below vacuous for anything opened through a batch.
+    for (const batched of openRequest?.openBatch ?? []) {
+      if (batched !== name && chatPaneHarness.openRequestNames.at(-1) !== batched) {
+        chatPaneHarness.openRequestNames.push(batched);
+      }
+    }
+    if (name && chatPaneHarness.openRequestNames.at(-1) !== name) {
+      chatPaneHarness.openRequestNames.push(name);
+    }
+    return null;
+  },
+}));
+
+vi.mock('../../src/components/Loading', () => ({
+  CenteredLoader: () => null,
+}));
+
+function renderProjectView(options?: {
+  resolvedDir?: string | null;
+  projectId?: string;
+  routeConversationId?: string | null;
+  intent?: 'web-clone';
+  strict?: boolean;
+}) {
+  const project = {
+    id: options?.projectId ?? 'project-1',
+    name: 'Project',
+    skillId: null,
+    designSystemId: null,
+    metadata: options?.intent ? { intent: options.intent } : undefined,
+  } as never;
+  const view = (
+    <ProjectView
+      project={project}
+      initialProjectDetail={{ project, resolvedDir: options?.resolvedDir ?? null }}
+      routeConversationId={options?.routeConversationId ?? null}
+      routeFileName={null}
+      config={
+        {
+          mode: 'daemon',
+          agentId: 'agent-1',
+          notifications: undefined,
+          agentModels: {},
+        } as never
+      }
+      agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+      skills={[]}
+      designTemplates={[]}
+      designSystems={[]}
+      daemonLive
+      onModeChange={() => {}}
+      onAgentChange={() => {}}
+      onAgentModelChange={() => {}}
+      onRefreshAgents={() => {}}
+      onOpenSettings={() => {}}
+      onBack={() => {}}
+      onClearPendingPrompt={() => {}}
+      onTouchProject={() => {}}
+      onProjectChange={() => {}}
+      onProjectsRefresh={() => {}}
+    />
+  );
+  return render(options?.strict ? <StrictMode>{view}</StrictMode> : view);
+}
+
+describe('computeProducedFiles', () => {
+  it('returns files not present in the before-set', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 },
+      { name: 'new.pptx', path: '/p/new.pptx', size: 2, updatedAt: 0 },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
+  });
+
+  it('excludes user sketch files from turn output attribution', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 2, mtime: 2, kind: 'sketch', mime: 'application/json' },
+      { name: 'new.pptx', path: '/p/new.pptx', size: 3, mtime: 3, kind: 'pdf', mime: 'application/pdf' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['new.pptx']);
+  });
+
+  it('keeps generated svg files even when they are classified as sketches', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'diagram.svg', path: '/p/diagram.svg', size: 2, mtime: 2, kind: 'sketch', mime: 'image/svg+xml' },
+      { name: 'board.sketch.json', path: '/p/board.sketch.json', size: 3, mtime: 3, kind: 'sketch', mime: 'application/json' },
+    ];
+    const produced = computeProducedFiles(before, next as never);
+    expect(produced?.map((f) => f.name)).toEqual(['diagram.svg']);
+  });
+
+  it('returns undefined when no baseline is provided', () => {
+    expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
+  });
+
+  it('uses authoritative run paths so an edited existing artifact is produced but its input is not', () => {
+    const before = new Set(['input.png', 'existing.png']);
+    const next = [
+      { name: 'input.png', path: 'input.png', kind: 'image', size: 10 },
+      { name: 'existing.png', path: 'existing.png', kind: 'image', size: 20 },
+    ];
+
+    expect(
+      computeProducedFiles(
+        before,
+        next as never,
+        ['existing.png'],
+        'project-1',
+      ),
+    ).toEqual([
+      expect.objectContaining({ name: 'existing.png' }),
+    ]);
+  });
+
+  it('keeps newly created non-artifact files when authoritative artifact paths are empty', () => {
+    const before = new Set(['input.png']);
+    const next = [
+      { name: 'input.png', path: 'input.png', kind: 'image', size: 10 },
+      { name: 'generated-plugin/open-design.json', path: 'generated-plugin/open-design.json', kind: 'code', size: 20 },
+      { name: 'generated-plugin/SKILL.md', path: 'generated-plugin/SKILL.md', kind: 'code', size: 30 },
+    ];
+
+    expect(
+      computeProducedFiles(before, next as never, [], 'project-1')?.map((file) => file.name),
+    ).toEqual([
+      'generated-plugin/open-design.json',
+      'generated-plugin/SKILL.md',
+    ]);
+  });
+});
+
+describe('computeTraceObjectFiles', () => {
+  it('includes existing files touched by successful write tools', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
+      { name: 'new.pptx', path: 'new.pptx', size: 20, mtime: 3, kind: 'presentation', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    ];
+
+    const files = computeTraceObjectFiles(before, next as never, ['existing.html']);
+
+    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
+      ['new.pptx', 'new'],
+      ['existing.html', 'modified'],
+    ]);
+  });
+
+  it('ignores slash-containing external paths that only share a basename with a project file', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
+    ];
+
+    const files = computeTraceObjectFiles(before, next as never, ['/tmp/existing.html'], 'project-1');
+
+    expect(files).toEqual([]);
+  });
+
+  it('ignores managed-project aliases that belong to a different project', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
+    ];
+
+    const files = computeTraceObjectFiles(
+      before,
+      next as never,
+      ['.od/projects/project-2/existing.html'],
+      'project-1',
+    );
+
+    expect(files).toEqual([]);
+  });
+
+  it('includes existing files touched through the current managed-project alias', () => {
+    const before = ['existing.html'];
+    const next = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 2, kind: 'html', mime: 'text/html' },
+    ];
+    const touchedPaths = ['.od/projects/project-1/existing.html'];
+
+    const files = computeTraceObjectFiles(before, next as never, touchedPaths, 'project-1');
+
+    expect(files?.map((file) => [file.name, file.traceObjectReason])).toEqual([
+      ['existing.html', 'modified'],
+    ]);
+    expect(resolveAgentTouchedFileNames(touchedPaths, next as never, 'project-1')).toEqual(
+      new Set(['existing.html']),
+    );
+  });
+
+  it('recovers successful write paths from persisted tool events', () => {
+    const touched = extractTouchedFilePathsFromEvents([
+      { kind: 'tool_use', id: 'tool-1', name: 'Edit', input: { file_path: 'existing.html' } },
+      { kind: 'tool_result', toolUseId: 'tool-1', isError: false },
+      { kind: 'tool_use', id: 'tool-2', name: 'Write', input: { file_path: 'failed.html' } },
+      { kind: 'tool_result', toolUseId: 'tool-2', isError: true },
+    ] as never);
+
+    expect(touched).toEqual(['existing.html']);
+  });
+
+  it('recovers supported write/edit aliases with path inputs from persisted tool events', () => {
+    const touched = extractTouchedFilePathsFromEvents([
+      { kind: 'tool_use', id: 'tool-1', name: 'create_file', input: { path: 'created.html' } },
+      { kind: 'tool_result', toolUseId: 'tool-1', isError: false },
+      { kind: 'tool_use', id: 'tool-2', name: 'str_replace_edit', input: { path: 'edited.html' } },
+      { kind: 'tool_result', toolUseId: 'tool-2', isError: false },
+      { kind: 'tool_use', id: 'tool-3', name: 'MultiEdit', input: { path: 'multi.html' } },
+      { kind: 'tool_result', toolUseId: 'tool-3', isError: false },
+      { kind: 'tool_use', id: 'tool-4', name: 'multi_edit', input: { path: 'failed.html' } },
+      { kind: 'tool_result', toolUseId: 'tool-4', isError: true },
+    ] as never);
+
+    expect(touched).toEqual(['created.html', 'edited.html', 'multi.html']);
+  });
+});
+
+describe('mergeRecoveredArtifact', () => {
+  const fileA = { name: 'helper.txt', path: '/p/helper.txt', size: 1, updatedAt: 0 };
+  const artifact = { name: 'deck.html', path: '/p/deck.html', size: 9, updatedAt: 0 };
+
+  it('keeps pre-artifact files when a recovered artifact is appended', () => {
+    const merged = mergeRecoveredArtifact([fileA] as never, artifact as never);
+    expect(merged.map((f) => f.name)).toEqual(['helper.txt', 'deck.html']);
+  });
+
+  it('does not duplicate the artifact if the diff already contains it', () => {
+    const merged = mergeRecoveredArtifact([fileA, artifact] as never, artifact as never);
+    expect(merged.map((f) => f.name)).toEqual(['helper.txt', 'deck.html']);
+  });
+
+  it('returns the diff unchanged when no artifact was recovered', () => {
+    const merged = mergeRecoveredArtifact([fileA] as never, null);
+    expect(merged.map((f) => f.name)).toEqual(['helper.txt']);
+  });
+});
+
+describe('findSameTurnHtmlWriteForRecoveredArtifact', () => {
+  const html = '<!doctype html><html><head><title>Demo</title></head><body><main><h1>Demo</h1></main></body></html>';
+
+  it('returns the same-turn HTML file when fallback content matches a Write output', async () => {
+    const indexFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: html.length,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const readProjectHtml = vi.fn(async (name: string) =>
+      name === 'index.html' ? `\uFEFF${html}\r\n` : null,
+    );
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: `\n${html}\n`,
+      producedFiles: [indexFile] as never,
+      readProjectHtml,
+    })).resolves.toBe(indexFile);
+  });
+
+  // #4308: agent-agnostic recovery is the *normalized exact content match* —
+  // it already binds for any filesystem-backed CLI (not just Claude) when the
+  // written file and the echoed artifact are the same document. We deliberately
+  // do NOT bind on a content *mismatch*: a same-turn HTML file whose content
+  // differs from the echo is a genuinely different document and must persist on
+  // its own. (A blind single-file bind also mis-fired across queued runs, where
+  // a prior run's artifact is still reported as "produced this turn" — the
+  // app-restoration regression that motivated dropping it.)
+  it('does not bind a single same-turn HTML file whose content differs from the echo', async () => {
+    const indexFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: html.length,
+      mtime: 2,
+      kind: 'html',
+      mime: 'text/html',
+    };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: vi.fn(async () => html.replace('Demo</h1>', 'Other</h1>')),
+    })).resolves.toBeNull();
+  });
+
+  // ...and never bind when several same-turn HTML files all differ from the
+  // echo — binding the wrong one could clobber the user's other in-flight work.
+  it('avoids selection when multiple same-turn HTML files differ from the echo', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'a.html' ? html.replace('Demo', 'AAA') : html.replace('Demo', 'BBB'),
+      ),
+    })).resolves.toBeNull();
+  });
+
+  // When multiple same-turn HTML files exist, bind the one whose normalized
+  // content matches the echo — unambiguous regardless of which agent ran.
+  it('binds the exact normalized match among multiple same-turn HTML files', async () => {
+    const a = { name: 'a.html', path: 'a.html', kind: 'html', mime: 'text/html' };
+    const b = { name: 'b.html', path: 'b.html', kind: 'html', mime: 'text/html' };
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [a, b] as never,
+      readProjectHtml: vi.fn(async (name: string) =>
+        name === 'b.html' ? `﻿${html}\r\n` : html.replace('Demo', 'AAA'),
+      ),
+    })).resolves.toBe(b);
+  });
+
+  it('ignores non-HTML same-turn files', async () => {
+    const readProjectHtml = vi.fn(async () => html);
+
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: html,
+      producedFiles: [{ name: 'notes.md', path: 'notes.md', kind: 'text' }] as never,
+      readProjectHtml,
+    })).resolves.toBeNull();
+    expect(readProjectHtml).not.toHaveBeenCalled();
+  });
+});
+
+// #4318: when the model emits a prose-only <artifact> next to a complete
+// same-turn <html> document, the call site must resolve the persisted HTML
+// (recovering the preceding document) BEFORE the dedup lookup. Feeding the raw
+// prose summary makes the normalized exact-match miss the same-turn Write file
+// and the recovered document persists a second time as a duplicate artifact.
+describe('same-turn dedup for recovered prose-only artifacts (#4318)', () => {
+  const realHtml = '<!doctype html><html><head><title>Recovered</title></head><body><main><h1>Recovered</h1></main></body></html>';
+  const proseSummary = '(The complete document above is the delivered artifact.)';
+  const sourceText = `${realHtml}\n<artifact identifier="page" type="text/html">${proseSummary}</artifact>`;
+  const indexFile = { name: 'index.html', path: 'index.html', kind: 'html', mime: 'text/html' };
+  const readProjectHtml = () =>
+    vi.fn(async (name: string) => (name === 'index.html' ? realHtml : null));
+
+  it('binds the same-turn HTML write once the persisted HTML is resolved', async () => {
+    const persistedHtml = resolvePersistedArtifactHtml({
+      artifactHtml: proseSummary,
+      identifier: 'page',
+      sourceText,
+    });
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: persistedHtml,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBe(indexFile);
+  });
+
+  it('misses the match when fed the raw prose summary (the pre-fix regression)', async () => {
+    await expect(findSameTurnHtmlWriteForRecoveredArtifact({
+      artifactHtml: proseSummary,
+      producedFiles: [indexFile] as never,
+      readProjectHtml: readProjectHtml(),
+    })).resolves.toBeNull();
+  });
+});
+
+describe('ProjectView daemon reattach restore', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    chatPaneHarness.onSend = null;
+    chatPaneHarness.onStop = null;
+    chatPaneHarness.onTabsStateChange = null;
+    chatPaneHarness.activeTab = null;
+    chatPaneHarness.openRequestNames = [];
+    chatPaneHarness.messages = [];
+    window.sessionStorage.clear();
+  });
+
+  it('settles a hard-routed fresh succeeded row with a terminal blocked strategy projection', async () => {
+    const projectId = 'fc036a72-6d8c-41a0-aa83-ae7fdd657da6';
+    const conversationId = 'ee4050ef-20f8-4fe5-a703-33073fc789ef';
+    const runId = 'a1a163a0-626f-44af-adfd-7850f8274a5c';
+    const strategyTaskExecutionId = 'odnext_68e6dd9e6313456cb35c498fa58c13f4';
+    const now = Date.now();
+    const messages: ChatMessage[] = [
+      {
+        id: 'home-auto-send-18mikvgtydqdr-user',
+        role: 'user',
+        content: 'Reply exactly: beta7 cold-start send path is healthy. Do not create or modify files.',
+        createdAt: now - 22_000,
+      },
+      {
+        id: 'home-auto-send-18mikvgtydqdr-assistant',
+        role: 'assistant',
+        agentId: 'agent-1',
+        content: 'beta7 cold-start send path is healthy.',
+        events: [
+          { kind: 'status', label: 'starting', detail: 'codex' },
+          { kind: 'done_key', key: '2c2867ff50a4ca49' },
+          { kind: 'status', label: 'initializing' },
+          { kind: 'status', label: 'thinking' },
+          { kind: 'text', text: 'beta7 cold-start send path is healthy.' },
+          { kind: 'usage', inputTokens: 36_352, outputTokens: 97 },
+          { kind: 'diagnostic', name: 'child_evidence_coverage_v1' },
+        ] as never,
+        createdAt: now - 22_000,
+        startedAt: now - 22_000,
+        endedAt: now,
+        runId,
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        producedFiles: [],
+        traceObjectFiles: [],
+        strategyTaskExecutionId,
+        strategyTaskRunIndex: 0,
+      },
+    ];
+    listConversations.mockResolvedValue([
+      { id: conversationId, projectId, title: 'Reply Exactly Beta7 Cold-start Send Path' },
+    ]);
+    listMessages.mockResolvedValue(messages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    listProjectRuns.mockResolvedValue([]);
+    saveMessage.mockResolvedValue(undefined);
+    fetchChatRunStatus.mockResolvedValue({
+      id: runId,
+      status: 'succeeded',
+      createdAt: now - 22_000,
+      updatedAt: now,
+      exitCode: 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: strategyTaskExecutionId,
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'a'.repeat(64),
+          snapshotId: 'e348ed1a-39f1-4c4c-b03b-25728586f87f',
+        },
+        inputStage: 'request',
+        outcome: 'blocked',
+        route: 'full_plan',
+        executionMode: null,
+        activeRunId: runId,
+        terminal: true,
+        blockedContext: {
+          reasonCodes: ['od_next_protocol_runtime_state_missing'],
+          visibleText: 'beta7 cold-start send path is healthy.',
+        },
+      },
+    });
+    const consoleErrors: unknown[][] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      consoleErrors.push(args);
+    });
+
+    try {
+      renderProjectView({ projectId, routeConversationId: conversationId, strict: true });
+
+      await waitFor(() => expect(chatPaneHarness.messages).toHaveLength(2));
+      await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledTimes(1));
+
+      expect(reattachDaemonRun).not.toHaveBeenCalled();
+      expect(saveMessage).not.toHaveBeenCalled();
+      expect(
+        consoleErrors.filter((args) =>
+          args.some((value) =>
+            /(?:Minified React error #185|Maximum update depth exceeded|update-depth)/iu.test(String(value)),
+          ),
+        ),
+      ).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('flushes the pending predecessor delta and text event before pinning a task successor', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let streamOptions: any = null;
+    streamViaDaemon.mockImplementation(async (options: any) => {
+      streamOptions = options;
+      options.onRunCreated('run-request', {
+        taskExecutionId: 'task-live-boundary',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'e'.repeat(64),
+          snapshotId: 'snapshot-live-boundary',
+        },
+        inputStage: 'request',
+        outcome: 'running',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-request',
+        terminal: false,
+      });
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+
+    void chatPaneHarness.onSend!('Build the requested design', [], []);
+    await waitFor(() => expect(streamOptions).not.toBeNull());
+
+    // Leave both values inside createBufferedTextUpdates' 250ms/RAF batch,
+    // then advance the daemon task before that scheduled batch can fire.
+    streamOptions.handlers.onDelta('Final predecessor decision.');
+    streamOptions.handlers.onAgentEvent({ kind: 'text', text: 'Pending predecessor event.' });
+    streamOptions.onRunCreated('run-production', {
+      taskExecutionId: 'task-live-boundary',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'e'.repeat(64),
+        snapshotId: 'snapshot-live-boundary',
+      },
+      inputStage: 'production',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-production',
+      terminal: false,
+    });
+
+    await waitFor(() => {
+      const pinnedSuccessor = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.runId === 'run-production')
+        .at(-1);
+      expect(pinnedSuccessor).toMatchObject({
+        content: 'Final predecessor decision.',
+        events: [{ kind: 'text', text: 'Pending predecessor event.' }],
+        strategyTaskPrefixLength: 'Final predecessor decision.'.length,
+        strategyTaskPrefixEventCount: 1,
+      });
+    });
+  });
+
+  it('keeps terminal artifact selection and ignores external project-alias writes', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: ['plan.md'], activeTabId: 'plan.md' });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    const beforeFiles = [
+      { name: 'plan.md', path: 'plan.md', size: 10, mtime: 1, kind: 'markdown', mime: 'text/markdown' },
+    ];
+    const afterFiles = [
+      { name: 'index.html', path: 'index.html', size: 20, mtime: Date.now(), kind: 'html', mime: 'text/html' },
+      { name: 'plan.md', path: 'plan.md', size: 11, mtime: Date.now(), kind: 'markdown', mime: 'text/markdown' },
+    ];
+    fetchProjectFiles.mockResolvedValue(beforeFiles);
+
+    let handlers: {
+      onAgentEvent: (event: unknown) => void;
+      onDone: (text?: string) => void;
+    } | null = null;
+    streamViaDaemon.mockImplementation(async (options: any) => {
+      options.onRunCreated('run-plan-artifact');
+      handlers = options.handlers;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView({ resolvedDir: '/tmp/projects/project-1' });
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+
+    let resolveHtmlWriteRefresh!: (files: typeof afterFiles) => void;
+    let resolvePlanWriteRefresh!: (files: typeof afterFiles) => void;
+    let refreshCall = 0;
+    fetchProjectFiles.mockClear();
+    fetchProjectFiles.mockImplementation(() => {
+      refreshCall += 1;
+      if (refreshCall === 1) {
+        return new Promise<typeof afterFiles>((resolve) => { resolveHtmlWriteRefresh = resolve; });
+      }
+      if (refreshCall === 2) {
+        return new Promise<typeof afterFiles>((resolve) => { resolvePlanWriteRefresh = resolve; });
+      }
+      return Promise.resolve(afterFiles);
+    });
+
+    void chatPaneHarness.onSend!('Generate from the plan', [], []);
+    await waitFor(() => expect(handlers).toBeTruthy());
+    handlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'write-html',
+      name: 'Write',
+      input: { file_path: '/tmp/projects/project-1/index.html' },
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'write-html',
+      content: 'ok',
+      isError: false,
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'write-plan',
+      name: 'Write',
+      input: { file_path: '/tmp/projects/project-1/plan.md' },
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'write-plan',
+      content: 'ok',
+      isError: false,
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'write-external-html',
+      name: 'Write',
+      input: { file_path: '/tmp/external/projects/project-1/ghost.html' },
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'write-external-html',
+      content: 'ok',
+      isError: false,
+    });
+    await waitFor(() => expect(chatPaneHarness.openRequestNames.at(-1)).toBe('index.html'));
+    handlers!.onDone('Generated index.html from plan.md.');
+
+    await waitFor(() => expect(chatPaneHarness.openRequestNames.at(-1)).toBe('index.html'));
+    resolveHtmlWriteRefresh(afterFiles);
+    resolvePlanWriteRefresh(afterFiles);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(chatPaneHarness.openRequestNames.at(-1)).toBe('index.html');
+    expect(chatPaneHarness.openRequestNames).not.toContain('ghost.html');
+  });
+
+  it('does not replay a terminal succeeded row just because produced files are missing', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-done',
+        role: 'assistant',
+        content: 'All done!',
+        createdAt: startedAt,
+        startedAt,
+        runStatus: 'succeeded',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+
+    renderProjectView();
+
+    await waitFor(() => expect(listMessages).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+    expect(listActiveChatRuns).not.toHaveBeenCalled();
+    expect(listProjectRuns).not.toHaveBeenCalled();
+    expect(fetchChatRunStatus).not.toHaveBeenCalled();
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(
+      saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .some((m) => m?.id === 'msg-done' && m.runStatus === 'failed'),
+    ).toBe(false);
+  });
+
+  it('populates producedFiles on the persisted message after reattach completes', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach',
+        role: 'assistant',
+        agentId: 'kimi',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-1',
+        runStatus: 'running',
+        preTurnFileNames: ['existing.html'],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    const beforeFiles = [{ name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 }];
+    const afterFiles = [
+      ...beforeFiles,
+      { name: 'new.pptx', path: '/p/new.pptx', size: 2, updatedAt: 0 },
+    ];
+    fetchProjectFiles.mockResolvedValueOnce(beforeFiles).mockResolvedValue(afterFiles);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-1',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedHandlers: {
+      onDelta: (text: string) => void;
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(
+      async (options: { handlers: { onDelta: any; onAgentEvent: any; onDone: any } }) => {
+        capturedHandlers = options.handlers;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'kimi',
+      publishRunFinishedEvent: true,
+    }));
+    expect(capturedHandlers).not.toBeNull();
+
+    capturedHandlers!.onDelta('hello ');
+    capturedHandlers!.onAgentEvent({ kind: 'thinking', text: 'reasoning step' });
+    capturedHandlers!.onDelta('world');
+    capturedHandlers!.onDone();
+
+    await waitFor(() => {
+      const lastWithProduced = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-reattach' && Array.isArray(m.producedFiles))
+        .at(-1);
+      expect(lastWithProduced?.producedFiles?.map((f) => f.name)).toEqual(['new.pptx']);
+      expect(lastWithProduced?.runStatus).toBe('succeeded');
+    });
+  });
+
+  it.each(([
+    { change: 'created', cachedListing: false, userTakesOver: false, terminalReplay: false },
+    { change: 'rewritten', cachedListing: false, userTakesOver: false, terminalReplay: false },
+    { change: 'created', cachedListing: true, userTakesOver: false, terminalReplay: false },
+    { change: 'created', cachedListing: false, userTakesOver: true, terminalReplay: false },
+    { change: 'created', cachedListing: false, userTakesOver: false, terminalReplay: true },
+    { change: 'created', cachedListing: true, userTakesOver: false, terminalReplay: true },
+    { change: 'created', cachedListing: false, userTakesOver: true, terminalReplay: true },
+  ] as const).flatMap((scenario) => [
+    { ...scenario, initialTabs: 'saved' as const },
+    { ...scenario, initialTabs: 'automatic' as const },
+  ]))(
+    'restores a one-hour, 206-artifact clone ($change entry, cached listing: $cachedListing, user takeover: $userTakesOver, terminal replay: $terminalReplay, initial tabs: $initialTabs)',
+    async ({ change, cachedListing, userTakesOver, terminalReplay, initialTabs }) => {
+      const endedAt = Date.now();
+      const startedAt = endedAt - (59 * 60 + 53) * 1000;
+      const notes: ProjectFile = {
+        name: initialTabs === 'automatic' ? 'previous.html' : 'notes.md',
+        path: initialTabs === 'automatic' ? 'previous.html' : 'notes.md',
+        size: 10, mtime: startedAt - 60_000,
+        kind: initialTabs === 'automatic' ? 'html' : 'text',
+        mime: initialTabs === 'automatic' ? 'text/html' : 'text/markdown',
+      };
+      const review: ProjectFile = { ...notes, name: 'review.md', path: 'review.md', kind: 'text', mime: 'text/markdown' };
+      const index: ProjectFile = {
+        name: 'index.html', path: 'index.html', size: 4096,
+        mtime: startedAt + 1000, kind: 'html', mime: 'text/html',
+      };
+      const artifacts: ProjectFile[] = [
+        index,
+        ...Array.from({ length: 205 }, (_, i): ProjectFile => ({
+          name: `assets/image-${i}.png`, path: `assets/image-${i}.png`,
+          size: 100, mtime: endedAt - 100, kind: 'image', mime: 'image/png',
+        })),
+      ];
+      const beforeNames = [notes.name, review.name, ...(change === 'rewritten' ? [index.name] : [])];
+      const focus = { kind: 'artifact_focus', open: index.name } as const;
+      listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Website Clone' }]);
+      listMessages.mockResolvedValue([{
+        id: 'msg-clone', role: 'assistant', content: '', agentId: 'codex',
+        createdAt: startedAt, startedAt, runId: 'run-clone',
+        runStatus: terminalReplay ? 'succeeded' : 'running',
+        endedAt: terminalReplay ? endedAt : undefined,
+        preTurnFileNames: beforeNames,
+        events: terminalReplay ? [{ kind: 'text', text: 'Clone complete.' }, focus] : [focus],
+      } satisfies ChatMessage]);
+      fetchPreviewComments.mockResolvedValue([]);
+      // Preserve the original saved-tab matrix. Also exercise the real initial
+      // primary-file effect: automatic previous.html must not count as a click.
+      loadTabs.mockResolvedValue(initialTabs === 'saved'
+        ? { tabs: [notes.name], active: notes.name, hasSavedState: true }
+        : { tabs: [], active: null, hasSavedState: false });
+      fetchProjectFiles.mockResolvedValue([notes, review]);
+      fetchLiveArtifacts.mockResolvedValue([]);
+      fetchSkill.mockResolvedValue(null);
+      fetchDesignSystem.mockResolvedValue(null);
+      getTemplate.mockResolvedValue(null);
+      listActiveChatRuns.mockResolvedValue([]);
+      const status = {
+        id: 'run-clone', status: 'running', createdAt: startedAt,
+        updatedAt: endedAt, exitCode: null, signal: null,
+        artifactCount: artifacts.length, artifactPaths: artifacts.map((file) => file.name),
+      };
+      const terminalStatus = { ...status, status: 'succeeded' };
+      let releaseStatus!: (value: typeof status) => void;
+      const statusReady = new Promise<typeof status>((resolve) => { releaseStatus = resolve; });
+      if (terminalReplay) fetchChatRunStatus.mockReturnValue(statusReady);
+      else fetchChatRunStatus.mockResolvedValue(status);
+      let handlers: { onAgentEvent: (event: unknown) => void; onDone: () => Promise<void> } | null = null;
+      reattachDaemonRun.mockImplementation(async (options: any) => {
+        handlers = options.handlers;
+        return new Promise<void>(() => {});
+      });
+
+      renderProjectView({ intent: 'web-clone' });
+      if (terminalReplay) await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalled());
+      else await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(chatPaneHarness.activeTab).toBe(notes.name));
+      expect(chatPaneHarness.openRequestNames).toEqual([]);
+      fetchChatRunStatus.mockResolvedValue(terminalStatus);
+      const finish = async () => {
+        if (terminalReplay) releaseStatus(terminalStatus);
+        else {
+          handlers!.onAgentEvent(focus);
+          await handlers!.onDone();
+        }
+      };
+      if (cachedListing) {
+        // Use the actual provider and one-second GET cache. An ordinary
+        // workspace read can finish just before the terminal artifact lands.
+        const registry = await vi.importActual<typeof import('../../src/providers/registry')>(
+          '../../src/providers/registry',
+        );
+        vi.useFakeTimers();
+        let filesOnServer = [notes, review];
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+          new Response(JSON.stringify({ files: filesOnServer }), { status: 200 })
+        ));
+        await registry.fetchProjectFiles('project-1', { requireAuthoritative: true });
+        fetchProjectFiles.mockImplementation(registry.fetchProjectFiles);
+        filesOnServer = [notes, review, ...artifacts];
+        await act(finish);
+        vi.useRealTimers();
+      } else {
+        // The focus event predates the authoritative file refresh. Its result
+        // contains both this turn's entry and 205 newer auxiliary resources.
+        let releaseFiles!: (files: ProjectFile[]) => void;
+        const filesReady = new Promise<ProjectFile[]>((resolve) => {
+          releaseFiles = resolve;
+        });
+        fetchProjectFiles.mockClear();
+        fetchProjectFiles.mockReturnValue(filesReady);
+        await act(finish);
+        await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+        expect(chatPaneHarness.openRequestNames).toEqual([]);
+        if (userTakesOver) {
+          await waitFor(() => expect(
+            chatPaneHarness.messages.find((message) => message.id === 'msg-clone')?.runStatus,
+          ).toBe('succeeded'));
+          // The run is visibly complete, but its final file read is still in
+          // flight. A deliberate tab switch now must win over that late read.
+          act(() => {
+            chatPaneHarness.onTabsStateChange!({
+              tabs: [notes.name, review.name], active: review.name,
+            });
+          });
+        }
+        await act(async () => { releaseFiles([notes, review, ...artifacts]); });
+      }
+
+      if (!userTakesOver) {
+        await waitFor(() => expect(chatPaneHarness.openRequestNames).toEqual([index.name]));
+      }
+      await waitFor(() => {
+        const saved = saveMessage.mock.calls
+          .map((call) => call[2] as ChatMessage)
+          .filter((message) => message.id === 'msg-clone' && message.producedFiles?.length)
+          .at(-1);
+        expect(saved?.runStatus).toBe('succeeded');
+        expect(saved?.producedFiles).toHaveLength(206);
+      });
+      if (userTakesOver) expect(chatPaneHarness.openRequestNames).toEqual([]);
+    },
+  );
+
+  it('claims the projected active task Run once and drops the predecessor cursor', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-crash-window',
+        role: 'assistant',
+        agentId: 'codex',
+        content: visiblePrefix,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request',
+        runStatus: 'succeeded',
+        lastRunEventId: '41',
+        strategyTaskExecutionId: 'task-1',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    // The successor is a distinct physical Run. Its status must not be
+    // inferred from either the predecessor's success or the task projection.
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: runId === 'run-production' ? 'running' : 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-1',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'a'.repeat(64),
+          snapshotId: 'snapshot-1',
+        },
+        inputStage: 'production',
+        outcome: 'running',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-production',
+        nextRunId: 'run-production',
+        terminal: false,
+      },
+    }));
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(fetchChatRunStatus).toHaveBeenCalledWith('run-production', null);
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-production',
+      initialLastEventId: null,
+      publishRunFinishedEvent: true,
+    }));
+    await waitFor(() => {
+      const normalized = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-crash-window')
+        .at(-1);
+      expect(normalized).toMatchObject({
+        runId: 'run-production',
+        runStatus: 'running',
+        content: visiblePrefix,
+        strategyTaskPrefixLength: visiblePrefix.length,
+        strategyTaskPrefixEventCount: 0,
+      });
+      expect(normalized?.lastRunEventId).toBeUndefined();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed production failed when a refresh finds its task already completed', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-failed-production',
+        role: 'assistant',
+        agentId: 'codex',
+        content: 'Decision summary.\n',
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request',
+        runStatus: 'succeeded',
+        lastRunEventId: '41',
+        strategyTaskExecutionId: 'task-1',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    // Orchestration ended, but the production Run itself failed. Only the
+    // physical Run can say how production went; `completed` must not read as success.
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: runId === 'run-production' ? 'failed' : 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: runId === 'run-production' ? 1 : 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-1',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'a'.repeat(64),
+          snapshotId: 'snapshot-1',
+        },
+        inputStage: 'production',
+        outcome: 'completed',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-production',
+        settlementReason: 'ended',
+        settlementFacts: { physicalStatus: 'failed' },
+        terminal: true,
+      },
+    }));
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledWith('run-production', null));
+    await waitFor(() => {
+      const saved = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-failed-production')
+        .at(-1);
+      expect(saved).toMatchObject({ runId: 'run-production', runStatus: 'failed' });
+    });
+  });
+
+  it('does not replay a projected successor into its predecessor when that successor message is already hydrated', async () => {
+    const startedAt = Date.now();
+    const taskExecutionId = 'task-already-hydrated';
+    const strategyTask = {
+      taskExecutionId,
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'f'.repeat(64),
+        snapshotId: 'snapshot-already-hydrated',
+      },
+      inputStage: 'production' as const,
+      outcome: 'completed' as const,
+      route: 'full_plan' as const,
+      executionMode: 'simple' as const,
+      activeRunId: 'run-production-hydrated',
+      terminal: true,
+    };
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-request-hydrated',
+        role: 'assistant',
+        agentId: 'codex',
+        content: 'Planning decision.',
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request-hydrated',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: taskExecutionId,
+        strategyTaskRunIndex: 0,
+      } satisfies ChatMessage,
+      {
+        id: 'msg-production-hydrated',
+        role: 'assistant',
+        agentId: 'codex',
+        content: 'Final delivery.',
+        events: [],
+        createdAt: startedAt + 1,
+        startedAt: startedAt + 1,
+        endedAt: startedAt + 2,
+        runId: 'run-production-hydrated',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: taskExecutionId,
+        strategyTaskRunIndex: 1,
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 2,
+      exitCode: 0,
+      signal: null,
+      strategyTask,
+    }));
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('preserves the predecessor visible prefix while replaying only the active successor', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-prefix',
+        role: 'assistant',
+        agentId: 'codex',
+        content: visiblePrefix,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request-prefix',
+        runStatus: 'succeeded',
+        lastRunEventId: '9',
+        strategyTaskExecutionId: 'task-prefix',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    const runningProjection = {
+      taskExecutionId: 'task-prefix',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'b'.repeat(64),
+        snapshotId: 'snapshot-prefix',
+      },
+      inputStage: 'production',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-production-prefix',
+      nextRunId: 'run-production-prefix',
+      terminal: false,
+    };
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-request-prefix',
+        status: 'succeeded',
+        createdAt: startedAt,
+        updatedAt: startedAt + 1,
+        exitCode: 0,
+        signal: null,
+        strategyTask: runningProjection,
+      })
+      .mockResolvedValue({
+        id: 'run-production-prefix',
+        status: 'succeeded',
+        createdAt: startedAt + 2,
+        updatedAt: startedAt + 3,
+        exitCode: 0,
+        signal: null,
+        strategyTask: {
+          ...runningProjection,
+          outcome: 'completed',
+          nextRunId: undefined,
+          terminal: true,
+        },
+      });
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      options.handlers.onDelta('Final delivery.');
+      options.onRunStatus('succeeded');
+      await options.handlers.onDone();
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-production-prefix',
+      initialLastEventId: null,
+    }));
+    await waitFor(() => {
+      const finalized = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-task-prefix'
+            && message.runStatus === 'succeeded',
+        )
+        .at(-1);
+      expect(finalized?.runId).toBe('run-production-prefix');
+      expect(finalized?.content).toBe(`${visiblePrefix}Final delivery.`);
+    });
+    expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the stored task prefix when a successor replay replaces partial local output', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-successor-retry',
+        role: 'assistant',
+        agentId: 'codex',
+        content: `${visiblePrefix}partial successor`,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-production-retry',
+        runStatus: 'running',
+        lastRunEventId: '12',
+        strategyTaskExecutionId: 'task-retry',
+        strategyTaskPrefixLength: visiblePrefix.length,
+        strategyTaskPrefixEventCount: 0,
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    const projection = {
+      taskExecutionId: 'task-retry',
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'd'.repeat(64),
+        snapshotId: 'snapshot-retry',
+      },
+      inputStage: 'production',
+      outcome: 'running',
+      route: 'full_plan',
+      executionMode: 'simple',
+      activeRunId: 'run-production-retry',
+      terminal: false,
+    };
+    fetchChatRunStatus
+      .mockResolvedValueOnce({
+        id: 'run-production-retry',
+        status: 'running',
+        createdAt: startedAt,
+        updatedAt: startedAt + 1,
+        exitCode: null,
+        signal: null,
+        strategyTask: projection,
+      })
+      .mockResolvedValue({
+        id: 'run-production-retry',
+        status: 'succeeded',
+        createdAt: startedAt,
+        updatedAt: startedAt + 2,
+        exitCode: 0,
+        signal: null,
+        strategyTask: {
+          ...projection,
+          outcome: 'completed',
+          terminal: true,
+        },
+      });
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      options.handlers.onDelta('Final delivery.');
+      options.onRunStatus('succeeded');
+      await options.handlers.onDone();
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      runId: 'run-production-retry',
+      initialLastEventId: null,
+    }));
+    await waitFor(() => {
+      const finalized = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-task-successor-retry'
+            && message.runStatus === 'succeeded',
+        )
+        .at(-1);
+      expect(finalized?.content).toBe(`${visiblePrefix}Final delivery.`);
+    });
+  });
+
+  it('persists the task prefix before same-successor replay and keeps stale partial output out of errors', async () => {
+    const startedAt = Date.now();
+    const visiblePrefix = 'Decision summary.\n';
+    const staleSuffix = 'stale partial successor';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-successor-error',
+        role: 'assistant',
+        agentId: 'codex',
+        content: `${visiblePrefix}${staleSuffix}`,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-production-error',
+        runStatus: 'running',
+        lastRunEventId: '27',
+        strategyTaskExecutionId: 'task-error',
+        strategyTaskPrefixLength: visiblePrefix.length,
+        strategyTaskPrefixEventCount: 0,
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-production-error',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: null,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-error',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'f'.repeat(64),
+          snapshotId: 'snapshot-error',
+        },
+        inputStage: 'production',
+        outcome: 'running',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-production-error',
+        terminal: false,
+      },
+    });
+    let capturedHandlers: { onError: (error: Error) => Promise<void> } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      capturedHandlers = options.handlers;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const prefixOnlySave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((message) => message?.id === 'msg-task-successor-error')
+        .at(-1);
+      expect(prefixOnlySave?.content).toBe(visiblePrefix);
+      expect(prefixOnlySave?.content).not.toContain(staleSuffix);
+    });
+
+    await capturedHandlers!.onError(new Error('successor replay blocked'));
+
+    await waitFor(() => {
+      const failed = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-task-successor-error'
+            && message.runStatus === 'failed',
+        )
+        .at(-1);
+      expect(failed?.content).toBe(visiblePrefix);
+      expect(failed?.content).not.toContain(staleSuffix);
+    });
+  });
+
+  it('does not replay an already-terminal logical task merely to probe its projection', async () => {
+    const startedAt = Date.now();
+    const finalContent = 'Decision summary.\nFinal delivery.';
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-task-terminal',
+        role: 'assistant',
+        agentId: 'codex',
+        content: finalContent,
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-task-terminal',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: 'task-terminal',
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-task-terminal',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1,
+      exitCode: 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: 'task-terminal',
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'c'.repeat(64),
+          snapshotId: 'snapshot-terminal',
+        },
+        inputStage: 'production',
+        outcome: 'completed',
+        route: 'full_plan',
+        executionMode: 'simple',
+        activeRunId: 'run-task-terminal',
+        terminal: true,
+      },
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
+    expect(
+      saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .some(
+          (message) =>
+            message?.id === 'msg-task-terminal'
+            && message.content !== finalContent,
+        ),
+    ).toBe(false);
+  });
+
+  it('does not publish a run-finished event while replaying a historical success', async () => {
+    const startedAt = Date.now() - 10_000;
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-historical-replay',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-historical-replay',
+        runStatus: 'succeeded',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-historical-replay',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 1_000,
+      exitCode: 0,
+      signal: null,
+      artifactCount: 1,
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      publishRunFinishedEvent: false,
+    }));
+    expect(publishDaemonRunFinishedEvent).not.toHaveBeenCalled();
+  });
+
+  it('finalizes reattached telemetry only after trace object files are restored', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-trace',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-trace',
+        runStatus: 'running',
+        preTurnFileNames: ['existing.html'],
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'tool-edit',
+            name: 'str_replace_edit',
+            input: { path: 'existing.html' },
+          },
+          { kind: 'tool_result', toolUseId: 'tool-edit', content: '', isError: false },
+        ],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    const beforeFiles = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 },
+    ];
+    const afterFiles = [
+      { name: 'existing.html', path: '/p/existing.html', size: 2, updatedAt: 1 },
+    ];
+    fetchProjectFiles.mockResolvedValueOnce(beforeFiles).mockResolvedValue(afterFiles);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-trace',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: {
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = {
+        onAgentEvent: options.handlers.onAgentEvent,
+        onDone: options.handlers.onDone,
+      };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(captured).not.toBeNull();
+    captured!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'tool-edit',
+      name: 'str_replace_edit',
+      input: { path: 'existing.html' },
+    });
+    captured!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'tool-edit',
+      content: '',
+      isError: false,
+    });
+    captured!.onDone();
+
+    await waitFor(() => {
+      const saves = saveMessage.mock.calls
+        .map((call) => ({
+          message: call[2] as ChatMessage,
+          options: call[3] as { telemetryFinalized?: boolean } | undefined,
+        }))
+        .filter(({ message }) => message?.id === 'msg-reattach-trace');
+      const firstFinalizedIndex = saves.findIndex(
+        ({ options }) => options?.telemetryFinalized === true,
+      );
+      expect(firstFinalizedIndex).toBeGreaterThan(-1);
+      expect(saves[firstFinalizedIndex]!.message.traceObjectFiles?.map((file) => [
+        file.name,
+        file.traceObjectReason,
+      ])).toEqual([['existing.html', 'modified']]);
+      expect(
+        saves.slice(0, firstFinalizedIndex).some(
+          ({ options }) => options?.telemetryFinalized === true,
+        ),
+      ).toBe(false);
+    });
+  });
+
+  it('uses replayed events for trace object files during a full reattach replay', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-full-replay-trace',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-full-replay-trace',
+        runStatus: 'running',
+        preTurnFileNames: ['existing.html'],
+        events: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    const beforeFiles = [
+      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 },
+    ];
+    const afterFiles = [
+      { name: 'existing.html', path: '/p/existing.html', size: 2, updatedAt: 1 },
+    ];
+    fetchProjectFiles.mockResolvedValueOnce(beforeFiles).mockResolvedValue(afterFiles);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-full-replay-trace',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: {
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = {
+        onAgentEvent: options.handlers.onAgentEvent,
+        onDone: options.handlers.onDone,
+      };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(captured).not.toBeNull();
+    captured!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'tool-edit',
+      name: 'str_replace_edit',
+      input: { path: 'existing.html' },
+    });
+    captured!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'tool-edit',
+      content: '',
+      isError: false,
+    });
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalized = saveMessage.mock.calls
+        .map((call) => ({
+          message: call[2] as ChatMessage,
+          options: call[3] as { telemetryFinalized?: boolean } | undefined,
+        }))
+        .filter(
+          ({ message, options }) =>
+            message?.id === 'msg-reattach-full-replay-trace' &&
+            options?.telemetryFinalized === true,
+        )
+        .at(-1);
+      expect(finalized?.message.traceObjectFiles?.map((file) => [
+        file.name,
+        file.traceObjectReason,
+      ])).toEqual([['existing.html', 'modified']]);
+    });
+  });
+
+  it('coalesces adjacent thinking events while saving a full reattach replay', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-full-replay-thinking',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-full-replay-thinking',
+        runStatus: 'running',
+        preTurnFileNames: [],
+        events: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-full-replay-thinking',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: {
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = {
+        onAgentEvent: options.handlers.onAgentEvent,
+        onDone: options.handlers.onDone,
+      };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(captured).not.toBeNull();
+    for (let index = 0; index < 1_500; index += 1) {
+      captured!.onAgentEvent({ kind: 'thinking', text: 'thought ' });
+    }
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-reattach-full-replay-thinking' &&
+            message.runStatus === 'succeeded',
+        )
+        .at(-1);
+      expect(finalMessage?.events).toHaveLength(1);
+      expect(finalMessage?.events).toEqual([
+        { kind: 'thinking', text: 'thought '.repeat(1_500) },
+      ]);
+    });
+  });
+
+  it('clears touched-file paths after a failed run before the next successful run finalizes', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    const projectFiles = [
+      { name: 'existing.html', path: 'existing.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
+    ];
+    fetchProjectFiles.mockResolvedValue(projectFiles);
+    streamViaDaemon
+      .mockImplementationOnce(async (options: any) => {
+        options.onRunCreated('run-failed');
+        options.handlers.onAgentEvent({
+          kind: 'tool_use',
+          id: 'tool-1',
+          name: 'str_replace_edit',
+          input: { path: 'existing.html' },
+        });
+        options.handlers.onAgentEvent({
+          kind: 'tool_result',
+          toolUseId: 'tool-1',
+          content: '',
+          isError: false,
+        });
+        options.onRunStatus('failed');
+        options.handlers.onError(new Error('failed after edit'));
+      })
+      .mockImplementationOnce(async (options: any) => {
+        options.onRunCreated('run-succeeded');
+        options.handlers.onDelta('done');
+        options.handlers.onDone('done');
+      });
+
+    renderProjectView();
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+
+    await chatPaneHarness.onSend!('first run', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const failed = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((m) => m?.runId === 'run-failed' && m.runStatus === 'failed');
+      expect(failed).toBeTruthy();
+    });
+
+    await chatPaneHarness.onSend!('second run', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+
+    await waitFor(() => {
+      const secondRunFinal = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.runId === 'run-succeeded' && Array.isArray(m.traceObjectFiles))
+        .at(-1);
+      expect(secondRunFinal?.traceObjectFiles).toEqual([]);
+    });
+  });
+
+  it('keeps touched-file paths isolated when a previous successful run finalizes late', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    const projectFiles = [
+      { name: 'first.html', path: 'first.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'second.html', path: 'second.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
+    ];
+    fetchProjectFiles.mockResolvedValue(projectFiles);
+
+    streamViaDaemon
+      .mockImplementationOnce(async (options: any) => {
+        options.onRunCreated('run-first');
+        options.handlers.onAgentEvent({
+          kind: 'tool_use',
+          id: 'tool-first',
+          name: 'str_replace_edit',
+          input: { path: 'first.html' },
+        });
+        options.handlers.onAgentEvent({
+          kind: 'tool_result',
+          toolUseId: 'tool-first',
+          content: '',
+          isError: false,
+        });
+        options.handlers.onDelta('first done');
+        options.handlers.onDone('first done');
+      })
+      .mockImplementationOnce(async (options: any) => {
+        options.onRunCreated('run-second');
+        options.handlers.onAgentEvent({
+          kind: 'tool_use',
+          id: 'tool-second',
+          name: 'str_replace_edit',
+          input: { path: 'second.html' },
+        });
+        options.handlers.onAgentEvent({
+          kind: 'tool_result',
+          toolUseId: 'tool-second',
+          content: '',
+          isError: false,
+        });
+        options.handlers.onDelta('second done');
+        options.handlers.onDone('second done');
+      });
+
+    renderProjectView();
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+
+    let resolveFirstFinalRefresh: ((files: typeof projectFiles) => void) | null = null;
+    let resolveSecondFinalRefresh: ((files: typeof projectFiles) => void) | null = null;
+    let refreshCall = 0;
+    fetchProjectFiles.mockClear();
+    fetchProjectFiles.mockImplementation(() => {
+      refreshCall += 1;
+      if (refreshCall === 2) {
+        return new Promise<typeof projectFiles>((resolve) => {
+          resolveFirstFinalRefresh = resolve;
+        });
+      }
+      if (refreshCall === 4) {
+        return new Promise<typeof projectFiles>((resolve) => {
+          resolveSecondFinalRefresh = resolve;
+        });
+      }
+      return Promise.resolve(projectFiles);
+    });
+
+    await chatPaneHarness.onSend!('first run', [], []);
+    await waitFor(() => expect(resolveFirstFinalRefresh).toBeTruthy());
+
+    await waitFor(() => {
+      const started = chatPaneHarness.onSend!('second run', [], []);
+      expect(started).toBeTruthy();
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(resolveSecondFinalRefresh).toBeTruthy());
+
+    resolveFirstFinalRefresh!(projectFiles);
+    await Promise.resolve();
+    resolveSecondFinalRefresh!(projectFiles);
+
+    await waitFor(() => {
+      const secondRunFinal = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.runId === 'run-second' && Array.isArray(m.traceObjectFiles))
+        .at(-1);
+      expect(secondRunFinal?.traceObjectFiles?.map((file) => file.name)).toEqual(['second.html']);
+    });
+  });
+
+  it('keeps replacement touched files when a superseded run emits a late colliding tool result', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    const projectFiles = [
+      { name: 'first.html', path: 'first.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
+      { name: 'second.html', path: 'second.html', size: 10, mtime: 1, kind: 'html', mime: 'text/html' },
+    ];
+    fetchProjectFiles.mockResolvedValue(projectFiles);
+
+    let firstHandlers: {
+      onAgentEvent: (ev: unknown) => void;
+    } | null = null;
+    let secondHandlers: {
+      onAgentEvent: (ev: unknown) => void;
+      onDelta: (text: string) => void;
+      onDone: (text?: string) => void;
+    } | null = null;
+
+    streamViaDaemon
+      .mockImplementationOnce(async (options: any) => {
+        options.onRunCreated('run-first');
+        firstHandlers = options.handlers;
+        options.handlers.onAgentEvent({
+          kind: 'tool_use',
+          id: 'tool-collide',
+          name: 'str_replace_edit',
+          input: { path: 'first.html' },
+        });
+        return new Promise<void>(() => {});
+      })
+      .mockImplementationOnce(async (options: any) => {
+        options.onRunCreated('run-second');
+        secondHandlers = options.handlers;
+        options.handlers.onAgentEvent({
+          kind: 'tool_use',
+          id: 'tool-collide',
+          name: 'str_replace_edit',
+          input: { path: 'second.html' },
+        });
+        return new Promise<void>(() => {});
+      });
+
+    renderProjectView();
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+    await waitFor(() => expect(chatPaneHarness.onStop).toBeTruthy());
+
+    void chatPaneHarness.onSend!('first run', [], []);
+    await waitFor(() => expect(firstHandlers).toBeTruthy());
+
+    chatPaneHarness.onStop!();
+    await waitFor(() => {
+      const stopped = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((m) => m?.runId === 'run-first' && m.runStatus === 'canceled');
+      expect(stopped).toBeTruthy();
+    });
+
+    void chatPaneHarness.onSend!('second run', [], []);
+    await waitFor(() => expect(secondHandlers).toBeTruthy());
+
+    firstHandlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'tool-collide',
+      content: '',
+      isError: false,
+    });
+    secondHandlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'tool-collide',
+      content: '',
+      isError: false,
+    });
+    secondHandlers!.onDelta('second done');
+    secondHandlers!.onDone('second done');
+
+    await waitFor(() => {
+      const secondRunFinal = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.runId === 'run-second' && Array.isArray(m.traceObjectFiles))
+        .at(-1);
+      expect(secondRunFinal?.traceObjectFiles?.map((file) => file.name)).toEqual(['second.html']);
+    });
+  });
+
+  it('reaches succeeded state via the SSE end event even when only the terminal event replays', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-late',
+        role: 'assistant',
+        content: 'partial',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-late',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-late',
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: 0,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedOnDone: (() => void) | null = null;
+    reattachDaemonRun.mockImplementation(
+      async (options: { handlers: { onDone: () => void } }) => {
+        capturedOnDone = options.handlers.onDone;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(capturedOnDone).not.toBeNull();
+    capturedOnDone!();
+
+    await waitFor(() => {
+      const succeeded = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .find((m) => m?.id === 'msg-late' && m.runStatus === 'succeeded');
+      expect(succeeded).toBeTruthy();
+    });
+  });
+
+  it('preserves failed runStatus when onRunStatus records failure before onDone fires', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-fail',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-fail',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-fail',
+      status: 'failed',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: 1,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: {
+      onDone: () => void;
+      onRunStatus: (s: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = { onDone: options.handlers.onDone, onRunStatus: options.onRunStatus };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(captured).not.toBeNull();
+
+    captured!.onRunStatus('failed');
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-fail' && (m.runStatus === 'failed' || m.runStatus === 'succeeded'))
+        .at(-1);
+      expect(finalSave?.runStatus).toBe('failed');
+    });
+  });
+
+  it('renders AMR recharge guidance when a reattached run reports insufficient balance', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-amr-balance',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-amr-balance',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-amr-balance',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      const error = new Error(
+        'AMR Cloud reported insufficient balance for this model. Top up your AMR balance at https://open-design.ai/amr/dashboard, then retry this run.',
+      ) as Error & { code: string; details: unknown };
+      error.code = 'AMR_INSUFFICIENT_BALANCE';
+      error.details = {
+        kind: 'amr_account',
+        action: 'recharge',
+        actionUrl: 'https://open-design.ai/amr/dashboard',
+      };
+      options.handlers.onError(error);
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-amr-balance' && m.runStatus === 'failed')
+        .at(-1);
+      const errorEvent = finalSave?.events?.find(
+        (event) => event.kind === 'status' && event.label === 'error',
+      ) as { code?: string } | undefined;
+      expect(errorEvent).toMatchObject({
+        code: 'AMR_INSUFFICIENT_BALANCE',
+      });
+    });
+  });
+
+  it('threads the captured stderr tail onto a reattached run that fails', async () => {
+    // Same promise as the live send path, different entry: a run whose failure
+    // arrives on reattach must also carry the daemon-captured stderr onto the
+    // assistant message, or the card that greets the user after a reconnect can
+    // only show the generic sentence.
+    const stderrTail =
+      'Error: dsh: plugin tree failed to load: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stderr-tail',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-stderr-tail',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-stderr-tail',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      const error = new Error(
+        'DeepSeek Harness profile exited without a terminal result.',
+      ) as Error & { code: string; stderrTail: string };
+      error.code = 'DSH_PROFILE_MISSING_RESULT';
+      error.stderrTail = stderrTail;
+      options.handlers.onError(error);
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-stderr-tail' && m.runStatus === 'failed')
+        .at(-1);
+      const errorEvent = finalSave?.events?.find(
+        (event) => event.kind === 'status' && event.label === 'error',
+      ) as { stderrTail?: string } | undefined;
+      expect(errorEvent?.stderrTail).toBe(stderrTail);
+    });
+  });
+
+  it('preserves canceled runStatus when onRunStatus records cancellation before onDone fires', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-cancel',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-cancel',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-cancel',
+      status: 'canceled',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: 'SIGTERM',
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: { onDone: () => void; onRunStatus: (s: any) => void } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = { onDone: options.handlers.onDone, onRunStatus: options.onRunStatus };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    captured!.onRunStatus('canceled');
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-cancel' && (m.runStatus === 'canceled' || m.runStatus === 'succeeded'))
+        .at(-1);
+      expect(finalSave?.runStatus).toBe('canceled');
+    });
+  });
+
+  it('persists the last buffered delta immediately on pagehide instead of waiting for the 500ms debounce', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-unload',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-unload',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-unload',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedOnDelta: ((text: string) => void) | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      capturedOnDelta = options.handlers.onDelta;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(capturedOnDelta).not.toBeNull();
+
+    // Stream a delta. persistSoon would schedule a save in 500ms, but the
+    // page is about to be torn down — anything not yet persisted is lost.
+    capturedOnDelta!('last buffered chunk');
+
+    // Page reload fires pagehide synchronously while the document is still
+    // alive; the buffered chunk must reach saveMessage with keepalive=true
+    // BEFORE the debounce timer would otherwise fire.
+    saveMessage.mockClear();
+    window.dispatchEvent(new Event('pagehide'));
+
+    await waitFor(() => {
+      const keepaliveSave = saveMessage.mock.calls.find((call) => {
+        const msg = call[2] as ChatMessage;
+        const opts = call[3] as { keepalive?: boolean } | undefined;
+        return (
+          msg?.id === 'msg-unload' &&
+          typeof msg.content === 'string' &&
+          msg.content.includes('last buffered chunk') &&
+          opts?.keepalive === true
+        );
+      });
+      expect(keepaliveSave).toBeTruthy();
+    });
+  });
+});

@@ -1,0 +1,241 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-claude-design-team",
+  "title": "Claude Design Team",
+  "title_i18n": {
+    "en": "Claude Design Team",
+    "id": "Claude Tim Desain",
+    "de": "Claude Designteam",
+    "zh-CN": "Claude 动效设计团队",
+    "zh-TW": "Claude 設計團隊",
+    "pt-BR": "Claude Equipe de Design",
+    "es-ES": "Claude Equipo de diseño",
+    "ru": "Claude Команда дизайнеров",
+    "fa": "Claude تیم طراحی",
+    "ar": "Claude فريق التصميم",
+    "ja": "Claude デザインチーム",
+    "ko": "Claude 디자인팀",
+    "pl": "Claude Zespół projektowy",
+    "hu": "Claude Tervező csapat",
+    "fr": "Claude Équipe de conception",
+    "uk": "Claude Команда дизайнерів",
+    "tr": "Claude Tasarım Ekibi",
+    "th": "Claude ทีมงานออกแบบ",
+    "it": "Claude Gruppo di progettazione"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "Claude turns one launch-video request into motion graphics with a full design team.",
+  "description_i18n": {
+    "en": "Claude turns one launch-video request into motion graphics with a full design team.",
+    "id": "Claude mengubah satu permintaan video peluncuran menjadi grafik gerak dengan tim desain lengkap.",
+    "de": "Claude setzt mit einem kompletten Designteam eine Anfrage für ein Einführungsvideo in Bewegungsgrafiken um.",
+    "zh-CN": "Claude 将一句发布视频请求变成多角色协作完成的动效作品。",
+    "zh-TW": "Claude 與完整的設計團隊將一個啓動視頻請求轉化爲動態圖形。",
+    "pt-BR": "Claude transforma uma solicitação de vídeo de lançamento em gráficos em movimento com uma equipe de design completa.",
+    "es-ES": "Claude convierte una solicitud de vídeo de lanzamiento en gráficos en movimiento con un equipo de diseño completo.",
+    "ru": "Claude превращает один запрос запуска видео в анимированную графику с полной командой дизайнеров.",
+    "fa": "Claude با یک تیم طراحی کامل، یک درخواست راه اندازی-ویدئو را به موشن گرافیک تبدیل می کند.",
+    "ar": "Claude يحول طلب إطلاق فيديو واحد إلى رسومات متحركة مع فريق تصميم كامل.",
+    "ja": "Claude は、デザイン チーム全員が 1 つのローンチ ビデオ リクエストをモーション グラフィックスに変換します。",
+    "ko": "Claude은 전체 디자인 팀과 함께 하나의 출시 비디오 요청을 모션 그래픽으로 전환합니다.",
+    "pl": "Claude zamienia jedno żądanie uruchomienia wideo w animowaną grafikę przy pomocy pełnego zespołu projektowego.",
+    "hu": "Claude egy indítási videó kérést mozgógrafikává alakít a teljes tervezőcsapattal.",
+    "fr": "Claude transforme une demande de vidéo de lancement en graphiques animés avec une équipe de conception complète.",
+    "uk": "Claude перетворює один запит запуску відео в анімаційну графіку за допомогою повної команди дизайнерів.",
+    "tr": "Claude, tam bir tasarım ekibiyle bir lansman videosu talebini hareketli grafiklere dönüştürüyor.",
+    "th": "Claude เปลี่ยนคำขอวิดีโอเปิดตัวหนึ่งคำขอให้เป็นกราฟิกเคลื่อนไหวด้วยทีมออกแบบเต็มรูปแบบ",
+    "it": "Claude trasforma una richiesta di video di lancio in grafica animata con un team di progettazione completo."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "typography",
+    "product",
+    "collaboration"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "brand",
+        "type": "string",
+        "label": "brand",
+        "default": "Claude",
+        "label_i18n": {
+          "en": "brand",
+          "id": "merek",
+          "de": "Marke",
+          "zh-CN": "品牌",
+          "zh-TW": "品牌",
+          "pt-BR": "marca",
+          "es-ES": "marca",
+          "ru": "бренд",
+          "fa": "نام تجاری",
+          "ar": "العلامة التجارية",
+          "ja": "ブランド",
+          "ko": "브랜드",
+          "pl": "marka",
+          "hu": "márka",
+          "fr": "marque",
+          "uk": "бренд",
+          "tr": "marka",
+          "th": "ยี่ห้อ",
+          "it": "marchio"
+        }
+      },
+      {
+        "name": "product",
+        "type": "string",
+        "label": "Product positioning",
+        "default": "motion graphics",
+        "label_i18n": {
+          "en": "Product positioning",
+          "id": "Penentuan posisi produk",
+          "de": "Produktpositionierung",
+          "zh-CN": "产品定位",
+          "zh-TW": "產品定位",
+          "pt-BR": "Posicionamento do produto",
+          "es-ES": "Posicionamiento del producto",
+          "ru": "Позиционирование продукта",
+          "fa": "موقعیت یابی محصول",
+          "ar": "تحديد موضع المنتج",
+          "ja": "製品のポジショニング",
+          "ko": "제품 포지셔닝",
+          "pl": "Pozycjonowanie produktu",
+          "hu": "Termék pozicionálás",
+          "fr": "Positionnement du produit",
+          "uk": "Позиціонування товару",
+          "tr": "Ürün konumlandırma",
+          "th": "การวางตำแหน่งผลิตภัณฑ์",
+          "it": "Posizionamento del prodotto"
+        }
+      },
+      {
+        "name": "request",
+        "type": "string",
+        "label": "Sample request",
+        "default": "Make a launch video for my app",
+        "label_i18n": {
+          "en": "Sample request",
+          "id": "Permintaan sampel",
+          "de": "Musteranfrage",
+          "zh-CN": "示例请求",
+          "zh-TW": "樣品請求",
+          "pt-BR": "Solicitação de amostra",
+          "es-ES": "Solicitud de muestra",
+          "ru": "Образец запроса",
+          "fa": "نمونه درخواست",
+          "ar": "طلب عينة",
+          "ja": "サンプルリクエスト",
+          "ko": "샘플 요청",
+          "pl": "Przykładowe żądanie",
+          "hu": "Minta kérés",
+          "fr": "Exemple de demande",
+          "uk": "Зразок запиту",
+          "tr": "Örnek istek",
+          "th": "คำขอตัวอย่าง",
+          "it": "Richiesta di campione"
+        }
+      },
+      {
+        "name": "launchTitle",
+        "type": "string",
+        "label": "Preview title",
+        "default": "LAUNCH DAY",
+        "label_i18n": {
+          "en": "Preview title",
+          "id": "Pratinjau judul",
+          "de": "Titelvorschau",
+          "zh-CN": "预览标题",
+          "zh-TW": "預覽標題",
+          "pt-BR": "Título de visualização",
+          "es-ES": "Título de vista previa",
+          "ru": "Предварительный заголовок",
+          "fa": "عنوان پیش نمایش",
+          "ar": "معاينة العنوان",
+          "ja": "プレビューのタイトル",
+          "ko": "미리보기 제목",
+          "pl": "Podgląd tytułu",
+          "hu": "Cím előnézete",
+          "fr": "Titre de l'aperçu",
+          "uk": "Назва попереднього перегляду",
+          "tr": "Başlığı önizleyin",
+          "th": "ดูตัวอย่างชื่อ",
+          "it": "Titolo in anteprima"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Make a promo for {{brand}} for {{product}}, showing the request “{{request}}” and a preview titled {{launchTitle}}.",
+        "id": "Buat promo {{brand}} untuk {{product}}, tampilkan request “{{request}}” dan preview bertajuk {{launchTitle}}.",
+        "de": "Erstellen Sie eine Werbeaktion für {{brand}} für {{product}} und zeigen Sie dabei die Anfrage „{{request}}“ und eine Vorschau mit dem Titel {{launchTitle}} an.",
+        "zh-CN": "为 {{brand}} 制作 {{product}} 宣传片，展示请求“{{request}}”和标题为 {{launchTitle}} 的预览作品。",
+        "zh-TW": "爲 {{product}} 製作 {{brand}} 的促銷，顯示請求“{{request}}”和標題爲 {{launchTitle}} 的預覽。",
+        "pt-BR": "Faça uma promo do {{brand}} para o {{product}}, mostrando o pedido “{{request}}” e uma prévia intitulada {{launchTitle}}.",
+        "es-ES": "Realiza una promoción del {{brand}} al {{product}}, mostrando la solicitud “{{request}}” y una vista previa titulada {{launchTitle}}.",
+        "ru": "Сделайте промо на {{brand}} для {{product}}, показывая запрос «{{request}}» и превью с названием {{launchTitle}}.",
+        "fa": "تبلیغی برای {{brand}} برای {{product}}، نشان دادن درخواست \"{{request}}و یک پیش نمایش با عنوان {{launchTitle}}.",
+        "ar": "عمل عرض ترويجي لـ {{brand}} لـ {{product}}، يظهر فيه الطلب \"{{request}}\" ومعاينة بعنوان {{launchTitle}}.",
+        "ja": "{{product}} 用の {{brand}} のプロモーションを作成し、リクエスト「{{request}}」と {{launchTitle}} というタイトルのプレビューを表示します。",
+        "ko": "{{product}}에 대해 {{brand}}에 대한 프로모션을 만들고 요청 \"{{request}}\"과 {{launchTitle}}라는 제목의 미리보기를 표시합니다.",
+        "pl": "Zrób promocję dla {{brand}} dla {{product}}, pokazując żądanie „{{request}}” i podgląd zatytułowany {{launchTitle}}.",
+        "hu": "Készítsen promóciót {{brand}} számára {{product}}, megjelenítve a kérést \"{{request}}” és egy előzetes címmel {{launchTitle}}.",
+        "fr": "Créez une promotion pour {{brand}} pour {{product}}, en affichant la demande « {{request}} » et un aperçu intitulé {{launchTitle}}.",
+        "uk": "Зробіть промо для {{brand}} для {{product}}, показуючи запит «{{request}}» і попередній перегляд під назвою {{launchTitle}}.",
+        "tr": "{{product}} için {{brand}} için \"{{request}}\" isteğini ve {{launchTitle}} başlıklı önizlemeyi gösteren bir promosyon yapın.",
+        "th": "สร้างโปรโมชันสำหรับ {{brand}} สำหรับ {{product}} โดยแสดงคำขอ “{{request}}” และตัวอย่างชื่อ {{launchTitle}}",
+        "it": "Realizza una promozione per {{brand}} per {{product}}, mostrando la richiesta “{{request}}” e un'anteprima intitolata {{launchTitle}}."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Claude Design Team"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "author": "@motion_so",
+      "url": "https://x.com/motion_so/status/2084690374833143893",
+      "note": "参考视频来源，仅用于内部复刻评测。"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+.banner {
+  margin: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #EFEFEF);
+  border-radius: 6px;
+  background: var(--bg-secondary, #F7F7F7);
+  color: var(--text-secondary, var(--share-text-secondary));
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+/* Inside ShareTab this is the design's unboxed `.share-status-panel .notice`:
+   flush with the panel's content edge, no border/fill/padding. */
+.backfillOnly {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.banner p { margin: 0; }
+.banner p + p { margin-block-start: 4px; }
+ .title { font-weight: 600; color: var(--text, var(--share-text-strong)); }
+ /* No current production caller renders this (ShareTab's own progress bar
+    replaced K1/K4 there), but it is a tested, documented capability for a
+    future non-`backfillOnly` mount — see CommentSyncBanner.tsx. */
+ .backfillProgress {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  background: #29292d;
+  color: var(--share-white);
+  font-weight: 500;
+}
+ .spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid rgb(255 255 255 / 45%);
+  border-top-color: var(--share-white);
+  border-radius: 50%;
+  animation: commentSyncSpin 0.8s linear infinite;
+}
+ @keyframes commentSyncSpin { to { transform: rotate(360deg); } }
+ .login { margin-block-start: 4px; }
+ .login button { text-decoration: underline; }
+ /* .retryRow moved to ShareNoticeRow.module.css's .row (2026 refactor: item
+    3). .retrySpacing keeps this row's own top-margin, which is positioning
+    inside THIS banner, not part of the shared row layout. */
+ .retrySpacing { margin-block-start: 4px; }
+ /* .retry/.retryError moved into the shared `ShareButton`'s `soft`/
+    `soft-error` variants (2026 refactor: item 1) — ShareButton.module.css. */

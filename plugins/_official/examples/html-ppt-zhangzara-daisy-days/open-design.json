@@ -1,0 +1,113 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-daisy-days",
+  "title": "Write a Customer Onboarding Workshop like a Field Enablement Director",
+  "title_i18n": {
+    "en": "Write a Customer Onboarding Workshop like a Field Enablement Director",
+    "zh-CN": "像客户成功赋能总监一样写客户上手工作坊",
+    "zh-TW": "像客户成功赋能总监一样写客户上手工作坊"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. Built as a decision-grade professional training deck for new customers, CS team.",
+  "description_i18n": {
+    "en": "A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. Built as a decision-grade professional training deck for new customers, CS team.",
+    "zh-CN": "像客户成功赋能总监一样写客户上手工作坊——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像客户成功赋能总监一样写客户上手工作坊——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-daisy-days",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "daisy-days",
+    "zhangzara-daisy-days",
+    "cheerful",
+    "playful",
+    "friendly",
+    "soft",
+    "education-classroom",
+    "kids-product-launch",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "training-deck",
+    "workshop",
+    "course-module",
+    "education",
+    "html-ppt-zhangzara-daisy-days",
+    "professional-training",
+    "employee-onboarding-deck",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "education",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Write a Customer Onboarding Workshop like a Field Enablement Director\" as a decision-grade Professional training deck in this template's own visual system. Subject: A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. Audience: new customers, CS team. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a learner perform the target task the next day.",
+        "zh-CN": "像客户成功赋能总监一样写客户上手工作坊。像客户成功赋能总监一样写客户上手工作坊——一份可商业交付的培训交付 Deck，围绕真实主题、证据链与决策目标组织。 主题：A customer-success workshop onboarding users to a project-management app — the first-value path and the habits that retain. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Write a Customer Onboarding Workshop like a Field Enablement Director",
+          "title_i18n": {
+            "en": "Write a Customer Onboarding Workshop like a Field Enablement Director",
+            "zh-CN": "像客户成功赋能总监一样写客户上手工作坊",
+            "zh-TW": "像客户成功赋能总监一样写客户上手工作坊"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "professional-training"
+  }
+}

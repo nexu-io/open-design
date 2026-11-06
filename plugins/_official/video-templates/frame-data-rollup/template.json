@@ -1,0 +1,55 @@
+{
+  "id": "frame-data-rollup",
+  "surface": "hyperframes",
+  "title": "Data Rollup Frame",
+  "summary": "A native Remotion data frame — bars grow from zero by real data via spring physics while the figures roll 0→target in sync.",
+  "category": "Data-viz",
+  "tags": [
+    "data",
+    "chart",
+    "bar",
+    "rollup",
+    "count-up",
+    "remotion",
+    "native",
+    "animated",
+    "kpi"
+  ],
+  "engine": "remotion",
+  "engineVersion": "^4.0.0",
+  "sourceEntry": "source/entry.ts",
+  "aspect": "16:9",
+  "fps": 30,
+  "durationSec": 15,
+  "formats": [
+    "mp4",
+    "webm"
+  ],
+  "bestFor": [
+    "A data frame where the numbers should animate, not sit static",
+    "Weekly metrics / growth bars driven by real values",
+    "Enhancing one data segment of an otherwise hyperframes video"
+  ],
+  "source": {
+    "repo": "nexu-io/html-video",
+    "path": "templates/frame-data-rollup",
+    "license": "Apache-2.0",
+    "author": "nexu-io",
+    "url": "https://github.com/nexu-io/html-video"
+  },
+  "provenance": {
+    "origin": {
+      "name": "none",
+      "kind": "none",
+      "reference": "Original work. Standard animated-bar-chart vocabulary (count-up figures, spring-grown bars) implemented from scratch as React-tsx for Remotion; not derived from any specific studio or upstream template.\n"
+    },
+    "via_skill": {
+      "name": "none",
+      "author": "nexu-io",
+      "url": "https://github.com/nexu-io/html-video",
+      "license": "Apache-2.0",
+      "source_file": "(original — packages/adapter-remotion native template, written for html-video)"
+    },
+    "transformation": "Original Remotion React-tsx composition. Bars grow with spring() on a staggered per-bar delay; figures roll 0→value via interpolate tracking the same growth curve so number and bar settle together. All layout is computed off the live canvas size (useVideoConfig) so 16:9 / 9:16 / 1:1 all render correctly. System font stack only — no external fonts or assets, keeping the headless render deterministic and offline-safe.\n"
+  }
+}

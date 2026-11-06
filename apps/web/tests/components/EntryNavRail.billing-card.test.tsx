@@ -1,0 +1,398 @@
+import { clearWorkspaceRemoval, currentWorkspaceRemoval, recordWorkspaceRemoval } from '../../src/collab/workspace-removal';
+// @vitest-environment jsdom
+//
+// Acceptance #146 / #112 — the account menu's billing card.
+//
+// #146: a workspace the user had just created, with nothing paid for, showed
+// 团队版. The label was derived from `workspaceType === 'team'`, but EVERY
+// user-created workspace in B is team-typed (only the auto-provisioned personal
+// one is not), so the workspace kind says nothing about whether a subscription
+// exists. B reports an unsubscribed workspace as `billingState: 'free'` with a
+// null planId and an EMPTY membershipTier — the label has to follow that.
+//
+// #112 (superseded 2026-07-22): a 附加积分 (bonus/top-up credits) row used to
+// live here. Product ruling: we have no such concept to show the user — 积分
+// is the one number that matters — so the row was removed outright rather
+// than fixed to show a real value.
+
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
+import { I18nProvider } from '../../src/i18n';
+import { currentWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
+import { currentWorkspaceContextRequestToken, WORKSPACE_BILLING_REFRESH_EVENT } from '../../src/collab/useWorkspaceContext';
+
+const originalFetch = globalThis.fetch;
+
+function context(overrides: Partial<WorkspaceCollabContext> = {}): WorkspaceCollabContext {
+  return {
+    workspaceId: 'ws-new',
+    workspaceType: 'team',
+    workspaceMemberId: 'wm-1',
+    teamName: 'Untitled Workspace',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    // B's entitlement for a workspace nobody has paid for.
+    billingState: 'free',
+    planId: null,
+    permissions: { canInviteMembers: true, canViewWorkspaceSettings: true },
+    ...overrides,
+  } as unknown as WorkspaceCollabContext;
+}
+
+function billing(overrides: Partial<WorkspaceBillingSummary> = {}): WorkspaceBillingSummary {
+  return {
+    workspaceId: 'ws-new',
+    membershipTier: '',
+    totalAvailableCredits: 0,
+    subscriptionCredits: 0,
+    rechargeCredits: 0,
+    balanceUsd: '0',
+    subscriptionStatus: '',
+    availableActions: [],
+    ...overrides,
+  } as WorkspaceBillingSummary;
+}
+
+function renderRail(props: {
+  context: WorkspaceCollabContext;
+  billing: WorkspaceBillingSummary | null;
+  balanceUsd?: string | null;
+}) {
+  return render(
+    <I18nProvider initial="zh-CN">
+      <EntryNavRail
+        view="home"
+        onViewChange={() => {}}
+        onNewProject={() => {}}
+        open
+        context={props.context}
+        billing={props.billing}
+        balanceUsd={props.balanceUsd}
+      />
+    </I18nProvider>,
+  );
+}
+
+/** Hover the top-right credits pill and scope queries to the billing card
+ *  that hangs under it. The card used to live inside the account menu; it now
+ *  hangs off the pill it describes (per product), so this is the gesture that
+ *  puts it on screen. */
+function billingCard() {
+  fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
+  const el = document.querySelector('.entry-nav-rail__menu-credits');
+  if (!el) throw new Error('billing card is not rendered');
+  return within(el as HTMLElement);
+}
+
+beforeEach(() => {
+  resetWorkspaceDirectoryCache();
+  globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })) as typeof fetch;
+});
+
+afterEach(() => {
+  cleanup();
+  clearWorkspaceRemoval();
+  globalThis.fetch = originalFetch;
+  resetWorkspaceDirectoryCache();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+describe('account menu billing card — scoped plan tier (#146)', () => {
+  it('shows Free for an unsubscribed team-typed workspace', () => {
+    renderRail({ context: context(), billing: billing() });
+
+    const card = billingCard();
+    expect(card.getByRole('img', { name: 'free' })).toBeTruthy();
+  });
+
+  it('shows Plus for a team Plus subscription', () => {
+    renderRail({
+      context: context({ billingState: 'active', planId: 'team_plus' } as Partial<WorkspaceCollabContext>),
+      billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
+    });
+
+    expect(billingCard().getByRole('img', { name: 'plus' })).toBeTruthy();
+  });
+
+  // OPEND-4440: workspace kind is not evidence of the pending subscription.
+  it('keeps an unconfirmed member plan neutral (OPEND-4440)', () => {
+    renderRail({
+      context: context({ role: 'member', billingState: 'active', planId: null } as Partial<WorkspaceCollabContext>),
+      billing: billing(),
+    });
+
+    expect(billingCard().queryByText('团队版')).toBeNull();
+    expect(screen.getByTestId('entry-top-right-credits').getAttribute('aria-busy')).toBe('true');
+  });
+});
+
+describe('account menu billing card — workspace-aware upgrade routing', () => {
+  it.each([
+    {
+      name: 'personal owner',
+      context: {
+        workspaceType: 'personal',
+        billingState: 'free',
+        planId: null,
+      } satisfies Partial<WorkspaceCollabContext>,
+      billing: { membershipTier: '', subscriptionStatus: '' } satisfies Partial<WorkspaceBillingSummary>,
+    },
+    {
+      name: 'free team owner',
+      context: {
+        workspaceType: 'team',
+        billingState: 'free',
+        planId: null,
+      } satisfies Partial<WorkspaceCollabContext>,
+      billing: { membershipTier: '', subscriptionStatus: '' } satisfies Partial<WorkspaceBillingSummary>,
+    },
+    {
+      name: 'paid team owner',
+      context: {
+        workspaceType: 'team',
+        billingState: 'active',
+        planId: 'team_plus',
+      } satisfies Partial<WorkspaceCollabContext>,
+      billing: {
+        membershipTier: 'team_plus',
+        subscriptionStatus: 'active',
+      } satisfies Partial<WorkspaceBillingSummary>,
+    },
+  ])(
+    'routes a $name to the console plan surface',
+    async ({ context: contextOverrides, billing: billingOverrides }) => {
+      vi.useFakeTimers();
+      const dispatch = vi.spyOn(window, 'dispatchEvent');
+      const generation = currentWorkspaceAccountGeneration();
+      const requestToken = currentWorkspaceContextRequestToken();
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      renderRail({
+        context: context({
+          ...contextOverrides,
+          permissions: {
+            canInviteMembers: true,
+            canManageBilling: true,
+            canViewWorkspaceSettings: true,
+          },
+          workspaceSettingsUrl:
+            'https://web.example.com/console/settings?workspaceId=ws-new',
+        } as Partial<WorkspaceCollabContext>),
+        billing: billing(billingOverrides),
+      });
+
+      fireEvent.click(billingCard().getByRole('button', { name: '升级' }));
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      const target = new URL(String(openSpy.mock.calls[0]![0]));
+      expect(`${target.origin}${target.pathname}`).toBe(
+        'https://open-design.ai/cloud/dashboard',
+      );
+      expect(target.searchParams.get('billing')).toBe('plan');
+      const billingRefreshes = () => dispatch.mock.calls.filter(([event]) => event.type === WORKSPACE_BILLING_REFRESH_EVENT);
+      await act(async () => { await vi.advanceTimersByTimeAsync(2999); });
+      // C-04 / DD:1316: opening the quota panel immediately re-reads billing.
+      expect(billingRefreshes()).toHaveLength(1);
+      expect(currentWorkspaceAccountGeneration()).toBe(generation);
+      expect(currentWorkspaceContextRequestToken()).toBe(requestToken);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(billingRefreshes()).toHaveLength(1);
+      // Opening billing (even a blocked popup) is not an account transition.
+      // These readers observe the real notifier; it is deliberately not mocked.
+      expect(currentWorkspaceAccountGeneration()).toBe(generation);
+      expect(currentWorkspaceContextRequestToken()).toBe(requestToken);
+    },
+  );
+
+  it('does not let a previously scheduled upgrade refresh dismiss a member-removal notice', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    const actor = context({ permissions: { canInviteMembers: true, canManageBilling: true, canViewWorkspaceSettings: true }, workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-new' } as Partial<WorkspaceCollabContext>);
+    renderRail({ context: actor, billing: billing() });
+    fireEvent.click(billingCard().getByRole('button', { name: '升级' }));
+    act(() => { recordWorkspaceRemoval({ type: 'workspace-context-changed', memberRemoval: { workspaceId: actor.workspaceId, workspaceMemberId: actor.workspaceMemberId, reason: 'member-removed' } }, actor); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(currentWorkspaceRemoval()).toMatchObject({ workspaceId: actor.workspaceId, workspaceMemberId: actor.workspaceMemberId });
+  });
+
+  it.each(['admin', 'member'] as const)(
+    'hides the upgrade action for a %s without billing permission',
+    (role) => {
+      renderRail({
+        context: context({
+          role,
+          permissions: {
+            canInviteMembers: true,
+            canManageBilling: false,
+            canViewWorkspaceSettings: true,
+          },
+          workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-new',
+        } as Partial<WorkspaceCollabContext>),
+        billing: billing(),
+      });
+
+      expect(billingCard().queryByRole('button', { name: '升级' })).toBeNull();
+    },
+  );
+});
+
+describe('account menu billing card — 积分 row opens the web console (#62)', () => {
+  it.each(['paid pill', 'allowance row'] as const)(
+    'opens the workspace dashboard from the %s without a settings URL',
+    (action) => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      renderRail({
+        context: context({ billingState: 'active', planId: 'team_plus' }),
+        billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
+        balanceUsd: '24',
+      });
+
+      // C-01 E-state trigger: pill opens the panel; its amount arrow opens the console.
+      if (action === 'paid pill') {
+        fireEvent.click(screen.getByTestId('entry-top-right-credits'));
+        expect(openSpy).not.toHaveBeenCalled();
+      }
+      fireEvent.click(billingCard().getByTestId('entry-nav-credits-row'));
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      const [url, target, features] = openSpy.mock.calls[0]!;
+      const destination = new URL(String(url));
+      expect(destination.origin).toBe('https://open-design.ai');
+      expect(destination.pathname).toBe('/cloud/dashboard');
+      expect(destination.searchParams.get('workspaceId')).toBe('ws-new');
+      expect(target).toBe('_blank');
+      expect(features).toBe('noopener,noreferrer');
+    },
+  );
+
+  // C-01 / division:65 supersedes #62: the panel's amount arrow views the current workspace console.
+  it('opens the console dashboard URL in a new tab instead of an in-client panel', () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    renderRail({
+      context: context({
+        workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-new',
+      } as Partial<WorkspaceCollabContext>),
+      billing: billing({ totalAvailableCredits: 100_000 }),
+      balanceUsd: '24',
+    });
+
+    const card = billingCard();
+    fireEvent.click(card.getByTestId('entry-nav-credits-row'));
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [url, target] = openSpy.mock.calls[0]!;
+    // C-01 TASK B.5: only the shared workspace URL helper chooses the console.
+    expect(new URL(String(url)).pathname).toBe('/cloud/dashboard');
+    expect(String(url)).toContain('workspaceId=ws-new');
+    expect(target).toBe('_blank');
+    // No intermediate panel appears.
+    expect(document.querySelector('.credits-panel')).toBeNull();
+  });
+});
+
+describe('account menu billing card — no 附加积分 row (#112 superseded)', () => {
+  it('never renders a bonus/top-up credits row, however the console splits its balance', () => {
+    renderRail({
+      context: context({ billingState: 'active', planId: 'team_plus' } as Partial<WorkspaceCollabContext>),
+      billing: billing({
+        membershipTier: 'team_plus',
+        totalAvailableCredits: 1_386_294,
+        subscriptionCredits: 1_000_000,
+        rechargeCredits: 386_294,
+      }),
+    });
+
+    expect(billingCard().queryByText('附加积分')).toBeNull();
+  });
+});
+
+describe('account menu billing card — scoped USD balance (recvqgaMLxEdZX)', () => {
+  it('shows the explicit workspace USD balance instead of raw credits', () => {
+    renderRail({
+      context: context(),
+      billing: billing({ totalAvailableCredits: 999_330 }),
+      balanceUsd: '9.9933',
+    });
+
+    const card = billingCard();
+    expect(card.getByText('按量额度')).toBeTruthy();
+    // C-01 E states use $ with two decimal places; no raw credit conversion.
+    expect(card.getByText('$9.99')).toBeTruthy();
+    expect(card.queryByText('999,330')).toBeNull();
+    expect(card.queryByText('余额')).toBeNull();
+    expect(card.queryByText(/积分/)).toBeNull();
+  });
+
+  it('keeps a proven zero visible as $0.00', () => {
+    renderRail({
+      context: context(),
+      billing: billing({ totalAvailableCredits: 600_000 }),
+      balanceUsd: '0',
+    });
+
+    expect(billingCard().getByText('$0.00')).toBeTruthy();
+  });
+
+  it('keeps the wallet chevron and scoped balance', () => {
+    renderRail({
+      context: context(),
+      billing: billing({ totalAvailableCredits: 600_000 }),
+      balanceUsd: '12',
+    });
+
+    const row = billingCard().getByTestId('entry-nav-credits-row');
+    expect(row.querySelectorAll('svg')).toHaveLength(1);
+    expect(row.textContent?.trim()).toBe('$12.00');
+  });
+});
+
+describe('billing card keyboard access', () => {
+  it('opens on focus and keeps both actions reachable across focus and pointer transitions', () => {
+    vi.useFakeTimers();
+    renderRail({
+      context: context({
+        billingState: 'active',
+        planId: 'team_plus',
+        permissions: {
+          ...context().permissions,
+          canManageBilling: true,
+        },
+        workspaceSettingsUrl: 'https://web.example.com/console/settings?workspaceId=ws-new',
+      }),
+      billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
+      balanceUsd: '24',
+    });
+    const pill = screen.getByTestId('entry-top-right-credits');
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).toBeNull();
+    act(() => pill.focus());
+    const panel = screen.getByRole('dialog', { name: '额度' });
+    expect(pill.getAttribute('aria-expanded')).toBe('true');
+    expect(pill.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(pill.getAttribute('aria-controls')).toBe(panel.id);
+
+    const upgrade = within(panel).getByRole('button', { name: '升级' });
+    const allowance = within(panel).getByTestId('entry-nav-credits-row');
+    act(() => upgrade.focus());
+    fireEvent.pointerLeave(pill.closest('.entry-top-right-credits-anchor')!);
+    act(() => vi.advanceTimersByTime(180));
+    expect(document.activeElement).toBe(upgrade);
+    expect(panel.isConnected).toBe(true);
+    act(() => allowance.focus());
+    expect(document.activeElement).toBe(allowance);
+    expect(panel.isConnected).toBe(true);
+
+    act(() => screen.getByTestId('entry-nav-account').focus());
+    act(() => vi.advanceTimersByTime(180));
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).toBeNull();
+    expect(pill.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});

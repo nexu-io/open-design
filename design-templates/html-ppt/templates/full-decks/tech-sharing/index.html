@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rust 异步运行时内部机制 · Tech Sharing</title>
+<link rel="stylesheet" href="../../../assets/fonts.css">
+<link rel="stylesheet" href="../../../assets/base.css">
+<link rel="stylesheet" href="../../../assets/animations/animations.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-tech-sharing">
+<div class="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide" data-title="Cover">
+    <p class="kicker">tech-sharing / 2026-04-15</p>
+    <h1 class="h1 anim-fade-up" data-anim="fade-up">Rust 异步运行时<br>到底在<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">调度什么</span>?</h1>
+    <p class="lede mt-m">从 <span class="mono">Future::poll</span> 到 tokio 的 work-stealing，一次讲清楚。</p>
+    <div class="speaker"><div class="av"></div><div><b>@lewis</b><span>platform infra · 45 min + Q&amp;A</span></div></div>
+    <div class="deck-footer"><span class="mono">#async #rust #tokio</span><span class="slide-number" data-current="1" data-total="8"></span></div>
+  </section>
+
+  <!-- 2. Agenda -->
+  <section class="slide" data-title="Agenda">
+    <p class="kicker">agenda.toml</p>
+    <h2 class="h2">今天的路线图</h2>
+    <div class="stack mt-l">
+      <div class="agenda-row"><span class="num">01</span><span class="t">Context: 为什么需要 async</span><span class="d">~5min</span></div>
+      <div class="agenda-row"><span class="num">02</span><span class="t">Deep dive 1: Future &amp; Waker</span><span class="d">~12min</span></div>
+      <div class="agenda-row"><span class="num">03</span><span class="t">Deep dive 2: Tokio scheduler</span><span class="d">~15min</span></div>
+      <div class="agenda-row"><span class="num">04</span><span class="t">Code: 手写一个 mini-runtime</span><span class="d">~8min</span></div>
+      <div class="agenda-row"><span class="num">05</span><span class="t">Takeaways + Q&amp;A</span><span class="d">~5min</span></div>
+    </div>
+  </section>
+
+  <!-- 3. Context -->
+  <section class="slide" data-title="Context">
+    <p class="kicker">// context</p>
+    <h2 class="h2">问题：一个线程一个连接，<br>撑不住 10 万并发。</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent"><h4>Thread-per-conn</h4><p class="dim">每条连接一根 OS 线程，栈 2–8MB。10 万连接 = 几百 GB RAM。</p><span class="tag mt-s">❌ 不现实</span></div>
+      <div class="card card-accent"><h4>Event loop (C)</h4><p class="dim">epoll/kqueue + 回调地狱。快，但写起来痛苦且容易出 bug。</p><span class="tag mt-s">😩 callback hell</span></div>
+      <div class="card card-accent"><h4>Async / await</h4><p class="dim">看起来像同步代码，编译成状态机。一根线程跑几千任务。</p><span class="tag mt-s">✅ Rust 选这个</span></div>
+    </div>
+  </section>
+
+  <!-- 4. Deep dive 1 -->
+  <section class="slide" data-title="Deep Dive 1">
+    <p class="kicker">deep-dive · 1 / 2</p>
+    <h2 class="h2">Future 其实只有一个方法。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">编译器把 <span class="mono">async fn</span> 变成一个实现了 <span class="mono">Future</span> trait 的匿名状态机。运行时只做一件事：反复 <span class="mono">poll</span> 它，直到返回 <span class="mono">Ready</span>。</p>
+        <div class="mt-l">
+          <span class="tag">Pending</span> <span class="tag">Ready(T)</span> <span class="tag">Waker.wake()</span>
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>future.rs</span></div>
+<pre><span class="kw">pub trait</span> <span class="fn">Future</span> {
+    <span class="kw">type</span> Output;
+    <span class="kw">fn</span> <span class="fn">poll</span>(
+        <span class="kw">self</span>: Pin&lt;&amp;<span class="kw">mut Self</span>&gt;,
+        cx: &amp;<span class="kw">mut</span> Context&lt;<span class="str">'_</span>&gt;,
+    ) -&gt; Poll&lt;<span class="kw">Self</span>::Output&gt;;
+}
+
+<span class="cmt">// Poll::Pending   → 挂起，等 waker 唤醒</span>
+<span class="cmt">// Poll::Ready(v)  → 完成，产出 v</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Deep dive 2 -->
+  <section class="slide" data-title="Deep Dive 2">
+    <p class="kicker">deep-dive · 2 / 2</p>
+    <h2 class="h2">Tokio 是一个偷任务的小工。</h2>
+    <div class="grid g2 mt-l" style="align-items:start">
+      <div>
+        <p class="lede">Multi-thread runtime = N 个 worker，每个 worker 有自己的本地队列。空闲的 worker 会去别人队列里"偷"任务。</p>
+        <div class="stack mt-m">
+          <div class="tag">✦ local queue · 256 slots</div>
+          <div class="tag">✦ global injection queue</div>
+          <div class="tag">✦ work-stealing @ 50% steal ratio</div>
+          <div class="tag">✦ LIFO slot for cache locality</div>
+        </div>
+      </div>
+      <div class="card" style="padding:32px">
+        <h4 class="mono" style="color:var(--accent-2)">scheduler tick loop</h4>
+        <div class="stack mt-m" style="font-family:'JetBrains Mono',monospace;font-size:14px;line-height:1.9;color:var(--text-2)">
+          <div><span style="color:var(--accent)">1.</span> pop from LIFO slot</div>
+          <div><span style="color:var(--accent)">2.</span> else pop from local queue</div>
+          <div><span style="color:var(--accent)">3.</span> else drain global queue (every 61 ticks)</div>
+          <div><span style="color:var(--accent)">4.</span> else steal from random victim</div>
+          <div><span style="color:var(--accent)">5.</span> else park the thread</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Code example -->
+  <section class="slide" data-title="Code">
+    <p class="kicker">mini-runtime.rs · ~40 LOC</p>
+    <h2 class="h2">手写一个最小 runtime。</h2>
+    <div class="terminal mt-m">
+      <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>src/main.rs</span></div>
+<pre><span class="kw">use</span> std::collections::VecDeque;
+<span class="kw">use</span> std::sync::{Arc, Mutex};
+<span class="kw">use</span> std::task::{Context, Poll, Wake, Waker};
+
+<span class="kw">struct</span> Task(Mutex&lt;Pin&lt;Box&lt;<span class="kw">dyn</span> Future&lt;Output = ()&gt; + Send&gt;&gt;&gt;);
+
+<span class="kw">impl</span> Wake <span class="kw">for</span> Task {
+    <span class="kw">fn</span> <span class="fn">wake</span>(<span class="kw">self</span>: Arc&lt;<span class="kw">Self</span>&gt;) { QUEUE.lock().unwrap().push_back(<span class="kw">self</span>); }
+}
+
+<span class="kw">fn</span> <span class="fn">block_on</span>&lt;F: Future&lt;Output = ()&gt; + Send + <span class="str">'static</span>&gt;(fut: F) {
+    <span class="fn">spawn</span>(fut);
+    <span class="kw">while let Some</span>(task) = QUEUE.lock().unwrap().pop_front() {
+        <span class="kw">let</span> waker = Waker::from(task.clone());
+        <span class="kw">let mut</span> cx = Context::from_waker(&amp;waker);
+        <span class="kw">let mut</span> fut = task.<span class="num">0</span>.lock().unwrap();
+        <span class="kw">let</span> _ = fut.as_mut().<span class="fn">poll</span>(&amp;<span class="kw">mut</span> cx); <span class="cmt">// 就是这一行</span>
+    }
+}</pre>
+    </div>
+  </section>
+
+  <!-- 7. Takeaways -->
+  <section class="slide" data-title="Takeaways">
+    <p class="kicker">// takeaways</p>
+    <h2 class="h2">三件事带回去。</h2>
+    <div class="grid g3 mt-l">
+      <div class="card card-accent"><h4>1 · async 是零成本抽象</h4><p class="dim">编译成状态机，没有运行时虚表，没有 GC。</p></div>
+      <div class="card card-accent"><h4>2 · Waker 是脉搏</h4><p class="dim">Future 不主动做事，运行时靠 waker 决定"什么时候再 poll"。</p></div>
+      <div class="card card-accent"><h4>3 · 别在 async 里阻塞</h4><p class="dim">一行 <span class="mono">std::fs::read</span> 能让整个 worker 停摆。用 <span class="mono">spawn_blocking</span>。</p></div>
+    </div>
+    <p class="lede mt-l">延伸阅读：<span class="mono">tokio.rs/blog/2019-10-scheduler</span> · <span class="mono">rust-lang.github.io/async-book</span></p>
+  </section>
+
+  <!-- 8. Q&A -->
+  <section class="slide center tc" data-title="Q and A">
+    <div>
+      <div class="mono" style="font-size:120px;color:var(--accent);font-weight:800;letter-spacing:-.04em">?</div>
+      <h2 class="h2">Questions?</h2>
+      <p class="lede" style="margin:14px auto">github.com/lewis · @lewis on slack</p>
+      <div class="row mt-l" style="justify-content:center">
+        <span class="tag">slides: git.co/rt-deck</span>
+        <span class="tag">code: git.co/mini-rt</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script src="../../../assets/runtime.js"></script>
+</body></html>

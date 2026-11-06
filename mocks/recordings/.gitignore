@@ -1,0 +1,6 @@
+# Recording corpus is hosted on Cloudflare R2 (see ../manifest.json).
+# Pull it with: bash mocks/scripts/fetch-recordings.sh
+# The .jsonl files land here at runtime; the manifest is the source of
+# truth committed in the parent dir.
+*.jsonl
+index.json

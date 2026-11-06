@@ -1,0 +1,342 @@
+# Início rápido
+
+<p align="center"><a href="../../QUICKSTART.md">English</a> · <b>Português (Brasil)</b> · <a href="QUICKSTART.de.md">Deutsch</a> · <a href="QUICKSTART.fr.md">Français</a> · <a href="QUICKSTART.ja-JP.md">日本語</a> · <a href="QUICKSTART.ko.md">한국어</a> · <a href="QUICKSTART.zh-CN.md">简体中文</a> · <a href="QUICKSTART.zh-TW.md">繁體中文</a> · <a href="QUICKSTART.th.md">ภาษาไทย</a></p>
+
+Rode o produto inteiro localmente.
+
+## Requisitos de ambiente
+
+- **Node.js:** `~24` (Node 24.x). O repo força isso via `package.json#engines`.
+- **pnpm:** `10.33.x`. O repo fixa `pnpm@10.33.2` via `packageManager`; use Corepack para selecionar a versão fixada automaticamente.
+- **SO:** macOS, Linux e WSL2 são os caminhos principais. Windows nativo costuma funcionar para a maioria dos fluxos, mas WSL2 é a base mais segura.
+- **CLI de agente local (opcional):** O OpenDesign mantém um registro de runtimes locais, incluindo Claude Code, Codex, Devin for Terminal, OpenCode, Cursor Agent, Qwen, Qoder CLI, GitHub Copilot CLI e outros. A lista atual fica em [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts). Sem nenhum instalado, use um runtime BYOK configurado em Settings.
+
+`nvm` / `fnm` são ferramentas opcionais de conveniência, não são parte obrigatória do setup do projeto. Se você usa um deles, instale/selecione o Node 24 antes de rodar pnpm:
+
+```bash
+# nvm
+nvm install 24
+nvm use 24
+
+# fnm
+fnm install 24
+fnm use 24
+```
+
+Em seguida, habilite o Corepack e deixe o repo escolher o pnpm:
+
+```bash
+corepack enable
+corepack pnpm --version   # should print 10.33.2
+```
+
+## Em um único comando (modo dev)
+
+```bash
+corepack enable
+pnpm install
+pnpm tools-dev run web # starts daemon + web in the foreground
+# open the web URL printed by tools-dev
+```
+
+Para a shell desktop e todos os sidecars gerenciados em background:
+
+```bash
+pnpm tools-dev # starts daemon + web + desktop in the background
+```
+
+No primeiro carregamento, o app detecta os runtimes locais disponíveis e também oferece runtimes BYOK configurados em Settings. Escolha um runtime, uma design template e um design system, digite um prompt e clique em **Send**. Runtimes locais estruturados escrevem os arquivos canônicos do projeto e transmitem eventos de arquivo/ferramenta; o workspace de arquivos e o preview se atualizam a partir dessas escritas. Execuções somente texto e BYOK retornam, em vez disso, um bloco `<artifact>` completo para o host parsear. Antes de documentar ou alterar qualquer caminho de armazenamento de artifact, você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
+
+O catálogo **Design systems** é carregado diretamente dos pacotes `DESIGN.md` em [`design-systems/`](../../design-systems/). Escolha um para aplicar a linguagem visual da marca ao artefato.
+
+O catálogo **Templates** vem de [`design-templates/`](../../design-templates/) e agrupa formatos de prototype, deck, documento, imagem, vídeo e áudio. [`skills/`](../../skills/) fica reservado às capacidades funcionais que o agente invoca durante o trabalho. Combine uma template com um design system para produzir um artefato na linguagem visual escolhida.
+
+## Outros scripts
+
+```bash
+pnpm tools-dev                 # daemon + web + desktop in the background
+pnpm tools-dev start web       # daemon + web in the background
+pnpm tools-dev run web         # daemon + web in the foreground (e2e/dev server)
+pnpm tools-dev restart         # restart daemon + web + desktop
+pnpm tools-dev restart --daemon-port 7457 --web-port 5175
+pnpm tools-dev status          # inspect managed runtimes
+pnpm tools-dev logs            # show daemon/web/desktop logs
+pnpm tools-dev check           # status + recent logs + common diagnostics
+pnpm tools-dev stop            # stop managed runtimes
+pnpm --filter @open-design/daemon build  # build apps/daemon/dist/cli.js for `od`
+pnpm --filter @open-design/web build     # build do pacote web quando necessário
+pnpm typecheck                 # workspace typecheck
+```
+
+`pnpm tools-dev` é o único entrypoint do ciclo de vida local. Não use os antigos atalhos do root removidos (`pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, `pnpm start`).
+
+Em desenvolvimento local, o `tools-dev` sobe o daemon primeiro, repassa a porta dele para `apps/web`, e o `apps/web/next.config.ts` reescreve `/api/*`, `/artifacts/*` e `/frames/*` para essa porta de daemon, permitindo que o app do App Router fale com o processo Express irmão sem configurar CORS.
+
+## Configuração Docker
+
+Execute o OpenDesign em um ambiente totalmente conteinerizado sem instalar Node.js ou pnpm localmente.
+
+### Requisitos
+
+* Docker Desktop
+* Docker Compose v2
+
+Verifique se o Docker está instalado corretamente:
+
+```bash
+docker compose version
+```
+
+---
+
+## Iniciar o OpenDesign
+
+A partir da raiz do repositório:
+
+1. Vá para o diretório deploy e copie o modelo de ambiente:
+
+   ```bash
+   cd deploy
+   cp .env.example .env
+   ```
+
+2. Gere um token seguro:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. Abra o `.env` no seu editor, encontre `OD_API_TOKEN=` e cole o token gerado.
+
+Em seguida, inicie o serviço:
+
+```bash
+docker compose up -d
+```
+
+Abra o aplicativo no seu navegador:
+
+```text
+http://localhost:7456
+```
+
+A primeira inicialização pode levar alguns segundos enquanto o Docker baixa a imagem mais recente.
+
+---
+
+## Comandos Docker comuns
+
+### Ver logs
+
+```bash
+docker compose logs -f
+```
+
+### Reiniciar contêineres
+
+```bash
+docker compose restart
+```
+
+### Parar contêineres
+
+```bash
+docker compose down
+```
+
+### Baixar a imagem mais recente
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Remover todos os dados locais do aplicativo
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Configuração de ambiente
+
+Crie um arquivo `deploy/.env` para substituir a configuração padrão. Comece a partir do exemplo fornecido:
+
+```bash
+cp deploy/.env.example deploy/.env
+```
+
+Edite `deploy/.env` para definir seu próprio token e ajustar outros valores conforme necessário:
+
+```env
+# Porta exposta no host
+OPEN_DESIGN_PORT=7456
+
+# Limite de memória do container
+OPEN_DESIGN_MEM_LIMIT=384m
+
+# Origens CORS permitidas
+OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com
+
+# Tag da imagem Docker
+OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest
+
+# Token de API obrigatório para segurança do daemon
+# Gere um com: openssl rand -hex 32
+OD_API_TOKEN=
+```
+
+---
+
+## Armazenamento persistente
+
+Antes de documentar, alterar ou escolher qualquer caminho persistente de armazenamento do daemon,
+você DEVE ler o `AGENTS.md` na raiz, seção **Daemon data directory contract**.
+Este Quickstart NÃO DEVE repetir esse contrato nem definir caminhos de armazenamento.
+
+---
+
+## Notas
+
+* O modo Docker é ideal para contribuidores que não desejam uma configuração local com Node.js ou pnpm.
+* O contêiner expõe a compilação do daemon de produção diretamente na porta `7456`.
+* Para fluxos de trabalho de desenvolvimento e configuração local avançada, consulte o restante deste guia de início rápido.
+
+---
+
+## Verificações de geração de mídia / dispatcher de agente
+
+Skills de imagem, vídeo, áudio e HyperFrames chamam o CLI local `od` por meio de variáveis de ambiente que o daemon injeta ao spawnar um agente:
+
+- `OD_BIN` — caminho absoluto para `apps/daemon/dist/cli.js`.
+- `OD_DAEMON_URL` — URL do daemon em execução.
+- `OD_PROJECT_ID` — id do projeto ativo.
+- `OD_PROJECT_DIR` — diretório de arquivos do projeto ativo.
+
+Se a geração de mídia falhar com `OD_BIN: parameter not set`, com `apps/daemon/dist/cli.js` ausente ou com `failed to reach daemon at http://127.0.0.1:0`, recompile o CLI do daemon e reinicie o runtime gerenciado:
+
+```bash
+pnpm --filter @open-design/daemon build
+pnpm tools-dev restart --daemon-port 7457 --web-port 5175
+ls -la apps/daemon/dist/cli.js
+curl -s http://127.0.0.1:7457/api/health
+```
+
+Em seguida, abra o projeto pelo app OpenDesign novamente em vez de retomar uma sessão antiga de agente no terminal. Um agente spawnado pelo daemon deve ver valores como:
+
+```bash
+echo "OD_BIN=$OD_BIN"
+echo "OD_PROJECT_ID=$OD_PROJECT_ID"
+echo "OD_PROJECT_DIR=$OD_PROJECT_DIR"
+echo "OD_DAEMON_URL=$OD_DAEMON_URL"
+ls -la "$OD_BIN"
+```
+
+`OD_DAEMON_URL` precisa ser uma porta de daemon real, como `http://127.0.0.1:7457`, e não `http://127.0.0.1:0`. O `:0` é apenas uma dica interna de "escolha uma porta livre" no launch e não deveria vazar para sessões de agente.
+
+No modo de produção daemon-only, o próprio daemon serve o export estático do Next.js em `http://localhost:7456`, então não há reverse proxy envolvido.
+
+Se você colocar nginx na frente do daemon, mantenha as rotas SSE sem buffering e sem compressão. Uma falha comum é o console do navegador mostrar `net::ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)` depois de 80–90 segundos, porque o `gzip on` do nginx bufferiza respostas SSE em chunks mesmo quando o daemon envia `X-Accel-Buffering: no`.
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:7456;
+
+    proxy_buffering off;
+    gzip off;
+
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+## Dois modos de execução
+
+| Modo | Valor no picker | Como uma requisição flui |
+|---|---|---|
+| **Local CLI** (default quando o daemon detecta um agente) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → eventos estruturados de ferramenta/arquivo via SSE → arquivos do projeto → preview. CLIs plain-stream usam o caminho text-artifact. |
+| **API mode** (fallback / sem CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → SSE do provider normalizado para `delta/end/error` → parser de `<artifact>` → preview |
+
+Os dois modos terminam no mesmo workspace de arquivos e preview sandboxed, mas usam contratos de entrega diferentes. Runtimes com filesystem escrevem os arquivos canônicos e não repetem seu código-fonte em `<artifact>`. Execuções plain/somente texto e BYOK não têm ferramentas de arquivo; o resultado canônico é o HTML completo em `<artifact>`. O perfil de execução é selecionado pelo transporte do runtime.
+
+## Composição de prompt
+
+A cada envio, o app monta um system prompt a partir de três camadas e o envia ao provider:
+
+```
+BASE_SYSTEM_PROMPT   (entrega por arquivo ou <artifact> conforme o perfil de execução)
+   + active design system body  (DESIGN.md — palette/type/layout)
+   + active skill body          (SKILL.md — workflow and output rules)
+```
+
+Troque o skill ou o design system na barra superior e o próximo envio usa a nova stack. Os corpos ficam em cache em memória por sessão, então é um único fetch ao daemon por escolha.
+
+## Mapa de arquivos
+
+```
+open-design/
+├── apps/
+│   ├── daemon/                # Node/Express — spawns local agents + serves APIs
+│   │   └── src/
+│   │       ├── cli.ts             # `od` bin entry
+│   │       ├── server.ts          # /api/* + static serving
+│   │       ├── agents.ts          # exports de compatibilidade dos módulos de runtime
+│   │       ├── runtimes/
+│   │       │   ├── registry.ts    # registro dos runtimes suportados
+│   │       │   └── defs/          # definições de launch e argumentos por runtime
+│   │       ├── skills.ts          # SKILL.md loader (frontmatter parser)
+│   │       └── design-systems/    # DESIGN.md loader e serviços
+│   │   ├── sidecar/           # tools-dev daemon sidecar wrapper
+│   │   └── tests/             # daemon package tests
+│   ├── web/                   # Next.js 16 App Router + React client
+│       ├── app/               # App Router entrypoints
+│       ├── src/               # React + TypeScript client/runtime modules
+│       │   ├── App.tsx        # orchestrates mode / skill / DS pickers + send
+│       │   ├── providers/     # daemon + BYOK API transports
+│       │   ├── prompts/       # system, discovery, directions, deck framework
+│       │   ├── artifacts/     # parsing de text-artifact + manifests de artifacts
+│       │   ├── runtime/       # iframe srcdoc, markdown, export helpers
+│       │   └── state/         # localStorage + daemon-backed project state
+│       ├── sidecar/           # tools-dev web sidecar wrapper
+│       └── next.config.ts     # tools-dev rewrites + prod apps/web/out export config
+│   └── desktop/               # Electron runtime, launched/inspected by tools-dev
+├── packages/
+│   ├── contracts/             # shared web/daemon app contracts
+│   ├── sidecar-proto/         # OpenDesign sidecar protocol contract
+│   ├── sidecar/               # generic sidecar runtime primitives
+│   └── platform/              # generic process/platform primitives
+├── tools/dev/                 # `pnpm tools-dev` lifecycle and inspect CLI
+├── e2e/                       # Playwright UI + external integration/Vitest harness
+├── skills/                    # capacidades funcionais invocadas durante o trabalho
+├── design-templates/          # catálogo de renderização para prototypes, decks, docs e mídia
+├── design-systems/            # pacotes de marca baseados em DESIGN.md
+├── scripts/sync-design-systems.ts    # re-import from upstream getdesign tarball
+├── docs/                      # product vision + spec
+├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
+└── package.json               # root quality scripts + `od` bin
+```
+
+## Solução de problemas
+
+- **"no agents found on PATH"** — instale um dos runtimes locais registrados em [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts), confirme que o executável está visível para o daemon e use **Rescan** em **Models & providers → Local CLI**. Ou configure um runtime BYOK em Settings.
+- **daemon 500 em /api/chat** — confira o terminal do daemon para a tail de stderr; geralmente o CLI rejeitou os args. CLIs diferentes aceitam formatos de argv diferentes; veja a definição correspondente em `apps/daemon/src/runtimes/defs/` se precisar ajustar.
+- **geração de mídia diz que `OD_BIN` está faltando ou que a URL do daemon é `:0`** — rode as verificações do dispatcher de mídia acima. Não retome a sessão antiga do CLI; reabra o projeto pelo app OpenDesign para o daemon injetar variáveis `OD_*` novas.
+- **Codex carrega muito contexto de plugin** — suba o OpenDesign com `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` para que processos Codex spawnados pelo daemon rodem com `--disable plugins`.
+- **artifact nunca renderiza** — primeiro identifique o perfil de entrega. Em um runtime local com filesystem, confirme que o agente criou um arquivo de projeto que pode ser pré-visualizado e que os eventos de arquivo chegaram ao daemon; o código-fonte não deve estar em `<artifact>`. Em execução plain/somente texto ou BYOK, confirme um único bloco `<artifact>` completo e procure no log do daemon a primeira fronteira que falhou.
+
+## Voltando à visão
+
+Este Início rápido é a semente executável da spec em [`docs/`](../../docs/). A spec descreve para onde isso evolui (veja [`docs/roadmap.md`](../../docs/roadmap.md)). Destaques:
+
+- `docs/architecture.md` descreve a stack entregue: Next.js 16 App Router na frente, daemon local atrás, e os rewrites de `apps/web/next.config.ts` em dev mantendo o navegador conversando com a mesma superfície `/api`.
+- `docs/skills-protocol.md` descreve o frontmatter atual de `SKILL.md`/`od:` e a separação entre skills funcionais e templates de renderização. O parser e a normalização em `apps/daemon/src/skills.ts` são a fonte de verdade da implementação.
+- `docs/agent-adapters.md` descreve o contrato dos adapters. Configurações de launch, argumentos, modelos e stream específicas de cada runtime ficam em `apps/daemon/src/runtimes/defs/`, com registro em `apps/daemon/src/runtimes/registry.ts`; `apps/daemon/src/agents.ts` é uma superfície de exports de compatibilidade.
+- `docs/modes.md` distingue as seis abas de New Project dos sete modos normalizados do registro (`prototype`, `deck`, `template`, `design-system`, `image`, `video`, `audio`).

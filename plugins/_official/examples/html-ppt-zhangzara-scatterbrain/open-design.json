@@ -1,0 +1,116 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-zhangzara-scatterbrain",
+  "title": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+  "title_i18n": {
+    "en": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+    "zh-CN": "像作品集出众的设计学生一样讲毕业设计",
+    "zh-TW": "像作品集出众的设计学生一样讲毕业设计"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-05-12T07:18:16Z",
+  "description": "A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Built as a decision-grade coursework defense deck for crit panel, faculty.",
+  "description_i18n": {
+    "en": "A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Built as a decision-grade coursework defense deck for crit panel, faculty.",
+    "zh-CN": "像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。",
+    "zh-TW": "像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "OpenDesign",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-zhangzara-scatterbrain",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "marketing",
+    "web",
+    "scatterbrain",
+    "zhangzara-scatterbrain",
+    "playful",
+    "creative",
+    "informal",
+    "warm",
+    "brainstorm-workshop",
+    "creative-agency-credentials",
+    "html-deck",
+    "html-slides",
+    "zhangzara",
+    "design",
+    "brand",
+    "visual-system",
+    "html-ppt-zhangzara-scatterbrain",
+    "student-coursework",
+    "senior-capstone-defense-deck",
+    "education",
+    "coursework",
+    "defense",
+    "academic",
+    "decision-deck",
+    "commercial-slide-agent"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "education",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create \"Pitch a Graduation Design Project like a Portfolio-Ready Design Student\" as a decision-grade Student coursework deck in this template's own visual system. Subject: A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. Audience: crit panel, faculty. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: can a reviewer find the contribution, evidence, and limitation in under 90 seconds.",
+        "zh-CN": "像作品集出众的设计学生一样讲毕业设计。像作品集出众的设计学生一样讲毕业设计——一份可商业交付的课业答辩 Deck，围绕真实主题、证据链与决策目标组织。 主题：A design-school graduation project: a civic wayfinding system for a transit hub — the brief, the process, and the outcome. 先确认受众、决策目标、素材来源、截止时间和必须保留的数据，再输出叙事主线、页面规划、逐页文案、视觉方向和按评审标准自检的版本。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+          "title_i18n": {
+            "en": "Pitch a Graduation Design Project like a Portfolio-Ready Design Student",
+            "zh-CN": "像作品集出众的设计学生一样讲毕业设计",
+            "zh-TW": "像作品集出众的设计学生一样讲毕业设计"
+          }
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ],
+    "category": "student-coursework"
+  }
+}

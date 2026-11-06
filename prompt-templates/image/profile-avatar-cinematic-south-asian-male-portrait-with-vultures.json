@@ -1,0 +1,22 @@
+{
+  "id": "profile-avatar-cinematic-south-asian-male-portrait-with-vultures",
+  "surface": "image",
+  "title": "Profile / Avatar - Cinematic South Asian Male Portrait with Vultures",
+  "summary": "A detailed cinematic portrait of a young South Asian man in a moody, dark fantasy setting surrounded by vultures and ravens.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "cinematic",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A highly detailed cinematic portrait of a handsome {argument name=\"ethnicity\" default=\"South Asian\"} man in his late 20s or early 30s, sitting on a metal railing with a soccer goal net behind him. He has sharp facial features, dark styled hair, light stubble, and intense dark eyes. He is wearing a {argument name=\"clothing\" default=\"black zip-up hoodie, black sweatpants, and white speckled sneakers\"}. His hands are clasped together resting on his knees as he looks directly at the viewer with a confident, slightly brooding expression.\n\nHe is surrounded by a dramatic flock of large black vultures and ravens. Some vultures are flying with wings spread in a dark stormy sky, while others are perched on the railing and goalpost near him. The atmosphere is {argument name=\"atmosphere\" default=\"dark, moody, and cinematic\"} with heavy storm clouds, dramatic lighting, and a mysterious, powerful vibe. High contrast, moody color grading, ultra-realistic, photorealistic, epic composition, dark fantasy aesthetic.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453132629_dmkonb_HG9Und1aYAAyo9g.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "Jahan Zaib",
+    "url": "https://x.com/jzaib4269/status/2048949396222489081"
+  }
+}

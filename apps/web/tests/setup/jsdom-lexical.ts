@@ -1,0 +1,87 @@
+import { afterEach } from 'vitest';
+import { configure } from '@testing-library/react';
+
+// Extend vitest's expect with @testing-library/jest-dom matchers (e.g.
+// toBeInTheDocument, toHaveTextContent) so jsdom-environment tests can use
+// them without importing jest-dom in every test file.
+import '@testing-library/jest-dom/vitest';
+
+import { resetPluginsCache } from '../../src/state/projects';
+
+// Failure budget for waitFor/findBy under CI CPU contention — not expected
+// duration. Recent Web workspace flakes clustered at 1015–1093ms, so 3s gives
+// useful runner slack while staying below Vitest's 5s per-test limit. Keep this
+// below the outer test timeout so Testing Library can still print its assertion
+// and DOM diagnostics when a wait genuinely fails.
+configure({ asyncUtilTimeout: 3_000 });
+
+// The visible-plugins cache is module-level so it survives Home remounts in the
+// app (a deliberate perf choice). In tests that persistence would leak a case's
+// mocked `/api/plugins` payload into the next case via `listPluginsFresh`, so
+// clear it after every case — each test then observes only its own mock.
+afterEach(() => {
+  resetPluginsCache();
+});
+
+// jsdom does not implement geometry for Range/Element, but Lexical's
+// `updateDOMSelection` calls `getBoundingClientRect()` on the collapsed
+// selection target whenever the editor is the active element (to scroll it
+// into view). With a real textarea this never ran; now that HomeHero embeds
+// the Lexical contenteditable and we call `editor.focus()`, focused commits
+// hit that path and throw `getBoundingClientRect is not a function` inside a
+// timer/rAF callback (an uncaught exception that fails the run).
+//
+// These polyfills are purely additive — they only define geometry methods
+// jsdom is missing — so they change no behavior in browsers or node-env
+// tests (guarded on `window`). They let the same Lexical editor that already
+// powers the project composer be exercised under jsdom on the homepage.
+
+if (typeof window !== 'undefined') {
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = (query) => ({
+      matches: false, media: query, onchange: null,
+      addListener: () => {}, removeListener: () => {},
+      addEventListener: () => {}, removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
+  const zeroRect = (): DOMRect => ({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    toJSON: () => ({}),
+  });
+
+  if (typeof Range !== 'undefined') {
+    if (typeof Range.prototype.getBoundingClientRect !== 'function') {
+      Range.prototype.getBoundingClientRect = zeroRect;
+    }
+    if (typeof Range.prototype.getClientRects !== 'function') {
+      Range.prototype.getClientRects = (() =>
+        Object.assign([], { item: () => null })) as unknown as Range['getClientRects'];
+    }
+  }
+
+  if (
+    typeof Element !== 'undefined' &&
+    typeof Element.prototype.scrollIntoView !== 'function'
+  ) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+}
+
+// jsdom has no 2D canvas backend, so every `getContext('2d')` call emits a
+// "Not implemented" jsdomError on the virtual console. Components that draw
+// (SpaceBackground, the kinetic grid, thumbnail rasterization) already treat a
+// null context as "no canvas, skip drawing", so return null quietly instead of
+// burying real diagnostics under one warning per render. Suites that need a
+// drawable canvas still `vi.spyOn(HTMLCanvasElement.prototype, 'getContext')`.
+if (typeof window !== 'undefined' && typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext =
+    (() => null) as unknown as HTMLCanvasElement['getContext'];
+}

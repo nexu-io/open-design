@@ -1,0 +1,127 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/together-ai/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Together AI".
+ * Pastel-gradient dreamscape for enterprise AI infrastructure: airy
+ * optimism meets technical precision, dual light/dark world approach.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure white light sections; Deep midnight blue (#010120) for dark sections
+ *   - "The Future" font with aggressive negative tracking throughout
+ *   - PP Neue Montreal Mono for uppercase section labels — technical taste
+ *   - Sharp geometry (4px, 8px) — never pill, never generous rounding
+ *   - Dark-blue-tinted shadows (rgba(1,1,32,0.1)) — ties to brand midnight
+ *   - Brand Magenta (#ef2cc1) + Orange (#fc4c02) for illustrations ONLY
+ *   - Lavender (#bdbbff) as a soft secondary UI accent
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Pure white for the light "business" world. Dark blue sections
+   * (the research/technical world) are applied as section overrides
+   * in components, not as the base --bg token. */
+  --bg: #ffffff;
+  --surface: #ffffff;        /* Cards on white — subtle glass tint in components */
+  --surface-warm: var(--surface); /* no warm tier — system uses cool/neutral palette */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Pure black on light; aliased to white on dark sections via component
+   * overrides. The soft lavender muted provides a gentle secondary tint. */
+  --fg: #000000;             /* Pure Black on light surfaces */
+  --fg-2: rgba(0, 0, 0, 0.6); /* Black 40 — de-emphasized secondary text */
+  --muted: #666666;          /* Approximated from Black 40 on white for readability */
+  --meta: var(--muted);      /* alias */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Semi-transparent borders using rgba — together with the dark blue
+   * shadow they give a "glass on white" quality to containment. */
+  --border: #ebebeb;         /* ≈ rgba(0,0,0,0.08) on white — subtle containment */
+  --border-soft: var(--border); /* alias — single border tier for light sections */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Dark Blue (#010120) as the primary CTA — it IS the dark world's
+   * surface color, making CTAs feel grounded in the brand universe.
+   * Brand Magenta and Orange are illustration-only; never use as --accent. */
+  --accent: #010120;         /* Dark Blue — primary CTA on light surfaces */
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), white 8%);  /* lighten the dark */
+  --accent-active: color-mix(in oklab, var(--accent), white 16%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Standard semantic palette against the clean white light world. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * "The Future" for all display and body — negative tracking throughout.
+   * PP Neue Montreal Mono for uppercase technical labels and markers.
+   * Weight range: 400 (regular) and 500 (medium) — NO bold.
+   * Tight line-heights (1.25–1.30) create a dense, information-rich feel. */
+  --font-display: "The Future", Arial, ui-sans-serif, sans-serif;
+  --font-body: "The Future", Arial, ui-sans-serif, sans-serif;
+  --font-mono: "PP Neue Montreal Mono", Georgia, ui-monospace, monospace;
+
+  /* Type scale — DESIGN.md §3. 64px display, 40px section, 28px sub. */
+  --text-xs: 10px;           /* Mono Micro — smallest uppercase labels */
+  --text-sm: 14px;           /* Caption — metadata, descriptions */
+  --text-base: 16px;         /* Body / Button / Nav */
+  --text-lg: 18px;           /* Body Large — descriptions, sections */
+  --text-xl: 22px;           /* Feature Title */
+  --text-2xl: 28px;          /* Sub-heading */
+  --text-3xl: 40px;          /* Section Heading */
+  --text-4xl: 64px;          /* Display / Hero — maximum impact */
+
+  --leading-body: 1.3;       /* Dense, information-rich feel — tighter than typical */
+  --leading-tight: 1.0;      /* Ultra-tight at display scale */
+  --tracking-display: -0.03em; /* ≈ -1.92px at 64px — always negative on The Future */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Generous section spacing (80–120px) for optimistic breathing room. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Sharp geometry — never pill, never generous rounding.
+   * This deliberately contrasts with the soft pastel gradients,
+   * creating "technical infrastructure company with taste." */
+  --radius-sm: 4px;          /* Badges, buttons, tags, small interactive */
+  --radius-md: 8px;          /* Larger containers, feature cards */
+  --radius-lg: 8px;          /* Same — no large roundness */
+  --radius-pill: 9999px;     /* Declared but should not be used in Together AI */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Dark-blue-tinted shadow — the subtle blue cast ties elevated
+   * elements to the brand's midnight-blue dark mode. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: rgba(1, 1, 32, 0.1) 0px 4px 10px; /* Brand midnight blue shadow */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Dark blue focus ring consistent with the CTA color. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard — Together AI's energy is in the gradient illustrations,
+   * not animation velocity. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px container, centered. Hero has centered pastel gradient bg. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

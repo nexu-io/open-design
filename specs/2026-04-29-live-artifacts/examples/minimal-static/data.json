@@ -1,0 +1,4 @@
+{
+  "title": "Minimal Static Live Artifact",
+  "summary": "A safe static fixture rendered from template.html and data.json."
+}

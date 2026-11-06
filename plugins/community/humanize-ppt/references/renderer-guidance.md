@@ -1,0 +1,10 @@
+# Renderer-specific guidance
+
+Moved out of `SKILL.md` (kept for history). The boundary itself is the
+invariants in `SKILL.md` — if anything here conflicts with them, the
+invariants win.
+
+14. For Chinese PPT production, the recommended stable path is `Humanize PPT → guizang-ppt-skill native → Humanize --qa-from → downstream presenter/deploy`. Guizang's own material QA and Swiss validator run inside the downstream skill. The presentation checkup in Humanize is a second-pair-of-eyes pass, not a replacement.
+15. For English PPT production, the recommended path is `Humanize PPT → frontend-slides or beautiful-html-templates (native) → Humanize --qa-from → downstream deploy`. The downstream skill owns its own template selection, preview gallery, and selected-template full deck. Humanize does not imitate them. **v1.0 support levels** (see `registry/renderer_registry.json`): both `beautiful-html-templates` and `frontend-slides` are now `full` — brief exit works, full presentation checkup ran on real decks, and 5 renderer-specific failure-mode rules added (horizontal overflow, low contrast, hyphenation noise, font contract, image alt). Screenshot review is still part of the checkup methodology for cases the static scan can't reach.
+16. For native PPTX, use `Humanize → ppt-master → Humanize --qa-from <deck.pptx>`. No raw template means PPT Master's strict main SVG pipeline; `--ppt-master-template <raw.pptx>` deterministically selects native `template-fill-pptx`. Keep its confirmation gates, speaker notes, transition/native-object flags, and downstream visual QA intact. Verification: `docs/showcase/ppt-master-native/verification-2026-07-10.md`.
+17. The verified Style A checkpoint at `examples/03-codex-guizang-native-ink-classic/` is a read-only visual reference. If the presentation checkup ever fails against it (`test_known_good_style_a_passes_all_style_a_gates`), the fixture or the live Guizang skill has drifted — do not weaken the checkup to make the test pass. The same applies to the English checked-up deck at `docs/showcase/hermes-agent-mastery/en/ppt/` (`test_english_showcase_deck_passes_presentation_checkup`).

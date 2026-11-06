@@ -1,0 +1,45 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "plugin-id",
+  "title": "Plugin Title",
+  "version": "0.1.0",
+  "description": "One sentence marketplace description.",
+  "license": "MIT",
+  "tags": ["create", "prototype"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "scenario": "general",
+    "useCase": {
+      "query": "Create {{artifact}} for {{audience}} about {{topic}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["discovery-question-form", "todo-write", "file-write", "critique-theater"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "artifact", "type": "string", "required": true, "label": "Artifact" },
+      { "name": "audience", "type": "string", "required": true, "label": "Audience" },
+      { "name": "topic", "type": "string", "required": true, "label": "Topic" }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}

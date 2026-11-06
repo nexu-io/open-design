@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quiver · Competitor Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Mission-control: cool neutral charcoal */
+    --bg:           #0c0c10;
+    --bg-soft:      #0e1015;
+    --surface:      #14161e;
+    --surface-2:    #181b25;
+    --surface-3:    #1e222e;
+    --surface-bright: #232734;
+    --line:         #232634;
+    --line-strong:  #303446;
+    --hairline:     rgba(255,255,255,0.04);
+
+    --ink:          #e7eaf0;
+    --ink-soft:     #b6bbc7;
+    --muted:        #767d8c;
+    --muted-2:      #525866;
+    --dim:          #353a47;
+
+    /* Status RGB */
+    --green:        #10b981;
+    --green-soft:   rgba(16,185,129,0.14);
+    --green-line:   rgba(16,185,129,0.5);
+    --amber:        #f59e0b;
+    --amber-soft:   rgba(245,158,11,0.14);
+    --amber-line:   rgba(245,158,11,0.5);
+    --red:          #ef4444;
+    --red-soft:     rgba(239,68,68,0.14);
+    --red-line:     rgba(239,68,68,0.5);
+
+    /* Brand */
+    --cyan:         #06b6d4;
+    --cyan-soft:    rgba(6,182,212,0.14);
+    --violet:       #a78bfa;
+    --violet-soft:  rgba(167,139,250,0.16);
+
+    /* Type */
+    --display:  'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+    --body:     'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono:     'JetBrains Mono', 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --r: 8px;
+    --r-card: 10px;
+    --r-pill: 999px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(900px 500px at 50% 0%, rgba(6,182,212,0.08), transparent 60%),
+      radial-gradient(700px 400px at 100% 60%, rgba(167,139,250,0.04), transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 13.5px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ─────── Top status bar ─────── */
+  .statusbar {
+    border-bottom: 1px solid var(--hairline);
+    background:
+      linear-gradient(180deg, rgba(6,182,212,0.05), transparent),
+      var(--bg-soft);
+    padding: 8px 24px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .statusbar .system::before {
+    content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); box-shadow: 0 0 8px var(--green);
+    margin-right: 8px; vertical-align: 1px;
+    animation: tick 1.6s ease-in-out infinite;
+  }
+  @keyframes tick {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .statusbar .v { color: var(--ink-soft); font-weight: 500; }
+  .statusbar .item { display: inline-flex; gap: 6px; align-items: center; }
+  .statusbar .threat-low { color: var(--green); }
+  .statusbar .threat-mid { color: var(--amber); }
+  .statusbar .threat-hi  { color: var(--red); }
+
+  /* ─────── Header ─────── */
+  header.app {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--bg);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 30px; height: 30px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+    box-shadow: 0 0 24px rgba(6,182,212,0.4);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 13px;
+  }
+  .word { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .title-stack { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.16em; }
+  .title-stack .row { color: var(--ink); font-weight: 500; }
+
+  .h-right { display: flex; align-items: center; gap: 8px; }
+  .icon-btn {
+    height: 32px; padding: 0 12px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--line);
+    color: var(--ink-soft); font-size: 12px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .icon-btn:hover { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+  .icon-btn.primary {
+    background: var(--cyan); border-color: var(--cyan); color: #002230;
+    font-weight: 600;
+    box-shadow: 0 0 18px rgba(6,182,212,0.3);
+  }
+  .icon-btn .ic { width: 13px; height: 13px; }
+  .icon-btn.spin .ic { animation: spin 0.8s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ─────── Layout ─────── */
+  main {
+    max-width: 1480px; margin: 0 auto;
+    padding: 22px 24px 60px;
+    display: grid; grid-template-columns: 1fr; gap: 20px;
+  }
+
+  /* ─────── Hero radar + summary ─────── */
+  .radar-section {
+    display: grid;
+    grid-template-columns: 460px 1fr;
+    gap: 20px;
+  }
+  .radar-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+  }
+  .radar-card .head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .radar-card .label {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.16em;
+  }
+  .radar-card .title {
+    font-family: var(--display); font-weight: 600; font-size: 17px;
+    margin-top: 4px; letter-spacing: -0.005em;
+  }
+  .radar-card .frame { color: var(--cyan); font-family: var(--mono); font-size: 10.5px; }
+
+  .radar-stage {
+    position: relative;
+    width: 100%; aspect-ratio: 1 / 1;
+    margin: 0 auto;
+  }
+  .radar-stage svg { width: 100%; height: 100%; display: block; }
+
+  .ring { fill: none; stroke: rgba(6,182,212,0.18); stroke-width: 1; }
+  .ring.inner { stroke: rgba(6,182,212,0.36); }
+  .crosshair { stroke: rgba(6,182,212,0.10); stroke-width: 1; }
+  .ring-label { fill: var(--muted-2); font-family: var(--mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; }
+
+  .sweep {
+    transform-origin: 50% 50%;
+    animation: sweepRot 6s linear infinite;
+  }
+  @keyframes sweepRot { to { transform: rotate(360deg); } }
+
+  .radar-node {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    z-index: 3;
+  }
+  .radar-node .badge {
+    width: 38px; height: 38px;
+    border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 14px;
+    border: 1.5px solid var(--bg);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .radar-node:hover .badge { transform: scale(1.08); }
+  .radar-node.active .badge {
+    box-shadow: 0 0 0 3px var(--cyan), 0 0 24px var(--cyan);
+  }
+  .radar-node .pin {
+    position: absolute; left: 50%; top: 100%;
+    transform: translate(-50%, 8px);
+    font-family: var(--mono); font-size: 10px; white-space: nowrap;
+    color: var(--ink-soft);
+    background: var(--surface-2);
+    padding: 2px 6px; border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+  .radar-node .threat-dot {
+    position: absolute; right: -3px; top: -3px;
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--bg);
+    z-index: 1;
+  }
+  .radar-node[data-threat="hi"] .threat-dot { background: var(--red); box-shadow: 0 0 6px var(--red); animation: tick 1.4s ease-in-out infinite; }
+  .radar-node[data-threat="mid"] .threat-dot { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+  .radar-node[data-threat="low"] .threat-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  .legend {
+    margin-top: 18px;
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .legend .swatch { display: inline-flex; gap: 6px; align-items: center; }
+  .legend .swatch::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+  .legend .hi::before { background: var(--red); }
+  .legend .mid::before { background: var(--amber); }
+  .legend .low::before { background: var(--green); }
+
+  /* Right side: focused brief */
+  .focus-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .focus-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 18px 22px;
+    background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border-bottom: 1px solid var(--hairline);
+  }
+  .focus-head .crumb {
+    font-family: var(--mono); font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.16em;
+  }
+  .focus-head h2 {
+    margin: 4px 0 0; font-family: var(--display); font-weight: 600; font-size: 22px;
+    letter-spacing: -0.015em;
+    display: inline-flex; gap: 12px; align-items: center;
+  }
+  .focus-head .co-mark {
+    width: 36px; height: 36px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 14px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .focus-head .threat {
+    font-family: var(--mono); font-size: 10.5px; padding: 4px 10px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .focus-head .threat.hi  { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-line); }
+  .focus-head .threat.mid { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-line); }
+  .focus-head .threat.low { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-line); }
+
+  .focus-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1px; background: var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .focus-stat { background: var(--surface); padding: 14px 18px; }
+  .focus-stat .lbl { font-family: var(--mono); font-size: 9.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+  .focus-stat .val { font-family: var(--display); font-weight: 600; font-size: 19px; margin-top: 4px; letter-spacing: -0.01em; }
+  .focus-stat .delta { font-family: var(--mono); font-size: 10.5px; margin-top: 2px; }
+  .focus-stat .delta.up { color: var(--red); }
+  .focus-stat .delta.down { color: var(--green); }
+  .focus-stat .delta.flat { color: var(--muted); }
+
+  .focus-thesis {
+    padding: 18px 22px;
+    flex: 1;
+  }
+  .focus-thesis h4 { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.14em; margin: 0 0 10px; font-weight: 500; }
+  .focus-thesis .body {
+    color: var(--ink-soft); font-size: 13px; line-height: 1.55;
+  }
+  .focus-thesis .body strong { color: var(--ink); }
+  .focus-thesis .body .accent {
+    background: linear-gradient(90deg, var(--red), var(--amber));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+
+  .focus-actions {
+    display: flex; gap: 8px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--hairline);
+  }
+  .focus-actions .btn {
+    flex: 1; padding: 9px 12px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--ink);
+    font-family: var(--display); font-weight: 500; font-size: 12.5px;
+    transition: all 0.15s;
+  }
+  .focus-actions .btn:hover { background: var(--surface-3); border-color: var(--line-strong); }
+  .focus-actions .btn.primary {
+    background: var(--cyan); color: #002230; border-color: var(--cyan); font-weight: 600;
+  }
+  .focus-actions .btn.primary:hover { box-shadow: 0 0 14px rgba(6,182,212,0.3); }
+
+  /* ─────── Filter ribbon ─────── */
+  .filters {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+  }
+  .filter-pills { display: flex; gap: 4px; padding: 3px; background: var(--surface-2); border-radius: 7px; border: 1px solid var(--line); }
+  .filter-pills button {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 5px 11px; font-size: 11.5px; font-weight: 500; border-radius: 5px;
+    font-family: var(--display);
+    transition: all 0.15s;
+    display: inline-flex; gap: 6px; align-items: center;
+  }
+  .filter-pills button:hover { color: var(--ink); }
+  .filter-pills button.active { background: var(--surface-3); color: var(--ink); }
+  .filter-pills .ic { width: 12px; height: 12px; }
+  .filter-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+
+  /* ─────── Activity feed + competitor cards ─────── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--hairline);
+  }
+  .panel-head .title { font-family: var(--display); font-weight: 600; font-size: 14px; }
+  .panel-head .sub { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+
+  .feed { display: flex; flex-direction: column; }
+  .feed-row {
+    display: grid;
+    grid-template-columns: 60px 28px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--hairline);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .feed-row:last-child { border-bottom: 0; }
+  .feed-row:hover { background: var(--surface-2); }
+  .feed-time { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .feed-mark {
+    width: 26px; height: 26px; border-radius: 6px;
+    color: #fff; font-weight: 700; font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .feed-body .who { font-family: var(--mono); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .feed-body .head { color: var(--ink); font-size: 13px; margin-top: 2px; line-height: 1.4; }
+  .feed-body .head strong { color: var(--ink); font-weight: 600; }
+  .feed-body .meta {
+    font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+    margin-top: 4px; display: flex; gap: 12px;
+  }
+  .feed-tag {
+    font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .feed-tag.hi  { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-line); }
+  .feed-tag.mid { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-line); }
+  .feed-tag.low { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-line); }
+  .feed-tag.fyi { background: var(--cyan-soft); color: var(--cyan); border: 1px solid rgba(6,182,212,0.4); }
+
+  /* Synthesis card */
+  .synth {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .synth .badge {
+    display: inline-flex; gap: 6px; align-items: center;
+    font-family: var(--mono); font-size: 10.5px; color: var(--violet);
+    text-transform: uppercase; letter-spacing: 0.14em;
+  }
+  .synth .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--violet); box-shadow: 0 0 10px var(--violet); }
+  .synth h4 {
+    font-family: var(--display); font-weight: 600; font-size: 18px;
+    margin: 8px 0 6px; line-height: 1.25; letter-spacing: -0.015em;
+  }
+  .synth h4 .accent {
+    background: linear-gradient(90deg, var(--cyan), var(--violet));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .synth p {
+    margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.55;
+  }
+  .synth-list {
+    margin-top: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .synth-list .item {
+    display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: flex-start;
+  }
+  .synth-list .num {
+    font-family: var(--mono); font-size: 9.5px;
+    background: var(--violet-soft); color: var(--violet);
+    border: 1px solid rgba(167,139,250,0.4); border-radius: 4px;
+    padding: 1px 0; text-align: center; font-weight: 600;
+  }
+  .synth-list .text { font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  .synth-list .text strong { color: var(--ink); }
+
+  /* Competitor cards */
+  .comp-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1px; background: var(--hairline);
+  }
+  .comp-card {
+    background: var(--surface);
+    padding: 14px 18px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .comp-card:hover { background: var(--surface-2); }
+  .comp-card.active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--cyan); }
+  .comp-top { display: flex; gap: 10px; align-items: center; }
+  .comp-top .mark {
+    width: 28px; height: 28px; border-radius: 7px;
+    color: #fff; font-weight: 700; font-size: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .comp-top .name { font-weight: 600; font-size: 13px; letter-spacing: -0.005em; }
+  .comp-top .tier {
+    margin-left: auto; font-family: var(--mono); font-size: 9.5px;
+    padding: 2px 6px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .comp-top .tier.hi { background: var(--red-soft); color: var(--red); }
+  .comp-top .tier.mid { background: var(--amber-soft); color: var(--amber); }
+  .comp-top .tier.low { background: var(--green-soft); color: var(--green); }
+  .comp-meta {
+    margin-top: 10px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    font-size: 11.5px;
+  }
+  .comp-meta .row { display: flex; justify-content: space-between; gap: 8px; }
+  .comp-meta .lbl { color: var(--muted); }
+  .comp-meta .val { font-family: var(--mono); color: var(--ink); }
+  .comp-meta .val.up   { color: var(--red); }
+  .comp-meta .val.down { color: var(--green); }
+  .comp-bar {
+    margin-top: 10px;
+    height: 28px;
+    background: var(--surface-3);
+    border-radius: 5px;
+    position: relative; overflow: hidden;
+  }
+  .comp-bar svg { width: 100%; height: 100%; display: block; }
+
+  /* ─────── Toast ─────── */
+  .toast-box {
+    position: fixed; bottom: 24px; right: 24px; z-index: 200;
+    display: flex; flex-direction: column; gap: 10px;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    min-width: 280px; max-width: 380px;
+    padding: 12px 14px;
+    background: rgba(20,22,30,0.95);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--cyan);
+    border-radius: 8px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    font-size: 12.5px; color: var(--ink);
+    animation: toastIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .toast.hi  { border-left-color: var(--red); }
+  .toast.mid { border-left-color: var(--amber); }
+  .toast.low { border-left-color: var(--green); }
+  .toast.violet { border-left-color: var(--violet); }
+  .toast .t-title { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); }
+  .toast .t-body { color: var(--ink); line-height: 1.45; }
+  .toast .t-body strong { color: var(--ink); }
+  .toast.fade { opacity: 0; transform: translateX(20px); transition: all 0.25s; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+  @media (max-width: 1080px) {
+    .radar-section { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .focus-stats { grid-template-columns: 1fr 1fr; }
+    .comp-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────── Status bar ─────── -->
+<div class="statusbar">
+  <span class="item system"><span>System</span><span class="v">nominal · 5 sources active</span></span>
+  <span class="item"><span>Threat level</span><span class="v threat-mid">elevated</span></span>
+  <span class="item"><span>Signals (24h)</span><span class="v" id="sigCount">42</span></span>
+  <span class="item"><span>Last scan</span><span class="v" id="lastScan">3m ago</span></span>
+  <span class="item" style="margin-left:auto"><span>Watchlist</span><span class="v">5 competitors · 18 keywords</span></span>
+</div>
+
+<!-- ─────── Header ─────── -->
+<header class="app">
+  <div class="brand">
+    <div class="logo">Q</div>
+    <div class="word">quiver</div>
+    <div class="title-stack">
+      <div>Competitor Intelligence</div>
+      <div class="row">Q2 Watch · pmtools.dev cohort</div>
+    </div>
+  </div>
+  <div class="h-right">
+    <button class="icon-btn" id="digestBtn">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M3 8h10M3 11h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Generate weekly digest
+    </button>
+    <button class="icon-btn primary" id="scanBtn">
+      <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M14 8a6 6 0 1 1-1.76-4.24M14 3v3.5h-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Scan now
+    </button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ─────── Radar + focused brief ─────── -->
+  <section class="radar-section">
+    <div class="radar-card">
+      <div class="head">
+        <div>
+          <div class="label">Active surveillance</div>
+          <div class="title">Distance = threat level · Color = trend</div>
+        </div>
+        <div class="frame">FRAME 04 / 09</div>
+      </div>
+      <div class="radar-stage" id="radarStage">
+        <svg viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <radialGradient id="bgRing" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#1f2738" stop-opacity="0.6"/>
+              <stop offset="60%" stop-color="#1f2738" stop-opacity="0.18"/>
+              <stop offset="100%" stop-color="#1f2738" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="sweepGrad" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stop-color="rgba(6,182,212,0)"/>
+              <stop offset="80%" stop-color="rgba(6,182,212,0.18)"/>
+              <stop offset="100%" stop-color="rgba(6,182,212,0.55)"/>
+            </linearGradient>
+          </defs>
+          <circle cx="200" cy="200" r="195" fill="url(#bgRing)"/>
+          <!-- Concentric rings -->
+          <circle class="ring inner" cx="200" cy="200" r="50"/>
+          <circle class="ring" cx="200" cy="200" r="100"/>
+          <circle class="ring" cx="200" cy="200" r="150"/>
+          <circle class="ring" cx="200" cy="200" r="190"/>
+          <line class="crosshair" x1="200" y1="10" x2="200" y2="390"/>
+          <line class="crosshair" x1="10" y1="200" x2="390" y2="200"/>
+          <line class="crosshair" x1="60" y1="60" x2="340" y2="340"/>
+          <line class="crosshair" x1="340" y1="60" x2="60" y2="340"/>
+
+          <!-- Ring labels -->
+          <text class="ring-label" x="200" y="146" text-anchor="middle">Critical</text>
+          <text class="ring-label" x="200" y="96" text-anchor="middle">High</text>
+          <text class="ring-label" x="200" y="46" text-anchor="middle">Watch</text>
+
+          <!-- Sweep -->
+          <g class="sweep">
+            <path d="M200,200 L200,10 A190,190 0 0,1 380,200 Z" fill="url(#sweepGrad)" opacity="0.9"/>
+          </g>
+
+          <!-- Center marker -->
+          <circle cx="200" cy="200" r="3" fill="#06b6d4"/>
+          <circle cx="200" cy="200" r="6" fill="none" stroke="#06b6d4" stroke-opacity="0.6"/>
+        </svg>
+
+        <!-- Competitor nodes (positioned in % so they scale with stage) -->
+        <div class="radar-node" data-id="linear" data-threat="hi" style="left:62%;top:30%">
+          <span class="badge" style="background:linear-gradient(135deg,#5e6ad2,#3a44a0)">L</span>
+          <span class="threat-dot"></span>
+          <span class="pin">Linear</span>
+        </div>
+        <div class="radar-node" data-id="notion" data-threat="mid" style="left:30%;top:42%">
+          <span class="badge" style="background:linear-gradient(135deg,#1f1f1f,#3a3a3a)">N</span>
+          <span class="threat-dot"></span>
+          <span class="pin">Notion</span>
+        </div>
+        <div class="radar-node" data-id="asana" data-threat="low" style="left:24%;top:74%">
+          <span class="badge" style="background:linear-gradient(135deg,#f06a6a,#ad3838)">A</span>
+          <span class="threat-dot"></span>
+          <span class="pin">Asana</span>
+        </div>
+        <div class="radar-node" data-id="monday" data-threat="hi" style="left:74%;top:62%">
+          <span class="badge" style="background:linear-gradient(135deg,#ff3d57,#9c2236)">M</span>
+          <span class="threat-dot"></span>
+          <span class="pin">Monday</span>
+        </div>
+        <div class="radar-node" data-id="clickup" data-threat="mid" style="left:54%;top:78%">
+          <span class="badge" style="background:linear-gradient(135deg,#7b68ee,#4d3fb6)">C</span>
+          <span class="threat-dot"></span>
+          <span class="pin">ClickUp</span>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="swatch hi">Critical · move now</span>
+        <span class="swatch mid">Watch · weekly</span>
+        <span class="swatch low">Stable</span>
+      </div>
+    </div>
+
+    <!-- Focused brief on selected competitor -->
+    <div class="focus-card" id="focusCard">
+      <div class="focus-head">
+        <div>
+          <div class="crumb">Selected · 04 May ↗ 06 May</div>
+          <h2 id="focusTitle"><span class="co-mark" id="focusMark" style="background:linear-gradient(135deg,#5e6ad2,#3a44a0)">L</span> Linear</h2>
+        </div>
+        <span class="threat hi" id="focusThreat">Critical · 92</span>
+      </div>
+      <div class="focus-stats">
+        <div class="focus-stat">
+          <div class="lbl">Pricing</div>
+          <div class="val" id="fsPrice">$8 → $10</div>
+          <div class="delta up" id="fsPriceDelta">+25% Pro · 2d ago</div>
+        </div>
+        <div class="focus-stat">
+          <div class="lbl">Releases (30d)</div>
+          <div class="val" id="fsRel">7</div>
+          <div class="delta up" id="fsRelDelta">+3 vs cohort avg</div>
+        </div>
+        <div class="focus-stat">
+          <div class="lbl">Hiring</div>
+          <div class="val" id="fsHire">14 open roles</div>
+          <div class="delta up" id="fsHireDelta">+8 in 30d · GTM heavy</div>
+        </div>
+        <div class="focus-stat">
+          <div class="lbl">X / Twitter velocity</div>
+          <div class="val" id="fsTw">142k impr/d</div>
+          <div class="delta up" id="fsTwDelta">+62% vs 30d avg</div>
+        </div>
+      </div>
+      <div class="focus-thesis">
+        <h4>Quiver synthesis · why this matters</h4>
+        <div class="body" id="focusBody">
+          <strong class="accent">Linear is hardening pricing into the AI-features bundle.</strong> The Pro plan jumped +25% with two announced AI features (auto-triage, code-search). Their hiring pipeline is GTM-heavy (8 of 14 new) — suggests outbound push, not inbound. <strong>Counter-move:</strong> emphasize cost-of-AI-features in our positioning and pre-empt with a 2-week migration tool.
+        </div>
+      </div>
+      <div class="focus-actions">
+        <button class="btn primary" data-fa="alert">⚑ Set alert on this competitor</button>
+        <button class="btn" data-fa="brief">Send brief to team</button>
+        <button class="btn" data-fa="open">Open intel page</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────── Filters ─────── -->
+  <div class="filters">
+    <div class="filter-pills" id="filterPills">
+      <button class="active" data-f="all">All <span class="ic" style="opacity:0.5;font-size:9px">42</span></button>
+      <button data-f="pricing">
+        <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M5 5l-2 3 2 3M11 5l2 3-2 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Pricing
+      </button>
+      <button data-f="product">
+        <svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 6h10M6 3v10" stroke="currentColor" stroke-width="1.4"/></svg>
+        Product
+      </button>
+      <button data-f="hiring">
+        <svg class="ic" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M3 13c0-2.5 2-4 5-4s5 1.5 5 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Hiring
+      </button>
+      <button data-f="social">
+        <svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M3 13l3-3 3 3 4-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Social
+      </button>
+      <button data-f="press">
+        <svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M5 6h6M5 8h6M5 10h4" stroke="currentColor" stroke-width="1.4"/></svg>
+        Press
+      </button>
+    </div>
+    <div class="filter-meta"><span id="feedCount">42</span> events · sorted by impact</div>
+  </div>
+
+  <!-- ─────── AI synthesis + activity feed + competitor cards ─────── -->
+  <section class="grid-2">
+
+    <!-- Activity feed -->
+    <div class="card">
+      <div class="panel-head">
+        <span class="title">Activity feed</span>
+        <span class="sub">Live · 24h window</span>
+      </div>
+      <div class="feed" id="feed"></div>
+    </div>
+
+    <!-- Right column: AI synthesis + competitor mini-cards -->
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <div class="card">
+        <div class="panel-head">
+          <span class="title">Quiver AI synthesis</span>
+          <span class="sub">Updated 14 min ago</span>
+        </div>
+        <div class="synth">
+          <div class="badge">Quiver intel</div>
+          <h4>The cohort just made <span class="accent">two converging moves</span> on AI features.</h4>
+          <p>Linear and Monday both raised Pro pricing with AI-bundle messaging. ClickUp's enterprise outbound stepped up <strong>+62%</strong> in social. Notion stayed quiet — possibly preparing a larger announcement.</p>
+          <div class="synth-list">
+            <div class="item"><div class="num">01</div><div class="text"><strong>Pre-empt the AI-bundle frame</strong> — publish "AI features included, no markup" landing page this week.</div></div>
+            <div class="item"><div class="num">02</div><div class="text"><strong>Migration tool from Linear → us</strong> — historical pattern: 2-week post-price-hike migration windows convert 3-5×.</div></div>
+            <div class="item"><div class="num">03</div><div class="text"><strong>Watch Notion next 7 days</strong> — silence + GTM hires usually precedes a major launch (last seen Sep '25 calendar release).</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="panel-head">
+          <span class="title">Competitor scorecard</span>
+          <span class="sub">Click to focus</span>
+        </div>
+        <div class="comp-grid" id="compGrid"></div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+(() => {
+  // ─────── Competitors ───────
+  const COMPS = {
+    linear: {
+      name: 'Linear', mark: 'L', bg: 'linear-gradient(135deg,#5e6ad2,#3a44a0)',
+      threat: 'hi', score: 92,
+      stats: { price: '$8 → $10', priceDelta: '+25% Pro · 2d ago', priceDir: 'up',
+               releases: '7', releasesDelta: '+3 vs cohort avg', releasesDir: 'up',
+               hiring: '14 open roles', hiringDelta: '+8 in 30d · GTM heavy', hiringDir: 'up',
+               twitter: '142k impr/d', twitterDelta: '+62% vs 30d avg', twitterDir: 'up' },
+      synthesis: '<strong class="accent">Linear is hardening pricing into the AI-features bundle.</strong> The Pro plan jumped +25% with two announced AI features (auto-triage, code-search). Their hiring pipeline is GTM-heavy (8 of 14 new) — suggests outbound push, not inbound. <strong>Counter-move:</strong> emphasize cost-of-AI-features in our positioning and pre-empt with a 2-week migration tool.',
+      micro: 'Pricing +25% · 7 releases · 142k impr/d',
+      bar: 88
+    },
+    notion: {
+      name: 'Notion', mark: 'N', bg: 'linear-gradient(135deg,#1f1f1f,#3a3a3a)',
+      threat: 'mid', score: 71,
+      stats: { price: '$10 (flat)', priceDelta: 'no change · 6mo+', priceDir: 'flat',
+               releases: '4', releasesDelta: 'avg pace · maintenance', releasesDir: 'flat',
+               hiring: '22 open roles', hiringDelta: '+11 in 30d · platform & infra', hiringDir: 'up',
+               twitter: '88k impr/d', twitterDelta: '−4% vs 30d avg', twitterDir: 'down' },
+      synthesis: '<strong class="accent">Suspicious silence.</strong> Notion is unusually quiet on social, but their hiring is heavily weighted to platform + infra (11 of 22 new). The pattern matches Sep \'25, two months before Calendar shipped. <strong>Watch:</strong> expect a larger announcement in 30–45 days.',
+      micro: 'Quiet on social · 11 platform hires · pattern match',
+      bar: 62
+    },
+    asana: {
+      name: 'Asana', mark: 'A', bg: 'linear-gradient(135deg,#f06a6a,#ad3838)',
+      threat: 'low', score: 38,
+      stats: { price: '$13.49 (flat)', priceDelta: 'last change Jan \'25', priceDir: 'flat',
+               releases: '2', releasesDelta: '−2 vs cohort · slow', releasesDir: 'down',
+               hiring: '6 open roles', hiringDelta: 'flat · half on EU expansion', hiringDir: 'flat',
+               twitter: '34k impr/d', twitterDelta: '−18% vs 30d avg', twitterDir: 'down' },
+      synthesis: '<strong>Asana is in maintenance mode.</strong> Two releases in 30 days, both bug-only. Hiring frozen except EU sales. Twitter velocity sliding. <strong>Read:</strong> not a near-term threat. Watch for a leadership change or pricing reset as the trigger.',
+      micro: 'Slow releases · −18% impressions · EU-only hiring',
+      bar: 24
+    },
+    monday: {
+      name: 'Monday', mark: 'M', bg: 'linear-gradient(135deg,#ff3d57,#9c2236)',
+      threat: 'hi', score: 84,
+      stats: { price: '$9 → $12', priceDelta: '+33% Standard · 5d ago', priceDir: 'up',
+               releases: '6', releasesDelta: '+2 vs cohort · AI-flavored', releasesDir: 'up',
+               hiring: '38 open roles', hiringDelta: '+18 in 30d · enterprise blitz', hiringDir: 'up',
+               twitter: '210k impr/d', twitterDelta: '+118% vs 30d avg', twitterDir: 'up' },
+      synthesis: '<strong class="accent">Monday is going aggressive on enterprise.</strong> Pricing +33%, 18 enterprise GTM hires, social impressions doubled. Sales motion shifted from PLG to outbound on mid-market accounts. <strong>Counter-move:</strong> reinforce self-serve story; outbound pricing flexibility for $50–200k ARR band.',
+      micro: 'Pricing +33% · 18 GTM hires · 210k impr/d',
+      bar: 92
+    },
+    clickup: {
+      name: 'ClickUp', mark: 'C', bg: 'linear-gradient(135deg,#7b68ee,#4d3fb6)',
+      threat: 'mid', score: 64,
+      stats: { price: '$7 (flat)', priceDelta: 'undercutter · holding', priceDir: 'flat',
+               releases: '12', releasesDelta: '+8 vs cohort · feature-tank', releasesDir: 'up',
+               hiring: '11 open roles', hiringDelta: '+3 in 30d · steady', hiringDir: 'up',
+               twitter: '94k impr/d', twitterDelta: '+18% vs 30d avg', twitterDir: 'up' },
+      synthesis: '<strong>ClickUp is shipping fast and undercutting on price.</strong> 12 releases in 30 days — feature-tank strategy. Pricing held at $7 while peers raised. <strong>Risk:</strong> commoditizing the mid-tier. <strong>Counter:</strong> lean into deeper integrations vs surface area.',
+      micro: '12 releases · price flat at $7 · feature-tank',
+      bar: 70
+    }
+  };
+
+  // ─────── Activity feed ───────
+  const FEED = [
+    { time: '14:32', who: 'monday.com', mark: 'M', bg: '#ff3d57', tag: 'pricing', tagClass: 'hi', head: 'Pricing change: <strong>Standard +33%</strong> ($9 → $12), Pro +18%. Effective immediately for new accounts; 30-day grandfather for existing.', meta: 'Source: monday.com/pricing · Detected by Quiver crawler · Confirmed by 2 user posts' },
+    { time: '13:18', who: 'Linear', mark: 'L', bg: '#5e6ad2', tag: 'product', tagClass: 'hi', head: 'Released <strong>auto-triage</strong> + AI-search at the <em>Pro</em> tier — bundled with the +25% price hike from May 4.', meta: 'Source: linear.app/changelog · 2.3k Twitter mentions in 6h' },
+    { time: '11:46', who: 'ClickUp', mark: 'C', bg: '#7b68ee', tag: 'product', tagClass: 'mid', head: 'Shipped <strong>4 features in 36 hours</strong>: AI image gen, Slack 2-way sync, table view tweaks, mobile widgets.', meta: 'Source: clickup.com/changelog · feature-tank velocity confirmed' },
+    { time: '10:22', who: 'Notion', mark: 'N', bg: '#1f1f1f', tag: 'hiring', tagClass: 'mid', head: 'Posted <strong>11 platform/infra roles</strong> in 30 days — Senior Distributed Systems, Search Infra, Realtime Sync. Salary band $260–340k.', meta: 'Source: notion.so/careers · Levels.fyi cross-check' },
+    { time: '09:48', who: 'Linear', mark: 'L', bg: '#5e6ad2', tag: 'social', tagClass: 'hi', head: 'Karri Saarinen viral thread on AI-triage hit <strong>1.4M impressions</strong> · 2.8k retweets. Sentiment 78% positive.', meta: 'Source: x.com/karrisaarinen · Tweet ID 1789... · ROI ~$284k earned media' },
+    { time: '09:04', who: 'monday.com', mark: 'M', bg: '#ff3d57', tag: 'hiring', tagClass: 'hi', head: 'Opened <strong>18 enterprise GTM roles</strong> in 30 days — AE, SE, CSM concentrated in $50k+ band.', meta: 'Source: monday.com/jobs · Outbound focus confirmed' },
+    { time: '08:30', who: 'Asana', mark: 'A', bg: '#f06a6a', tag: 'press', tagClass: 'fyi', head: 'CEO interview in The Information: "We\'re slowing platform investment to focus on Goals."', meta: 'Source: theinformation.com · Strategic narrowing — bullish read for our team' },
+    { time: '07:12', who: 'ClickUp', mark: 'C', bg: '#7b68ee', tag: 'social', tagClass: 'mid', head: 'Founder posted demo video of new AI Brain — <strong>312k views</strong>, 940 retweets, mixed reception in replies.', meta: 'Source: x.com/zebzanaib · Reception: positive 56%, skeptical 31%' },
+    { time: 'Yest 22:48', who: 'Linear', mark: 'L', bg: '#5e6ad2', tag: 'pricing', tagClass: 'hi', head: 'Pricing page <strong>copy-tested</strong> 3 variations of "AI included" headline (split A/B/C).', meta: 'Source: Quiver tracker · Hashed copy matches 18% of competitor lines' },
+    { time: 'Yest 19:14', who: 'Notion', mark: 'N', bg: '#1f1f1f', tag: 'product', tagClass: 'fyi', head: 'Quiet update: <strong>Calendar API</strong> deprecated v1 endpoints — webhooks shifted format. Indicates platform investment.', meta: 'Source: developers.notion.com · Cross-confirmed via deprecation feed' }
+  ];
+
+  const feedEl = document.getElementById('feed');
+  const compGridEl = document.getElementById('compGrid');
+  const feedCount = document.getElementById('feedCount');
+
+  function renderFeed(filter = 'all') {
+    const items = filter === 'all' ? FEED : FEED.filter(x => x.tag === filter);
+    feedCount.textContent = items.length;
+    feedEl.innerHTML = items.map(f => `
+      <div class="feed-row" data-who="${f.who.toLowerCase().split(' ')[0].replace('.com','')}">
+        <div class="feed-time">${f.time}</div>
+        <span class="feed-mark" style="background:${f.bg}">${f.mark}</span>
+        <div class="feed-body">
+          <div class="who">${f.who} · ${f.tag}</div>
+          <div class="head">${f.head}</div>
+          <div class="meta"><span>${f.meta}</span></div>
+        </div>
+        <span class="feed-tag ${f.tagClass}">${f.tagClass === 'hi' ? 'critical' : f.tagClass === 'mid' ? 'watch' : f.tagClass === 'low' ? 'stable' : 'fyi'}</span>
+      </div>
+    `).join('');
+    feedEl.querySelectorAll('.feed-row').forEach(row => {
+      row.addEventListener('click', () => {
+        toast({ kind: 'low', title: 'Event opened', body: row.querySelector('.head').innerHTML });
+      });
+    });
+  }
+  renderFeed('all');
+
+  // ─────── Competitor cards ───────
+  function renderComps() {
+    compGridEl.innerHTML = Object.entries(COMPS).map(([id, c]) => `
+      <div class="comp-card" data-id="${id}">
+        <div class="comp-top">
+          <span class="mark" style="background:${c.bg}">${c.mark}</span>
+          <span class="name">${c.name}</span>
+          <span class="tier ${c.threat}">${c.threat === 'hi' ? 'Critical' : c.threat === 'mid' ? 'Watch' : 'Stable'} · ${c.score}</span>
+        </div>
+        <div class="comp-meta">
+          <div class="row"><span class="lbl">Pricing</span><span class="val ${c.stats.priceDir}">${c.stats.price}</span></div>
+          <div class="row"><span class="lbl">Hiring</span><span class="val ${c.stats.hiringDir}">${c.stats.hiring.replace(/ open roles/, '')}</span></div>
+          <div class="row"><span class="lbl">Releases</span><span class="val ${c.stats.releasesDir}">${c.stats.releases}/30d</span></div>
+          <div class="row"><span class="lbl">Twitter</span><span class="val ${c.stats.twitterDir}">${c.stats.twitter}</span></div>
+        </div>
+        <div class="comp-bar">
+          <svg viewBox="0 0 200 28" preserveAspectRatio="none">
+            <defs><linearGradient id="cg-${id}" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="${c.threat === 'hi' ? '#ef4444' : c.threat === 'mid' ? '#f59e0b' : '#10b981'}" stop-opacity="0.8"/>
+            </linearGradient></defs>
+            <rect x="0" y="0" width="${c.bar * 2}" height="28" fill="url(#cg-${id})"/>
+            <text x="${Math.min(190, c.bar * 2 + 6)}" y="18" font-family="JetBrains Mono,monospace" font-size="10" fill="#e7eaf0">${c.micro}</text>
+          </svg>
+        </div>
+      </div>
+    `).join('');
+    compGridEl.querySelectorAll('.comp-card').forEach(card => {
+      card.addEventListener('click', () => {
+        focus(card.dataset.id);
+      });
+    });
+  }
+  renderComps();
+
+  // ─────── Focus / select ───────
+  let activeId = 'linear';
+  function focus(id) {
+    if (!COMPS[id]) return;
+    activeId = id;
+    const c = COMPS[id];
+    // Update focus card
+    document.getElementById('focusTitle').innerHTML = `<span class="co-mark" id="focusMark" style="background:${c.bg}">${c.mark}</span> ${c.name}`;
+    const t = document.getElementById('focusThreat');
+    t.className = `threat ${c.threat}`;
+    t.textContent = (c.threat === 'hi' ? 'Critical · ' : c.threat === 'mid' ? 'Watch · ' : 'Stable · ') + c.score;
+    document.getElementById('fsPrice').textContent = c.stats.price;
+    document.getElementById('fsRel').textContent = c.stats.releases;
+    document.getElementById('fsHire').textContent = c.stats.hiring;
+    document.getElementById('fsTw').textContent = c.stats.twitter;
+    document.getElementById('fsPriceDelta').textContent = c.stats.priceDelta;
+    document.getElementById('fsRelDelta').textContent = c.stats.releasesDelta;
+    document.getElementById('fsHireDelta').textContent = c.stats.hiringDelta;
+    document.getElementById('fsTwDelta').textContent = c.stats.twitterDelta;
+    ['fsPrice','fsRel','fsHire','fsTw'].forEach((idn, i) => {
+      const dirs = [c.stats.priceDir, c.stats.releasesDir, c.stats.hiringDir, c.stats.twitterDir];
+      const el = document.getElementById(idn + 'Delta');
+      el.className = `delta ${dirs[i]}`;
+    });
+    document.getElementById('focusBody').innerHTML = c.synthesis;
+    // Highlight radar node + comp card
+    document.querySelectorAll('.radar-node').forEach(n => n.classList.toggle('active', n.dataset.id === id));
+    document.querySelectorAll('.comp-card').forEach(n => n.classList.toggle('active', n.dataset.id === id));
+  }
+
+  document.querySelectorAll('.radar-node').forEach(n => {
+    n.addEventListener('click', () => {
+      focus(n.dataset.id);
+      toast({ kind: COMPS[n.dataset.id].threat, title: COMPS[n.dataset.id].name, body: `Focused · threat <strong>${COMPS[n.dataset.id].threat === 'hi' ? 'critical' : COMPS[n.dataset.id].threat === 'mid' ? 'watch' : 'stable'} · ${COMPS[n.dataset.id].score}</strong>` });
+    });
+  });
+
+  // ─────── Filter ───────
+  document.querySelectorAll('#filterPills button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#filterPills button').forEach(x => x.classList.toggle('active', x === b));
+      renderFeed(b.dataset.f);
+    });
+  });
+
+  // ─────── Toasts ───────
+  const toastBox = document.getElementById('toastBox');
+  function toast(opts) {
+    const { kind = '', title = '', body = '' } = (typeof opts === 'string') ? { body: opts } : opts;
+    const node = document.createElement('div');
+    node.className = `toast ${kind}`;
+    node.innerHTML = `<div class="t-title">${title}</div><div class="t-body">${body}</div>`;
+    toastBox.appendChild(node);
+    setTimeout(() => {
+      node.classList.add('fade');
+      setTimeout(() => node.remove(), 280);
+    }, 4200);
+  }
+
+  // ─────── Scan now ───────
+  const scanBtn = document.getElementById('scanBtn');
+  let mins = 3;
+  scanBtn.addEventListener('click', () => {
+    scanBtn.classList.add('spin');
+    scanBtn.disabled = true;
+    setTimeout(() => {
+      scanBtn.classList.remove('spin');
+      scanBtn.disabled = false;
+      mins = 0;
+      document.getElementById('lastScan').textContent = 'just now';
+      // Bump signals count + add a synthetic feed entry at top
+      const sigEl = document.getElementById('sigCount');
+      sigEl.textContent = (parseInt(sigEl.textContent) + 3).toString();
+      FEED.unshift({ time: '14:36', who: 'Linear', mark: 'L', bg: '#5e6ad2', tag: 'social', tagClass: 'hi', head: '<strong>New:</strong> Pricing page A/B test concluded — variant C "<em>AI features included</em>" wins by 18%. Going live tomorrow.', meta: 'Source: Quiver tracker · Detected via copy delta · Confidence 94%' });
+      renderFeed(document.querySelector('#filterPills .active').dataset.f);
+      toast({ kind: 'hi', title: 'Scan complete', body: `<strong>3 new signals</strong> · 1 critical · 2 watch<br/>Linear A/B test concluded — pricing copy change inbound.` });
+    }, 1100);
+  });
+  setInterval(() => {
+    mins += 1;
+    document.getElementById('lastScan').textContent = mins === 0 ? 'just now' : `${mins}m ago`;
+  }, 60000);
+
+  // ─────── Other actions ───────
+  document.getElementById('digestBtn').addEventListener('click', () => {
+    toast({ kind: 'violet', title: 'Weekly digest drafted', body: '5 competitors · 42 signals · 3 recommended actions · ready in Notion at <strong>Q2 Intel / Week 18</strong>.' });
+  });
+  document.querySelectorAll('[data-fa]').forEach(b => {
+    b.addEventListener('click', () => {
+      const a = b.dataset.fa;
+      const c = COMPS[activeId];
+      const map = {
+        alert: { kind: 'mid', title: 'Alert set', body: `Will ping you on any <strong>${c.name}</strong> pricing or product change ≥ medium confidence.` },
+        brief: { kind: '', title: 'Brief sent', body: `${c.name} brief sent to #competitive Slack channel · 4 takeaways · 1 recommended action.` },
+        open:  { kind: '', title: c.name + ' intel page', body: 'Opening full timeline · 30-day pricing diff · 90-day social heatmap.' }
+      };
+      if (map[a]) toast(map[a]);
+    });
+  });
+
+  focus('linear'); // initial highlight
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,549 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { test, vi } from 'vitest';
+import {
+  createRunArtifactBaselines,
+  diffRunArtifacts,
+  primaryArtifactChangeForRun,
+  snapshotProjectArtifacts,
+  snapshotProjectArtifactsAsync,
+} from '../src/run-artifact-fs.js';
+
+function tmpProject(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'od-artifact-fs-'));
+}
+
+function writeNumberedFiles(root: string, prefix: string, extension: string, count: number): void {
+  for (let index = 0; index < count; index += 1) {
+    const suffix = index.toString().padStart(4, '0');
+    fs.writeFileSync(path.join(root, `${prefix}-${suffix}${extension}`), 'x');
+  }
+}
+
+test('the async snapshot preserves the synchronous snapshot contract', async () => {
+  const root = tmpProject();
+  fs.mkdirSync(path.join(root, 'nested'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'index.html'), '<html>page</html>');
+  fs.writeFileSync(path.join(root, 'nested', 'styles.css'), 'body {}');
+  fs.writeFileSync(path.join(root, 'nested', 'notes.txt'), 'not tracked');
+  fs.writeFileSync(path.join(root, 'node_modules', 'ignored.html'), '<html>ignored</html>');
+
+  assert.deepEqual(
+    await snapshotProjectArtifactsAsync(root),
+    snapshotProjectArtifacts(root),
+  );
+});
+
+test('a second-round edit of an existing artifact counts as touched, not zero', () => {
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>v1</html>');
+
+  // Snapshot as it stood at the start of round 2.
+  const before = snapshotProjectArtifacts(root);
+  assert.equal(before.size, 1);
+
+  // Round 2 EDITS the same file — directory still holds exactly one file.
+  fs.writeFileSync(page, '<html>v2 — substantially edited content</html>');
+  const after = snapshotProjectArtifacts(root);
+  assert.equal(after.size, 1, 'file count is unchanged by an edit');
+
+  assert.deepEqual(diffRunArtifacts(before, after), {
+    created: 0,
+    modified: 1,
+    touched: 1,
+    designSystemCreated: false,
+    previewModuleCount: 0,
+    touchedPaths: [page],
+    contentCreated: 0,
+    contentModified: 1,
+    contentTouched: 1,
+    contentTouchedPaths: [page],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    filesWritten: 1,
+  });
+});
+
+test('created vs modified are reported separately and sum into touched', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'a.html'), '<html>a</html>');
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'a.html'), '<html>a edited longer</html>'); // modify
+  fs.writeFileSync(path.join(root, 'b.png'), 'PNGDATA'); // create
+  const after = snapshotProjectArtifacts(root);
+
+  assert.deepEqual(diffRunArtifacts(before, after), {
+    created: 1,
+    modified: 1,
+    touched: 2,
+    designSystemCreated: false,
+    previewModuleCount: 0,
+    touchedPaths: [path.join(root, 'a.html'), path.join(root, 'b.png')],
+    contentCreated: 1,
+    contentModified: 1,
+    contentTouched: 2,
+    contentTouchedPaths: [path.join(root, 'a.html'), path.join(root, 'b.png')],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 1,
+    filesWritten: 2,
+  });
+});
+
+test('a touched DESIGN.md sets designSystemCreated but not artifact_count', () => {
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'DESIGN.md'), '# brand v1');
+  const afterCreate = snapshotProjectArtifacts(root);
+  assert.deepEqual(diffRunArtifacts(before, afterCreate), {
+    created: 0, // DESIGN.md is not an artifact extension
+    modified: 0,
+    touched: 0,
+    designSystemCreated: true,
+    previewModuleCount: 0,
+    touchedPaths: [],
+    contentCreated: 0,
+    contentModified: 0,
+    contentTouched: 0,
+    contentTouchedPaths: [],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    filesWritten: 1, // …but it IS a written file
+  });
+
+  // Editing it on a later round still flags the design-system signal.
+  fs.writeFileSync(path.join(root, 'DESIGN.md'), '# brand v2 — refined tokens');
+  const afterEdit = snapshotProjectArtifacts(root);
+  assert.equal(diffRunArtifacts(afterCreate, afterEdit).designSystemCreated, true);
+});
+
+test('preview modules are counted and also count as artifacts', () => {
+  const root = tmpProject();
+  fs.mkdirSync(path.join(root, 'preview'), { recursive: true });
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'preview', 'colors.html'), '<html>colors</html>');
+  fs.writeFileSync(path.join(root, 'preview', 'typography.html'), '<html>type</html>');
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.previewModuleCount, 2);
+  // Preview modules are .html artifacts too, so they also land in touched.
+  assert.equal(diff.touched, 2);
+  assert.equal(diff.created, 2);
+});
+
+test('non-artifact files and ignored dirs do not count as artifacts', () => {
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'notes.txt'), 'just text'); // not an artifact ext
+  fs.mkdirSync(path.join(root, 'node_modules', 'pkg'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'node_modules', 'pkg', 'dep.html'), '<html>dep</html>');
+  const after = snapshotProjectArtifacts(root);
+
+  assert.deepEqual(diffRunArtifacts(before, after), {
+    created: 0,
+    modified: 0,
+    touched: 0,
+    designSystemCreated: false,
+    previewModuleCount: 0,
+    touchedPaths: [],
+    contentCreated: 0,
+    contentModified: 0,
+    contentTouched: 0,
+    contentTouchedPaths: [],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    // notes.txt IS a written file; node_modules stays ignored entirely.
+    filesWritten: 1,
+  });
+});
+
+test('an md-only delivery reports files_written while artifact_count stays 0', () => {
+  // The blind spot that motivated files_written_count: a run whose deliverable
+  // is a markdown brief (e.g. `PROMPTS.md`) looked identical to a pure chat
+  // turn because markdown is not an artifact extension.
+  const root = tmpProject();
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds');
+  const afterCreate = snapshotProjectArtifacts(root);
+  const createDiff = diffRunArtifacts(before, afterCreate);
+  assert.equal(createDiff.touched, 0, 'md never counts as an artifact');
+  assert.equal(createDiff.filesWritten, 1);
+
+  // A later run that only EDITS the md still reports its write.
+  fs.writeFileSync(path.join(root, 'PROMPTS.md'), '# nine premium backgrounds — revised');
+  const editDiff = diffRunArtifacts(afterCreate, snapshotProjectArtifacts(root));
+  assert.equal(editDiff.touched, 0);
+  assert.equal(editDiff.filesWritten, 1);
+});
+
+test('a same-size rewrite with a preserved mtime is still detected (content hash)', () => {
+  // The pathological edit: equal byte length AND the timestamp reset to its
+  // original value. size + mtime alone cannot tell this apart, so the content
+  // hash must catch it — otherwise an edit-only turn would silently report 0.
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>AAAA</html>');
+  const { atimeMs, mtimeMs } = fs.statSync(page);
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(page, '<html>BBBB</html>'); // same byte length, different content
+  fs.utimesSync(page, atimeMs / 1000, mtimeMs / 1000); // pin timestamp back to original
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.modified, 1, 'same-size, same-mtime rewrite must be caught by the content hash');
+  assert.equal(diff.touched, 1);
+});
+
+test('v4 ignores a timestamp-only rewrite while the legacy counter remains compatible', () => {
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>stable</html>');
+  const before = snapshotProjectArtifacts(root);
+  const stat = fs.statSync(page);
+  fs.utimesSync(page, stat.atimeMs / 1000, (stat.mtimeMs + 2_000) / 1000);
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.touched, 1, 'legacy artifact_count retains timestamp semantics');
+  assert.equal(diff.contentTouched, 0, 'v4 changed_file_count requires content change');
+});
+
+test('a CSS-only visible edit modifies the primary HTML artifact without inflating artifact_count', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'index.html'), '<link rel="stylesheet" href="styles.css">');
+  const css = path.join(root, 'styles.css');
+  fs.writeFileSync(css, 'body { color: red; }');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(css, 'body { color: blue; }');
+  const after = snapshotProjectArtifacts(root);
+  const diff = diffRunArtifacts(before, after);
+
+  assert.equal(diff.touched, 0, 'CSS remains outside the legacy artifact_count file set');
+  assert.equal(diff.renderDependencyTouched, 1);
+  assert.equal(primaryArtifactChangeForRun({
+    diff,
+    projectKind: 'prototype',
+    hadExistingArtifacts: true,
+    interactionMode: 'design',
+    clarificationRequested: false,
+  }), 'modified');
+});
+
+test('module-script variants participate in render dependency syntax checks', () => {
+  const root = tmpProject();
+  const esm = path.join(root, 'app.mjs');
+  const commonjs = path.join(root, 'legacy.cjs');
+  fs.writeFileSync(esm, 'export const ready = false;');
+  fs.writeFileSync(commonjs, 'module.exports = false;');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(esm, 'export const ready = true;');
+  fs.writeFileSync(commonjs, 'module.exports = true;');
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.renderDependencyTouched, 2);
+  assert.deepEqual(
+    diff.renderDependencyTouchedPaths.map((file) => path.basename(file)).sort(),
+    ['app.mjs', 'legacy.cjs'],
+  );
+});
+
+test('first generation is created even when the run edits a pre-seeded HTML file', () => {
+  const root = tmpProject();
+  const page = path.join(root, 'index.html');
+  fs.writeFileSync(page, '<html>seed</html>');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(page, '<html>generated result</html>');
+  const diff = diffRunArtifacts(before, snapshotProjectArtifacts(root));
+
+  assert.equal(primaryArtifactChangeForRun({
+    diff,
+    projectKind: 'prototype',
+    hadExistingArtifacts: false,
+    interactionMode: 'design',
+    clarificationRequested: false,
+  }), 'created');
+});
+
+test('Windows-style backslash paths still classify preview modules and DESIGN.md', () => {
+  // On Windows, snapshot keys come back with backslashes (path.join). The diff
+  // must normalize separators before the slash-only preview / design-system
+  // helpers, or those signals silently report false on Windows project runs.
+  // (Built by hand because the test host is POSIX and can't produce \\ keys.)
+  const fp = { size: 10, mtimeMs: 1, hash: 'h' };
+  const before = new Map();
+  const after = new Map([
+    ['C:\\proj\\DESIGN.md', { ...fp }],
+    ['C:\\proj\\preview\\colors.html', { ...fp }],
+    ['C:\\proj\\index.html', { ...fp }],
+  ]);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.designSystemCreated, true, 'DESIGN.md must be detected on Windows paths');
+  assert.equal(diff.previewModuleCount, 1, 'preview/*.html must be detected on Windows paths');
+  // index.html + preview/colors.html are artifacts; DESIGN.md is not.
+  assert.equal(diff.created, 2);
+});
+
+test('contended same-cwd runs are flagged so the caller skips the whole-tree diff', () => {
+  // The daemon allows overlapping runs; a whole-tree snapshot diff cannot tell
+  // which concurrent run wrote a file. The registry must mark BOTH overlapping
+  // runs in a shared cwd as contended, while leaving distinct-cwd runs clean.
+  const reg = createRunArtifactBaselines();
+  const empty = new Map();
+
+  reg.remember('A', '/proj-1', empty);
+  reg.remember('B', '/proj-1', empty); // overlaps A in the same cwd
+  reg.remember('C', '/proj-2', empty); // different cwd, no overlap
+
+  const a = reg.take('A');
+  const b = reg.take('B');
+  const c = reg.take('C');
+  assert.equal(a?.contended, true, 'the earlier run is retroactively marked contended');
+  assert.equal(b?.contended, true, 'the later overlapping run is marked contended');
+  assert.equal(c?.contended, false, 'a distinct-cwd run stays uncontended');
+  // take() removes the entry — a second take is empty.
+  assert.equal(reg.take('A'), undefined);
+});
+
+test('a no-op turn (no file writes) reports zero', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'page.html'), '<html>stable</html>');
+  const before = snapshotProjectArtifacts(root);
+  const after = snapshotProjectArtifacts(root);
+
+  assert.deepEqual(diffRunArtifacts(before, after), {
+    created: 0,
+    modified: 0,
+    touched: 0,
+    designSystemCreated: false,
+    previewModuleCount: 0,
+    touchedPaths: [],
+    contentCreated: 0,
+    contentModified: 0,
+    contentTouched: 0,
+    contentTouchedPaths: [],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+    filesWritten: 0,
+  });
+});
+
+// #7579: `create_artifact` writes a `<file>.artifact.json` manifest sidecar,
+// and the manifest layer accepts non-renderable kinds such as Markdown
+// exports. The snapshot/diff must count such files as artifacts instead of
+// reporting artifactCount: 0 → no_artifact at finalization.
+const validMdManifest = (entry: string): string =>
+  JSON.stringify({
+    version: 1,
+    kind: 'markdown-document',
+    renderer: 'markdown',
+    entry,
+    exports: ['md'],
+    title: entry,
+  });
+
+test('a manifest-backed Markdown export counts as a run artifact', async () => {
+  const root = tmpProject();
+  const doc = path.join(root, 'fitcv-design-system-export.md');
+
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(doc, '# export');
+  fs.writeFileSync(
+    `${doc}.artifact.json`,
+    validMdManifest('fitcv-design-system-export.md'),
+  );
+  const after = snapshotProjectArtifacts(root);
+  const afterAsync = await snapshotProjectArtifactsAsync(root);
+
+  assert.deepEqual(after, afterAsync, 'async snapshot must agree with the sync one');
+  assert.equal(
+    after.get(doc)?.manifestBacked,
+    true,
+    'the .md is tracked as manifest-backed',
+  );
+  assert.equal(
+    after.get(`${doc}.artifact.json`),
+    undefined,
+    'the sidecar itself is metadata, not a tracked artifact',
+  );
+  assert.deepEqual(diffRunArtifacts(before, after), {
+    created: 1,
+    modified: 0,
+    touched: 1,
+    filesWritten: 1,
+    designSystemCreated: false,
+    previewModuleCount: 0,
+    touchedPaths: [doc],
+    contentCreated: 1,
+    contentModified: 0,
+    contentTouched: 1,
+    contentTouchedPaths: [doc],
+    renderDependencyTouched: 0,
+    renderDependencyTouchedPaths: [],
+    supportingMediaTouched: 0,
+  });
+});
+
+test('the async manifest check does not use synchronous sidecar reads', async () => {
+  const root = tmpProject();
+  const doc = path.join(root, 'async-export.md');
+  fs.writeFileSync(doc, '# export');
+  fs.writeFileSync(`${doc}.artifact.json`, validMdManifest('async-export.md'));
+
+  const readFileSync = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+    throw new Error('async snapshot must not use readFileSync');
+  });
+  try {
+    const snapshot = await snapshotProjectArtifactsAsync(root);
+    assert.equal(snapshot.get(doc)?.manifestBacked, true);
+  } finally {
+    readFileSync.mockRestore();
+  }
+});
+
+test('manifest classification is applied before the snapshot budgets', async () => {
+  const otherRoot = tmpProject();
+  writeNumberedFiles(otherRoot, 'ordinary', '.txt', 5000);
+  const manifestBackedDoc = path.join(otherRoot, 'z-manifest-export.md');
+  fs.writeFileSync(manifestBackedDoc, '# export');
+  fs.writeFileSync(
+    `${manifestBackedDoc}.artifact.json`,
+    validMdManifest('z-manifest-export.md'),
+  );
+
+  for (const snapshot of [
+    snapshotProjectArtifacts(otherRoot),
+    await snapshotProjectArtifactsAsync(otherRoot),
+  ]) {
+    assert.equal(
+      snapshot.get(manifestBackedDoc)?.manifestBacked,
+      true,
+      'a manifest-backed file must not be rejected by the ordinary-file budget',
+    );
+    assert.equal(diffRunArtifacts(snapshot, snapshot).filesWrittenUnknown, undefined);
+  }
+
+  const trackedRoot = tmpProject();
+  writeNumberedFiles(trackedRoot, 'tracked', '.html', 5000);
+  const overBudgetDoc = path.join(trackedRoot, 'z-manifest-export.md');
+  fs.writeFileSync(overBudgetDoc, '# export');
+  fs.writeFileSync(
+    `${overBudgetDoc}.artifact.json`,
+    validMdManifest('z-manifest-export.md'),
+  );
+
+  for (const snapshot of [
+    snapshotProjectArtifacts(trackedRoot),
+    await snapshotProjectArtifactsAsync(trackedRoot),
+  ]) {
+    assert.equal(
+      snapshot.get(overBudgetDoc),
+      undefined,
+      'a manifest-backed file must not bypass the tracked-file budget',
+    );
+    assert.equal(diffRunArtifacts(snapshot, snapshot).filesWrittenUnknown, true);
+  }
+});
+
+test('a Markdown file without a valid manifest sidecar stays untracked', () => {
+  const root = tmpProject();
+  fs.writeFileSync(path.join(root, 'notes.md'), 'no sidecar here');
+  fs.writeFileSync(path.join(root, 'broken.md'), 'sidecar is not JSON');
+  fs.writeFileSync(`${path.join(root, 'broken.md')}.artifact.json`, '{not json');
+  fs.writeFileSync(path.join(root, 'stale.md'), 'sidecar has an unknown version');
+  fs.writeFileSync(
+    `${path.join(root, 'stale.md')}.artifact.json`,
+    JSON.stringify({ ...JSON.parse(validMdManifest('stale.md')), version: 99 }),
+  );
+
+  const snapshot = snapshotProjectArtifacts(root);
+  for (const fingerprint of snapshot.values()) {
+    assert.equal(
+      fingerprint.manifestBacked,
+      undefined,
+      'unmanifested or invalidly manifested .md must not be manifest-backed',
+    );
+  }
+
+  const diff = diffRunArtifacts(new Map(), snapshot);
+  assert.equal(diff.touched, 0);
+});
+
+test('an edit to a manifest-backed Markdown export counts as modified', async () => {
+  const root = tmpProject();
+  const doc = path.join(root, 'report.md');
+  fs.writeFileSync(doc, '# report v1');
+  fs.writeFileSync(`${doc}.artifact.json`, validMdManifest('report.md'));
+  const before = snapshotProjectArtifacts(root);
+
+  fs.writeFileSync(doc, '# report v2 — substantially revised');
+  const after = await snapshotProjectArtifactsAsync(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.created, 0);
+  assert.equal(
+    diff.modified,
+    1,
+    'edit-only turns must still report >0 for manifest-backed files',
+  );
+  assert.equal(diff.touched, 1);
+});
+
+for (const mode of ['sync', 'async'] as const) {
+  test(`${mode} missing filesystem snapshots cannot attest to a zero-write run`, async () => {
+    const root = tmpProject();
+    try {
+      const missing = path.join(root, 'does-not-exist');
+      const snapshot = mode === 'sync' ? snapshotProjectArtifacts : snapshotProjectArtifactsAsync;
+      const before = await snapshot(missing);
+      const after = await snapshot(missing);
+      const diff = diffRunArtifacts(before, after);
+      assert.equal(diff.filesWritten, 0); // Legacy counter remains best-effort.
+      assert.equal(diff.filesWrittenUnknown, true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+}
+
+test('a directory read failure remains unknown even when another directory is measured successfully', () => {
+  const root = tmpProject();
+  try {
+    const unreadable = path.join(root, 'private');
+    fs.mkdirSync(unreadable);
+    fs.writeFileSync(path.join(unreadable, 'draft.html'), '<title>hidden from this scan</title>');
+    const before = snapshotProjectArtifacts(root);
+    const read = fs.readdirSync;
+    const spy = vi.spyOn(fs, 'readdirSync').mockImplementation((...args: Parameters<typeof fs.readdirSync>) => {
+      if (String(args[0]) === unreadable) throw new Error('fixture read failure');
+      return Reflect.apply(read, fs, args);
+    });
+    try { assert.equal(diffRunArtifacts(before, snapshotProjectArtifacts(root)).filesWrittenUnknown, true); }
+    finally { spy.mockRestore(); }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the existing snapshot file budget reports incomplete coverage instead of a known zero', () => {
+  const root = tmpProject();
+  try {
+    for (let i = 0; i < 5001; i += 1) fs.writeFileSync(path.join(root, `note-${i}.txt`), 'x');
+    const before = snapshotProjectArtifacts(root);
+    const after = snapshotProjectArtifacts(root);
+    assert.equal(before.size, 5000);
+    assert.equal(diffRunArtifacts(before, after).filesWrittenUnknown, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

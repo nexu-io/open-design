@@ -1,0 +1,135 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/clickhouse/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by ClickHouse".
+ * High-performance cockpit in acid yellow-green on obsidian black —
+ * pure black canvas, neon volt accents, extra-heavy Inter (900) display,
+ * charcoal-bordered cards, terminal-grade aesthetic.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure Black (#000000) page bg — never dark gray as page bg
+ *   - Neon Volt (#faff69) as sole chromatic accent — maximum contrast on black
+ *   - Charcoal borders (rgba(65,65,65,0.8)) — primary depth mechanism
+ *   - Inter as primary, Basier as secondary display, Inconsolata for code
+ *   - 96px display headlines with weight 900 — text as physical mass
+ *   - Tight 1.0 leading on display sizes — billboard scale
+ *   - Sharp 4px radius on buttons, 8px on cards — database precision geometry
+ *   - Forest Green (#166534) doubles as --success — brand-aligned semantic
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Dark void: pure black canvas, near-black surfaces.
+   * The black is absolute (#000000) — never softened to dark gray. */
+  --bg: #000000;             /* Pure Black — the page canvas, absolute */
+  --surface: #141414;        /* Near Black — buttons, lifted dark surfaces */
+  --surface-warm: var(--surface); /* alias — no warm tier in the cool-neutral palette */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Pure White on black for primary, Silver for secondary.
+   * All neutrals are perfectly neutral — no warm undertone. */
+  --fg: #ffffff;             /* Pure White — primary text on dark surfaces */
+  --fg-2: #a0a0a0;           /* Silver — secondary body text on dark */
+  --muted: #a0a0a0;          /* Silver — captions, muted content */
+  --meta: #585858;           /* Mid Gray — metadata, deepest neutral text */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Charcoal at 80% opacity — the workhorse for all card containment.
+   * Deep charcoal for inner separators that should not visually compete. */
+  --border: rgba(65, 65, 65, 0.8); /* Charcoal — primary card edge */
+  --border-soft: #343434;    /* Deep Charcoal — inner separator, quieter */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Neon Volt — the literal ClickHouse brand mark. Sole chromatic
+   * interruption on the obsidian canvas. Used on CTAs, link hovers,
+   * featured borders. Hover/active swap to dark variants per DESIGN.md:
+   * the neon CTA's hover INVERTS to near-black bg; active dims to pale. */
+  --accent: #faff69;         /* Neon Volt — signature acid yellow-green */
+  --accent-on: #151515;      /* Near Black text on neon — maximum readability */
+  --accent-hover: #1d1d1d;   /* Brand-specific: neon CTA inverts to dark on hover */
+  --accent-active: #f4f692;  /* Pale Yellow — DESIGN.md active/pressed state */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Forest Green doubles as success — it's already the brand's
+   * "Get Started" CTA color, so it's natively part of the palette.
+   * Warn and danger use schema defaults to stay distinguishable. */
+  --success: #166534;        /* Forest Green — brand-aligned secondary CTA / success */
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Inter is the primary face — full weight spectrum (400/500/600/700/900).
+   * Basier is the secondary display face for feature anchors at weight 600.
+   * Inconsolata for code blocks at weight 600 — terminal-like rendering. */
+  --font-display: "Inter", "Basier", Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: "Inconsolata", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. 96px display mega, 72px hero, 36px feature.
+   * Weight 900 is reserved for --text-4xl in components; 700 carries the
+   * rest. Tight leading at scale — text feels architectural. */
+  --text-xs: 12px;           /* Small — smallest text */
+  --text-sm: 14px;           /* Caption / Uppercase Label (1.4px tracking) */
+  --text-base: 16px;         /* Body / Button / Code */
+  --text-lg: 20px;           /* Feature Title */
+  --text-xl: 24px;           /* Sub-heading / Card title */
+  --text-2xl: 36px;          /* Feature Heading (Basier 600) */
+  --text-3xl: 72px;          /* Display / Hero (Inter 700) */
+  --text-4xl: 96px;          /* Display Mega — Inter Black (900) */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.0;      /* Display ultra-tight — physical mass */
+  --tracking-display: normal; /* DESIGN.md: normal letter-spacing on display */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base grid. Section vertical spacing 48–64px (generous). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 64px; /* DESIGN.md: 48–64px generous section rhythm */
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Sharp (4px) on buttons / badges / code blocks — database precision.
+   * Comfortable (8px) on cards. Never round corners beyond 8px. */
+  --radius-sm: 4px;          /* Sharp — buttons, badges, small elements */
+  --radius-md: 8px;          /* Comfortable — cards, containers */
+  --radius-lg: 8px;          /* Same — DESIGN.md caps radius at 8px */
+  --radius-pill: 9999px;     /* Pill — toggle indicators, status badges */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Shadows are barely visible on black — depth comes from borders.
+   * Level 2 subtle shadow declared for parity; the real depth signal
+   * is --elev-ring (charcoal hairline) and neon-border highlights. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Neon-tinted focus — unified interactive feedback signal across
+   * links, buttons, and inputs. Always shifts toward the accent. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — ClickHouse's intensity is in color and weight,
+   * not motion. Snappy enough to feel performant. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1280px container — wide enough for multi-column dense data layouts
+   * while still tractable on standard desktops (DESIGN.md tops at 2200px
+   * for ultra-wide; 1280px is the workable default). */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

@@ -1,0 +1,64 @@
+/* design-systems/mastercard/tokens.css
+ *
+ * Structured token bindings for Mastercard.
+ * putty-cream editorial canvas, orbital geometry, and warm payment-network restraint.
+ */
+
+:root {
+  --bg: #f3f0ee;
+  --surface: #fcfbfa;
+  --surface-warm: #f7e8de;
+  --fg: #141413;
+  --fg-2: #262627;
+  --muted: #696969;
+  --meta: #9a3a0a;
+  --border: #d1cdc7;
+  --border-soft: #e7e1dc;
+  --accent: #cf4500;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #2e7d32;
+  --warn: #f79e1b;
+  --danger: #eb001b;
+  --font-display: "MarkForMC", "Sofia Sans", Arial, sans-serif;
+  --font-body: "MarkForMC", "Sofia Sans", Arial, sans-serif;
+  --font-mono: "MarkOffcForMC", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.4;
+  --leading-tight: 1;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 52px;
+  --radius-sm: 20px;
+  --radius-md: 40px;
+  --radius-lg: 64px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 48px rgba(20, 20, 19, 0.10);
+  --focus-ring: 0 0 0 4px rgba(207, 69, 0, 0.24);
+  --motion-fast: 180ms;
+  --motion-base: 260ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 20px;
+}

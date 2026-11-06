@@ -1,0 +1,40 @@
+/* pitch-deck — classic YC/VC pitch */
+.tpl-pitch-deck{
+  --bg:#ffffff;--bg-soft:#f6f7fb;--surface:#ffffff;--surface-2:#f2f4fa;
+  --border:rgba(20,25,60,.08);--border-strong:rgba(20,25,60,.18);
+  --text-1:#0d1130;--text-2:#4a5070;--text-3:#8a90ad;
+  --accent:#3b5bff;--accent-2:#7a46ff;--accent-3:#d94cff;
+  --grad:linear-gradient(135deg,#3b5bff 0%,#7a46ff 55%,#d94cff 100%);
+  --grad-soft:linear-gradient(135deg,#eef1ff,#f4edff 55%,#fbedff);
+  --radius:20px;--radius-lg:28px;
+  --shadow:0 14px 40px rgba(20,25,60,.08),0 2px 8px rgba(20,25,60,.04);
+  font-family:'Inter','Noto Sans SC',sans-serif;
+}
+.tpl-pitch-deck .slide{padding:88px 112px}
+.tpl-pitch-deck .kicker{color:var(--accent);font-weight:700}
+.tpl-pitch-deck .h1{font-size:86px;line-height:1.02;font-weight:900;letter-spacing:-.035em}
+.tpl-pitch-deck .h2{font-size:62px;font-weight:800;letter-spacing:-.03em}
+.tpl-pitch-deck .mega{font-size:180px;font-weight:900;line-height:.95;letter-spacing:-.05em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tpl-pitch-deck .mega-sub{font-size:28px;color:var(--text-2);margin-top:18px}
+.tpl-pitch-deck .cover-bg{position:absolute;inset:0;background:var(--grad-soft);z-index:-1}
+.tpl-pitch-deck .cover-blob{position:absolute;right:-140px;top:-140px;width:560px;height:560px;border-radius:50%;background:var(--grad);filter:blur(8px);opacity:.35;z-index:-1}
+.tpl-pitch-deck .brand-dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--grad);margin-right:10px;vertical-align:middle}
+.tpl-pitch-deck .brand{font-weight:800;font-size:22px;letter-spacing:-.02em}
+.tpl-pitch-deck .card{border-radius:var(--radius)}
+.tpl-pitch-deck .num-tag{font-family:'Inter',sans-serif;font-size:14px;font-weight:700;color:var(--accent);letter-spacing:.12em}
+.tpl-pitch-deck .big-q{font-family:'Playfair Display',serif;font-size:56px;line-height:1.15;font-weight:700;letter-spacing:-.02em;max-width:22ch}
+.tpl-pitch-deck .metric{display:flex;flex-direction:column;gap:6px}
+.tpl-pitch-deck .metric .n{font-size:72px;font-weight:900;letter-spacing:-.035em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+.tpl-pitch-deck .metric .l{color:var(--text-2);font-size:16px}
+.tpl-pitch-deck .team-card{text-align:center;padding:32px 20px}
+.tpl-pitch-deck .avatar{width:96px;height:96px;border-radius:50%;margin:0 auto 14px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:32px}
+.tpl-pitch-deck .ask-box{background:var(--grad);color:#fff;padding:56px 64px;border-radius:var(--radius-lg);box-shadow:0 30px 70px rgba(59,91,255,.35)}
+.tpl-pitch-deck .ask-box .h2{color:#fff}
+.tpl-pitch-deck .ask-box .dim{color:rgba(255,255,255,.85)}
+.tpl-pitch-deck .traction-bar{display:flex;align-items:flex-end;gap:14px;height:240px;margin-top:24px}
+.tpl-pitch-deck .traction-bar .bar{flex:1;background:var(--grad);border-radius:8px 8px 0 0;position:relative;min-height:20px}
+.tpl-pitch-deck .traction-bar .bar span{position:absolute;bottom:-28px;left:0;right:0;text-align:center;font-size:13px;color:var(--text-3)}
+.tpl-pitch-deck .traction-bar .bar em{position:absolute;top:-28px;left:0;right:0;text-align:center;font-size:14px;font-weight:700;font-style:normal;color:var(--text-1)}
+.tpl-pitch-deck .section-num{font-size:220px;font-weight:900;line-height:.9;color:var(--surface-2);position:absolute;right:72px;bottom:40px;z-index:0;letter-spacing:-.05em}
+.tpl-pitch-deck .slide > *{position:relative;z-index:1}
+.tpl-pitch-deck .deck-footer{color:var(--text-3)}

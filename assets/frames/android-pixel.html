@@ -1,0 +1,162 @@
+<!doctype html>
+<!--
+  Shared frame: Pixel 8 Pro (412 × 900).
+  Usage:  <iframe src="android-pixel.html?screen=path/to/screen.html"></iframe>
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pixel 8 Pro frame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+    body {
+      display: grid;
+      place-items: center;
+      font: 14px/1.4 'Roboto', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    }
+
+    .device {
+      position: relative;
+      width: 412px;
+      height: 900px;
+      border-radius: 44px;
+      padding: 10px;
+      background:
+        linear-gradient(160deg, #1a1a1a 0%, #0a0a0a 100%);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.05) inset,
+        0 0 0 2px #000 inset,
+        0 28px 60px -12px rgba(0,0,0,0.45),
+        0 8px 20px -8px rgba(0,0,0,0.35);
+    }
+    /* power button (right) */
+    .device::after {
+      content: '';
+      position: absolute;
+      right: -3px;
+      top: 160px;
+      width: 4px; height: 70px;
+      background: #0a0a0a;
+      border-radius: 2px;
+    }
+    /* volume rocker (right, below power) */
+    .device::before {
+      content: '';
+      position: absolute;
+      right: -3px;
+      top: 240px;
+      width: 4px; height: 110px;
+      background: #0a0a0a;
+      border-radius: 2px;
+    }
+
+    /* punch-hole camera, top-center */
+    .punch-hole {
+      position: absolute;
+      top: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 12px;
+      height: 12px;
+      background: #000;
+      border-radius: 50%;
+      z-index: 5;
+    }
+
+    .screen {
+      position: relative;
+      width: 100%; height: 100%;
+      background: #fafaf7;
+      border-radius: 36px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .statusbar {
+      flex: 0 0 36px;
+      padding: 12px 20px 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--statusbar-fg, #1a1916);
+      pointer-events: none;
+    }
+    .statusbar .right { display: inline-flex; align-items: center; gap: 5px; }
+    .statusbar svg { width: 14px; height: 10px; fill: currentColor; }
+    .statusbar .battery { width: 22px; }
+
+    .inner {
+      flex: 1 1 auto;
+      width: 100%;
+      border: 0;
+      background: #fafaf7;
+    }
+
+    /* Android nav bar — three-button (back / home / recents) */
+    .navbar {
+      flex: 0 0 28px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      align-items: center;
+      justify-items: center;
+      pointer-events: none;
+      color: var(--navbar-fg, #1a1916);
+      opacity: 0.7;
+    }
+    .navbar svg { width: 14px; height: 14px; }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <span class="punch-hole" aria-hidden></span>
+
+    <div class="screen">
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="right">
+          <svg viewBox="0 0 14 10" aria-hidden><path d="M0 9h2V5H0v4zm4 0h2V3H4v6zm4 0h2V1H8v8zm4 0h2V0h-2v9z"/></svg>
+          <svg viewBox="0 0 14 10" aria-hidden><path d="M7 1.2c-2.4 0-4.6.9-6.4 2.5L2 5.2c1.4-1.2 3.1-1.9 5-1.9s3.6.7 5 1.9l1.4-1.5C11.6 2.1 9.4 1.2 7 1.2zm0 3c-1.5 0-2.9.6-4 1.5L4.4 7.2c.7-.7 1.7-1 2.6-1s1.9.3 2.6 1L11 5.7c-1.1-.9-2.5-1.5-4-1.5zm0 3c-.7 0-1.4.3-1.9.8l1.9 1.9 1.9-1.9c-.5-.5-1.2-.8-1.9-.8z"/></svg>
+          <svg class="battery" viewBox="0 0 22 10" aria-hidden>
+            <rect x="0.5" y="0.5" width="18" height="9" rx="2" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+            <rect x="19" y="3" width="1.5" height="4" rx="0.4" fill="currentColor" fill-opacity="0.45"/>
+            <rect x="2" y="2" width="15" height="6" rx="1"/>
+          </svg>
+        </span>
+      </div>
+
+      <iframe
+        class="inner"
+        id="screen"
+        title="Inner screen"
+        sandbox="allow-scripts allow-same-origin"
+        loading="lazy"
+        src="about:blank"
+      ></iframe>
+
+      <nav class="navbar" aria-hidden>
+        <svg viewBox="0 0 14 14"><path d="M9 2 4 7l5 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        <svg viewBox="0 0 14 14"><rect x="2" y="2" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      </nav>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var qs = new URLSearchParams(location.search);
+      var raw = qs.get('screen');
+      var iframe = document.getElementById('screen');
+      if (!raw) return;
+      var isAbsolute = /^[a-zA-Z][a-zA-Z\d+.\-]*:/.test(raw) || raw.charAt(0) === '/';
+      iframe.src = isAbsolute
+        ? raw
+        : new URL(raw, document.referrer || location.href).toString();
+    })();
+  </script>
+</body>
+</html>

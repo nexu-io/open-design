@@ -1,0 +1,63 @@
+/* design-systems/premium/tokens.css
+ * Structured token bindings for Premium.
+ * premium marketing system with warm white canvas, graphite type, and muted bronze signal.
+ */
+
+:root {
+  --bg: #faf8f4;
+  --surface: #ffffff;
+  --surface-warm: #f0e7d8;
+  --fg: #1c1b19;
+  --fg-2: #4b4740;
+  --muted: #746d63;
+  --meta: #a06a3b;
+  --border: #ded6c9;
+  --border-soft: #eee7dc;
+  --accent: #a06a3b;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #3f8f5f;
+  --warn: #c4872c;
+  --danger: #b84a4a;
+  --font-display: "Canela", Georgia, serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 26px;
+  --text-2xl: 40px;
+  --text-3xl: 60px;
+  --text-4xl: 84px;
+  --leading-body: 1.58;
+  --leading-tight: 1.02;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 64px rgba(28, 27, 25, 0.12);
+  --focus-ring: 0 0 0 4px rgba(160, 106, 59, 0.24);
+  --motion-fast: 170ms;
+  --motion-base: 280ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1160px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

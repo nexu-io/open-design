@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mutuals · your dating life, measured by the company you keep</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Serif+Text:ital@0;1&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f4ede0;
+      --panel: #f9f3e7;
+      --ink: #1f1c14;
+      --muted: #7a7264;
+      --rule: #d6cdb6;
+      --accent: #c14a2b;
+      --good: #406b3a;
+      --bad: #b6422f;
+      --serif-display: 'DM Serif Display', 'Iowan Old Style', Georgia, serif;
+      --serif-body: 'DM Serif Text', 'Iowan Old Style', Georgia, serif;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.55 var(--serif-body); }
+
+    .ticker {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 28px;
+      border-bottom: 1px solid var(--ink);
+      font: 11px/1 var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .ticker .left { display: flex; align-items: center; gap: 18px; }
+    .ticker b { color: var(--ink); font-weight: 500; }
+
+    .layout { display: grid; grid-template-columns: 232px 1fr; min-height: calc(100vh - 44px); }
+    aside.rail {
+      border-right: 1px solid var(--ink);
+      padding: 22px 22px 22px 28px;
+      display: flex; flex-direction: column; gap: 22px;
+    }
+    aside .brand { font: italic 800 30px/1 var(--serif-display); letter-spacing: -0.005em; }
+    aside .brand .dot { color: var(--accent); }
+    aside .user { display: flex; align-items: center; gap: 10px; }
+    aside .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--paper); display: grid; place-items: center; font: 700 12px/1 var(--mono); letter-spacing: 0.06em; }
+    aside .user .meta { font: 13px/1.2 var(--mono); }
+    aside .user .meta b { display: block; color: var(--ink); font-weight: 500; }
+    aside .user .meta span { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
+
+    aside h4 { font: 11px/1 var(--mono); color: var(--muted); letter-spacing: 0.18em; text-transform: uppercase; margin: 0 0 10px; }
+    aside ul { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; gap: 4px; }
+    aside li { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-radius: 4px; font: 15.5px/1.2 var(--serif-body); color: var(--ink); cursor: default; }
+    aside li.active { background: rgba(193,74,43,0.10); color: var(--accent); font-weight: 600; }
+    aside li.active::before { content: '●'; color: var(--accent); margin-right: 6px; font-size: 9px; }
+    aside li .badge { background: var(--accent); color: var(--paper); font: 10px/1 var(--mono); padding: 3px 6px; border-radius: 999px; letter-spacing: 0.06em; }
+    aside li .badge.gray { background: var(--ink); }
+
+    aside .status {
+      margin-top: auto;
+      padding-top: 18px;
+      border-top: 1px solid var(--rule);
+      font: 11px/1.4 var(--mono);
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+    aside .status .live::before { content: '●'; color: #2f7d4a; margin-right: 6px; }
+
+    main { padding: 30px 36px 44px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-auto-rows: minmax(120px, auto);
+      gap: 22px 36px;
+      margin-bottom: 36px;
+    }
+    .stat { padding: 4px 0 14px; border-bottom: 1px solid var(--rule); }
+    .stat .label { font: 11px/1.4 var(--mono); color: var(--muted); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 6px; }
+    .stat .value {
+      font: 800 56px/1.05 var(--serif-display);
+      letter-spacing: -0.01em;
+      font-feature-settings: 'tnum';
+      margin-bottom: 6px;
+    }
+    .stat .value.good { color: var(--good); }
+    .stat .value.bad { color: var(--bad); }
+    .stat .value em { font-style: italic; font-weight: 400; }
+    .stat .note { font: italic 13.5px/1.4 var(--serif-body); color: var(--muted); max-width: 32ch; }
+    .stat .arrow { font-style: normal; color: var(--good); font-size: 14px; }
+
+    .panel { padding: 18px 0 24px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); margin-bottom: 18px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 14px; }
+    .panel-head h3 { margin: 0; font: italic 24px/1 var(--serif-display); letter-spacing: -0.005em; }
+    .panel-head .meta { font: 11px/1.4 var(--mono); color: var(--muted); letter-spacing: 0.16em; text-transform: uppercase; max-width: 56ch; text-align: right; }
+    .panel svg { width: 100%; height: 220px; display: block; }
+    .panel .axis { display: flex; justify-content: space-between; font: 10px/1 var(--mono); color: var(--muted); letter-spacing: 0.1em; padding: 8px 4px 0; text-transform: uppercase; }
+
+    .lower-panel .lede { font: italic 15px/1.55 var(--serif-body); color: var(--muted); margin: 0; max-width: 70ch; }
+    .lower-panel .lede b { color: var(--ink); font-style: normal; font-weight: 600; }
+
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      aside.rail { border-right: none; border-bottom: 1px solid var(--ink); }
+      .grid { grid-template-columns: repeat(2, 1fr); gap: 18px 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ticker" data-od-id="ticker">
+    <div class="left">
+      <span>YOUR DATING LIFE, MEASURED BY THE COMPANY YOU KEEP</span>
+      <span style="opacity:0.6;">·</span>
+      <span>REVIEWED WEEKLY</span>
+    </div>
+    <div>NEXT TIER AT <b>2,080 MUTUALS</b></div>
+  </div>
+
+  <div class="layout">
+    <aside class="rail" data-od-id="rail">
+      <div class="brand">mutuals<span class="dot">.</span></div>
+      <div class="user">
+        <div class="avatar">si</div>
+        <div class="meta"><b>@signals</b><span>RATIO 22.9 · TIER III</span></div>
+      </div>
+
+      <div>
+        <h4>Today</h4>
+        <ul>
+          <li>specimen <span class="badge">3</span></li>
+          <li>inbox <span class="badge">3</span></li>
+          <li>queue <span style="font:11px/1 var(--mono);color:var(--muted);">6</span></li>
+          <li>notifications <span class="badge gray">12</span></li>
+        </ul>
+      </div>
+      <div>
+        <h4>You</h4>
+        <ul>
+          <li class="active">your stats</li>
+          <li>mutuals &amp; communities</li>
+          <li>blocked <span style="font:11px/1 var(--mono);color:var(--muted);">14</span></li>
+          <li>settings</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Archive</h4>
+        <ul>
+          <li>past issues</li>
+          <li>expired matches <span style="font:11px/1 var(--mono);color:var(--muted);">7</span></li>
+        </ul>
+      </div>
+
+      <div class="status">
+        <div class="live">online · last match 11m ago</div>
+        <div style="opacity:0.7;margin-top:2px;">mutuals.v0.6.1</div>
+      </div>
+    </aside>
+
+    <main data-od-id="main">
+      <section class="grid" data-od-id="kpis">
+        <div class="stat">
+          <div class="label">Mutuals on file</div>
+          <div class="value"><em>1,842</em></div>
+          <p class="note"><span class="arrow">↑</span> 41 this wk · healthy growth.</p>
+        </div>
+        <div class="stat">
+          <div class="label">Replies in 24h</div>
+          <div class="value good">47</div>
+          <p class="note">the people who'd text back within a day.</p>
+        </div>
+        <div class="stat">
+          <div class="label">Communities</div>
+          <div class="value"><em>14</em></div>
+          <p class="note">4 active · 7 lurking · 3 inferred.</p>
+        </div>
+
+        <div class="stat">
+          <div class="label">Match rate</div>
+          <div class="value good">14%</div>
+          <p class="note">above median for your cohort.</p>
+        </div>
+        <div class="stat">
+          <div class="label">2nd dates</div>
+          <div class="value"><em>3</em></div>
+          <p class="note">of 7 first dates this year. you commit.</p>
+        </div>
+        <div class="stat">
+          <div class="label">Exes in your circle</div>
+          <div class="value bad">4</div>
+          <p class="note">manageable. two are now friends.</p>
+        </div>
+
+        <div class="stat">
+          <div class="label">Shared blocks</div>
+          <div class="value"><em>214</em></div>
+          <p class="note">your single greatest compatibility asset.</p>
+        </div>
+        <div class="stat">
+          <div class="label">Avg response</div>
+          <div class="value"><em>2.1<span style="font-size:32px;">h</span></em></div>
+          <p class="note">too fast. wait 4–6h. they notice.</p>
+        </div>
+        <div class="stat">
+          <div class="label">Logged-off hrs</div>
+          <div class="value bad">4</div>
+          <p class="note">/ 168 this wk. we beg.</p>
+        </div>
+      </section>
+
+      <section class="panel" data-od-id="bars">
+        <div class="panel-head">
+          <h3>mutuals — <em>last 30 days</em></h3>
+          <div class="meta">↑ TRENDING UP · +3 CLOSE MUTUALS THIS MONTH · TWO VIA THE SAME OFFSITE</div>
+        </div>
+        <svg viewBox="0 0 720 220" preserveAspectRatio="none" aria-hidden="true">
+          <g fill="#1f1c14">
+            <rect x="6"   y="170" width="14" height="50"></rect>
+            <rect x="30"  y="158" width="14" height="62"></rect>
+            <rect x="54"  y="146" width="14" height="74"></rect>
+            <rect x="78"  y="172" width="14" height="48"></rect>
+            <rect x="102" y="162" width="14" height="58"></rect>
+            <rect x="126" y="138" width="14" height="82"></rect>
+            <rect x="150" y="120" width="14" height="100"></rect>
+            <rect x="174" y="148" width="14" height="72"></rect>
+            <rect x="198" y="132" width="14" height="88"></rect>
+            <rect x="222" y="108" width="14" height="112"></rect>
+            <rect x="246" y="118" width="14" height="102"></rect>
+            <rect x="270" y="154" width="14" height="66"></rect>
+            <rect x="294" y="130" width="14" height="90"></rect>
+            <rect x="318" y="100" width="14" height="120"></rect>
+            <rect x="342" y="86"  width="14" height="134"></rect>
+            <rect x="366" y="116" width="14" height="104"></rect>
+            <rect x="390" y="138" width="14" height="82"></rect>
+            <rect x="414" y="92"  width="14" height="128"></rect>
+            <rect x="438" y="74"  width="14" height="146"></rect>
+            <rect x="462" y="106" width="14" height="114"></rect>
+            <rect x="486" y="84"  width="14" height="136"></rect>
+            <rect x="510" y="124" width="14" height="96"></rect>
+            <rect x="534" y="98"  width="14" height="122"></rect>
+            <rect x="558" y="68"  width="14" height="152"></rect>
+            <rect x="582" y="80"  width="14" height="140"></rect>
+            <rect x="606" y="46"  width="14" height="174" fill="#c14a2b"></rect>
+            <rect x="630" y="60"  width="14" height="160" fill="#c14a2b"></rect>
+            <rect x="654" y="92"  width="14" height="128"></rect>
+            <rect x="678" y="76"  width="14" height="144"></rect>
+            <rect x="702" y="90"  width="14" height="130"></rect>
+          </g>
+        </svg>
+        <div class="axis"><span>MAR 18</span><span>MAR 25</span><span>APR 1</span><span>APR 8</span><span>APR 15</span><span>TODAY</span></div>
+      </section>
+
+      <section class="panel lower-panel" data-od-id="trend">
+        <div class="panel-head">
+          <h3>match rate — <em>last 12 weeks</em></h3>
+          <div class="meta">STEADY CLIMB FROM 8% → 14%. ATTRIBUTABLE TO ONE COMMUNITY JOIN (FOUNDERS WHO POST, WK 4).</div>
+        </div>
+        <p class="lede">A real climb, not a vibe. <b>One community join</b> moved your match rate more than four months of profile edits — keep posting from that circle, ship more, tweet less.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

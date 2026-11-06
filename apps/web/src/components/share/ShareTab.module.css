@@ -1,0 +1,286 @@
+/* The popover's fixed-canvas skin while Share is mounted now lives in
+   shell.css as the explicit `.chrome-unified-popover--share` class the call
+   site sets (2026 refactor: item 2) — no longer a `:has(.panel)` structural
+   coupling to this module's own `.panel` class below. */
+
+/* S0/S13: signed-out explanation and existing Cloud login action. */
+.signInPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* .signInPrimaryAction/.signInSecondaryAction moved into the shared
+   `ShareButton`'s `primary`/`soft` variants, and the CloudSignInTip-internal
+   markup overrides (entry-local-mode-tip__head/__login-badge) are gone
+   entirely — `ShareSignInButton` (OD-2, 2026 refactor: item 1) renders a
+   real `<button>` with its own plain-text label instead of nesting
+   CloudSignInTip's rail-pill markup inside a `<section role="button">`. */
+
+/* S1/S4: link access heading and description. */
+.linkAccessHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linkAccessLabel {
+  color: var(--share-text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.linkAccessDescription {
+  margin: 0;
+  color: var(--share-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* linkAccessRow / linkAccessToggle / linkAccessToggleOn / linkAccessToggleThumb
+   moved to LinkAccessRow.module.css (2026 refactor: item 3) —
+   .linkAccessHeading/Label/Description stay here: the sign-in-prompt branch
+   below still uses them directly (it has no switch, so it never becomes a
+   LinkAccessRow). */
+
+/* S1-T/S4-T: scope explanation stays readable without hover or focus. */
+.scopeHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Canvas sections are 32px apart: the panel supplies 12px of that gap.
+   When public sharing is absent, scope is first and needs no extra offset. */
+.scopeHeading:not(:first-child) {
+  margin-block-start: 20px;
+}
+
+.scopeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.scopeDescription {
+  margin: 0;
+  color: var(--share-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* S1-T/S4-T scope label: align to the panel, not a padded deployment row.
+   Only the scope heading has this help modifier inside ShareTab. */
+.panel :global(.share-menu-section-label--help) {
+  /* Allow narrow panels to wrap the heading instead of displacing the busy control. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 0;
+  color: var(--share-text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.panel :global(.chrome-access-select) {
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* S1-T/S4-T: compact scope trigger; legacy viewer and option rows are untouched. */
+.panel :global(.chrome-access-trigger) {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: fit-content;
+  min-width: 88px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--share-canvas);
+  color: #555555;
+  font-size: 12px;
+}
+
+/* Static scope icons are decorative; never hide the pending-request spinner. */
+.panel :global(.chrome-access-trigger > .share-menu-icon:not(:has(.icon-spin))) {
+  display: none;
+}
+
+.panel :global(.chrome-access-trigger > svg) {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* S1-T2: canvas minimum width; grow for translations within the panel.
+   Border/radius/shadow/padding/gap are the shared menu-surface skin (item 4)
+   — same tokens ShareMoreMenu.module.css's `.menu` reads, since the two
+   already matched byte-for-byte. */
+.panel :global(.chrome-access-options) {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 168px;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  max-width: 100%;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: var(--share-menu-border);
+  border-radius: var(--share-menu-radius);
+  background: var(--share-menu-bg);
+  box-shadow: var(--share-menu-shadow);
+}
+
+/* S1-T2 option-row skin; retain existing listbox anchoring and permission gates. */
+.panel :global(.chrome-access-options button) {
+  box-sizing: border-box;
+  grid-template-columns: 13px minmax(0, 1fr);
+  height: var(--share-menu-row-h);
+  min-height: var(--share-menu-row-h);
+  padding: 0 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--share-menu-row-color);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.panel :global(.chrome-access-options button > .share-menu-icon) {
+  display: none;
+}
+
+.panel :global(.chrome-access-options button > span:nth-child(2)) {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel :global(.chrome-access-options button > svg) {
+  grid-column: 1;
+  grid-row: 1;
+  width: 13px;
+  height: 13px;
+}
+
+.panel :global(.chrome-access-options button[aria-selected="true"]) {
+  background: var(--share-menu-row-hover-bg);
+  color: var(--share-menu-row-hover-color);
+}
+
+.panel :global(.chrome-access-options button:hover:not(:disabled)) {
+  background: var(--share-menu-row-hover-bg);
+  color: var(--share-menu-row-hover-color);
+}
+
+.panel:global(.chrome-unified-panel) {
+  padding: 0;
+  gap: 12px;
+}
+
+/* .copyButton/.publishingButton moved into the shared `ShareButton`'s
+   `primary`/`transparentBusy` variant (2026 refactor: item 1) —
+   ShareButton.module.css. */
+.copiedIcon {
+  color: var(--share-copied);
+}
+
+/* S2 help describes panel dismissal, not quitting the app. */
+p.publishHint {
+  margin: 0;
+  color: var(--share-text-faint);
+  font-size: 10.5px;
+  line-height: 17px;
+}
+
+/* S3/S4: match the final-design link/copy stack without affecting FileViewer’s separate renderer. */
+.publishedLink {
+  gap: 8px;
+  padding: 0;
+}
+
+/* G2/S3/S4/S4-C/S10 UI audit: this used to be reached only through
+   `.publishedLink :global(.chrome-publish-url)`, a cross-scope descendant
+   selector spanning a local CSS-module class and a plain global class name.
+   That compound selector depended on the URL row staying a literal
+   descendant of `.publishedLink` and on this module's rule outranking
+   `shell.css`'s bare `.chrome-publish-url` — true on paper (two classes beat
+   one), but the row was confirmed rendering with zero box in the real
+   packaged/dev build (present in the DOM per the existing Playwright
+   assertions, invisible in every captured screenshot: G2, S3, S4, S4-C, S10
+   all show the toggle/description flowing straight into the copy button
+   with no link line above it — see `docs/../.tmp/ui-audit/final-design-review`
+   captures and `RESTORATION.md`'s admission that the box was never measured
+   by DOM rect, only asserted by text). Root cause not narrowed further since
+   it never reproduces in jsdom (no real cascade/layer resolution there); the
+   fix removes the dependency on cross-scope selector matching entirely by
+   applying a class the module owns directly to the element. */
+.publishedUrl {
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  height: var(--share-control-h);
+  padding: 0 9px 0 29px;
+  border: 1px solid var(--share-published-border);
+  border-radius: var(--share-radius);
+  background: var(--share-white);
+  color: var(--share-published-fg);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  user-select: text;
+  cursor: text;
+}
+
+/* .updateButton moved into the shared `ShareButton`'s `soft` variant (2026
+   refactor: item 1) — ShareButton.module.css. */
+
+.publishedLinkIcon {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  color: var(--share-text-muted);
+}
+
+.publishedActions {
+  display: block;
+  width: 100%;
+}
+
+
+.copyHint {
+  margin: 0;
+  color: var(--share-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* K1/K4: comment-sync-pending replaces the entire published-link block with
+   a single indicator — a progress bar for the first-publish backfill (K1,
+   `reopened` absent/false) or a busy primary button for a verified reopen
+   resync (K4, `reopened === true`). The bar itself (.syncProgress*) moved to
+   ShareProgressButton.module.css (2026 refactor: item 4); this wrapper stays. */
+.syncStatus {
+  display: grid;
+}
+
+/* .publishError moved to ShareErrorRow.module.css's shared .row/.hasIcon/.icon
+   (2026 refactor: item 2) — used here for both a failed publish and the
+   S7/S15 pre-check "file too large" block; legacy renderer and deployment
+   errors keep their own styles. */

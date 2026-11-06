@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Growth Squad · Weekly W15</title>
+<link rel="stylesheet" href="../../../assets/fonts.css">
+<link rel="stylesheet" href="../../../assets/base.css">
+<link rel="stylesheet" href="../../../assets/animations/animations.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="tpl-weekly-report">
+<div class="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide" data-title="Cover">
+    <div class="cover-head">
+      <div class="logo">Growth Squad</div>
+      <div class="week-chip">W15 · 2026-04-07 → 2026-04-13</div>
+    </div>
+    <p class="kicker">WEEKLY REPORT</p>
+    <h1 class="h1 mt-s">本周：付费转化率<br>回到了 <span style="color:var(--accent)">3.8%</span>。</h1>
+    <p class="lede mt-m">6 个发布，3 个实验收敛，1 个阻塞项升级。整体健康。</p>
+    <div class="deck-footer"><span>Prepared by @lewis · reviewed by @may</span><span class="slide-number" data-current="1" data-total="7"></span></div>
+  </section>
+
+  <!-- 2. KPI -->
+  <section class="slide" data-title="KPIs">
+    <p class="kicker">HIGHLIGHTS · KPIs</p>
+    <h2 class="h2">本周核心指标</h2>
+    <div class="grid g4 mt-l">
+      <div class="kpi good"><div class="label">Paid conv.</div><div class="value">3.82%</div><div class="delta up">▲ +0.4 pts WoW</div></div>
+      <div class="kpi good"><div class="label">MRR</div><div class="value">$148k</div><div class="delta up">▲ +6.1%</div></div>
+      <div class="kpi"><div class="label">Signups</div><div class="value">12,430</div><div class="delta flat">— +0.3%</div></div>
+      <div class="kpi bad"><div class="label">D7 retention</div><div class="value">41%</div><div class="delta down">▼ -1.8 pts</div></div>
+      <div class="kpi good"><div class="label">NPS</div><div class="value">64</div><div class="delta up">▲ +3</div></div>
+      <div class="kpi"><div class="label">Support tickets</div><div class="value">318</div><div class="delta flat">— -12</div></div>
+      <div class="kpi warn"><div class="label">p95 latency</div><div class="value">412ms</div><div class="delta down">▼ +38ms</div></div>
+      <div class="kpi good"><div class="label">Deploys</div><div class="value">37</div><div class="delta up">▲ +9</div></div>
+    </div>
+  </section>
+
+  <!-- 3. Shipped -->
+  <section class="slide" data-title="Shipped">
+    <p class="kicker">SHIPPED THIS WEEK · 6 items</p>
+    <h2 class="h2">Shipped</h2>
+    <div class="mt-l" style="max-width:980px">
+      <div class="ship-item"><span class="tag feat">FEAT</span><div><b>New onboarding checklist v3</b><p class="dim" style="font-size:13px;margin:2px 0 0">4-step checklist replaces the old 7-step modal. A/B won +18% activation.</p></div><span class="owner">@may</span></div>
+      <div class="ship-item"><span class="tag feat">FEAT</span><div><b>Stripe Tax auto-filing</b><p class="dim" style="font-size:13px;margin:2px 0 0">Quarterly filings now handled for 12 US states via Stripe Tax API.</p></div><span class="owner">@raj</span></div>
+      <div class="ship-item"><span class="tag exp">EXP</span><div><b>Pricing page hero test</b><p class="dim" style="font-size:13px;margin:2px 0 0">"From $29" vs "Free trial" headline. Free-trial wins +22% click-through.</p></div><span class="owner">@lewis</span></div>
+      <div class="ship-item"><span class="tag fix">FIX</span><div><b>Edge case in SSO redirect</b><p class="dim" style="font-size:13px;margin:2px 0 0">Google Workspace users with custom domains now land on the correct workspace.</p></div><span class="owner">@eli</span></div>
+      <div class="ship-item"><span class="tag infra">INFRA</span><div><b>Postgres 16 upgrade</b><p class="dim" style="font-size:13px;margin:2px 0 0">Zero-downtime migration. Query p50 down 14%, p95 down 9%.</p></div><span class="owner">@raj</span></div>
+      <div class="ship-item"><span class="tag feat">FEAT</span><div><b>Referral rewards v1</b><p class="dim" style="font-size:13px;margin:2px 0 0">Both sides get 1 month free. Dashboard + email flow live behind flag.</p></div><span class="owner">@may</span></div>
+    </div>
+  </section>
+
+  <!-- 4. Metrics chart -->
+  <section class="slide" data-title="Metrics">
+    <p class="kicker">METRIC DEEP-DIVE</p>
+    <h2 class="h2">Paid conversion, last 8 weeks</h2>
+    <div class="chart mt-l">
+      <div class="row" style="justify-content:space-between"><h4>Paid conv. rate · weekly</h4><span class="pill" style="background:var(--surface-2);color:var(--text-2)">target: 4.0%</span></div>
+      <div class="chart-bars">
+        <div class="col"><div class="b" data-v="3.1%" style="height:58%"></div><div class="lbl">W08</div></div>
+        <div class="col"><div class="b" data-v="3.3%" style="height:64%"></div><div class="lbl">W09</div></div>
+        <div class="col"><div class="b" data-v="3.5%" style="height:72%"></div><div class="lbl">W10</div></div>
+        <div class="col"><div class="b" data-v="3.6%" style="height:75%"></div><div class="lbl">W11</div></div>
+        <div class="col"><div class="b" data-v="3.4%" style="height:68%"></div><div class="lbl">W12</div></div>
+        <div class="col"><div class="b" data-v="3.0%" style="height:55%"></div><div class="lbl">W13</div></div>
+        <div class="col"><div class="b" data-v="3.4%" style="height:68%"></div><div class="lbl">W14</div></div>
+        <div class="col"><div class="b" data-v="3.8%" style="height:88%"></div><div class="lbl">W15</div></div>
+      </div>
+      <p class="dim mt-m" style="font-size:13px;margin-top:36px">Drop in W13 tracked to a broken Stripe webhook (fixed W14). Rebound in W15 is driven by the new onboarding checklist.</p>
+    </div>
+  </section>
+
+  <!-- 5. Blockers -->
+  <section class="slide" data-title="Blockers">
+    <p class="kicker">BLOCKERS · 3 items</p>
+    <h2 class="h2">Needs attention</h2>
+    <div class="mt-l" style="max-width:900px">
+      <div class="blocker">
+        <h4>p95 latency regressed to 412ms (+38ms)</h4>
+        <p>Traced to the new recommender service under load. Adding caching layer + connection pooling.</p>
+        <div class="meta">owner: @raj · ETA: W16 Wed · severity: medium</div>
+      </div>
+      <div class="blocker">
+        <h4>Apple Pay disabled in EU for 3 days</h4>
+        <p>Stripe credential rotation wasn't synced to the EU account. Fixed, but cost ~$4.2k in lost checkouts.</p>
+        <div class="meta">owner: @eli · severity: high · postmortem in progress</div>
+      </div>
+      <div class="blocker">
+        <h4>D7 retention down 1.8 points</h4>
+        <p>Cohort analysis shows it's isolated to the free-trial pricing test. Need to decide: kill test, or push through W16.</p>
+        <div class="meta">owner: @lewis · needs decision from @may by Monday</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Next week -->
+  <section class="slide" data-title="Next Week">
+    <p class="kicker">NEXT WEEK · W16 plan</p>
+    <h2 class="h2">下周重点</h2>
+    <div class="mt-l" style="max-width:960px">
+      <div class="next-row"><div class="owner">@raj</div><div class="task"><b>Ship recommender cache layer</b><span>blocker · must land Wed</span></div></div>
+      <div class="next-row"><div class="owner">@may</div><div class="task"><b>Referral rewards · flag rollout to 100%</b><span>milestone · targets +3% WoW signups</span></div></div>
+      <div class="next-row"><div class="owner">@lewis</div><div class="task"><b>Pricing test: decision doc + readout</b><span>deadline Mon noon</span></div></div>
+      <div class="next-row"><div class="owner">@eli</div><div class="task"><b>Apple Pay postmortem + runbook update</b><span>include in W16 eng review</span></div></div>
+      <div class="next-row"><div class="owner">squad</div><div class="task"><b>Q2 OKR planning offsite</b><span>Thu 2–5pm · async pre-reads Wed</span></div></div>
+    </div>
+  </section>
+
+  <!-- 7. Thanks -->
+  <section class="slide center tc" data-title="Thanks">
+    <div>
+      <p class="kicker">FIN · week 15</p>
+      <h1 class="h1" style="font-size:100px">Thanks, team 🫶</h1>
+      <p class="lede" style="margin:16px auto">Solid week. Rebound earned, not luck.</p>
+      <div class="row mt-l" style="justify-content:center;gap:16px">
+        <span class="week-chip">Next report: Mon W16</span>
+        <span class="week-chip">questions → #growth-squad</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script src="../../../assets/runtime.js"></script>
+</body></html>

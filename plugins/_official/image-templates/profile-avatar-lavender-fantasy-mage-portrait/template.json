@@ -1,0 +1,23 @@
+{
+  "id": "profile-avatar-lavender-fantasy-mage-portrait",
+  "surface": "image",
+  "title": "Profile / Avatar - Lavender Fantasy Mage Portrait",
+  "summary": "This prompt generates a polished anime-style fantasy portrait of an elegant mage princess with glossy blonde hair, purple flowers, and ornate crystal attire, ideal for character art or magical illustr",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "anime",
+    "cinematic",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "A highly detailed anime fantasy portrait of a beautiful young woman mage in a luminous flower garden at a castle. She is shown from about the waist up in a vertical composition, holding an ornate staff topped with a large faceted purple crystal in her right hand. Her face is obscured, but the rest of her design is elegant and refined. She has {argument name=\"hair color\" default=\"platinum blonde\"} hair, long and silky with a smooth glossy finish, soft flowing strands, delicate highlights, and no frizz or messy dryness; the hair is partially braided on one side and decorated with 3 large purple flowers and fine gold filigree hair ornaments. She wears a {argument name=\"dress color\" default=\"lavender and white\"} fantasy gown with off-shoulder ruffled sleeves, translucent fabric, layered chiffon, intricate gold trim, embroidered details, and 3 visible purple gemstones set into the outfit and jewelry at the collar, chest, and waist. Add a jeweled choker-like collar and elegant arm details with gold chains. The background is a dreamy palace courtyard with purple blossoms, flowering vines, stone arches, and distant castle spires, filled with glowing particles and drifting petals. Use strong warm backlighting mixed with soft pastel ambient light, sparkling highlights, rim light through the hair, ethereal bloom, and a romantic magical atmosphere. Color palette focused on lavender, violet, soft pink, pearl white, and gold. Ultra-detailed, polished anime illustration, delicate linework, glossy fabric reflections, cinematic depth of field, premium fantasy card art aesthetic.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453212320_egzd24_HHA47W2aIAEKWQz.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "美和",
+    "url": "https://x.com/tokikageyomikag/status/2049200427842064715#reversed-0"
+  }
+}
