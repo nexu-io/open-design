@@ -24,6 +24,8 @@ export interface DesignDeliveryInput {
   traceObjectFileCount: number;
   /** Authoritative artifact count reported by the daemon at run finalization. */
   artifactCount?: number;
+  /** Daemon-resolved working directory; excludes temporary verification files. */
+  projectRoot?: string | null;
   persistenceSucceeded?: boolean;
   persistenceFailed?: boolean;
 }
@@ -102,7 +104,7 @@ export function resolveDesignDeliveryOutcome(
   }
   if (input.persistenceFailed) return 'delivery_failed';
   if (containsUnrenderableQuestionForm(input.content)) return 'no_result';
-  if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
+  if (!hasFileMutationToolUse(input.events, { resolvedDir: input.projectRoot }) && input.content.trim().length > 0) {
     return 'report_only';
   }
   return 'no_result';

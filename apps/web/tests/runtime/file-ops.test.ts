@@ -4,6 +4,7 @@ import {
   countArtifactFileOps,
   countFileOps,
   deriveFileOps,
+  hasFileMutationToolUse,
 } from '../../src/runtime/file-ops';
 import type { AgentEvent } from '../../src/types';
 
@@ -17,6 +18,90 @@ function use(name: string, input: unknown, id: string): ToolUse {
 function ok(id: string, content = ''): ToolResult {
   return { kind: 'tool_result', toolUseId: id, content, isError: false };
 }
+
+describe('hasFileMutationToolUse project scope', () => {
+  const scope = { resolvedDir: '/Users/test/projects/prototype' };
+
+  it.each(['Edit', 'Write', 'Delete', 'str_replace_edit', 'create_file'])('excludes a project-external %s', (name) => {
+    expect(hasFileMutationToolUse([use(name, { filePath: '/tmp/od-probe/cdp.mjs' }, 'probe')], scope)).toBe(false);
+  });
+
+  it.each([
+    '/Users/test/projects/prototype/index.html',
+    'index.html',
+    './assets/app.js',
+  ])('retains project mutation attempts at %s', (file_path) => {
+    expect(hasFileMutationToolUse([use('Edit', { file_path }, 'edit')], scope)).toBe(true);
+  });
+
+  it('keeps external non-temp paths conservative because they may alias the project', () => {
+    // A symlinked project root, or an external symlink into the project, has
+    // no traversal segment; only the daemon could canonicalize either path.
+    expect(hasFileMutationToolUse([use('Edit', { path: '/Volumes/data/prototype/index.html' }, 'alias')], scope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { path: '/Users/test/projects/prototype-backup/index.html' }, 'sibling')], scope)).toBe(true);
+  });
+
+  it.each([
+    '/private/tmp/od-probe/cdp.mjs',
+    '/var/tmp/probe.js',
+    '/var/folders/xy/T/od-probe/cdp.mjs',
+    '/private/var/folders/xy/T/od-probe/cdp.mjs',
+  ])('excludes the temp scratch path %s', (filePath) => {
+    expect(hasFileMutationToolUse([use('Edit', { filePath }, 'probe')], scope)).toBe(false);
+  });
+
+  it('keeps temp edits conservative when the project itself lives in a temp directory', () => {
+    const tempScope = { resolvedDir: '/tmp/od-projects/prototype' };
+    expect(hasFileMutationToolUse([use('Edit', { filePath: '/private/tmp/od-projects/prototype/index.html' }, 'alias')], tempScope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { filePath: '/tmp/od-probe/cdp.mjs' }, 'probe')], tempScope)).toBe(true);
+  });
+
+  it.each([
+    ['/tmp', '/private/tmp/prototype/index.html'],
+    ['/private/tmp', '/tmp/prototype/index.html'],
+    ['/var/tmp', '/tmp/prototype/index.html'],
+    ['/var/folders', '/tmp/prototype/index.html'],
+    ['/private/var/folders', '/tmp/prototype/index.html'],
+    ['C:\\Temp', 'C:\\Windows\\Temp\\prototype\\index.html'],
+    ['C:\\Windows\\Temp', 'C:\\Temp\\prototype\\index.html'],
+    ['C:\\Users\\Test\\AppData\\Local\\Temp', 'C:\\Temp\\prototype\\index.html'],
+  ])('keeps edits conservative for an exact temp project root %s', (resolvedDir, filePath) => {
+    expect(hasFileMutationToolUse([use('Edit', { filePath }, 'alias')], { resolvedDir })).toBe(true);
+  });
+
+  it('does not treat a temp root prefix as a temp directory', () => {
+    expect(hasFileMutationToolUse([use('Edit', { filePath: '/tmp-backup/probe.js' }, 'edit')], scope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { filePath: '/tmp/probe.js' }, 'edit')], { resolvedDir: '/tmp-project' })).toBe(false);
+  });
+
+  it('keeps unknown scope, missing paths and traversal paths conservative', () => {
+    expect(hasFileMutationToolUse([use('Edit', { filePath: '/tmp/od-probe/cdp.mjs' }, 'edit')])).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', {}, 'edit')], scope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { path: '../index.html' }, 'edit')], scope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { path: '/tmp/../Users/test/projects/prototype/index.html' }, 'edit')], scope)).toBe(true);
+  });
+
+  it('applies project scope to each Bash deletion path', () => {
+    expect(hasFileMutationToolUse([use('Bash', { command: 'rm /tmp/probe.png' }, 'rm')], scope)).toBe(false);
+    expect(hasFileMutationToolUse([use('Bash', { command: 'rm /tmp/probe.png index.html' }, 'rm')], scope)).toBe(true);
+  });
+
+  it('keeps a project mutation even when another event edits a temporary script', () => {
+    expect(hasFileMutationToolUse([
+      use('Edit', { file_path: '/tmp/od-probe/cdp.mjs' }, 'probe'),
+      use('Edit', { file_path: 'index.html' }, 'project'),
+    ], scope)).toBe(true);
+  });
+
+  it('handles Windows project paths without a case-sensitive prefix check', () => {
+    const windowsScope = { resolvedDir: 'C:\\Users\\Test\\project' };
+    expect(hasFileMutationToolUse([use('Edit', { filePath: 'c:\\users\\test\\PROJECT\\index.html' }, 'inside')], windowsScope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { filePath: 'C:\\Temp\\probe.js' }, 'outside')], windowsScope)).toBe(false);
+    expect(hasFileMutationToolUse([use('Edit', { filePath: 'C:\\Users\\Test\\AppData\\Local\\Temp\\od-probe\\cdp.mjs' }, 'temp')], windowsScope)).toBe(false);
+    expect(hasFileMutationToolUse([use('Edit', { filePath: 'C:\\Users\\Test\\project-backup\\index.html' }, 'sibling')], windowsScope)).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { filePath: 'D:\\Work\\project\\index.html' }, 'alias')], windowsScope)).toBe(true);
+  });
+});
 
 function fail(id: string, content = 'boom'): ToolResult {
   return { kind: 'tool_result', toolUseId: id, content, isError: true };
