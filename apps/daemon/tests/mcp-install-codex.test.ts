@@ -222,6 +222,14 @@ describe('refreshOwnedCodexMcp', () => {
     ]);
   });
 
+  it('reads and rewrites the registration through the configured Codex executable and home (#5734)', async () => {
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
+    setCodexRunner(runner);
+    const codexEnv = { CODEX_BIN: '/opt/codex/bin/codex', CODEX_HOME: '/data/codex-home' };
+    await expect(refreshOwnedCodexMcp(spec, () => true, codexEnv)).resolves.toBe('refreshed');
+    expect(runner.calls.map((call) => call.env)).toEqual([codexEnv, codexEnv]);
+  });
+
   it("leaves another install's registration untouched", async () => {
     const runner = makeStubRunner(async () => ({ exitCode: 0, stdout: existingJson, stderr: '' }));
     setCodexRunner(runner);
