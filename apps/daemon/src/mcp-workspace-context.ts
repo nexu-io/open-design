@@ -2,6 +2,7 @@ import type {
   WorkspaceDirectoryItem,
   WorkspaceDirectoryResponse,
 } from '@open-design/contracts';
+import { mcpDaemonFetch } from './mcp-daemon-auth.js';
 
 /**
  * Workspace-aware request context for the MCP stdio bridge (#6569).
@@ -86,7 +87,7 @@ export async function resolveMcpWorkspaceContext(
   }
 
   try {
-    const resp = await fetch(`${baseUrl}/api/workspace/directory`, {
+    const resp = await mcpDaemonFetch(`${baseUrl}/api/workspace/directory`, {
       signal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
     });
     if (!resp.ok) {
