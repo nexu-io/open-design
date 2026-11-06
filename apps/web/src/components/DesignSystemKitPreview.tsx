@@ -168,6 +168,7 @@ function RegistryDesignSystemKitPreview({
     host,
     workspaceContext,
     workspaceReadGeneration: resourceReadIdentityKey,
+    detailPending: !detailResolved,
   });
 
   const pending = !detailResolved || loading || !kit;
