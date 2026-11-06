@@ -49,7 +49,16 @@
   }
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
-.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
+.viewer-toolbar-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+  row-gap: 6px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
 /* Wraps the icon-action group (screenshot/comment/mark/edit/comment-count/
    zoom) as a single unit `.viewer-toolbar-actions` can hide via the 600px
    @container breakpoint above once the ⋮ overflow menu is the fallback home
