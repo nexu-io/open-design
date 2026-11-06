@@ -3,6 +3,7 @@ import fs, { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, exists
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import type { Brand } from '@open-design/contracts';
 
 import {
@@ -23,10 +24,11 @@ import {
   readBrandDetail,
   reconcileProgrammaticExtractionTranscript,
   renderBrandPreviewIntoProject,
+  resolveBrandLogoPath,
   startBrandExtraction,
 } from '../src/brands/index.js';
 import { patchMeta } from '../src/brands/store.js';
-import { ensureLogoFallback } from '../src/brands/logo-fallback.js';
+import { adoptExistingLogos, ensureLogoFallback } from '../src/brands/logo-fallback.js';
 import { brandFromMaterial } from '../src/brands/provisional.js';
 import { deleteUserDesignSystem, listDesignSystems } from '../src/design-systems/index.js';
 import {
@@ -1731,6 +1733,105 @@ describe('agent-driven brand extraction engine', () => {
     expect(projectBrandJson.logo?.primary).toBe('logos/header.svg');
   });
 
+  it('adoptExistingLogos ranks wordmarks ahead of same-extension symbols', () => {
+    const logosDir = path.join(tempDir, 'logos');
+    mkdirSync(logosDir, { recursive: true });
+    writeFileSync(path.join(logosDir, 'Symbol.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(logosDir, 'Wordmark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const logo = { primary: null, alternates: [], notes: '' };
+    expect(adoptExistingLogos(logosDir, logo).changed).toBe(true);
+    expect(logo.primary).toBe('logos/Wordmark.png');
+    expect(logo.alternates).toContain('logos/Symbol.png');
+  });
+
+  it('adoptExistingLogos keeps vector files ahead of raster wordmarks', () => {
+    const logosDir = path.join(tempDir, 'logos');
+    mkdirSync(logosDir, { recursive: true });
+    writeFileSync(path.join(logosDir, 'Symbol.svg'), '<svg viewBox="0 0 1 1"></svg>');
+    writeFileSync(path.join(logosDir, 'Wordmark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const logo = { primary: null, alternates: [], notes: '' };
+    expect(adoptExistingLogos(logosDir, logo).changed).toBe(true);
+    expect(logo.primary).toBe('logos/Symbol.svg');
+    expect(logo.alternates).toContain('logos/Wordmark.png');
+  });
+
+  it('resolveBrandLogoPath preserves extension priority over name heuristics', () => {
+    const id = 'brand-test';
+    const brandDir = path.join(brandsRoot, id);
+    const logosDir = path.join(brandDir, 'logos');
+    mkdirSync(logosDir, { recursive: true });
+    writeFileSync(
+      path.join(brandDir, 'brand.json'),
+      JSON.stringify({ ...VALID_BRAND, logo: { primary: null, alternates: [], notes: '' } }, null, 2),
+      'utf8',
+    );
+    writeFileSync(path.join(logosDir, 'Symbol.svg'), '<svg viewBox="0 0 1 1"></svg>');
+    writeFileSync(path.join(logosDir, 'Wordmark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    expect(resolveBrandLogoPath(brandsRoot, id)).toBe(path.join(logosDir, 'Symbol.svg'));
+  });
+
+  it('finalizeBrand mirrors logo-like assets before adopting an empty logo slot', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    mkdirSync(path.join(projectDir, 'logos'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'logos', 'brand-mark.png'), Buffer.from([0x00]));
+    writeFileSync(path.join(projectDir, 'assets', 'Symbol.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(projectDir, 'assets', 'Wordmark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(projectDir, 'assets', 'brand mark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(projectDir, 'assets', 'photo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(projectDir, 'assets', 'hero.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(projectDir, 'assets', 'site-header.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(path.join(projectDir, 'assets', 'wordmark.pdf'), Buffer.from([0x25, 0x50, 0x44, 0x46]));
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify(
+        { ...VALID_BRAND, sourceUrl: started.sourceUrl, logo: { primary: null, alternates: [], notes: '' } },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+
+    const finalized = await finalizeBrand({
+      id: started.id,
+      brandsRoot,
+      userDesignSystemsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: ensureLogoFallback,
+      imageryFallback: NO_IMAGERY_FALLBACK,
+    });
+
+    expect(finalized.brand.logo.primary).toBe('logos/Wordmark.png');
+    expect(finalized.brand.logo.alternates).toContain('logos/Symbol.png');
+    expect(existsSync(path.join(projectDir, 'assets', 'Wordmark.png'))).toBe(true);
+    expect(existsSync(path.join(projectDir, 'assets', 'brand mark.png'))).toBe(true);
+    expect(existsSync(path.join(projectDir, 'logos', 'Wordmark.png'))).toBe(true);
+    expect(readdirSync(path.join(projectDir, 'logos')).filter((name) => /^brand-mark-[a-f0-9]{12}\.png$/i.test(name)))
+      .toHaveLength(1);
+    expect(existsSync(path.join(projectDir, 'logos', 'photo.png'))).toBe(false);
+    expect(existsSync(path.join(projectDir, 'logos', 'hero.png'))).toBe(false);
+    expect(existsSync(path.join(projectDir, 'logos', 'site-header.png'))).toBe(false);
+    expect(existsSync(path.join(projectDir, 'logos', 'wordmark.pdf'))).toBe(false);
+
+    const html = readFileSync(path.join(projectDir, 'brand.html'), 'utf8');
+    expect(html).toContain('"primary":"logos/Wordmark.png"');
+  });
+
   it('preview adopts on-disk project logos so the live page is never logo-less', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const started = await startOfflineBrandExtraction({
@@ -1772,6 +1873,255 @@ describe('agent-driven brand extraction engine', () => {
     expect(html).toContain('logos/apple-touch-icon.png');
     // Embedded as the payload primary, so the live page shows the seed mark.
     expect(html).toContain('"primary":"logos/apple-touch-icon.png"');
+  });
+
+  it('preview mirrors logo-like assets before rendering the live kit page', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'assets', 'Wordmark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        name: 'Acme',
+        sourceUrl: started.sourceUrl,
+        colors: [VALID_BRAND.colors[0], VALID_BRAND.colors[2], VALID_BRAND.colors[5]],
+        logo: { primary: null, alternates: [], notes: '' },
+      }),
+      'utf8',
+    );
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+
+    const html = readFileSync(path.join(projectDir, 'brand.html'), 'utf8');
+    expect(existsSync(path.join(projectDir, 'assets', 'Wordmark.png'))).toBe(true);
+    expect(existsSync(path.join(projectDir, 'logos', 'Wordmark.png'))).toBe(true);
+    expect(html).toContain('"primary":"logos/Wordmark.png"');
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+    const promoted = readdirSync(path.join(projectDir, 'logos')).filter((name) => name.startsWith('Wordmark'));
+    expect(promoted).toEqual(['Wordmark.png']);
+  });
+
+  it('preview ignores unsupported asset files without creating logo mirrors', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'assets', 'wordmark.pdf'), Buffer.from([0x25, 0x50, 0x44, 0x46]));
+    writeFileSync(path.join(projectDir, 'assets', 'site-header.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        name: 'Acme',
+        sourceUrl: started.sourceUrl,
+        colors: [VALID_BRAND.colors[0], VALID_BRAND.colors[2], VALID_BRAND.colors[5]],
+        logo: { primary: null, alternates: [], notes: '' },
+      }),
+      'utf8',
+    );
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+
+    expect(existsSync(path.join(projectDir, 'logos', 'wordmark.pdf'))).toBe(false);
+    expect(existsSync(path.join(projectDir, 'logos', 'site-header.png'))).toBe(false);
+  });
+
+  it('preview treats sanitized same-base logo assets as duplicates', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    const logoBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    mkdirSync(path.join(projectDir, 'logos'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'assets', 'brand mark.png'), logoBytes);
+    writeFileSync(path.join(projectDir, 'logos', 'brand-mark.png'), logoBytes);
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        name: 'Acme',
+        sourceUrl: started.sourceUrl,
+        colors: [VALID_BRAND.colors[0], VALID_BRAND.colors[2], VALID_BRAND.colors[5]],
+        logo: { primary: null, alternates: [], notes: '' },
+      }),
+      'utf8',
+    );
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+
+    const mirrored = readdirSync(path.join(projectDir, 'logos'))
+      .filter((name) => /^brand-mark(?:-[a-f0-9]+)?\.png$/i.test(name))
+      .sort();
+    expect(mirrored).toEqual(['brand-mark.png']);
+  });
+
+  it('preview keeps sanitized logo asset targets inside logos', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'assets', '...logo...png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        name: 'Acme',
+        sourceUrl: started.sourceUrl,
+        colors: [VALID_BRAND.colors[0], VALID_BRAND.colors[2], VALID_BRAND.colors[5]],
+        logo: { primary: null, alternates: [], notes: '' },
+      }),
+      'utf8',
+    );
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+
+    expect(existsSync(path.join(projectDir, 'logos', 'logo.png'))).toBe(true);
+    expect(existsSync(path.join(projectDir, '..', 'logo.png'))).toBe(false);
+  });
+
+  it('preview bounds hash-collision filenames while preserving changed assets', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    const logoBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const shortHash = createHash('sha256').update(logoBytes).digest('hex').slice(0, 12);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    mkdirSync(path.join(projectDir, 'logos'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'assets', 'Wordmark.png'), logoBytes);
+    writeFileSync(path.join(projectDir, 'logos', 'Wordmark.png'), Buffer.from([0x01]));
+    writeFileSync(path.join(projectDir, 'logos', `Wordmark-${shortHash}.png`), Buffer.from([0x00]));
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        name: 'Acme',
+        sourceUrl: started.sourceUrl,
+        colors: [VALID_BRAND.colors[0], VALID_BRAND.colors[2], VALID_BRAND.colors[5]],
+        logo: { primary: null, alternates: [], notes: '' },
+      }),
+      'utf8',
+    );
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+
+    expect(existsSync(path.join(projectDir, 'logos', `Wordmark-${shortHash}-2.png`))).toBe(true);
+    expect(existsSync(path.join(projectDir, 'assets', 'Wordmark.png'))).toBe(true);
+  });
+
+  it('preview mirrors same-name changed assets once without growing duplicates', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const started = await startOfflineBrandExtraction({
+      url: 'acme.com',
+      brandsRoot,
+      projectsRoot,
+      skillsRoot: SKILLS_ROOT,
+      db,
+      logoFallback: NO_LOGO_FALLBACK,
+    });
+
+    const projectDir = path.join(projectsRoot, started.projectId);
+    mkdirSync(path.join(projectDir, 'assets'), { recursive: true });
+    mkdirSync(path.join(projectDir, 'logos'), { recursive: true });
+    writeFileSync(path.join(projectDir, 'logos', 'Wordmark.png'), Buffer.from([0x00]));
+    writeFileSync(path.join(projectDir, 'assets', 'Wordmark.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(
+      path.join(projectDir, 'brand.json'),
+      JSON.stringify({
+        name: 'Acme',
+        sourceUrl: started.sourceUrl,
+        colors: [VALID_BRAND.colors[0], VALID_BRAND.colors[2], VALID_BRAND.colors[5]],
+        logo: { primary: null, alternates: [], notes: '' },
+      }),
+      'utf8',
+    );
+
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+    await renderBrandPreviewIntoProject({
+      id: started.id,
+      brandsRoot,
+      skillsRoot: SKILLS_ROOT,
+      projectsRoot,
+    });
+
+    const mirrored = readdirSync(path.join(projectDir, 'logos'))
+      .filter((name) => /^Wordmark(?:-[a-f0-9]{12})?\.png$/i.test(name))
+      .sort();
+    expect(mirrored).toHaveLength(2);
+    expect(mirrored.some((name) => /^Wordmark-[a-f0-9]{12}\.png$/i.test(name))).toBe(true);
   });
 
   it('finalizeBrand mirrors imagery/ and renders the gallery on the ready page', async () => {
