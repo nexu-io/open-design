@@ -193,9 +193,19 @@ export type DaemonStatusSnapshot = {
   desktopAuthGateActive: boolean;
 };
 
+/** Bundler a dev web sidecar resolved at startup. A production build resolves none. */
+export type WebDevBundler = "webpack" | "turbopack";
+
 export type WebStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  /**
+   * Bundler the dev server actually resolved. Reported by the sidecar instead
+   * of inferred by the caller: the environment a caller sees today is not
+   * necessarily the one the running process started with, so only the process
+   * itself can answer which bundler a reused sidecar is on.
+   */
+  bundler?: WebDevBundler;
   updatedAt?: string;
   url: string | null;
 };

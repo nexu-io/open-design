@@ -24,6 +24,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   SIDECAR_ENV,
+  type WebDevBundler,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 
@@ -79,6 +80,12 @@ export function resolveNextBundlerOptions(isDev: boolean): NextBundlerOptions {
   const configured = (process.env.OD_WEB_DEV_BUNDLER ?? "webpack").trim().toLowerCase();
   if (configured === "turbopack" || configured === "turbo") return { turbopack: true };
   return { webpack: true };
+}
+
+/** The bundler `resolveNextBundlerOptions` hands Next.js, in reportable form. */
+export function resolveDevBundler(isDev: boolean): WebDevBundler | null {
+  if (!isDev) return null;
+  return resolveNextBundlerOptions(true).turbopack === true ? "turbopack" : "webpack";
 }
 
 export type WebSidecarHandle = {
@@ -1022,12 +1029,14 @@ async function createWebSidecarHandle(
   closeRuntime: () => Promise<void> | void,
   portRequest: number,
   isRuntimeRunning?: () => boolean,
+  bundler: WebDevBundler | null = null,
 ): Promise<WebSidecarHandle> {
   const closeHttpServer = createWebHttpServerShutdown(httpServer);
   const port = await listen(httpServer, portRequest);
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
+    ...(bundler == null ? {} : { bundler }),
     updatedAt: new Date().toISOString(),
     url: `http://${HOST}:${port}`,
   };
@@ -1119,7 +1128,7 @@ async function startRegularNextSidecar(
 
   return await createWebSidecarHandle(httpServer, async () => {
     await app.close?.();
-  }, port);
+  }, port, undefined, resolveDevBundler(dev));
 }
 
 async function startStandaloneNextSidecar(
