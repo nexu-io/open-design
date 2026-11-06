@@ -31,6 +31,7 @@ import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 import { I18nProvider, useI18n } from '../../src/i18n';
 import { clearTestRuntimeSession, observeTestRuntimeIdentity, useTestRuntime } from '../../src/components/TestCampaignModal';
+import { workspaceContextFixture, workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
 const cmsTestMocks = vi.hoisted(() => ({ realCoordinator: false }));
@@ -275,6 +276,58 @@ afterEach(() => {
 });
 
 describe('CMS campaigns during onboarding', () => {
+  it('suppresses both hosts throughout registration invitation and restores them after skipping', async () => {
+    const status = {
+      loggedIn: true,
+      sessionState: 'authenticated',
+      credentialRevision: 'registration-campaign-credential',
+      profile: 'prod',
+      configPath: '/test',
+      user: { id: 'registration-campaign-account', email: 'new@example.com' },
+      registrationInvite: {
+        accountId: 'registration-campaign-account',
+        deviceAuthorizationId: 'registration-campaign-authorization',
+      },
+    };
+    const completionKey = 'od.registration-invite.completed:registration-campaign-account:registration-campaign-authorization';
+    localStorage.removeItem(completionKey);
+    mockedLoadConfig.mockReturnValue({ ...firstRunConfig(), agentId: 'amr', onboardingCompleted: true });
+    const base = workspaceContextFixture({ workspaceId: 'registration-campaign-workspace', workspaceMemberId: 'registration-campaign-member', role: 'owner' });
+    const context = { ...base, permissions: { ...base.permissions, canInviteMembers: true } };
+    let resolveContext!: (response: Response) => void;
+    const contextRead = new Promise<Response>(resolve => { resolveContext = resolve; });
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/integrations/vela/status')) return Response.json(status);
+      if (url === '/api/workspace/directory') return Response.json(workspaceDirectoryFixture([context]));
+      if (url === '/api/workspace/context') return (await contextRead).clone();
+      return original(input, init);
+    });
+    const view = render(<I18nProvider initial="en"><App /></I18nProvider>);
+    await screen.findByText('Loading workspace…');
+    expect(screen.queryByRole('dialog', { name: 'Production campaign witness' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Test campaign witness' })).toBeNull();
+
+    await act(async () => resolveContext(Response.json({ context })));
+    await screen.findByRole('heading', { name: /^Invite colleagues for free\.\s*Design together\.$/ });
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByRole('dialog', { name: 'Production campaign witness' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Test campaign witness' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByRole('dialog', { name: 'Test campaign witness' });
+    expect(localStorage.getItem(completionKey)).toBe('1');
+    view.unmount();
+    render(<I18nProvider initial="en"><App /></I18nProvider>);
+    await screen.findByRole('dialog', { name: 'Production campaign witness' });
+    await screen.findByRole('dialog', { name: 'Test campaign witness' });
+    expect(screen.queryByRole('heading', { name: /^Invite colleagues for free\.\s*Design together\.$/ })).toBeNull();
+    localStorage.removeItem(completionKey);
+  });
+
   it('suppresses both hosts on the login page even after the account is restored', async () => {
     window.history.replaceState(null, '', '/onboarding');
     render(<App />);
