@@ -238,15 +238,13 @@ OpenCode and byok-opencode locate their binary through `OPENCODE_BIN` (not
 Claude Code state with the host `~/.claude` mount: the Linux override mounts it
 read-only and puts a tmpfs on `/home/open-design`, so `claude` may warn
 `Claude configuration file not found` and its state is lost on container
-restart. To persist it, point `CLAUDE_CONFIG_DIR` (an allow-listed daemon env
-var) at a path on the data volume, for example in a
-`docker-compose.override.yml` next to the other compose files:
+restart. To persist it, set the allow-listed `CLAUDE_CONFIG_DIR` variable in a
+separate Compose override that follows the daemon data-directory contract in
+[AGENTS.md](../AGENTS.md), and include that file explicitly when recreating:
 
-```yaml
-services:
-  open-design:
-    environment:
-      CLAUDE_CONFIG_DIR: /app/.od/claude-config
+```bash
+docker compose -f docker-compose.yml -f docker-compose.linux.yml \
+  -f docker-compose.override.yml up -d --no-build
 ```
 
 The default configuration is unchanged.
