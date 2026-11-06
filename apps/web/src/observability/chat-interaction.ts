@@ -1,5 +1,6 @@
 import type { ChatInteractionLatencyProps } from '@open-design/contracts/analytics';
 import { chatCorrelation } from './chat-context';
+import { checkpointInputResponsiveness, registerInputCollectorFlush } from '../analytics/error-tracking';
 import {
   createExposureClock, reportResponsiveness,
   responsivenessVisible,
@@ -10,6 +11,9 @@ const MAX_LEGACY_REPORTS = 20;
 type ChatArea = ChatInteractionLatencyProps['area'];
 type InputArea = 'composer' | 'search' | 'settings' | 'other_input';
 interface InputWindow {
+  id: string;
+  start: number;
+  lastWindowMs: number;
   attempts: number;
   samples: number;
   slow: number;
@@ -39,6 +43,7 @@ export function installChatInteractionObserver(): () => void {
   let observer: PerformanceObserver | null = null;
   let supported = false;
   let since = performance.now();
+  let inputSince = since;
   let lastEntry = -1;
   let inputs = new Map<InputArea, InputWindow>();
   let current: { worst: number; count: number; name: string; area: ChatArea; streaming: boolean } | null = null;
@@ -46,11 +51,26 @@ export function installChatInteractionObserver(): () => void {
   const state = (area: InputArea): InputWindow => {
     let value = inputs.get(area);
     if (!value) {
-      value = { attempts: 0, samples: 0, slow: 0, max: null, queue: null };
+      value = { id: crypto.randomUUID(), start: inputSince, lastWindowMs: 1, attempts: 0, samples: 0, slow: 0, max: null, queue: null };
       inputs.set(area, value);
     }
     return value;
   };
+  const checkpoint = (area: InputArea, value: InputWindow, final: boolean) => {
+    const elapsed = performance.now() - value.start;
+    if (elapsed >= 0 && elapsed <= 35_000) value.lastWindowMs = Math.max(1, Math.round(elapsed));
+    return checkpointInputResponsiveness({ metric_schema_version: 1, event_id: value.id,
+      telemetry_capability: 'supported', area, window_ms: value.lastWindowMs,
+      input_attempt_count: value.attempts, qualified_sample_count: value.samples,
+      over_500ms_count: value.slow, max_input_to_presentation_ms: value.max,
+      max_queue_delay_ms: value.queue, sample_floor_ms: 16,
+    }, final);
+  };
+  const flushTails = () => {
+    for (const [area, value] of inputs) if (checkpoint(area, value, true)) inputs.delete(area);
+    inputSince = performance.now();
+  };
+  const unregisterFlush = registerInputCollectorFlush(flushTails);
   const reset = () => { inputs = new Map(); current = null; since = performance.now(); lastEntry = -1; clock.reset(); };
   const stop = () => { observer?.disconnect(); observer = null; supported = false; reset(); };
   const start = () => {
@@ -92,6 +112,7 @@ export function installChatInteractionObserver(): () => void {
             && timing.processingStart >= timing.startTime) {
             bucket.queue = Math.max(bucket.queue ?? 0, timing.processingStart - timing.startTime);
           }
+          checkpoint(input, bucket, false);
         }
       });
       observer.observe({ type: 'event', durationThreshold: 16 } as PerformanceObserverInit);
@@ -102,11 +123,12 @@ export function installChatInteractionObserver(): () => void {
   const keydown = (event: KeyboardEvent) => {
     if (!event.isTrusted || !supported || !responsivenessVisible() || !(event.target instanceof Element)) return;
     const area = inputArea(event.target);
-    if (area) state(area).attempts += 1;
+    if (area) { const value = state(area); value.attempts += 1; checkpoint(area, value, false); }
   };
-  const visibility = () => { inputs.clear(); current = null; since = performance.now(); };
+  const visibility = () => { flushTails(); inputs.clear(); current = null; since = performance.now(); inputSince = since; };
   document.addEventListener('keydown', keydown, { capture: true, passive: true });
   document.addEventListener('visibilitychange', visibility);
+  window.addEventListener('pagehide', flushTails);
   const timer = setInterval(() => {
     const exposure = clock.tick();
     const measurable = supported && exposure.qualified;
@@ -116,8 +138,8 @@ export function installChatInteractionObserver(): () => void {
       window_ms: exposure.elapsed,
     });
     if (measurable) {
-      for (const [area, value] of inputs) reportResponsiveness('client_input_responsiveness', {
-        telemetry_capability: 'supported', area, window_ms: exposure.elapsed,
+      for (const [area, value] of inputs) if (!checkpoint(area, value, true)) reportResponsiveness('client_input_responsiveness', {
+        event_id: value.id, telemetry_capability: 'supported', area, window_ms: exposure.elapsed,
         input_attempt_count: value.attempts, qualified_sample_count: value.samples,
         over_500ms_count: value.slow, max_input_to_presentation_ms: value.max,
         max_queue_delay_ms: value.queue, sample_floor_ms: 16,
@@ -131,13 +153,15 @@ export function installChatInteractionObserver(): () => void {
           event_name: current.name, area: current.area, streaming: current.streaming,
         });
       }
-    }
-    inputs.clear(); current = null;
+    } else flushTails();
+    inputs.clear(); current = null; inputSince = performance.now();
   }, WINDOW_MS);
   const cleanup = () => {
+    flushTails(); unregisterFlush();
     stop(); clock.stop(); clearInterval(timer);
     document.removeEventListener('keydown', keydown, { capture: true });
     document.removeEventListener('visibilitychange', visibility);
+    window.removeEventListener('pagehide', flushTails);
     teardown = null;
   };
   teardown = cleanup;

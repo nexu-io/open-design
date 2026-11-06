@@ -21,6 +21,19 @@ const memory = {
   sampled_at: common.occurred_at, sampling_interval_ms: 60_000,
 };
 
+it('B09 validates local shadow summary periods, counts, and privacy projection', () => {
+  const summary = { ...common, area: 'settings', aggregation_page_id: 'page-1', period_ms: 300_000,
+    window_start: '2026-11-03T00:00:00Z', window_end: '2026-11-03T00:05:00Z', flush_reason: 'window',
+    source_event_count: 2, source_window_ms: 60_000, input_attempt_count: 3, qualified_sample_count: 2,
+    over_500ms_count: 1, max_input_to_presentation_ms: 600, max_queue_delay_ms: null, sample_floor_ms: 16 };
+  expect(parseClientMetricEvent('client_input_responsiveness_summary', { ...summary, content: 'private', url: 'private' })).toEqual(summary);
+  expect(parseClientMetricEvent('client_input_responsiveness_summary', { ...summary, flush_reason: 'recovery' })).not.toBeNull();
+  for (const patch of [{ period_ms: 60_000 }, { area: 'composer' }, { source_event_count: 0 },
+    { over_500ms_count: 3 }, { window_end: summary.window_start }]) {
+    expect(parseClientMetricEvent('client_input_responsiveness_summary', { ...summary, ...patch })).toBeNull();
+  }
+});
+
 describe('CS01 client metric contracts', () => {
   it('registers launch, business Ready, launch result, navigation and memory', () => {
     const events = [
