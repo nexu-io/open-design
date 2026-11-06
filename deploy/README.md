@@ -221,12 +221,15 @@ docker compose -f docker-compose.yml -f docker-compose.linux.yml exec open-desig
 ```
 
 Both variables are daemon-recognized, allow-listed CLI environment overrides
-(`apps/daemon/src/app-config.ts`, `AGENT_CLI_ENV_KEYS`) — the CLI itself has
-no other route to a public endpoint once `*_BASE_URL` is set, so all traffic
-for that agent stays on the private gateway. This works the same way whether
-the CLI is baked into a custom image layer or mounted from the host per the
-section above; it is independent of Vela/AMR, which remains unavailable
-unless the Vela CLI is installed and authenticated separately.
+(`apps/daemon/src/app-config.ts`, `AGENT_CLI_ENV_KEYS`). They route the agent's
+model API requests through the configured private gateway; they do not by
+themselves disable separate CLI telemetry, version checks, or other background
+requests. For a private-only deployment, apply the CLI's documented
+background-traffic controls and enforce the required egress policy as well.
+This works the same way whether the CLI is baked into a custom image layer or
+mounted from the host per the section above; it is independent of Vela/AMR,
+which remains unavailable unless the Vela CLI is installed and authenticated
+separately.
 
 OpenCode and byok-opencode locate their binary through `OPENCODE_BIN` (not
 `VELA_OPENCODE_BIN`). The Linux override forwards it, defaulting to
