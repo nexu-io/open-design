@@ -111,4 +111,42 @@ describe('HomeView working-dir picker host fallback', () => {
     });
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
+
+  // A headless daemon (systemd unit without WAYLAND_DISPLAY/DISPLAY) fails
+  // zenity before any dialog appears; the daemon maps that to a 500, and
+  // openFolderDialog rethrows. The pure web path must surface the error
+  // instead of treating it as a silent user cancel.
+  it('surfaces the error when the web folder dialog fails on the pure web path', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockRejectedValue(
+      new Error('Could not open folder picker: (zenity:123): Gtk-WARNING **: Failed to open display'),
+    );
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('working-dir-trigger'));
+    fireEvent.click(screen.getByTestId('working-dir-pick'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't open the folder picker/i)).toBeTruthy();
+    });
+  });
+
+  // The Add menu's "Link local code" row rides the same picker; it must not
+  // fail silently either (it used to look like a dead button).
+  it('surfaces the error when Link local code fails on the pure web path', async () => {
+    mockedIsHostAvailable.mockReturnValue(false);
+    mockedOpenFolderDialog.mockRejectedValue(
+      new Error('Could not open folder picker: (zenity:123): Gtk-WARNING **: Failed to open display'),
+    );
+
+    renderHome();
+
+    fireEvent.click(screen.getByTestId('home-hero-plus-trigger'));
+    fireEvent.click(screen.getByTestId('composer-plus-local-code'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't open the folder picker/i)).toBeTruthy();
+    });
+  });
 });

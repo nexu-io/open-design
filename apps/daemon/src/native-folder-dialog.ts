@@ -17,7 +17,10 @@ function errorMessage(error: unknown): string {
 function hardLinuxFolderDialogFailure(error: unknown, stderrText: string): string | null {
   const code = errorCode(error);
   if (code === 'ENOENT') return 'zenity is not installed';
-  if (/cannot open display/i.test(stderrText)) return stderrText;
+  // zenity exits 1 both when the user cancels and when GTK cannot reach a
+  // display, so the stderr wording is the only discriminator. GTK3 zenity
+  // prints "cannot open display"; GTK4 prints "Failed to open display".
+  if (/(?:cannot|failed to) open display/i.test(stderrText)) return stderrText;
   if (/no such file or directory/i.test(stderrText) && /zenity/i.test(stderrText)) return stderrText;
   return null;
 }
