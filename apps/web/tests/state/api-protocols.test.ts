@@ -43,4 +43,21 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the Cheaper Inference preset wired to OpenAI-compatible chat models', () => {
+    const cheaperInferenceProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.cheaperinference.com/v1',
+    );
+
+    expect(cheaperInferenceProvider).toMatchObject({
+      label: 'Cheaper Inference',
+      apiKeyConsoleLink: {
+        host: 'cheaperinference.com',
+        url: 'https://cheaperinference.com/signup',
+      },
+    });
+    expect(cheaperInferenceProvider?.preferredModels[0]).toBe('gpt-5.4-mini');
+  });
 });
