@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000" viewBox="0 0 1500 1000">
+  <defs>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="2"/><feColorMatrix values="0 0 0 0 .18 0 0 0 0 .15 0 0 0 0 .11 0 0 0 .16 0"/></filter>
+    <pattern id="grid" width="52" height="52" patternUnits="userSpaceOnUse"><path d="M52 0H0V52" fill="none" stroke="#9d3a30" stroke-opacity=".17"/></pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="none"/>
+  <rect width="100%" height="100%" fill="url(#grid)"/><path d="M80 80H260M80 80V260M1320 920h-180m180 0V740" stroke="#9d3a30" stroke-width="2" fill="none"/>
+  <g font-family="ui-monospace,monospace" fill="#9d3a30">
+    <text x="6%" y="10%" font-size="26" letter-spacing="3">structure-diagram</text>
+    <text x="6%" y="15%" font-size="15" opacity=".55">independent · vector-overlay · 3:2</text>
+    <text x="6%" y="89%" font-size="15" opacity=".62">SVG technical overlay only; leader lines and registration marks are authored, not image-generated</text>
+  </g>
+  </svg>
