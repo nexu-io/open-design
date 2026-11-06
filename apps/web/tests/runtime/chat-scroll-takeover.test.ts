@@ -360,10 +360,7 @@ describe('chat scroll takeover — once the kick has failed to heal it', () => {
     expect(geometry.writes).toEqual([]);
   });
 
-  it('lets the wheel chain onward once the log is genuinely at its end', () => {
-    // At a real edge the native behaviour is to hand the wheel to whatever is
-    // outside. Holding on to it there would trap the gesture inside a log that
-    // has nothing left to give.
+  it('does not hand a bottom-edge notch back to the broken native scroll path', () => {
     const { log, geometry } = freezeAndTakeOver();
     // Drive to the bottom through the takeover itself, so the edge it sees is
     // one it put the log at rather than one the spec asserted behind its back.
@@ -372,18 +369,17 @@ describe('chat scroll takeover — once the kick has failed to heal it', () => {
     geometry.writes.length = 0;
 
     const event = wheelEvent(log, 120);
+    // Model the known browser failure only when its default action is allowed.
+    if (!event.defaultPrevented) geometry.setTop(0);
 
-    expect(event.defaultPrevented).toBe(false);
+    expect(geometry.top()).toBe(LAYOUT_MAX);
+    expect(event.defaultPrevented).toBe(true);
     expect(geometry.writes).toEqual([]);
   });
 
   it('does not strand the user at a bottom that has since moved', () => {
-    // The edge check runs against a frame-old cache, which is fine for a
-    // settled log and a deadlock for a streaming one: parked at what used to
-    // be the bottom, every wheel is declined, a declined wheel schedules
-    // nothing, and nothing ever re-reads the geometry that would let the next
-    // one through — on a surface whose native path is broken. So a declined
-    // wheel still asks for a frame, purely to take a fresh reading.
+    // Content can grow after the last frame cached the bottom. The first
+    // notch must use the current layout instead of entering the native path.
     const { log, geometry } = freezeAndTakeOver();
     wheelEvent(log, 99_999);
     expect(geometry.top()).toBe(LAYOUT_MAX);
@@ -392,15 +388,29 @@ describe('chat scroll takeover — once the kick has failed to heal it', () => {
     // A turn streams in: the log is now 600px taller than the takeover thinks.
     geometry.setContent(FROZEN.scrollHeight + 600);
 
-    // This one is declined against the stale bottom — and refreshes the cache.
+    // The very first notch already reaches the new content.
     const stale = wheelEvent(log, 120);
-    expect(stale.defaultPrevented).toBe(false);
-    expect(geometry.writes).toEqual([]);
+    expect(stale.defaultPrevented).toBe(true);
+    expect(geometry.writes).toEqual([LAYOUT_MAX + 120]);
 
     // …so the next one reaches the content that arrived.
     const fresh = wheelEvent(log, 120);
     expect(fresh.defaultPrevented).toBe(true);
-    expect(geometry.writes).toEqual([LAYOUT_MAX + 120]);
+    expect(geometry.writes).toEqual([LAYOUT_MAX + 120, LAYOUT_MAX + 240]);
+  });
+
+  it('keeps an inner thinking scrollport native even when the outer log is at its bottom', () => {
+    const { log, geometry } = freezeAndTakeOver();
+    wheelEvent(log, 99_999);
+    geometry.writes.length = 0;
+    const inner = document.createElement('div');
+    inner.style.overflowY = 'auto';
+    stubGeometry(inner, { scrollTop: 0, scrollHeight: 900, clientHeight: 96 });
+    log.appendChild(inner);
+
+    expect(wheelEvent(inner, 120).defaultPrevented).toBe(false);
+    expect(geometry.top()).toBe(LAYOUT_MAX);
+    expect(geometry.writes).toEqual([]);
   });
 });
 
