@@ -289,6 +289,51 @@ describe('OD Next V2 prompt recipe', () => {
     expect(direct.match(/^## Task Skill —/gm)).toHaveLength(1);
   });
 
+  it.each(['designSystemBody', 'designSystemUsageMd'] as const)(
+    'preserves ordinary design-system references in %s',
+    (field) => {
+      const body = '# Demo design system\nUse system fonts.\nReference file: verification.md.\nReference path: components/Verification.md.\nComponent label: Checklist.';
+      const context = { [field]: body };
+      const direct = composeOdNextStrategyRequestPromptV2(recipe, context);
+
+      expect(direct).toContain(body);
+      expect(direct).toContain('<od-next-context kind="instruction" name="active-design-system-');
+      expect(composeOdNextStrategyStableRequestContextV2(context)).toContain(body);
+      expect(composeSystemPrompt({ odNextStrategyRecipe: recipe, ...context })).toBe(direct);
+    },
+  );
+
+  it.each(['designSystemBody', 'designSystemUsageMd'] as const)(
+    'still rejects post-Build workflow instructions in %s',
+    (field) => {
+      for (const body of [
+        '## Verification\nCheck the result.',
+        '## Checklist\nCheck the result.',
+        'After finishing the build, run verification.',
+        'Render the finished artifact, inspect it, then fix any defects.',
+      ]) {
+        expect(() => composeOdNextStrategyRequestPromptV2(recipe, { [field]: body }))
+          .toThrow(/stable context .* contains forbidden/i);
+      }
+    },
+  );
+
+  it.each(['coreStrategy', 'generalOrchestration', 'taskSkill'] as const)(
+    'retains strict recipe vocabulary checks for %s',
+    (field) => {
+      expect(() => composeOdNextStrategyRequestPromptV2({
+        ...recipe,
+        [field]: 'Reference file: verification.md.',
+      })).toThrow(/contains forbidden/i);
+    },
+  );
+
+  it('keeps vocabulary checks for other executable stable context', () => {
+    expect(() => composeOdNextStrategyRequestPromptV2(recipe, {
+      memoryBody: 'Reference file: verification.md.',
+    })).toThrow(/stable context personal-memory contains forbidden/i);
+  });
+
   it('guards executable stable context without deleting factual reference content', () => {
     const contamination = 'Render the finished artifact, inspect it, then fix any defects.';
     const executableContexts = [
