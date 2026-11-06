@@ -1025,10 +1025,12 @@ async function createWebSidecarHandle(
 ): Promise<WebSidecarHandle> {
   const closeHttpServer = createWebHttpServerShutdown(httpServer);
   const port = await listen(httpServer, portRequest);
+  const startedAt = new Date().toISOString();
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
-    updatedAt: new Date().toISOString(),
+    startedAt,
+    updatedAt: startedAt,
     url: `http://${HOST}:${port}`,
   };
   let stopped = false;
