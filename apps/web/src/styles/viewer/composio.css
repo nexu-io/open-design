@@ -157,6 +157,9 @@
 .deploy-result-block.delayed {
   border-color: color-mix(in srgb, #b7791f 34%, var(--border));
 }
+/* Intentional hue anchors: the protected/failed amber-green mix and the
+   delayed amber below are fixed brand hues blended toward the theme border,
+   not theme greens — keep the literals. */
 .deploy-result-block.protected,
 .deploy-result-block.failed {
   border-color: color-mix(in srgb, #87ea5c 38%, var(--border));
@@ -195,7 +198,7 @@
 }
 .deploy-result-badge.ready,
 .deploy-result-link-state.ready {
-  color: #137a3d;
+  color: var(--green);
   background: color-mix(in srgb, var(--green) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--green) 28%, var(--border));
 }

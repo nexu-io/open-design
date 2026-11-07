@@ -17,7 +17,7 @@
   --bg-fill-tertiary: rgba(0, 0, 0, 0.03);
   --bg-fill-secondary: rgba(0, 0, 0, 0.06);
   --bg-fill: rgba(0, 0, 0, 0.12);
-  --bg-elevated: #fafafa;
+  --bg-elevated: #fff;
   /* Liquid Glass — frosted "regular" material for floating functional layers
      (nav rail, toolbars, popovers) per the material spec. Translucent surface
      + backdrop blur; falls back to a solid --bg-panel where unsupported. */
@@ -28,10 +28,10 @@
   /* Entry ground shares the app surface — the nav rail is a solid panel now,
      so the page behind it no longer needs a tinted ground to float on. */
   --entry-ground: var(--bg);
-  --border: #dbdbdb;
+  --border: #c9c9c9;
   --border-strong: #bdbdbd;
-  --border-selected: #a3a3a3;
-  --border-soft: #ededed;
+  --border-selected: #8a8a8a;
+  --border-soft: #e2e2e2;
 
   --text: #494949;
   --text-strong: #202020;
@@ -66,20 +66,7 @@
   --brand-surface: #F2FFF2;
   /* Composer send button: saturated green glyph on a near-black disc (the
      supplied mark, 发送按钮.svg). Theme-independent — the pair is the mark
-     itself. */
-  --send-ground: #00ff08;
-  --send-ink: #202020;
-  /* Free-plan upgrade pill (entry top-right cluster): the same saturated green
-     as a GROUND, with near-black ink on it (per product #00FF08 / #121212).
-     Its own pair rather than borrowing --send-*: that one is the send mark's
-     glyph-on-disc and inverts the roles, and the inks differ. Theme-
-     independent — the pair carries its own contrast either way. */
-  --upgrade-ground: #00ff08;
-  --upgrade-ink: #121212;
-
-  /* Composer send button: saturated green glyph on a near-black disc (the
-     supplied mark, 发送按钮.svg / Group 2147224569.svg). Theme-independent —
-     the pair IS the mark, so it does not swap in dark mode.
+     itself, so it does not swap in dark mode.
 
      ⚠️ 合并 main 的 revert(#7843)时,main 侧把这一对连同它自己的使用者一起
      撤掉了,但**聊天面板仍在用**:`chat.css` 的 `.composer-send.stop
@@ -91,6 +78,13 @@
      同的根,没有共同祖先能挂,所以留在 `:root` 而不是收进面板作用域。 */
   --send-ground: #00ff08;
   --send-ink: #202020;
+  /* Free-plan upgrade pill (entry top-right cluster): the same saturated green
+     as a GROUND, with near-black ink on it (per product #00FF08 / #121212).
+     Its own pair rather than borrowing --send-*: that one is the send mark's
+     glyph-on-disc and inverts the roles, and the inks differ. Theme-
+     independent — the pair carries its own contrast either way. */
+  --upgrade-ground: #00ff08;
+  --upgrade-ink: #121212;
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #00AA54;
@@ -107,6 +101,7 @@
   --red-border: color-mix(in srgb, #F04142 24%, #dbdbdb);
   --amber: #FF7528;
   --amber-bg: color-mix(in srgb, #FFBA12 18%, #fafafa);
+  --amber-border: color-mix(in srgb, #FF7528 32%, #dbdbdb);
 
   /* Project-kind tag hues (see `.design-card-tag.tag-*`). Each kind carries an
      ink; the three whose tint is a lighter sibling of that ink also carry a
@@ -232,7 +227,7 @@
   --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
   --bg-fill-secondary: rgba(255, 255, 255, 0.10);
   --bg-fill: rgba(255, 255, 255, 0.16);
-  --bg-elevated: #353535;
+  --bg-elevated: #3a3a3a;
   --glass-regular: rgba(53, 53, 53, 0.66);
   --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
   --border: #5c5c5c;
@@ -299,7 +294,9 @@
   --code-body-bg: #18181b;
 }
 
-/* System mode: follow OS preference when no explicit data-theme is set. */
+/* System mode: follow OS preference when no explicit data-theme is set.
+   Mirror of [data-theme="dark"] above, which is canonical — keep in sync,
+   no independent values here (full-copy drift risk). */
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
@@ -311,7 +308,7 @@
     --bg-fill-tertiary: rgba(255, 255, 255, 0.06);
     --bg-fill-secondary: rgba(255, 255, 255, 0.10);
     --bg-fill: rgba(255, 255, 255, 0.16);
-    --bg-elevated: #353535;
+    --bg-elevated: #3a3a3a;
     --glass-regular: rgba(53, 53, 53, 0.66);
     --glass-edge-highlight: color-mix(in srgb, #fff 14%, transparent);
     --border: #5c5c5c;

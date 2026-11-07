@@ -79,11 +79,13 @@
 
   /* Text greys. */
   --share-text-strong: #333333;
-  --share-text-muted: #888888;
-  --share-text-faint: #999999;
+  --share-text-muted: #6b6b6b;
+  --share-text-faint: #767676;
   --share-text-notice: #5C5C5C;
-  --share-text-dim: #858585;
-  --share-copied: #82D994;
+  --share-text-dim: #6e6e6e;
+  /* Foreground text/icon green (ShareTab .copiedIcon `color`): #2f7a44 keeps
+     AA on white; the old #82D994 was a fill green, unreadable as text. */
+  --share-copied: #2f7a44;
   --share-published-border: #E5E5E5;
   --share-text-secondary: #666666;
   --share-published-fg: var(--share-text-secondary);

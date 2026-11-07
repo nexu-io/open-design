@@ -22,10 +22,10 @@
   align-items: center;
   padding: 8px 14px;
   border-bottom: 0;
-  /* Solid white bar, no hairline: nothing scrolls under this bar (the body
-     scrolls inside itself), so a glass film served no function. Dark theme
-     swaps to the panel surface below. */
-  background: #ffffff;
+  /* Solid bar, no hairline: nothing scrolls under this bar (the body
+     scrolls inside itself), so a glass film served no function. Theme token
+     so dark follows the app ground. */
+  background: var(--bg);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   font-size: 13px;
@@ -331,19 +331,19 @@
   gap: 5px;
   border: 0;
   border-radius: 6px;
-  background: #F3F3F4;
-  color: #333333;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 700;
 }
 .viewer-action.viewer-comment-count-trigger:hover:not(:disabled) {
-  background: #F3F3F4;
-  color: #333333;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
 }
 .viewer-action.viewer-comment-count-trigger.active,
 .viewer-action.viewer-comment-count-trigger.active:hover:not(:disabled) {
-  background: #E4E4E6;
-  color: #333333;
+  background: var(--bg-muted);
+  color: var(--text-strong);
 }
 .viewer-comment-count {
   min-width: 12px;

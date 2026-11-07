@@ -1175,7 +1175,7 @@
   width: 22px;
   height: 22px;
   border-radius: var(--radius-xs);
-  background: color-mix(in srgb, #fff 92%, transparent);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   box-shadow: var(--shadow-xs);
   opacity: 0;
   transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out);
@@ -1331,7 +1331,7 @@ button.df-card-thumb:focus:not(:disabled) {
   border-radius: var(--radius-xs);
   /* The Remix checkbox glyph carries the box shape itself; the chip only
      provides a translucent backdrop for legibility over thumbnails. */
-  background: color-mix(in srgb, #fff 92%, transparent);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   box-shadow: var(--shadow-xs);
   color: var(--text-muted);
   cursor: pointer;

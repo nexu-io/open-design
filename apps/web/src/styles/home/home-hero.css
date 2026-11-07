@@ -152,12 +152,9 @@
   font-size: 32px;
   line-height: 1.24;
   letter-spacing: -0.02em;
-  /* Pure black (per product), one step past `--text-strong`'s #202020. A
-     literal rather than a change to that token: the rest of the app's
-     strongest text reads the same token and is not meant to move with the
-     headline. Dark mode keeps the token — #000 on a dark ground is
-     unreadable — via the two overrides below. */
-  color: #000;
+  /* Headline reads the strongest text token so both themes follow it.
+     Dark keeps the token via the two overrides below. */
+  color: var(--text-strong);
   text-align: center;
 }
 [data-theme="dark"] .home-hero__title {
@@ -365,6 +362,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border-soft, var(--border));
   border-radius: 16px;
+  /* Shadows stay black in both themes: alpha-black depth, not a surface. */
   box-shadow:
     0 1px 2px color-mix(in srgb, #000 4%, transparent),
     0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);

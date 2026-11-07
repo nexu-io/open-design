@@ -601,6 +601,17 @@
 .fork-note {
   --chat-message-muted-ink: #a3a3a3;
 }
+/* 暗色上浮一档到 #a8a8a8,保证深底可读。对齐下方气泡底的双选择器写法。 */
+[data-theme="dark"] .msg,
+[data-theme="dark"] .fork-note {
+  --chat-message-muted-ink: #a8a8a8;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .msg,
+  html:not([data-theme]) .fork-note {
+    --chat-message-muted-ink: #a8a8a8;
+  }
+}
 .msg.user {
   /* 气泡底色只能有一个出处:hover 变色、以及折行时盖住半个字的那道渐变,
      必须和它同色 —— 写死两处早晚会分叉。接入 chat 接缝后这条搬去 --chat-bub-bg(W1)。
@@ -857,7 +868,7 @@
 }
 .msg-mode-chip--chat {
   border-color: color-mix(in srgb, var(--text-soft) 22%, var(--border));
-  background: color-mix(in srgb, var(--bg-subtle) 78%, #fff);
+  background: color-mix(in srgb, var(--bg-subtle) 78%, var(--bg));
   color: var(--text-muted);
 }
 .msg-plugin-context {

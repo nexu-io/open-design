@@ -66,8 +66,8 @@
 }
 
 .primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .primary:active:not(:disabled) {

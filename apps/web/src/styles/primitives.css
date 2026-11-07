@@ -46,8 +46,8 @@ button.primary {
   color: var(--bg);
 }
 button.primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 button.primary:active:not(:disabled) {
   background: var(--text);
@@ -77,12 +77,12 @@ button.ghost:active:not(:disabled) { background: var(--bg-muted); }
  * ghost button that wants the same "did it" pulse.
  */
 button.ghost.is-success-flash {
-  border-color: var(--green-border, color-mix(in srgb, #1f9d55 32%, var(--border)));
-  background: var(--green-bg, color-mix(in srgb, #1f9d55 8%, transparent));
+  border-color: var(--green-border, color-mix(in srgb, var(--green, #1f9d55) 32%, var(--border)));
+  background: var(--green-bg, color-mix(in srgb, var(--green, #1f9d55) 8%, transparent));
   color: var(--green, #137a3d);
 }
 button.ghost.is-success-flash:hover:not(:disabled) {
-  background: var(--green-bg, color-mix(in srgb, #1f9d55 14%, transparent));
+  background: var(--green-bg, color-mix(in srgb, var(--green, #1f9d55) 14%, transparent));
 }
 button.ghost.is-success-flash svg {
   color: currentColor;
@@ -238,21 +238,21 @@ select {
   padding-right: 32px;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23848484' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 12px;
 }
 select::-ms-expand { display: none; }
 [data-theme='dark'] select {
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23bdbdbd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 12px;
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) select {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23bdbdbd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     background-size: 12px 12px;

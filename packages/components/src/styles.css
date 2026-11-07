@@ -1,3 +1,12 @@
+/* DEPRECATED copy — canonical source is apps/web/src/styles/primitives.css,
+ * which owns the app-surface primitives. This file duplicates them for
+ * standalone @open-design/components use, and the duplication has already
+ * drifted once (od-select-menu glass vs solid, primary hover, focus halo —
+ * see primitives.css for the reference treatments). No functional merge:
+ * comment only, except .od-select-menu below, which is re-aligned to the
+ * primitives glass (var(--glass-regular) + var(--glass-backdrop)). Do not
+ * extend this copy; converge new surfaces on primitives.css.
+ */
 /* -------- Buttons --------------------------------------------------- */
 button {
   display: inline-flex;
@@ -41,8 +50,8 @@ button.primary {
   color: var(--bg);
 }
 button.primary:hover:not(:disabled) {
-  background: #353535;
-  border-color: #353535;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 button.primary:active:not(:disabled) {
   background: var(--text);
@@ -72,12 +81,12 @@ button.ghost:active:not(:disabled) { background: var(--bg-muted); }
  * ghost button that wants the same "did it" pulse.
  */
 button.ghost.is-success-flash {
-  border-color: var(--green-border, color-mix(in srgb, #1f9d55 32%, var(--border)));
-  background: var(--green-bg, color-mix(in srgb, #1f9d55 8%, transparent));
+  border-color: var(--green-border, color-mix(in srgb, var(--green, #1f9d55) 32%, var(--border)));
+  background: var(--green-bg, color-mix(in srgb, var(--green, #1f9d55) 8%, transparent));
   color: var(--green, #137a3d);
 }
 button.ghost.is-success-flash:hover:not(:disabled) {
-  background: var(--green-bg, color-mix(in srgb, #1f9d55 14%, transparent));
+  background: var(--green-bg, color-mix(in srgb, var(--green, #1f9d55) 14%, transparent));
 }
 button.ghost.is-success-flash svg {
   color: currentColor;
@@ -148,16 +157,14 @@ input:focus, textarea:focus, select:focus {
   box-shadow: none;
 }
 /* Entry sidebar form fields keep a quieter, neutral focus so the orange
-   "Create" CTA stays the loudest thing in the panel. A low-opacity black
-   halo reads as "focused" without re-introducing the global blue/accent
-   ring. Using rgba directly because the Next CSS pipeline collapses
-   `color-mix(in srgb, var(--text) 8%, transparent)` to a solid var(--text)
-   ring (would render a 3px black band — too loud). */
+   "Create" CTA stays the loudest thing in the panel. The halo uses
+   var(--selected-soft) so it tracks the theme instead of a hard-coded
+   light-mode rgba. */
 .entry-side input:focus,
 .entry-side textarea:focus,
 .entry-side select:focus {
   border-color: var(--text);
-  box-shadow: 0 0 0 3px rgba(28, 27, 26, 0.08);
+  box-shadow: 0 0 0 3px var(--selected-soft);
 }
 /* Native <select> on macOS uses its own intrinsic min-height that ends up
    shorter than <input> at the same `padding: 7px 10px` rule above, so any
@@ -171,21 +178,21 @@ select {
   padding-right: 32px;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23848484' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 12px;
 }
 select::-ms-expand { display: none; }
 [data-theme='dark'] select {
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23bdbdbd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 12px;
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) select {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23bdbdbd' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     background-size: 12px 12px;
@@ -255,7 +262,9 @@ textarea { resize: vertical; font-family: inherit; }
   overflow-x: hidden;
   overscroll-behavior: contain;
   max-width: calc(100vw - 24px);
-  background: var(--bg-panel);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);

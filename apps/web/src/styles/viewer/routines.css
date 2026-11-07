@@ -234,7 +234,7 @@
 }
 .workspace-toast-anchor:not(:has(.od-toast-browser-snapshot)) .od-toast.tone-success {
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
-  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
+  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg));
   color: var(--success, #2da44e);
 }
 .workspace-toast-anchor .od-toast.od-toast-browser-snapshot {
@@ -273,7 +273,7 @@
      page's share/sync feedback wears the success palette even while
      loading, instead of the base .od-toast dark scrim + white text. */
   border: 1px solid color-mix(in srgb, var(--success, #2da44e) 30%, transparent);
-  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg, #fff));
+  background: color-mix(in srgb, var(--success, #2da44e) 15%, var(--bg));
   color: var(--success, #2da44e);
 }
 /* Keep every glyph on the green pill green: out-specify the dark-toast close
@@ -423,7 +423,7 @@
 .od-toast:not(.tone-success):not(.tone-error) .od-toast-close {
   border-color: rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.16);
-  color: var(--bg, #fff);
+  color: var(--bg);
 }
 .od-toast.od-toast-browser-snapshot .od-toast-close {
   top: 8px;
@@ -2491,14 +2491,17 @@
 [data-theme="dark"] .app .chat-log,
 [data-theme="dark"] .chat-skin .chat-log,
 [data-theme="dark"] .chat-composer-fixed-layer .composer {
-  background: var(--bg-panel);
+  /* Veil contract: the pane stays transparent in dark so the shared wash
+     shows through; an opaque panel fill would strand a light card on dark. */
+  background: transparent;
 }
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) .app .chat-log,
   html:not([data-theme]) .chat-skin .chat-log,
   html:not([data-theme]) .chat-composer-fixed-layer .composer {
-    background: var(--bg-panel);
+    /* Veil contract (system dark, no explicit theme): same transparency. */
+    background: transparent;
   }
 }
 .chat-composer-fixed-layer .composer-shell > * {

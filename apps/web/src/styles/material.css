@@ -84,6 +84,7 @@
    (same contract as tokens.css). Surfaces sit on the elevated neutral
    (#353535) so translucent layers still read as lifted off #202020. */
 [data-theme='dark'] {
+  --scrim-tint: rgba(0, 0, 0, 0.55);
   --material-ultrathin: rgba(53, 53, 53, 0.45);
   --material-thin: rgba(53, 53, 53, 0.6);
   --material-regular: rgba(53, 53, 53, 0.72);
@@ -105,6 +106,7 @@
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
+    --scrim-tint: rgba(0, 0, 0, 0.55);
     --material-ultrathin: rgba(53, 53, 53, 0.45);
     --material-thin: rgba(53, 53, 53, 0.6);
     --material-regular: rgba(53, 53, 53, 0.72);

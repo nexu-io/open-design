@@ -119,7 +119,7 @@
   --chat-stream-ink: #a3a3a3;
   /* 终端块的正文色。值与思考流同值(#a3a3a3),但「进度变深、终端不动」两边不
      联动,所以单独立一枚(原委见 record.module.css 里 `.term` 那段注释)。
-     按接缝约定只在根 Module 定义,亮暗两个作用域同值。 */
+     按接缝约定只在根 Module 定义;亮色 #a3a3a3,暗色 #fafafa(见暗色作用域)。 */
   --chat-terminal-ink: #a3a3a3;
   /* **独立**工具行 / 重连行那一整行的字色。稿子写的是字面
      `#A3A3A3`(`729fa43ce7:components.css:2157` 的 `.tool`,全稿这枚字面出现 14 次),
@@ -128,6 +128,9 @@
      `.fold.mod-flat .tool { color: var(--text-strong) }` 提深,走的是
      `--chat-progress-detail-ink`,不是这一枚。 */
   --chat-tool-ink: #a3a3a3;
+  /* 消息时间 / 复制等附属信息的静音色(对齐 chat.css 的 --chat-message-muted-ink)。
+     亮色 #a3a3a3,暗色 #a8a8a8(见暗色作用域)。 */
+  --chat-message-muted-ink: #a3a3a3;
   /* 选中那一行的字色 */
   --chat-select-ink: var(--select-ink);
   /* 升级按钮的字和闪光 */
@@ -270,8 +273,8 @@
   --chat-bg-fill-secondary: var(--bg-fill-secondary);
   --chat-bg-fill-tertiary: var(--bg-fill-tertiary);
   --chat-confirm-surface: var(--brand-soft);
-  --chat-floating-card-bg: #fff;
-  --chat-floating-card-text: #202020;
+  --chat-floating-card-bg: #2b2b2b;
+  --chat-floating-card-text: #f5f5f5;
 
   --chat-border: var(--border);
   --chat-border-strong: var(--border-strong);
@@ -305,16 +308,19 @@
      暗底上取最浅的正文档 #fafafa —— 「当前这一步」仍是同族里最重的一档,
      与亮色下「比正文深一格」的相对关系保持一致。 */
   --chat-plan-current-text: #fafafa;
-  /* 状态卡这四枚稿子没给暗色覆盖,按接缝约定同值(原委见亮色作用域那段注释)。
-     ⚠️ 暗色方案真要落地时这一族得整张卡一起看,而不是在这儿凭空反色。 */
-  --chat-status-card-surface: #121212;
-  --chat-status-card-ink: #fff;
+  /* 状态卡暗色:深底 #2b2b2b + 近白字 #f5f5f5;图标底 #353535 在深底上仍可辨,明细 #bdbdbd 保持。 */
+  --chat-status-card-surface: #2b2b2b;
+  --chat-status-card-ink: #f5f5f5;
   --chat-status-card-icon-plate: #353535;
   --chat-status-card-detail-ink: #bdbdbd;
   /* 设计稿没给暗色值,按接缝约定同值 */
   --chat-stream-ink: #a3a3a3;
+  /* 终端块暗色取最浅正文 #fafafa(同 --text-strong 暗色档),保证深底可读。 */
+  --chat-terminal-ink: #fafafa;
   /* 同上:稿子的 `.tool` 字面 `#A3A3A3` 没有暗色覆盖,两个作用域同值 */
   --chat-tool-ink: #a3a3a3;
+  /* 消息静音层暗色上浮一档到 #a8a8a8,保证深底可读。 */
+  --chat-message-muted-ink: #a8a8a8;
   --chat-select-ink: var(--select-ink);
   --chat-upgrade-ink: #00ff08;
   /* 稿子 `.up .h .amt b { color: #f8672f }` —— 余额那串数字的暖橙;
@@ -378,6 +384,110 @@
   --chat-dia-3: #fb923c;
   --chat-dia-4: #f1f5f9;
   --chat-dia-5: #60a5fa;
+}
+
+/* 系统跟随暗色(未显式指定 data-theme 时):与上方显式暗色作用域同值。
+   对齐 styles/tokens.css 与 chat.css 的双选择器写法。 */
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme])) .vars,
+  :global(html:not([data-theme])) .root {
+    --chat-text: var(--text);
+    --chat-text-strong: var(--text-strong);
+    --chat-text-muted: var(--text-muted);
+    --chat-text-soft: var(--text-soft);
+    --chat-text-faint: var(--text-faint);
+    --chat-bg: var(--bg);
+    --chat-bg-panel: var(--bg-panel);
+    --chat-bg-subtle: var(--bg-subtle);
+    --chat-bg-muted: var(--bg-muted);
+    --chat-bg-fill-secondary: var(--bg-fill-secondary);
+    --chat-bg-fill-tertiary: var(--bg-fill-tertiary);
+    --chat-confirm-surface: var(--brand-soft);
+    --chat-floating-card-bg: #2b2b2b;
+    --chat-floating-card-text: #f5f5f5;
+    --chat-border: var(--border);
+    --chat-border-strong: var(--border-strong);
+    --chat-border-soft: var(--border-soft);
+    --chat-stroke: var(--stroke-thin, 1px);
+    --chat-red: var(--red);
+    --chat-red-bg: var(--red-bg);
+    --chat-red-border: var(--red-border);
+    --chat-blue: var(--blue);
+    --chat-green: var(--green);
+    --chat-amber: var(--amber);
+    --chat-amber-bg: var(--amber-bg);
+    --chat-amber-border: color-mix(in srgb, var(--amber) 24%, var(--border));
+    --chat-brand: var(--brand);
+    --chat-brand-weak: #2f781d;
+    --chat-brand-soft: var(--brand-soft);
+    --chat-brand-text: var(--brand-text);
+    --chat-accent: var(--accent);
+    --chat-selected: var(--selected);
+    --chat-selected-soft: var(--selected-soft);
+    --chat-banner-ground: #082f69;
+    --chat-pick: #00ff04;
+    --chat-anim-ink: #dbdbdb;
+    --chat-plan-current-text: #fafafa;
+    --chat-status-card-surface: #2b2b2b;
+    --chat-status-card-ink: #f5f5f5;
+    --chat-status-card-icon-plate: #353535;
+    --chat-status-card-detail-ink: #bdbdbd;
+    --chat-stream-ink: #a3a3a3;
+    --chat-terminal-ink: #fafafa;
+    --chat-tool-ink: #a3a3a3;
+    --chat-message-muted-ink: #a8a8a8;
+    --chat-select-ink: var(--select-ink);
+    --chat-upgrade-ink: #00ff08;
+    --chat-upgrade-amount: #f8672f;
+    --chat-orb-c1: #00ff08;
+    --chat-orb-c2: #00ffae;
+    --chat-orb-c3: #202020;
+    --chat-orb-c4: oklch(48% 0.13 152);
+    --chat-orb-c5: #eaffeb;
+    --chat-orb-bg: #202020;
+    --chat-orb-fill: oklch(48% 0.12 158);
+    --chat-tick-img: var(--tick-img);
+    --chat-font-sans: var(--sans);
+    --chat-font-mono: var(--mono);
+    --chat-t-cap: var(--font-size-12);
+    --chat-t-mini: var(--font-size-12);
+    --chat-t-body: var(--font-size-13);
+    --chat-t-lead: var(--font-size-14);
+    --chat-t-head: var(--font-size-16);
+    --chat-t-disp: var(--font-size-20);
+    --chat-t-dialog-title: var(--font-size-18);
+    --chat-t-dialog-body: 13.5px;
+    --chat-lh-tight: 1.35;
+    --chat-lh-body: 1.7;
+    --chat-lh-row: 1.5;
+    font-weight: 500;
+    font-size: var(--chat-t-body);
+    line-height: var(--chat-lh-row);
+    --chat-radius-sm: var(--radius-sm);
+    --chat-radius: var(--radius);
+    --chat-radius-lg: var(--radius-lg);
+    --chat-radius-xl: var(--radius-xl);
+    --chat-radius-2xl: var(--radius-2xl);
+    --chat-radius-pill: var(--radius-pill);
+    --chat-shadow-sm: var(--shadow-sm);
+    --chat-shadow-md: var(--shadow-md);
+    --chat-shadow-lg: var(--shadow-lg);
+    --chat-artifact-single-max-width: 406px;
+    --chat-artifact-max-height: 240px;
+    --chat-overlay-glass: rgba(32, 32, 32, 0.88);
+    --chat-overlay-glass-text: #fafafa;
+    --chat-overlay-glass-edge: color-mix(in srgb, #fff 16%, transparent);
+    --chat-glass-blur: var(--glass-regular-blur, 28px);
+    --chat-ease-out: var(--ease-out);
+    --chat-dur-quick: var(--duration-faster);
+    --chat-dur-enter: var(--duration-normal);
+    --chat-dur-exit: var(--duration-fast);
+    --chat-dia-1: #a78bfa;
+    --chat-dia-2: #fb7185;
+    --chat-dia-3: #fb923c;
+    --chat-dia-4: #f1f5f9;
+    --chat-dia-5: #60a5fa;
+  }
 }
 
 /* 「包一层」那种用法专有:不引入布局盒。抹在已有元素上时不能有这一条。 */

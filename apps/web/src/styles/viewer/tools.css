@@ -228,6 +228,9 @@
 /* PR7170 keeps the artwork visible through a dark glass pill. OPEND-2560 only
    supersedes its outer height; the fill, inset, type, icon and interaction
    stay on the design baseline. */
+/* intentional inverse tooltip: dark glass pill on artwork in both themes.
+   Light keeps a near-black fill with white text; dark reads the elevated
+   surface + strongest text tokens so it stays inverse without hardcoding. */
 .artifact-card .artifact-card-act {
   flex: none;
   box-sizing: border-box;
@@ -242,7 +245,7 @@
   padding: 4px 8px;
   border: 0;
   border-radius: var(--radius-pill);
-  background: rgb(18 18 18 / 60%);
+  background: rgba(18, 18, 18, 0.85);
   color: #fff;
   -webkit-backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
   backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
@@ -264,8 +267,28 @@
 }
 /* Hover deepens the same glass fill without changing geometry. */
 .artifact-card .artifact-card-act:hover {
-  background: rgb(18 18 18 / 72%);
+  background: rgba(18, 18, 18, 0.92);
   border-color: transparent;
+}
+[data-theme='dark'] .artifact-card .artifact-card-act {
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-strong) 16%, transparent), 0 2px 8px rgb(0 0 0 / 32%);
+}
+[data-theme='dark'] .artifact-card .artifact-card-act:hover {
+  background: var(--bg-muted);
+  border-color: transparent;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .artifact-card .artifact-card-act {
+    background: var(--bg-elevated);
+    color: var(--text-strong);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-strong) 16%, transparent), 0 2px 8px rgb(0 0 0 / 32%);
+  }
+  html:not([data-theme]) .artifact-card .artifact-card-act:hover {
+    background: var(--bg-muted);
+    border-color: transparent;
+  }
 }
 .artifact-card .artifact-card-act:active { transform: none; }
 .artifact-card .artifact-card-act:focus-visible {
@@ -282,6 +305,10 @@
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .artifact-card .artifact-card-act { background: #353535; }
   .artifact-card .artifact-card-act:hover { background: #202020; }
+  /* intentional inverse tooltip: no-blur fallback stays dark in light;
+     dark theme falls back to the elevated solid instead. */
+  [data-theme='dark'] .artifact-card .artifact-card-act { background: var(--bg-elevated); }
+  [data-theme='dark'] .artifact-card .artifact-card-act:hover { background: var(--bg-muted); }
 }
 /* D37 — NOT in the design sheet. Product asked for it on 2026-08-21: while a
    file is still being written the turn otherwise sits silent and then pops an
