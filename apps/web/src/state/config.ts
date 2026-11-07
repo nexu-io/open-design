@@ -155,6 +155,10 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'deepseek-v4-pro',
     ],
     retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
+    apiKeyConsoleLink: {
+      host: 'platform.deepseek.com',
+      url: 'https://platform.deepseek.com/api_keys',
+    },
   },
   {
     label: 'MiniMax — Anthropic',
@@ -314,6 +318,10 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'deepseek-v4-pro',
     ],
     retiredModels: ['deepseek-chat', 'deepseek-reasoner'],
+    apiKeyConsoleLink: {
+      host: 'platform.deepseek.com',
+      url: 'https://platform.deepseek.com/api_keys',
+    },
   },
   {
     label: 'Mistral AI',
