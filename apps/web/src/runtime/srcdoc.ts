@@ -1897,6 +1897,54 @@ function injectSelectionBridge(
   var frameUnavailable = new WeakSet();
   var frameLoadListeners = new WeakSet();
   var childTargets = new WeakMap();
+  // Tagged replies belong to one observed document, not its reusable WindowProxy.
+  var childDocuments = new WeakMap();
+  var pendingChildComments = new Map();
+  function rememberChildDocument(frame, data){
+    var previous = childDocuments.get(frame);
+    if (typeof data.documentToken !== 'string' || !data.documentToken ||
+        data.documentVersion !== 'url:' + data.href) return;
+    if (previous && previous.token === data.documentToken && previous.version === data.documentVersion &&
+        previous.src === (frame.getAttribute('src') || '')) return;
+    childDocuments.set(frame, { token: data.documentToken, version: data.documentVersion,
+      src: frame.getAttribute('src') || '', path: projectFramePathFromHref(data.href) });
+  }
+  function relayChildCommentReply(ev){
+    var data = ev && ev.data;
+    if (!data || typeof data.requestId !== 'string' ||
+        (data.type !== 'od:comment-active-target-update' && data.type !== 'od:comment-location-missing')) return false;
+    var pending = pendingChildComments.get(data.requestId);
+    if (!pending || ev.source !== pending.frame.contentWindow) return true;
+    pendingChildComments.delete(data.requestId);
+    var frame = pending.frame;
+    if (Date.now() - pending.started > 5000 || frameElementForSource(ev.source) !== frame ||
+        childDocuments.get(frame) !== pending.document ||
+        (frame.getAttribute('src') || '') !== pending.document.src ||
+        projectFramePath(frame) !== pending.document.path ||
+        projectFramePathFromHref(frame.src) !== pending.document.path ||
+        data.documentToken !== pending.document.token || data.documentVersion !== pending.document.version ||
+        (pending.save && data.type !== 'od:comment-location-missing' && data.requestedSelector !== pending.selector)) return true;
+    var message = { type: data.type, requestId: data.requestId, documentVersion: 'srcdoc:' + runtimeStateGeneration,
+      requestedSelector: pending.selector };
+    if (data.type === 'od:comment-active-target-update') {
+      // Preserve the host validator's strict numeric wire contract before translating.
+      if (!data.position || !['x', 'y', 'width', 'height'].every(function(key){ return Number.isFinite(data.position[key]); })) return true;
+      var position = safeRelayPosition(data.position, frame);
+      if (!position || typeof data.elementId !== 'string' || !data.elementId ||
+          typeof data.selector !== 'string' || !data.selector) return true;
+      message.elementId = projectFrameTargetId(pending.document.path, data.elementId);
+      message.selector = data.selector;
+      message.position = position;
+      message.text = typeof data.text === 'string' ? data.text : '';
+      message.label = typeof data.label === 'string' ? data.label : '';
+      message.htmlHint = typeof data.htmlHint === 'string' ? data.htmlHint : '';
+      message.style = data.style || null;
+      if (typeof data.domSelector === 'string') message.domSelector = data.domSelector;
+      if (Number.isInteger(data.slideIndex) && data.slideIndex >= 0) message.slideIndex = data.slideIndex;
+    }
+    window.parent.postMessage(message, '*');
+    return true;
+  }
   function observeFrameLoad(frame){
     if (!frame || frameLoadListeners.has(frame)) return;
     frameLoadListeners.add(frame);
@@ -1904,6 +1952,7 @@ function injectSelectionBridge(
       try { liveFramePaths.delete(frame); } catch (_) {}
       try { frameUnavailable.add(frame); } catch (_) {}
       childTargets.delete(frame);
+      childDocuments.delete(frame);
       schedulePostTargets();
       markProjectFrames();
       // The child's first ready ping can precede iframe load; ask the loaded
@@ -1983,7 +2032,7 @@ function injectSelectionBridge(
     }
     return null;
   }
-  function routeProjectFrameCommand(data){
+  function routeProjectFrameCommand(data, source){
     if (!data || !data.type) return false;
     var allowed = { 'od:comment-active-target': true, 'od:inspect-set': true, 'od:inspect-reset': true };
     if (!allowed[data.type]) return false;
@@ -1993,6 +2042,19 @@ function injectSelectionBridge(
     if (!frame || !frame.contentWindow) return true;
     var message = { type: data.type, elementId: target.localElementId };
     if (typeof data.selector === 'string') message.selector = data.selector;
+    if (data.type === 'od:comment-active-target' && typeof data.requestId === 'string' && (data.validateForSave || data.locate)) {
+      var childDocument = childDocuments.get(frame);
+      if (source !== window.parent || !childDocument || childDocument.path !== target.framePath ||
+          childDocument.src !== (frame.getAttribute('src') || '') ||
+          projectFramePathFromHref(frame.src) !== target.framePath) return true;
+      // Bound abandoned requests without leaving a timer per iframe.
+      if (pendingChildComments.size >= 64) pendingChildComments.delete(pendingChildComments.keys().next().value);
+      pendingChildComments.set(data.requestId, { frame: frame, document: childDocument,
+        selector: data.selector, save: !!data.validateForSave, started: Date.now() });
+      message.requestId = data.requestId;
+      if (data.validateForSave) message.validateForSave = true;
+      if (data.locate) message.locate = true;
+    }
     if (typeof data.prop === 'string') message.prop = data.prop;
     if (typeof data.value === 'string') message.value = data.value;
     try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
@@ -2025,6 +2087,7 @@ function injectSelectionBridge(
       width: Math.round(Number(position.width) * sx), height: Math.round(Number(position.height) * sy) };
   }
   function relayProjectFrameSelection(ev){
+    if (relayChildCommentReply(ev)) return;
     if (!active()) return;
     var data = ev && ev.data;
     if (data && data.type === 'od:comment-targets' && Array.isArray(data.targets)) {
@@ -2037,7 +2100,7 @@ function injectSelectionBridge(
         if (!item || !item.elementId || !item.selector) continue;
         var id = projectFrameTargetId(targetPath, String(item.elementId));
         if (!id || !safeRelayPosition(item.position, targetFrame)) continue;
-        targets.push({ elementId: id, selector: String(item.selector), label: String(item.label || ''),
+        targets.push({ elementId: id, selector: String(item.selector), domSelector: typeof item.domSelector === 'string' ? item.domSelector : undefined, label: String(item.label || ''),
           text: String(item.text || ''), position: item.position, htmlHint: String(item.htmlHint || ''), style: item.style || null });
       }
       childTargets.set(targetFrame, { path: targetPath, src: targetFrame.getAttribute('src') || '', targets: targets });
@@ -2064,6 +2127,7 @@ function injectSelectionBridge(
       localElementId: localElementId, framePath: framePath, selector: String(data.selector),
       label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
       position: position, htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };
+    if (typeof data.domSelector === 'string') message.domSelector = data.domSelector;
     if (data.clickedDescendant && typeof data.clickedDescendant === 'object') message.clickedDescendant = { label: typeof data.clickedDescendant.label === 'string' ? data.clickedDescendant.label : '', text: typeof data.clickedDescendant.text === 'string' ? data.clickedDescendant.text : '' };
     // Pins and target rectangles share root-viewport coordinates, including frame offset and scale.
     var hoverPoint = data.hoverPoint && safeRelayPosition({ x: data.hoverPoint.x, y: data.hoverPoint.y, width: 0, height: 0 }, frame);
@@ -2881,6 +2945,7 @@ function meaningfulDomFallbackTarget(el) {
       var readyFramePath = projectFramePathFromHref(data.href);
       if (!readyFramePath) return;
       observeFrameLoad(readyFrame);
+      rememberChildDocument(readyFrame, data);
       try { liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' }); } catch (_) {}
       // #7296 review (R9-2): a ready ping only clears the post-departure
       // "unavailable" gate when it confirms the frame is back at its OWN
@@ -2900,7 +2965,7 @@ function meaningfulDomFallbackTarget(el) {
       relayFrameInspectOverrides(readyFramePath);
       return;
     }
-    if (routeProjectFrameCommand(data)) return;
+    if (routeProjectFrameCommand(data, ev.source)) return;
     if (data.type === 'od:preview-runtime-state-restore') {
       var currentGeneration = runtimeStateRestoreGeneration();
       if (

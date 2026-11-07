@@ -12992,7 +12992,7 @@ function HtmlViewer({
   // Only a current target report or a paired locate failure can establish loss.
   // Saved boxes/text never supply location evidence; an unwitnessed document is pending.
   const selectedLocationComment = previewComments.find(comment => comment.id === activePreviewCommentId
-    && comment.filePath === file.name && commentUsesIdentity(comment) && ownerCommentNeedsLocation(comment, collab.enabled));
+    && isAuthorizedCommentFilePath(comment.filePath, file.name, projectFramePaths) && commentUsesIdentity(comment) && ownerCommentNeedsLocation(comment, collab.enabled));
   const lostSelectedCommentId = selectedLocationComment && commentTargetsReadyKey === commentTargetsKey
     && (resolveOwnerCommentAnchor(selectedLocationComment, liveCommentTargets, collab.publishedVersion ?? undefined).state === 'lost'
       || (missingCommentLocation?.commentId === selectedLocationComment.id && missingCommentLocation.previewKey === commentTargetsKey
@@ -13002,7 +13002,7 @@ function HtmlViewer({
   const commentIdentityFrameReady = commentTargetsReadyKey === commentTargetsKey
     && (useUrlLoadPreview ? urlSelectionBridgeReady
       : commentPreviewReady?.frame === iframeRef.current && commentPreviewReady.generation === srcDocTransportGeneration);
-  const commentLocateRequestRef = useRef<{ requestId: string; commentId: string; previewKey: string; selector: string; targetId: string | null; scrolled: boolean; reportRevision: number } | null>(null);
+  const commentLocateRequestRef = useRef<{ requestId: string; commentId: string; previewKey: string; filePath: string; selector: string; targetId: string | null; scrolled: boolean; reportRevision: number } | null>(null);
   const commentLocateSequenceRef = useRef(0);
   const commentTargetReportRevisionRef = useRef(0);
   useEffect(() => {
@@ -13255,7 +13255,7 @@ function HtmlViewer({
           return;
         }
         const snapshot = snapshotFromData(data);
-        if (!snapshot?.elementId || !isValidCommentOverlayPosition(snapshot.position)) return;
+        if (!snapshot?.elementId || snapshot.filePath !== request.filePath || !isValidCommentOverlayPosition(snapshot.position)) return;
         if (commentUsesIdentity({ elementId: request.targetId ?? '', selector: request.selector })
           && (!request.targetId || snapshot.elementId !== request.targetId || snapshot.selector !== request.selector)) return;
         if (snapshot.elementId !== request.targetId && !commentSelectorsMatch(snapshot.selector, request.selector)
@@ -13285,7 +13285,7 @@ function HtmlViewer({
         // boxes without request ids; match the current target and use its
         // existing scroll protocol, without changing daemon or its contract.
         const previousTargetId = request?.targetId;
-        const matchesRequest = request && request.previewKey === commentTargetsKey
+        const matchesRequest = request && request.previewKey === commentTargetsKey && snapshot.filePath === request.filePath
           && (snapshot.elementId === request.targetId || commentSelectorsMatch(snapshot.domSelector ?? '', request.selector));
         if (matchesRequest) {
           request.targetId = snapshot.elementId;
@@ -13435,7 +13435,8 @@ function HtmlViewer({
   useEffect(() => {
     commentLocateRequestRef.current = null;
     if (!workspaceActive || !boardMode || !activePreviewCommentId) return;
-    const comment = previewComments.find(item => item.id === activePreviewCommentId && item.filePath === file.name);
+    const comment = previewComments.find(item => item.id === activePreviewCommentId
+      && isAuthorizedCommentFilePath(item.filePath, file.name, projectFramePaths));
     if (!comment || !ownerCommentNeedsLocation(comment, collab.enabled)) return;
     if (composerHoldsUnsentWorkRef.current) return;
     setActiveCommentTarget(null);
@@ -13443,13 +13444,13 @@ function HtmlViewer({
     if (commentTargetsReadyKey !== commentTargetsKey) return;
     const requestId = `comment-location-${++commentLocateSequenceRef.current}`;
     const resolution = resolveOwnerCommentAnchor(comment, liveCommentTargets, collab.publishedVersion ?? undefined);
-    commentLocateRequestRef.current = { requestId, commentId: comment.id, previewKey: commentTargetsKey, selector: comment.selector,
+    commentLocateRequestRef.current = { requestId, commentId: comment.id, previewKey: commentTargetsKey, filePath: comment.filePath, selector: comment.selector,
       targetId: resolution.state !== 'lost' ? resolution.snapshot?.elementId ?? null : null, scrolled: false,
       reportRevision: commentTargetReportRevisionRef.current };
     iframeRef.current?.contentWindow?.postMessage({ type: 'od:comment-active-target',
       elementId: comment.elementId, selector: comment.selector, locate: true, requestId }, '*');
     return () => { commentLocateRequestRef.current = null; };
-  }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, commentLocationIntent, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey]);
+  }, [workspaceActive, boardMode, collab.enabled, activePreviewCommentId, commentLocationIntent, previewComments, file.name, commentTargetsKey, commentTargetsReadyKey, projectFramePaths]);
 
   useEffect(() => {
     if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
