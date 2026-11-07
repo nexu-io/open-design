@@ -42,7 +42,7 @@
  * 只断言「轮次间距是 24」是**假绿**:把所有间距一起改成 24 也能过,而那正是现在这个 bug
  * 的另一种形态。所以每条几何断言都成对出现:轮次间 X、轮次内 Y,且 X ≠ Y。
  */
-import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -139,31 +139,54 @@ section .app, section .app-less { flex: 1; display: flex; flex-direction: column
  * 两边各用各的运行时,中间用一个临时 html 文件和一行 JSON 交接。
  */
 const CHROME_CANDIDATES = [
+  process.env.GAP_CHROME,
+  process.env.CHROME_BIN,
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
-];
+].filter((p): p is string => Boolean(p));
 const CHROME = CHROME_CANDIDATES.find((p) => existsSync(p)) ?? null;
 
 const MEASURE_IN_CHROME = `
 import { spawn } from 'node:child_process';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PORT = Number(process.env.GAP_PORT);
+const requestedPort = process.env.GAP_PORT ? Number(process.env.GAP_PORT) : 0;
+const profile = process.env.GAP_PROFILE;
+let chromeErr = '';
 const chrome = spawn(process.env.GAP_CHROME, [
   '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
   '--hide-scrollbars', '--force-color-profile=srgb', '--window-size=1200,1000',
-  '--remote-debugging-port=' + PORT, '--user-data-dir=' + process.env.GAP_PROFILE, 'about:blank',
-], { stdio: 'ignore' });
-let url = null;
-for (let i = 0; i < 80 && !url; i += 1) {
-  try {
-    const list = await (await fetch('http://127.0.0.1:' + PORT + '/json')).json();
-    url = list.find((x) => x.type === 'page')?.webSocketDebuggerUrl ?? null;
-  } catch {}
-  if (!url) await sleep(250);
+  '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+  '--remote-debugging-port=' + requestedPort, '--user-data-dir=' + profile, 'about:blank',
+], { stdio: ['ignore', 'ignore', 'pipe'] });
+chrome.stderr?.on('data', (d) => { chromeErr += d; });
+
+let port = requestedPort || null;
+const portFile = join(profile, 'DevToolsActivePort');
+for (let i = 0; i < 80 && !port; i += 1) {
+  if (existsSync(portFile)) {
+    try {
+      const lines = readFileSync(portFile, 'utf-8').trim().split('\\n');
+      if (lines[0]) port = Number(lines[0]);
+    } catch {}
+  }
+  if (!port) await sleep(100);
 }
-if (!url) { chrome.kill('SIGKILL'); throw new Error('headless chrome did not come up'); }
+
+let url = null;
+if (port) {
+  for (let i = 0; i < 80 && !url; i += 1) {
+    try {
+      const list = await (await fetch('http://127.0.0.1:' + port + '/json')).json();
+      url = list.find((x) => x.type === 'page')?.webSocketDebuggerUrl ?? null;
+    } catch {}
+    if (!url) await sleep(250);
+  }
+}
+if (!url) { chrome.kill('SIGKILL'); throw new Error('headless chrome did not come up:\\n' + chromeErr); }
 const sock = new WebSocket(url);
 await new Promise((r) => sock.addEventListener('open', r));
 let seq = 0;
@@ -195,23 +218,30 @@ process.stdout.write('GAP_JSON:' + out.result.value);
 `;
 
 function measureInChrome(file: string, expression: string): Record<string, CaseGeometry> {
-  const run = spawnSync(process.execPath, ['--input-type=module', '-e', MEASURE_IN_CHROME], {
-    encoding: 'utf-8',
-    timeout: 120_000,
-    env: {
-      ...process.env,
-      GAP_CHROME: CHROME!,
-      GAP_FILE: file,
-      GAP_EXPR: expression,
-      GAP_PORT: String(9550 + (process.pid % 90)),
-      GAP_PROFILE: mkdtempSync(join(tmpdir(), 'gap-chrome-')),
-    },
-  });
-  const marker = (run.stdout ?? '').indexOf('GAP_JSON:');
-  if (marker === -1) {
-    throw new Error(`Chrome 量不到几何:\nstdout=${run.stdout}\nstderr=${run.stderr}`);
+  const profile = mkdtempSync(join(tmpdir(), 'gap-chrome-'));
+  try {
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', MEASURE_IN_CHROME], {
+      encoding: 'utf-8',
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        GAP_CHROME: CHROME!,
+        GAP_FILE: file,
+        GAP_EXPR: expression,
+        GAP_PORT: '0',
+        GAP_PROFILE: profile,
+      },
+    });
+    const marker = (run.stdout ?? '').indexOf('GAP_JSON:');
+    if (marker === -1) {
+      throw new Error(`Chrome 量不到几何:\nstdout=${run.stdout}\nstderr=${run.stderr}`);
+    }
+    return JSON.parse(run.stdout.slice(marker + 'GAP_JSON:'.length));
+  } finally {
+    try {
+      rmSync(profile, { recursive: true, force: true });
+    } catch {}
   }
-  return JSON.parse(run.stdout.slice(marker + 'GAP_JSON:'.length));
 }
 
 /* ── 探针表达式 ─────────────────────────────────────────────────── */
@@ -339,9 +369,16 @@ describe.skipIf(!canRun)('轮次边界 · 真 Chrome 几何', () => {
       'virtualized': `<div class="chat-virtual-spacer"><div class="chat-virtual-row" style="position:relative">${turnA}</div><div class="chat-virtual-row" style="position:relative">${turnB}</div></div>`,
     });
 
-    const file = join(mkdtempSync(join(tmpdir(), 'gap-probe-')), 'probe.html');
-    writeFileSync(file, page, 'utf-8');
-    geometry = measureInChrome(file, PROBE);
+    const probeDir = mkdtempSync(join(tmpdir(), 'gap-probe-'));
+    const file = join(probeDir, 'probe.html');
+    try {
+      writeFileSync(file, page, 'utf-8');
+      geometry = measureInChrome(file, PROBE);
+    } finally {
+      try {
+        rmSync(probeDir, { recursive: true, force: true });
+      } catch {}
+    }
   }, 150_000);
 
   afterEach(() => cleanup());
