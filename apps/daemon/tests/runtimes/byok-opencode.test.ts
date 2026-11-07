@@ -15,6 +15,11 @@ describe('byok-opencode runtime config', () => {
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
       '--dangerously-skip-permissions': 'skipPermissions',
+      '--auto': 'autoApprove',
+      '--dir': 'workspaceDir',
+      '--pure': 'pure',
+      '--variant': 'variant',
+      '--standalone': 'standalone',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -31,6 +36,30 @@ describe('byok-opencode runtime config', () => {
         '--dangerously-skip-permissions',
         '-m',
         'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('pins the workspace with --dir on OpenCode 1.x and with the spawn cwd on 2.x', () => {
+    agentCapabilities.set('byok-opencode', {
+      skipPermissions: true, autoApprove: false, workspaceDir: true, pure: true, variant: true, standalone: false,
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' }, { cwd: '/projects/p1' })).toEqual([
+        'run', '--format', 'json',
+        '--dir', '/projects/p1',
+        '--dangerously-skip-permissions',
+        '-m', 'open-design-byok/gpt-5.5',
+      ]);
+      agentCapabilities.set('byok-opencode', {
+        skipPermissions: false, autoApprove: true, workspaceDir: false, pure: false, variant: false, standalone: true,
+      });
+      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' }, { cwd: '/projects/p1' })).toEqual([
+        'run', '--format', 'json',
+        '--auto', '--standalone',
+        '-m', 'open-design-byok/gpt-5.5',
       ]);
     } finally {
       agentCapabilities.delete('byok-opencode');

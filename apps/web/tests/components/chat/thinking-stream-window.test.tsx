@@ -136,8 +136,13 @@ describe('还在想的那一格:一只灰底容器,里面是普通正文', () =>
 
     const cap = declsOf('.fold .body.scroll');
     expect(cap, '找不到 .fold .body.scroll 规则').not.toBe('');
-    expect(cap).toMatch(/max-height: 96px/);
+    // The value moved from a fixed 96px window to a viewport-relative cap
+    // (2026-11-07: thinking is meant to be readable, not peeking through a
+    // 5-line slot). What must hold is the MECHANISM: a max-height, not a fixed
+    // height, plus its own scroll.
+    expect(cap).toMatch(/max-height: min\(50vh, 640px\)/);
     expect(cap).toMatch(/overflow-y: auto/);
+    expect(cap).not.toMatch(/(^|[^-])height:/);
     // 同一件事只能有一套机制:限高不许在 `.stream` 上再写一遍
     expect(declsOf('.stream')).not.toMatch(/max-height/);
   });

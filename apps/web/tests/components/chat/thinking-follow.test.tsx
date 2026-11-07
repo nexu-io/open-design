@@ -243,7 +243,8 @@ describe('限高与遮罩:被推翻的那两样不许回来', () => {
 
   it('限高走 `max-height`,不是定高 —— 短内容完全不出滚动条', () => {
     const cap = declsOf('.fold .body.scroll');
-    expect(cap).toMatch(/max-height: 96px/);
+    // 2026-11-07:窗口从固定 96px 改成随视口长到 min(50vh, 640px)
+    expect(cap).toMatch(/max-height: min\(50vh, 640px\)/);
     expect(cap).toMatch(/overflow-y: auto/);
     expect(declsOf('.stream')).not.toMatch(/(^|[^-])height:/);
   });

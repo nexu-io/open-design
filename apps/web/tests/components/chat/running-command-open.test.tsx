@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 /**
- * 组件 11「工具调用-代码执行」的**默认状态**:执行中展开 → 完成收起。
+ * 组件 11「工具调用-代码执行」的**默认状态**:始终展开。
+ *
+ * 稿子的 `cmp-meta` 写的是「执行中展开 → 完成收起」;2026-11-07 的裁决把完成态也
+ * 改成摊开 —— 命令输出是记录的一部分,跑完不该消失。下面保留稿子基线说明,便于
+ * 对照哪些形态是有意偏离。
  *
  * ── 稿子怎么说的(基线 `729fa43ce7`,PR #7170)────────────────────────────
  *
@@ -143,47 +147,27 @@ describe('执行中的命令行:默认展开,输出当场看得见(稿子 body-c
   });
 });
 
-describe('跑完自动收起(稿子:执行中展开 → 完成收起)', () => {
-  it('同一行从 pending 翻成成功,折叠块自己收起来', () => {
-    const { rerender } = render(<ToolRow running row={running()} />);
+describe('跑完保持展开(2026-11-07:不再自动收起)', () => {
+  it('同一行从 pending 翻成成功,折叠块保持开着的', () => {
+    const { rerender, container } = render(<ToolRow running row={running()} />);
     expect(fold().open).toBe(true);
     // 摊开那一帧浏览器会为「open 被写上」派发一次 toggle —— 不算用户点过
     echoToggle(fold());
 
     rerender(<ToolRow row={settled()} />);
-    expect(fold().open, '跑完该按稿子收起来').toBe(false);
-  });
-
-  /*
-   * 【实测钉住,不是我希望的样子】跑完自动收起之后,**终端节点仍然留在 DOM 里**。
-   *
-   * `Foldable` 的 `bodyActivated` 是一只**只进不出的闩**:`deferBody` 只推迟
-   * 「第一次挂载」,一旦开过就不再卸载(理由是再展开时不该重新掀一遍)。
-   * 所以「收起 = 卸掉几百个节点」这个直觉是错的,收起省掉的是**渲染**不是**节点**:
-   * `<details>` 收起时浏览器不布局不绘制它的正文,但节点还挂着。
-   *
-   * 代价只落在**开过的那些行**身上;重载一条老会话时所有命令行都是收起态、
-   * 一次都没开过,`deferBody` 拦住的是那一档(见下面「首屏」那一条)。
-   * 要不要在收起时真的卸掉正文,是 `Foldable` 全局语义的改动(每条 todo 抽屉、
-   * 每个思考块都吃这只闩),不在这次范围内 —— 记在报告里待拍板。
-   */
-  it('跑完收起之后节点仍在 DOM 里(bodyActivated 是只进不出的闩)—— 省掉的是渲染不是节点', () => {
-    const { rerender, container } = render(<ToolRow running row={running()} deferBody />);
-    echoToggle(fold());
-    rerender(<ToolRow row={settled()} deferBody />);
-    expect(fold().open).toBe(false);
+    expect(fold().open, '跑完不该把命令现场收走').toBe(true);
     expect(container.textContent).toContain('✓ built in 8.42s');
   });
 
-  it('首屏:一条从来没展开过的成功命令行,正文一个节点都不挂(deferBody 生效)', () => {
-    // 重载老会话就是这一档:没有正在跑的,所有行一上来就是收起的
+  it('首屏:一条已完成的成功命令行也默认展开,正文直接挂载', () => {
+    // 重载老会话就是这一档:没有正在跑的,所有行一上来就是完成态
     const { container } = render(<ToolRow row={settled()} deferBody />);
-    expect(fold().open).toBe(false);
-    expect(container.querySelector('div[class*="code"]'), '收起且没开过 → 正文不挂载').toBeNull();
-    expect(container.textContent).not.toContain('✓ built in 8.42s');
+    expect(fold().open).toBe(true);
+    expect(container.querySelector('div[class*="code"]'), '默认展开 → 正文挂载').not.toBeNull();
+    expect(container.textContent).toContain('✓ built in 8.42s');
   });
 
-  it('跑完翻成失败的,**不收** —— 失败是稿子里唯一默认展开的完成态', () => {
+  it('跑完翻成失败,同样保持展开', () => {
     const { rerender, container } = render(<ToolRow running row={running()} />);
     echoToggle(fold());
 
@@ -205,23 +189,23 @@ describe('用户自己动过的,生命周期不许拨回去', () => {
     expect(fold().open).toBe(false);
   });
 
-  it('用户手动展开一条已完成的,后续重渲染不许把它收回去', () => {
+  it('用户手动收起的已完成行,后续重渲染不许把它打开', () => {
     const { rerender } = render(<ToolRow row={settled()} />);
-    expect(fold().open).toBe(false);
-
-    clickSummary(fold());
     expect(fold().open).toBe(true);
 
+    clickSummary(fold());
+    expect(fold().open).toBe(false);
+
     rerender(<ToolRow row={settled({ elapsedMs: 8430 })} />);
-    expect(fold().open, '用户掀开的不许被拨回去').toBe(true);
+    expect(fold().open, '用户收起的不许被拨回去').toBe(false);
   });
 });
 
 describe('反向对照:别的状态一个都没改坏', () => {
-  it('成功且用户没动过的,默认收起(稿子 :1014-1015 不带 open)', () => {
+  it('成功且用户没动过的,默认展开 —— 输出是记录的一部分', () => {
     const { container } = render(<ToolRow row={settled()} />);
-    expect(fold().open).toBe(false);
-    expect(container.textContent).not.toContain('✓ built in 8.42s');
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain('✓ built in 8.42s');
   });
 
   it('失败的默认展开,报错原文在 DOM 里(稿子 :1018-1019 是 `fold is-fail` + open)', () => {
@@ -233,9 +217,12 @@ describe('反向对照:别的状态一个都没改坏', () => {
     expect(screen.getByText('失败')).toBeTruthy();
   });
 
-  it('点标题行照样能手动展开一条收起的成功行', () => {
+  it('点标题行仍然能手动收起、再展开', () => {
     const { container } = render(<ToolRow row={settled()} />);
     clickSummary(fold());
+    expect(fold().open).toBe(false);
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
     expect(container.textContent).toContain('✓ built in 8.42s');
   });
 });

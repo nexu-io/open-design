@@ -18,10 +18,10 @@ import styles from './ThinkingMarkdown.module.css';
  * A live model can produce dozens of thinking deltas per second. Parsing the
  * entire accumulated Markdown for every delta makes a long stream quadratic
  * and replaces a large React subtree more often than a display can paint.
- * Ten commits per second is still visibly live while placing a hard ceiling on
- * full-document Markdown parses and DOM commits.
+ * 60ms (≈16 commits/s) still caps full-document Markdown parses while keeping
+ * thinking visibly ahead of the streamed prose.
  */
-export const THINKING_MARKDOWN_COMMIT_MS = 100;
+export const THINKING_MARKDOWN_COMMIT_MS = 60;
 
 export interface ThinkingMarkdownProps {
   texts: readonly string[];

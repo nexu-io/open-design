@@ -646,6 +646,41 @@ const liveAccountFetchedAt = new Map<string, number>();
 const LIVE_ACCOUNT_TTL_MS = 60_000;
 
 /**
+ * Re-probe floor for an explicit `refresh=1` status read. A forced refresh
+ * exists so the client can say "login state may have changed, re-read it now" —
+ * it is NOT a request to spawn a remote billing probe on every focus event.
+ * Once a projection is cached, forced reads re-probe at most once per this
+ * window; the ordinary cold-cache path keeps its own bounded wait.
+ */
+export const VELA_LIVE_ACCOUNT_FORCED_REFRESH_MIN_INTERVAL_MS = 10_000;
+
+/** First failed probe waits this long before retrying; doubles per failure. */
+const LIVE_ACCOUNT_FAILURE_BACKOFF_BASE_MS = 30_000;
+/** ...and never waits longer than this, however long the outage lasts. */
+const LIVE_ACCOUNT_FAILURE_BACKOFF_MAX_MS = 5 * 60_000;
+
+export interface VelaLiveAccountFailure {
+  /** Consecutive failed probes in the current failure window. */
+  failures: number;
+  /** Epoch ms before which no probe is attempted. */
+  retryAt: number;
+  /** Latest failure message; a different message starts a new log window. */
+  message: string;
+}
+
+export interface VelaLiveAccountFailureUpdate {
+  /**
+   * True only when the caller should emit the failure log line: the first
+   * failure of a window, or a failure whose message changed. Every later probe
+   * inside the same window stays silent (the backoff is the durable record).
+   */
+  shouldLog: boolean;
+  failure: VelaLiveAccountFailure;
+}
+
+const liveAccountFailures = new Map<string, VelaLiveAccountFailure>();
+
+/**
  * Cache key for the live account. Derived from the full credential revision
  * (auth source + profile + signed-in user + config mtime), NOT just the
  * profile — so a logout or an account switch on the same profile produces a
@@ -671,18 +706,34 @@ export function peekVelaLiveAccount(cacheKey: string): VelaLiveAccount | null {
 }
 
 /**
- * TTL gate for the background refresh. Returns true (and records the attempt)
- * at most once per cache key per {@link LIVE_ACCOUNT_TTL_MS}, so concurrent
- * status polls don't all spawn the CLI.
+ * Attempt gate for the background refresh. Returns true (and records the
+ * attempt) at most once per cache key per {@link LIVE_ACCOUNT_TTL_MS}, so
+ * concurrent status polls don't all spawn the CLI.
+ *
+ * A failed probe owns the key until its backoff deadline lapses, and that
+ * deadline outranks both the TTL and any caller-supplied shorter interval: a
+ * 403 or connection refusal must never be retried at poll/focus frequency.
  */
-export function shouldRefreshVelaLiveAccount(cacheKey: string): boolean {
+export function shouldRefreshVelaLiveAccount(
+  cacheKey: string,
+  options: { minIntervalMs?: number } = {},
+): boolean {
+  const now = Date.now();
+  const failure = liveAccountFailures.get(cacheKey);
+  if (failure) {
+    if (now < failure.retryAt) return false;
+    // The backoff deadline is the authoritative retry schedule for a failing
+    // key; it can be shorter than the successful-read TTL (30s vs 60s).
+    liveAccountFetchedAt.set(cacheKey, now);
+    return true;
+  }
   const last = liveAccountFetchedAt.get(cacheKey) ?? 0;
-  if (Date.now() - last < LIVE_ACCOUNT_TTL_MS) return false;
-  liveAccountFetchedAt.set(cacheKey, Date.now());
+  if (now - last < (options.minIntervalMs ?? LIVE_ACCOUNT_TTL_MS)) return false;
+  liveAccountFetchedAt.set(cacheKey, now);
   return true;
 }
 
-/** Store a freshly fetched live-account projection. */
+/** Store a freshly fetched live-account projection and clear any failure. */
 export function setVelaLiveAccount(
   cacheKey: string,
   account: VelaLiveAccount,
@@ -691,20 +742,70 @@ export function setVelaLiveAccount(
   // Stamp the fetch time so the warm-path TTL gate doesn't immediately trigger
   // a redundant refresh right after a (blocking) cold fetch populated the cache.
   liveAccountFetchedAt.set(cacheKey, Date.now());
+  // A successful probe ends the failure window, so the next failure (if any)
+  // opens a fresh one and gets its own first-failure log line.
+  liveAccountFailures.delete(cacheKey);
+}
+
+/** Last failure recorded for a cache key, or null when the key is healthy. */
+export function peekVelaLiveAccountFailure(
+  cacheKey: string,
+): VelaLiveAccountFailure | null {
+  const failure = liveAccountFailures.get(cacheKey);
+  return failure ? { ...failure } : null;
+}
+
+/**
+ * Arm exponential backoff for a failed live-account probe. The first failure
+ * delays the next attempt by {@link LIVE_ACCOUNT_FAILURE_BACKOFF_BASE_MS}
+ * (30s), each consecutive failure doubles it, and the delay caps at
+ * {@link LIVE_ACCOUNT_FAILURE_BACKOFF_MAX_MS} (5 min). Success clears the state
+ * through {@link setVelaLiveAccount}.
+ *
+ * Returns whether the caller should log: only the first failure of a window,
+ * or one whose message changed (e.g. `403` -> `connection refused`). This is
+ * what keeps a persistent billing outage from printing a stack per poll.
+ */
+export function recordVelaLiveAccountFailure(
+  cacheKey: string,
+  error: unknown,
+): VelaLiveAccountFailureUpdate {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  const previous = liveAccountFailures.get(cacheKey);
+  const failures = (previous?.failures ?? 0) + 1;
+  const delayMs = Math.min(
+    LIVE_ACCOUNT_FAILURE_BACKOFF_BASE_MS * 2 ** Math.min(failures - 1, 10),
+    LIVE_ACCOUNT_FAILURE_BACKOFF_MAX_MS,
+  );
+  const now = Date.now();
+  const retryAt = now + delayMs;
+  const failure: VelaLiveAccountFailure = { failures, retryAt, message };
+  liveAccountFailures.set(cacheKey, failure);
+  // Keep the attempt stamp aligned with the failure deadline so a caller that
+  // probes without first claiming through shouldRefresh... still gets a real
+  // backoff rather than an immediately-expired TTL.
+  liveAccountFetchedAt.set(cacheKey, now);
+  return {
+    shouldLog: !previous || previous.message !== message,
+    failure,
+  };
 }
 
 /** Clear the refresh throttle so a failed fetch can retry on the next poll. */
 export function clearVelaLiveAccountRefreshThrottle(cacheKey: string): void {
   liveAccountFetchedAt.delete(cacheKey);
+  liveAccountFailures.delete(cacheKey);
 }
 
 /**
- * Drop every cached live-account projection + throttle. Call on logout so a
- * subsequent login can never surface the signed-out account's plan or balance.
+ * Drop every cached live-account projection + throttle + failure backoff. Call
+ * on logout so a subsequent login can never surface the signed-out account's
+ * plan or balance.
  */
 export function clearAllVelaLiveAccounts(): void {
   liveAccountCache.clear();
   liveAccountFetchedAt.clear();
+  liveAccountFailures.clear();
 }
 
 /**

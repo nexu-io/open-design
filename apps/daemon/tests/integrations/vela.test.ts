@@ -20,13 +20,16 @@ import {
   clearAllVelaLiveAccounts,
   forgetVelaLogin,
   peekVelaLiveAccount,
+  peekVelaLiveAccountFailure,
   readVelaControlApiContext,
   readVelaCredentialRevision,
   clearVelaAuthorizationState,
   markVelaAuthorizationExpired,
   readVelaLoginStatus,
+  recordVelaLiveAccountFailure,
   resolveAmrProfile,
   setVelaLiveAccount,
+  shouldRefreshVelaLiveAccount,
   spawnVelaLogin,
   velaLiveAccountCacheKey,
   amrConfigPath,
@@ -815,5 +818,130 @@ describe('registration claim credential-source binding', () => {
     const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
     expect(readVelaControlApiContext(env)).toMatchObject({ apiUrl: profile.apiUrl, controlKey: profile.controlKey });
     expect(readVelaLoginStatus(env).registrationInvite).toEqual(claim);
+  });
+});
+
+describe('vela live-account failure backoff', () => {
+  const KEY = 'file|prod|1|u1|100|';
+
+  it('arms 30s backoff on the first failure and doubles it per retry', () => {
+    clearAllVelaLiveAccounts();
+    const clock = vi.spyOn(Date, 'now');
+    try {
+      let now = 1_000_000;
+      clock.mockImplementation(() => now);
+
+      expect(shouldRefreshVelaLiveAccount(KEY)).toBe(true);
+      const first = recordVelaLiveAccountFailure(KEY, new Error('403 forbidden'));
+      expect(first.shouldLog).toBe(true);
+      expect(first.failure.failures).toBe(1);
+      expect(first.failure.retryAt).toBe(now + 30_000);
+      expect(peekVelaLiveAccountFailure(KEY)).toEqual(first.failure);
+      // A forced-refresh-style shorter interval cannot bypass the failure
+      // backoff.
+      expect(
+        shouldRefreshVelaLiveAccount(KEY, { minIntervalMs: 10_000 }),
+      ).toBe(false);
+
+      now += 29_999;
+      expect(shouldRefreshVelaLiveAccount(KEY)).toBe(false);
+
+      // The backoff deadline, not the 60s success TTL, schedules the retry.
+      now += 1;
+      expect(shouldRefreshVelaLiveAccount(KEY)).toBe(true);
+      const second = recordVelaLiveAccountFailure(KEY, new Error('403 forbidden'));
+      expect(second.shouldLog).toBe(false);
+      expect(second.failure.failures).toBe(2);
+      expect(second.failure.retryAt).toBe(now + 60_000);
+    } finally {
+      clock.mockRestore();
+      clearAllVelaLiveAccounts();
+    }
+  });
+
+  it('caps the backoff at five minutes', () => {
+    clearAllVelaLiveAccounts();
+    const clock = vi.spyOn(Date, 'now');
+    try {
+      let now = 2_000_000;
+      clock.mockImplementation(() => now);
+      let lastRetryAt = 0;
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        now += 1;
+        lastRetryAt = recordVelaLiveAccountFailure(
+          KEY,
+          new Error('connection refused'),
+        ).failure.retryAt;
+      }
+      expect(lastRetryAt - now).toBe(5 * 60_000);
+    } finally {
+      clock.mockRestore();
+      clearAllVelaLiveAccounts();
+    }
+  });
+
+  it('logs again only when the failure message changes', () => {
+    clearAllVelaLiveAccounts();
+    try {
+      expect(
+        recordVelaLiveAccountFailure(KEY, new Error('403 forbidden')).shouldLog,
+      ).toBe(true);
+      expect(
+        recordVelaLiveAccountFailure(KEY, new Error('403 forbidden')).shouldLog,
+      ).toBe(false);
+      // A different failure (connection refused after a 403) is a state change.
+      expect(
+        recordVelaLiveAccountFailure(KEY, new Error('connection refused')).shouldLog,
+      ).toBe(true);
+      expect(peekVelaLiveAccountFailure(KEY)?.failures).toBe(3);
+    } finally {
+      clearAllVelaLiveAccounts();
+    }
+  });
+
+  it('clears the backoff on a successful probe and opens a new window on the next failure', () => {
+    clearAllVelaLiveAccounts();
+    try {
+      recordVelaLiveAccountFailure(KEY, new Error('403 forbidden'));
+      expect(shouldRefreshVelaLiveAccount(KEY)).toBe(false);
+
+      setVelaLiveAccount(KEY, { plan: 'free', balanceUsd: '0.00' });
+      expect(peekVelaLiveAccountFailure(KEY)).toBeNull();
+      expect(peekVelaLiveAccount(KEY)).toEqual({ plan: 'free', balanceUsd: '0.00' });
+      // Success re-arms the ordinary TTL gate, not the failure backoff.
+      expect(shouldRefreshVelaLiveAccount(KEY)).toBe(false);
+      expect(shouldRefreshVelaLiveAccount(KEY, { minIntervalMs: 0 })).toBe(true);
+
+      expect(
+        recordVelaLiveAccountFailure(KEY, new Error('403 forbidden')).shouldLog,
+      ).toBe(true);
+    } finally {
+      clearAllVelaLiveAccounts();
+    }
+  });
+
+  it('honors the forced-refresh floor for a healthy cached key', () => {
+    clearAllVelaLiveAccounts();
+    const clock = vi.spyOn(Date, 'now');
+    try {
+      let now = 3_000_000;
+      clock.mockImplementation(() => now);
+      setVelaLiveAccount(KEY, { plan: 'plus', balanceUsd: '1.00' });
+
+      expect(
+        shouldRefreshVelaLiveAccount(KEY, { minIntervalMs: 10_000 }),
+      ).toBe(false);
+      now += 9_999;
+      expect(
+        shouldRefreshVelaLiveAccount(KEY, { minIntervalMs: 10_000 }),
+      ).toBe(false);
+      now += 1;
+      expect(
+        shouldRefreshVelaLiveAccount(KEY, { minIntervalMs: 10_000 }),
+      ).toBe(true);
+    } finally {
+      clock.mockRestore();
+      clearAllVelaLiveAccounts();
+    }
   });
 });

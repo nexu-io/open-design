@@ -24,6 +24,15 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 
+/**
+ * Upper bound on a token-endpoint round trip. This request can sit on the chat
+ * send path (see `refreshAndPersistToken` in `server.ts`), and the caller
+ * degrades gracefully to the stale token on failure — so the only thing a
+ * longer wait buys is a stalled turn. Ten seconds is generous for a healthy
+ * IdP and short enough that a dead one is a hiccup, not a hang.
+ */
+const MCP_OAUTH_TOKEN_TIMEOUT_MS = 10_000;
+
 // ───────────────────────────────────────────────────────────────────────
 // Types — narrow subsets of the relevant RFC payloads.
 // ───────────────────────────────────────────────────────────────────────
@@ -418,6 +427,12 @@ async function tokenRequest(
     method: 'POST',
     headers,
     body: form.toString(),
+    // This runs on the chat send path (an expired MCP token is refreshed
+    // before the agent spawns), so an unresponsive identity provider must not
+    // hold the turn open. Without a signal the request inherits undici's
+    // multi-minute header/body defaults; the caller catches the rejection and
+    // continues with the stale token.
+    signal: AbortSignal.timeout(MCP_OAUTH_TOKEN_TIMEOUT_MS),
   });
   if (!res.ok) {
     const txt = await safeText(res);

@@ -81,7 +81,7 @@ export function ToolRow({
   onOpenFile,
   fileScope,
   onShowFailure,
-  deferBody = true,
+  deferBody = false,
   running = false,
 }: ToolRowProps): ReactElement {
   const t = useT();
@@ -104,35 +104,16 @@ export function ToolRow({
     : row.pending ? <span className={styles.meta} /> : null;
 
   /**
-   * 这一行该不该**自动**摊开 —— 只回答生命周期那一半。
+   * **工具行始终摊开**(产品裁决 2026-11-07)。
    *
-   * 「自动」的对家是**用户自己掀的**:那一半归 `Foldable` 的 `userToggled` 闩,
-   * 一旦用户动过手,下面这个值就再也拨不动它。
+   * 旧规则只在「此刻真的在跑」或「失败」时展开,成功一结算就收起来 —— 于是用户
+   * 回头核对这一轮跑过什么时,只看到一行行收起的标题。现在自动收起整个拿掉,
+   * 命令输出和失败原文都直接摊着。
    *
-   * 两条各有各的理由,而且**判据不同**:
-   *
-   *  · **此刻真的在跑** → 摊开。输出正一行行长出来,收着就等于让用户对着一行静止的
-   *    字干等几十秒(稿子 `body-components.html:1010` 的 `<details class="fold" open>`)。
-   *
-   *    判据是 `row.pending && running`,**两个都要**。`row.pending` 的定义是
-   *    `result == null` —— 「这次调用**从来没有回来过**」,不是「它此刻还在跑」。
-   *    用户按停止时那条在飞的调用永远等不到 `tool_result`,`pending` 就永远为真;
-   *    只看它,那一行会**永远摊着**,而且以后每次重载这条老会话都还摊着(装依赖那种
-   *    几百行输出的,一条顶掉整屏)。`running` 才是「此刻」——
-   *    `ExecutionShell:78` 的 `shell.status === 'running' && !shell.stopped`。
-   *
-   *    ⚠️ 别改成「轮次终止时把 `row.pending` 清掉」:行首那一格靠它分档
-   *    (见上面 `icon`),清掉就等于给一次没跑完的调用画上跑完的工具图标 ——
-   *    `build-turn-blocks` 的 `closeRunningSegments` 把这条规矩写在 todo 那一半上,
-   *    逐字是「标成完成是替 agent 说了它没说过的话」。工具行同理。
-   *
-   *  · **失败** → 摊开。报错原文是这时候唯一要读的东西(稿子 `:1018` 的
-   *    `fold is-fail open`)。这一条和轮次跑没跑**无关**:失败是结算过的终态。
-   *
-   * 判据钉在 `tests/components/chat/stopped-run-row-collapse.test.tsx`。
+   * 用户手点收起/展开之后仍然听用户的(`Foldable` 的 `userToggled` 闩)。
+   * 行首状态标记仍旧按 `row.pending` / `running` 分档(见上面 `icon`),不因开合改变。
    */
-  const lifecycleOpen = (row.pending && running) || row.failed;
-
+  const lifecycleOpen = true;
   /**
    * 这次失败**有没有原文可给**。
    *
@@ -410,8 +391,8 @@ export function ToolRow({
    * ── 补法:与上面那支逐字同构,不另发挥 ─────────────────────────────────
    *
    * summary 保留稿子 `:909` 的原样(动词 + 等宽命令 + 秒数槽),正文直接复用同一个
-   * `div.code`;开合规则用**同一个** `lifecycleOpen`,所以「执行中展开 → 完成收起」
-   * 和「用户手动开合优先」两条一次都不用重写。
+   * `div.code`;开合规则用**同一个** `lifecycleOpen`(默认摊开,用户手动开合优先),
+   * 和有标题那支一次都不用重写。
    *
    * 两个刻意的克制:
    *  · **命令不做 `elide`** —— `FileButton` 的省略是给文件名设计的(保后缀、中间省),

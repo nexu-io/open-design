@@ -84,20 +84,20 @@ describe('壳头', () => {
       .toContain('进行中');
   });
 
-  it('结束但量不到秒数:只写「用时」不写数字(P0-24 Q1),默认收起,球撤掉', () => {
+  it('结束但量不到秒数:只写「用时」不写数字(P0-24 Q1),默认摊开,球撤掉', () => {
     const [shell] = shellsOf(call('t1', 'Bash', { command: 'ls' }), 'succeeded');
     render(<ExecutionShell shell={shell as ShellData} />);
     expect(screen.getByText('用时')).toBeTruthy();
     expect(screen.queryByText('已完成')).toBeNull();
     expect(document.querySelector('[data-orb]')).toBeNull();
-    expect(document.querySelector('details')?.open).toBe(false);
+    expect(document.querySelector('details')?.open).toBe(true);
   });
 
-  it('整轮失败:状态词换成「运行失败」,默认收起(原因交给报错卡)', () => {
+  it('整轮失败:状态词换成「运行失败」,默认摊开(原因交给报错卡)', () => {
     const [shell] = shellsOf(call('t1', 'Bash', { command: 'npm run build' }), 'failed');
     render(<ExecutionShell shell={shell as ShellData} />);
     expect(screen.getByText('运行失败')).toBeTruthy();
-    expect(document.querySelector('details')?.open).toBe(false);
+    expect(document.querySelector('details')?.open).toBe(true);
   });
 
   /*

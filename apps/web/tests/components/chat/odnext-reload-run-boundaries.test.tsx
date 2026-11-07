@@ -199,6 +199,9 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
         if (el.tagName === 'DETAILS') {
           const text = el.textContent ?? '';
           if (text.includes('视觉签名我已经锁定')) return 'shell:run0';
+          // run 1 的思考正文里也会提到 `index.html`,所以先认它自己的指纹,
+          // 再认 run 2 的产物名 —— 顺序反了会把 run 1 的壳标成 run 2。
+          if (text.includes('Since the user left the topic open')) return 'shell:run1';
           if (text.includes('index.html')) return 'shell:run2';
           return 'shell:run1';
         }

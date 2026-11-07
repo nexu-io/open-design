@@ -1264,7 +1264,9 @@
  */
 .term {
   --chat-terminal-ink: #a3a3a3;
-  max-height: 104px;
+  /* Command output gets the same treatment as thinking: readable by default,
+     bounded only when it is genuinely huge. */
+  max-height: min(40vh, 520px);
   overflow-y: auto;
   padding: 9px 11px;
   font-family: var(--chat-font-mono);
@@ -1715,7 +1717,14 @@
  * 限高要留(就是这一条),贴底跟随也要留(在 `useThinkingFollow` 里,一次写到底)。
  */
 .fold .body.scroll {
-  max-height: 96px;
+  /*
+   * 2026-11-07: the old 96px window showed ~5 lines of reasoning and hid the
+   * rest behind a scrollbar. Thinking is the thing the user opens the record to
+   * read, so the window now grows with the viewport and only caps on a very
+   * large screen. Still `max-height` (short content never scrolls) and still no
+   * mask/fade (see the note above).
+   */
+  max-height: min(50vh, 640px);
   overflow-y: auto;
   /*
    * ── 滚动条**自己一条车道**,不许画到字上(OPEND-2643)────────────────

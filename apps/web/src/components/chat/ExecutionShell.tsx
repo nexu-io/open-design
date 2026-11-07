@@ -9,8 +9,8 @@
  *   进行中   球 + 会扫光的「进行中」+ 秒数,默认展开
  *   思考中   同上但换文案 + 三个点。**靠事件驱动**:claude 的 thinking 全是空串,
  *            靠文字判断永远等不到(S21 / W11)
- *   已完成   纯文本 + 总耗时,**默认收起**
- *   运行失败 红色状态词,默认收起 —— 原因和下一步交给下面的报错卡(B18)
+ *   已完成   纯文本 + 总耗时,默认摊开 —— 跑过的现场要能回头核对
+ *   运行失败 红色状态词,默认摊开 —— 原因和下一步交给下面的报错卡(B18)
  *   (手动停止:状态词是「已取消」、秒数停住、不挂球也不挂扫光。OPEND-2626 之前
  *    这一档沿用「进行中」,而下方那行「已手动停止」在历史回合上是 hover 才揭示的,
  *    于是一轮停掉的活在屏幕上常驻的唯一说法是「进行中」。判据见 `head` 里的注释。)
@@ -88,22 +88,12 @@ export interface ExecutionShellProps {
    */
   deferCollapsedBodies?: boolean;
   /**
-   * **这一轮的结论已经开始落地了** —— done 标记到了(产品 2026-09-04)。
+   * **这一轮的结论已经开始落地了** —— done 标记到了。
    *
-   * 用户原话:「输出 done 标记之后,上面的**进行中展开收起卡片,就应该自动收起**,
-   * 而不是等到整个对话 run 完了再收起」。截图里两个做完的步骤连着工具行还全摊着,
-   * 而正文已经在下面写「已交付 …」了。
-   *
-   * 为什么不能只看 `shell.status`:done 到达时 run **还在跑**(结论本身还在一个字
-   * 一个字地写),壳仍是 `running`,`lifecycleOpen` 照旧为真 —— 卡要摊到流真正关闭
-   * 为止,而那可能是几十秒之后。判据在 `tests/components/chat/shell-collapse-on-done.tsx`。
-   *
-   * 只影响**自动**折叠;用户手点开过的那张仍然归用户(`userToggled` 闩)。
-   *
-   * ⚠️ 这个值由消息层给,因为 done 是**轮次**的事实,不是壳的字段:壳外出现结论段
-   * (`ProseBlock`)就等于这一轮的 done 已经判定。壳的契约里目前没有这枚闩 ——
-   * `buildTurnBlocks` 内部那只 `doneSeen` 没有出口,补一个字段要动
-   * `runtime/chat/contract.ts`,另有改动在飞,所以先由消息层推。
+   * 它曾经是执行记录自动收起的触发点(2026-09-04)。2026-11-07 的裁决把自动收起
+   * 整个拿掉了(记录要能回头核对跑过的命令与推理),这个 prop 因此不再影响开合;
+   * 保留它是因为调用方仍按轮次事实传入,后续若需要按 done 分区时可继续使用。
+   * 用户手动收起仍然由 `userToggled` 闩决定。
    */
   concluded?: boolean;
   /**
@@ -123,7 +113,7 @@ export function ExecutionShell({
   onRetryImage,
   runTerminal = false,
   imageSrc,
-  deferCollapsedBodies = true,
+  deferCollapsedBodies = false,
   concluded = false,
   bodyOnly = false,
   children,
@@ -166,23 +156,16 @@ export function ExecutionShell({
   );
 
   /**
-   * 折叠态跟着 **run 的生命周期**走(D18):跑着的时候摊开,结束就收起来。
+   * **执行记录始终摊开**(产品裁决 2026-11-07)。
    *
-   * 不能只靠 `Foldable` 的 `defaultOpen` —— 那是初始值,run 结束时不会再看它一眼,
-   * 壳会一直摊在那儿。也不能每次都把它写回去:用户中途手点收起/展开之后就该听用户的
-   * (同一条约束在 `Foldable` 的注释里,老的执行记录卡也是这么做的)。
+   * 旧规则跟 run 的生命周期走:跑着摊开,done / 结束自动收起,把屏幕让给结论。
+   * 代价是这一轮真正跑过的命令、读过的文件和推理在完成那一刻全部消失,用户回头
+   * 想看「它到底干了什么」时只看到一排收起的行。现在自动收起整个拿掉。
+   *
+   * 用户手点收起/展开之后仍然听用户的(`userToggled` 闩),不能每帧把 `open` 拨回去。
    */
-  /*
-   * **收起的时刻是 done,不是 run 结束**(产品 2026-09-04,见 `concluded` 的注释)。
-   *
-   * 这一行原来只有 `running || shell.stopped`,于是「摊开」一直摊到流关闭。
-   * `concluded` 一为真,这一轮的活就已经交代完了 —— 后面写的是结论,不是过程,
-   * 记录卡该让位给它。
-   *
-   * `shell.stopped` 仍然单独成条:被用户停住的那一档没有结论,收起来等于把
-   * 「停在哪一步」也藏了。
-   */
-  const lifecycleOpen = (running && !concluded) || shell.stopped;
+  void concluded;
+  const lifecycleOpen = true;
   const [open, setOpen] = useState(foldPreference?.current ?? lifecycleOpen);
   const [userToggled, setUserToggled] = useState(foldPreference?.current !== undefined);
   useEffect(() => {
@@ -819,7 +802,7 @@ function ThoughtsRow({ texts, elapsedMs, tokens, muted, live, t, deferBody }: {
       summary={summary}
       elapsed={slot ?? undefined}
       className={styles.thoughts}
-      defaultOpen={live}
+      defaultOpen
       stream={live}
       /* **两态共用同一套限高**:`max-height` + 普通滚动条,用户自己滚。
          用户 2026-08-27:「thought 展开应该有个最高高度, 可以滚动」;
@@ -849,6 +832,7 @@ function PlanRow({ steps, t, deferBody }: {
     <Foldable
       summary={<><StatusMark status="ok" /><span>{t('chat.record.plan', { count: steps.length })}</span></>}
       deferBody={deferBody}
+      defaultOpen
       /* 计划卡是这条链的头:它和下面几条 todo 一起构成「步骤」那一层(见 `TodoRow` 的注释) */
       className={styles.stepRow}
     >
@@ -927,9 +911,12 @@ function TodoRow({ segment, ctx }: { segment: TodoSegment; ctx: RenderCtx }): Re
        * `todo-${segment.content}-${index}`,状态从 `in_progress` 翻成 `completed`
        * 时内容和位置一个字都没变,于是同一个实例、同一份内部折叠态,**跑完还摊着**。
        * `lifecycleOpen` 每次变都跟,但用户自己动过之后就不再跟。
-       * 守卫在 `tests/components/chat/todo-row-lifecycle-collapse.test.tsx`。
+       *
+       * **恒为摊开**(产品裁决 2026-11-07):抽屉里装着这一步真正跑过的命令、
+       * 读过的文件和推理。跑完就收,用户点开这一轮想知道「它到底干了什么」时
+       * 看到的只是一排收起来的行 —— 记录本来就是为了事后读的,所以不再自动收。
        */
-      lifecycleOpen={segment.status === 'in_progress'}
+      lifecycleOpen
       deferBody={ctx.deferCollapsedBodies}
       /*
        * **这一行是一步** —— 那条竖线和它带来的 22px 那一列只属于步骤这一层。

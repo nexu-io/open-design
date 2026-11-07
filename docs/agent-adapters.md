@@ -216,8 +216,8 @@ authentication, and the boundary between REST and MCP.
   `opencode-cli`/`opencode` process still owns the model/tool loop.
 - Invocation is `opencode run --format json` with the composed prompt on
   stdin and the selected provider/model passed through OpenCode's model
-  syntax. The profile shares the OpenCode JSON-event parser and external MCP
-  injection path.
+  syntax. The profile shares the OpenCode JSON-event parser, the external MCP
+  injection path, and the generation-aware argv described in §5.6.
 - There is no daemon-owned fallback loop or daemon implementation of
   `Read`/`Write`/`Edit` tools, and this profile is not an automatic recovery
   target for failed local agents.
@@ -286,12 +286,31 @@ authentication, and the boundary between REST and MCP.
 ### 5.6 OpenCode
 
 - OpenCode runs as `opencode run --format json` with the prompt on stdin.
-  Newer builds that advertise `--dangerously-skip-permissions` from
-  `opencode run --help` receive that flag; older builds keep the compatible
-  argv without it.
-- The adapter discovers models with `opencode models`, parses structured JSON
-  events, and captures OpenCode's `sessionID`. Follow-up turns continue the
-  native session with `-s <session-id>`.
+  The rest of the argv depends on which command line the installed build
+  speaks, decided by the `opencode run --help` capability probe
+  (`runtimes/opencode-permissions.ts`): `--dir` is present on every 1.x build
+  and absent on every 2.x build.
+  - 1.x: `--dangerously-skip-permissions` when advertised, `--dir <project>`
+    (1.x otherwise walks up to the enclosing git root and adopts it as the
+    workspace), `-m provider/model --variant <v>`, and `--pure` on the
+    connection test.
+  - 2.x: `--auto` (the non-interactive posture that replaced the skip flag),
+    `--standalone` (a private in-process server, so the daemon's per-launch
+    env reaches it instead of a background service started elsewhere), and
+    `-m provider/model#variant`. The spawn cwd is the workspace and `PWD` is
+    pinned to it for the 2.0.x builds that consult `PWD` first.
+  - An unprobed build keeps the 1.x argv: a 2.x CLI then fails loudly at
+    spawn, whereas a 1.x CLI without `--dir` would lose files silently.
+- Model discovery tries `opencode models --verbose` (1.x, with per-model
+  variant metadata) and falls back to plain `opencode models` (2.x, no
+  variants, so no variant picker). The adapter parses structured JSON events,
+  which have the same shape on both generations, and captures OpenCode's
+  `sessionID`. Follow-up turns continue the native session with
+  `-s <session-id>`.
+- Child-session evidence reads `opencode export <id> --sanitize --pure` on
+  1.x and `opencode session export <id> --sanitize --standalone` on 2.x.
+- The optional tool-preview plugin (`runtimes/opencode-event-plugin.ts`) is
+  1.17.18+ only; 2.x ships a new plugin API and runs without previews.
 - External MCP configuration is supplied per invocation through
   `OPENCODE_CONFIG_CONTENT`; selected skills still use the shared §4 path.
 
@@ -539,8 +558,8 @@ external-directory flags can widen a CLI's reach.
   `--auto`. Other definitions have their own explicit headless posture (for
   example Amp's `--dangerously-allow-all`).
 - OpenCode receives `--dangerously-skip-permissions` only when its help probe
-  advertises that flag, so older compatible builds are not given an unknown
-  option.
+  advertises that flag, and `--auto` on 2.x builds that advertise that one
+  instead, so no build is given an unknown option.
 - Codex defaults to `workspace-write` with network access on supported macOS
   and Linux hosts. Windows, WSL, or an explicit
   `OD_CODEX_SANDBOX=danger-full-access` operator override uses

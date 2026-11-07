@@ -33,7 +33,7 @@ import os from 'node:os';
 import net from 'node:net';
 import {
   composeOdNextStrategyBundleHeadV2,
-  composeOdNextStrategyCorePromptV2,
+  composeOdNextStrategyRequestPromptV2,
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   odNextStrategyRecipeIdentityV2,
   composeOdNextStrategyStableRequestContextV2,
@@ -59,6 +59,7 @@ import {
 import {
   composeSystemPrompt,
   detectDeckIntentSignal,
+  detectEditIntentSignal,
   detectMediaIntentSignal,
   detectPlatformIntentSignal,
   extractUserAuthoredSignalText,
@@ -516,7 +517,12 @@ import {
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
-import { resolveOpenCodeEditBaseDirs } from './runtimes/opencode-permissions.js';
+import {
+  resolveOpenCodeCliGeneration,
+  resolveOpenCodeEditBaseDirs,
+  withOpenCodeWorkspaceEnv,
+  type OpenCodeCliGeneration,
+} from './runtimes/opencode-permissions.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -583,6 +589,7 @@ import {
 } from './artifacts/successful-run-deliverable-finalization.js';
 import { inferBaselineHtmlEntry } from './run-deliverable-validation.js';
 import { recordDeliverableSyntaxDelivery } from './artifacts/deliverable-syntax-metrics.js';
+import { projectHasEditableArtifact } from './artifacts/project-artifact-presence.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -10537,6 +10544,7 @@ export async function startServer({
     mediaHintSignal,
     platformHintSignal,
     devicePlatformSignal = null,
+    editIntentSignal = false,
     frozenSkillPackage,
   }) => {
     const project =
@@ -11204,7 +11212,44 @@ export async function startServer({
     }
 
     // Strategy identity, package/profile drift checks, atom loading, runtime
-    // profile selection are owned by the OD Next prompt service.
+    // capability facts, and local-only synthetic policy are owned by the OD
+    // Next prompt service. This composition root only supplies detected runtime
+    // versions and process configuration.
+    /**
+     * Direct-edit fast path, resolved once and shared by both prompt forks:
+     *
+     *  · `defaultSystemPromptInputs.editIntentSignal` selects
+     *    `DIRECT_EDIT_OVERRIDE` in the classic/slim composer.
+     *  · The same boolean is forwarded to the OD Next composers, which emit
+     *    their minimal edit document / bundle head instead of the full
+     *    strategy + task-skill stack.
+     *
+     * Vocabulary alone is not enough: the project must already hold an
+     * artifact, otherwise "change the pricing copy" in an empty project is a
+     * build request and keeps the full workflow. Ask mode and media surfaces
+     * are excluded — they own complete charters of their own, and an edit verb
+     * there must not swap in a file-editing workflow.
+     */
+    const directEditRequested = (() => {
+      if (editIntentSignal !== true) return false;
+      if (normalizeConversationSessionMode(sessionMode) === 'chat') return false;
+      const projectKind =
+        (project?.metadata as { kind?: string } | null | undefined)?.kind
+        ?? (metadata as { kind?: string } | undefined)?.kind;
+      if (projectKind === 'image' || projectKind === 'video' || projectKind === 'audio') {
+        return false;
+      }
+      if (!project || typeof projectId !== 'string' || !projectId) {
+        return false;
+      }
+      try {
+        return projectHasEditableArtifact(resolveProjectDir(PROJECTS_DIR, projectId, project.metadata));
+      } catch {
+        // Unresolvable project root: no artifact evidence, so keep the normal path.
+        return false;
+      }
+    })();
+
     const odNextStrategyRecipe = await resolveOdNextPromptRecipeForRun({
       db,
       bundledPluginsDir: BUNDLED_PLUGINS_DIR,
@@ -11263,6 +11308,9 @@ export async function startServer({
       freeformDeckSignal,
       mediaHintSignal,
       platformHintSignal,
+      // Direct-edit fast path — already required an artifact to edit during
+      // `directEditRequested` resolution above.
+      editIntentSignal: directEditRequested,
       // VALIDATION DEFAULT — feat/system-prompt integration branch only.
       // Slim is the default here so packaged beta builds exercise the
       // rewritten charter without env plumbing (the packaged sidecar env
@@ -11362,8 +11410,12 @@ export async function startServer({
           // without it here an OD Next codex run is told to keep a Todo plan
           // live and is never told what its plan tool is called. Resolved from
           // the single daemon-side table; a runtime with no verified name
-          // resolves to null and adds no bytes.
-          planToolNote: planToolNoteForRuntime(agentId, streamFormat),
+          // resolves to null and adds no bytes. A direct edit has no plan step,
+          // so the note is suppressed rather than contradicting the
+          // direct-edit section.
+          planToolNote: directEditRequested
+            ? null
+            : planToolNoteForRuntime(agentId, streamFormat),
           executionProfile: executionProfileFromStreamFormat(streamFormat),
           // Discovery reads the staged framework through the selected PPT Skill.
           // Suppress the stable-context renderer's eager deck-intent fallback too.
@@ -11419,13 +11471,20 @@ export async function startServer({
       });
     }
     const prompt = odNextStrategyRecipe
-      ? composeOdNextStrategyCorePromptV2(odNextStrategyRecipe)
+      ? composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
+          editIntentSignal: directEditRequested,
+        })
       : composeSystemPrompt(systemPromptInputs);
     // OD Next sends a canonical XML tree, not this Markdown string. The tree's
-    // cache-stable head and per-task identity are composed here together and
-    // placed in their existing bundle slots downstream.
+    // cache-stable head, its per-task identity, and the runtime-owned planning
+    // facts are three separate products of the same verified recipe, so they are
+    // composed here together and placed in different bundle slots downstream.
+    // A direct-edit turn keeps the same head/identity contract (the Bundle
+    // service treats either being null as fatal) but composes the minimal head.
     const odNextBundleHead = odNextStrategyRecipe
-      ? composeOdNextStrategyBundleHeadV2(odNextStrategyRecipe)
+      ? composeOdNextStrategyBundleHeadV2(odNextStrategyRecipe, {
+          editIntentSignal: directEditRequested,
+        })
       : null;
     const odNextRecipeIdentity = odNextStrategyRecipe
       ? odNextStrategyRecipeIdentityV2(odNextStrategyRecipe)
@@ -12227,6 +12286,10 @@ export async function startServer({
         freeformDeckSignal: intentSignals.deck,
         mediaHintSignal: intentSignals.media,
         platformHintSignal: intentSignals.platform,
+        // Per-turn, never latched: "change the headline" must not put the whole
+        // conversation on the direct-edit path. The composer additionally
+        // requires an artifact on disk before honoring it.
+        editIntentSignal: detectEditIntentSignal(...intentSignalTexts),
         frozenSkillPackage: undefined,
       });
     const {
@@ -14557,11 +14620,17 @@ export async function startServer({
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
+    // Which OpenCode command line this Run was spawned with. Captured once
+    // the capability map is warm so the close path (child-evidence export)
+    // speaks the same generation as the argv, even if detection re-ran
+    // mid-run after an in-place CLI upgrade.
+    let openCodeCliGeneration: OpenCodeCliGeneration = 'unknown';
     try {
       // Optional argv flags are gated on the `--help` capability map, which used
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
       // has never served that route still builds the same argv as one that has.
       await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
+      openCodeCliGeneration = resolveOpenCodeCliGeneration(def.id);
       args = def.buildArgs(
         composed,
         promptImagePaths,
@@ -15232,7 +15301,10 @@ export async function startServer({
         def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT
           ? 'pipe'
           : 'ignore';
-      const env = applyAgentLaunchEnv({
+      // OpenCode 2.x has no `--dir`; the spawn cwd is the workspace and `PWD`
+      // is pinned to it for the 2.0.x builds that consult `PWD` first. Other
+      // agents (and OpenCode 1.x, which carries `--dir`) get the env as is.
+      const env = withOpenCodeWorkspaceEnv(applyAgentLaunchEnv({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
@@ -15298,7 +15370,7 @@ export async function startServer({
         ...(odNextTaskInputSnapshot
           ? { OD_TASK_INPUT_DIR: odNextTaskInputSnapshot.projectionDir }
           : {}),
-      }, agentLaunch);
+      }, agentLaunch), effectiveCwd, def.id);
       // Build permissions after configured env expansion and launch overrides,
       // so the granted temp root matches the environment the child receives.
       if (isOpenCodeContent || isMiMoContent) {
@@ -17085,6 +17157,7 @@ export async function startServer({
               loadSanitizedExport: createOpenCodeSanitizedExportLoader({
                 launchPath,
                 env: spawnedAgentEnv,
+                cliGeneration: openCodeCliGeneration,
               }),
             });
             for (const fact of facts) {

@@ -170,10 +170,13 @@ function thinkingScrollBox(): HTMLElement {
 }
 
 describe('OPEND-2643 思考过程的限高滚动盒', () => {
-  it('事实基线:它就是限高 96px、`overflow-y: auto` 的那只盒子', () => {
+  it('事实基线:它就是限高、`overflow-y: auto` 的那只盒子', () => {
     const block = /\.fold \.body\.scroll\s*\{([^}]*)\}/.exec(stripComments(RECORD_CSS))?.[1] ?? '';
     expect(block, '`.fold .body.scroll` 这条规则不见了 —— 夹具跟着改').not.toBe('');
-    expect(block).toContain('max-height: 96px');
+    // 2026-11-07: the cap became viewport-relative so thinking is readable.
+    // The baseline this test guards is the box itself (a max-height cap with
+    // its own scroll), not the old literal 96px.
+    expect(block).toContain('max-height: min(50vh, 640px)');
     expect(block).toContain('overflow-y: auto');
     // 真的挂在 DOM 上(CSS Module 发了这个类,选择器不是空转的)
     expect(thinkingScrollBox().className).toContain(cls('scroll'));

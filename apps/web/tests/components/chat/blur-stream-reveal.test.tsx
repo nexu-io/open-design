@@ -11,7 +11,8 @@
  *
  * 设计稿(`docs/design/chat-panel-next.html` @ `1bbdce0b06`,md5 `28ea4c65…`)给的是
  * **单字**的值:0.4s、字与字错开 0.01s、`blur(10px) brightness(0%)` → `blur(0) brightness(100%)`。
- * 「整段 2s 铺完」是用户给的**总时长**目标,稿子里没有 —— 两者是不同的量,这个文件分开钉。
+ * 2026-11-07 把单字收到 0.2s、整段预算收到 500ms(2s 的入场让已经到货的正文看起来
+ * 还在等)。这个文件钉的是排期公式与预算,不写死单个时长。
  *
  * 修前的真实基线(无头 Chrome 量的,不是推测):
  *   一次性到达 2000 字 → `.rv` span **0 个**(整段瞬间刷出来,就是用户说的那一下)
@@ -70,14 +71,14 @@ function arrivesAtOnce(text: string): ReturnType<typeof render> {
 /* ── 1. 排期是纯函数,可以直接量 ───────────────────────────────── */
 
 describe('planReveal:一段字怎么排进时间里', () => {
-  it('稿子那句「五十来字约 0.9s 化完」对得上 —— 单字一个单位、错开 10ms', () => {
+  it('五十来字也压进新的 500ms 预算 —— 单位加粗、错开仍是 10ms', () => {
     const plan = planReveal(50);
-    expect(plan.unitSize).toBe(1);
+    // 预算是 500ms、单字 200ms ⇒ 最多 31 个单位;50 字要 2 字一个单位才排得下
+    expect(plan.unitSize).toBe(2);
     expect(plan.staggerMs).toBe(STAGGER_MS);
-    // 最后一个字起跑 = 49 × 10ms,它自己再开 0.4s
-    expect(plan.totalMs).toBe(49 * STAGGER_MS + CHAR_MS);
-    expect(plan.totalMs).toBeGreaterThan(800);
-    expect(plan.totalMs).toBeLessThan(1000);
+    expect(plan.totalMs).toBe((plan.units - 1) * STAGGER_MS + CHAR_MS);
+    expect(plan.totalMs).toBeLessThanOrEqual(REVEAL_BUDGET_MS);
+    expect(plan.units * plan.unitSize).toBeGreaterThanOrEqual(50);
   });
 
   it('一次性给一大段:压进 2s 预算,靠**加粗单位**而不是无限缩间隔', () => {

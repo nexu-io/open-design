@@ -40,8 +40,10 @@ import {
   applyVelaLiveAccount,
   clearAllVelaLiveAccounts,
   clearVelaAuthorizationState,
+  markVelaAuthorizationExpired,
   parseVelaLoginAttribution,
   peekVelaLiveAccount,
+  recordVelaLiveAccountFailure,
   readVelaApiContext,
   readVelaCredentialRevision,
   readVelaControlApiContext,
@@ -53,9 +55,11 @@ import {
   setVelaLiveAccount,
   shouldRefreshVelaLiveAccount,
   velaLiveAccountCacheKey,
+  VELA_LIVE_ACCOUNT_FORCED_REFRESH_MIN_INTERVAL_MS,
   spawnVelaLoginWithFallback,
   type VelaLiveAccount,
 } from '../integrations/vela.js';
+import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
 import {
   clearVelaWalletSnapshotCache,
   velaWalletSnapshotReader,
@@ -144,6 +148,11 @@ function hasLegacySimulatedRuntimeInput(req: Request): boolean {
  * window focus/visibilitychange, or the `od:amr-login-status-change` event
  * dispatched right after sign-in resolves), so the plan/balance simply
  * arrives on that next read instead of holding this one hostage.
+ *
+ * This wait is the ONLY blocking path left. A warm cache — including a
+ * `refresh=1` read — is served immediately and re-probed in the background;
+ * failed probes are negatively cached by `recordVelaLiveAccountFailure` so a
+ * 403 / connection refusal cannot re-spawn the CLI on every focus event.
  */
 const VELA_STATUS_LIVE_ACCOUNT_WAIT_MS = 1_200;
 
@@ -1200,14 +1209,24 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       return account;
     })()
       .catch((err) => {
-        // Keep the refresh throttle as a short negative cache/backoff. /status
-        // is read by focus/menu/login surfaces, so a persistent optional
-        // billing failure must not make every poll await the same slow probe.
-        // Billing is display-only (OPEND-3553): a failed `vela billing
-        // summary` — even an auth-shaped one — must never expire the AMR
-        // session. Genuine credential expiry is detected by the non-billing
-        // workspace directory path.
-        console.warn('[amr] live account fetch failed', err);
+        // A persistent optional billing failure (403, connection refused) must
+        // not make every focus/poll spawn a probe and print a stack. Billing is
+        // display-only (OPEND-3553): a failed `vela billing summary` — even an
+        // auth-shaped one — must never expire the AMR session by itself, but
+        // the caller still records the auth signal for the credential-recovery
+        // path below. The first failure arms exponential backoff (30s doubling
+        // to 5 min); subsequent probes are gated by
+        // shouldRefreshVelaLiveAccount, and only the first failure of a window
+        // (or a changed failure) is logged.
+        const update = recordVelaLiveAccountFailure(accountCacheKey, err);
+        if (update.shouldLog) {
+          console.warn(
+            `[amr] live account fetch failed (attempt ${update.failure.failures}, retry at ${new Date(update.failure.retryAt).toISOString()}): ${update.failure.message}`,
+          );
+        }
+        if (classifyAmrAccountFailure(err instanceof Error ? err.message : String(err))?.code === 'AMR_AUTH_REQUIRED') {
+          markVelaAuthorizationExpired(env, probe.configuredEnv);
+        }
         return null;
       })
       .finally(() => {
@@ -1297,21 +1316,17 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         );
         const probe = resolveAmrModelProbeForEnv(configuredEnv);
         const cachedAccount = peekVelaLiveAccount(accountCacheKey);
-        if (refresh) {
-          const liveAccount = await fetchVelaLiveAccountSingleFlight(accountCacheKey, probe, {
-            invalidateModelsOnPlanChange: true,
-          });
-          applyVelaLiveAccount(status, liveAccount);
-        } else if (!cachedAccount) {
+        if (!cachedAccount) {
           // Cold cache (or a fetch already in flight): wait up to
           // VELA_STATUS_LIVE_ACCOUNT_WAIT_MS for the single-flight billing
           // fetch so the first open still carries plan/balance in the common
-          // case (billing typically answers in well under a second). On
-          // failure the helper resolves null and the refresh throttle
-          // becomes a short negative cache/backoff, so repeated menu/focus
-          // polls degrade to config-only instead of each awaiting the same
-          // slow probe. If billing is genuinely slow (or hung), the wait
-          // lapses and this response goes out with `account` absent rather
+          // case (billing typically answers in well under a second). A forced
+          // refresh after sign-in lands here too, because the credential
+          // revision (and therefore the cache key) changed. On failure the
+          // helper resolves null and arms the failure backoff, so repeated
+          // menu/focus polls degrade to config-only instead of each awaiting
+          // the same slow probe. If billing is genuinely slow (or hung), the
+          // wait lapses and this response goes out with `account` absent rather
           // than blocking the login-status check itself — the fetch is left
           // running and populates the cache for the next /status read (see
           // VELA_STATUS_LIVE_ACCOUNT_WAIT_MS's docblock for why that is
@@ -1320,7 +1335,11 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
             inFlightVelaAccountFetches.has(accountCacheKey) ||
             shouldRefreshVelaLiveAccount(accountCacheKey)
           ) {
-            const pending = fetchVelaLiveAccountSingleFlight(accountCacheKey, probe);
+            const pending = fetchVelaLiveAccountSingleFlight(
+              accountCacheKey,
+              probe,
+              refresh ? { invalidateModelsOnPlanChange: true } : {},
+            );
             const liveAccount = await raceVelaLiveAccountFetch(
               pending,
               VELA_STATUS_LIVE_ACCOUNT_WAIT_MS,
@@ -1330,10 +1349,26 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
             }
           }
         } else {
-          // Warm cache: serve it immediately; refresh in the background for the
-          // next poll once the TTL has lapsed.
+          // Warm cache: always serve it immediately. `refresh=1` re-reads the
+          // login state (above) and lowers the re-probe floor to
+          // VELA_LIVE_ACCOUNT_FORCED_REFRESH_MIN_INTERVAL_MS, but it must never
+          // hold this response on a remote billing round-trip: a persistent
+          // outage would otherwise tax every focus/visibilitychange with a CLI
+          // spawn. The probe below runs in the background and lands on the
+          // next poll, exactly like the ordinary TTL refresh.
           applyVelaLiveAccount(status, cachedAccount);
-          if (shouldRefreshVelaLiveAccount(accountCacheKey)) {
+          const refreshInterval = refresh
+            ? { minIntervalMs: VELA_LIVE_ACCOUNT_FORCED_REFRESH_MIN_INTERVAL_MS }
+            : undefined;
+          // A forced read that arrives during an in-flight probe also marks
+          // that probe for plan-change model invalidation; it still never waits
+          // for it — the cached projection above is the response.
+          const marksInFlightProbe = refresh
+            && inFlightVelaAccountFetches.has(accountCacheKey);
+          if (
+            marksInFlightProbe
+            || shouldRefreshVelaLiveAccount(accountCacheKey, refreshInterval)
+          ) {
             void fetchVelaLiveAccountSingleFlight(accountCacheKey, probe, {
               invalidateModelsOnPlanChange: true,
             }).catch(() => {});

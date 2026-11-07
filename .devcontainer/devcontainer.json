@@ -1,0 +1,50 @@
+{
+  "name": "open-design",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+
+  // ── Security: run as non-root user ────────────────────────────
+  "remoteUser": "vscode",
+  "containerUser": "vscode",
+
+  // ── SSH agent forwarding (no key files inside container) ───────
+  "mounts": [
+    "source=${localEnv:SSH_AUTH_SOCK},target=/ssh-agent,type=bind,consistency=cached,readonly"
+  ],
+
+  "containerEnv": {
+    "SSH_AUTH_SOCK": "/ssh-agent",
+    // Infisical injects secrets at runtime — no raw secrets in container
+    "INFISICAL_DOMAIN": "${localEnv:INFISICAL_DOMAIN}",
+    "INFISICAL_TOKEN": "${localEnv:INFISICAL_TOKEN}"
+  },
+
+  // ── VS Code settings inside container ─────────────────────────
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "infisical.infisical",
+        "github.copilot",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "editor.formatOnSave": true,
+        "security.workspace.trust.enabled": false
+      }
+    }
+  },
+
+  // ── Lifecycle ─────────────────────────────────────────────────
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "ssh-add -l 2>/dev/null | head -3 || true",
+
+  // ── Resource limits (prevent container abuse) ─────────────────
+  "runArgs": [
+    "--memory=4g",
+    "--cpus=2",
+    "--security-opt=no-new-privileges",
+    "--cap-drop=ALL",
+    "--cap-add=NET_BIND_SERVICE"
+  ]
+}

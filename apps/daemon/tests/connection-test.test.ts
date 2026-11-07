@@ -3834,9 +3834,43 @@ setTimeout(() => process.exit(0), 50);
     );
   });
 
+  const OPENCODE_INCOMPATIBLE_DETAIL =
+    'OpenCode rejected the command-line flags this connection test uses, so the installed OpenCode build and this OpenDesign build do not match. Update whichever is older (`npm i -g opencode-ai@latest` for OpenCode), then retry the OpenCode connection test.';
+
+  it('reports a 2.x "Unrecognized flag" rejection as a version mismatch instead of raw stderr', async () => {
+    await withFakeOpenCode(
+      `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+if (args.includes('--help')) {
+  console.error('FLAGS\\n  --dir  Directory');
+  process.exit(0);
+}
+console.error('ERROR\\n  Unrecognized flag: --pure in command opencode run');
+process.exit(1);
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+        });
+        expect(res.status).toBe(200);
+        await expect(res.json()).resolves.toMatchObject({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          agentName: 'OpenCode',
+          detail: OPENCODE_INCOMPATIBLE_DETAIL,
+        });
+      },
+    );
+  });
+
   it('reports outdated OpenCode CLI argument failures with update guidance', async () => {
-    const expectedDetail =
-      'OpenCode CLI appears to be outdated or incompatible with this connection test. Update it with `npm i -g opencode-ai@latest`, then retry the OpenCode connection test.';
+    const expectedDetail = OPENCODE_INCOMPATIBLE_DETAIL;
 
     await withFakeOpenCode(
       `
@@ -3912,6 +3946,12 @@ if (args[0] === 'models') {
   console.log('github-copilot/gpt-4o');
   process.exit(0);
 }
+if (args.includes('--help')) {
+  // 1.x help: the workspace/isolation/variant flags exist, the permission
+  // bypass does not (this fake rejects it below).
+  console.error('Options:\\n  --dir      Directory\\n  --pure     No plugins\\n  --variant  Model variant');
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
 let stdin = '';
 process.stdin.setEncoding('utf8');
@@ -3962,6 +4002,83 @@ process.stdin.on('end', () => {
             'Connection test',
           ]);
           await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('launches OpenCode 2.x connection tests without the removed 1.x flags', async () => {
+    // OpenCode 2.0 rejects `--dir`, `--pure`, `--variant` and
+    // `--dangerously-skip-permissions` with "Unrecognized flag" and exit 1,
+    // which is exactly what the Settings "Test" button showed on 2.0.29.
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-v2-argv-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const envFile = path.join(markerDir, 'env.json');
+    try {
+      await withFakeOpenCode(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  if (args.includes('--verbose')) {
+    console.error('ERROR\\n  Unrecognized flag: --verbose in command opencode models');
+    process.exit(1);
+  }
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+if (args.includes('--help')) {
+  console.error('FLAGS\\n  --standalone  Run with a private server\\n  --auto  Auto-approve permissions\\n  --model, -m string  Model to use in the format provider/model#variant');
+  process.exit(0);
+}
+for (const flag of ['--dir', '--pure', '--variant', '--dangerously-skip-permissions']) {
+  if (args.includes(flag)) {
+    console.error('ERROR\\n  Unrecognized flag: ' + flag + ' in command opencode run');
+    process.exit(1);
+  }
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+// Resolve both while the probe cwd still exists; the daemon removes it after the test.
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  PWD: fs.realpathSync(process.env.PWD),
+  cwd: fs.realpathSync(process.cwd()),
+}));
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'opencode',
+              model: 'github-copilot/gpt-4o',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+            sample: 'ok',
+          });
+
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv).toEqual([
+            'run', '--format', 'json',
+            '--auto', '--standalone',
+            '-m', 'github-copilot/gpt-4o',
+            '--title', 'Connection test',
+          ]);
+          // Without `--dir`, the probe's temp cwd is the workspace; `PWD` is
+          // pinned to it for the 2.0.x builds that consult `PWD` first.
+          const env = JSON.parse(await fsp.readFile(envFile, 'utf8')) as { PWD: string; cwd: string };
+          expect(env.PWD).toBe(env.cwd);
         },
       );
     } finally {

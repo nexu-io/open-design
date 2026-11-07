@@ -12,6 +12,7 @@ import {
 
 import {
   detectDeckIntentSignal,
+  detectEditIntentSignal,
   detectMediaIntentSignal,
   detectPlatformIntentSignal,
   extractUserAuthoredSignalText,
@@ -263,6 +264,12 @@ export function createOdNextInitialPromptBundleService(
       freeformDeckSignal: intentSignals.deck,
       mediaHintSignal: intentSignals.media,
       platformHintSignal: intentSignals.platform,
+      // Per-turn (never latched): an edit mention must not pin the whole
+      // conversation to the direct-edit path.
+      editIntentSignal: detectEditIntentSignal(
+        extractUserAuthoredSignalText(stringValue(message)),
+        extractUserAuthoredSignalText(stringValue(currentPrompt)),
+      ),
       devicePlatformSignal: intentSignals.devicePlatform,
       workspaceScope: meta.workspaceScope,
       frozenSkillPackage,

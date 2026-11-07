@@ -54,7 +54,12 @@ interface InternalSubscriber {
 }
 
 const INITIAL_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 30_000;
+// The stream is a loopback connection to the local daemon. A 30s ceiling meant a
+// single dropped socket made the UI look frozen for half a minute — new edits
+// simply did not appear even though the run had finished. Five seconds keeps a
+// genuinely-down daemon from being hammered while a one-off drop recovers
+// before the user notices.
+const MAX_BACKOFF_MS = 5_000;
 // How long the tab may stay hidden before we drop the stream to free the
 // client + server connection. Short enough to reclaim idle connections, long
 // enough that a quick tab-switch does not thrash reconnects.

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import {
@@ -61,6 +62,15 @@ const detectedRuntimeVersionProbes = new Map<
   Promise<DetectedRuntimeVersions | null>
 >();
 const detectedRuntimeCapabilityScopes = new Map<string, string>();
+// A `--help` read that failed (timeout, crash during a cold start) leaves an
+// empty map, which buildArgs reads as "unknown". Keep it only for a while:
+// long enough that one Run's launch, its automatic retry, memory extraction
+// and evidence export share the answer instead of each paying the bounded
+// probe (a CLI that hangs on `--help` costs the full 5s per read), short
+// enough that it never becomes the daemon-lifetime verdict that pins the 1.x
+// argv onto a 2.x CLI. Mirrors `missingRuntimeVersionRetryAt`.
+const emptyRuntimeCapabilityRetryAt = new Map<string, number>();
+const EMPTY_RUNTIME_CAPABILITY_TTL_MS = 60_000;
 const detectedRuntimeCapabilityProbes = new Map<
   string,
   Promise<RuntimeCapabilityMap | null>
@@ -154,9 +164,17 @@ export async function ensureDetectedRuntimeCapabilities(
   const context = runtimeVersionProbeContext(def, configuredAgentEnv);
   if (!context) return null;
   const remembered = agentCapabilities.get(agentId);
+  // A populated map is daemon-lifetime provenance for its scope. An empty one
+  // (a CLI whose help merely lacks every flag resolves to explicit `false`
+  // values, so empty means the read failed) is honoured only inside its retry
+  // window; see `emptyRuntimeCapabilityRetryAt`.
   if (
     remembered
     && detectedRuntimeCapabilityScopes.get(agentId) === context.scope
+    && (
+      Object.keys(remembered).length > 0
+      || Date.now() < (emptyRuntimeCapabilityRetryAt.get(agentId) ?? 0)
+    )
   ) {
     return { ...remembered };
   }
@@ -168,6 +186,8 @@ export async function ensureDetectedRuntimeCapabilities(
       if (caps) {
         agentCapabilities.set(def.id, caps);
         detectedRuntimeCapabilityScopes.set(def.id, context.scope);
+        if (Object.keys(caps).length > 0) emptyRuntimeCapabilityRetryAt.delete(def.id);
+        else emptyRuntimeCapabilityRetryAt.set(def.id, Date.now() + EMPTY_RUNTIME_CAPABILITY_TTL_MS);
       }
       return caps ? { ...caps } : null;
     });
@@ -431,8 +451,27 @@ function runtimeVersionProbeContext(
       selectedPath: launch.selectedPath,
       launchPath: launch.launchPath,
       companionPath,
+      binary: executableIdentity(launch.selectedPath),
     })).digest('hex'),
   };
+}
+
+/**
+ * Identity of the bytes behind a resolved executable, so a CLI that
+ * self-updates in place (OpenCode's `~/.opencode/bin/opencode`, Claude's
+ * native installer) invalidates the daemon-lifetime version and capability
+ * caches instead of keeping the previous build's answers. The caches decide
+ * which command line the daemon speaks, so a stale entry sends the old
+ * generation's flags to the new binary. Unreadable paths (a wrapper on PATH
+ * that resolves lazily) fall back to the path-only scope.
+ */
+function executableIdentity(executablePath: string): { size: number; mtimeMs: number } | null {
+  try {
+    const stat = statSync(executablePath);
+    return { size: stat.size, mtimeMs: stat.mtimeMs };
+  } catch {
+    return null;
+  }
 }
 
 async function probeRuntimeVersionsOnly(

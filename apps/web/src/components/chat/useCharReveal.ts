@@ -8,7 +8,8 @@
  * 交付稿 `docs/design/chat-panel-next.html` @ `1bbdce0b06`(md5 `28ea4c65…`)第 1605–1631 行,
  * 照搬 motion-primitives 的 `TextEffect(per='char')`:
  *
- *   · 单字 `0.4s var(--ease-out) both`,`opacity 0 + blur(10px) + brightness(0%)`
+ *   · 单字 `0.2s var(--ease-out) both`(2026-11-07 从稿子的 0.4s 收紧),
+ *     `opacity 0 + blur(10px) + brightness(0%)`
  *     化到 `opacity 1 + blur(0) + brightness(100%)`
  *   · 字与字错开 `--i * 0.01s`(= 10ms)
  *   · **只有进场,没有退场** —— 「这段话是这一轮交给人的结论,出来了就该一直在」
@@ -21,22 +22,20 @@
  *
  * keyframes 与 `.rv` 那两条在 `styles/chat.css`,这里只负责**谁在什么时候开始开**。
  *
- * ## 稿子没有、用户给的那一条:整段 2s 铺完
+ * ## 整段预算:500ms 铺完
  *
- * 用户 2026-08-27:「如果不是真正流式的, 可能背后 daemon 还是一次性出来, 但展示的时候,
- * 也保留一个流式的效果, 可能完整走完这个流式输出效果 2s 左右的动画, 加速一下」。
+ * 用户 2026-08-27 要求「整段 2s 左右」;2026-11-07 又收到 500ms,因为 2s 的入场
+ * 让已经到货的正文看起来还在等。
  *
- * 稿子的 0.4s 是**单字时长**,10ms 是**字间隔**,两者都不封顶整段时间 ——
+ * 稿子的单字时长是**单字**,10ms 是**字间隔**,两者都不封顶整段时间 ——
  * 一段 34,731 字的推理按 10ms 排要 347 秒。所以这里加一层预算:
  *
  *   **单位数封顶在 `MAX_UNITS`,一个单位里塞几个字随长度长。**
  *
- * 于是错开值永远是稿子的 10ms、单字时长永远是稿子的 0.4s,而整段总时长
- * `(units - 1) × 10ms + 400ms` 天然被压在 2s 以内。五十来字的一句话仍然是稿子说的
- * 0.89s(49 × 10 + 400),这一点没有被预算改动。
+ * 于是错开值永远是稿子的 10ms,而整段总时长 `(units - 1) × 10ms + 200ms`
+ * 天然被压在 `REVEAL_BUDGET_MS` 以内。
  *
  * 顺带把 DOM 也封住了:一次最多 `MAX_UNITS` 个 span,而不是一字一个。
- * 同时在开的更少 —— `0.4s / 10ms = 40` 个,合成层不会爆。
  *
  * ## 为什么不能照抄参考实现
  *
@@ -108,13 +107,13 @@ import { useLayoutEffect, type RefObject } from 'react';
 
 /** 字间错开 10ms(稿子的 `--i * 0.01s`) */
 export const STAGGER_MS = 10;
-/** 单字 0.4s,与稿子一致 */
-export const CHAR_MS = 400;
-/** 一整段最多铺多久(用户 2026-08-27 给的总时长目标;稿子里没有这个量) */
-export const REVEAL_BUDGET_MS = 2000;
+/** 单字 0.2s(稿子是 0.4s;2026-11-07 收紧) */
+export const CHAR_MS = 200;
+/** 一整段最多铺多久(2026-11-07:2s 的入场让已经到货的正文看起来还在等,收到 500ms) */
+export const REVEAL_BUDGET_MS = 500;
 /**
  * 一批最多拆几个单位。
- * `(MAX_UNITS - 1) × STAGGER_MS + CHAR_MS ≤ REVEAL_BUDGET_MS` ⇒ 161。
+ * `(MAX_UNITS - 1) × STAGGER_MS + CHAR_MS ≤ REVEAL_BUDGET_MS` ⇒ 31。
  * 超过这个数就把单位加粗(一个 span 装多个字),而不是把间隔压到看不见。
  */
 export const MAX_UNITS = Math.floor((REVEAL_BUDGET_MS - CHAR_MS) / STAGGER_MS) + 1;
@@ -389,7 +388,7 @@ export function useCharReveal(ref: RefObject<HTMLElement | null>, streaming: boo
 
     /*
      * **开完就撒手。** 收 span 不能只等「下一次重渲染」—— 流最后一批字落地之后可能
-     * 一次渲染都没有,那 161 个 span 会一直挂在树上,每个都带着 `filter`
+     * 一次渲染都没有,那 `MAX_UNITS` 个 span 会一直挂在树上,每个都带着 `filter`
      * (末帧是 `blur(0) brightness(100%)`,值是空操作,但它仍然给每个 span 立一个
      * 层叠上下文)。到点自己收,树就干净了。
      * 这一批还没开完就来了新字时,上面那句 `clearTimeout` 会把它撤掉重排。

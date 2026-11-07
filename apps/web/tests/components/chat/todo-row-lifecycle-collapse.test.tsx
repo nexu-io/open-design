@@ -1,22 +1,18 @@
 // @vitest-environment jsdom
 /**
- * **一条 todo 跑完了,它自己那只抽屉也要收起来。**
+ * 【产品裁决 2026-11-07】**todo 抽屉跑完不自动收起** —— 它装着这一步真正跑过的
+ * 命令、读过的文件和推理。
  *
- * 壳那一层早就有这条(OPEND-2557,`shell-collapse-on-finish.test.tsx`),抽屉这一层
- * 漏了:`TodoRow` 传的是 `defaultOpen={segment.status === 'in_progress'}`。
- * `defaultOpen` **只在挂载那一帧被看一眼**,而这一行的 key 是
- * `todo-${segment.content}-${index}` —— 状态从 `in_progress` 翻成 `completed` 时
- * 内容和位置一个字都没变,于是**同一个实例、同一份内部折叠态**,那只抽屉
- * 跑完还摊着,把后面几步挤到屏外。
+ * 这个文件原来钉的是「一条 todo 跑完,抽屉自己收起来」。新裁决推翻了那条:记录
+ * 本来就是为了事后读的,跑完就收等于把证据藏起来。现在 `TodoRow` 恒传
+ * `lifecycleOpen`,抽屉始终摊开;用户手动收起仍然算数。
  *
- * 修法是接 `Foldable` 的 `lifecycleOpen`(W24 交付,`foldable-lifecycle-follow.test.tsx`
- * 钉着它自己那一层):跟着外面那件事的相位走,**但用户自己动过之后就不再跟** ——
- * 手动展开的跑完不替他收,手动收起的后续不替他开。
+ * 这一行的 key 是 `todo-${segment.content}-${index}`,状态从 `in_progress` 翻成
+ * `completed` 时内容和位置一个字都没变 —— 所以「保持摊开」不能只靠挂载时的
+ * `defaultOpen`,必须走 `Foldable` 的 `lifecycleOpen` 同步。
  *
- * ⚠️ jsdom 不保证按浏览器时序派发 `toggle`,所以下面和
- * `shell-collapse-on-finish.test.tsx` 一样**显式派发一次同值回声**。
- * 那声回声正是这个 bug 家族的真因:把「我们自己把 open 写回 DOM」引发的 toggle
- * 当成「用户点过」,自动跟随会在第一帧就被永久禁用。
+ * ⚠️ jsdom 不保证按浏览器时序派发 `toggle`,所以下面显式派发一次同值回声,
+ * 钉住「回声不算用户点过」。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
@@ -75,37 +71,37 @@ const echoToggle = (el: HTMLDetailsElement): void => {
   fireEvent(el, new Event('toggle', { bubbles: false }));
 };
 
-describe('todo 抽屉跟着这一步的相位收放', () => {
+describe('todo 抽屉的摊开态', () => {
   it('这一步在跑:抽屉是摊开的', () => {
     const { container } = render(show(shellOf('in_progress')));
     expect(drawer(container).open).toBe(true);
   });
 
-  it('这一步做完了:key 一个字没变,抽屉也要自己收起来', () => {
+  it('这一步做完了:key 一个字没变,抽屉仍然摊着', () => {
     const { container, rerender } = render(show(shellOf('in_progress')));
     const el = drawer(container);
     expect(el.open).toBe(true);
     // 摊开那一帧浏览器会为「open 属性被写上」派发一次 toggle。
-    // 这一次必须**不算**用户操作,否则后面的相位同步全被屏蔽。
+    // 这一次必须**不算**用户操作,否则用户手动收起的判断会认错。
     echoToggle(el);
 
     rerender(show(shellOf('completed')));
-    expect(drawer(container).open, '跑完还摊着就是这个 bug').toBe(false);
+    expect(drawer(container).open, '跑完之后这一步的现场仍然要看得见').toBe(true);
   });
 
-  it('反向对照:用户自己掀开的,这一步跑完不许替他收走', () => {
+  it('用户手动收起的,后续重渲染不许替他打开', () => {
     const { container, rerender } = render(show(shellOf('completed')));
     const el = drawer(container);
-    expect(el.open).toBe(false);
+    expect(el.open).toBe(true);
 
     const summary = el.querySelector('summary');
     expect(summary).not.toBeNull();
     fireEvent.click(summary!);
-    expect(el.open, 'summary 点击应当先把 details 翻开').toBe(true);
+    expect(el.open, 'summary 点击应当先把 details 收起').toBe(false);
     echoToggle(el);
 
-    // 又来一帧同样的终态,不能把用户掀开的这一下抹掉
+    // 又来了一帧同样的终态,不能把用户收起的这一下抹掉
     rerender(show(shellOf('completed')));
-    expect(drawer(container).open).toBe(true);
+    expect(drawer(container).open).toBe(false);
   });
 });

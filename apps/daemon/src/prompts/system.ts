@@ -317,6 +317,44 @@ export function detectPlatformIntentSignal(
 }
 
 /**
+ * Edit vocabulary. Deliberately narrow: a false positive costs the agent the
+ * discovery/plan/checklist workflow on a turn that actually needed it, which
+ * is far more expensive than a false negative (that turn just takes the normal
+ * build path). So this only lists words that are unambiguous edit commands —
+ * bare "add" / "make" / "create" / "fix" / "update" are NOT here, because they
+ * front new-build briefs and bug reports as often as they front a visual tweak.
+ */
+const EDIT_INTENT_SIGNAL =
+  /\b(change|edit|tweak|adjust|modify|rename|replace|swap|reword|shorten|lengthen|resize|restyle|recolor|bigger|smaller|larger|taller|wider|narrower|bolder|lighter|darker|brighter|rounder|spacing|padding|margin|gap|font size|font|colour|color|hex|headline|subtitle|button label|icon|logo)\b|改一下|改成|改为|改到|修改|调整|换成|换掉|替换|修复|放大|缩小|变大|变小|调大|调小|颜色|字体|字号|间距|边距|对齐|居中|圆角|文案/i;
+
+/**
+ * How long a candidate text may be and still count as a one-line edit request.
+ * A build brief or a bug report is long; "make the headline bigger" is not.
+ * The cap is the second half of the guard against edit vocabulary embedded in
+ * a transcript: only a text that is BOTH short and imperative qualifies.
+ */
+const EDIT_INTENT_MAX_TEXT_LENGTH = 600;
+
+/**
+ * Whether this turn is a small change to an artifact that already exists.
+ * Callers must ALSO confirm the project actually has an artifact to edit —
+ * vocabulary alone would fire on "change the world, build me a landing page".
+ * When true, the composer drops the discovery layer, the designer charter, the
+ * skill body, the checklist/critique flow and the TodoWrite plan: every one of
+ * those turns a one-line edit into a multi-round-trip ceremony.
+ */
+export function detectEditIntentSignal(
+  ...texts: Array<string | null | undefined>
+): boolean {
+  return texts.some(
+    (text) =>
+      typeof text === 'string'
+      && text.length <= EDIT_INTENT_MAX_TEXT_LENGTH
+      && EDIT_INTENT_SIGNAL.test(text),
+  );
+}
+
+/**
  * Whether the visible conversation mentions generating media. Gates the
  * MEDIA_DISPATCH_HINT for non-media projects: most runs never generate
  * media, so the generate→wait dispatch hint only ships once the request
@@ -441,6 +479,37 @@ export const BASE_SYSTEM_PROMPT = renderOfficialDesignerPrompt('filesystem');
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
 This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit a project-opening \`<question-form id="discovery">\` or show "Quick brief — 30 seconds". Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+
+/**
+ * Direct-edit mode — a small change to an artifact that already exists.
+ *
+ * The normal charter is built for designing something new: brand extraction,
+ * a discovery form, a TodoWrite plan, a seed template, a checklist pass and a
+ * five-dimension critique. Applied to "make the headline bigger" every one of
+ * those becomes a round trip that produces no pixels, which is why simple
+ * edits took minutes. This block replaces all of it with the narrowest
+ * possible loop: find the file, change it, say what changed.
+ *
+ * Kept short on purpose — it is the whole workflow for the turn, and the turn
+ * is supposed to be cheap.
+ */
+export const DIRECT_EDIT_OVERRIDE = `# Direct edit mode — change the existing artifact, nothing else
+
+This turn is a small change to an artifact that already exists in this project. Do NOT run the build workflow:
+
+- Do NOT emit a discovery \`<question-form>\`.
+- Do NOT call TodoWrite or make a plan. An edit is one or two tool calls, not a project.
+- Do NOT extract or re-derive a brand spec, pick a direction, or copy a seed template.
+- Do NOT run a checklist pass, a five-dimension critique, or a self-verify scorecard.
+- Do NOT rewrite the artifact from scratch. Preserve every part of the file the request did not name — structure, copy, styles, scripts, slide count, existing class names.
+
+Do this instead:
+
+1. Locate the target: the file the user is looking at, the file named in the request, or — when neither names one — the most recently modified HTML/Markdown artifact at the project root. One read is enough; search only if the target is genuinely ambiguous.
+2. Make the smallest edit that satisfies the request. Use the native edit tool with a tight old-string/new-string pair. If the file is large, edit the specific block rather than re-writing the document.
+3. Stop. Reply with one short sentence naming the file and what changed. No summary section, no bullet list of steps, no offer to do more.
+
+If the request is genuinely ambiguous about WHICH element changes, ask exactly one short question in plain prose and stop. Do not turn it into a form.`;
 
 // Injected into non-media projects so the agent knows how to dispatch
 // media generation if the user asks for it mid-session (e.g. "generate an
@@ -894,6 +963,13 @@ export interface ComposeInput {
   // `detectPlatformIntentSignal`). ORed with the metadata-based platform
   // gate for PLATFORM_CONTRACTS_BLOCK under slim; absent = metadata only.
   platformHintSignal?: boolean | undefined;
+  // Whether this turn is a small edit to an artifact that already exists (see
+  // `detectEditIntentSignal`). Callers must confirm the project has an
+  // artifact before setting this. When true the composer drops the discovery
+  // layer, designer charter, skill body, deck framework, media hint, checklist
+  // /critique flow and the TodoWrite plan, and ships `DIRECT_EDIT_OVERRIDE`
+  // instead — one locate-read-edit-answer loop.
+  editIntentSignal?: boolean | undefined;
 }
 
 export function composeSystemPrompt({
@@ -938,6 +1014,7 @@ export function composeSystemPrompt({
   promptCoreVariant,
   mediaHintSignal,
   platformHintSignal,
+  editIntentSignal,
 }: ComposeInput): string {
   // ── FORK POINT: two independent prompt implementations ──────────────────
   // Everything below this early return is the legacy stack; OD Next runs never
@@ -963,6 +1040,10 @@ export function composeSystemPrompt({
       locale,
       deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,
       deckFrameworkMode,
+      // Per-turn direct-edit fast path. The legacy stack below has already
+      // resolved this signal; OD Next forwards it so a small edit does not
+      // compose the full strategy + task skill either.
+      editIntentSignal,
       metadata,
       template,
       designSystemBody,
@@ -999,7 +1080,17 @@ export function composeSystemPrompt({
     metadata?.kind === 'image' ||
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
-  const isSlimCharterHead = isSlimCore && !isAskModeEarly && !isMediaSurfaceEarly;
+  /**
+   * Direct-edit mode (2026-11-07). A short change request against an existing
+   * artifact takes the minimal path: no discovery, no charter, no plan tool
+   * round trip. The caller has already confirmed the project contains
+   * something to edit (`editIntentSignal` is vocabulary + artifact presence).
+   * Mutually exclusive with ask mode and media surfaces, which have their own
+   * complete charters.
+   */
+  const isDirectEdit =
+    editIntentSignal === true && !isAskModeEarly && !isMediaSurfaceEarly;
+  const isSlimCharterHead = isSlimCore && !isAskModeEarly && !isMediaSurfaceEarly && !isDirectEdit;
 
   // Head ordering differs by variant, following prompt-caching prefix rules
   // (stable content first — see shared prompt-caching guidance):
@@ -1018,8 +1109,17 @@ export function composeSystemPrompt({
   // the charter's TodoWrite/render instructions, which classic guaranteed by
   // always composing the override first. Cache-neutral — plain runs use the
   // text_artifact charter variant and form their own prefix family anyway.
-  const parts: string[] = isSlimCharterHead
+  const parts: string[] = isDirectEdit
     ? [
+        // Security keeps its documented position — first, so nothing later can
+        // talk it down. The direct-edit workflow follows it.
+        PROMPT_INJECTION_RESISTANCE,
+        '\n\n---\n\n',
+        DIRECT_EDIT_OVERRIDE,
+        '\n\n---\n\n',
+      ]
+    : isSlimCharterHead
+      ? [
         ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
         renderSlimCoreCharter(
           executionProfile ?? executionProfileFromStreamFormat(streamFormat),
@@ -1131,7 +1231,7 @@ export function composeSystemPrompt({
     parts.push('\n\n---\n\n');
   }
 
-  if (!isMediaSurfaceEarly && !isAskMode) {
+  if (!isMediaSurfaceEarly && !isAskMode && !isDirectEdit) {
     if (!isSlimCore) {
       parts.push(renderDiscoveryAndPhilosophy(resolvedExecutionProfile), '\n\n---\n\n');
     }
@@ -1193,7 +1293,7 @@ export function composeSystemPrompt({
   // Ask mode skips the multi-thousand-token designer charter entirely — the
   // CHAT_MODE_OVERRIDE above is its self-contained identity. Plan/Design keep
   // it. Slim already opened the document with its charter (see head above).
-  if (!isAskMode && !isSlimCore) {
+  if (!isAskMode && !isSlimCore && !isDirectEdit) {
     parts.push(
       '# Identity and workflow charter (background)\n\n',
       renderOfficialDesignerPrompt(resolvedExecutionProfile, {
@@ -1219,7 +1319,7 @@ export function composeSystemPrompt({
         `\n\nIf you applied memory, you may emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>.`,
       );
     }
-    if ((memoryHooks?.verify ?? true)) {
+    if ((memoryHooks?.verify ?? true) && !isDirectEdit) {
       parts.push(
         `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks. After producing or editing an artifact, evaluate every active rule, FIX failures in place, then emit one scorecard — the daemon checks it programmatically, and a missing scorecard on an artifact turn with active rules is recorded as an enforcement failure:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking; leave a row as "fail" only when the fix needs a decision you genuinely cannot make. Order: craft self-check → scorecard → normal handoff. Skip it only when no verified rules apply or the turn produced no artifact.`,
       );
@@ -1246,7 +1346,7 @@ export function composeSystemPrompt({
       );
     }
 
-    if ((memoryHooks?.verify ?? true)) {
+    if ((memoryHooks?.verify ?? true) && !isDirectEdit) {
       parts.push(
         `\n\n## Self-verify against your verified rules\n\nThe **Verified rules** above are enforceable checks, not soft preferences. After you finish producing or editing an artifact, evaluate it against every active rule, FIX any failure in place before ending your turn, then emit one scorecard:\n\n<od-card type="verify-scorecard">\n{ "status": "pass|partial|fail", "summary": "5/6 checks passed · 1 auto-fixed", "rows": [ {"rule": "<the check>", "status": "pass|fail|fixed", "note": "<what was wrong / what you fixed>"} ] }\n</od-card>\n\nPrefer fixing silently over asking. Leave a row as "fail" only when fixing it needs a decision you genuinely cannot make from the request plus memory. The daemon programmatically checks this scorecard after your turn — a missing scorecard or a rule left uncovered on an artifact turn is recorded as an enforcement failure — so always emit it when verified rules apply. Skip the scorecard entirely only when there are no verified rules or the turn produced no artifact.\n\nThe scorecard is ADDITIVE to — never a replacement for — the rest of the end-of-run flow. On an artifact turn you still run the existing anti-slop / brand self-check (the "N/N brand checks passed" gate) and still close with the normal handoff. Order the end of your turn as: (1) finish the anti-slop / brand self-check and fix any failure in place, (2) emit the verify-scorecard card, (3) close with the normal handoff — a single <artifact> block when this turn wrote a new canonical HTML file, otherwise a brief file-operation summary of what changed and what is still open. The scorecard only checks your verified rules; it does not absorb the anti-slop gate or the end-of-run summary.`,
       );
@@ -1322,7 +1422,7 @@ export function composeSystemPrompt({
     );
   }
 
-  if (craftBody && craftBody.trim().length > 0) {
+  if (craftBody && craftBody.trim().length > 0 && !isDirectEdit) {
     const sectionLabel =
       Array.isArray(craftSections) && craftSections.length > 0
         ? ` — ${craftSections.join(', ')}`
@@ -1332,14 +1432,14 @@ export function composeSystemPrompt({
     );
   }
 
-  if (skillBody && skillBody.trim().length > 0) {
+  if (skillBody && skillBody.trim().length > 0 && !isDirectEdit) {
     const preflight = derivePreflight(skillBody);
     parts.push(
       `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
   }
 
-  if (!isAskMode) {
+  if (!isAskMode && !isDirectEdit) {
     parts.push(`\n\n${SEMANTIC_OUTPUT_FILE_NAMES}`);
   }
 
@@ -1369,7 +1469,11 @@ export function composeSystemPrompt({
     mediaExecution,
     isSlimCore ? 'facts' : 'classic',
   );
-  if (metaBlock) parts.push(metaBlock);
+  // Direct edit does not need project-creation facts: the target is an existing
+  // file, and the metadata block's delivery rules ("one file per screen",
+  // "build real interactive controls") describe building, not changing. Leaving
+  // it in invited a one-line tweak to restructure the artifact.
+  if (metaBlock && !isDirectEdit) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
   // stylesheet for PDF stitching). Pin it last so it overrides any softer
@@ -1391,7 +1495,7 @@ export function composeSystemPrompt({
   const isFreeformProject = activeSkillModes.size === 0 && (!metadata || metadata.kind === 'other');
   const hasDeckSkillSeed =
     activeSkillModes.has('deck') && !!skillBody && /assets\/template\.html/.test(skillBody);
-  if (!isAskMode && isDeckProject && !hasDeckSkillSeed) {
+  if (!isAskMode && isDeckProject && !hasDeckSkillSeed && !isDirectEdit) {
     // ⚠️ This decides WHEN the legacy path gets the deck scaffold. OD Next has
     // its own gate — `resolveOdNextDeckFrameworkMode` in `od-next-strategy.ts`.
     // The scaffold is shared; the injection conditions are not. Change both.
@@ -1401,6 +1505,7 @@ export function composeSystemPrompt({
     !isDeckProject &&
     !isMediaSurfaceEarly &&
     !hasDeckSkillSeed &&
+    !isDirectEdit &&
     (freeformDeckSignal === true || (isFreeformProject && freeformDeckSignal === undefined))
   ) {
     // A deck request may arrive after a project was created under another
@@ -1429,7 +1534,7 @@ export function composeSystemPrompt({
       byokMediaDefaults,
     );
     if (runtimeDefaultsHint) parts.push(runtimeDefaultsHint);
-  } else if (mediaHintSignal ?? true) {
+  } else if ((mediaHintSignal ?? true) && !isDirectEdit) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
     // mid-session, rather than hunting for provider API keys in the environment.
@@ -1452,7 +1557,7 @@ export function composeSystemPrompt({
   // the critique flag is a no-op there until a media-aware panel template
   // lands.
   const cfg = critique ?? defaultCritiqueConfig();
-  if (cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface && !isAskMode) {
+  if (cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface && !isAskMode && !isDirectEdit) {
     parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 
@@ -1496,7 +1601,7 @@ export function composeSystemPrompt({
   // host keeps ONE unified questions surface: the form renders inline in the
   // originating assistant message, and answers return as the next user message.
   // Applies to every agent — question-form is UI-parsed markup, not a tool.
-  if (!isSlimCharterHead || isAskMode) parts.push(
+  if ((!isSlimCharterHead || isAskMode) && !isDirectEdit) parts.push(
     "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the OpenDesign UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.\n\nAt most 6-7 options per question; merge near-duplicates instead of listing more. Choose `radio` vs `select` by option count, not importance: `radio` for a short list, `select` once it runs long (languages, timezones, voices); `checkbox` is always a plain list. `select` options may carry `group` (first group expands, the rest collapse) and `trailingLabel` (a short end-of-row code such as `ZH-CN`); both optional. Label options in the user's words, not jargon: \"Magazine-style layout\", not \"Editorial\". Reword only `label`; never change a stable `value`. Keep each `label` under ~40 characters; put anything longer in `description`.",
   );
 
@@ -1514,15 +1619,15 @@ export function composeSystemPrompt({
    * cached stable prefix rather than the per-turn slice: it never varies by turn,
    * and re-sending it every turn would pay for it every turn.
    */
-  if (!isSlimCharterHead || isAskMode) parts.push(
+  if ((!isSlimCharterHead || isAskMode) && !isDirectEdit) parts.push(
     "\n\n---\n\n## How your turn is rendered\n\n" +
-    "This panel does not print your output as one flat transcript. A turn renders as a **collapsed execution card** with your **answer below it**, and the completion marker is the boundary between them (see the turn-completion rules in this turn's instructions). Knowing which side something lands on is the difference between a readable turn and a wall of text.\n\n" +
-    "- **Inside the card** (default collapsed once the turn ends): every tool call, your thinking, and any narration you write while working. Each tool call is one row — a verb plus what it acted on — so a command whose intent is legible from its head reads well here, and a 200-character one-liner does not.\n" +
+    "This panel does not print your output as one flat transcript. A turn renders as an **execution card** with your **answer below it**, and the completion marker is the boundary between them (see the turn-completion rules in this turn's instructions). Knowing which side something lands on is the difference between a readable turn and a wall of text.\n\n" +
+    "- **Inside the card** (expanded, and it stays expanded after the turn ends): every tool call, your thinking, and any narration you write while working. Each tool call is one row — a verb plus what it acted on — so a command whose intent is legible from its head reads well here, and a 200-character one-liner does not.\n" +
     "- **Below the card**: only what comes after the completion marker. This is the part a person reads without clicking anything. Keep it about the outcome — what now exists, what changed, what needs their decision. Do not replay the steps; they are one click away and already legible.\n" +
     "- **TodoWrite is the progress the user watches.** The list renders as `Plan · N steps` plus one drawer per step inside the card, and while the run is in flight a pill above the composer shows which step is current. So a multi-step task without a plan leaves the user watching a spinner. Update the list as you go — each entry's state is read live, and a plan written once and never advanced reads as a stall.\n" +
     "- **Artifact cards are the deliverables you declare**, not every file you touch. The display marker in this turn's instructions decides which files get a card with a preview under the turn; a turn that declares none falls back to the host's own pick of the main artifacts it wrote — pages, documents and images, never a stylesheet or a script — and every file stays reachable in the project's file list either way. Pasting file contents back into your answer duplicates something the user can already see and open.\n" +
     "- **Questions go through `<question-form>`**, never as a markdown list of options — a list renders as plain text and forces the user to type their answer back.\n\n" +
-    "One consequence worth stating plainly: everything you write before the completion marker is filed away by default. If a caveat matters to the decision, it belongs after the marker, not buried in the working narration."
+    "One consequence worth stating plainly: everything you write before the completion marker is part of the record the user can read, and the record stays open after the turn. If a caveat matters to the decision, it belongs after the marker, not buried in the working narration."
   );
 
   parts.push(`\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`);

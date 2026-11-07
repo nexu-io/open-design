@@ -81,7 +81,10 @@ export interface ProjectEventsConnectionOptions {
 }
 
 const DEFAULT_INITIAL_BACKOFF = 1000;
-const DEFAULT_MAX_BACKOFF = 30_000;
+// Loopback stream: cap the reconnect delay low enough that a transient drop is
+// invisible (the file tree / run rows refresh again within seconds) instead of
+// leaving the project view stale for up to half a minute.
+const DEFAULT_MAX_BACKOFF = 5_000;
 
 export function projectEventsUrl(
   projectId: string,

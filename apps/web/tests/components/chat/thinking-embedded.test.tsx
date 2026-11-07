@@ -18,7 +18,7 @@
  *   D46' 限高滚动窗挂在**思考这一个条目**上,不是壳 body(壳 body 永远 `.stack`)
  *   N7-a 思考期间壳里原有的工具行 / 清单**原样还在**
  *   N7-b 壳头在思考时仍是「进行中」——「思考中」的动画与文案落到思考块自己身上
- *   N7-c 跑完的推理一律收成一格,**包括落在 todo 段里的那些**(问题二的真因)
+ *   N7-c 跑完的推理一律收成一格并保持摊开,**包括落在 todo 段里的那些**
  *   N7-d 那一格不画绿勾,用 brain 图标,长得像工具行
  *
  * 规格冲突与裁决理由见 `specs/current/chat-panel-feedback.md` §F-15。
@@ -192,10 +192,10 @@ describe('N7-b 壳头在思考时仍是「进行中」', () => {
   });
 });
 
-/* ── N7-c 跑完就收起来,todo 段里的也要收 ────────────────────── */
+/* ── N7-c 跑完的推理仍摊开,todo 段里的也一样 ────────────────── */
 
-describe('N7-c 跑完的推理一律收成一格', () => {
-  it('落在 todo 段里的推理也收起来(问题二的真因)', () => {
+describe('N7-c 跑完的推理一律收成一格并保持摊开', () => {
+  it('落在 todo 段里的推理也保持摊开', () => {
     const { container } = render(show(shellOf([
       todo('选定视觉方向', 'in_progress', [
         tool('a.png'),
@@ -208,42 +208,37 @@ describe('N7-c 跑完的推理一律收成一格', () => {
       if (d.querySelector('summary')?.textContent?.includes('选定视觉方向')) d.open = true;
     }
 
-    /* 正向对照:todo 抽屉确实展开了、里面的工具行读得到。
-       否则「推理被收起来」在抽屉整个没渲染时也天然成立。 */
+    /* 正向对照:todo 抽屉确实展开了、里面的工具行读得到。 */
     expect(screen.getByText(/读取 a\.png/)).toBeInTheDocument();
 
     // todo 段里也要出「思考过程」那一格
     expect(screen.getAllByText('思考过程').length).toBeGreaterThan(0);
-    // 且推理正文默认藏着
-    expect(visibleThinkChars(container)).toBe(0);
-    expect(allThinkChars(container)).toBeGreaterThan(0);   // 正文确实渲染了,只是收着
+    // 而且推理正文默认摊开 —— 用户回头看这一步时直接读得到
+    expect(visibleThinkChars(container)).toBeGreaterThan(0);
+    expect(visibleThinkChars(container)).toBe(allThinkChars(container));
   });
 
-  it('从「思考中」切到「思考完」的那一刻,推理是收起来的', () => {
+  it('从「思考中」切到「思考完」的那一刻,推理仍然摊开', () => {
     /*
-     * 这是用户原话「thinking 完了之后…全摊开了」的**那一帧**:同一张壳,
-     * `shell.thinking` 从 true 翻到 false。思考中那一格是摊开的(要读到滚动的字),
-     * 翻过去之后必须**收起来**,不能把摊开态带过去。
-     *
-     * 挡的是 `Foldable` 的内部展开态:它只在挂载时读一次 `defaultOpen`,
-     * 复用同一只 `<details>` 的话 live 那会儿的 open 会原样留着。
+     * 同一张壳,`shell.thinking` 从 true 翻到 false。思考中那一格是摊开的
+     * (要读到滚动的字);翻过去之后也保持摊开,不再把现场的思考收走。
      */
     const items: ShellItem[] = [tool('a.png'), think('一段很长的推理。')];
     const { container, rerender } = render(show(
       shellOf(items, { status: 'running', thinking: true }),
     ));
     openShell(container);
-    // 正向对照:思考中的时候正文确实是**读得到**的,否则下面那条不成立
+    // 正向对照:思考中的时候正文确实是**读得到**的
     expect(visibleThinkChars(container)).toBeGreaterThan(0);
 
     rerender(show(shellOf(items, { status: 'running', thinking: false })));
     openShell(container);
     expect(screen.getByText(/读取 a\.png/)).toBeInTheDocument();      // 壳还在
     expect(screen.getByText('思考过程')).toBeInTheDocument();          // 已经收成一格
-    expect(visibleThinkChars(container)).toBe(0);                     // 而且没摊开
+    expect(visibleThinkChars(container)).toBeGreaterThan(0);          // 而且仍然摊开
   });
 
-  it('真实录制回放:38K 字的推理不能摊在屏幕上', () => {
+  it('真实录制回放:38K 字的推理保持摊开、可滚动阅读', () => {
     /* 夹具来自本机 `.od/runs/0161ef44-…/events.jsonl`(agent=amr,2026-08-27 16:52)。
        只做了一件事:把连续的 thinking delta 拼起来(`buildTurnBlocks` 本来就会拼,
        已验证落块结果与全量事件逐字节相同),别的事件一律原样。 */
@@ -262,8 +257,8 @@ describe('N7-c 跑完的推理一律收成一格', () => {
 
     // 正向对照:这一轮确实有一大堆推理被渲染出来了
     expect(allThinkChars(container)).toBeGreaterThan(30_000);
-    // 修之前这里是 38,064 —— 用户截图里那几屏字
-    expect(visibleThinkChars(container)).toBe(0);
+    // 新契约:推理默认摊开,不再收进闭合的折叠块里
+    expect(visibleThinkChars(container)).toBeGreaterThan(30_000);
   });
 });
 

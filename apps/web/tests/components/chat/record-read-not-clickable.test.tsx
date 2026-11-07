@@ -150,7 +150,8 @@ describe('搜索 / 执行:那两处本来就不该是按钮', () => {
         onOpenFile={vi.fn()}
       />,
     );
-    expect(screen.getByText('ls -la')).toBeTruthy();
+    // 默认展开之后 summary 和正文各有一份命令原文,这里只要求命令可读、且不是按钮
+    expect(screen.getAllByText('ls -la').length).toBeGreaterThan(0);
     expect(document.querySelector('button')).toBeNull();
   });
 });

@@ -233,10 +233,12 @@ describe('ToolRow', () => {
     expect(screen.queryByText('0.4s')).toBeNull();
   });
 
-  it('没有人话标题的命令走「执行 <命令>」单行(S8)', () => {
+  it('没有人话标题的命令走「执行 <命令>」摘要(S8)', () => {
     render(<ToolRow row={row({ tool: 'exec', command: 'ls -la', title: 'ls -la', rawTitle: true })} />);
     expect(screen.getByText('执行')).toBeTruthy();
-    expect(screen.getByText('ls -la')).toBeTruthy();
+    // 默认展开之后命令原文在 summary 和正文各出现一次 —— 这里钉的是摘要那一份
+    const summary = document.querySelector('details > summary');
+    expect(summary?.querySelector('code')?.textContent).toBe('ls -la');
   });
 
   it('已识别的 shell 动作不回落成「执行」', () => {
@@ -315,18 +317,17 @@ describe('命令折叠块(组件 11)', () => {
     ...over,
   });
 
-  it('有人话标题就折起来:标题在外,命令与输出在里面', () => {
+  it('有人话标题就折起来:标题在外,命令与输出在里面,默认摊开', () => {
     render(<ToolRow row={cmd()} />);
     expect(screen.getByText('构建产物,看能不能跑通')).toBeTruthy();
-    expect(screen.queryByText('npm run build')).toBeNull();
-    fireEvent.click(screen.getByText('构建产物,看能不能跑通'));
     expect(screen.getByText('npm run build')).toBeTruthy();
     expect(screen.getByText('8.4s')).toBeTruthy();
+    expect(document.querySelector('details')?.open).toBe(true);
   });
 
-  it('成功默认收起 —— 标题那一行已经说了跑没跑通', () => {
+  it('成功也默认展开 —— 命令输出是记录的一部分', () => {
     render(<ToolRow row={cmd()} />);
-    expect(document.querySelector('details')?.open).toBe(false);
+    expect(document.querySelector('details')?.open).toBe(true);
   });
 
   it('失败默认展开 —— 报错原文是这时候唯一要读的东西', () => {
@@ -337,7 +338,6 @@ describe('命令折叠块(组件 11)', () => {
 
   it('输出行按行首符号分绿红,认不出来的按普通行画', () => {
     render(<ToolRow row={cmd({ terminal: '✓ 成功那行\n普通那行\n✗ 失败那行' })} />);
-    fireEvent.click(screen.getByText('构建产物,看能不能跑通'));
     const cls = (t: string) => screen.getByText(t).className;
     expect(cls('✓ 成功那行')).toMatch(/ok/);
     expect(cls('✗ 失败那行')).toMatch(/er/);

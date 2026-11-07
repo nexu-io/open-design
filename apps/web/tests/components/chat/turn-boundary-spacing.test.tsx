@@ -83,6 +83,15 @@ const TURN: PersistedAgentEvent[] = [
   { kind: 'text', text: '<done/>栅格对得上,可以直接复刻。' },
 ];
 
+/**
+ * 配平态量的是「内容不满一屏时首条会不会被推到底」。执行记录现在默认展开,
+ * `TURN` 的高度已经吃掉大半屏,配平剩下的余量会随记录内容变化 —— 所以
+ * 这一档单独用一条**短**消息,让「不满一屏」这个前提稳定成立。
+ */
+const SHORT_TURN: PersistedAgentEvent[] = [
+  { kind: 'text', text: '<done/>好了。' },
+];
+
 function markupOf(node: ReactElement): string {
   const { container, unmount } = render(<I18nProvider initial="zh-CN">{node}</I18nProvider>);
   const html = container.innerHTML;
@@ -313,6 +322,8 @@ describe.skipIf(!canRun)('轮次边界 · 真 Chrome 几何', () => {
     const turnB = markupOf(<AssistantMessage message={msg('m2', TURN)} streaming={false} />);
     // 接上一条、不再报名字的续写块 —— 同一个人在说话,不是新的一轮
     const cont = markupOf(<AssistantMessage message={msg('m3', TURN)} streaming={false} showRole={false} />);
+    // 配平/不配平两格用的短消息 —— 见 `SHORT_TURN` 的注释
+    const short = markupOf(<AssistantMessage message={msg('m-short', SHORT_TURN)} streaming={false} />);
 
     expect(turnA, '真实组件没吐出头像行').toContain('data-testid="assistant-role"');
     expect(cont, '续写块没打上 assistant-continuation').toContain('assistant-continuation');
@@ -330,12 +341,12 @@ describe.skipIf(!canRun)('轮次边界 · 真 Chrome 几何', () => {
       //    行距只由 `.chat-virtual-row` 自己的 padding 给。两条路必须算出同一个数。
       // ⑤ / ⑥ 配平态:内容不满一屏时整段贴底,靠首条消息的 margin-top:auto。
       //    轮次边界那条规则的特异性压得过它,所以必须有一格钉住「auto 还在」。
-      'balanced:short': turnA,
+      'balanced:short': short,
       // ⑦ 基底那一档:`.assistant-flow` 的 gap 在 `code.css` 里也必须是 12。
       //    皮肤层(`.app …`)现在压着它,所以只有把皮肤祖先摘掉才照得出这个取值 ——
       //    两处写不一样的话,哪天皮肤那条被删掉就会静悄悄退回 14。
       'no-skin:base': turnA,
-      'unbalanced:short': turnA,
+      'unbalanced:short': short,
       'virtualized': `<div class="chat-virtual-spacer"><div class="chat-virtual-row" style="position:relative">${turnA}</div><div class="chat-virtual-row" style="position:relative">${turnB}</div></div>`,
     });
 
@@ -349,14 +360,14 @@ describe.skipIf(!canRun)('轮次边界 · 真 Chrome 几何', () => {
   it('探针自己站得住:每格都量到了该量的东西', () => {
     for (const [name, g] of Object.entries(geometry)) {
       expect(g.flowDisplay, `${name}:.assistant-flow 不是 flex,层叠被谁压掉了`).toBe('flex');
-      expect(g.flowKidCount, `${name}:一轮里没有两块可比`).toBeGreaterThanOrEqual(2);
-      // 配平那两格刻意只放一条消息(要量的是「首条离顶多远」),其余每格都得有两条
-      if (name === 'no-skin:base') {
-        expect(g.withinTurn, 'no-skin:base:没量到轮次内部那一档').not.toBeNull();
-        continue;
-      }
+      // 配平那两格刻意只放一条**短**消息(要量的是「首条离顶多远」),其余每格都得有两条
       if (name.endsWith(':short')) {
         expect(g.fromLogTop, `${name}:没量到首条相对流水顶的位置`).not.toBeNull();
+        continue;
+      }
+      expect(g.flowKidCount, `${name}:一轮里没有两块可比`).toBeGreaterThanOrEqual(2);
+      if (name === 'no-skin:base') {
+        expect(g.withinTurn, 'no-skin:base:没量到轮次内部那一档').not.toBeNull();
         continue;
       }
       expect(g.betweenMessages, `${name}:没量到相邻两条消息`).not.toBeNull();

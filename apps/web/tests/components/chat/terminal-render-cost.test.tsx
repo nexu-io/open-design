@@ -135,11 +135,11 @@ describe('终端输出的成本', () => {
     expect(container.textContent).toContain('6.0s');
   });
 
-  it('首屏:重载老会话时,收起的命令行一个终端节点都不挂', () => {
+  it('首屏:重载老会话时,完成的行也默认展开、终端节点全部挂载', () => {
     /*
-     * 老会话里没有正在跑的调用 —— 每一行都是 `pending: false` 的完成态,
-     * 按稿子收起,`deferBody` 于是一次都不挂载正文。
-     * 满屏 30 条这样的命令行,终端节点总数应当是 **0**。
+     * 老会话里没有正在跑的调用 —— 每一行都是 `pending: false` 的完成态。
+     * 2026-11-07 起不再自动收起,所以正文随首屏一起挂载、输出直接可读。
+     * 这里量的就是新契约的代价:30 条命令各自的终端块都在。
      */
     const done = (i: number): ToolRowData =>
       row({ id: `c${i}`, pending: false, terminal: outputOf(500), elapsedMs: 8420 });
@@ -148,13 +148,14 @@ describe('终端输出的成本', () => {
     );
 
     expect(container.querySelectorAll('details').length, '30 行命令都在').toBe(30);
-    expect(container.querySelectorAll('div[class*="term"]').length, '一个终端块都不该挂').toBe(0);
-    expect(probe.renders.length, 'Terminal 一次都没渲染').toBe(0);
+    // 每行两块:命令原文那一行 + `TerminalOutput` 的输出块
+    expect(container.querySelectorAll('div[class*="term"]').length, '30 组终端块都挂载').toBe(60);
+    expect(probe.renders.length, 'Terminal 每行渲染一次').toBe(30);
 
     const all = container.querySelectorAll('*').length;
     // eslint-disable-next-line no-console -- 首屏这一格的数要落在跑测的输出里
-    console.log(`[量] 首屏 30 条收起的命令行:整屏 ${all} 个节点(每行 15000 行输出全部没挂)`);
-    expect(all, '每行只剩折叠块骨架').toBeLessThanOrEqual(30 * 12);
+    console.log(`[量] 首屏 30 条展开的命令行:整屏 ${all} 个节点(30 × 500 行输出全部挂载)`);
+    expect(all, '输出行确实全部挂载').toBeGreaterThan(30 * 500);
   });
 
   /*
@@ -189,7 +190,7 @@ describe('终端输出的成本', () => {
     expect(probe.renders.length, '秒表跳了 5 次,输出没变 —— 一次都不该重算').toBe(1);
   });
 
-  it('【量一下】AMR 形态首屏:30 条收起的老命令行,终端节点仍然是 0', () => {
+  it('【量一下】AMR 形态首屏:30 条完成的老命令行同样全部展开', () => {
     const done = (i: number): ToolRowData =>
       rawRow({ id: `c${i}`, pending: false, terminal: outputOf(500), elapsedMs: 8420 });
     const { container } = render(
@@ -197,20 +198,14 @@ describe('终端输出的成本', () => {
     );
 
     expect(container.querySelectorAll('details').length, '30 行都是折叠块了').toBe(30);
-    expect(container.querySelectorAll('div[class*="term"]').length, '一个终端块都不该挂').toBe(0);
-    expect(probe.renders.length, 'Terminal 一次都没渲染').toBe(0);
+    // 每行两块:命令原文那一行 + `TerminalOutput` 的输出块
+    expect(container.querySelectorAll('div[class*="term"]').length, '30 组终端块都挂载').toBe(60);
+    expect(probe.renders.length, 'Terminal 每行渲染一次').toBe(30);
 
     const all = container.querySelectorAll('*').length;
     // eslint-disable-next-line no-console -- 首屏这一格的数要落在跑测的输出里
-    console.log(`[量·AMR] 首屏 30 条收起的命令行:整屏 ${all} 个节点`);
-    /*
-     * 有标题那支是 12 节点/行,这一支是 **14** —— 差的两个是把命令排成等宽的
-     * `<span class="file fileStatic"><code>`(有标题那支的 summary 是纯文本标题,
-     * 不需要这一对)。实测:360 → 420,30 行共 +60 个节点,**与输出量无关**,
-     * 是每行恒定的两个。这里按 14 钉住而不是把上界抬到「够用就行」:
-     * 数字再涨说明骨架又胖了,应该当回归看见。
-     */
-    expect(all).toBeLessThanOrEqual(30 * 14);
+    console.log(`[量·AMR] 首屏 30 条展开的命令行:整屏 ${all} 个节点`);
+    expect(all, '输出行确实全部挂载').toBeGreaterThan(30 * 500);
   });
 
   it('并发:同时几条命令在跑,就同时几个终端展开 —— 量一下最坏那一屏', () => {

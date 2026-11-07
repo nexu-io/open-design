@@ -275,6 +275,13 @@ export interface ComposeInput {
   freeformDeckSignal?: boolean | undefined;
   /** Host-resolved OD Next deck scaffold policy for blank vs legacy/existing decks. */
   deckFrameworkMode?: DeckFrameworkMode | undefined;
+  /**
+   * Host-confirmed small edit against an existing artifact. Mirrors the
+   * daemon's `ComposeInput.editIntentSignal`; the OD Next fork forwards it so
+   * the request prompt can ship the compact direct-edit document instead of
+   * the core strategy, orchestration, and Task Skill bodies.
+   */
+  editIntentSignal?: boolean | undefined;
   // Free-form instructions the user set at the global (user-level)
   // settings panel. Injected after personal memory.
   userInstructions?: string | undefined;
@@ -313,6 +320,7 @@ export function composeSystemPrompt({
   locale,
   freeformDeckSignal,
   deckFrameworkMode,
+  editIntentSignal,
   userInstructions,
   projectInstructions,
 }: ComposeInput): string {
@@ -333,6 +341,7 @@ export function composeSystemPrompt({
       locale,
       deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,
       deckFrameworkMode,
+      editIntentSignal,
       metadata,
       template,
       designSystemBody,
@@ -446,13 +455,13 @@ export function composeSystemPrompt({
     /* 与 daemon 那份 `prompts/system.ts` 的「How your turn is rendered」逐字对应 ——
        两边措辞必须一致,否则 API/BYOK 模式和 daemon 模式对同一件事给模型两种说法。 */
     "\n\n---\n\n## How your turn is rendered\n\n" +
-    "This panel does not print your output as one flat transcript. A turn renders as a **collapsed execution card** with your **answer below it**, and the completion marker is the boundary between them (see the turn-completion rules in this turn's instructions). Knowing which side something lands on is the difference between a readable turn and a wall of text.\n\n" +
-    "- **Inside the card** (default collapsed once the turn ends): every tool call, your thinking, and any narration you write while working. Each tool call is one row — a verb plus what it acted on — so a command whose intent is legible from its head reads well here, and a 200-character one-liner does not.\n" +
+    "This panel does not print your output as one flat transcript. A turn renders as an **execution card** with your **answer below it**, and the completion marker is the boundary between them (see the turn-completion rules in this turn's instructions). Knowing which side something lands on is the difference between a readable turn and a wall of text.\n\n" +
+    "- **Inside the card** (expanded, and it stays expanded after the turn ends): every tool call, your thinking, and any narration you write while working. Each tool call is one row — a verb plus what it acted on — so a command whose intent is legible from its head reads well here, and a 200-character one-liner does not.\n" +
     "- **Below the card**: only what comes after the completion marker. This is the part a person reads without clicking anything. Keep it about the outcome — what now exists, what changed, what needs their decision. Do not replay the steps; they are one click away and already legible.\n" +
     "- **TodoWrite is the progress the user watches.** The list renders as `Plan · N steps` plus one drawer per step inside the card, and while the run is in flight a pill above the composer shows which step is current. So a multi-step task without a plan leaves the user watching a spinner. Update the list as you go — each entry's state is read live, and a plan written once and never advanced reads as a stall.\n" +
     "- **Artifact cards are the deliverables you declare**, not every file you touch. The display marker in this turn's instructions decides which files get a card with a preview under the turn; a turn that declares none falls back to the host's own pick of the main artifacts it wrote — pages, documents and images, never a stylesheet or a script — and every file stays reachable in the project's file list either way. Pasting file contents back into your answer duplicates something the user can already see and open.\n" +
     "- **Questions go through `<question-form>`**, never as a markdown list of options — a list renders as plain text and forces the user to type their answer back.\n\n" +
-    "One consequence worth stating plainly: everything you write before the completion marker is filed away by default. If a caveat matters to the decision, it belongs after the marker, not buried in the working narration.",
+    "One consequence worth stating plainly: everything you write before the completion marker is part of the record the user can read, and the record stays open after the turn. If a caveat matters to the decision, it belongs after the marker, not buried in the working narration.",
   );
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —

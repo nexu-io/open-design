@@ -572,7 +572,7 @@ describe('AssistantMessage 执行记录', () => {
     expect(body.querySelector('[aria-label="Not started"]'), '还在跑不该退成中性灰').toBeNull();
   });
 
-  it('还在流的 Write 当场落行(源码预览仍然不许回来);run 结束后壳收起(D3 作废 + D18)', () => {
+  it('还在流的 Write 当场落行(源码预览仍然不许回来);run 结束后壳保持展开(D3 作废)', () => {
     const streamingEvents = [
       {
         kind: 'tool_use' as const,
@@ -639,7 +639,7 @@ describe('AssistantMessage 执行记录', () => {
       />,
     );
 
-    expect(record(container).open).toBe(false);
+    expect(record(container).open).toBe(true);
   });
 
   it('壳外的结论带着流式光标;done 之前的叙述留在壳里(D43)', () => {
@@ -762,7 +762,7 @@ describe('AssistantMessage 执行记录', () => {
       { streaming: false, runStatus: 'succeeded', endedAt: 3_000 },
     ));
     expect(recordHead(container)).toContain('Took');
-    expect(record(container).open).toBe(false);
+    expect(record(container).open).toBe(true);
   });
 
   it('run 还在跑时,流出来的推理当场就看得见(recvqgLmAkUM6G)', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  OD_NEXT_DIRECT_EDIT_SECTION,
   composeOdNextStrategyBundleHeadV2,
   composeOdNextStrategyCorePromptV2,
   composeOdNextStrategyRequestPromptV2,
@@ -8,6 +9,7 @@ import {
   resolveOdNextDeckFrameworkMode,
   type OdNextStrategyRequestRecipeV2,
 } from '../src/prompts/od-next-strategy.js';
+import { serializeOdNextPromptBundleV2 } from '../src/prompts/od-next-prompt-bundle-v2.js';
 
 import { composeSystemPrompt } from '../src/prompts/system.js';
 import { composeOdNextMarkerProductionTurn, renderOdNextProductionReadyInstructions } from '../src/prompts/od-next-production-marker.js';
@@ -647,11 +649,172 @@ describe('runtime plan tool in the stable request context', () => {
   });
 });
 
-
 it('keeps planning progress in the user language without exposing host protocol details', () => {
   const prompt = renderOdNextProductionReadyInstructions('a1b2');
   expect(prompt).toContain('<od-production-ready key="a1b2" />');
   expect(prompt).toContain('FIRST progress sentence');
   expect(prompt).toContain('Keep the visible plan brief and result-focused');
   expect(renderOdNextProductionReadyInstructions('invalid key')).toBe('');
+});
+
+/**
+ * Direct-edit fast path for OD Next.
+ *
+ * A one-line change to an existing artifact must not pay for the full
+ * planning/Build composition — ~54 KB of core strategy, general
+ * orchestration, and Task Skill markdown on the shipped prototype profile.
+ * The recipe is still resolved (the Bundle head and identity are separate
+ * products), but neither composer consumes those bodies when the host has
+ * confirmed an edit against a project that already holds a deliverable.
+ */
+describe('OD Next direct-edit fast path', () => {
+  const editContext = { editIntentSignal: true } as const;
+
+  it('ships the direct-edit document instead of the three strategy bodies', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe, editContext);
+
+    expect(prompt).toContain(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(prompt).toContain('# Open Design execution and security boundary');
+    expect(prompt).toContain('## Native filesystem execution');
+    // The three full bodies and their section headings are gone.
+    expect(prompt).not.toContain(recipe.coreStrategy);
+    expect(prompt).not.toContain(recipe.generalOrchestration);
+    expect(prompt).not.toContain(recipe.taskSkill);
+    expect(prompt).not.toContain('## OD Next core strategy');
+    expect(prompt).not.toContain('## OD Next general orchestration');
+    expect(prompt).not.toContain('## Task Skill —');
+    expect(prompt).not.toContain('## Discovery, planning, and Build surface');
+    expect(prompt).not.toContain('## Active stage:');
+    // No plan output contract either: a direct edit finishes in this turn.
+    expect(prompt).not.toContain('OD Next production-marker/v1');
+  });
+
+  it('leaves the normal composition unchanged', () => {
+    const normal = composeOdNextStrategyRequestPromptV2(recipe);
+
+    expect(normal).toContain(recipe.coreStrategy);
+    expect(normal).toContain(recipe.generalOrchestration);
+    expect(normal).toContain(recipe.taskSkill);
+    expect(normal).not.toContain(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(composeOdNextStrategyRequestPromptV2(recipe, { editIntentSignal: false }))
+      .toBe(normal);
+    // The legacy alias still resolves to the same normal document.
+    expect(composeOdNextStrategyCorePromptV2(recipe)).toBe(normal);
+  });
+
+  it('forwards the signal through the contracts composer mirror', () => {
+    expect(composeSystemPrompt({ odNextStrategyRecipe: recipe, editIntentSignal: true }))
+      .toBe(composeOdNextStrategyRequestPromptV2(recipe, editContext));
+    expect(composeSystemPrompt({ odNextStrategyRecipe: recipe }))
+      .toBe(composeOdNextStrategyRequestPromptV2(recipe));
+  });
+
+  it('does not require the strategy bodies it will not use', () => {
+    const stripped: OdNextStrategyRequestRecipeV2 = {
+      ...recipe,
+      coreStrategy: '',
+      generalOrchestration: '',
+      taskSkill: '',
+    };
+
+    expect(() => composeOdNextStrategyRequestPromptV2(stripped, editContext))
+      .not.toThrow();
+    expect(() => composeOdNextStrategyBundleHeadV2(stripped, editContext))
+      .not.toThrow();
+    // Without the signal the same recipe must still fail closed.
+    expect(() => composeOdNextStrategyRequestPromptV2(stripped))
+      .toThrow(/coreStrategy/);
+    expect(() => composeOdNextStrategyBundleHeadV2(stripped))
+      .toThrow(/coreStrategy/);
+  });
+
+  it('still rejects a wrong recipe or strategy id in edit mode', () => {
+    const wrongRecipe = { ...recipe, recipe: 'other-recipe' } as unknown as OdNextStrategyRequestRecipeV2;
+    const wrongStrategy = { ...recipe, strategyId: 'other-strategy' } as unknown as OdNextStrategyRequestRecipeV2;
+
+    expect(() => composeOdNextStrategyRequestPromptV2(wrongRecipe, editContext))
+      .toThrow(/Unsupported OD Next prompt recipe/);
+    expect(() => composeOdNextStrategyBundleHeadV2(wrongRecipe, editContext))
+      .toThrow(/Unsupported OD Next prompt recipe/);
+    expect(() => composeOdNextStrategyRequestPromptV2(wrongStrategy, editContext))
+      .toThrow(/strategy id does not match/);
+    expect(() => composeOdNextStrategyBundleHeadV2(wrongStrategy, editContext))
+      .toThrow(/strategy id does not match/);
+  });
+
+  it('keeps brand tokens, memory, and custom instructions on the edit turn', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe, {
+      ...editContext,
+      designSystemTitle: 'Acme Brand',
+      designSystemTokensCss: ':root { --brand-primary: #1255ee; }',
+      memoryBody: 'The user prefers compact information density.',
+      userInstructions: 'Use concise product copy.',
+      projectInstructions: 'Prioritize operator triage.',
+    });
+
+    expect(prompt).toContain(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(prompt).toContain('Acme Brand');
+    expect(prompt).toContain('--brand-primary');
+    expect(prompt).toContain('compact information density');
+    expect(prompt).toContain('Use concise product copy.');
+    expect(prompt).toContain('Prioritize operator triage.');
+    expect(prompt).toContain('name="active-design-system-tokens"');
+    expect(prompt).toContain('name="personal-memory"');
+  });
+
+  it('suppresses the runtime plan-tool note because an edit has no plan step', () => {
+    const note = 'Your plan tool is `todowrite` — use it for the plan step above.';
+
+    expect(composeOdNextStrategyRequestPromptV2(recipe, { planToolNote: note }))
+      .toContain(note);
+    const editPrompt = composeOdNextStrategyRequestPromptV2(recipe, {
+      ...editContext,
+      planToolNote: note,
+    });
+    expect(editPrompt).toContain(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(editPrompt).not.toContain('runtime-plan-tool');
+    expect(editPrompt).not.toContain(note);
+  });
+
+  it('returns a minimal Bundle head that still satisfies the Bundle schema', () => {
+    const head = composeOdNextStrategyBundleHeadV2(recipe, editContext);
+
+    expect(head.coreSystemPrompt.coreStrategy).toBe(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(head.coreSystemPrompt.nativeExecution.profile).toBe('filesystem');
+    expect(head.coreSystemPrompt.echoGuard).not.toBe('');
+    // Required by the type and the serializer; see the composer docblock.
+    expect(head.coreSystemPrompt.discoveryAndPlanningSurface).toBeTruthy();
+    expect(head.coreSystemPrompt.outputContract).not.toContain('OD Next production-marker/v1');
+    expect(head.sessionSkills.generalOrchestrationSkill.body).not.toContain(recipe.generalOrchestration);
+    expect(head.sessionSkills.taskTypeSkill.body).not.toContain(recipe.taskSkill);
+    // The schema requires one stage with one atom; the normal roster is gone.
+    expect(head.activeStages).toEqual([
+      { name: 'edit', atoms: [{ name: 'direct-edit' }] },
+    ]);
+    expect(head.activeStages.some((stage) => stage.name === 'discovery')).toBe(false);
+
+    // The shipping path serializes this head; prove the minimal values are
+    // accepted rather than merely type-correct.
+    const xml = serializeOdNextPromptBundleV2({
+      ...head,
+      taskMetadata: { taskType: recipe.taskType },
+      context: {
+        recipeIdentity: {
+          recipe: recipe.recipe,
+          strategyId: recipe.strategyId,
+          strategyVersion: recipe.strategyVersion,
+          appliedSnapshot: recipe.snapshotId,
+          taskProfileVersion: recipe.taskProfileVersion,
+        },
+      },
+      userFirstPrompt: 'make the headline bigger',
+    });
+    expect(xml).toContain('<active_stages>');
+    expect(xml).toContain('<stage name="edit">');
+    expect(xml).toContain('<atom name="direct-edit" />');
+    expect(xml).toContain('Direct edit mode');
+    expect(xml).not.toContain(recipe.coreStrategy);
+    expect(xml).not.toContain(recipe.generalOrchestration);
+    expect(xml).not.toContain(recipe.taskSkill);
+  });
 });

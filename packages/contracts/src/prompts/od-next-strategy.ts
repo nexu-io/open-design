@@ -87,6 +87,17 @@ export interface OdNextStrategyStableRequestContextV2 {
    * existing deck HTML keep their own scaffold and rely on the host bridge.
    */
   deckFrameworkMode?: DeckFrameworkMode | undefined;
+  /**
+   * The host matched a short edit command against a project that already holds
+   * an editable artifact (`detectEditIntentSignal` + `projectHasEditableArtifact`
+   * in the daemon). When true, the request-stage prompt drops the core
+   * strategy, general orchestration, and Task Skill bodies — a one-line change
+   * must not pay for the full planning/Build composition — and ships the
+   * compact direct-edit document instead. This is a per-turn decision, never a
+   * conversation latch, and it is not vocabulary alone: without an artifact to
+   * edit the full workflow still owns the turn.
+   */
+  editIntentSignal?: boolean | undefined;
   metadata?: object | undefined;
   template?: {
     id?: string | undefined;
@@ -432,6 +443,55 @@ Preserve every requested deliverable and write files inside
 the project, and report the actual outputs and remaining gaps. Prefer a clear runnable entry
 for HTML so the user can open the result. No route, mode, outcome, or machine JSON is required.`;
 
+/**
+ * Direct-edit path for OD Next — a small change to an artifact that already
+ * exists. The normal strategy is a full BUILD composition: core strategy,
+ * general orchestration, task skill, discovery, planning, and execution
+ * stages. Applied to "make the headline bigger" every one of those becomes a
+ * round trip that produces no pixels, so the request prompt ships this block
+ * instead and skips the three bodies entirely.
+ *
+ * Kept short on purpose: this block is the whole workflow for the turn.
+ * It bypasses `assertOdNextPlanningBuildOnlyV2` for the same reason the deck
+ * directive does — it intentionally talks about what NOT to do, and the
+ * planning/Build-only guard exists for untrusted stable-context instructions,
+ * not for host-owned workflow text.
+ */
+export const OD_NEXT_DIRECT_EDIT_SECTION = `# Direct edit mode — change the existing artifact in place
+
+This turn is a small change to an artifact that already exists in this project. Edit it; do not plan or rebuild it.
+
+- Do not run a discovery question form.
+- Do not call TodoWrite or write a plan. An edit is one or two tool calls.
+- Do not rewrite the artifact from scratch. Preserve every part of the file the request did not name — structure, copy, styles, scripts, slide count, and existing class names.
+
+Locate the target in this order: the file the user names, the file currently open in the viewer, or the most recently modified HTML at the project root. Read it when needed, then make the smallest edit that satisfies the request with the native edit tool, using a tight old-string/new-string pair.
+
+Stop after the edit. Reply with one short sentence naming the file and what changed. No summary section, no bullet list, and no offer to do more.
+
+If the request is genuinely ambiguous about which element changes, ask one short question in plain prose and stop. Do not turn it into a form.`;
+
+/**
+ * Required Bundle slots cannot be empty: `serializeOdNextPromptBundleV2`
+ * rejects blank text bodies, so a direct-edit head still has to carry a
+ * session-skill body and an output contract. These are the smallest honest
+ * values — each says the normal workflow does not apply — rather than a copy
+ * of the full skill/output text the fast path exists to skip.
+ */
+const OD_NEXT_DIRECT_EDIT_SKILL_BODY =
+  'Not applicable to a direct edit: follow the direct-edit section instead.';
+const OD_NEXT_DIRECT_EDIT_OUTPUT_CONTRACT =
+  'No plan or production-ready marker applies to this direct-edit turn. Finish the edit and reply with one short sentence naming the file and what changed.';
+/**
+ * The Bundle schema requires at least one stage and at least one atom per
+ * stage (`stageNode` in `od-next-prompt-bundle-v2.ts`). One presence-only
+ * atom is the smallest valid value; it declares the turn's actual stage
+ * without pulling in the discovery/plan/generate roster.
+ */
+const OD_NEXT_DIRECT_EDIT_STAGES: ReadonlyArray<OdNextPromptBundleStageV2> = [
+  { name: 'edit', atoms: [{ name: 'direct-edit' }] },
+];
+
 const OMITTED_PROJECT_METADATA_KEYS = new Set([
   'baseDir',
   'userWorkingDir',
@@ -647,11 +707,47 @@ export function composeOdNextStrategyRequestPromptV2(
   if (input.strategyId !== OD_NEXT_STRATEGY_ID) {
     throw new TypeError('OD Next strategy id does not match the recipe.');
   }
-  const identity = odNextPromptCacheIdentityV2(input);
-  const snapshotId = requireText(input.snapshotId, 'snapshotId');
   const executionSection = input.executionProfile === 'text_artifact'
     ? TEXT_ARTIFACT_EXECUTION_SECTION
     : FILESYSTEM_EXECUTION_SECTION;
+  // Direct-edit early return. The full recipe is still resolved (the Bundle
+  // head and recipe identity are separate products), but this turn does not
+  // consume the core strategy, general orchestration, or Task Skill, so they
+  // are neither required nor validated here. Stable request context is kept:
+  // brand tokens, project/user instructions, and memory still govern the edit.
+  if (context.editIntentSignal === true) {
+    // Mirror the normal path's deck resolution: an edit to an existing deck
+    // still needs the scaffold compatibility policy, and resolving it here
+    // keeps `deckIntent` from emitting a second directive.
+    const deckFrameworkMode = context.deckFrameworkMode
+      ?? resolveOdNextDeckFrameworkMode({
+        taskType: input.taskType,
+        deckIntent: context.deckIntent,
+      });
+    const stableContext = composeOdNextStrategyStableRequestContextV2(
+      {
+        ...context,
+        deckIntent: false,
+        // A direct edit has no plan step, so the runtime plan-tool note would
+        // contradict the section above and invite the TodoWrite round trip the
+        // fast path exists to skip. It is a planning hint, not part of the
+        // runtime tool environment (which still ships via `runtimeToolPrompt`).
+        planToolNote: undefined,
+        ...(deckFrameworkMode ? { deckFrameworkMode } : {}),
+      },
+      input.executionProfile,
+    );
+    return [
+      EXECUTION_AND_SECURITY_SECTION,
+      executionSection,
+      OD_NEXT_DIRECT_EDIT_SECTION,
+      stableContext,
+    ]
+      .filter((section) => section.length > 0)
+      .join('\n\n---\n\n');
+  }
+  const identity = odNextPromptCacheIdentityV2(input);
+  const snapshotId = requireText(input.snapshotId, 'snapshotId');
   const coreStrategy = requireText(input.coreStrategy, 'coreStrategy');
   const generalOrchestration = requireText(
     input.generalOrchestration,
@@ -749,10 +845,57 @@ export function odNextStrategyRecipeIdentityV2(
  * Everything here is byte-identical across tasks that share a strategy version,
  * task type, and execution profile. The caller supplies `userSelectedSkills`
  * separately because those are the one per-task member of `session_skills`.
+ *
+ * A direct-edit turn (`context.editIntentSignal === true`) is the exception:
+ * it skips `verifyOdNextRecipeV2` and the full skill/stage roster, because the
+ * turn does not run the planning/Build workflow at all. Required Bundle slots
+ * that cannot be empty are filled with the smallest honest values documented
+ * beside `OD_NEXT_DIRECT_EDIT_SKILL_BODY`.
  */
 export function composeOdNextStrategyBundleHeadV2(
   input: OdNextStrategyRequestRecipeV2,
+  context: OdNextStrategyStableRequestContextV2 = {},
 ): OdNextPromptBundleHeadV2 {
+  if (context.editIntentSignal === true) {
+    // Still reject a mismatched recipe: the fast path skips content validation,
+    // not the identity check every OD Next composer shares.
+    if (input.recipe !== OD_NEXT_PROMPT_RECIPE_ID) {
+      throw new TypeError('Unsupported OD Next prompt recipe.');
+    }
+    if (input.strategyId !== OD_NEXT_STRATEGY_ID) {
+      throw new TypeError('OD Next strategy id does not match the recipe.');
+    }
+    return {
+      coreSystemPrompt: {
+        executionBoundary: EXECUTION_AND_SECURITY_SECTION,
+        nativeExecution: {
+          profile: input.executionProfile,
+          body: input.executionProfile === 'text_artifact'
+            ? TEXT_ARTIFACT_EXECUTION_SECTION
+            : FILESYSTEM_EXECUTION_SECTION,
+        },
+        // Required by the Bundle schema, and `serializeOdNextPromptBundleV2`
+        // rejects blank text slots, so there is no honest empty value yet.
+        // Keep the shared constant rather than invent a second discovery
+        // surface; the direct-edit section above it owns the turn's workflow.
+        discoveryAndPlanningSurface: DISCOVERY_AND_PLANNING_SECTION,
+        coreStrategy: OD_NEXT_DIRECT_EDIT_SECTION,
+        outputContract: OD_NEXT_DIRECT_EDIT_OUTPUT_CONTRACT,
+        echoGuard: OD_NEXT_BUNDLE_ECHO_GUARD_V2,
+      },
+      sessionSkills: {
+        generalOrchestrationSkill: {
+          skillName: 'general_orchestration',
+          body: OD_NEXT_DIRECT_EDIT_SKILL_BODY,
+        },
+        taskTypeSkill: {
+          skillName: input.taskType,
+          body: OD_NEXT_DIRECT_EDIT_SKILL_BODY,
+        },
+      },
+      activeStages: OD_NEXT_DIRECT_EDIT_STAGES,
+    };
+  }
   const verified = verifyOdNextRecipeV2(input);
   return {
     coreSystemPrompt: {

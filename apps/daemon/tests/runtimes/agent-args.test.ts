@@ -83,7 +83,10 @@ test('opencode args pass model-supported variants without changing the default a
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
-  assert.deepEqual(opencode.listModels?.args, ['models', '--verbose']);
+  // Model discovery is version-aware (`models --verbose` on 1.x, plain
+  // `models` on 2.x), so it lives in `fetchModels` rather than a static argv.
+  assert.equal(opencode.listModels, undefined);
+  assert.equal(typeof opencode.fetchModels, 'function');
   assert.equal(opencode.fallbackModels.find(
     (model) => model.id === 'openai/gpt-5.6-sol',
   )?.reasoningOptions, undefined);
@@ -252,6 +255,78 @@ test('opencode pins its workspace to the project cwd', () => {
 test('opencode omits --dir for a run with no project directory', () => {
   const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
   assert.equal(args.includes('--dir'), false);
+});
+
+// ---- OpenCode 2.x ----------------------------------------------------------
+// OpenCode 2.0 removed `--dir`, `--pure`, `--variant` and
+// `--dangerously-skip-permissions` from `opencode run` (every one of them
+// fails the spawn with "Unrecognized flag"), added `--auto` and
+// `--standalone`, and folds the variant into `-m provider/model#variant`.
+// The `run --help` probe is the only signal; a 2.x map records the removed
+// flags as `false`.
+const OPENCODE_2X_CAPABILITIES = {
+  skipPermissions: false,
+  autoApprove: true,
+  workspaceDir: false,
+  pure: false,
+  variant: false,
+  standalone: true,
+};
+
+test('opencode 2.x runs with --auto and --standalone instead of --dir and the skip flag', () => {
+  agentCapabilities.set('opencode', OPENCODE_2X_CAPABILITIES);
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto', '--standalone']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x keeps the session handle and model after the posture flags', () => {
+  agentCapabilities.set('opencode', OPENCODE_2X_CAPABILITIES);
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {
+      model: 'anthropic/claude-sonnet-4-5',
+    }, { cwd: '/projects/p1', resumeSessionId: 'ses_abc' });
+    assert.deepEqual(args, [
+      'run', '--format', 'json', '--auto', '--standalone',
+      '-s', 'ses_abc',
+      '-m', 'anthropic/claude-sonnet-4-5',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x folds an advertised variant into the model id', () => {
+  const previous = getRememberedLiveModels('opencode');
+  agentCapabilities.set('opencode', OPENCODE_2X_CAPABILITIES);
+  rememberLiveModels('opencode', [{
+    id: 'openai/gpt-5.6-sol',
+    label: 'openai/gpt-5.6-sol',
+    reasoningOptions: [{ id: 'default', label: 'Default' }, { id: 'high', label: 'high' }],
+  }]);
+  try {
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    }, { cwd: '/projects/p1' }), [
+      'run', '--format', 'json', '--auto', '--standalone',
+      '-m', 'openai/gpt-5.6-sol#high',
+    ]);
+    // An unadvertised variant is still dropped rather than guessed.
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'ultra',
+    }, { cwd: '/projects/p1' }), [
+      'run', '--format', 'json', '--auto', '--standalone',
+      '-m', 'openai/gpt-5.6-sol',
+    ]);
+  } finally {
+    rememberLiveModels('opencode', previous);
+    agentCapabilities.delete('opencode');
+  }
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely

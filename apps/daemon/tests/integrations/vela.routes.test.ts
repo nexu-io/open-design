@@ -35,6 +35,7 @@ import {
   isVelaLoginSupervisorSettled,
   parseAmrEntryAnalyticsPayload,
   parseAmrOnboardingProfileAnalyticsPayload,
+  peekVelaLiveAccountFailure,
   readVelaCredentialRevision,
   velaLiveAccountCacheKey,
 } from '../../src/integrations/vela.js';
@@ -94,6 +95,25 @@ async function waitForAmrModels(
       throw new Error(`timed out waiting for /api/amr/models source=${expectedSource}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+// Warm `/status` reads serve the cached projection, so a background probe is
+// observed by polling until the new plan lands in the cache.
+async function waitForStatusAccountPlan(
+  expectedPlan: string,
+  timeoutMs = 5_000,
+): Promise<{ account?: { plan?: string; balanceUsd?: string | null } }> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const response = await getJson<{
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status`);
+    if (response.body.account?.plan === expectedPlan) return response.body;
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for /status account plan=${expectedPlan}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 
@@ -200,6 +220,27 @@ async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
     if (existsSync(file)) return;
     if (Date.now() >= deadline) throw new Error(`timed out waiting for ${file}`);
     await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+function billingAttempts(file: string): string[] {
+  return existsSync(file)
+    ? readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
+    : [];
+}
+
+async function waitForVelaAccountFailure(
+  cacheKey: string,
+  timeoutMs = 5_000,
+): Promise<NonNullable<ReturnType<typeof peekVelaLiveAccountFailure>>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const failure = peekVelaLiveAccountFailure(cacheKey);
+    if (failure) return failure;
+    if (Date.now() >= deadline) {
+      throw new Error('timed out waiting for the live-account failure backoff');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 
@@ -460,11 +501,20 @@ describe('GET /api/integrations/vela/wallet', () => {
     ]);
 
     process.env.FAKE_VELA_BILLING_TIER = 'pro';
+    // The forced-refresh floor applies while the cache is warm. Let it lapse so
+    // this test still observes the plan change and its model-cache invalidation
+    // instead of asserting the throttle itself.
+    clearVelaLiveAccountRefreshThrottle(
+      velaLiveAccountCacheKey(readVelaCredentialRevision(process.env, {})),
+    );
     const upgradedStatus = await getJson<{ account?: { plan?: string } }>(
       `${baseUrl}/api/integrations/vela/status?refresh=1`,
     );
     expect(upgradedStatus.status).toBe(200);
-    expect(upgradedStatus.body.account?.plan).toBe('pro');
+    // A warm forced read serves the cached projection; the probe that observes
+    // the plan change runs in the background.
+    expect(upgradedStatus.body.account?.plan).toBe('free');
+    await waitForStatusAccountPlan('pro');
 
     const afterPlanChange = await getJson<{
       source: 'preset' | 'remote';
@@ -517,7 +567,7 @@ describe('GET /api/integrations/vela/wallet', () => {
     expect(afterRefresh.body.refreshing).toBe(true);
   });
 
-  it('preserves model-cache invalidation when forced status refresh joins an in-flight probe', async () => {
+  it('preserves model-cache invalidation when a forced status refresh arrives during an in-flight probe', async () => {
     clearAllVelaLiveAccounts();
     process.env.FAKE_VELA_BILLING_TIER = 'free';
     process.env.FAKE_VELA_BILLING_BALANCE_USD = '1.00';
@@ -560,7 +610,11 @@ describe('GET /api/integrations/vela/wallet', () => {
     );
     expect((await warmStatus).body.account?.plan).toBe('free');
     expect(forcedStatus.status).toBe(200);
-    expect(forcedStatus.body.account?.plan).toBe('pro');
+    // The warm forced read serves the cached projection instead of awaiting
+    // the in-flight probe, but it still marks that probe for plan-change model
+    // invalidation — so no plan-change signal is lost by bounding the refresh.
+    expect(forcedStatus.body.account?.plan).toBe('free');
+    await waitForStatusAccountPlan('pro');
 
     const afterPlanChange = await getJson<{
       source: 'preset' | 'remote';
@@ -1054,6 +1108,153 @@ describe('GET /api/integrations/vela/status', () => {
     expect(second.status).toBe(200);
     expect(second.body.account).toBeUndefined();
     expect(second.body.sessionState).toBe('authenticated');
+  });
+
+  it('does not spawn more than one billing probe per failure backoff window across forced status refreshes', async () => {
+    clearAllVelaLiveAccounts();
+    const billingLog = path.join(tmpHome, 'billing-summary-refresh-backoff.log');
+    process.env.FAKE_VELA_BILLING_LOG = billingLog;
+    // No FAKE_VELA_BILLING_* success values: every probe fails.
+    seedLogin('local', {
+      user: {
+        id: 'refresh-backoff-1',
+        email: 'refresh-backoff@example.com',
+        plan: undefined,
+      },
+    });
+    const cacheKey = velaLiveAccountCacheKey(
+      readVelaCredentialRevision(process.env, {}),
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let failureLogs: string[] = [];
+
+    try {
+      for (let poll = 0; poll < 5; poll += 1) {
+        const { status, body } = await getJson<{
+          loggedIn: boolean;
+          account?: { plan?: string; balanceUsd?: string | null };
+        }>(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+        expect(status).toBe(200);
+        expect(body.loggedIn).toBe(true);
+        expect(body.account).toBeUndefined();
+      }
+      failureLogs = warn.mock.calls
+        .map(([message]) => (typeof message === 'string' ? message : ''))
+        .filter((message) =>
+          message.startsWith('[amr] live account fetch failed'),
+        );
+    } finally {
+      warn.mockRestore();
+    }
+
+    // The first failure armed the backoff; the four forced refreshes after it
+    // were served without spawning another `vela billing summary` child.
+    expect(billingAttempts(billingLog)).toHaveLength(1);
+    expect(peekVelaLiveAccountFailure(cacheKey)?.failures).toBe(1);
+    // ...and the failure is logged once for the whole window, not per poll.
+    expect(failureLogs).toHaveLength(1);
+  });
+
+  it('serves the cached projection while a failed probe is backing off', async () => {
+    clearAllVelaLiveAccounts();
+    const billingLog = path.join(tmpHome, 'billing-summary-cached-backoff.log');
+    process.env.FAKE_VELA_BILLING_LOG = billingLog;
+    process.env.FAKE_VELA_BILLING_TIER = 'free';
+    process.env.FAKE_VELA_BILLING_BALANCE_USD = '0.00';
+    seedLogin('local', {
+      user: {
+        id: 'cached-backoff-1',
+        email: 'cached-backoff@example.com',
+        plan: undefined,
+      },
+    });
+    const cacheKey = velaLiveAccountCacheKey(
+      readVelaCredentialRevision(process.env, {}),
+    );
+
+    const first = await getJson<{
+      loggedIn: boolean;
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+    expect(first.body.account?.plan).toBe('free');
+    expect(billingAttempts(billingLog)).toHaveLength(1);
+
+    // Simulate the forced-refresh floor lapsing, then break billing upstream.
+    clearVelaLiveAccountRefreshThrottle(cacheKey);
+    delete process.env.FAKE_VELA_BILLING_TIER;
+    delete process.env.FAKE_VELA_BILLING_BALANCE_USD;
+
+    // The forced read serves the cached projection and schedules the probe in
+    // the background; the response is not held on a failing CLI.
+    const forced = await getJson<{
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+    expect(forced.body.account?.plan).toBe('free');
+    const failure = await waitForVelaAccountFailure(cacheKey);
+    expect(failure.failures).toBe(1);
+    expect(billingAttempts(billingLog)).toHaveLength(2);
+
+    // Inside the backoff window the cached projection keeps serving and no
+    // further probe is spawned.
+    const duringBackoff = await getJson<{
+      account?: { plan?: string; balanceUsd?: string | null };
+    }>(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+    expect(duringBackoff.body.account?.plan).toBe('free');
+    expect(billingAttempts(billingLog)).toHaveLength(2);
+  });
+
+  it('re-probes once the failure backoff lapses and clears it on success', async () => {
+    clearAllVelaLiveAccounts();
+    const billingLog = path.join(tmpHome, 'billing-summary-backoff-recovery.log');
+    process.env.FAKE_VELA_BILLING_LOG = billingLog;
+    seedLogin('local', {
+      user: {
+        id: 'backoff-recovery-1',
+        email: 'backoff-recovery@example.com',
+        plan: undefined,
+      },
+    });
+    const cacheKey = velaLiveAccountCacheKey(
+      readVelaCredentialRevision(process.env, {}),
+    );
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const failed = await getJson<{
+        loggedIn: boolean;
+        account?: { plan?: string; balanceUsd?: string | null };
+      }>(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+      expect(failed.body.loggedIn).toBe(true);
+      expect(failed.body.account).toBeUndefined();
+      expect(peekVelaLiveAccountFailure(cacheKey)?.failures).toBe(1);
+      expect(billingAttempts(billingLog)).toHaveLength(1);
+
+      // Still inside the 30s first-failure window: no new probe.
+      await getJson(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+      expect(billingAttempts(billingLog)).toHaveLength(1);
+
+      // Let the backoff lapse and make billing healthy again.
+      vi.setSystemTime(new Date(Date.now() + 30_001));
+      process.env.FAKE_VELA_BILLING_TIER = 'plus';
+      process.env.FAKE_VELA_BILLING_BALANCE_USD = '5.00';
+
+      const recovered = await getJson<{
+        account?: { plan?: string; balanceUsd?: string | null };
+      }>(`${baseUrl}/api/integrations/vela/status?refresh=1`);
+      expect(recovered.body.account?.plan).toBe('plus');
+      expect(recovered.body.account?.balanceUsd).toBe('5.00');
+      expect(peekVelaLiveAccountFailure(cacheKey)).toBeNull();
+      expect(billingAttempts(billingLog)).toHaveLength(2);
+
+      // Success restamps the TTL; an immediate forced read serves the cache.
+      const cached = await getJson<{ account?: { plan?: string } }>(
+        `${baseUrl}/api/integrations/vela/status?refresh=1`,
+      );
+      expect(cached.body.account?.plan).toBe('plus');
+      expect(billingAttempts(billingLog)).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps signed-in status usable when old vela CLI lacks billing commands', async () => {

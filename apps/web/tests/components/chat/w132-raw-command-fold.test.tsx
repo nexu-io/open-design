@@ -201,26 +201,30 @@ describe('AMR 形态(rawTitle)在跑的时候:是折叠块、展开着、输出�
   });
 });
 
-describe('跑完自动收起 —— 与有标题那支完全一致', () => {
-  it('同一行从 pending 翻成成功,折叠块自己收起来', () => {
-    const { rerender } = render(<ToolRow running row={rawRunning()} />);
+describe('跑完保持展开 —— 与有标题那支完全一致', () => {
+  it('同一行从 pending 翻成成功,折叠块保持开着', () => {
+    const { container, rerender } = render(<ToolRow running row={rawRunning()} />);
     expect(fold().open).toBe(true);
     echoToggle(fold()); // 摊开那一帧的回声,不算用户点过
 
     rerender(<ToolRow row={rawSettled()} />);
-    expect(fold().open, '跑完该收起来').toBe(false);
+    expect(fold().open, '跑完不该把命令现场收走').toBe(true);
+    expect(container.textContent).toContain('added 37 packages in 8.4s');
   });
 
-  it('首屏:重载老会话,一条从来没展开过的成功命令行正文一个节点都不挂', () => {
+  it('首屏:重载老会话,完成的行也默认展开、正文挂载', () => {
     const { container } = render(<ToolRow row={rawSettled()} deferBody />);
-    expect(fold().open).toBe(false);
-    expect(container.querySelector('div[class*="code"]')).toBeNull();
-    expect(container.textContent).not.toContain('added 37 packages');
+    expect(fold().open).toBe(true);
+    expect(container.querySelector('div[class*="code"]')).not.toBeNull();
+    expect(container.textContent).toContain('added 37 packages');
   });
 
-  it('点标题行能手动展开,输出就出来了(稿子那颗按钮的 aria-label 说的正是这件事)', () => {
+  it('点标题行能手动收起、再展开', () => {
     const { container } = render(<ToolRow row={rawSettled()} deferBody />);
     clickSummary(fold());
+    expect(fold().open).toBe(false);
+    clickSummary(fold());
+    expect(fold().open).toBe(true);
     expect(container.textContent).toContain('added 37 packages in 8.4s');
   });
 });
@@ -237,15 +241,15 @@ describe('反向对照:用户自己动过的,生命周期不许拨回去', () =>
     expect(fold().open, '用户收起过的,跑完不许替他打开').toBe(false);
   });
 
-  it('用户手动展开一条已完成的,后续重渲染不许把它收回去', () => {
+  it('用户手动收起的已完成行,后续重渲染不许把它打开', () => {
     const { rerender } = render(<ToolRow row={rawSettled()} />);
-    expect(fold().open).toBe(false);
-
-    clickSummary(fold());
     expect(fold().open).toBe(true);
 
+    clickSummary(fold());
+    expect(fold().open).toBe(false);
+
     rerender(<ToolRow row={rawSettled({ elapsedMs: 8430 })} />);
-    expect(fold().open, '用户掀开的不许被拨回去').toBe(true);
+    expect(fold().open, '用户收起的不许被拨回去').toBe(false);
   });
 });
 
@@ -277,10 +281,10 @@ describe('反向对照:有人话标题那一支一个字都没改坏', () => {
     expect(container.textContent).toContain('Packages: +37');
   });
 
-  it('成功且用户没动过的,默认收起', () => {
+  it('成功且用户没动过的,默认展开', () => {
     const { container } = render(<ToolRow row={titled({ terminal: 'added 37 packages in 8.4s', elapsedMs: 8420 })} />);
-    expect(fold().open).toBe(false);
-    expect(container.textContent).not.toContain('added 37 packages');
+    expect(fold().open).toBe(true);
+    expect(container.textContent).toContain('added 37 packages');
   });
 
   it('失败的默认展开,报错原文在 DOM 里', () => {

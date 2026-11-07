@@ -1,17 +1,14 @@
 // @vitest-environment jsdom
 /**
- * N2:**跑完的 thinking 收进一个可展开的折叠行**(用户裁决,2026-08-27)。
+ * N2:**thinking 收进一个可展开的折叠行**,并且默认摊开。
  *
- * 用户原话:「thinking 也要包裹在进行中的下拉卡片里,其次 thinking 完成后就变成
- * 普通工具调用的状态,可以下拉展开看思考细节」。
+ * 用户 2026-08-27 的原话是「thinking 完成后就变成普通工具调用的状态,可以下拉展开
+ * 看思考细节」;当时的实现让跑完的 thinking 默认收起。2026-11-07 的裁决把默认态改成
+ * 摊开:思考也是这一轮的过程证据,用户回头看时不应该还要逐格点开。手动收起仍然算数。
  *
  * ⚠️ 这条**覆盖设计稿**。设计稿组件 3 状态 3 写的是「跑完 · 收进 7·任务进度里,
  * 是几段纯文字,**不再自带折叠**」。冲突已当面对齐,用户选 B。
  * 详见 `specs/current/chat-panel-feedback.md` §F-11。
- *
- * 修的是哪个画面:`shell.thinking` 一旦置 false(第一段正文或第一个工具落下),
- * body 就从 `.stream`(限高 96px)换成 `.stack`(高度 auto),
- * 于是刚才那十几段推理**原地全部展开** —— 用户说的「怎么一结束全部释放出来了」。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -50,32 +47,34 @@ const openShell = (root: HTMLElement): void => {
 };
 
 describe('N2 跑完的 thinking 收进折叠行', () => {
-  it('两段连续的 thinking 收成【一个】折叠行,标题是「思考过程」,默认不展开正文', () => {
+  it('两段连续的 thinking 收成【一个】折叠行,标题是「思考过程」,默认展开正文', () => {
     const { container } = render(show(shellOf([
       think('先判断这一屏属于哪种页面类型。'),
       think('设置页要和它共用同一套间距。'),
       tool('a.png'),
     ])));
-    openShell(container);           // 壳自己跑完是收起的,先摊开壳看里面
+    openShell(container);           // 正向对照:壳确实渲染出来了
     // 折叠头出现,且只有一个
     expect(screen.getAllByText('思考过程')).toHaveLength(1);
-    // 推理正文默认藏着 —— 这正是「不再一结束全释放」
+    // 推理正文默认摊开 —— 思考也是这一轮要能直接读到的过程证据
     const fold = screen.getByText('思考过程').closest('details');
     expect(fold).not.toBeNull();
-    expect(fold?.open).toBe(false);
+    expect(fold?.open).toBe(true);
   });
 
-  it('展开之后读得到每一段推理', () => {
+  it('默认就读得到每一段推理;手动收起仍然算数', () => {
     const { container } = render(show(shellOf([
       think('先判断这一屏属于哪种页面类型。'),
       think('设置页要和它共用同一套间距。'),
     ])));
     openShell(container);
     const fold = screen.getByText('思考过程').closest('details');
-    fireEvent.click(fold!.querySelector('summary')!);   // 用户点开这一格
     // 不只是「读得到」——必须读在折叠里,否则等于没折叠(否定断言会空转)
     expect(fold?.contains(screen.getByText('先判断这一屏属于哪种页面类型。'))).toBe(true);
     expect(fold?.contains(screen.getByText('设置页要和它共用同一套间距。'))).toBe(true);
+
+    fireEvent.click(fold!.querySelector('summary')!);   // 用户手动收起
+    expect(fold?.open).toBe(false);
   });
 
   it('还在思考时**不折叠** —— 那一段归 96px 的流式窗管(设计稿状态 1)', () => {
@@ -138,7 +137,7 @@ describe('N2 跑完的 thinking 收进折叠行', () => {
     expect(screen.getAllByText('思考过程')).toHaveLength(2);
   });
 
-  it('OPEND-2406:运行中的历史/中间 thought 收起,只有当前 live thought 展开', () => {
+  it('OPEND-2406:运行中的历史/中间 thought 也不再收起 —— 三格全部摊开', () => {
     const { container } = render(show(shellOf([
       think('开头已经完成的推理。'),
       tool('first.png'),
@@ -152,7 +151,7 @@ describe('N2 跑完的 thinking 收进折叠行', () => {
       container.querySelectorAll<HTMLDetailsElement>('details[class*="thoughts"]'),
     );
     expect(thoughts).toHaveLength(3);
-    expect(thoughts.map((row) => row.open)).toEqual([false, false, true]);
+    expect(thoughts.map((row) => row.open)).toEqual([true, true, true]);
     expect(thoughts.slice(0, 2).map((row) => row.querySelector('summary')?.textContent))
       .toEqual(['思考过程', '思考过程']);
     expect(thoughts[2]?.querySelector('summary')?.textContent).toContain('思考中');

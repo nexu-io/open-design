@@ -807,6 +807,7 @@ describe('native OpenCode child evidence', () => {
     const load = createOpenCodeSanitizedExportLoader({
       launchPath: '/opt/open-design/opencode',
       env: { XDG_DATA_HOME: '/run/od/share' },
+      cliGeneration: 'v1',
     });
 
     await expect(load('ses_child_synthetic')).resolves.toMatchObject({
@@ -834,6 +835,43 @@ describe('native OpenCode child evidence', () => {
       candidates: [candidate!],
       loadSanitizedExport: load,
     })).resolves.toEqual([]);
+  });
+
+  it('reads a child through `session export` on OpenCode 2.x and keeps the legacy export isolated', async () => {
+    const data = fixture();
+    execAgentFileMock.mockResolvedValue({
+      stdout: JSON.stringify(data.sanitizedChildExport),
+      stderr: '',
+    });
+    // 2.x moved `export` under `session` and dropped `--pure`; `--standalone`
+    // keeps the read inside the spawned process (and its env) instead of a
+    // background service started from another shell.
+    const v2 = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+      cliGeneration: 'v2',
+    });
+    await expect(v2('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic' },
+    });
+    expect(execAgentFileMock).toHaveBeenLastCalledWith(
+      '/opt/open-design/opencode',
+      ['session', 'export', 'ses_child_synthetic', '--sanitize', '--standalone'],
+      expect.objectContaining({ env: { XDG_DATA_HOME: '/run/od/share' } }),
+    );
+
+    // An unprobed build keeps the 1.x command, never a plugin-enabled export.
+    const unknown = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: {},
+      cliGeneration: 'unknown',
+    });
+    await unknown('ses_child_synthetic');
+    expect(execAgentFileMock).toHaveBeenLastCalledWith(
+      '/opt/open-design/opencode',
+      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      expect.anything(),
+    );
   });
 
   it('labels the fixture contract-only so it cannot become production evidence', () => {

@@ -2353,6 +2353,7 @@ function AppInner() {
   // unmounted before their poll settled.
   useEffect(() => {
     let cancelled = false;
+    let returnToAppTimer: number | null = null;
     const sync = async (
       options: { refresh?: boolean } = {},
       restartOnSignIn = false,
@@ -2374,13 +2375,22 @@ function AppInner() {
     };
     const onReturnToApp = () => {
       if (document.visibilityState === 'hidden') return;
-      void sync({ refresh: true });
+      // `focus` and `visibilitychange` fire together when the user returns to
+      // the app, and rapid focus toggles repeat them. Collapse the burst into
+      // one forced status read instead of one per event; the daemon also bounds
+      // its own billing re-probe, so this only trims the request fan-out.
+      if (returnToAppTimer !== null) window.clearTimeout(returnToAppTimer);
+      returnToAppTimer = window.setTimeout(() => {
+        returnToAppTimer = null;
+        void sync({ refresh: true });
+      }, 250);
     };
     window.addEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
     window.addEventListener('focus', onReturnToApp);
     document.addEventListener('visibilitychange', onReturnToApp);
     return () => {
       cancelled = true;
+      if (returnToAppTimer !== null) window.clearTimeout(returnToAppTimer);
       window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onStatusEvent);
       window.removeEventListener('focus', onReturnToApp);
       document.removeEventListener('visibilitychange', onReturnToApp);

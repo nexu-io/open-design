@@ -76,7 +76,9 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { withOpenCodeWorkspaceEnv } from './runtimes/opencode-permissions.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -1020,6 +1022,9 @@ async function callLocalCli(provider, system, user, options) {
     // `--file <prompt-file> "<message>"` made OpenCode treat the message
     // text as a second attachment and exit with "File not found". Bare
     // `opencode run --format json` reads the message from stdin instead.
+    // The argv is generation-aware (1.x vs 2.x flags), so warm the
+    // `run --help` capability map first, as the chat path does.
+    await ensureDetectedRuntimeCapabilities(provider.agentId, configuredAgentEnv);
     args = def.buildArgs(
       '',
       [],
@@ -1032,15 +1037,19 @@ async function callLocalCli(provider, system, user, options) {
     throw new Error(`Local CLI memory extraction is not supported for ${provider.agentId}`);
   }
 
-  const env = applyAgentLaunchEnv(
-    spawnEnvForAgent(
-      def.id,
-      { ...process.env, ...(def.env || {}) },
-      configuredAgentEnv,
-      undefined,
-      { resolvedBin: launch.selectedPath },
+  const env = withOpenCodeWorkspaceEnv(
+    applyAgentLaunchEnv(
+      spawnEnvForAgent(
+        def.id,
+        { ...process.env, ...(def.env || {}) },
+        configuredAgentEnv,
+        undefined,
+        { resolvedBin: launch.selectedPath },
+      ),
+      launch,
     ),
-    launch,
+    cwd,
+    def.id,
   );
   const invocation = createCommandInvocation({
     command: launch.launchPath,

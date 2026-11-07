@@ -4,7 +4,10 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  OD_NEXT_DIRECT_EDIT_SECTION,
+  composeOdNextStrategyBundleHeadV2,
   composeSystemPrompt as composeContractsSystemPrompt,
+  serializeOdNextPromptBundleV2,
   type AppliedPluginSnapshot,
   type InstalledPluginRecord,
   type OdNextStrategyRequestRecipeV2,
@@ -100,6 +103,86 @@ afterAll(() => {
 });
 
 describe('OD Next V2 request recipe wiring', () => {
+  it('composes the canonical motion skill with Core and orchestration for the motion route', async () => {
+    const binding = createBundledStrategyBindingV2({ plugin, taskType: 'motion-design' });
+    const motionSnapshot = applyPlugin({
+      plugin, inputs: {}, registry: EMPTY_REGISTRY, internalStrategyBinding: binding,
+    }).result.appliedPlugin;
+    const recipe = await resolveRecipe({ activeSnapshot: { ...motionSnapshot, snapshotId: 'snapshot-motion-recipe' } });
+    if (!recipe) throw new Error('expected motion recipe');
+    const prompt = composeSystemPrompt({ agentId: 'codex', sessionMode: 'design', odNextStrategyRecipe: recipe });
+    const source = await readFile(path.resolve(BUNDLED_ROOT, '../../skills/motion-design/SKILL.md'), 'utf8');
+    expect(prompt).toContain(source);
+    expect(prompt).toContain('OD Next Core Strategy');
+    expect(prompt).toContain('General Orchestration');
+    expect(prompt).not.toContain('# OD Next Task Profile: HyperFrames');
+    expect(prompt).not.toContain('<open-design-plan-contract>');
+    expect(prompt).not.toContain('<open-design-runtime-state>');
+    expect(prompt).not.toContain('planContractHash=');
+    expect(prompt).toContain('keyed');
+    expect(prompt).toContain('selected scenario or a loaded');
+  });
+
+  // A one-line edit turned into minutes because every OD Next run composed the
+  // full strategy. This pins the fast path against the REAL bundled recipe:
+  // the three strategy bodies dominate the normal prompt, and the edit turn
+  // must ship a fraction of them while keeping the Bundle contract valid.
+  it('ships the compact direct-edit document and head on an edit turn', async () => {
+    const recipe = await resolveRecipe();
+    if (!recipe) throw new Error('expected real OD Next recipe');
+
+    const normal = composeSystemPrompt({ odNextStrategyRecipe: recipe });
+    const edit = composeSystemPrompt({ odNextStrategyRecipe: recipe, editIntentSignal: true });
+    const normalHead = composeOdNextStrategyBundleHeadV2(recipe);
+    const editHead = composeOdNextStrategyBundleHeadV2(recipe, { editIntentSignal: true });
+
+    expect(edit).toContain(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(edit).not.toContain(recipe.coreStrategy);
+    expect(edit).not.toContain(recipe.generalOrchestration);
+    expect(edit).not.toContain(recipe.taskSkill);
+    expect(edit).toBe(composeContractsSystemPrompt({
+      odNextStrategyRecipe: recipe,
+      editIntentSignal: true,
+    }));
+    expect(editHead.coreSystemPrompt.coreStrategy).toBe(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(editHead.activeStages).toHaveLength(1);
+    expect(normalHead.activeStages).toHaveLength(3);
+
+    const strategyBodyBytes =
+      recipe.coreStrategy.length + recipe.generalOrchestration.length + recipe.taskSkill.length;
+    const toBundle = (head: typeof normalHead) => serializeOdNextPromptBundleV2({
+      ...head,
+      taskMetadata: { taskType: recipe.taskType },
+      context: {
+        recipeIdentity: {
+          recipe: recipe.recipe,
+          strategyId: recipe.strategyId,
+          strategyVersion: recipe.strategyVersion,
+          appliedSnapshot: recipe.snapshotId,
+          taskProfileVersion: recipe.taskProfileVersion,
+        },
+      },
+      userFirstPrompt: 'make the headline bigger',
+    });
+    // The bodies are the reason the normal turn costs tens of thousands of
+    // characters; the edit document must be smaller than the part it replaces,
+    // not merely the same order of magnitude.
+    expect(normal.length).toBeGreaterThan(strategyBodyBytes);
+    expect(edit.length).toBeLessThan(strategyBodyBytes / 10);
+    expect(JSON.stringify(editHead).length).toBeLessThan(JSON.stringify(normalHead).length / 5);
+
+    const normalBundle = toBundle(normalHead);
+    const editBundle = toBundle(editHead);
+    expect(editBundle).toContain(OD_NEXT_DIRECT_EDIT_SECTION);
+    expect(editBundle).not.toContain(recipe.coreStrategy);
+    expect(editBundle).not.toContain(recipe.generalOrchestration);
+    expect(editBundle).not.toContain(recipe.taskSkill);
+    expect(editBundle.length).toBeLessThan(normalBundle.length / 5);
+    // "A few KB", not "a slightly smaller catalogue": the measured edit Bundle
+    // is ~5.7 KB against ~69 KB for the full strategy.
+    expect(editBundle.length).toBeLessThan(8_000);
+  });
+
   it.each(['prototype', 'ppt', 'marketing', 'hyperframes'] as const)(
     'treats %s as guidance rather than overriding the current requested output', async (taskType) => {
       const binding = createBundledStrategyBindingV2({ plugin, taskType });

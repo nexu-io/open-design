@@ -1,22 +1,11 @@
 // @vitest-environment jsdom
 /**
- * 【产品裁决 2026-09-04】**done 标记一到,进行中那张执行记录卡就自己收起来** ——
- * 不等整轮跑完。
+ * 【产品裁决 2026-11-07】执行记录**不再自动收起** —— done 到达、run 结束都保持摊开。
  *
- * 用户原话:「然后输出 done 标记之后,上面的**进行中展开收起卡片,就应该自动收起**,
- * 而不是等到整个对话 run 完了再收起」。截图里:两个已完成的步骤连着它们的工具行还
- * 全摊着,而正文已经在下面开始输出「已交付 parchment-typography-one-pager.html ——」。
- *
- * ── 为什么这不是 OPEND-2557 那一条的重复 ────────────────────────────────
- *
- * `shell-collapse-on-finish.test.tsx` 钉的是「**run 结束**要收起」,判据是
- * `shell.status` 从 `running` 翻成 `done`。那一条改动之前就绿,它看不见这里的缺陷:
- * done 标记到达时 run **还在跑**(`runStatus: 'running'`、壳仍是 `running`),
- * 于是 `lifecycleOpen = running || stopped` 照旧为真,卡就一直摊着 ——
- * 摊到流真正关闭为止,而那可能是几十秒之后(结论本身还在一个字一个字地写)。
- *
- * 所以下面这一整套的**时刻**都压在「done 到了、run 没完」那一帧上:
- * 每一条断言的前置条件里 `runStatus` 都是 `running`。
+ * 此前的裁决(2026-09-04)是 done 标记一到就收起记录卡,让结论接管视线。后来的
+ * 裁决推翻了它:收起会把这一轮真正跑过的命令、读过的文件和推理一起藏起来,用户
+ * 点开记录想知道「它到底干了什么」时只看到一排收起的行。现在自动收起整个拿掉,
+ * 记录始终摊开;用户手动收起仍然算数(`userToggled` 闩)。
  *
  * ── 走整条真实链路,不手搭壳 ────────────────────────────────────────────
  *
@@ -24,6 +13,9 @@
  * (每轮一次性密钥 `<od-done key="…"/>`,配一条 `done_key` 事件)。手搭一个
  * `ExecutionShell` 的 props 等于自己替它判一遍 done,那测的就不是真实触发路径了。
  * 所以这里从 `AssistantMessage` 喂事件流进去。
+ *
+ * 下面这一整套的**时刻**仍然压在「done 到了、run 没完」那一帧上:
+ * 每一条断言的前置条件里 `runStatus` 都是 `running`。
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
@@ -84,7 +76,7 @@ const echoToggle = (el: HTMLDetailsElement): void => {
   fireEvent(el, new Event('toggle', { bubbles: false }));
 };
 
-describe('done 标记一到,进行中的执行记录就收起', () => {
+describe('done 标记到达后,执行记录仍然摊开', () => {
   it('done 之前:还在跑,卡摊着', () => {
     const { container } = render(live(BEFORE_DONE));
     expect(shellCard(container).open, 'done 还没来,过程仍在写,卡该开着').toBe(true);
@@ -92,7 +84,7 @@ describe('done 标记一到,进行中的执行记录就收起', () => {
     expect(container.textContent).toContain('进行中');
   });
 
-  it('done 到达的那一帧就收起 —— run 还在跑', () => {
+  it('done 到达的那一帧仍然摊开 —— run 还在跑', () => {
     const { container, rerender } = render(live(BEFORE_DONE));
     const card = shellCard(container);
     expect(card.open).toBe(true);
@@ -100,23 +92,25 @@ describe('done 标记一到,进行中的执行记录就收起', () => {
     echoToggle(card);
 
     rerender(live(AFTER_DONE));
-    expect(shellCard(container).open, 'done 标记到了,卡就该收 —— 不等 run 结束').toBe(false);
+    expect(shellCard(container).open, 'done 标记到了,记录不该自己收起来').toBe(true);
     // 这一帧 run 仍在跑:壳头还是「进行中」,结论已经开始往下写
     expect(container.textContent).toContain('进行中');
     expect(container.textContent).toContain('已交付 parchment-typography-one-pager.html');
+    // 过程本身仍然读得到 —— 自动收起被拿掉之后,判据落在这一句上
+    expect(container.textContent).toContain('构建单文件 HTML 一页纸。');
   });
 
-  it('刷新页面那一档同样 —— 整批事件一次性到,首帧就是收着的', () => {
+  it('刷新页面那一档同样 —— 整批事件一次性到,首帧就是摊开的', () => {
     const { container } = render(live(AFTER_DONE));
-    expect(shellCard(container).open).toBe(false);
+    expect(shellCard(container).open).toBe(true);
+    expect(container.textContent).toContain('构建单文件 HTML 一页纸。');
   });
 
   /**
-   * 【产品要点 2】只收**自动展开**的那张,不许把用户手点开的收掉。
+   * 【产品要点 2】用户手动收起之后,后续帧不许替他打开。
    *
-   * 这两件事在 `ExecutionShell` 里本来就分得开(`userToggled` 闩,判据是那次 toggle
-   * 的**值**和自身状态一不一致),这一条只是把它挂到新的触发时机上再钉一遍 ——
-   * 新加一个自动收起的时机,最容易顺手踩坏的就是这只闩。
+   * 自动收起拿掉之后,这只闩仍然是「用户意图优先」的唯一实现(`userToggled`,
+   * 判据是那次 toggle 的**值**和自身状态一不一致)。
    */
   /**
    * **边界:认的只有真标记。**
@@ -146,19 +140,31 @@ describe('done 标记一到,进行中的执行记录就收起', () => {
     expect(shellCard(container).open).toBe(true);
   });
 
-  it('用户自己点开的,done 到了也不许替他收走', () => {
+  it('用户手动收起的,done 到了也不许替他打开', () => {
     const { container, rerender } = render(live(BEFORE_DONE));
     const card = shellCard(container);
     // 用户手动收起(DOM 先自己翻面,再派发 toggle —— 这就是「用户点过」的形状)
     card.open = false;
     fireEvent(card, new Event('toggle', { bubbles: false }));
-    // 再手动展开
+    expect(shellCard(container).open).toBe(false);
+
+    rerender(live(AFTER_DONE));
+    expect(shellCard(container).open, '用户亲手收起的东西不该被自动打开').toBe(false);
+  });
+
+  it('用户手动收起的,之后手动展开也仍然算数', () => {
+    const { container, rerender } = render(live(AFTER_DONE));
+    const card = shellCard(container);
+    card.open = false;
+    fireEvent(card, new Event('toggle', { bubbles: false }));
+    expect(shellCard(container).open).toBe(false);
+
     card.open = true;
     fireEvent(card, new Event('toggle', { bubbles: false }));
     expect(shellCard(container).open).toBe(true);
 
     rerender(live(AFTER_DONE));
-    expect(shellCard(container).open, '用户主动点开的东西被自动收走是很恼人的').toBe(true);
+    expect(shellCard(container).open, '用户重新展开后,后续帧不该把它拨回去').toBe(true);
   });
 });
 
@@ -179,16 +185,19 @@ describe('done 标记一到,进行中的执行记录就收起', () => {
  * 在「内容一边长一边算」的场景下验过 —— jsdom 不做布局(`scrollHeight`/`clientHeight`
  * 恒为 0),这个仓库那套「真跑层叠」的量尺也只解层叠不做布局,**单测绿在这件事上不是证据**。
  */
-describe('收起的动作本身', () => {
-  it('收起时 body 留在 DOM 里 —— 卸载会跳过任何过渡', () => {
-    const { container, rerender } = render(live(BEFORE_DONE));
-    const body = shellCard(container).querySelector('[class*="body"]');
-    expect(body, 'done 之前 body 当然在').not.toBeNull();
+describe('手动收起的动作本身', () => {
+  it('手动收起时 body 留在 DOM 里 —— 卸载会跳过任何过渡', () => {
+    const { container } = render(live(BEFORE_DONE));
+    const card = shellCard(container);
+    const body = card.querySelector(':scope > div');
+    expect(body, '默认展开时 body 当然在').not.toBeNull();
 
-    rerender(live(AFTER_DONE));
+    // 用户手动收起
+    card.open = false;
+    fireEvent(card, new Event('toggle', { bubbles: false }));
     expect(shellCard(container).open).toBe(false);
     expect(
-      shellCard(container).querySelector('[class*="body"]'),
+      shellCard(container).querySelector(':scope > div'),
       '保持挂载只切状态 —— 卸载了就没有过渡可言',
     ).toBe(body);
   });
