@@ -626,6 +626,34 @@ for (const transport of ['url', 'srcdoc'] as const) {
   });
 }
 
+test('[P0] a saved child identity comment reopens only after live location in the current document', async ({ page }) => {
+  test.setTimeout(60_000);
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Nested identity comment');
+  const uuid = '8b9f8213-bad2-45cd-adf3-81fd2770cf35';
+  await seedProjectFile(page, projectId, 'child.html', `<!doctype html><html><body><h2 data-od-comment-id="${uuid}">Child identity</h2></body></html>`);
+  await seedHtmlArtifact(page, projectId, 'root.html', '<!doctype html><html><body><iframe title="identity child" src="/child.html"></iframe></body></html>');
+  await page.goto(`/projects/${projectId}/files/root.html`);
+  await openDesignFile(page, 'root.html');
+  await page.getByTestId('board-mode-toggle').click();
+  const child = artifactPreviewFrame(page).frameLocator('iframe[title="identity child"]');
+  await expect(child.locator('html[data-od-comment-mode]')).toHaveCount(1);
+  await child.getByRole('heading', { name: 'Child identity' }).click();
+  await page.getByTestId('comment-popover-input').fill('Identity child feedback');
+  await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
+  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
+  await page.reload();
+  await waitForLoadingToClear(page);
+  await page.getByTestId('comment-panel-toggle').click();
+  const row = page.getByTestId('comment-side-item').filter({ hasText: 'Identity child feedback' });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.getByTestId('comment-active-pin')).toBeVisible();
+  await expect(page.getByTestId('comment-popover-input')).toHaveValue('Identity child feedback');
+  const childTargetId = `frame:${encodeURIComponent(JSON.stringify(['child.html', `cmt:${uuid}`]))}`;
+  await expect(page.getByTestId(`comment-saved-marker-${childTargetId}`)).toHaveAttribute('data-anchor-state', 'anchored');
+});
+
 test('[P0] comments reject self-navigated files and re-anchor on the declared child after reload', async ({ page }) => {
   test.setTimeout(60_000);
   await routeMockAgents(page);

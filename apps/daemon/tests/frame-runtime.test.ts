@@ -194,6 +194,19 @@ describe('URL preview nested-frame bridges', () => {
     const dispatch = (data: unknown, source: unknown = undefined) => {
       for (const listener of listeners) listener({ data, source });
     };
+    const readyPing = parentMessages.find((message) =>
+      (message as { type?: string }).type === 'od:url-selection-bridge-ready') as {
+        documentToken: string; documentVersion: string;
+      };
+    expect(readyPing.documentToken).toEqual(expect.any(String));
+    expect(readyPing.documentToken).not.toBe('');
+    expect(readyPing.documentVersion).toBe('url:' + document.baseURI);
+    dispatch({ type: 'od:comment-active-target', elementId: 'absent', selector: '#absent',
+      validateForSave: true, requestId: 'root-missing' }, window.parent);
+    expect(parentMessages).toContainEqual(expect.objectContaining({
+      type: 'od:comment-location-missing', requestId: 'root-missing',
+      documentToken: readyPing.documentToken, documentVersion: readyPing.documentVersion,
+    }));
     dispatch({ type: 'od:comment-mode', enabled: true, mode: 'picker' });
     dispatch({ type: 'od:inspect-mode', enabled: true });
     received.length = 0;
@@ -213,31 +226,93 @@ describe('URL preview nested-frame bridges', () => {
     dispatch({ type: 'od:url-selection-bridge-ready', href: 'http://preview.local/api/projects/project-1/preview/scope-1/child.html' }, childWindow);
     expect(projectFrameMarked).toBe(true);
     parentMessages.length = 0;
-    dispatch({ type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '[data-od-id="hero"]', position: { x: 10, y: 20, width: 30, height: 40 } }] }, childWindow);
+    dispatch({ type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '[data-od-id="hero"]', domSelector: 'body > main > h2', position: { x: 10, y: 20, width: 30, height: 40 } }] }, childWindow);
     expect(parentMessages).toContainEqual({ type: 'od:comment-targets', targets: [expect.objectContaining({
       elementId: `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`,
-      position: { x: 10, y: 20, width: 30, height: 40 },
+      domSelector: 'body > main > h2', position: { x: 10, y: 20, width: 30, height: 40 },
     })] });
 
     frameY = 100;
     parentMessages.length = 0;
     resize();
     expect(parentMessages).toContainEqual({ type: 'od:comment-targets', targets: [expect.objectContaining({
-      position: { x: 10, y: 120, width: 30, height: 40 },
+      domSelector: 'body > main > h2', position: { x: 10, y: 120, width: 30, height: 40 },
     })] });
 
     frameScale = 0.5;
     for (const type of ['od:comment-target', 'od:comment-hover', 'od:comment-active-target-update']) {
       parentMessages.length = 0;
       dispatch({
-        type, elementId: 'hero', selector: '[data-od-id="hero"]',
+        type, elementId: 'hero', selector: '[data-od-id="hero"]', domSelector: 'body > main > h2',
         position: { x: 10, y: 20, width: 30, height: 40 },
         hoverPoint: { x: 4, y: 5 },
       }, childWindow);
       expect(parentMessages).toContainEqual(expect.objectContaining({
-        type, position: { x: 5, y: 110, width: 15, height: 20 },
+        type, domSelector: 'body > main > h2', position: { x: 5, y: 110, width: 15, height: 20 },
         hoverPoint: { x: 2, y: 103 },
       }));
+    }
+
+
+    // The save/locate handshake must survive the relay, but never a child reload.
+    const childHref = 'http://preview.local/api/projects/project-1/preview/scope-1/child.html';
+    const readyDocument = (documentToken = 'child-document-1') => dispatch({
+      type: 'od:url-selection-bridge-ready', href: childHref,
+      documentVersion: 'url:' + childHref, documentToken,
+    }, childWindow);
+    const qualifiedHero = 'frame:' + encodeURIComponent(JSON.stringify(['child.html', 'hero']));
+    for (const kind of ['save', 'locate']) {
+      readyDocument();
+      const request = (requestId: string) => dispatch({ type: 'od:comment-active-target',
+        elementId: qualifiedHero, selector: '#hero', requestId,
+        ...(kind === 'save' ? { validateForSave: true } : { locate: true }),
+      }, window.parent);
+      const response = (requestId: string, extra = {}) => dispatch({
+        type: 'od:comment-active-target-update', elementId: 'hero', selector: '#hero',
+        requestedSelector: '#hero', documentVersion: 'url:' + childHref,
+        documentToken: 'child-document-1', requestId,
+        position: { x: 10, y: 20, width: 30, height: 40 }, ...extra,
+      }, childWindow);
+      received.length = 0; parentMessages.length = 0;
+      request('success');
+      expect(received).toContainEqual(expect.objectContaining({
+        requestId: 'success', ...(kind === 'save' ? { validateForSave: true } : { locate: true }),
+      }));
+      response('success');
+      expect(parentMessages).toContainEqual(expect.objectContaining({
+        requestId: 'success', elementId: qualifiedHero, requestedSelector: '#hero',
+        documentVersion: 'url:' + document.baseURI,
+        position: { x: 5, y: 110, width: 15, height: 20 },
+      }));
+      parentMessages.length = 0;
+      response('success');
+      expect(parentMessages).toEqual([]);
+      request('missing');
+      response('missing', { type: 'od:comment-location-missing' });
+      expect(parentMessages).toContainEqual(expect.objectContaining({
+        requestId: 'missing', type: 'od:comment-location-missing', documentVersion: 'url:' + document.baseURI,
+      }));
+      parentMessages.length = 0;
+      request('reload');
+      frameLoad();
+      readyDocument('child-document-2');
+      response('reload');
+      expect(parentMessages).not.toContainEqual(expect.objectContaining({ requestId: 'reload' }));
+      readyDocument();
+      request('wrong-version');
+      response('wrong-version', { documentVersion: 'url:wrong' });
+      expect(parentMessages).not.toContainEqual(expect.objectContaining({ requestId: 'wrong-version' }));
+      request('wrong-token');
+      response('wrong-token', { documentToken: 'departed-document' });
+      expect(parentMessages).not.toContainEqual(expect.objectContaining({ requestId: 'wrong-token' }));
+      request('invalid-position');
+      response('invalid-position', { position: { x: '10', y: 20, width: 30, height: 40 } });
+      expect(parentMessages).not.toContainEqual(expect.objectContaining({ requestId: 'invalid-position' }));
+      if (kind === 'save') {
+        request('wrong-selector');
+        response('wrong-selector', { requestedSelector: '#other' });
+        expect(parentMessages).not.toContainEqual(expect.objectContaining({ requestId: 'wrong-selector' }));
+      }
     }
 
     received.length = 0;

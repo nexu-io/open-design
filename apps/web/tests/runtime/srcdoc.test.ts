@@ -531,7 +531,7 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('function projectFramePath(frame)');
     expect(srcdoc).toContain('function relayProjectFrameSelection(ev)');
     expect(srcdoc).toContain("'od:comment-target': true");
-    expect(srcdoc).toContain('function routeProjectFrameCommand(data)');
+    expect(srcdoc).toContain('function routeProjectFrameCommand(data, source)');
     expect(srcdoc).toContain("'od:inspect-set': true");
     expect(srcdoc).toContain('iframe:not([data-od-project-frame])');
   });
@@ -626,17 +626,19 @@ describe('buildSrcdoc', () => {
       Object.defineProperty(frame, 'clientHeight', { value: 100 });
       let frameY = 200;
       frame.getBoundingClientRect = () => ({ x: 20, y: frameY, width: 50, height: 50 } as DOMRect);
-      const messages: Array<{ type: string; targets?: Array<{ elementId: string; position: { y: number } }> }> = [];
+      const messages: Array<{ type: string; targets?: Array<{ elementId: string; domSelector?: string; position: { y: number } }> }> = [];
       dom.window.parent.postMessage = (message) => messages.push(message);
       const dispatch = (data: unknown) => dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data, source: child }));
       dispatch({ type: 'od:url-selection-bridge-ready', href: `${base}child.html` });
       const id = `frame:${encodeURIComponent(JSON.stringify(['child.html', 'hero']))}`;
       const latest = () => messages.filter((message) => message.type === 'od:comment-targets').at(-1)?.targets?.find((target) => target.elementId === id);
-      dispatch({ type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '#hero', position: { x: 10, y: 20, width: 30, height: 40 } }] });
+      dispatch({ type: 'od:comment-targets', targets: [{ elementId: 'hero', selector: '#hero', domSelector: 'body > main > h2', position: { x: 10, y: 20, width: 30, height: 40 } }] });
       await vi.waitFor(() => expect(latest()?.position).toEqual({ x: 25, y: 210, width: 15, height: 20 }));
+      expect(latest()?.domSelector).toBe('body > main > h2');
       frameY = 100;
       dom.window.document.dispatchEvent(new dom.window.Event('scroll'));
       await vi.waitFor(() => expect(latest()?.position.y).toBe(110));
+      expect(latest()?.domSelector).toBe('body > main > h2');
       frame.dispatchEvent(new dom.window.Event('load'));
       await vi.waitFor(() => expect(latest()).toBeUndefined());
     } finally {
@@ -662,14 +664,14 @@ describe('buildSrcdoc', () => {
       dom.window.parent.postMessage = (message: unknown) => hostMessages.push(message);
       dom.window.dispatchEvent(new dom.window.MessageEvent('message', {
         data: {
-          type, elementId: 'hero', selector: '[data-od-id="hero"]', label: 'Hero', text: 'Hero',
+          type, elementId: 'hero', selector: '[data-od-id="hero"]', domSelector: 'body > main > h2', label: 'Hero', text: 'Hero',
           position: { x: 1, y: 2, width: 3, height: 4 }, htmlHint: '<h1>', style: {},
           clickedDescendant: { label: 'span.badge', text: 'Badge' }, hoverPoint: { x: 4, y: 5 }, slideIndex: 2,
         },
         source: childWindow,
       }));
       expect(hostMessages).toContainEqual(expect.objectContaining({
-        type, clickedDescendant: { label: 'span.badge', text: 'Badge' },
+        type, domSelector: 'body > main > h2', clickedDescendant: { label: 'span.badge', text: 'Badge' },
         hoverPoint: { x: 12, y: 30 }, slideIndex: 2,
       }));
       dom.window.close();
@@ -1248,5 +1250,77 @@ describe('buildSrcdoc', () => {
     // Its direct-child divs are matched by [id] > div[class] / [id] > div[id]
     expect(srcdoc).toContain('<div class="content" data-od-id=');
     expect(srcdoc).toContain('<div id="named" data-od-id=');
+  });
+});
+
+describe('nested comment request relay', () => {
+  it.each(['save', 'locate'])('pairs %s replies with the current child document', async (kind) => {
+    const base = 'http://preview.local/api/projects/project-1/preview/scope-1/';
+    const dom = new JSDOM(buildSrcdoc('<iframe src=child.html></iframe>', {
+      baseHref: base, commentBridge: true, transportActivationGeneration: 'root-generation',
+    }), { runScripts: 'dangerously', pretendToBeVisual: true, url: base + 'root.html' });
+    try {
+      await new Promise<void>(resolve => dom.window.addEventListener('load', () => resolve()));
+      const frame = dom.window.document.querySelector('iframe')!;
+      const child = frame.contentWindow!;
+      Object.defineProperty(frame, 'clientWidth', { value: 100 });
+      Object.defineProperty(frame, 'clientHeight', { value: 100 });
+      frame.getBoundingClientRect = () => ({ x: 20, y: 100, width: 50, height: 50 } as DOMRect);
+      const sent: unknown[] = [], replies: Array<{ requestId?: string }> = [];
+      child.postMessage = message => sent.push(message);
+      dom.window.parent.postMessage = message => replies.push(message);
+      const dispatch = (data: unknown, source: Window = child) =>
+        dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data, source }));
+      const ready = (token = 'document-1') => dispatch({ type: 'od:url-selection-bridge-ready',
+        href: base + 'child.html', documentVersion: 'url:' + base + 'child.html', documentToken: token });
+      ready();
+      const id = 'frame:' + encodeURIComponent(JSON.stringify(['child.html', 'hero']));
+      const request = (requestId: string) => dispatch({ type: 'od:comment-active-target', elementId: id,
+        selector: '#hero', requestId, ...(kind === 'save' ? { validateForSave: true } : { locate: true }) }, dom.window.parent);
+      const response = (requestId: string, extra = {}) => dispatch({
+        type: 'od:comment-active-target-update', elementId: 'hero', selector: '#hero', requestedSelector: '#hero',
+        requestId, documentVersion: 'url:' + base + 'child.html', documentToken: 'document-1',
+        position: { x: 10, y: 20, width: 30, height: 40 }, ...extra });
+      sent.length = 0; replies.length = 0;
+      request('success');
+      expect(sent).toContainEqual(expect.objectContaining({ requestId: 'success',
+        ...(kind === 'save' ? { validateForSave: true } : { locate: true }) }));
+      response('success');
+      expect(replies).toContainEqual(expect.objectContaining({ requestId: 'success', elementId: id,
+        documentVersion: 'srcdoc:root-generation', requestedSelector: '#hero',
+        position: { x: 25, y: 110, width: 15, height: 20 } }));
+      replies.length = 0;
+      response('success');
+      expect(replies).toEqual([]);
+      request('missing');
+      response('missing', { type: 'od:comment-location-missing' });
+      expect(replies).toContainEqual(expect.objectContaining({ type: 'od:comment-location-missing',
+        requestId: 'missing', documentVersion: 'srcdoc:root-generation' }));
+      replies.length = 0;
+      request('reload');
+      frame.dispatchEvent(new dom.window.Event('load'));
+      ready('document-2');
+      response('reload');
+      expect(replies.filter((item: { requestId?: string }) => item.requestId)).toEqual([]);
+      ready();
+      request('wrong-version');
+      response('wrong-version', { documentVersion: 'url:wrong' });
+      expect(replies.filter((item: { requestId?: string }) => item.requestId)).toEqual([]);
+      request('wrong-token');
+      response('wrong-token', { documentToken: 'departed-document' });
+      expect(replies.filter(item => item.requestId)).toEqual([]);
+      request('invalid-position');
+      response('invalid-position', { position: { x: '10', y: 20, width: 30, height: 40 } });
+      expect(replies.filter(item => item.requestId)).toEqual([]);
+      if (kind === 'save') {
+        request('wrong-selector');
+        response('wrong-selector', { requestedSelector: '#other' });
+        expect(replies.filter((item: { requestId?: string }) => item.requestId)).toEqual([]);
+      }
+      request('src-change');
+      frame.setAttribute('src', 'other.html');
+      response('src-change');
+      expect(replies.filter((item: { requestId?: string }) => item.requestId)).toEqual([]);
+    } finally { await Promise.resolve(); dom.window.close(); }
   });
 });
