@@ -10,6 +10,7 @@ import {
 	type TouchpointSdk,
 	TouchpointUpdateQueue,
 } from "@open-design/contracts";
+import { randomUUID } from "../utils/uuid";
 
 export type WebTouchpointContent = {
 	id: string;
@@ -728,7 +729,7 @@ export function webTouchpointContext(
 		: undefined;
 	if (!locale) return undefined;
 	return Object.freeze({
-		instanceId: crypto.randomUUID(),
+		instanceId: randomUUID(),
 		contentVersionId: touchpoint.id,
 		placementKey: touchpoint.placementKey,
 		locale,

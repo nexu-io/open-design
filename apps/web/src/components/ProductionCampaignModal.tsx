@@ -43,6 +43,7 @@ import {
 } from "./TestCampaignModal";
 import type { TestCampaignPlacement, TestDecision } from "./TestCampaignModal";
 import styles from "./TestCampaignModal.module.css";
+import { randomUUID } from "../utils/uuid";
 const PLACEMENT = "opend.home.campaign-modal";
 export const PRODUCTION_ACTION_TELEMETRY_TIMEOUT_MS = 3_000;
 const supportedCapabilities = new Set(["close", "static-action"]);
@@ -147,7 +148,7 @@ export async function dispatchProductionCampaignAction(
 				touchpointDecisionId: decision.touchpointDecisionId,
 				activityId: decision.activityId,
 				placementKey: decision.placementKey,
-				eventId: crypto.randomUUID(),
+				eventId: randomUUID(),
 				kind: "click",
 			}),
 		});

@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useI18n } from '../i18n';
+import { randomUUID } from '../utils/uuid';
 import { InviteDialog } from './InviteDialog';
 import { Toast } from './Toast';
 import styles from './HomeInviteSurface.module.css';
@@ -18,7 +19,7 @@ const OPEN_INVITE = 'od:workspace-invite-open';
 export function HomeInviteTrigger({ context, signedOut = false }: { context: WorkspaceCollabContext | null; signedOut?: boolean }) {
   const { t } = useI18n();
   const analytics = useAnalytics();
-  const [surfaceId] = useState(() => crypto.randomUUID());
+  const [surfaceId] = useState(() => randomUUID());
   if (!signedOut && (!context || !context.permissions.canInviteMembers || context.memberStatus !== 'active' || context.lifecycleState !== 'active')) return null;
   return <Button className={styles.trigger} onClick={() => { trackWorkspaceJourneyClick(analytics.track, { page_name: 'home', area: 'home_invite_header', element: 'invite_teammates', entry_from: 'home_header', surface_instance_id: surfaceId, ...workspaceAnalyticsDimensions(context) }); window.dispatchEvent(new CustomEvent(OPEN_INVITE, { detail: signedOut ? { signedOut: true } : { workspaceId: context?.workspaceId, workspaceMemberId: context?.workspaceMemberId } })); }}><InvitePersonIcon /> {t('homeInvite.invite')}</Button>;
 }
