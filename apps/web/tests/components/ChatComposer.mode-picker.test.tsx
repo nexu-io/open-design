@@ -11,13 +11,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('ChatComposer fixed Design mode', () => {
-  it('does not expose a session-mode picker in project chat', async () => {
+describe('ChatComposer project mode picker (restored)', () => {
+  it('exposes a session-mode picker in project chat', async () => {
+    const onSessionModeChange = vi.fn();
     render(
       <ChatComposer
         projectId="project-1"
         projectFiles={[]}
         streaming={false}
+        sessionMode="design"
+        onSessionModeChange={onSessionModeChange}
         onEnsureProject={async () => 'project-1'}
         onSend={vi.fn()}
         onStop={vi.fn()}
@@ -25,7 +28,6 @@ describe('ChatComposer fixed Design mode', () => {
     );
     await flushMounts();
 
-    expect(screen.queryByTestId('composer-mode-trigger')).toBeNull();
-    expect(screen.queryByTestId('composer-mode-clear')).toBeNull();
+    expect(screen.getByTestId('composer-mode-trigger')).toBeTruthy();
   });
 });

@@ -1263,7 +1263,7 @@
  * 稿子给每一枚都写明了「不联动谁」。
  */
 .term {
-  --chat-terminal-ink: #a3a3a3;
+  /* `--chat-terminal-ink` lives in the seam (ChatRoot, both scopes); consumed here. */
   /* Command output gets the same treatment as thinking: readable by default,
      bounded only when it is genuinely huge. */
   max-height: min(40vh, 520px);

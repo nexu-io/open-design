@@ -852,9 +852,8 @@ export function trackChatPanelClick(
   send(track, 'ui_click', props);
 }
 
-// Dormant with `ComposerModePicker` (see that file's header): both composers
-// have dropped the mode chip, so nothing calls this today. Kept so the picker
-// can be restored in one step — do NOT delete it as dead code.
+// Fires from `ComposerModePicker` in both composers (Home hero foot-right and
+// project chat footer). Kept next to the other composer click trackers.
 export function trackComposerSessionModeClick(
   track: Track,
   props: ComposerSessionModeClickProps,

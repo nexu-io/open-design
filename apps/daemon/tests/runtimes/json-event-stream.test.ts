@@ -38,6 +38,26 @@ test('opencode json stream emits text and usage events', () => {
   ]);
 });
 
+test('opencode json stream emits reasoning as thinking deltas', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  handler.feed(
+    '{"type":"reasoning","sessionID":"ses-1","part":{"type":"reasoning","text":"The header is the target."}}\n' +
+    '{"type":"text","sessionID":"ses-1","part":{"type":"text","text":"Shrunk the header."}}\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'thinking_delta', delta: 'The header is the target.' },
+    { type: 'text_delta', delta: 'Shrunk the header.' },
+  ]);
+});
+
+test('opencode json stream ignores an empty reasoning part instead of opening a blank thinking row', () => {
+  const { events, handler } = collectEvents('opencode');
+  handler.feed('{"type":"reasoning","sessionID":"ses-1","part":{"type":"reasoning","text":""}}\n');
+  assert.deepEqual(events, []);
+});
+
 test('opencode step_start surfaces the session id as the status sessionId (capture-style resume handle)', () => {
   const { events, handler } = collectEvents('opencode');
   handler.feed('{"type":"step_start","sessionID":"ses_4af9c2","part":{"type":"step-start"}}\n');

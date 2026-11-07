@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
-import { isAbsolute } from "node:path";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import path, { isAbsolute } from "node:path";
 
 import { SidecarFactory } from "@open-design/sidecar";
 import {
@@ -34,6 +36,20 @@ export interface PlanMcpDaemonBootstrapOptions {
   daemonReachable: boolean;
   env: NodeJS.ProcessEnv;
   explicitDaemonUrl: boolean;
+  /**
+   * Launcher for this same `od` build, used when no packaged bootstrap command
+   * is registered. This is what lets a source checkout start its own headless
+   * daemon instead of telling the user to open the app.
+   */
+  selfBootstrap?: McpSelfBootstrapPlan;
+}
+
+export interface McpSelfBootstrapPlan {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  /** The URL the spawned daemon will bind, so the caller can poll it directly. */
+  targetUrl?: string;
 }
 
 export function planMcpDaemonBootstrap(
@@ -47,6 +63,14 @@ export function planMcpDaemonBootstrap(
   }
   const command = options.env.OD_MCP_BOOTSTRAP_COMMAND;
   if (command == null || command.length === 0) {
+    if (options.selfBootstrap) {
+      return {
+        action: "spawn",
+        args: [...options.selfBootstrap.args],
+        command: options.selfBootstrap.command,
+        env: bootstrapChildEnv(options.env, options.selfBootstrap.env),
+      };
+    }
     return { action: "none", reason: "bootstrap-unavailable" };
   }
   if (!isAbsolute(command)) {
@@ -56,13 +80,69 @@ export function planMcpDaemonBootstrap(
   if (args == null || !args.includes("--headless")) {
     return { action: "none", reason: "invalid-bootstrap-args" };
   }
-  const env = { ...options.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.OD_DAEMON_URL;
-  for (const key of Object.keys(env)) {
-    if (key.startsWith("OD_SIDECAR_")) delete env[key];
+  return {
+    action: "spawn",
+    args,
+    command,
+    env: bootstrapChildEnv(options.env),
+  };
+}
+
+function bootstrapChildEnv(
+  env: NodeJS.ProcessEnv,
+  extra: Record<string, string> = {},
+): NodeJS.ProcessEnv {
+  const next = { ...env, ...extra };
+  delete next.ELECTRON_RUN_AS_NODE;
+  delete next.OD_DAEMON_URL;
+  for (const key of Object.keys(next)) {
+    if (key.startsWith("OD_SIDECAR_")) delete next[key];
   }
-  return { action: "spawn", args, command, env };
+  return next;
+}
+
+export interface ResolveMcpDataDirOptions {
+  flagDir?: string | null;
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+  exists?: (candidate: string) => boolean;
+}
+
+/**
+ * Pick the daemon data root for a self-bootstrapped MCP daemon.
+ *
+ * Order: `--data-dir`, `OD_DATA_DIR`, the nearest ancestor `.od` that already
+ * holds an `app.sqlite`, then `<cwd>/.od`. The walk-up is what makes `od mcp`
+ * launched from a project folder reuse the daemon data the app already wrote,
+ * instead of starting empty beside it.
+ */
+export function resolveMcpDataDir(
+  options: ResolveMcpDataDirOptions = {},
+): string {
+  const env = options.env ?? process.env;
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const exists = options.exists ?? existsSync;
+  const flag = (options.flagDir ?? "").trim();
+  if (flag.length > 0) return path.resolve(cwd, expandHome(flag));
+  const configured = (env.OD_DATA_DIR ?? "").trim();
+  if (configured.length > 0) return path.resolve(cwd, expandHome(configured));
+  let current = cwd;
+  for (;;) {
+    const candidate = path.join(current, ".od");
+    if (exists(path.join(candidate, "app.sqlite"))) return candidate;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return path.join(cwd, ".od");
+}
+
+function expandHome(value: string): string {
+  const home = homedir();
+  return value
+    .replace(/^~(?=$|[\\/])/, home)
+    .replace(/^\$HOME(?=$|[\\/])/, home)
+    .replace(/^\$\{HOME\}(?=$|[\\/])/, home);
 }
 
 interface EnsureMcpDaemonUrlOptions {
@@ -81,6 +161,8 @@ interface EnsureMcpDaemonUrlOptions {
     timeoutMs?: number;
   }) => Promise<string>;
   sleep?: (milliseconds: number) => Promise<void>;
+  /** Launcher for this same `od` build when no packaged bootstrap is registered. */
+  selfBootstrap?: McpSelfBootstrapPlan;
   spawnBootstrap?: (plan: Extract<
     McpDaemonBootstrapPlan,
     { action: "spawn" }
@@ -158,18 +240,28 @@ export async function ensureMcpDaemonUrl(
 
   let daemonUrl: string | null = registeredBootstrapTarget
     ? await discoverTargetDaemonUrl(env, 800)
-    : await resolveDaemonUrl({
-        allowLegacyDefault: false,
-        env,
-        flagUrl,
-        timeoutMs: 800,
-      });
+    : await (async () => {
+        try {
+          return await resolveDaemonUrl({
+            allowLegacyDefault: false,
+            env,
+            flagUrl,
+            timeoutMs: 800,
+          });
+        } catch {
+          // Nothing registered yet. A self-bootstrap plan can still come up;
+          // an explicit URL or packaged launcher is handled above.
+          return null;
+        }
+      })();
   const daemonReachable =
     daemonUrl != null && await probeDaemon(daemonUrl);
+  const selfBootstrap = options.selfBootstrap ?? null;
   const plan = planMcpDaemonBootstrap({
     daemonReachable,
     env,
     explicitDaemonUrl,
+    ...(selfBootstrap ? { selfBootstrap } : {}),
   });
   if (plan.action === "none") {
     if (daemonUrl != null && (daemonReachable || explicitDaemonUrl)) return daemonUrl;
@@ -179,22 +271,36 @@ export async function ensureMcpDaemonUrl(
   }
 
   await spawnBootstrap(plan);
+  const selfTarget = selfBootstrap?.targetUrl ?? null;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(DEFAULT_BOOTSTRAP_POLL_MS);
-    daemonUrl = registeredBootstrapTarget
+    daemonUrl = selfTarget ?? (registeredBootstrapTarget
       ? await discoverTargetDaemonUrl(env, 300)
-      : await resolveDaemonUrl({
-          allowLegacyDefault: false,
-          env,
-          flagUrl: null,
-          timeoutMs: 300,
-        });
+      : await resolveRegisteredUrl(resolveDaemonUrl, env, flagUrl));
     if (daemonUrl != null && await probeDaemon(daemonUrl)) return daemonUrl;
   }
   throw new Error(
     `OpenDesign was launched headlessly but its daemon did not become ready within ${timeoutMs}ms.`,
   );
+}
+
+async function resolveRegisteredUrl(
+  resolveDaemonUrl: NonNullable<EnsureMcpDaemonUrlOptions["resolveDaemonUrl"]>,
+  env: NodeJS.ProcessEnv,
+  flagUrl: string | null,
+): Promise<string | null> {
+  try {
+    return await resolveDaemonUrl({
+      allowLegacyDefault: false,
+      env,
+      flagUrl,
+      timeoutMs: 300,
+    });
+  } catch {
+    // Nothing is registered yet; the caller's deadline decides when to give up.
+    return null;
+  }
 }
 
 async function ensureManagedMcpDaemonUrl(

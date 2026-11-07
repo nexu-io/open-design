@@ -29,7 +29,16 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
 const turn = (value: ChatMessage, streaming = false) => (
   <I18nProvider initial="en"><AssistantMessage message={value} streaming={streaming} projectId="clock-project" /></I18nProvider>
 );
-const clocks = (container: HTMLElement) => [...container.querySelectorAll('[data-testid="chat-foldable-elapsed"]')].map(el => el.textContent);
+// Only the run-level clocks. An execution shell now stays open after the turn
+// ends, so its nested thought/todo foldables contribute their own elapsed
+// markers to the same testid; those belong to the inner row, not to a Run.
+const clocks = (container: HTMLElement) =>
+  [...container.querySelectorAll('[data-testid="chat-foldable-elapsed"]')]
+    .filter((el) => {
+      const details = el.closest('details');
+      return Boolean(details) && !details?.parentElement?.closest('details');
+    })
+    .map(el => el.textContent);
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 

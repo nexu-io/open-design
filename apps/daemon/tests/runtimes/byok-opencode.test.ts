@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
@@ -10,60 +9,8 @@ import {
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 
 describe('byok-opencode runtime config', () => {
-  it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
-    agentCapabilities.delete('byok-opencode');
-    expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
-    expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
-      '--dangerously-skip-permissions': 'skipPermissions',
-      '--auto': 'autoApprove',
-      '--dir': 'workspaceDir',
-      '--pure': 'pure',
-      '--variant': 'variant',
-      '--standalone': 'standalone',
-    });
-    expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
-      'run',
-      '--format',
-      'json',
-    ]);
-
-    agentCapabilities.set('byok-opencode', { skipPermissions: true });
-    try {
-      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' })).toEqual([
-        'run',
-        '--format',
-        'json',
-        '--dangerously-skip-permissions',
-        '-m',
-        'open-design-byok/gpt-5.5',
-      ]);
-    } finally {
-      agentCapabilities.delete('byok-opencode');
-    }
-  });
-
-  it('pins the workspace with --dir on OpenCode 1.x and with the spawn cwd on 2.x', () => {
-    agentCapabilities.set('byok-opencode', {
-      skipPermissions: true, autoApprove: false, workspaceDir: true, pure: true, variant: true, standalone: false,
-    });
-    try {
-      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' }, { cwd: '/projects/p1' })).toEqual([
-        'run', '--format', 'json',
-        '--dir', '/projects/p1',
-        '--dangerously-skip-permissions',
-        '-m', 'open-design-byok/gpt-5.5',
-      ]);
-      agentCapabilities.set('byok-opencode', {
-        skipPermissions: false, autoApprove: true, workspaceDir: false, pure: false, variant: false, standalone: true,
-      });
-      expect(byokOpenCodeAgentDef.buildArgs('', [], [], { model: 'gpt-5.5' }, { cwd: '/projects/p1' })).toEqual([
-        'run', '--format', 'json',
-        '--auto', '--standalone',
-        '-m', 'open-design-byok/gpt-5.5',
-      ]);
-    } finally {
-      agentCapabilities.delete('byok-opencode');
-    }
+  it('defaults to the SDK transport', () => {
+    expect((byokOpenCodeAgentDef as { transport?: string }).transport).toBe('sdk');
   });
 
   it.each(['openai', 'anthropic', 'google', 'azure', 'ollama', 'senseaudio', 'aihubmix'] as const)(

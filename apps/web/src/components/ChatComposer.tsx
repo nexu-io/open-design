@@ -26,12 +26,14 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
   trackComposerBarClick,
+  trackComposerSessionModeClick,
   trackContextLinkResult,
   trackDesignToolboxClick,
   trackFigmaHelpModalSurfaceView,
   trackFileUploadResult,
   trackProjectReferenceModalSurfaceView,
 } from '../analytics/events';
+import { ComposerModePicker } from './ComposerModePicker';
 import type {
   ComposerBarClickProps,
   DesignToolboxClickProps,
@@ -335,6 +337,7 @@ interface Props {
   activeProjectFileName?: string | null;
   streaming: boolean;
   sessionMode?: ChatSessionMode;
+  onSessionModeChange?: (mode: ChatSessionMode) => void;
   sendDisabled?: boolean;
   // Read-only viewer of a team-shared project: makes the Lexical editor
   // non-editable (in addition to `sendDisabled` blocking the send action) so
@@ -608,6 +611,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       activeProjectFileName = null,
       streaming,
       sessionMode = 'design',
+      onSessionModeChange,
       sendDisabled = false,
       inputDisabled = false,
       initialDraft,
@@ -3900,12 +3904,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             {designSystemPicker}
             {leadingAccessory}
             <span className="composer-spacer" />
-            {/* No mode picker in the composer (2026-08-19, product): the row
-                carried a 规划/设计/提问 chooser that every run defaulted past.
-                `sessionMode` still flows through this component — a
-                conversation keeps its stored mode and next-step actions still
-                switch it (ChatPane.handleNextStepPromptAction) — it just is
-                not chosen from here any more. */}
+            <ComposerModePicker
+              mode={sessionMode}
+              onModeChange={(mode) => {
+                if (mode === sessionMode) return;
+                trackComposerSessionModeClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_composer',
+                  element: 'session_mode_toggle',
+                  mode_before: sessionMode === 'chat' ? 'ask' : sessionMode,
+                  mode_after: mode === 'chat' ? 'ask' : mode,
+                  ...(projectId ? { project_id: projectId } : {}),
+                });
+                onSessionModeChange?.(mode);
+              }}
+            />
             {footerAccessory}
             {showAdmissionPendingButton ? (
               <button

@@ -119,6 +119,7 @@ import type {
   ApiProtocol,
   ApiProtocolConfig,
   AppConfig,
+  AppTheme,
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
@@ -1551,8 +1552,10 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
-  // Accent only — the theme is a constant now that the app ships light-only.
+  // Last persisted appearance (theme + accent): closing Settings without a
+  // newer autosave rolls the document back to these.
   const lastSavedAppearanceRef = useRef({
+    theme: initial.theme,
     accentColor: resolveAccentColor(initial.accentColor),
   });
 
@@ -1568,9 +1571,10 @@ export function SettingsDialog({
 
   useEffect(() => {
     lastSavedAppearanceRef.current = {
+      theme: initial.theme,
       accentColor: resolveAccentColor(initial.accentColor),
     };
-  }, [initial.accentColor]);
+  }, [initial.accentColor, initial.theme]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -3374,6 +3378,7 @@ export function SettingsDialog({
             committedClearedByokProviderKeyRef.current = null;
           }
           lastSavedAppearanceRef.current = {
+            theme: persistedSnapshot.theme,
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
           };
           // If a newer edit landed while the request was in flight,
@@ -3931,10 +3936,9 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    // The theme setting is gone (the app ships light-only), so `appearance` has
-    // no copy of its own. It survives only as a legacy deep-link token that
-    // `normalizeSettingsSection` folds into General, so this entry can never be
-    // the active header — it exists to keep the Record exhaustive.
+    // `appearance` is a legacy deep-link token that `normalizeSettingsSection`
+    // folds into General (the theme picker lives there now), so this entry can
+    // never be the active header — it exists to keep the Record exhaustive.
     appearance: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     critiqueTheater: {
       title: t('critiqueTheater.settingsNav'),
@@ -6013,6 +6017,27 @@ export function SettingsDialog({
                           {LOCALE_LABEL[code]} · {code}
                         </option>
                       ))}
+                    </select>
+                    <Icon name="chevron-down" size={14} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-field">
+                  <span className="settings-general-label">{t('settings.theme')}</span>
+                  <label className="settings-general-select">
+                    <select
+                      value={cfg.theme ?? 'light'}
+                      aria-label={t('settings.theme')}
+                      onChange={(event) => {
+                        const next = event.target.value as AppTheme;
+                        setCfg((prev) => ({ ...prev, theme: next }));
+                      }}
+                    >
+                      <option value="light">{t('settings.themeLight')}</option>
+                      <option value="dark">{t('settings.themeDark')}</option>
+                      <option value="system">{t('settings.themeSystem')}</option>
                     </select>
                     <Icon name="chevron-down" size={14} />
                   </label>

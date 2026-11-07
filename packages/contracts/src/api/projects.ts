@@ -720,6 +720,12 @@ export interface UpdateProjectLocationsRequest {
   locations: Array<{ id?: string; name?: string; path: string }>;
 }
 
+export interface ProjectOutputs {
+  designs?: string;
+  plans?: string;
+  store?: string;
+}
+
 export interface ProjectManifest {
   schemaVersion: 1;
   id: string;
@@ -728,6 +734,7 @@ export interface ProjectManifest {
   updatedAt: number;
   skillId?: string | null;
   designSystemId?: string | null;
+  outputs?: ProjectOutputs;
 }
 
 export interface ScanProjectLocationsResponse {
@@ -764,6 +771,16 @@ export interface ReplaceProjectWorkingDirResponse {
   project: Project;
   baseDir: string;
   entryFile: string | null;
+}
+
+export interface ProjectOutputsResponse {
+  projectId: string;
+  outputs: ProjectOutputs;
+  manifestPath: string;
+}
+
+export interface UpdateProjectOutputsRequest {
+  outputs: ProjectOutputs;
 }
 
 export interface ConversationsResponse {

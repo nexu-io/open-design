@@ -2,10 +2,13 @@
 //
 //   - testProviderConnection: posts a tiny "Reply with only: ok" request to
 //     a BYOK API endpoint and reports a categorized result.
-//   - testAgentConnection: spawns a Local CLI adapter with the same prompt,
-//     drives the existing stream parser through a collector sink, and treats
-//     assistant text as proof that the CLI can run unless the text is an
-//     explicit model-selection error.
+//   - testAgentConnection: for CLI runtimes, spawns a Local CLI adapter with
+//     the same prompt, drives the existing stream parser through a collector
+//     sink, and treats assistant text as proof that the CLI can run unless
+//     the text is an explicit model-selection error. For SDK-transport
+//     runtimes (the opencode family) there is no binary to resolve or spawn:
+//     the test boots the in-process SDK host and reads the model catalog,
+//     reporting `transport: sdk` instead of a CLI version.
 //
 // Both functions persist nothing — no project, no chat record, no
 // media-config write. The intent is to give Settings a definite "your
@@ -99,11 +102,6 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
-import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
-import {
-  shouldUseOpenCodePureFlag,
-  withOpenCodeWorkspaceEnv,
-} from './runtimes/opencode-permissions.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2103,41 +2101,134 @@ function extractOpenCodeTextFromRawStdout(stdout: string): string {
   return text.join('');
 }
 
-// The argv is negotiated from `opencode run --help` (see
-// `runtimes/opencode-permissions.ts`), so a rejected flag means a build the
-// daemon does not know yet — on either side — rather than simply an old CLI.
-const OPENCODE_OUTDATED_CLI_DETAIL =
-  'OpenCode rejected the command-line flags this connection test uses, so the installed OpenCode build and this OpenDesign build do not match. Update whichever is older (`npm i -g opencode-ai@latest` for OpenCode), then retry the OpenCode connection test.';
-const OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH = 240;
-
-function openCodeOutdatedCliDetail(output: string): string | null {
-  const value = output.toLowerCase();
-  const looksLikeOpenCodeHelp =
-    /\bopencode\b/u.test(value) && /\b(?:usage|commands|options):/u.test(value);
-  // `unrecognized flag` is the OpenCode 2.x wording.
-  const looksLikeUnsupportedArgs =
-    /\b(?:unknown option|unknown argument|unexpected argument|unrecognized option|unrecognized flag|invalid option|incompatible opencode args)\b/u.test(value);
-
-  return looksLikeOpenCodeHelp || looksLikeUnsupportedArgs
-    ? OPENCODE_OUTDATED_CLI_DETAIL
-    : null;
-}
-
-function openCodeProviderConnectivityDetail(output: string): string | null {
-  for (const rawLine of output.split(/\r?\n/u)) {
-    const line = rawLine.replace(/\s+/gu, ' ').trim();
-    if (!line) continue;
-    const match = /\bCannot connect to API:[^"'`\r\n]+/iu.exec(line) ??
-      /\bUnable to connect[^"'`\r\n]+/iu.exec(line) ??
-      /\bWas there a typo in the url or port\?/iu.exec(line);
-    if (!match) continue;
-    const detail = match[0].trim();
-    const boundedDetail = detail.length > OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH
-      ? `${detail.slice(0, OPENCODE_PROVIDER_CONNECTIVITY_DETAIL_MAX_LENGTH - 3).trimEnd()}...`
-      : detail;
-    return `OpenCode reported a provider connectivity failure before the connection test timed out: ${boundedDetail}`;
+// Native SDK connection test for `transport: 'sdk'` runtimes (the opencode
+// family). There is no CLI binary to resolve, `--version`-probe, or spawn:
+// proof of life is booting the in-process host (`OpenCode.create()`) and
+// reading the model catalog (`host.model.list()`). Diagnostics carry no
+// `binaryPath` / `binaryVersion` — the detail line names the SDK transport
+// instead, so Settings never implies a CLI version was checked.
+async function testSdkAgentConnection(
+  def: RuntimeAgentDef,
+  model: string,
+  start: number,
+): Promise<ConnectionTestResponse> {
+  let host: { close: () => Promise<void> } | null = null;
+  try {
+    const { OpenCode } = await import('@opencode/sdk');
+    // Same credential database as the shared run host: without it the probe
+    // catalog is the unauthenticated free-model subset and every real user
+    // model reports `not_found_model`.
+    const { resolveOpenCodeCliDatabasePath } = await import('./runtimes/opencode-sdk-host.js');
+    const databasePath = resolveOpenCodeCliDatabasePath();
+    host = (await OpenCode.create(
+      databasePath ? { database: { path: databasePath } } : undefined,
+    )) as unknown as {
+      close: () => Promise<void>;
+    };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn(`[test:agent] ${def.name} → sdk_host_failed: ${redactSecrets(detail)}`);
+    return {
+      ok: false,
+      kind: 'agent_spawn_failed',
+      latencyMs: Date.now() - start,
+      model,
+      agentName: def.name,
+      detail: `OpenCode SDK host failed to start (transport: sdk, in-process via @opencode/sdk): ${redactSecrets(detail) || 'unknown error'}`,
+      diagnostics: { phase: 'connection_smoke_test' },
+    };
   }
-  return null;
+  try {
+    const sdk = host as unknown as {
+      model: { list: () => Promise<{ data?: unknown }> };
+    };
+    const outcome = await Promise.race([
+      sdk
+        .model.list()
+        .then(
+          (listed) => ({ kind: 'listed' as const, listed }),
+          (error: unknown) => ({ kind: 'failed' as const, error }),
+        ),
+      delay(agentTimeoutMs()).then(() => ({ kind: 'timeout' as const })),
+    ]);
+    if (outcome.kind === 'timeout') {
+      console.warn(`[test:agent] ${def.name} → timeout (sdk model list)`);
+      return {
+        ok: false,
+        kind: 'timeout',
+        latencyMs: Date.now() - start,
+        model,
+        agentName: def.name,
+        diagnostics: { phase: 'connection_smoke_test' },
+      };
+    }
+    if (outcome.kind === 'failed') {
+      const detail =
+        outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
+      const redacted = redactSecrets(detail) || 'unknown error';
+      // Preserve #4999: provider connectivity failures surface as
+      // `upstream_unavailable` (not a generic spawn failure) so Settings
+      // can tell "no network / bad URL" from "SDK host broken".
+      if (/cannot connect to api|unable to connect|typo in the url or port|able to access the url/i.test(detail)) {
+        console.warn(`[test:agent] ${def.name} → sdk_upstream_unavailable: ${redacted}`);
+        return {
+          ok: false,
+          kind: 'upstream_unavailable',
+          latencyMs: Date.now() - start,
+          model,
+          agentName: def.name,
+          detail: `OpenCode reported a provider connectivity failure (transport: sdk): ${redacted}`,
+          diagnostics: { phase: 'connection_smoke_test', stderrTail: redacted },
+        };
+      }
+      console.warn(`[test:agent] ${def.name} → sdk_model_list_failed: ${redacted}`);
+      return {
+        ok: false,
+        kind: 'agent_spawn_failed',
+        latencyMs: Date.now() - start,
+        model,
+        agentName: def.name,
+        detail: `OpenCode SDK model catalog read failed (transport: sdk): ${redacted}`,
+        diagnostics: { phase: 'connection_smoke_test' },
+      };
+    }
+    const catalog = Array.isArray(outcome.listed?.data) ? outcome.listed.data : [];
+    // SDK entries carry bare `id`s (`beam-free` + `providerID`); compose the
+    // daemon `provider/model` identity the picker and `resolveModelForAgent`
+    // use, otherwise every qualified pick reports a false `not_found_model`.
+    const { sdkModelId } = await import('./runtimes/defs/opencode.js');
+    const ids = catalog
+      .map((entry) => sdkModelId((entry ?? {}) as { id?: unknown; providerID?: unknown; modelID?: unknown }))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (model !== 'default' && !ids.includes(model)) {
+      console.warn(`[test:agent] ${def.name} → not_found_model: ${model}`);
+      return {
+        ok: false,
+        kind: 'not_found_model',
+        latencyMs: Date.now() - start,
+        model,
+        agentName: def.name,
+        detail: `Model "${model}" is not in the OpenCode SDK model catalog (transport: sdk).`,
+        diagnostics: { phase: 'connection_smoke_test' },
+      };
+    }
+    console.log(
+      `[test:agent] ${def.name} → ok via SDK in ${((Date.now() - start) / 1000).toFixed(1)}s`,
+    );
+    return {
+      ok: true,
+      kind: 'success',
+      latencyMs: Date.now() - start,
+      model,
+      agentName: def.name,
+      detail: `OpenCode SDK host reachable (transport: sdk, in-process via @opencode/sdk, no CLI binary required): ${ids.length} models listed.`,
+      diagnostics: { phase: 'connection_smoke_test' },
+    };
+  } finally {
+    await host?.close().catch(() => {
+      // Best-effort host teardown; the test verdict is already decided.
+    });
+  }
 }
 
 interface AgentSpawnHandle {
@@ -2269,38 +2360,6 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-function runQuietCommand(command: string, args: string[], cwd: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      stdio: 'ignore',
-      shell: false,
-    });
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      if (code === 0 && !signal) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} ${args.join(' ')} exited with ${signal || code}`));
-    });
-  });
-}
-
-async function prepareOpenCodeConnectionTestCwd(tempDir: string): Promise<void> {
-  await fsp.writeFile(
-    path.join(tempDir, 'README.md'),
-    'OpenDesign OpenCode connection test.\n',
-    'utf8',
-  );
-  try {
-    await runQuietCommand('git', ['init'], tempDir);
-  } catch {
-    // OpenCode responds more reliably inside a git worktree, but a missing or
-    // misconfigured local git binary must not sink an otherwise healthy CLI.
-  }
-}
-
 async function resolveConnectionTestModelForAgent(
   def: RuntimeAgentDef,
   requestedModel: string | null,
@@ -2351,6 +2410,12 @@ async function testAgentConnectionInternal(
       diagnostics: { phase: 'binary_resolution' },
     };
   }
+  // SDK-transport runtimes (the opencode family) have no CLI binary to
+  // resolve, version-probe, or spawn. Branch before binary resolution so the
+  // test reports the SDK transport instead of a CLI version.
+  if (def.transport === 'sdk') {
+    return testSdkAgentConnection(def, model, start);
+  }
   const configuredAgentEnv = agentCliEnvForAgent(
     validateAgentCliEnv(input.agentCliEnv),
     input.agentId,
@@ -2387,30 +2452,8 @@ async function testAgentConnectionInternal(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
-  let providerConnectivitySettled = false;
-  let resolveProviderConnectivity!: (value: {
-    kind: 'providerConnectivity';
-    detail: string;
-  }) => void;
-  const providerConnectivity = new Promise<{
-    kind: 'providerConnectivity';
-    detail: string;
-  }>((resolve) => {
-    resolveProviderConnectivity = resolve;
-  });
   const sendAgentEvent = (event: string, payload: unknown) => {
     sink.send(event, payload);
-    if (
-      providerConnectivitySettled ||
-      input.agentId !== 'opencode' ||
-      event !== 'stderr'
-    ) {
-      return;
-    }
-    const detail = openCodeProviderConnectivityDetail(sink.getStderrTail());
-    if (!detail) return;
-    providerConnectivitySettled = true;
-    resolveProviderConnectivity({ kind: 'providerConnectivity', detail });
   };
 
   // Phase tracker for structured diagnostics (#2248). The order matches
@@ -2542,36 +2585,9 @@ async function testAgentConnectionInternal(
     };
   };
 
-  const resultFromProviderConnectivity = (
-    providerDetail: string,
-    exit?: { code: number | null; signal: NodeJS.Signals | null },
-  ): ConnectionTestResponse => {
-    const detail = redactSecrets(providerDetail);
-    console.warn(`[test:agent] ${def.name} → upstream_unavailable: ${detail}`);
-    return {
-      ok: false,
-      kind: 'upstream_unavailable',
-      latencyMs: Date.now() - start,
-      model,
-      agentName: def.name,
-      detail,
-      diagnostics: buildDiagnostics({
-        phase: 'connection_smoke_test',
-        ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}),
-      }),
-    };
-  };
-
   const resultFromCancellation = (
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
-    if (kind === 'timeout' && input.agentId === 'opencode') {
-      const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
-      const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
-      if (providerDetail) {
-        return resultFromProviderConnectivity(providerDetail);
-      }
-    }
     const latencyMs = Date.now() - start;
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
@@ -2585,16 +2601,6 @@ async function testAgentConnectionInternal(
   };
 
   try {
-    if (input.agentId === 'opencode' || input.agentId === 'mimo') {
-      if (input.agentId === 'opencode') await prepareOpenCodeConnectionTestCwd(tempDir);
-    }
-    if (input.agentId === 'opencode' || input.agentId === 'byok-opencode') {
-      // The OpenCode argv is generation-aware (1.x `--dir`/`--pure` vs 2.x
-      // `--auto`/`--standalone`), decided by the `run --help` capability map.
-      // A daemon that never served `/api/agents` has not probed it yet, so a
-      // cold map would send the 1.x flags to a 2.x CLI and fail at spawn.
-      await ensureDetectedRuntimeCapabilities(input.agentId, configuredAgentEnv);
-    }
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
@@ -2604,14 +2610,7 @@ async function testAgentConnectionInternal(
         [],
         {
           model: input.model ?? null,
-          // The remembered OpenCode variant catalog belongs to the detected
-          // binary. A one-off OPENCODE_BIN connection test may point at a
-          // different version, so keep the base model but do not forward a
-          // variant that was never probed on that executable.
-          reasoning:
-            input.agentId === 'opencode' && executableResolution.configuredOverridePath
-              ? null
-              : input.reasoning ?? null,
+          reasoning: input.reasoning ?? null,
           serviceTier: input.serviceTier ?? null,
         },
         {
@@ -2623,16 +2622,13 @@ async function testAgentConnectionInternal(
         },
       );
       // Connection tests should validate the adapter's core CLI path, not
-      // fail on unrelated user-installed OpenCode plugins. `opencode run
-      // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment. OpenCode 2.x removed the flag;
-      // MiMo keeps the 1.x surface.
-      const isolateWithPure = input.agentId === 'mimo'
-        || (input.agentId === 'opencode' && shouldUseOpenCodePureFlag('opencode'));
+      // fail on unrelated user-installed plugins. MiMo keeps the 1.x
+      // `--pure` isolation flag.
+      const isolateWithPure = input.agentId === 'mimo';
       if (isolateWithPure && !args.includes('--pure')) {
         args.push('--pure');
       }
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
+      if (input.agentId === 'mimo' && !args.includes('--title')) {
         args.push('--title', 'Connection test');
       }
     } catch (err) {
@@ -2676,14 +2672,10 @@ async function testAgentConnectionInternal(
           model,
         ).catch(() => null)
       : null;
-    const env = withOpenCodeWorkspaceEnv(
-      applyAgentLaunchEnv({
-        ...baseEnv,
-        ...(mmdRouteLaunchEnv || {}),
-      }, executableResolution),
-      tempDir,
-      input.agentId,
-    );
+    const env = applyAgentLaunchEnv({
+      ...baseEnv,
+      ...(mmdRouteLaunchEnv || {}),
+    }, executableResolution);
     model = await resolveConnectionTestModelForAgent(
       def,
       model,
@@ -2790,17 +2782,6 @@ async function testAgentConnectionInternal(
       // close event before all stdout chunks have reached the parser.
       await delay(AGENT_STDOUT_DRAIN_MS);
       const latencyMs = Date.now() - start;
-      if (input.agentId === 'opencode') {
-        const providerDetail = openCodeProviderConnectivityDetail(
-          `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`,
-        );
-        if (providerDetail) {
-          return resultFromProviderConnectivity(providerDetail, {
-            code: winner.code,
-            signal: winner.signal,
-          });
-        }
-      }
       const buffered = sink.getText().trim();
       const claudeResult = input.agentId === 'claude'
         ? parseClaudeResultFrame(sink.getRawStdout())
@@ -2859,7 +2840,7 @@ async function testAgentConnectionInternal(
       }
       const stderrTail = sink.getStderrTail().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && exitedCleanly && rawStdoutTail) {
+      if (input.agentId === 'mimo' && exitedCleanly && rawStdoutTail) {
         const recoveredText = extractOpenCodeTextFromRawStdout(rawStdoutTail).trim();
         if (recoveredText) {
           return resultFromAgentText(recoveredText, {
@@ -2952,27 +2933,6 @@ async function testAgentConnectionInternal(
       ]
         .filter(Boolean)
         .join(' · ');
-      if (input.agentId === 'opencode') {
-        const outdatedCliDetail = openCodeOutdatedCliDetail(rawDetail);
-        if (outdatedCliDetail) {
-          console.warn(
-            `[test:agent] ${def.name} → outdated_cli: ${redactSecrets(rawDetail)}`,
-          );
-          return {
-            ok: false,
-            kind: 'agent_spawn_failed',
-            latencyMs,
-            model,
-            agentName: def.name,
-            detail: outdatedCliDetail,
-            diagnostics: buildDiagnostics({
-              phase: 'spawn',
-              exitCode: winner.code,
-              signal: winner.signal,
-            }),
-          };
-        }
-      }
       const auth = classifyAgentAuthFailure(input.agentId, rawDetail);
       if (auth?.status === 'missing') {
         console.warn(`[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`);
@@ -3080,7 +3040,6 @@ async function testAgentConnectionInternal(
       sink.result,
       childExit,
       cancellationPromise,
-      providerConnectivity,
     ]);
 
     if (winner.kind === 'text') {
@@ -3088,13 +3047,9 @@ async function testAgentConnectionInternal(
         streamError,
         childExit,
         cancellationPromise,
-        providerConnectivity,
       ]);
       if (completion.kind === 'streamError') {
         return resultFromStreamError(completion.error);
-      }
-      if (completion.kind === 'providerConnectivity') {
-        return resultFromProviderConnectivity(completion.detail);
       }
       if (completion.kind === 'timeout' || completion.kind === 'aborted') {
         return resultFromCancellation(completion.kind);
@@ -3103,9 +3058,6 @@ async function testAgentConnectionInternal(
     }
     if (winner.kind === 'streamError') {
       return resultFromStreamError(winner.error);
-    }
-    if (winner.kind === 'providerConnectivity') {
-      return resultFromProviderConnectivity(winner.detail);
     }
     if (winner.kind === 'timeout' || winner.kind === 'aborted') {
       return resultFromCancellation(winner.kind);

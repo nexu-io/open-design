@@ -1,86 +1,12 @@
 import { DEFAULT_MODEL_OPTION } from './shared.js';
-import {
-  OPENCODE_PERMISSION_CAPABILITY,
-  appendOpenCodePermissionBypass,
-  appendOpenCodeStandalone,
-  appendOpenCodeWorkspaceDir,
-  openCodeModelArgs,
-} from '../opencode-permissions.js';
-import { execAgentFile } from '../invocation.js';
-import { resolveOpenCodeCliGeneration } from '../opencode-permissions.js';
-import { getRememberedLiveModels } from '../models.js';
+import { acquireSharedSdkHost, releaseSharedSdkHost } from '../opencode-sdk-host.js';
 import type { RuntimeAgentDef, RuntimeEnv, RuntimeModelOption } from '../types.js';
 
+// Bound for the SDK catalog read. The old CLI probe (`opencode models`)
+// needed 15s for the provider-registry round trip; the in-process host
+// answers from the same catalog without a spawn, so the budget is kept as
+// a hang guard rather than an expected cost.
 const OPENCODE_LIST_MODELS_TIMEOUT_MS = 15_000;
-// Models lists easily exceed the default 1MB buffer once every OpenRouter
-// model is included.
-const OPENCODE_LIST_MODELS_MAX_BUFFER = 8 * 1024 * 1024;
-
-// The OpenCode 2.x rejection of a flag the 1.x CLI accepted (and the 1.x
-// wording, in case an older build ever rejects one).
-const OPENCODE_UNRECOGNIZED_FLAG = /unrecognized flag|unknown option/iu;
-
-function isUnrecognizedFlagError(error: unknown): boolean {
-  const parts = [
-    error instanceof Error ? error.message : String(error),
-    String((error as { stderr?: unknown })?.stderr ?? ''),
-    String((error as { stdout?: unknown })?.stdout ?? ''),
-  ];
-  return OPENCODE_UNRECOGNIZED_FLAG.test(parts.join('\n'));
-}
-
-async function readOpenCodeModels(
-  resolvedBin: string,
-  env: RuntimeEnv,
-  args: string[],
-): Promise<RuntimeModelOption[] | null> {
-  const { stdout } = await execAgentFile(resolvedBin, args, {
-    env,
-    timeout: OPENCODE_LIST_MODELS_TIMEOUT_MS,
-    maxBuffer: OPENCODE_LIST_MODELS_MAX_BUFFER,
-  });
-  return parseOpenCodeModels(String(stdout));
-}
-
-/**
- * Discover models across both OpenCode generations. 1.x exposes per-model
- * variant metadata through `models --verbose`; 2.x removed the flag (the
- * command exits 1 with "Unrecognized flag") and only prints `provider/model`
- * per line, which `parseOpenCodeModels` already accepts. Only that rejection
- * earns a second spawn: a timeout or crash of the verbose listing says
- * nothing about the plain one and must not double the detection budget.
- * Real-world listings can take >8s (network round-trip to the provider
- * registry), hence the 15s budget shared with the other agent defs.
- *
- * Once the `run --help` probe has classified this binary as v2 (cached on
- * `agentCapabilities` by detection), skip the verbose attempt entirely and
- * go straight to the plain listing. Blindly trying `--verbose` first costs a
- * guaranteed-failing spawn on EVERY detection — visible as a recurring
- * `cli process failed ... Unrecognized flag: --verbose` ERROR in opencode.log
- * — for a flag the probe already told us does not exist.
- */
-async function fetchOpenCodeModels(
-  resolvedBin: string,
-  env: RuntimeEnv,
-): Promise<RuntimeModelOption[] | null> {
-  if (resolveOpenCodeCliGeneration('opencode') === 'v2') {
-    try {
-      return await readOpenCodeModels(resolvedBin, env, ['models']);
-    } catch {
-      return null;
-    }
-  }
-  try {
-    return await readOpenCodeModels(resolvedBin, env, ['models', '--verbose']);
-  } catch (error) {
-    if (!isUnrecognizedFlagError(error)) return null;
-  }
-  try {
-    return await readOpenCodeModels(resolvedBin, env, ['models']);
-  } catch {
-    return null;
-  }
-}
 
 const OPENCODE_VARIANT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
 const OPENCODE_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._/:@-]*$/u;
@@ -90,6 +16,113 @@ function reasoningOptions(ids: readonly string[]): RuntimeModelOption[] {
     { id: 'default', label: 'Default' },
     ...ids.map((id) => ({ id, label: id })),
   ];
+}
+
+// Minimal structural view of the SDK `model.list()` entry
+// (`ModelInfo` in `@opencode/client`). Only the fields the daemon maps
+// are declared; everything else rides along untouched.
+interface OpenCodeSdkModelEntry {
+  id?: unknown;
+  providerID?: unknown;
+  modelID?: unknown;
+  variants?: unknown;
+}
+
+interface OpenCodeSdkModelListHost {
+  model: {
+    list: (input?: unknown) => Promise<{ data?: unknown }>;
+  };
+}
+
+function sdkVariantIds(entry: OpenCodeSdkModelEntry): string[] {
+  const variants = entry.variants;
+  if (!Array.isArray(variants)) return [];
+  const ids: string[] = [];
+  for (const variant of variants) {
+    const id = (variant as { id?: unknown } | null)?.id;
+    if (typeof id !== 'string' || !OPENCODE_VARIANT_ID.test(id)) continue;
+    if (id === 'default' || ids.includes(id)) continue;
+    ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Canonical daemon model id for one SDK catalog entry. The SDK reports the
+ * parts separately (`providerID` + `modelID`; `id` is often the bare model
+ * id), while the daemon's picker, remembered live models, and fallback ids
+ * all use the CLI-established `provider/model` form. Compose that form so
+ * the identity stays stable across the CLI→SDK migration; accept an `id`
+ * that already carries it.
+ */
+export function sdkModelId(entry: OpenCodeSdkModelEntry): string | null {
+  if (typeof entry.id === 'string' && OPENCODE_MODEL_ID.test(entry.id)) {
+    return entry.id;
+  }
+  if (typeof entry.providerID === 'string' && typeof entry.modelID === 'string') {
+    const composed = `${entry.providerID}/${entry.modelID}`;
+    if (OPENCODE_MODEL_ID.test(composed)) return composed;
+  }
+  return null;
+}
+
+/**
+ * Map the SDK `model.list()` catalog (`{ data: ModelInfo[] }`) onto the
+ * daemon's model options. Variant ids become reasoning options, mirroring
+ * what the old `models --verbose` CLI parse advertised. Returns null when
+ * the catalog carries no usable model so detection falls back to the static
+ * list instead of presenting a Default-only picker.
+ */
+export function mapOpenCodeSdkModels(data: unknown): RuntimeModelOption[] | null {
+  if (!Array.isArray(data)) return null;
+  const models: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>();
+  for (const raw of data) {
+    const entry = (raw ?? {}) as OpenCodeSdkModelEntry;
+    const id = sdkModelId(entry);
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const variantIds = sdkVariantIds(entry);
+    models.push({
+      id,
+      label: id,
+      ...(variantIds.length > 0
+        ? { reasoningOptions: reasoningOptions(variantIds) }
+        : {}),
+    });
+  }
+  return models.length > 1 ? models : null;
+}
+
+/**
+ * Discover models through the in-process SDK host (`host.model.list()`)
+ * instead of spawning `opencode models [--verbose]`. No CLI binary is
+ * resolved or executed; the `_resolvedBin` / `_env` parameters only preserve
+ * the `fetchModels` signature detection calls with. A host boot or catalog
+ * failure resolves to null so detection falls back to the static list.
+ */
+async function fetchOpenCodeModels(
+  _resolvedBin: string,
+  _env: RuntimeEnv,
+): Promise<RuntimeModelOption[] | null> {
+  let host: Awaited<ReturnType<typeof acquireSharedSdkHost>> | null = null;
+  try {
+    host = await acquireSharedSdkHost();
+    const listed = await Promise.race([
+      (host as unknown as OpenCodeSdkModelListHost).model.list(),
+      new Promise<null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), OPENCODE_LIST_MODELS_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]);
+    if (!listed || typeof listed !== 'object') return null;
+    return mapOpenCodeSdkModels((listed as { data?: unknown }).data);
+  } catch {
+    return null;
+  } finally {
+    if (host) await releaseSharedSdkHost();
+  }
 }
 
 const OPENCODE_FALLBACK_MODELS: RuntimeModelOption[] = [
@@ -114,141 +147,25 @@ const OPENCODE_FALLBACK_MODELS: RuntimeModelOption[] = [
   { id: 'google/gemini-2.5-pro', label: 'google/gemini-2.5-pro' },
 ];
 
-function parseVerboseModelMetadata(
-  lines: string[],
-  start: number,
-): { value: Record<string, unknown> | null; end: number } {
-  let buffer = '';
-  for (let index = start; index < lines.length; index += 1) {
-    buffer += `${lines[index]}\n`;
-    if (!lines[index]!.trimEnd().endsWith('}')) continue;
-    try {
-      const parsed = JSON.parse(buffer) as unknown;
-      return {
-        value: parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? parsed as Record<string, unknown>
-          : null,
-        end: index,
-      };
-    } catch {
-      // Nested objects close before the outer metadata object. Keep reading
-      // until the complete JSON value parses.
-    }
-  }
-  return { value: null, end: start - 1 };
-}
-
-/**
- * Parse `opencode models --verbose`, retaining each model's exact variant
- * names. Plain one-id-per-line output remains accepted as a compatibility
- * fallback, but only verbose metadata can advertise reasoning choices.
- */
-export function parseOpenCodeModels(stdout: string): RuntimeModelOption[] | null {
-  const lines = String(stdout || '').split('\n');
-  const models: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
-  const seen = new Set<string>();
-  for (let index = 0; index < lines.length; index += 1) {
-    const id = lines[index]!.trim();
-    if (!OPENCODE_MODEL_ID.test(id) || seen.has(id)) continue;
-    seen.add(id);
-    const next = lines[index + 1]?.trimStart();
-    const metadata = next?.startsWith('{')
-      ? parseVerboseModelMetadata(lines, index + 1)
-      : { value: null, end: index };
-    const variants = metadata.value?.['variants'];
-    const variantIds = variants && typeof variants === 'object' && !Array.isArray(variants)
-      ? Object.keys(variants).filter((variant) => OPENCODE_VARIANT_ID.test(variant))
-      : [];
-    models.push({
-      id,
-      label: id,
-      ...(variantIds.length > 0
-        ? { reasoningOptions: reasoningOptions(variantIds) }
-        : {}),
-    });
-    index = Math.max(index, metadata.end);
-  }
-  return models.length > 1 ? models : null;
-}
-
-function supportsOpenCodeVariant(
-  modelId: string | null | undefined,
-  variant: string | null | undefined,
-): variant is string {
-  if (!modelId || modelId === 'default' || !variant || variant === 'default') return false;
-  const live = getRememberedLiveModels('opencode').find((model) => model.id === modelId);
-  return Boolean(live?.reasoningOptions?.some((option) => option.id === variant));
-}
-
 export const opencodeAgentDef = {
     id: 'opencode',
     name: 'OpenCode',
-    bin: 'opencode-cli',
-    fallbackBins: ['opencode'],
+    // SDK-only transport: `opencode run --format json` spawning was removed.
+    // `bin` / `versionArgs` / `streamFormat` / `buildArgs` remain only because
+    // `RuntimeAgentDef` still requires them; they are not consulted on the
+    // SDK path (`opencode-sdk-host.ts` + `opencode-sdk-events.ts`).
+    bin: 'opencode',
     versionArgs: ['--version'],
-    ...OPENCODE_PERMISSION_CAPABILITY,
     fetchModels: fetchOpenCodeModels,
     fallbackModels: OPENCODE_FALLBACK_MODELS,
-    // OpenCode 1.18.x exposes provider/model-specific variants. Detection
-    // reads the exact live variant keys from `models --verbose`; 2.x has no
-    // CLI listing of variants, so none are advertised there. The fallback
-    // keeps Sol/Terra/Luna model ids usable during a catalog outage but does
-    // not guess their variants. Unknown model/variant pairs omit the variant
-    // rather than inventing a provider capability or preventing the base
-    // model from running.
-    //
-    // The argv is generation-aware (see `opencode-permissions.ts`): 1.x gets
-    // `--dangerously-skip-permissions --dir <cwd> [-m model --variant v]`,
-    // 2.x gets `--auto --standalone [-m model#v]`. Both generations read the
-    // prompt from stdin (`opencode run` with no message argv), which avoids
-    // Windows `spawn ENAMETOOLONG` while preserving OpenCode's structured
-    // stream. A literal `-` is parsed as a positional message by OpenCode
-    // 1.14.x and can surface as "Session not found".
-    buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
-      const args = [
-        'run',
-        '--format',
-        'json',
-      ];
-      appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
-      appendOpenCodeStandalone(args, 'opencode');
-      // Capture-style resume: OpenCode mints its own session id (reported on
-      // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
-      // daemon continues that session with `-s <id>` instead of re-sending the
-      // flattened transcript, so the first upstream call reuses the warm prefix
-      // cache. `-s` continues an EXISTING session (the create turn passes no id
-      // and we capture the one OpenCode generated), mirroring codex.
-      const resumeSessionId =
-        typeof runtimeContext.resumeSessionId === 'string' &&
-        runtimeContext.resumeSessionId.length > 0
-          ? runtimeContext.resumeSessionId
-          : null;
-      if (resumeSessionId) {
-        args.push('-s', resumeSessionId);
-      }
-      if (options.model && options.model !== 'default') {
-        const variant = supportsOpenCodeVariant(options.model, options.reasoning)
-          ? options.reasoning
-          : null;
-        args.push(...openCodeModelArgs(options.model, variant, 'opencode'));
-      }
-      return args;
+    // The SDK `model.list()` catalog carries each model's exact variant ids
+    // (`variants: [{ id, ... }]`), which become the advertised reasoning
+    // options. The fallback keeps Sol/Terra/Luna model ids usable during a
+    // catalog outage but does not guess their variants.
+    buildArgs: (_prompt, _imagePaths, _extraAllowedDirs, _options, _runtimeContext) => {
+      throw new Error('CLI removed, use SDK');
     },
-    promptViaStdin: true,
-    // OpenCode's CLI carries its own session across spawns: on a follow-up turn
-    // the daemon resumes the captured session id (`-s <id>`) instead of
-    // re-flattening the transcript. Capture-style — the resume handle is the
-    // `sessionID` captured from the stream, not a daemon-minted id.
-    resumesSessionViaCli: true,
-    capturesSessionIdFromStream: true,
     streamFormat: 'json-event-stream',
-    eventParser: 'opencode',
-    // OpenCode reads MCP servers from its layered config (global ~/.config
-    // /opencode/opencode.json + project opencode.json + OPENCODE_CONFIG
-    // + OPENCODE_CONFIG_CONTENT). The env-var form lets the daemon hand
-    // user-configured external MCP servers to a single `opencode run`
-    // invocation without polluting the user's saved config files. See
-    // <https://opencode.ai/docs/config> and issue #2142.
-    externalMcpInjection: 'opencode-env-content',
+    // Native SDK is the default and only transport for the opencode family.
+    transport: 'sdk' as const,
 } satisfies RuntimeAgentDef;

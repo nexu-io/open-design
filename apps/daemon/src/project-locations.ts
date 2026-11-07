@@ -11,6 +11,15 @@ export interface ProjectLocation extends ProjectLocationPrefs {
   builtIn?: boolean;
 }
 
+export interface ProjectOutputs {
+  /** Relative folder for design deliverables (e.g. `designs`). */
+  designs?: string;
+  /** Relative folder for plans / specs (e.g. `plans`). */
+  plans?: string;
+  /** Relative folder for binary store / assets (e.g. `store`). */
+  store?: string;
+}
+
 export interface ProjectManifest {
   schemaVersion: 1;
   id: string;
@@ -19,6 +28,44 @@ export interface ProjectManifest {
   updatedAt: number;
   skillId?: string | null;
   designSystemId?: string | null;
+  /** Agent-chosen output folders, relative to the project root. */
+  outputs?: ProjectOutputs;
+}
+
+const PROJECT_OUTPUT_DIR_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/;
+
+function normalizeOutputsDir(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim().replace(/\\/g, '/');
+  if (!trimmed) return undefined;
+  if (trimmed.includes('\0')) return undefined;
+  if (trimmed.startsWith('/') || /^[A-Za-z]:/.test(trimmed)) return undefined;
+  const parts = trimmed.split('/').filter(Boolean);
+  if (parts.length === 0) return undefined;
+  // Outputs must stay visible and inside the project: no hidden segments,
+  // no traversal, no absolute paths.
+  if (parts.some((p) => p === '.' || p === '..' || p.startsWith('.'))) return undefined;
+  const joined = parts.join('/');
+  if (!PROJECT_OUTPUT_DIR_PATTERN.test(joined)) return undefined;
+  return joined;
+}
+
+export function normalizeProjectOutputs(value: unknown): ProjectOutputs | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const obj = value as Record<string, unknown>;
+  const out: ProjectOutputs = {};
+  const designs = normalizeOutputsDir(obj.designs);
+  const plans = normalizeOutputsDir(obj.plans);
+  const store = normalizeOutputsDir(obj.store);
+  if (designs) out.designs = designs;
+  if (plans) out.plans = plans;
+  if (store) out.store = store;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export function isProjectManifestPath(name: unknown): boolean {
+  const normalized = String(name ?? '').replace(/\\/g, '/').split('/').filter(Boolean).join('/');
+  return normalized === PROJECT_MANIFEST_RELATIVE_PATH.replace(/\\/g, '/');
 }
 
 export function builtInProjectLocation(projectsDir: string): ProjectLocation {
@@ -85,6 +132,40 @@ export async function writeProjectManifest(projectDir: string, manifest: Project
   await writeFile(file, JSON.stringify(manifest, null, 2), 'utf8');
 }
 
+export async function upsertProjectManifestOutputs(
+  projectDir: string,
+  projectId: string,
+  projectName: string,
+  outputs: unknown,
+): Promise<ProjectManifest> {
+  const normalized = normalizeProjectOutputs(outputs);
+  if (!normalized) throw new Error('no valid outputs: provide designs, plans, or store as relative folders');
+  const existing = await readProjectManifest(projectDir);
+  const now = Date.now();
+  const next: ProjectManifest = {
+    schemaVersion: 1,
+    id: existing?.id ?? projectId,
+    name: existing?.name ?? projectName,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    skillId: existing?.skillId ?? null,
+    designSystemId: existing?.designSystemId ?? null,
+    outputs: { ...(existing?.outputs ?? {}), ...normalized },
+  };
+  await writeProjectManifest(projectDir, next);
+  return next;
+}
+
+export function resolveProjectOutputs(projectDir: string, manifest: ProjectManifest | null): Required<ProjectOutputs> {
+  void projectDir;
+  const outputs = manifest?.outputs ?? {};
+  return {
+    designs: outputs.designs ?? 'designs',
+    plans: outputs.plans ?? 'plans',
+    store: outputs.store ?? 'store',
+  };
+}
+
 export async function readProjectManifest(projectDir: string): Promise<ProjectManifest | null> {
   try {
     const raw = await readFile(manifestPath(projectDir), 'utf8');
@@ -96,6 +177,7 @@ export async function readProjectManifest(projectDir: string): Promise<ProjectMa
     if (typeof obj.name !== 'string' || !obj.name.trim()) return null;
     const createdAt = typeof obj.createdAt === 'number' && Number.isFinite(obj.createdAt) ? obj.createdAt : Date.now();
     const updatedAt = typeof obj.updatedAt === 'number' && Number.isFinite(obj.updatedAt) ? obj.updatedAt : createdAt;
+    const normalizedOutputs = normalizeProjectOutputs(obj.outputs);
     return {
       schemaVersion: 1,
       id: obj.id,
@@ -104,6 +186,7 @@ export async function readProjectManifest(projectDir: string): Promise<ProjectMa
       updatedAt,
       skillId: typeof obj.skillId === 'string' ? obj.skillId : null,
       designSystemId: typeof obj.designSystemId === 'string' ? obj.designSystemId : null,
+      ...(normalizedOutputs ? { outputs: normalizedOutputs } : {}),
     };
   } catch (err: unknown) {
     const e = err as { code?: string; name?: string };

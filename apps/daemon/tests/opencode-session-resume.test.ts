@@ -1,27 +1,145 @@
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
-// End-to-end coverage for OpenCode native (capture-style) session resume.
+// End-to-end coverage for OpenCode SDK (capture-style) session resume.
 //
-// OpenCode mints its own session id and stamps it on every stream event as
-// `sessionID` (e.g. `ses_...`). The daemon must:
-//   1. capture that id from the stream and persist it (NOT the daemon-minted
-//      `newSessionId`, which OpenCode ignores),
-//   2. continue it next turn with `opencode run -s <id>` and send ONLY the new
-//      turn (no flattened-history resend), and
-//   3. when the session store is gone (`Session not found`), clear the stale
-//      handle, surface a retryable error, and let the next turn start fresh
-//      re-seeded with the full transcript.
+// The daemon hosts OpenCode in-process: a create turn mints an SDK session
+// (`sessions.create` in the project directory) and captures its id; a
+// follow-up turn continues it with `sessions.prompt` against the SAME id and
+// sends only the new turn (no flattened-history resend). When the SDK
+// session is gone (`Session not found`), the daemon clears the stale handle,
+// transparently re-runs the same turn on a fresh session, and the user sees
+// a succeeded turn — no error, no turn 3.
 //
-// On origin/main OpenCode is not `resumesSessionViaCli`, so it always runs
-// plain `run` and re-pays the whole transcript — turn-2 here would carry no
-// `-s` and would include the prior reply, going red.
+// The SDK host module is mocked at the daemon boundary: the mock records
+// `create` / `prompt` calls (directory + session id + text) and replays
+// CLI-shaped stream frames through the real `sdkEventToStreamRecords` +
+// parser path, so this exercises resume wiring without a model backend.
+// Background memory extraction shares the same mock; chat calls are
+// distinguished by the project working dir (test projects are created as
+// `opencode_resume_*`, memory runs in the daemon project root).
+vi.mock('../src/runtimes/opencode-sdk-host.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/runtimes/opencode-sdk-host.js')>();
+  const calls: {
+    creates: Array<{ directory: string; init: unknown; sessionID: string }>;
+    prompts: Array<{ sessionID: string; text: string }>;
+  } = { creates: [], prompts: [] };
+  // Session ids minted for chat (project-dir) sessions, in creation order.
+  let created: string[] = [];
+  // Prompt failures to inject, consumed in order.
+  let promptFailures: Array<{ matchSession?: string; error: Error }> = [];
+  // Frame sets scripted per chat prompt call, consumed in order.
+  let queuedFrames: unknown[][] = [];
+  // Live frames pending delivery to subscriber(s).
+  let liveFrames: unknown[] = [];
+  // Ids minted for chat sessions (project-dir creates).
+  let chatSessionIds: string[] = [];
+  const SESSION = 'ses_e2e0000resume0000';
+
+  const framesFor = (sessionID: string, text: string): unknown[] => [
+    { type: 'step_start', sessionID },
+    { type: 'text', sessionID, part: { type: 'text', text } },
+    {
+      type: 'step_finish',
+      sessionID,
+      part: { type: 'step-finish', tokens: { input: 8, output: 2, reasoning: 0, cache: { read: 0, write: 0 } } },
+    },
+    { type: 'session.idle', data: { sessionID } },
+  ];
+
+  const isChatDir = (directory: string): boolean => directory.includes('opencode_resume_');
+
+  async function* fakeSubscribe(): AsyncIterable<unknown> {
+    for (;;) {
+      const next = liveFrames.shift();
+      if (next !== undefined) {
+        yield next;
+        continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  return {
+    ...original,
+    __mockState: { calls, SESSION },
+    __mockReset(state?: { sessions?: string[] }) {
+      calls.creates.length = 0;
+      calls.prompts.length = 0;
+      created = [...(state?.sessions ?? [SESSION])];
+      promptFailures = [];
+      queuedFrames = [];
+      liveFrames = [];
+      chatSessionIds = [];
+    },
+    __mockQueueFrames(frames: unknown[][]) {
+      queuedFrames = frames;
+    },
+    __mockFailPromptOnce(failure: { matchSession?: string; error: Error }) {
+      promptFailures.push(failure);
+    },
+    __mockFramesFor: framesFor,
+    async acquireSharedSdkHost() {
+      return { __fakeSdkHost: true };
+    },
+    async releaseSharedSdkHost() {},
+    async createSdkSession(_host: unknown, directory: string, init?: unknown) {
+      let sessionID: string;
+      if (isChatDir(directory)) {
+        sessionID = created.shift() ?? `ses_e2e_${randomUUID().slice(0, 8)}`;
+        chatSessionIds.push(sessionID);
+      } else {
+        // Background (memory) session: never consumes scripted chat ids.
+        sessionID = `ses_e2e_mem_${randomUUID().slice(0, 8)}`;
+      }
+      calls.creates.push({ directory, init, sessionID });
+      return sessionID;
+    },
+    subscribeSdkEvents() {
+      return fakeSubscribe();
+    },
+    async promptSdkSession(_host: unknown, input: { sessionID: string; text: string }) {
+      const failure = promptFailures[0];
+      if (failure && (!failure.matchSession || failure.matchSession === input.sessionID)) {
+        promptFailures.shift();
+        throw failure.error;
+      }
+      calls.prompts.push({ sessionID: input.sessionID, text: input.text });
+      // Replay this call's scripted frames (chat sessions only — background
+      // memory prompts get a default reply and never consume the script),
+      // always terminated by `session.idle` so the subscriber loop completes.
+      const isChat = chatSessionIds.includes(input.sessionID);
+      const frames = isChat && queuedFrames.length > 0
+        ? queuedFrames.shift()!
+        : framesFor(input.sessionID, isChat ? 'Reply.' : 'Memory reply.');
+      liveFrames.push(...frames);
+      if (!frames.some((frame) => (frame as { type?: unknown })?.type === 'session.idle')) {
+        liveFrames.push({ type: 'session.idle', data: { sessionID: input.sessionID } });
+      }
+      return { id: `inbox_${randomUUID().slice(0, 8)}` };
+    },
+  };
+});
+
+const mockHost = await import('../src/runtimes/opencode-sdk-host.js') as unknown as {
+  __mockState: {
+    calls: {
+      creates: Array<{ directory: string; init: unknown; sessionID: string }>;
+      prompts: Array<{ sessionID: string; text: string }>;
+    };
+    SESSION: string;
+  };
+  __mockReset: (state?: { sessions?: string[] }) => void;
+  __mockQueueFrames: (frames: unknown[][]) => void;
+  __mockFailPromptOnce: (failure: { matchSession?: string; error: Error }) => void;
+  __mockFramesFor: (sessionID: string, text: string) => unknown[];
+};
 
 type StartedServer = {
   url: string;
@@ -38,20 +156,33 @@ type RunStatus = {
   resumable?: boolean;
 };
 
-type RunInvocation = { argv: string[]; stdin: string; cwd: string };
 type RunEvent = { event: string; data: unknown };
 
-const SESSION = 'ses_e2e0000resume0000';
 const FIRST_REPLY_SENTINEL = 'FIRST_TURN_REPLY_SENTINEL_0c7d2';
+
+/** Calls belonging to chat turns (project working dir), not background memory. */
+function chatCalls() {
+  const { calls } = mockHost.__mockState;
+  const chatSessionIds = new Set(
+    calls.creates.filter((c) => c.directory.includes('opencode_resume_')).map((c) => c.sessionID),
+  );
+  return {
+    creates: calls.creates.filter((c) => c.directory.includes('opencode_resume_')),
+    prompts: calls.prompts.filter((p) => chatSessionIds.has(p.sessionID)),
+  };
+}
 
 describe('opencode native session resume', () => {
   const originalEnv = snapshotEnv();
   let started: StartedServer | null = null;
   let binDir: string | null = null;
 
+  const SESSION = mockHost.__mockState.SESSION;
+
   beforeEach(() => {
     // These fixtures exercise session transport with plain replies, not OD Next state.
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+    mockHost.__mockReset();
   });
 
   afterEach(async () => {
@@ -66,8 +197,10 @@ describe('opencode native session resume', () => {
   });
 
   it('captures the session id on turn 1 and resumes it (without resending history) on turn 2', async () => {
+    // Version-only binary: the SDK path never spawns it, but availability
+    // probing still resolves the configured executable.
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-opencode-resume-bin-'));
-    const { bin, logPath } = await writeCapturingOpencode(binDir, 'opencode-capture');
+    const bin = await writeVersionOnlyOpencode(binDir, 'opencode-capture');
 
     clearTelemetryEnv();
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
@@ -79,35 +212,41 @@ describe('opencode native session resume', () => {
     });
 
     const conversationId = await createConversation(started.url);
+    const projectId = conversationId.split('::')[0]!;
 
+    mockHost.__mockQueueFrames([
+      mockHost.__mockFramesFor(SESSION, FIRST_REPLY_SENTINEL),
+      mockHost.__mockFramesFor(SESSION, 'Resumed reply.'),
+    ]);
     const turn1 = await sendRunAndWait(started.url, conversationId, 'first user request');
     expect(turn1.status).toBe('succeeded');
 
     const turn2 = await sendRunAndWait(started.url, conversationId, 'second user request please');
     expect(turn2.status).toBe('succeeded');
 
-    const runs = await readChatTurnRuns(logPath, conversationId);
-    expect(runs).toHaveLength(2);
-    const [create, resume] = runs as [RunInvocation, RunInvocation];
+    const { creates, prompts } = chatCalls();
+    // One SDK session created (turn 1); turn 2 reuses it via `prompt`.
+    expect(creates).toHaveLength(1);
+    expect(prompts).toHaveLength(2);
 
-    // Turn 1 is a fresh `run` — no `-s`, no leaked id.
-    expect(create.argv[0]).toBe('run');
-    expect(create.argv).not.toContain('-s');
-    expect(create.argv).not.toContain(SESSION);
+    // The session lives in the project working dir.
+    expect(creates[0]!.directory).toContain(projectId);
 
-    // Turn 2 continues the captured session id.
-    expect(resume.argv).toContain('-s');
-    expect(resume.argv[resume.argv.indexOf('-s') + 1]).toBe(SESSION);
+    // Both turns address the captured session id.
+    expect(prompts[0]!.sessionID).toBe(SESSION);
+    expect(prompts[1]!.sessionID).toBe(SESSION);
 
     // The turn-2 prompt must NOT re-send turn-1's assistant reply (history is
     // carried by the resumed session), but must carry the new user message.
-    expect(resume.stdin).not.toContain(FIRST_REPLY_SENTINEL);
-    expect(resume.stdin).toContain('second user request please');
+    expect(prompts[1]!.text).not.toContain(FIRST_REPLY_SENTINEL);
+    expect(prompts[1]!.text).toContain('second user request please');
+    // And turn 1 carried the first request.
+    expect(prompts[0]!.text).toContain('first user request');
   });
 
   it('transparently auto-reseeds within the same turn on `Session not found`', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-opencode-fallback-bin-'));
-    const { bin, logPath } = await writeMissingSessionOpencode(binDir, 'opencode-fallback');
+    const bin = await writeVersionOnlyOpencode(binDir, 'opencode-fallback');
 
     clearTelemetryEnv();
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
@@ -119,15 +258,26 @@ describe('opencode native session resume', () => {
     });
 
     const conversationId = await createConversation(started.url);
+    const FRESH = 'ses_e2e0000fresh0001';
 
+    // Turn 1 creates normally.
+    mockHost.__mockQueueFrames([mockHost.__mockFramesFor(SESSION, 'Created reply.')]);
     const turn1 = await sendRunAndWait(started.url, conversationId, 'first request');
     expect(turn1.status).toBe('succeeded');
 
-    // Turn 2 resumes, but the session store is gone (OpenCode prints "Session
-    // not found" and exits 0, exercising the exit-0 resume-failure path). The
-    // daemon must NOT surface an error: it clears the dead handle and
-    // TRANSPARENTLY re-runs the same turn as a fresh `run` (full transcript),
-    // within this one run. The user sees a succeeded turn — no turn 3.
+    // Turn 2 resumes, but the SDK session is gone: the first `prompt` with
+    // the stored id throws `Session not found`. The daemon must NOT surface
+    // an error: it clears the dead handle and TRANSPARENTLY re-runs the same
+    // turn on a fresh session (full transcript) within this one run.
+    // (The SQLite-stored handle from turn 1 survives the call-log reset.)
+    mockHost.__mockReset({ sessions: [FRESH] });
+    mockHost.__mockFailPromptOnce({
+      matchSession: SESSION,
+      error: new Error('Session not found'),
+    });
+    // The stored handle (SESSION) comes from SQLite, not the mock: re-queue
+    // fresh-session frames for the reseed prompt.
+    mockHost.__mockQueueFrames([mockHost.__mockFramesFor(FRESH, 'Reseeded reply.')]);
     const turn2 = await sendRunAndWait(started.url, conversationId, 'second request');
     expect(turn2.status).toBe('succeeded');
 
@@ -139,22 +289,17 @@ describe('opencode native session resume', () => {
       stale_session_cleared: true,
     })).toBe(true);
 
-    // The create, then turn 2's dead resume (`-s`), then the in-turn fresh reseed.
-    const runs = await readChatTurnRuns(logPath, conversationId);
-    expect(runs).toHaveLength(3);
-    const [create, deadResume, fresh] = runs as [
-      RunInvocation,
-      RunInvocation,
-      RunInvocation,
-    ];
-    expect(create.argv).not.toContain('-s');
-    expect(deadResume.argv).toContain('-s');
-    expect(fresh.argv).not.toContain('-s');
+    const { creates, prompts } = chatCalls();
+    // The dead resume attempt is not recorded as a prompt (it threw before
+    // recording); a fresh session was created and prompted once — all within
+    // turn 2. (Turn 1's calls were cleared by the reset above.)
+    expect(creates.map((c) => c.sessionID)).toEqual([FRESH]);
+    expect(prompts.map((p) => p.sessionID)).toEqual([FRESH]);
   });
 
-  it('starts fresh on turn 2 when turn 1 succeeds without a captured session id', async () => {
-    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-opencode-nohandle-bin-'));
-    const { bin, logPath } = await writeNoHandleOpencode(binDir, 'opencode-nohandle');
+  it('creates the SDK session in the project working dir on turn 1', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-opencode-dir-bin-'));
+    const bin = await writeVersionOnlyOpencode(binDir, 'opencode-dir');
 
     clearTelemetryEnv();
     started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
@@ -166,125 +311,36 @@ describe('opencode native session resume', () => {
     });
 
     const conversationId = await createConversation(started.url);
+    const projectId = conversationId.split('::')[0]!;
 
-    expect((await sendRunAndWait(started.url, conversationId, 'first request')).status)
-      .toBe('succeeded');
-    expect((await sendRunAndWait(started.url, conversationId, 'second request')).status)
-      .toBe('succeeded');
+    mockHost.__mockQueueFrames([mockHost.__mockFramesFor(SESSION, 'Reply.')]);
+    const turn1 = await sendRunAndWait(started.url, conversationId, 'first request');
+    expect(turn1.status).toBe('succeeded');
 
-    const runs = await readChatTurnRuns(logPath, conversationId);
-    expect(runs).toHaveLength(2);
-    const [turn1, turn2] = runs as [RunInvocation, RunInvocation];
-    expect(turn1.argv).not.toContain('-s');
-    expect(turn2.argv[0]).toBe('run');
-    expect(turn2.argv).not.toContain('-s');
+    const { creates, prompts } = chatCalls();
+    expect(creates).toHaveLength(1);
+    // `createSdkSession(location.directory=cwd)`: the SDK session is rooted
+    // at the project working dir, which carries the project id.
+    expect(creates[0]!.directory).toContain(projectId);
+    expect(prompts[0]!.sessionID).toBe(SESSION);
   });
 });
 
-// Fake opencode CLI: stamps a FIXED session id on a create turn and echoes it
-// on a resume turn. Logs `{argv, stdin}` per invocation.
-async function writeCapturingOpencode(
-  dir: string,
-  name: string,
-): Promise<{ bin: string; logPath: string }> {
+// Version-only fake opencode CLI: the SDK path never spawns it, but agent
+// availability probing still resolves the configured executable.
+async function writeVersionOnlyOpencode(dir: string, name: string): Promise<string> {
   const bin = path.join(dir, name);
-  const logPath = path.join(dir, `${name}-log.jsonl`);
   await writeFile(
     bin,
-    fakeOpencodeSource({
-      logPath,
-      body: `
-  const isResume = argv.includes('-s');
-  const text = isResume ? 'Resumed reply.' : ${JSON.stringify(FIRST_REPLY_SENTINEL)};
-  console.log(JSON.stringify({ type: 'step_start', sessionID: SESSION, part: { type: 'step-start' } }));
-  console.log(JSON.stringify({ type: 'text', sessionID: SESSION, part: { type: 'text', text } }));
-  console.log(JSON.stringify({ type: 'step_finish', sessionID: SESSION, part: { type: 'step-finish', tokens: { input: 11, output: 7, reasoning: 0, cache: { read: 5, write: 2 } }, cost: 0 } }));
-  setTimeout(() => process.exit(0), 10);`,
-    }),
+    `#!/usr/bin/env node\n` +
+      `const argv = process.argv.slice(2);\n` +
+      `if (argv.includes('--version')) { console.log('1.17.7'); process.exit(0); }\n` +
+      `if (argv[0] === 'models') { console.log('anthropic/claude-sonnet-4-5'); process.exit(0); }\n` +
+      `process.exit(0);\n`,
     'utf8',
   );
   await chmod(bin, 0o755);
-  return { bin, logPath };
-}
-
-// Fake opencode CLI: succeeds on a create turn (persisting the session), but a
-// resume turn (`-s`) prints "Session not found" to stderr and exits 0 — the
-// real OpenCode behavior for a missing session.
-async function writeMissingSessionOpencode(
-  dir: string,
-  name: string,
-): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, name);
-  const logPath = path.join(dir, `${name}-log.jsonl`);
-  await writeFile(
-    bin,
-    fakeOpencodeSource({
-      logPath,
-      body: `
-  if (argv.includes('-s')) {
-    process.stderr.write('Error: Session not found\\n');
-    setTimeout(() => process.exit(0), 10);
-    return;
-  }
-  console.log(JSON.stringify({ type: 'step_start', sessionID: SESSION, part: { type: 'step-start' } }));
-  console.log(JSON.stringify({ type: 'text', sessionID: SESSION, part: { type: 'text', text: 'Created reply.' } }));
-  console.log(JSON.stringify({ type: 'step_finish', sessionID: SESSION, part: { type: 'step-finish', tokens: { input: 8, output: 2, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0 } }));
-  setTimeout(() => process.exit(0), 10);`,
-    }),
-    'utf8',
-  );
-  await chmod(bin, 0o755);
-  return { bin, logPath };
-}
-
-// Fake opencode CLI: succeeds but never stamps `sessionID` on stream events.
-// Without a durable handle, the daemon must leave the next turn on fresh `run`.
-async function writeNoHandleOpencode(
-  dir: string,
-  name: string,
-): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, name);
-  const logPath = path.join(dir, `${name}-log.jsonl`);
-  await writeFile(
-    bin,
-    fakeOpencodeSource({
-      logPath,
-      body: `
-  console.log(JSON.stringify({ type: 'step_start', part: { type: 'step-start' } }));
-  console.log(JSON.stringify({ type: 'text', part: { type: 'text', text: 'Reply without session id.' } }));
-  console.log(JSON.stringify({ type: 'step_finish', part: { type: 'step-finish', tokens: { input: 8, output: 2, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0 } }));
-  setTimeout(() => process.exit(0), 10);`,
-    }),
-    'utf8',
-  );
-  await chmod(bin, 0o755);
-  return { bin, logPath };
-}
-
-function fakeOpencodeSource(opts: { logPath: string; body: string }): string {
-  return `#!/usr/bin/env node
-const fs = require('node:fs');
-const logPath = ${JSON.stringify(opts.logPath)};
-const SESSION = ${JSON.stringify(SESSION)};
-const argv = process.argv.slice(2);
-if (argv.includes('--version')) { console.log('1.17.7'); process.exit(0); }
-if (argv.includes('--help')) { console.log('opencode run [message..]'); process.exit(0); }
-if (argv[0] === 'models') { console.log('anthropic/claude-sonnet-4-5'); process.exit(0); }
-let stdin = '';
-let done = false;
-function finish() {
-  if (done) return; done = true;
-  try { fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd() }) + '\\n'); } catch {}
-  run();
-}
-function run() {${opts.body}
-}
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (d) => { stdin += d; });
-process.stdin.on('end', finish);
-process.stdin.on('error', finish);
-setTimeout(finish, 1500);
-`;
+  return bin;
 }
 
 function snapshotEnv(): Record<string, string | undefined> {
@@ -376,7 +432,7 @@ async function sendRunAndWait(
 
 async function waitForRun(url: string, runId: string): Promise<RunStatus> {
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 10_000) {
+  while (Date.now() - startedAt < 30_000) {
     const response = await fetch(`${url}/api/runs/${encodeURIComponent(runId)}`);
     expect(response.status).toBe(200);
     const run = (await response.json()) as RunStatus;
@@ -388,38 +444,10 @@ async function waitForRun(url: string, runId: string): Promise<RunStatus> {
   throw new Error(`run ${runId} did not finish`);
 }
 
-// Chat-turn `run` invocations for this conversation, in call order. OpenCode is
-// also used as the daemon's background memory-llm and for `models` probes;
-// those run from the repo root, so filter by the chat turn's cwd (the project
-// working dir, which contains the project id). OpenCode receives its cwd via
-// the spawn `cwd`, not an argv flag.
-async function readChatTurnRuns(
-  logPath: string,
-  encoded: string,
-): Promise<RunInvocation[]> {
-  const projectId = encoded.split('::')[0] ?? encoded;
-  let raw = '';
-  try {
-    raw = await readFile(logPath, 'utf8');
-  } catch {
-    return [];
-  }
-  return raw
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as RunInvocation)
-    .filter(
-      (rec) =>
-        rec.argv[0] === 'run' &&
-        typeof rec.cwd === 'string' &&
-        rec.cwd.includes(projectId),
-    );
-}
-
 async function readRunEvents(eventsLogPath: string): Promise<RunEvent[]> {
   let raw = '';
   try {
+    const { readFile } = await import('node:fs/promises');
     raw = await readFile(eventsLogPath, 'utf8');
   } catch {
     return [];

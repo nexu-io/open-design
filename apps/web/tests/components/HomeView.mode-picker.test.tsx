@@ -1,24 +1,20 @@
 // @vitest-environment jsdom
 //
-// Home's composer no longer mounts the session-mode picker chip.
+// Home's composer mounts the session-mode picker chip.
 //
-// The chip sat in the composer footer immediately left of the model switcher
-// and the send button: a mode glyph + the mode name (「设计」) + an × that
-// cleared it. The project composer already dropped it (2026-08-19, product —
-// see the comment at the mode-picker's old slot in `ChatComposer.tsx`, and
-// `ChatComposer.mode-picker-removal.test.tsx`); Home is the last surface that
-// still carried it, so this pins the same removal at the Home mount point.
+// The chip sits in the composer footer left of the model switcher: a mode
+// glyph + the mode name (「设计」) + an × that clears it back to the neutral
+// trigger. The project composer carries the same chip (see
+// `ChatComposer.mode-picker.test.tsx`); Home was the last surface to get it
+// back, and every Home request defaults to Design.
 //
-// The component itself (`ComposerModePicker`) stays in the tree as a dormant
-// part — see its file header. This spec is about the ENTRY, not the part:
-// nothing on Home may mount it.
-//
-// Two things are deliberately pinned alongside the removal, because the risk
-// here is removing more than was asked for:
-//   1. Home still submits `conversationMode: 'design'`. Design was always the
-//      app default; taking away the chip must change what the user SEES, not
-//      what the request DOES.
-//   2. The send button that sat directly right of the chip survives.
+// This spec pins the mount at the Home entry point, plus the payload half of
+// the pair:
+//   1. The chip renders (`composer-mode-trigger`).
+//   2. Home still submits `conversationMode: 'design'` by default — the chip
+//      changes what the user SEES, and picking another mode changes what the
+//      request DOES (both flow through `conversationMode`).
+//   3. The send button that sits right of the chip survives.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -72,24 +68,17 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
-describe('HomeView — composer session-mode picker', () => {
-  it('does not render the mode chip anywhere in the Home composer', async () => {
+describe('HomeView — composer session-mode picker (restored)', () => {
+  it('renders the mode chip in the Home composer', async () => {
     stubFetch();
     renderHome();
 
-    // The composer is really painted, so the negative assertions below cannot
-    // pass for the wrong reason (an empty render would satisfy them too).
+    // The composer is really painted, so the assertions below cannot
+    // pass for the wrong reason (an empty render would fail them too).
     await waitFor(() => expect(screen.getByTestId('home-hero-input')).toBeTruthy());
     expect(screen.getByTestId('home-hero-submit')).toBeTruthy();
 
-    expect(screen.queryByTestId('composer-mode-trigger')).toBeNull();
-    expect(screen.queryByTestId('composer-mode-clear')).toBeNull();
-    expect(screen.queryByTestId('composer-mode-menu')).toBeNull();
-    // The chip's own class, in case the test hooks ever move.
-    expect(document.querySelector('.composer-mode')).toBeNull();
-    // The label the chip rendered when Design was the selection.
-    expect(screen.queryByLabelText('Mode: Design')).toBeNull();
-    expect(screen.queryByLabelText('Choose a mode')).toBeNull();
+    expect(screen.getByTestId('composer-mode-trigger')).toBeTruthy();
   });
 
   it('still submits Design as the conversation mode', async () => {

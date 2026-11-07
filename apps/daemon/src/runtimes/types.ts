@@ -335,6 +335,11 @@ export type RuntimeAgentDef = {
   // still ingests stdio MCP servers at all versions — the existing behavior is
   // unchanged. See `agent-protocol/acp/stdio-mcp.ts` for the mechanism.
   acpStdioMcpRemovedInVersion?: string;
+  // Native SDK transport. The opencode family is SDK-only: OpenCode runs
+  // in-process via `@opencode/sdk` (`OpenCode.create()` +
+  // `sessions.create/prompt` + `events.subscribe()`). No `cli` option
+  // remains; `opencode run --format json` spawning was removed.
+  transport?: 'sdk';
 };
 
 export type DetectedAgent = Omit<
@@ -352,6 +357,7 @@ export type DetectedAgent = Omit<
   | 'maxPromptArgBytes'
   | 'encodeStdinPrompt'
   | 'env'
+  | 'transport'
   // Runtime timeout fields are spawn-time-only hints consumed by chat-run
   // watchdogs. They are not part of the public `/api/agents`
   // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so

@@ -3381,6 +3381,13 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   --composer-att-ink: #dbdbdb;
   --att-fade: color-mix(in srgb, #fff 6%, var(--bg));
 }
+/* System dark (no data-theme attr): same pair as the explicit dark rule above. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .composer-att {
+    --composer-att-ink: #dbdbdb;
+    --att-fade: color-mix(in srgb, #fff 6%, var(--bg));
+  }
+}
 .composer-att::-webkit-scrollbar {
   display: none;
 }

@@ -100,19 +100,18 @@ describe('HomeView media composer options', () => {
     expect(homeTemplateTrigger()).toBeTruthy();
   });
 
-  it('defaults to Design mode with no mode picker in the composer', async () => {
+  it('renders the mode chip and still defaults to Design', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
     await screen.findByTestId('home-hero-input');
 
-    // 设计 is the app default, and since the mode chip left the Home composer
-    // (2026-09-08, product) it is also the only mode Home submits — nothing on
-    // this surface can move it any more. Absence is pinned in full by
-    // `HomeView.mode-picker-removed.test.tsx`; this spec keeps the payload half
-    // of the pair, so a picker coming back cannot quietly change what Home runs.
-    expect(screen.queryByTestId('composer-mode-trigger')).toBeNull();
+    // 设计 is the app default and the chip is mounted in the Home composer,
+    // so the requested mode is stated on screen. Switching the chip moves
+    // `conversationMode` with it — the payload half is pinned below, and the
+    // mount itself is pinned in full by `HomeView.mode-picker.test.tsx`.
+    expect(screen.getByTestId('composer-mode-trigger')).toBeTruthy();
 
     await setHomePrompt('Create a clean loading animation');
     await submitHome();

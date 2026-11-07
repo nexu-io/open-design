@@ -4143,6 +4143,7 @@ export function ChatPane({
       projectFiles={projectFiles}
       activeProjectFileName={activeProjectFileName}
       sessionMode={sessionMode}
+      onSessionModeChange={onSessionModeChange}
       skills={skills}
       streaming={streaming}
       sendDisabled={sendDisabled}

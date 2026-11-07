@@ -443,6 +443,10 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  * null return means "leave the env untouched and let OpenCode read the
  * user's home-dir config as-is."
  *
+ * For the SDK transport (no child process, so no env to inject into), use
+ * {@link buildOpenCodeSdkCreateOptions} instead, which wraps this same
+ * document as `OpenCode.create({ config: { content } })`.
+ *
  * The OAuth Bearer merge mirrors `buildClaudeMcpJson` so a remote MCP
  * server the daemon already authenticated against (Higgsfield etc.)
  * works the same way for OpenCode users without forcing them to
@@ -520,6 +524,34 @@ export function buildOpenCodeMcpConfigContent(
     };
   }
   return JSON.stringify(config);
+}
+
+/**
+ * SDK-native MCP/packaging for `OpenCode.create({ config: { content } })`.
+ *
+ * The CLI single-run path hands this same JSON to one `opencode run`
+ * spawn through the `OPENCODE_CONFIG_CONTENT` env overlay. The in-process
+ * SDK host has no child env to inject into, so the identical document is
+ * passed as the host's `config.content` instead:
+ *
+ *   const sdkConfig = buildOpenCodeSdkCreateOptions(servers, tokens, options);
+ *   const host = await OpenCode.create({ ...(sdkConfig ?? {}), plugins });
+ *
+ * Returns null under the same "nothing to emit" rule as
+ * {@link buildOpenCodeMcpConfigContent}: a null return means "pass no
+ * config and let OpenCode read the user's saved home-dir config as-is".
+ * User-configured MCP servers keep working unchanged — the `mcp` mapping
+ * (local `command` arrays, remote `url` + merged OAuth headers) is shared
+ * with the env-overlay builder.
+ */
+export function buildOpenCodeSdkCreateOptions(
+  servers: McpServerConfig[],
+  tokens: Record<string, string> = {},
+  options: OpenCodeConfigBuildOptions = {},
+): { config: { content: string } } | null {
+  const content = buildOpenCodeMcpConfigContent(servers, tokens, options);
+  if (!content) return null;
+  return { config: { content } };
 }
 
 /** Resource denials must be last: OpenCode uses the last matching pattern. */

@@ -1,52 +1,67 @@
 import { describe, expect, it } from 'vitest';
 import { opencodeAgentDef } from '../../src/runtimes/defs/opencode.js';
+import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
+import { toOpenCodeSdkModel } from '../../src/runtimes/opencode-sdk-host.js';
 
-// OpenCode is capture-style: it mints its own session id (reported on the
-// stream's `step_start.sessionID`) rather than accepting a daemon-minted one.
-// A create turn passes NO id (plain `run`); a resume turn continues the stored
-// session with `-s <id>`.
-describe('opencode buildArgs session resume', () => {
+// SDK-only transport: `opencode run --format json` spawning was removed, so
+// there is no `-s <id>` argv anymore. Resume replays the same SDK
+// `sessionID` through `sessions.prompt`. These specs lock in that contract:
+// the defs advertise the SDK transport, `buildArgs` (a required-but-unused
+// `RuntimeAgentDef` slot) refuses CLI construction, and daemon model ids map
+// onto the `{ id, providerID, variant? }` the SDK requires.
+describe('opencode SDK session resume', () => {
   const SESSION = 'ses_4af9c2e1b0';
 
-  it('uses plain `run` (no `-s`) on a create turn', () => {
-    const args = opencodeAgentDef.buildArgs('prompt', [], [], {}, {
-      newSessionId: '11111111-1111-4111-8111-111111111111',
-      resumeSessionId: null,
+  it('advertises the native SDK transport for the opencode family', () => {
+    expect((opencodeAgentDef as { transport?: string }).transport).toBe('sdk');
+    expect((byokOpenCodeAgentDef as { transport?: string }).transport).toBe('sdk');
+  });
+
+  it('refuses CLI argv construction (no `run --format json`, no `-s`)', () => {
+    expect(() =>
+      opencodeAgentDef.buildArgs('prompt', [], [], {}, { resumeSessionId: SESSION }),
+    ).toThrow(/CLI removed/);
+    expect(() =>
+      byokOpenCodeAgentDef.buildArgs('prompt', [], [], {}, { resumeSessionId: SESSION }),
+    ).toThrow(/CLI removed/);
+  });
+
+  it('maps provider/model ids onto SDK model references', () => {
+    expect(toOpenCodeSdkModel('anthropic/claude-sonnet-4-5')).toEqual({
+      id: 'claude-sonnet-4-5',
+      providerID: 'anthropic',
     });
-    expect(args.slice(0, 3)).toEqual(['run', '--format', 'json']);
-    expect(args).not.toContain('-s');
-    // The minted daemon id must NOT leak into argv.
-    expect(args).not.toContain('11111111-1111-4111-8111-111111111111');
-  });
-
-  it('continues the stored session with `-s <id>` on a resume turn', () => {
-    const args = opencodeAgentDef.buildArgs('prompt', [], [], {}, {
-      resumeSessionId: SESSION,
+    expect(toOpenCodeSdkModel('openai/gpt-5#high')).toEqual({
+      id: 'gpt-5',
+      providerID: 'openai',
+      variant: 'high',
     });
-    expect(args).toContain('-s');
-    expect(args[args.indexOf('-s') + 1]).toBe(SESSION);
+    expect(toOpenCodeSdkModel('openai/gpt-5', 'high')).toEqual({
+      id: 'gpt-5',
+      providerID: 'openai',
+      variant: 'high',
+    });
   });
 
-  it('keeps the model flag alongside the resume flag', () => {
-    const args = opencodeAgentDef.buildArgs(
-      'prompt',
-      [],
-      [],
-      { model: 'anthropic/claude-sonnet-4-5' },
-      { resumeSessionId: SESSION },
-    );
-    expect(args[args.indexOf('-s') + 1]).toBe(SESSION);
-    expect(args[args.indexOf('-m') + 1]).toBe('anthropic/claude-sonnet-4-5');
+  it('routes BYOK models through the run-scoped provider', () => {
+    expect(toOpenCodeSdkModel('open-design-byok/gpt-4o-mini')).toEqual({
+      id: 'gpt-4o-mini',
+      providerID: 'open-design-byok',
+    });
+    // A raw model id without a provider prefix addresses the BYOK provider.
+    expect(toOpenCodeSdkModel('gpt-4o-mini')).toEqual({
+      id: 'gpt-4o-mini',
+      providerID: 'open-design-byok',
+    });
   });
 
-  it('uses plain `run` when no session context is supplied (back-compat)', () => {
-    const args = opencodeAgentDef.buildArgs('prompt', [], [], {}, {});
-    expect(args.slice(0, 3)).toEqual(['run', '--format', 'json']);
-    expect(args).not.toContain('-s');
-  });
-
-  it('declares CLI-managed, capture-style session resume', () => {
-    expect(opencodeAgentDef.resumesSessionViaCli).toBe(true);
-    expect(opencodeAgentDef.capturesSessionIdFromStream).toBe(true);
+  it('returns null for default/empty models (session keeps its default)', () => {
+    expect(toOpenCodeSdkModel(null)).toBeNull();
+    expect(toOpenCodeSdkModel('')).toBeNull();
+    expect(toOpenCodeSdkModel('default')).toBeNull();
+    expect(toOpenCodeSdkModel(' anthropic/claude-sonnet-4-5 ', 'default')).toEqual({
+      id: 'claude-sonnet-4-5',
+      providerID: 'anthropic',
+    });
   });
 });

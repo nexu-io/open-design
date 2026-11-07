@@ -268,6 +268,7 @@ import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js'
 import { stampToolTiming } from './runtimes/tool-timing.js';
 import {
   buildOpenCodeByokProviderConfig,
+  BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
 import {
@@ -516,13 +517,23 @@ import {
   normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
-import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
 import {
-  resolveOpenCodeCliGeneration,
   resolveOpenCodeEditBaseDirs,
-  withOpenCodeWorkspaceEnv,
-  type OpenCodeCliGeneration,
 } from './runtimes/opencode-permissions.js';
+import {
+  acquireSharedSdkHost,
+  createSdkSession,
+  promptSdkSession,
+  releaseSharedSdkHost,
+  subscribeSdkEvents,
+  switchSdkSessionModel,
+  toOpenCodeSdkModel,
+} from './runtimes/opencode-sdk-host.js';
+import {
+  clearSdkToolCorrelation,
+  sdkEventToStreamRecords,
+} from './runtimes/opencode-sdk-events.js';
+import { buildNativeSdkToolPlugin } from './runtimes/opencode-sdk-plugin.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
@@ -625,10 +636,6 @@ import {
 import { createTaskObservationRolloutService } from './observability/task-observation-rollout.js';
 import { strategyTaskRunObservationId } from './observability/task-observation-aggregation.js';
 import { collectCodexChildEvidence } from './runtimes/codex-child-evidence.js';
-import {
-  collectOpenCodeChildEvidenceFacts,
-  createOpenCodeSanitizedExportLoader,
-} from './runtimes/opencode-child-evidence.js';
 import {
   InvalidOdNextExactSendPromptError,
   bindOdNextExactSendPromptEvidence,
@@ -12691,7 +12698,11 @@ export async function startServer({
         resolveRunArtifactOutcomeBeforeFinish();
       }
     };
-    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
+    // SDK transport (opencode family) carries the same MCP/config overlay as
+    // the retired `opencode run` env passing: the overlay is built into the
+    // run env below and the SDK runner bridges it to the in-process host.
+    const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content'
+      || def.transport === 'sdk';
     const extraAllowedDirs = [
       ...resolveChatExtraAllowedDirs({
         agentId,
@@ -12720,18 +12731,23 @@ export async function startServer({
         : message,
     );
     // Resume-capable adapters continue their own upstream session so they
-    // keep working memory across turns. Decide once per run; reuse for the
-    // prompt-composition skipTranscript choice, the buildArgs flags, and the
-    // create-turn persistence below.
+    // keep working memory across turns. The SDK transport (opencode family)
+    // resumes via `sessions.prompt` with the same SDK `sessionID` — the same
+    // capture-style contract as `resumesSessionViaCli`, without any `-s` argv.
     const agentSupportsSessionResume =
       runtimeResumesSessionById(def) ||
       def.streamFormat === 'pi-rpc' ||
-      def.resumesSessionViaAcpLoad === true;
+      def.resumesSessionViaAcpLoad === true ||
+      def.transport === 'sdk';
     // Capture-style adapters (codex) mint their OWN session id and report it on
     // the stream; the daemon captures it here and persists THAT as the resume
     // handle instead of `agentResumeCtx.newSessionId` (which such CLIs ignore).
-    // Set from the `status` event's `sessionId` in `sendAgentEvent` below.
-    const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
+    // The SDK transport is capture-style too: the id comes from
+    // `createSdkSession` (create) or the `step_start` stream event, and resume
+    // replays it through `sessions.prompt`. Set from the `status` event's
+    // `sessionId` in `sendAgentEvent` below.
+    const agentCapturesSessionId = def.capturesSessionIdFromStream === true
+      || def.transport === 'sdk';
     let capturedSessionId: string | null = null;
     // --- Model resolution hoisted above the resume-identity guard ---
     // The guard (and the persisted `agent_sessions.model`) must key off the
@@ -14617,20 +14633,24 @@ export async function startServer({
       antigravityModelLockRelease = await acquireAntigravityModelLock();
     }
 
-    let args;
+    let args: string[] = [];
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
-    // Which OpenCode command line this Run was spawned with. Captured once
-    // the capability map is warm so the close path (child-evidence export)
-    // speaks the same generation as the argv, even if detection re-ran
-    // mid-run after an in-place CLI upgrade.
-    let openCodeCliGeneration: OpenCodeCliGeneration = 'unknown';
+    // SDK-only transport (opencode family): no `run --format json` argv is
+    // ever built. `buildArgs` on those defs throws; skip the capability
+    // probe and argv construction entirely and keep `args` empty for the
+    // budget guards below (no argv elements to expand).
+    const isOpencodeSdkRun = def.transport === 'sdk'
+      || def.id === 'opencode'
+      || def.id === 'byok-opencode';
     try {
+      if (isOpencodeSdkRun) {
+        args = [];
+      } else {
       // Optional argv flags are gated on the `--help` capability map, which used
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
       // has never served that route still builds the same argv as one that has.
       await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
-      openCodeCliGeneration = resolveOpenCodeCliGeneration(def.id);
       args = def.buildArgs(
         composed,
         promptImagePaths,
@@ -14652,6 +14672,7 @@ export async function startServer({
             : {}),
         },
       );
+      }
     } catch (err) {
       cleanupPromptFile();
       throw err;
@@ -14714,7 +14735,11 @@ export async function startServer({
     }
 
     let persistDeliveredAgentSessionState = () => {};
-    if (runtimeResumesSessionById(def) && run.conversationId) {
+    // The SDK transport persists the same way: the closure below keys off
+    // `agentCapturesSessionId` / `agentResumeCtx`, both of which cover
+    // `transport === 'sdk'` (see above), so the SDK session id lands in
+    // `agent_sessions` exactly like a captured CLI id.
+    if ((runtimeResumesSessionById(def) || def.transport === 'sdk') && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
@@ -15301,10 +15326,11 @@ export async function startServer({
         def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT
           ? 'pipe'
           : 'ignore';
-      // OpenCode 2.x has no `--dir`; the spawn cwd is the workspace and `PWD`
-      // is pinned to it for the 2.0.x builds that consult `PWD` first. Other
-      // agents (and OpenCode 1.x, which carries `--dir`) get the env as is.
-      const env = withOpenCodeWorkspaceEnv(applyAgentLaunchEnv({
+      // The SDK transport (opencode family) addresses the session by
+      // `location.directory` and `sessions.prompt({ sessionID })` — no spawn
+      // cwd/`PWD` pinning and no file-backed stdin. Every other agent keeps
+      // its existing launch env.
+      const env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
         ...odMediaEnv,
@@ -15370,7 +15396,7 @@ export async function startServer({
         ...(odNextTaskInputSnapshot
           ? { OD_TASK_INPUT_DIR: odNextTaskInputSnapshot.projectionDir }
           : {}),
-      }, agentLaunch), effectiveCwd, def.id);
+      }, agentLaunch);
       // Build permissions after configured env expansion and launch overrides,
       // so the granted temp root matches the environment the child receives.
       if (isOpenCodeContent || isMiMoContent) {
@@ -15419,17 +15445,10 @@ export async function startServer({
         }
       }
 
-      if (def.id === 'opencode' || def.id === 'byok-opencode') {
-        try {
-          const versions = await ensureDetectedRuntimeVersions('opencode', configuredAgentEnv);
-          if (!versions?.agentCliVersion) {
-            console.info('[opencode] optional tool previews disabled: CLI version unavailable; later launches retry detection after the short cache expires');
-          }
-          await applyOpenCodeEventPlugin(env, RUNTIME_DATA_DIR, versions?.agentCliVersion, agentSpawnEnv.OPENCODE_CONFIG_CONTENT);
-        } catch (error) {
-          console.warn('[opencode] optional tool previews unavailable:', error instanceof Error ? error.message : String(error));
-        }
-      }
+      // Retired with `opencode run` CLI spawning: tool previews arrive via
+      // the native SDK plugin (`opencode-sdk-plugin.ts`) + the
+      // `events.subscribe()` adapter, not a staged `.mjs` file merged into
+      // `OPENCODE_CONFIG_CONTENT`.
       if (def.id === 'amr' && !amrModelIdentityMatches(env)) {
         cleanupPromptFile();
         revokeToolToken('child_exit');
@@ -15454,6 +15473,10 @@ export async function startServer({
         return;
       }
       spawnedAgentEnv = env;
+      // No child_process spawn for the SDK transport: the opencode family
+      // runs below through the shared in-process host. Skip argv invocation,
+      // process-group record, model lock watcher, and stdin plumbing.
+      if (!isOpencodeSdkRun) {
       const invocation = createCommandInvocation({
         command: agentLaunch.launchPath,
         args,
@@ -15573,6 +15596,7 @@ export async function startServer({
         // child's file-backed stdin at spawn must never be written twice.
         writePromptToChildStdin = def.promptViaStdin === true && !promptDeliveredAtSpawn;
       }
+      } // end `if (!isOpencodeSdkRun)` — SDK runs skip child spawn entirely
     } catch (err) {
       cleanupPromptFile();
       revokeToolToken('child_exit');
@@ -15589,6 +15613,10 @@ export async function startServer({
       return;
     }
 
+    // Child-process stdio + exit hooks. Skipped for the SDK transport, which
+    // has no child: the SDK runner below feeds `events.subscribe()` through
+    // the same parser and runs its own memory/finalize path.
+    if (!isOpencodeSdkRun) {
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
 
@@ -15690,6 +15718,7 @@ export async function startServer({
         })
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
+    } // end child-process-only stdio/exit hooks (SDK runner has its own path)
 
     // Critique Theater branch (M0 dark launch, default disabled).
     // Only plain-stream adapters are routed through runOrchestrator in v1.
@@ -15707,7 +15736,9 @@ export async function startServer({
     // must also skip the orchestrator and fall through to legacy
     // generation; otherwise the parser waits for <CRITIQUE_RUN> tags
     // the model was never told to emit.
-    if (critiqueShouldRun) {
+    // The SDK runner below owns opencode-family turns outright; the
+    // child-process orchestrator never sees them.
+    if (critiqueShouldRun && !isOpencodeSdkRun) {
       const adapterStreamFormat: string = def.streamFormat ?? 'plain';
       if (adapterStreamFormat !== 'plain') {
         if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
@@ -16378,6 +16409,416 @@ export async function startServer({
         coverage,
       });
     };
+
+    // ---- Native OpenCode SDK transport (opencode / byok-opencode) ----
+    //
+    // `opencode run --format json` CLI spawning was removed. These agents
+    // ALWAYS run here: shared in-process host + `sessions.create` in the
+    // project directory + `sessions.prompt` + `events.subscribe()` mapped
+    // through `sdkEventToStreamRecords` into the existing json-event-stream
+    // parser. No child_process spawn, no `-s` argv — resume replays the same
+    // SDK `sessionID` through `sessions.prompt`.
+    //
+    // Session resume rides the standard capture-style machinery enabled
+    // above (`agentSupportsSessionResume` / `agentCapturesSessionId` cover
+    // `transport === 'sdk'`): `agentResumeCtx` already resolved whether this
+    // turn continues a stored session, and `persistDeliveredAgentSessionState`
+    // below stores the SDK id the same way the CLI stored its minted id.
+    if (isOpencodeSdkRun) {
+      trackingSubstantiveOutput = true;
+      const sdkHandler = createJsonEventStreamHandler(
+        'opencode',
+        sendAgentEvent,
+        def.id === 'opencode'
+          ? {
+              openCodeChildEvidence: {
+                cliVersion: 'sdk',
+                onCandidate: (candidate) => sendAgentEvent({
+                  type: 'diagnostic',
+                  name: 'opencode_child_task_candidate',
+                  ...candidate,
+                }),
+              },
+            }
+          : {},
+      );
+      jsonEventStreamHandler = sdkHandler;
+      clearSdkToolCorrelation();
+      noteAgentActivity();
+
+      // SDK model identity for this turn. `toOpenCodeSdkModel` maps the
+      // daemon's `provider/model[#variant]` (or BYOK `open-design-byok/raw`)
+      // onto the `{ id, providerID, variant? }` the SDK requires. The variant
+      // is only attached when the live catalog advertises it for this model —
+      // never invented — mirroring the retired CLI `--variant` gating.
+      let sdkModel = toOpenCodeSdkModel(safeModel, null);
+      if (sdkModel && safeReasoning && safeReasoning !== 'default' && def.id === 'opencode') {
+        try {
+          const live = getRememberedLiveModels('opencode').find((model) => model.id === safeModel);
+          if (live?.reasoningOptions?.some((option) => option.id === safeReasoning)) {
+            sdkModel = { ...sdkModel, variant: safeReasoning };
+          }
+        } catch {
+          // Catalog lookup is advisory; the base model still runs.
+        }
+      }
+
+      const sdkAbort = new AbortController();
+      const sdkSessionAbort = {
+        abort: () => {
+          try { sdkAbort.abort(); } catch { /* best-effort */ }
+        },
+        completedSuccessfully: () => false,
+        hasFatalError: () => false,
+      };
+      acpSession = sdkSessionAbort as typeof acpSession;
+      run.acpSession = acpSession;
+      // The SDK prompt promise may settle on enqueue while execution streams
+      // on; `session.idle` / `execution.succeeded|failed|interrupted` for our
+      // session is the completion signal. Filter to our session id: the host
+      // is shared, so concurrent runs' events interleave on one subscription.
+      const sdkFrameSessionId = (frame: unknown): string | null => {
+        if (!frame || typeof frame !== 'object' || Array.isArray(frame)) return null;
+        const record = frame as Record<string, unknown>;
+        const data = (record.data ?? record.properties) as unknown;
+        const candidates = [
+          (data as Record<string, unknown> | null)?.sessionID,
+          (data as Record<string, unknown> | null)?.sessionId,
+          record.sessionID,
+          record.sessionId,
+        ];
+        for (const candidate of candidates) {
+          if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+        }
+        return null;
+      };
+      const isSdkSessionMissing = (error: unknown): boolean =>
+        /session\s+(not\s+found|missing|unknown|expired|gone)|no\s+(such\s+)?session|unknown\s+session/i.test(
+          error instanceof Error
+            ? `${error.message}\n${String((error as { cause?: unknown }).cause ?? '')}`
+            : String(error ?? ''),
+        );
+
+      const runOpencodeSdkTurn = async (): Promise<void> => {
+        // Bridge the run-scoped config the CLI used to receive as spawn env:
+        // the MCP overlay (`OPENCODE_CONFIG_CONTENT`, built above from the
+        // user's external MCP + OAuth tokens + directory grants + BYOK
+        // provider) and the BYOK API-key template
+        // (`{env:OPEN_DESIGN_BYOK_API_KEY}`). The in-process server resolves
+        // provider `{env:…}` templates against the host process env at model
+        // call time. Restored in `finally`; concurrent SDK runs share the
+        // host, so identical keys converge on the last writer — the overlay
+        // is near-identical across runs of one project (same user MCP).
+        const bridgedEnvKeys = new Set<string>();
+        const previousEnv: Record<string, string | undefined> = {};
+        const bridgeEnvFromSpawnEnv = () => {
+          if (!spawnedAgentEnv) return;
+          for (const [key, value] of Object.entries(spawnedAgentEnv)) {
+            if (typeof value !== 'string') continue;
+            if (
+              key === 'OPENCODE_CONFIG_CONTENT' ||
+              key === BYOK_OPENCODE_API_KEY_ENV
+            ) {
+              if (!bridgedEnvKeys.has(key)) {
+                bridgedEnvKeys.add(key);
+                previousEnv[key] = process.env[key];
+              }
+              process.env[key] = value;
+            }
+          }
+        };
+        const restoreBridgedEnv = () => {
+          for (const key of bridgedEnvKeys) {
+            const previous = previousEnv[key];
+            if (previous === undefined) delete process.env[key];
+            else process.env[key] = previous;
+          }
+          bridgedEnvKeys.clear();
+        };
+
+        let host: Awaited<ReturnType<typeof acquireSharedSdkHost>> | null = null;
+        // Cancel poller: `cancel()` finishes a childless run immediately
+        // without calling `acpSession.abort()`, and a silent model emits no
+        // events to observe `cancelRequested` on — so poll and abort the SDK
+        // prompt directly. The inactivity watchdog aborts through the same
+        // controller via `acpSession.abort()` above.
+        let cancelWatcher: ReturnType<typeof setTimeout> | null = null;
+        const stopCancelWatcher = () => {
+          if (cancelWatcher) {
+            clearInterval(cancelWatcher);
+            cancelWatcher = null;
+          }
+        };
+        try {
+          bridgeEnvFromSpawnEnv();
+          host = await acquireSharedSdkHost({
+            plugins: [buildNativeSdkToolPlugin()],
+          });
+          if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+
+          // Resolve the SDK session: continue the stored session on a resume
+          // turn, otherwise create one in the project directory. The id is
+          // the capture-style resume handle from here on.
+          let sdkSessionId: string | null = null;
+          if (agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId) {
+            sdkSessionId = agentResumeCtx.resumeSessionId;
+          } else {
+            sdkSessionId = await createSdkSession(host, effectiveCwd, {
+              ...(sdkModel ? { model: sdkModel } : {}),
+            });
+          }
+          if (!sdkSessionId) throw new Error('opencode SDK session was not established');
+          capturedSessionId = sdkSessionId;
+          run.nativeSessionRecovery = markNativeSessionCaptured({
+            previous: run.nativeSessionRecovery,
+            agentId: def.id,
+            sessionId: sdkSessionId,
+            resumed: agentResumeCtx.isResuming,
+          });
+          publishNativeSessionRecoveryMetadata();
+          noteCliReadyAt();
+          lifecycle.mark('process_spawned');
+
+          // The preview state machine releases `od_opencode_tool` frames only
+          // after it has seen this session's `step_start`. A resumed SDK
+          // session emits no `session.created`, so seed the opener
+          // explicitly; a create turn's own `session.created` maps to the
+          // same record and the duplicate is harmless.
+          sdkHandler.feed(JSON.stringify({ type: 'step_start', sessionID: sdkSessionId }) + '\n');
+
+          let terminal: 'succeeded' | 'failed' | 'interrupted' | null = null;
+          const feedSdkFrame = (frame: unknown) => {
+            const frameType =
+              frame && typeof frame === 'object' && !Array.isArray(frame)
+                ? String((frame as Record<string, unknown>).type ?? '')
+                : '';
+            const frameSessionId = sdkFrameSessionId(frame);
+            // Session-scoped frames for another run's session stay out: the
+            // parser has no session filter and would render foreign text.
+            if (frameSessionId && frameSessionId !== sdkSessionId) return;
+            if (frameSessionId === sdkSessionId) {
+              if (frameType === 'session.execution.started') armFirstOutputWatchdog();
+              if (frameType === 'session.idle' || frameType === 'session.execution.succeeded') {
+                if (!terminal) terminal = 'succeeded';
+              } else if (frameType === 'session.execution.failed') {
+                if (!terminal) terminal = 'failed';
+              } else if (frameType === 'session.execution.interrupted') {
+                if (!terminal) terminal = 'interrupted';
+              }
+            }
+            for (const record of sdkEventToStreamRecords(frame)) {
+              sdkHandler.feed(`${JSON.stringify(record)}\n`);
+            }
+          };
+
+          cancelWatcher = setInterval(() => {
+            if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+              try { sdkAbort.abort(); } catch { /* best-effort */ }
+            }
+          }, 250);
+
+          const subscription = subscribeSdkEvents(host, { signal: sdkAbort.signal });
+          const drainSubscription = (async () => {
+            try {
+              for await (const frame of subscription) {
+                if (sdkAbort.signal.aborted) break;
+                if (run.cancelRequested || design.runs.isTerminal(run.status)) break;
+                try {
+                  feedSdkFrame(frame);
+                } catch (error) {
+                  console.warn('[opencode-sdk] frame mapping failed', error);
+                }
+                if (terminal) break;
+              }
+            } catch (error) {
+              // Abort-driven teardown surfaces here; anything else is already
+              // visible through mapped `error` records or the prompt below.
+              if (!sdkAbort.signal.aborted) {
+                console.warn('[opencode-sdk] event subscription ended', error);
+              }
+            }
+          })();
+
+          try {
+            await promptSdkSession(host, { sessionID: sdkSessionId, text: composed }, { signal: sdkAbort.signal });
+          } catch (error) {
+            // Stale SDK session (daemon restart drops the in-memory host while
+            // `agent_sessions` still points at it): clear the dead handle and
+            // transparently re-run this turn on a fresh session with the full
+            // transcript — one cold turn, never a broken conversation. Mirrors
+            // the CLI close-path auto-reseed, but inline: the SDK reports the
+            // missing session synchronously from `prompt`.
+            if (
+              sdkAbort.signal.aborted ||
+              run.cancelRequested ||
+              design.runs.isTerminal(run.status)
+            ) {
+              throw error;
+            }
+            if (
+              agentResumeCtx.isResuming &&
+              !run.resumeAutoReseeded &&
+              run.conversationId &&
+              isSdkSessionMissing(error)
+            ) {
+              clearAgentSession(db, run.conversationId, def.id);
+              run.resumeAutoReseeded = true;
+              run.resumeAutoReseededFrom = agentResumeCtx.resumeSessionId ?? null;
+              run.nativeSessionRecovery = markNativeSessionCaptured({
+                previous: run.nativeSessionRecovery,
+                agentId: def.id,
+                sessionId: sdkSessionId,
+                resumed: true,
+              });
+              publishNativeSessionRecoveryMetadata();
+              design.runs.emit(run, 'diagnostic', {
+                type: 'agent_resume_auto_reseed',
+                agent_id: def.id,
+                reason: 'resume_failed',
+                previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+                stale_session_cleared: true,
+                nativeSessionRecovery: run.nativeSessionRecovery,
+              });
+              sdkSessionId = await createSdkSession(host, effectiveCwd, {
+                ...(sdkModel ? { model: sdkModel } : {}),
+              });
+              capturedSessionId = sdkSessionId;
+              sdkHandler.feed(JSON.stringify({ type: 'step_start', sessionID: sdkSessionId }) + '\n');
+              await promptSdkSession(host, { sessionID: sdkSessionId, text: composed }, { signal: sdkAbort.signal });
+            } else {
+              throw error;
+            }
+          }
+
+          await drainSubscription;
+          if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+
+          sdkHandler.flush();
+          publishRuntimeChildEvidenceCoverage(
+            sdkHandler.childEvidenceCoverage?.(
+              terminal !== 'failed' && !agentStreamError,
+            ),
+          );
+          flushAgentTitleMarkerBuffer();
+
+          // Background memory extraction reads the guarded reply accumulated
+          // through `send()` above — same contract as the child-close hook.
+          void import('./memory-llm.js')
+            .then(({ extractWithLLM, distillAnnotationsToMemory }) => {
+              const userMsg = typeof message === 'string' ? message : '';
+              const captured = memoryReplyText;
+              const memoryChatProvider: {
+                provider?: string;
+                apiKey?: string;
+                baseUrl?: string;
+                apiVersion?: string;
+                model?: string;
+                requiresApiKey?: boolean;
+              } | null = byokProvider
+                ? {
+                    provider: (byokProvider as { protocol?: string }).protocol ?? undefined,
+                    apiKey: (byokProvider as { apiKey?: string }).apiKey,
+                    baseUrl: (byokProvider as { baseUrl?: string }).baseUrl,
+                    apiVersion: (byokProvider as { apiVersion?: string }).apiVersion,
+                    model: typeof safeModel === 'string' ? safeModel : undefined,
+                    requiresApiKey: (byokProvider as { requiresApiKey?: boolean }).requiresApiKey,
+                  }
+                : null;
+              const memoryOptions = {
+                extractionOrigin: { projectId: run.projectId, conversationId: run.conversationId, runId: run.id, assistantMessageId: run.assistantMessageId },
+                projectRoot: PROJECT_ROOT,
+                chatAgentId: typeof agentId === 'string' ? agentId : null,
+                chatModel: typeof safeModel === 'string' ? safeModel : null,
+                chatProvider: memoryChatProvider,
+                conversationId: run.conversationId ?? null,
+              };
+              const generalPass = extractWithLLM(
+                RUNTIME_DATA_DIR,
+                { userMessage: userMsg, assistantMessage: captured },
+                memoryOptions,
+              );
+              const annotationPass =
+                safeCommentAttachments.length > 0
+                  ? distillAnnotationsToMemory(
+                      RUNTIME_DATA_DIR,
+                      { annotations: safeCommentAttachments, userMessage: userMsg, assistantMessage: captured },
+                      memoryOptions,
+                    )
+                  : Promise.resolve([]);
+              return Promise.allSettled([generalPass, annotationPass]);
+            })
+            .catch((err) => console.warn('[memory-llm] background failed', err));
+
+          // Session persistence runs ONLY on the success path below. A failed
+          // turn leaves nothing resumable behind: non-retryable provider
+          // errors must start the next turn fresh, mirroring the CLI close
+          // path where only success / resumable-failure paths upsert.
+          if (run.cancelRequested) {
+            finishWithRetryDecision('canceled', 1, null);
+            return;
+          }
+          if (terminal === 'interrupted') {
+            finishWithRetryDecision('canceled', 1, null);
+            return;
+          }
+          if (agentStreamError) {
+            finishWithRetryDecision('failed', 1, null);
+            return;
+          }
+          if (terminal === 'failed') {
+            finishWithRetryDecision('failed', 1, null);
+            return;
+          }
+          try {
+            persistDeliveredAgentSessionState();
+          } catch (err) {
+            console.warn('[sessions] delivered SDK session persistence failed', err);
+          }
+          // Substantive-output guard: an SDK turn that ends (idle) without
+          // visible output is an empty reply, not a silent success — same
+          // contract as the child close path after issue #691.
+          if (trackingSubstantiveOutput && !agentProducedOutput) {
+            finishWithRetryDecision('failed', 0, null, {
+              emptyReplyError: createSseErrorPayload(
+                'AGENT_EXECUTION_FAILED',
+                'Agent completed without producing any output. The model or provider may have returned an empty response. Retry the turn or switch models.',
+                { retryable: true },
+              ),
+            });
+            return;
+          }
+          finishWithRetryDecision('succeeded', 0, null);
+        } catch (error) {
+          if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+          const messageText = error instanceof Error ? error.message : String(error ?? 'Unknown SDK error');
+          // Abort-driven unwind after a watchdog/retry verdict already
+          // finalized this attempt — never double-finish it.
+          if (sdkAbort.signal.aborted && (watchdogRetryRestarted || run.pendingTerminalFinish)) return;
+          clearInactivityWatchdog();
+          clearFirstOutputWatchdog();
+          if (!agentStreamError) {
+            agentStreamError = messageText;
+            agentStreamErrorObservedBeforeCancellation = true;
+            run.runtimeFailureObservedBeforeCancellation = true;
+            send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', messageText, { retryable: true }));
+          }
+          finishWithRetryDecision('failed', 1, null);
+        } finally {
+          stopCancelWatcher();
+          clearInactivityWatchdog();
+          clearFirstOutputWatchdog();
+          clearForcedChildShutdown();
+          cleanupPromptFile();
+          revokeToolToken('child_exit');
+          unregisterChatAgentEventSink();
+          restoreBridgedEnv();
+          if (host) await releaseSharedSdkHost().catch(() => {});
+        }
+      };
+
+      await runOpencodeSdkTurn();
+      return;
+    }
 
     if (def.streamFormat === 'claude-stream-json') {
       const claude = createClaudeStreamHandler((ev) => {
@@ -17140,38 +17581,13 @@ export async function startServer({
         }
       }
       completeCodexEvidenceCollection();
-      // Native OpenCode filters child-session events out of the root JSON
-      // stream, so the live stream can only produce a terminal-only L1
-      // candidate — which fails the evidence graph on `child_started_missing`
-      // and refuses every COMPLEX task on this runtime. `opencode export
-      // --sanitize` is the only surface that pairs a child's `parentID` with
-      // its own transcript, and it can only be read once the child has exited.
-      // Any failure here publishes nothing, leaving the L1 candidate in place.
-      if (def.id === 'opencode' && strategyTaskAtStart) {
-        const launchPath = agentLaunch.launchPath;
-        const candidates = jsonEventStreamHandler?.childEvidenceCandidates() ?? [];
-        if (launchPath && spawnedAgentEnv && candidates.length > 0) {
-          try {
-            const facts = await collectOpenCodeChildEvidenceFacts({
-              candidates,
-              loadSanitizedExport: createOpenCodeSanitizedExportLoader({
-                launchPath,
-                env: spawnedAgentEnv,
-                cliGeneration: openCodeCliGeneration,
-              }),
-            });
-            for (const fact of facts) {
-              sendAgentEvent({
-                type: 'diagnostic',
-                name: 'opencode_child_runtime_fact',
-                ...fact,
-              });
-            }
-          } catch (error) {
-            console.warn('[observability] OpenCode child export unavailable', String(error));
-          }
-        }
-      }
+      // Retired with `opencode run` CLI spawning: the post-run
+      // `opencode export --sanitize` upgrade (which spawned a CLI per child
+      // session) is gone. The live stream still publishes L1
+      // `opencode_child_task_candidate` diagnostics through the
+      // json-event-stream handler's `onCandidate` hook (wired for both the
+      // CLI chain below and the SDK runner above), so runs keep candidate
+      // coverage without any child_process spawn.
 
       // Resume-target-missing recovery runs BEFORE the generic fatal/stream-error
       // short-circuits. The signal arrives differently per adapter: codex reports

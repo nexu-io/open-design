@@ -1,40 +1,26 @@
-// Composer footer "mode" picker — sits just left of the model selector.
-// Three modes (Plan / Design / Ask); the trigger shows a neutral grid+sparkle
-// glyph until a mode is chosen, then flips to that mode's icon. The dropdown
-// mirrors the "+" menu surface: each row shows its name + an always-visible
-// description, and the selected row carries a check.
+// Mode picker — live in both composers (restored).
 //
-// Ported from #5517 (demo `ComposerModePicker`) but wired to the REAL
-// `ChatSessionMode` ('design' | 'chat' | 'plan') instead of the demo's
-// app-wide mock store: the component is controlled via `mode`/`onModeChange`,
-// so the home composer and the project chat composer each reflect their own
-// conversation's persisted mode. `design` is the app default AND it is shown
-// as selected by default: the composer opens carrying the 「设计 ×」 pill, so
-// the mode the request will actually run in is stated on screen instead of
-// being an invisible default behind a neutral glyph. The × still clears it
-// back to the neutral trigger.
+// Home (`HomeHero` foot-right) and project chat (`ChatComposer` footer) both
+// mount this component, controlled via `mode` / `onModeChange`, so the home
+// composer and the project chat composer each reflect their own conversation's
+// persisted mode. `design` is the app default AND it is shown as selected by
+// default: the composer opens carrying the 「设计 ×」 pill, so the mode the
+// request will actually run in is stated on screen instead of being an
+// invisible default behind a neutral glyph. The × still clears it back to the
+// neutral trigger.
 //
-// ⚠️ **休眠件(2026-09-08)** —— 产品直接指令拿掉入口:「这些代码先讲提示词干掉,
-// 组件代码注释, 后续可能要找回」。**正常流程里没有上游会再挂载这个组件。**
+// History: the chip was dormant 2026-09-08 (product removed both entries;
+// project chat first on 2026-08-19, Home last). The restore re-mounted both
+// slots with the same `trackComposerSessionModeClick` analytics call.
+// `HomeView` owns the `sessionMode` state that feeds `conversationMode`;
+// project-side next-step actions can still switch a session's mode
+// (`ChatPane.handleNextStepPromptAction`) — that path is independent of this
+// chip.
 //
-// 摘掉的顺序是两步:项目页的输入框先走(2026-08-19,见 `ChatComposer.tsx` 里
-// 那颗 picker 原来的位置),首页输入区最后走(2026-09-08,见 `HomeHero.tsx` 的
-// `home-hero__foot-right`)。两处都留了原地注释,写清楚怎么接回来。
-//
-// **行为没变,只是控件没了**:`design` 一直是 app 默认档,两个宿主(`HomeView`
-// 的 `sessionMode` state、项目会话存下来的 mode)都还各自持有 mode 并把它送进
-// 请求;只是不再从这颗 chip 上选。项目侧的 next-step 动作仍会改会话的 mode
-// (`ChatPane.handleNextStepPromptAction`),那条路和这颗 chip 无关。
-//
-// **想找回**:回到对应宿主的注释锚点,重新 import 本组件、把宿主的 mode /
-// onModeChange 接回来即可 —— 本组件、它的 i18n key(`chat.modePicker.*`)、
-// `.composer-mode*` 样式、以及 `tests/components/ComposerModePicker.test.tsx`
-// 都**原样保留**,就是为了这一步能一次接回。
-//
-// **不要**因为「线上看不到它」就删组件、删样式、删 i18n key 或删它的单测。
-// 反过来,`HomeView.mode-picker-removed.test.tsx` 和
-// `ChatComposer.mode-picker-removal.test.tsx` 钉的是「宿主不许挂载它」,那两条
-// 才是当前生效的裁决。
+// Mount coverage is pinned by `ChatComposer.mode-picker.test.tsx` and
+// `HomeView.mode-picker.test.tsx`. Do not remove this component, its styles,
+// its i18n keys (`chat.modePicker.*`), or its unit tests because "it is not
+// visible somewhere" — check the mount specs first.
 import {
   useEffect,
   useLayoutEffect,

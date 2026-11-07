@@ -56,6 +56,12 @@ Good examples: \`investor-pitch-deck.html\`, \`ai-community-pr-deck.html\`, \`re
 
 When editing an existing artifact, preserve its existing filename unless the user asks for a copy or version. Use \`index.html\` only for fixed runtime conventions or a lightweight launcher/overview: live-artifact generated previews, HyperFrames compositions, static SPA/deploy entry mapping, plugin previews/examples, \`ui_kits/app/index.html\`, or a multi-screen overview that links to semantic screen files. If an active skill or template says to copy a seed to \`index.html\`, adapt the destination to a semantic filename unless the task is one of those fixed-path exceptions.`;
 
+const PROJECT_OUTPUT_FOLDERS = `## Project output folders (imported folders)
+
+When the working directory is a user-owned imported folder (metadata.baseDir set), you may declare where designs, plans, and file store assets live by writing \`.open-design/project.json\` with an \`outputs\` mapping, e.g. \`{ "outputs": { "designs": "designs", "plans": "plans", "store": "store" } }\`. This file is the one dotfile you are allowed to create in imported folders; every other hidden path stays blocked.
+
+Rules: keep each value a relative visible folder (no leading dot, no traversal, no absolute path). Create the folders you declare and store deliverables inside the folder the user asked for. Prefer \`designs/\` for design deliverables, \`plans/\` for plans/specs, and \`store/\` (or \`assets/stock/\`) for binary store assets. Re-read the manifest before choosing an output path; when it already declares outputs, respect it unless the user asks to change it.`;
+
 export interface AudioVoiceOption {
   name: string;
   voiceId: string;
@@ -528,6 +534,7 @@ export function composeSystemPrompt({
 
   if (!isAskMode) {
     parts.push(`\n\n${SEMANTIC_OUTPUT_FILE_NAMES}`);
+    parts.push(`\n\n${PROJECT_OUTPUT_FOLDERS}`);
   }
 
   if (pluginBlock && pluginBlock.trim().length > 0) {

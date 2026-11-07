@@ -55,8 +55,9 @@ apps/web/src/runtime/chat/     纯函数领域逻辑(无 JSX、无 DOM)
 /* ❌ */ [data-theme="dark"] .row { … }                /* 组件内写主题分支 */
 ```
 
-理由:`--chat-*` 是唯一的主题接缝。产品当前**强制亮色**(`FORCED_APP_THEME`),
-暗色方案到位时只改 chat 根 Module 里那一段映射,23 个组件零改动。
+理由:`--chat-*` 是唯一的主题接缝。主题是 light / dark / system 三档偏好
+(`state/appearance.ts`),暗色落地时只改 chat 根 Module 里那一段映射,
+23 个组件零改动。
 组件里写死主题分支 = 把接缝散布到全域,等于没有接缝。
 
 新增 `--chat-*` 变量必须在 chat 根 Module 的**亮暗两个作用域都定义**,即使暂时同值。
@@ -73,7 +74,8 @@ apps/web/src/runtime/chat/     纯函数领域逻辑(无 JSX、无 DOM)
 ## 3. 降级是一等公民,不是异常分支
 
 **8 家 agent 完全不吐工具事件**(qoder / cursor-agent / qwen / deepseek / grok-build /
-aider / antigravity / atomcode),**opencode 直连不吐 thinking**,
+aider / antigravity / atomcode),**opencode v2 探到 `--thinking` 才吐 reasoning
+(1.x / 探针失败时不吐)**、
 **AMR 的终端输出被安全打码**。
 
 因此每个消费 agent 事件的组件必须回答:数据缺席时长什么样?

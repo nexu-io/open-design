@@ -190,7 +190,11 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
       </I18nProvider>,
     );
     const flow = container.querySelector<HTMLElement>('.assistant-flow')!;
+    // The record stays open after the turn ends (product decision 2026-11-07);
+    // clicking a summary now closes it. Only open a shell that is still closed
+    // so the text-based run classification below can see its body.
     for (const shell of flow.querySelectorAll<HTMLDetailsElement>(':scope > details')) {
+      if (shell.open) continue;
       const summary = shell.querySelector<HTMLElement>(':scope > summary');
       if (summary) fireEvent.click(summary);
     }
@@ -201,6 +205,8 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
           if (text.includes('视觉签名我已经锁定')) return 'shell:run0';
           // run 1 的思考正文里也会提到 `index.html`,所以先认它自己的指纹,
           // 再认 run 2 的产物名 —— 顺序反了会把 run 1 的壳标成 run 2。
+          // 记录现在始终摊开,run 1 的思考对 textContent 可见;合并壳因此以
+          // run 1 的指纹命名,而它仍然带着 run 2 的产物(下面单独断言)。
           if (text.includes('Since the user left the topic open')) return 'shell:run1';
           if (text.includes('index.html')) return 'shell:run2';
           return 'shell:run1';
@@ -216,14 +222,18 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
       .find((el) => el.querySelector('[data-testid="question-form-summary"]'))!;
     expect(runTag(answeredBlock.textContent ?? '')).toBe('run0');
 
-    // 推测项 A-01 + D8 答复「什么都不改」:答完之后只剩一张壳(壳里有 index.html,标成 run2),
-    // run 1 的方案说明照旧在壳外、最终答复之前
+    // 推测项 A-01 + D8 答复「什么都不改」:答完之后只剩一张壳(壳里既有 run 1
+    // 的思考、也有 index.html 这个 run 2 的产物),run 1 的方案说明照旧在壳外、
+    // 最终答复之前。
     expect(order).toEqual([
       'shell:run0',
       'answered+prose',
-      'shell:run2',
+      'shell:run1',
       'prose:run1',
       'prose:run2',
     ]);
+    const mergedShell = [...flow.querySelectorAll<HTMLDetailsElement>(':scope > details')]
+      .find((shell) => shell.textContent?.includes('Since the user left the topic open'))!;
+    expect(mergedShell.textContent).toContain('index.html');
   });
 });

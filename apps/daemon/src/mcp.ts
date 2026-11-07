@@ -37,6 +37,8 @@ import {
   type WorkspaceProjectsResponse,
 } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
+import { existsSync, realpathSync } from 'node:fs';
+import path from 'node:path';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
@@ -91,7 +93,7 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; skills?: string[]; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; prompt?: unknown; plugin?: unknown; inputs?: unknown; agent?: unknown; model?: unknown; serviceTier?: unknown; apiKey?: unknown; requestId?: unknown; resume?: unknown; runId?: unknown; id?: unknown; designSystem?: unknown; skill?: unknown; skills?: string[]; includeUnavailable?: unknown; artifactType?: unknown; projectTitle?: unknown; locale?: unknown; knownAnswers?: unknown; skip?: unknown; briefDraftId?: unknown; nonce?: unknown; answers?: unknown; externalPluginContext?: unknown; pluginWorkflowId?: unknown; conversationId?: unknown; designSystemId?: unknown; directory?: unknown; waitMs?: unknown; timeoutMs?: unknown; pollMs?: unknown; after?: unknown; maxChars?: unknown; argv?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; skippedFileCount?: number; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
@@ -120,13 +122,17 @@ const SAFE_MCP_DAEMON_RETRY_CALLS = new Set([
   'get_run',
   'get_vela_login_status',
   'list_agents',
+  'list_conversations',
   'list_files',
   'list_plugins',
   'list_projects',
   'list_resources',
   'list_skills',
+  'read_conversation',
   'read_resource',
   'search_files',
+  'wait_for_run',
+  'watch_run',
 ]);
 
 function normalizeDaemonUrl(value: string | URL): string {
@@ -456,6 +462,43 @@ export const TOOL_DEFS = [
     annotations: { ...READ_ANNOTATIONS, title: 'List OpenDesign projects' },
   },
   {
+    name: 'list_conversations',
+    description:
+      'List a project\'s chat conversations, newest first. Pass a returned conversationId to read_conversation to read its turns, or to start_run to continue that exact thread instead of the project default.',
+    inputSchema: {
+      type: 'object',
+      properties: { project: PROJECT_ARG, pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List OpenDesign conversations' },
+  },
+  {
+    name: 'read_conversation',
+    description:
+      'Read a conversation\'s messages, oldest-to-newest in the returned window, including each turn\'s run id and status. Use it to recover context before continuing a thread with start_run(conversationId). Defaults to the project\'s first conversation and the last 20 messages.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        conversationId: {
+          type: 'string',
+          description: 'Conversation id from list_conversations. Optional; defaults to the project\'s first conversation.',
+        },
+        limit: {
+          type: 'number',
+          description: 'How many of the most recent messages to return (1–100, default 20).',
+        },
+        maxChars: {
+          type: 'number',
+          description: 'Per-message content cap in characters (default 8000). Longer text is truncated with a marker.',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Read OpenDesign conversation' },
+  },
+  {
     name: 'get_active_context',
     description:
       'Project + file the user has open in OpenDesign right now. Returns {active:false, hint:"..."} when no project is active so the agent can ask the user to interact with OpenDesign (the active context expires ~5 minutes after the last user interaction). Most tools default to this when project is omitted, so you rarely need to call this directly.',
@@ -676,14 +719,18 @@ export const TOOL_DEFS = [
   {
     name: 'create_project',
     description:
-      'Create a new empty OpenDesign project to generate into, then call start_run against it. Returns the project (with its id) plus a conversationId. The id is derived from name unless you pass one explicitly.',
+      'Create an OpenDesign project to generate into, then call start_run against it. Pass directory to bind the project to a folder on disk (for example the repo you are working in): imports, plans, and design artifacts are then read and written there instead of the daemon data directory. Omit directory for a managed project under the daemon data root. Returns the project, its baseDir, and a conversationId. Reuses an existing project already bound to the same folder.',
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Human-readable project name.' },
+        name: { type: 'string', description: 'Human-readable project name. Defaults to the folder basename when directory is set.' },
         id: {
           type: 'string',
-          description: 'Optional project id slug ([A-Za-z0-9._-], <=128 chars). Derived from name when omitted.',
+          description: 'Optional project id slug ([A-Za-z0-9._-], <=128 chars). Derived from name when omitted. Ignored for folder-bound projects, whose id is daemon-generated.',
+        },
+        directory: {
+          type: 'string',
+          description: 'Absolute path, or a path relative to this MCP process cwd, of an existing folder to bind the project to. Files OpenDesign writes, including plan.md, land in this folder.',
         },
         designSystem: {
           type: 'string',
@@ -692,7 +739,6 @@ export const TOOL_DEFS = [
         skill: { type: 'string', description: 'Optional skill id to seed the project with.' },
         pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
-      required: ['name'],
       additionalProperties: false,
     },
     annotations: { ...WRITE_ANNOTATIONS, title: 'Create OpenDesign project' },
@@ -780,6 +826,20 @@ export const TOOL_DEFS = [
           type: 'string',
           description: 'Plugin id from list_plugins to drive the run. Optional.',
         },
+        conversationId: {
+          type: 'string',
+          description:
+            'Conversation to continue, from list_conversations. Optional; defaults to the project\'s default conversation. Pass the same id on the next turn to keep one thread — this is how an agent answers a <question-form> or refines an existing design.',
+        },
+        designSystemId: {
+          type: 'string',
+          description: 'Design system id from the od://design-systems/* resources to bind this run to. Optional.',
+        },
+        waitMs: {
+          type: 'number',
+          description:
+            'Wait up to this many milliseconds for the run to finish, then return the same enriched payload as get_run. 0 (default) returns the runId immediately.',
+        },
         inputs: {
           type: 'object',
           additionalProperties: true,
@@ -830,6 +890,56 @@ export const TOOL_DEFS = [
     annotations: { ...READ_ANNOTATIONS, title: 'Check OpenDesign run' },
   },
   {
+    name: 'watch_run',
+    description:
+      'Read a run\'s inner-agent event stream (thinking, assistant text, tool calls) as a resumable page. Pass the returned nextAfter back as after to continue. waitMs keeps the request open for that long so a single call can catch new events instead of polling in a tight loop. Prefer this over tailing eventsLogPath when you need progress in the conversation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        runId: { type: 'string', description: 'Run id returned by start_run.' },
+        after: {
+          type: 'number',
+          description: 'Cursor to resume from: the nextAfter value from a previous watch_run call. Defaults to 0 (full history).',
+        },
+        waitMs: {
+          type: 'number',
+          description: 'How long to keep the stream open for new events (250–30000, default 1500). A terminal run returns immediately.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of events to return (1–500, default 200).',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+      },
+      required: ['runId'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Watch OpenDesign run' },
+  },
+  {
+    name: 'wait_for_run',
+    description:
+      'Wait for a run to reach a terminal status, then return the same enriched payload as get_run (previewUrl, artifactRef, agentMessage). Use it instead of a manual get_run polling loop. Returns the current status with done:false when the timeout expires first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        runId: { type: 'string', description: 'Run id returned by start_run.' },
+        timeoutMs: {
+          type: 'number',
+          description: 'Maximum wait in milliseconds (1000–300000, default 60000).',
+        },
+        pollMs: {
+          type: 'number',
+          description: 'Polling interval in milliseconds (500–10000, default 2000).',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+      },
+      required: ['runId'],
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'Wait for OpenDesign run' },
+  },
+  {
     name: 'cancel_run',
     description: 'Request cancellation of an in-flight run started by start_run.',
     inputSchema: {
@@ -858,6 +968,30 @@ export const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'List OpenDesign agents' },
+  },
+  {
+    name: 'od_command',
+    description:
+      'Escape hatch for the rest of the OpenDesign product: run any headless `od` CLI command against the same daemon and return its stdout/stderr. Use this for capabilities that do not have a dedicated tool: automations (automation list|get|create|update|run|runs|pause|resume|delete), media (media generate|scaffold|reference|compare|stock-search), research (research search), export (export <file> --project <id> --format html|pdf|image|pptx), lint, comment, ui (read and answer GenUI surfaces), memory, message-center, plugin, skills, design-systems, templates, diagnostics. Pass --json when the command supports it. argv is executed without a shell.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        argv: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description: 'Command tokens, e.g. ["automation","list","--json"] or ["export","index.html","--project","<id>","--format","pdf","--out","/tmp/deck.pdf"].',
+        },
+        timeoutMs: {
+          type: 'number',
+          description: 'Maximum run time in milliseconds (1000–300000, default 120000).',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+      },
+      required: ['argv'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Run OpenDesign CLI command' },
   },
 ];
 
@@ -2157,6 +2291,10 @@ const PROJECT_OR_RUN_TOOLS = new Set([
   'start_run',
   'get_run',
   'cancel_run',
+  'list_conversations',
+  'read_conversation',
+  'watch_run',
+  'wait_for_run',
 ]);
 
 async function handleMcpToolCall(
@@ -2221,11 +2359,73 @@ async function handleMcpToolCall(
               id: p.id,
               name: p.name,
               ...(p.metadata ? { metadata: p.metadata as unknown as JsonObject } : {}),
+              baseDir:
+                typeof p.metadata?.baseDir === 'string'
+                  ? p.metadata.baseDir
+                  : null,
               workspaceId: p.workspaceId,
             })),
           });
         }
         return ok(await getJson<ProjectsPayload>(`${baseUrl}/api/projects`));
+      case 'list_conversations': {
+        const { id } = await resolveProjectArg(baseUrl, args.project, headers);
+        const data = await getJson<{ conversations?: Array<JsonObject> }>(
+          `${baseUrl}/api/projects/${encodeURIComponent(id)}/conversations`,
+          headers,
+        );
+        const conversations = (data?.conversations ?? []).map((conversation) => ({
+          id: conversation.id,
+          title: conversation.title,
+          createdAt: conversation.createdAt,
+          updatedAt: conversation.updatedAt,
+          messageCount: conversation.messageCount,
+          sessionMode: conversation.sessionMode,
+        }));
+        return ok({ projectId: id, conversations });
+      }
+      case 'read_conversation': {
+        const { id } = await resolveProjectArg(baseUrl, args.project, headers);
+        let conversationId =
+          typeof args.conversationId === 'string' && args.conversationId.length > 0
+            ? args.conversationId
+            : await getDefaultConversationId(baseUrl, id, headers);
+        if (!conversationId) {
+          return errorResult('This project has no conversations yet. Start one with start_run.');
+        }
+        const data = await getJson<{ messages?: Array<JsonObject> }>(
+          `${baseUrl}/api/projects/${encodeURIComponent(id)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+          headers,
+        );
+        const all = Array.isArray(data?.messages) ? data.messages : [];
+        const limit = clampInteger(args.limit, 1, 100, 20);
+        const maxChars = clampInteger(args.maxChars, 200, 200_000, 8_000);
+        const window = all.slice(Math.max(0, all.length - limit));
+        const messages = window.map((message) => {
+          const content = typeof message.content === 'string' ? message.content : '';
+          return {
+            id: message.id,
+            role: message.role,
+            content:
+              content.length > maxChars
+                ? `${content.slice(0, maxChars)}\n\n… truncated ${content.length - maxChars} chars (raise maxChars to read the rest)`
+                : content,
+            createdAt: message.createdAt,
+            runId: message.runId,
+            runStatus: message.runStatus,
+            ...(Array.isArray(message.attachments) && message.attachments.length > 0
+              ? { attachments: message.attachments }
+              : {}),
+          };
+        });
+        return ok({
+          projectId: id,
+          conversationId,
+          totalMessages: all.length,
+          returnedMessages: messages.length,
+          messages,
+        });
+      }
       case 'get_active_context': {
         const data = await getJson<ActiveContext>(`${baseUrl}/api/active`);
         if (!data || data.active === false) {
@@ -2259,6 +2459,10 @@ async function handleMcpToolCall(
               ...project,
               entryFile,
               kind: project?.metadata?.kind ?? null,
+              baseDir:
+                typeof project?.metadata?.baseDir === 'string'
+                  ? project.metadata.baseDir
+                  : null,
               resolvedDir,
               // previewUrl: open in a browser to view the rendered
               // design directly (HTML entries render; see
@@ -2369,6 +2573,12 @@ async function handleMcpToolCall(
         return await startRun(baseUrl, args, options, headers);
       case 'get_run':
         return await getRun(baseUrl, args, headers);
+      case 'watch_run':
+        return await watchRun(baseUrl, args, headers);
+      case 'wait_for_run':
+        return await waitForRun(baseUrl, args, headers);
+      case 'od_command':
+        return await runOdCommand(baseUrl, args);
       case 'cancel_run': {
         requireString(args.runId, 'runId');
         return ok(
@@ -2513,6 +2723,10 @@ async function createProject(
   args: McpArgs,
   headers?: Record<string, string>,
 ) {
+  const directory = typeof args.directory === 'string' ? args.directory.trim() : '';
+  if (directory.length > 0) {
+    return await createFolderProject(baseUrl, directory, args, headers);
+  }
   requireString(args.name, 'name');
   const id =
     typeof args.id === 'string' && args.id.length > 0
@@ -2536,6 +2750,88 @@ async function createProject(
     if (!headers || !String(err).includes('WORKSPACE_')) throw err;
     return ok(await postJson<JsonObject>(`${baseUrl}/api/projects`, body));
   }
+}
+
+// Bind a project to a folder the caller already owns. This is the MCP face of
+// `POST /api/import/folder` (the same endpoint behind the desktop folder
+// picker and `od project import-folder`), so every read/write tool and every
+// run sees the caller's real files instead of a copy under the daemon data
+// root — which is what makes plan.md and the design files land in the folder
+// the agent chose.
+async function createFolderProject(
+  baseUrl: string,
+  directory: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
+  const resolved = path.isAbsolute(directory)
+    ? path.normalize(directory)
+    : path.resolve(process.cwd(), directory);
+  let canonical = resolved;
+  try {
+    canonical = realpathSync(resolved);
+  } catch {
+    // The daemon owns the "folder not found" answer; keep the literal path so
+    // its error names what the caller actually typed.
+  }
+  const existing = await findProjectByBaseDir(baseUrl, canonical, headers);
+  if (existing) {
+    return ok({
+      project: existing,
+      projectId: existing.id,
+      baseDir: canonical,
+      reused: true,
+      hint: 'A project is already bound to this folder; reuse its id for start_run. Do not import it twice.',
+    });
+  }
+  const body: JsonObject = { baseDir: canonical };
+  const name =
+    typeof args.name === 'string' && args.name.trim().length > 0
+      ? args.name.trim()
+      : path.basename(canonical);
+  body.name = name;
+  if (typeof args.designSystem === 'string' && args.designSystem.length > 0) {
+    body.designSystemId = args.designSystem;
+  }
+  if (typeof args.skill === 'string' && args.skill.length > 0) {
+    body.skillId = args.skill;
+  }
+  const created = await postJson<JsonObject>(
+    `${baseUrl}/api/import/folder`,
+    body,
+    headers ?? {},
+  );
+  const project = (created?.project as JsonObject | undefined) ?? created;
+  return ok({
+    ...created,
+    project,
+    projectId: project?.id,
+    baseDir: canonical,
+    reused: false,
+    hint: 'Project is bound to baseDir. Files written by the agent — including plan.md and the design artifacts — land in that folder. Pass projectId to start_run.',
+  });
+}
+
+async function findProjectByBaseDir(
+  baseUrl: string,
+  baseDir: string,
+  headers?: Record<string, string>,
+): Promise<ProjectSummary | null> {
+  const normalize = (value: string): string => {
+    try {
+      return realpathSync(value);
+    } catch {
+      return path.normalize(value);
+    }
+  };
+  const projects = await fetchProjectList(baseUrl, headers);
+  const target = normalize(baseDir);
+  return (
+    projects.find((project) => {
+      const declared = project.metadata?.baseDir;
+      return typeof declared === 'string' && normalize(declared) === target;
+    }) ?? null
+  );
 }
 
 // Flatten daemon's plugin record into the few fields an external agent
@@ -2674,6 +2970,12 @@ async function startRun(
   if (typeof args.skill === 'string' && args.skill.length > 0) body.skillId = args.skill;
   if (Array.isArray(args.skills) && args.skills.length > 0) body.skillIds = args.skills;
   if (typeof args.plugin === 'string' && args.plugin.length > 0) body.pluginId = args.plugin;
+  if (typeof args.conversationId === 'string' && args.conversationId.length > 0) {
+    body.conversationId = args.conversationId;
+  }
+  if (typeof args.designSystemId === 'string' && args.designSystemId.length > 0) {
+    body.designSystemId = args.designSystemId;
+  }
   if (typeof args.agent === 'string' && args.agent.length > 0) body.agentId = args.agent;
   if (typeof args.model === 'string' && args.model.length > 0) body.model = args.model;
   if (typeof args.serviceTier === 'string' && args.serviceTier.length > 0) {
@@ -2690,6 +2992,31 @@ async function startRun(
     body,
     { ...options.analyticsHeaders, ...headers },
   );
+  if (typeof args.waitMs === 'number' && args.waitMs > 0 && typeof created?.runId === 'string') {
+    const waited = await waitForRun(
+      baseUrl,
+      { runId: created.runId, timeoutMs: args.waitMs },
+      headers,
+    );
+    const finalPayload = parseMcpResult(waited);
+    if (finalPayload) {
+      return ok(
+        withActiveEcho(
+          {
+            ...created,
+            ...finalPayload,
+            projectId: id,
+            requestId,
+            ...(options.pluginAttribution
+              ? { pluginWorkflowId: options.pluginAttribution.pluginWorkflowId }
+              : {}),
+          },
+          active,
+          resolved,
+        ),
+      );
+    }
+  }
   // Build studioUrl (conversation-level — no entry file yet) so the
   // outer agent has a URL to give the user right away. The daemon
   // returns conversationId in the response now that POST /api/runs
@@ -2809,6 +3136,330 @@ async function getRun(
     : 'Run finished but produced no files. The inner agent\'s output is in agentMessage — relay it to the user verbatim. Most often this is a clarifying question (e.g. a <question-form>) you should answer by calling start_run again with a more specific prompt or a chosen plugin. When studioUrl is present, show it as a clickable markdown link (`[Open OpenDesign studio](STUDIO_URL)`) so the user can navigate to the OD page that shows the chat history — never render it as inline code. eventsLogPath, when present, holds the full event log if you need to inspect what happened.';
   return ok(enriched);
 }
+
+// Resumable, bounded read of the run's inner-agent event stream. The daemon
+// replays history from `?after=<cursor>` and then keeps the response open
+// until the run is terminal, so the abort deadline is what turns it into a
+// single bounded page instead of a hung tool call.
+async function watchRun(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
+  requireString(args.runId, 'runId');
+  const runId = args.runId;
+  const after = clampInteger(args.after, 0, Number.MAX_SAFE_INTEGER, 0);
+  const waitMs = clampInteger(args.waitMs, 250, 30_000, 1_500);
+  const limit = clampInteger(args.limit, 1, 500, 200);
+
+  const status = await getJson<JsonObject>(
+    `${baseUrl}/api/runs/${encodeURIComponent(runId)}`,
+    headers,
+  );
+  const terminal = isTerminalRunStatus(status.status);
+
+  const url = new URL(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`);
+  if (after > 0) url.searchParams.set('after', String(after));
+  let body = '';
+  try {
+    const response = await fetch(url, {
+      ...(headers ? { headers } : {}),
+      signal: AbortSignal.timeout(terminal ? 5_000 : waitMs),
+    });
+    body = await response.text();
+  } catch (error) {
+    // A deadline abort is the normal way an in-flight read ends: the events
+    // already received are in the body only when the stream was fully read,
+    // so a timeout returns what the status alone can prove.
+    if (!terminal && !(error instanceof Error && error.name === 'TimeoutError')) throw error;
+  }
+
+  const records = parseSseRecords(body);
+  const events: JsonObject[] = [];
+  let nextAfter = after;
+  for (const record of records) {
+    if (record.id != null) nextAfter = Math.max(nextAfter, record.id);
+    const compact = compactRunEvent(record);
+    if (compact == null) continue;
+    events.push(compact);
+    if (events.length >= limit) break;
+  }
+  const done = isTerminalRunStatus(status.status);
+  return ok({
+    runId,
+    status: status.status,
+    done,
+    nextAfter,
+    returnedEvents: events.length,
+    events,
+    ...(typeof status.eventsLogPath === 'string' ? { eventsLogPath: status.eventsLogPath } : {}),
+    hint: done
+      ? 'Run is terminal. Call get_run (or wait_for_run) for the enriched delivery payload.'
+      : 'Run is still in flight. Call watch_run again with after=nextAfter to resume; pass a larger waitMs to catch more events per call.',
+  });
+}
+
+// Bounded wait for a terminal status, then the same enriched payload get_run
+// returns. Keeps an outer agent from writing its own polling loop.
+async function waitForRun(
+  baseUrl: string,
+  args: McpArgs,
+  headers?: Record<string, string>,
+) {
+  requireString(args.runId, 'runId');
+  const runId = args.runId;
+  const timeoutMs = clampInteger(args.timeoutMs, 1_000, 300_000, 60_000);
+  const pollMs = clampInteger(args.pollMs, 500, 10_000, 2_000);
+  const deadline = Date.now() + timeoutMs;
+  let status = await getJson<JsonObject>(
+    `${baseUrl}/api/runs/${encodeURIComponent(runId)}`,
+    headers,
+  );
+  while (!isTerminalRunStatus(status.status) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    status = await getJson<JsonObject>(
+      `${baseUrl}/api/runs/${encodeURIComponent(runId)}`,
+      headers,
+    );
+  }
+  if (!isTerminalRunStatus(status.status)) {
+    return ok({
+      ...status,
+      runId,
+      done: false,
+      waitedMs: timeoutMs,
+      hint: `Still ${String(status.status ?? 'running')} after ${timeoutMs}ms. Call wait_for_run again (or watch_run with after=<cursor> for progress events); do not cancel just because the status has not changed.`,
+    });
+  }
+  const enriched = await getRun(baseUrl, { runId }, headers);
+  const payload = parseMcpResult(enriched);
+  if (!payload) return enriched;
+  return ok({ ...payload, runId, done: true, waitedMs: timeoutMs });
+}
+
+function isTerminalRunStatus(status: unknown): boolean {
+  return status === 'succeeded' || status === 'failed' || status === 'canceled';
+}
+
+interface ParsedSseRecord {
+  id: number | null;
+  event: string;
+  data: unknown;
+}
+
+function parseSseRecords(body: string): ParsedSseRecord[] {
+  const records: ParsedSseRecord[] = [];
+  for (const block of body.split(/\n\n/)) {
+    if (!block.trim()) continue;
+    let event = 'message';
+    let id: number | null = null;
+    const dataLines: string[] = [];
+    for (const rawLine of block.split('\n')) {
+      if (rawLine.startsWith('event:')) event = rawLine.slice(6).trim() || 'message';
+      else if (rawLine.startsWith('id:')) {
+        const parsed = Number(rawLine.slice(3).trim());
+        if (Number.isSafeInteger(parsed)) id = parsed;
+      } else if (rawLine.startsWith('data:')) {
+        dataLines.push(rawLine.slice(5).replace(/^ /u, ''));
+      }
+    }
+    if (dataLines.length === 0) continue;
+    const raw = dataLines.join('\n');
+    let data: unknown = raw;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      // Non-JSON payloads are kept verbatim rather than dropped.
+    }
+    records.push({ id, event, data });
+  }
+  return records;
+}
+
+const RUN_EVENT_TEXT_CAP = 4_000;
+
+function compactRunEvent(record: ParsedSseRecord): JsonObject | null {
+  const data =
+    record.data != null && typeof record.data === 'object' && !Array.isArray(record.data)
+      ? (record.data as JsonObject)
+      : null;
+  const type = typeof data?.type === 'string' ? data.type : record.event;
+  // The daemon emits a `status: running` frame on every tick; the status field
+  // of this tool already carries that fact.
+  if (type === 'status' && data?.label === 'running') return null;
+  if (type === 'done_key') return null;
+
+  const text = typeof data?.delta === 'string' ? data.delta : undefined;
+  const compact: JsonObject = {
+    seq: record.id,
+    kind: type,
+  };
+  if (text !== undefined) {
+    compact.text =
+      text.length > RUN_EVENT_TEXT_CAP
+        ? `${text.slice(0, RUN_EVENT_TEXT_CAP)}…`
+        : text;
+  }
+  if (typeof data?.name === 'string') compact.name = data.name;
+  if (data?.input !== undefined) compact.input = data.input;
+  if (typeof data?.toolUseId === 'string') compact.toolUseId = data.toolUseId;
+  if (typeof data?.isError === 'boolean') compact.isError = data.isError;
+  if (typeof data?.label === 'string') compact.label = data.label;
+  if (typeof data?.content === 'string' && text === undefined) {
+    compact.text =
+      data.content.length > RUN_EVENT_TEXT_CAP
+        ? `${data.content.slice(0, RUN_EVENT_TEXT_CAP)}…`
+        : data.content;
+  }
+  if (data?.usage !== undefined) compact.usage = data.usage;
+  if (data?.costUsd !== undefined) compact.costUsd = data.costUsd;
+  if (typeof data?.message === 'string' && text === undefined) {
+    compact.text = data.message;
+  }
+  return compact;
+}
+
+function clampInteger(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
+// Every `od` verb is a thin wrapper over the same daemon endpoints the web UI
+// uses, so exposing the headless CLI is what makes the MCP surface complete
+// without re-implementing each capability as a bespoke tool. The allowlist
+// keeps lifecycle and recursion out: `mcp` would nest stdio servers, and
+// `daemon start|stop` would fight the runtime the MCP is attached to.
+const OD_COMMAND_ALLOWLIST = new Set([
+  'agent',
+  'artifacts',
+  'atoms',
+  'automation',
+  'automations',
+  'brand',
+  'brands',
+  'chat',
+  'collab',
+  'comment',
+  'conversation',
+  'craft',
+  'deploy',
+  'design-systems',
+  'diagnostics',
+  'export',
+  'files',
+  'lint',
+  'marketplace',
+  'media',
+  'memory',
+  'message-center',
+  'plugin',
+  'project',
+  'research',
+  'resource',
+  'run',
+  'share',
+  'skill',
+  'skills',
+  'status',
+  'strategy',
+  'templates',
+  'ui',
+  'version',
+  'whats-new',
+  'workspace',
+]);
+
+const OD_COMMAND_OUTPUT_CAP = 200_000;
+
+async function runOdCommand(baseUrl: string, args: McpArgs) {
+  const argv = Array.isArray(args.argv) ? args.argv : null;
+  if (!argv || argv.length === 0 || argv.some((token) => typeof token !== 'string')) {
+    throw new Error('argv must be a non-empty array of strings.');
+  }
+  const tokens = argv as string[];
+  if (tokens.length === 1 && (tokens[0] === 'help' || tokens[0] === '--help' || tokens[0] === '-h')) {
+    return ok(OD_CLI_HELP_HINT);
+  }
+  const [command, subcommand] = tokens;
+  const allowed =
+    OD_COMMAND_ALLOWLIST.has(command ?? '')
+    || (command === 'daemon' && (subcommand === 'status' || subcommand === 'db'));
+  if (!allowed) {
+    return errorResult(
+      `od_command does not allow "${command}". Allowed: ${[...OD_COMMAND_ALLOWLIST].sort().join(', ')}, daemon status, daemon db.`,
+    );
+  }
+  const cliEntry = resolveOwnCliEntry();
+  if (!cliEntry) {
+    return errorResult('od_command is unavailable: this process was not launched from the od CLI entry.');
+  }
+  const timeoutMs = clampInteger(args.timeoutMs, 1_000, 300_000, 120_000);
+  const { spawn } = await import('node:child_process');
+  const env = {
+    ...process.env,
+    OD_DAEMON_URL: baseUrl,
+    // Keep the child on the same runtime as this bridge when the daemon was
+    // discovered rather than configured.
+    OD_PORT: new URL(baseUrl).port || process.env.OD_PORT || '7456',
+  };
+  return await new Promise<McpToolCallResult>((resolve) => {
+    const child = spawn(process.execPath, [cliEntry, ...tokens], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (exitCode: number | null, failure?: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const result: JsonObject = {
+        command: tokens.join(' '),
+        exitCode,
+        stdout: clipOutput(stdout),
+        stderr: clipOutput(stderr),
+      };
+      if (failure) result.error = failure;
+      resolve(ok(result));
+    };
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      finish(null, `timed out after ${timeoutMs}ms`);
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      stdout += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    });
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    });
+    child.once('error', (error) => finish(null, error.message));
+    child.once('close', (code) => finish(code));
+  });
+}
+
+function clipOutput(value: string): string {
+  if (value.length <= OD_COMMAND_OUTPUT_CAP) return value;
+  return `${value.slice(0, OD_COMMAND_OUTPUT_CAP)}\n… truncated ${value.length - OD_COMMAND_OUTPUT_CAP} chars`;
+}
+
+function resolveOwnCliEntry(): string | null {
+  const entry = process.argv[1];
+  if (typeof entry !== 'string' || entry.length === 0) return null;
+  if (!/\.[cm]?js$/u.test(entry)) return null;
+  if (!existsSync(entry)) return null;
+  return entry;
+}
+
+const OD_CLI_HELP_HINT =
+  'Run `od_command` with argv such as ["project","list","--json"], ["run","start","--project","<id>","--message","…","--follow","--json"], ["automation","list","--json"], ["media","generate",…], ["export","index.html","--project","<id>","--format","pdf","--out","/tmp/out.pdf"], or ["ui","list","--json"]. Most verbs accept --json.';
 
 // Reassemble the inner agent's textual output from the SSE event log.
 // We pull the events one-shot (the endpoint returns the full history

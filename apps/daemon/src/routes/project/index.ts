@@ -7,7 +7,7 @@ import { ProjectPublicFileStopPendingError } from '../../collab/project-public-f
 import type { ProjectDeleteResponse } from '@open-design/contracts';
 import { publicFileMutationHandler } from '../public-file-mutation-handler.js';
 import { createPublicFileMutations, type PublicFileMutations } from '../../collab/public-file-mutations.js';
-import { rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { load } from 'cheerio';
 import {
@@ -127,7 +127,12 @@ import {
   allProjectLocations,
   createLocationProjectDir,
   ensureProjectLocation,
+  manifestPath,
+  normalizeProjectOutputs,
+  readProjectManifest,
+  resolveProjectOutputs,
   scanProjectLocation,
+  upsertProjectManifestOutputs,
   writeProjectManifest,
 } from '../../project-locations.js';
 import { auditDesignSystemPackage } from '../../tools-connectors-cli.js';
@@ -5159,6 +5164,53 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       resolvedDir,
     };
     res.json(body);
+  });
+
+  // Agent-owned output folders for imported-folder projects.
+  // GET returns the manifest `outputs` (or defaults); PUT upserts it.
+  // The agent creates `.open-design/project.json` with e.g.
+  // `{ outputs: { designs: "designs", plans: "plans", store: "store" } }`
+  // and then stores deliverables in the folders it chose.
+  app.get('/api/projects/:id/outputs', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
+    try {
+      const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const manifest = await readProjectManifest(resolvedDir);
+      const outputs = resolveProjectOutputs(resolvedDir, manifest);
+      /** @type {import('@open-design/contracts').ProjectOutputsResponse} */
+      const body = { projectId: project.id, outputs, manifestPath: manifestPath(resolvedDir) };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 500, 'OUTPUTS_READ_FAILED', String(err?.message || err));
+    }
+  });
+
+  app.put('/api/projects/:id/outputs', async (req, res) => {
+    const project = getProject(db, req.params.id);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    if (!await enforceWorkspaceProjectMutation(req, res, sendApiError,
+      getWorkspaceProject, getWorkspaceProjectByProjectId, db, project.id, 'writeFiles')) return;
+    const normalized = normalizeProjectOutputs(req.body?.outputs ?? req.body);
+    if (!normalized) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'outputs must include at least one of designs, plans, store as relative folders');
+    }
+    try {
+      const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const manifest = await upsertProjectManifestOutputs(resolvedDir, project.id, project.name, normalized);
+      // Ensure the chosen folders exist so the next agent turn can write into them.
+      for (const dir of Object.values(manifest.outputs ?? {})) {
+        if (typeof dir === 'string' && dir) {
+          await mkdir(path.join(resolvedDir, dir), { recursive: true });
+        }
+      }
+      /** @type {import('@open-design/contracts').ProjectOutputsResponse} */
+      const body = { projectId: project.id, outputs: resolveProjectOutputs(resolvedDir, manifest), manifestPath: manifestPath(resolvedDir) };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'OUTPUTS_WRITE_FAILED', String(err?.message || err));
+    }
   });
 
   app.get('/api/projects/:id/workspace-scope', async (req, res) => {

@@ -226,9 +226,9 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
   if (obj.type === 'step_start') {
     // `sessionID` is OpenCode's own session handle (capture-style resume).
     // Surface it on the step-start status so the daemon can persist it to
-    // `agent_sessions` and replay it as `run -s <id>` next turn. OpenCode
-    // stamps it on every stream event; step_start is the turn opener, so a
-    // create turn always exposes it here.
+    // `agent_sessions` and continue it next turn with `sessions.prompt`
+    // against the same SDK session id. The SDK stamps it on every event;
+    // step_start is the turn opener, so a create turn always exposes it here.
     const sessionId =
       typeof obj.sessionID === 'string' && obj.sessionID.length > 0
         ? obj.sessionID
@@ -240,6 +240,18 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
 
   if (obj.type === 'text' && typeof part.text === 'string' && part.text.length > 0) {
     onEvent({ type: 'text_delta', delta: part.text });
+    return true;
+  }
+
+  // Model reasoning. The SDK surfaces these frames through the same
+  // `session.reasoning.*` events the adapter maps here; the text is the
+  // completed block, which is the same granularity `text` frames arrive at.
+  // A known-but-empty part is swallowed rather than downgraded to `raw` —
+  // it must not open a blank thinking row.
+  if (obj.type === 'reasoning') {
+    if (typeof part.text === 'string' && part.text.length > 0) {
+      onEvent({ type: 'thinking_delta', delta: part.text });
+    }
     return true;
   }
 
@@ -282,13 +294,13 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
   }
 
   if (obj.type === 'error') {
-    // OpenCode emits structured error frames on stdout (e.g. provider auth
-    // failures, network errors, schema mismatches) and still exits 0. Surface
-    // them as proper `error` events so server.ts's `sendAgentEvent` wrapper
-    // can flip the run to `failed` and forward a visible SSE error to the
-    // chat UI. Previously we downgraded these to `type:'raw'`, which is not
-    // rendered as an assistant message — the run looked like a fast clean
-    // success while the user actually got nothing back. See issue #691.
+    // The SDK surfaces provider auth failures, network errors, and schema
+    // mismatches as structured error records. Surface them as proper `error`
+    // events so server.ts's `sendAgentEvent` wrapper can flip the run to
+    // `failed` and forward a visible SSE error to the chat UI. Previously
+    // these were downgraded to `type:'raw'`, which is not rendered as an
+    // assistant message — the run looked like a fast clean success while the
+    // user actually got nothing back. See issue #691.
     //
     // Shape mirrors the qoder-stream contract (`{type, message, raw}`) so
     // the daemon's existing error-handling path recognises it without

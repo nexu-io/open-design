@@ -5,6 +5,7 @@ import {
   ensureMcpDaemonUrl,
   parseManagedMcpDiscovery,
   planMcpDaemonBootstrap,
+  resolveMcpDataDir,
 } from "../src/mcp-bootstrap.js";
 
 describe("planMcpDaemonBootstrap", () => {
@@ -247,5 +248,93 @@ describe("managed MCP registrations", () => {
       statusAtEndpoint,
     })).rejects.toThrow(/registration.*refresh/i);
     expect(statusAtEndpoint).not.toHaveBeenCalled();
+  });
+});
+
+describe("source-checkout self bootstrap", () => {
+  const selfBootstrap = {
+    command: "/usr/local/bin/node",
+    args: ["/repo/apps/daemon/dist/cli.js", "daemon", "start", "--headless", "--port", "7456"],
+    env: { OD_DATA_DIR: "/repo/.od" },
+    targetUrl: "http://127.0.0.1:7456",
+  };
+
+  it("plans a headless spawn when no packaged launcher is registered", () => {
+    expect(planMcpDaemonBootstrap({
+      daemonReachable: false,
+      explicitDaemonUrl: false,
+      env: { OD_DAEMON_URL: "http://127.0.0.1:1", OD_SIDECAR_CLIENT_ENDPOINT: "/tmp/ipc" },
+      selfBootstrap,
+    })).toMatchObject({
+      action: "spawn",
+      command: "/usr/local/bin/node",
+      args: selfBootstrap.args,
+      env: expect.objectContaining({ OD_DATA_DIR: "/repo/.od" }),
+    });
+    const plan = planMcpDaemonBootstrap({
+      daemonReachable: false,
+      explicitDaemonUrl: false,
+      env: { OD_DAEMON_URL: "http://127.0.0.1:1", OD_SIDECAR_CLIENT_ENDPOINT: "/tmp/ipc" },
+      selfBootstrap,
+    });
+    expect(plan).not.toHaveProperty("env.OD_DAEMON_URL");
+    expect(plan).not.toHaveProperty("env.OD_SIDECAR_CLIENT_ENDPOINT");
+  });
+
+  it("never self-bootstraps over an explicit daemon URL", () => {
+    expect(planMcpDaemonBootstrap({
+      daemonReachable: false,
+      explicitDaemonUrl: true,
+      env: {},
+      selfBootstrap,
+    })).toEqual({ action: "none", reason: "explicit-daemon-url" });
+  });
+
+  it("waits for the self-spawned URL when nothing is registered yet", async () => {
+    let launched = false;
+    const spawnBootstrap = vi.fn(async () => { launched = true; });
+    const probeDaemon = vi.fn(async () => launched);
+    await expect(ensureMcpDaemonUrl({
+      env: {},
+      resolveDaemonUrl: async () => { throw new Error("not registered"); },
+      connectInherited: () => null,
+      probeDaemon,
+      sleep: async () => undefined,
+      spawnBootstrap,
+      selfBootstrap,
+    })).resolves.toBe("http://127.0.0.1:7456");
+    expect(spawnBootstrap).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveMcpDataDir", () => {
+  it("prefers the flag, then OD_DATA_DIR", () => {
+    expect(resolveMcpDataDir({
+      flagDir: "custom",
+      env: { OD_DATA_DIR: "/elsewhere" },
+      cwd: "/repo/apps",
+    })).toBe("/repo/apps/custom");
+    expect(resolveMcpDataDir({
+      flagDir: "",
+      env: { OD_DATA_DIR: "/elsewhere" },
+      cwd: "/repo/apps",
+    })).toBe("/elsewhere");
+  });
+
+  it("walks up to the nearest existing .od/app.sqlite", () => {
+    const existing = new Set(["/repo/.od/app.sqlite"]);
+    expect(resolveMcpDataDir({
+      env: {},
+      cwd: "/repo/packages/web/src",
+      exists: (candidate) => existing.has(candidate),
+    })).toBe("/repo/.od");
+  });
+
+  it("falls back to the cwd when no daemon data exists yet", () => {
+    expect(resolveMcpDataDir({
+      env: {},
+      cwd: "/scratch/new-project",
+      exists: () => false,
+    })).toBe("/scratch/new-project/.od");
   });
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-nocheck
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
@@ -106,6 +106,8 @@ const MEDIA_STOCK_SEARCH_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 const MCP_STRING_FLAGS = new Set([
   'daemon-url',
+  'data-dir',
+  'port',
 ]);
 const MCP_BOOLEAN_FLAGS = new Set([
   'help',
@@ -262,7 +264,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'client-request-id',
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
-  'source', 'out',
+  'source', 'out', 'designs', 'plans', 'store',
 ]);
 const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
@@ -2861,9 +2863,15 @@ async function runMcp(args) {
     return;
   }
 
-  const { ensureMcpDaemonUrl } = await import('./mcp-bootstrap.js');
+  const { ensureMcpDaemonUrl, resolveMcpDataDir } = await import('./mcp-bootstrap.js');
+  const dataDir = resolveMcpDataDir({ flagDir: flags['data-dir'] });
+  const port = Number(flags.port ?? process.env.OD_PORT ?? 7456);
   const daemonUrl = await ensureMcpDaemonUrl({
     flagUrl: flags['daemon-url'],
+    selfBootstrap: planOwnHeadlessDaemon({
+      dataDir,
+      port: Number.isFinite(port) && port > 0 ? port : 7456,
+    }),
   });
 
   const { runMcpStdio } = await import('./mcp.js');
@@ -2877,8 +2885,23 @@ async function runMcp(args) {
   });
 }
 
+function planOwnHeadlessDaemon(options: { dataDir: string; port: number }) {
+  // A packaged install supplies OD_MCP_BOOTSTRAP_COMMAND instead; this path
+  // exists so a source checkout (or any standalone `od`) can bring up its own
+  // daemon without the user opening the desktop app.
+  const entry = process.argv[1];
+  if (typeof entry !== 'string' || !/\.[cm]?js$/u.test(entry)) return undefined;
+  if (!existsSync(entry)) return undefined;
+  return {
+    command: process.execPath,
+    args: [entry, 'daemon', 'start', '--headless', '--port', String(options.port)],
+    env: { OD_DATA_DIR: options.dataDir },
+    targetUrl: `http://127.0.0.1:${options.port}`,
+  };
+}
+
 function printMcpHelp() {
-  console.log(`Usage: od mcp [--daemon-url <url>]
+  console.log(`Usage: od mcp [--daemon-url <url>] [--data-dir <path>] [--port <n>]
 
 Run a stdio MCP (Model Context Protocol) server that proxies project
 tool calls to a running OpenDesign daemon. Wire it into a coding agent
@@ -2900,6 +2923,15 @@ Options:
                        before calls and safely retries reads when the
                        daemon changes ports, so an existing task can
                        survive an OpenDesign restart.
+  --data-dir <path>    Daemon data root to use when this MCP has to start
+                       its own headless daemon (no packaged launcher and no
+                       daemon already running). Resolution order: this flag,
+                       OD_DATA_DIR, the nearest ancestor .od that already
+                       contains app.sqlite, then <cwd>/.od. Reusing the
+                       existing root is what makes a headless MCP see the
+                       same projects the app wrote.
+  --port <n>           Port for that self-started headless daemon
+                       (default 7456, env OD_PORT).
 
 Environment:
   OD_MCP_STDIO_IDLE_EXIT_MS
@@ -7700,6 +7732,11 @@ async function runProject(args) {
                     [--design-system <id>] [--json]
   od project list                         List projects.
   od project info <id>                    Print one project.
+  od project outputs <id> [--designs <dir>] [--plans <dir>] [--store <dir>] [--json]
+                    Get or set the agent-owned output folders
+                    (designs / plans / store) stored in
+                    `.open-design/project.json`. With no folder flags it
+                    prints the current mapping; with flags it upserts it.
   od project restore-automatic-scenario <id> [--json]
                                           Restore the daemon-selected default
                                           scenario with a snapshot CAS guard.
@@ -7828,6 +7865,45 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'outputs': {
+      const id = positionalArgs(rest, PROJECT_RESOURCE_STRING_FLAGS)[0];
+      if (!id) {
+        console.error('Usage: od project outputs <id> [--designs <dir>] [--plans <dir>] [--store <dir>] [--json]');
+        process.exit(2);
+      }
+      const outputs = {};
+      for (const key of ['designs', 'plans', 'store']) {
+        const value = typeof flags[key] === 'string' ? flags[key].trim() : '';
+        if (value) outputs[key] = value;
+      }
+      if (Object.keys(outputs).length === 0) {
+        const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/outputs`, {
+          headers: workspaceHeaders,
+        });
+        if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+        const data = await resp.json();
+        if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        console.log(`designs: ${data.outputs?.designs ?? '-'}`);
+        console.log(`plans: ${data.outputs?.plans ?? '-'}`);
+        console.log(`store: ${data.outputs?.store ?? '-'}`);
+        return;
+      }
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/outputs`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json', ...workspaceHeaders },
+          body: JSON.stringify({ outputs }),
+        });
+      } catch {
+        return exitWithStructuredError({ code: 'daemon-not-running', message: 'Failed to reach daemon.' });
+      }
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] outputs for ${id}: designs=${data.outputs?.designs} plans=${data.outputs?.plans} store=${data.outputs?.store}`);
       return;
     }
     case 'restore-automatic-scenario': {

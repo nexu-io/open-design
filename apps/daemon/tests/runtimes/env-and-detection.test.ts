@@ -558,23 +558,23 @@ test('resolveAgentExecutable prefers a direct Copilot CLI over the VS Code boots
   }
 });
 
-test('resolveAgentExecutable prefers opencode-cli before desktop opencode fallback', () => {
+test('resolveAgentExecutable resolves the opencode binary (SDK transport, no opencode-cli)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-opencode-cli-'));
   try {
     return withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], () => {
+      // `opencode-cli` is no longer consulted: the opencode family runs
+      // through the in-process SDK and resolves only the `opencode` binary
+      // (used for version probing, never for `run` spawning).
       const cli = join(dir, 'opencode-cli');
-      const desktop = join(dir, 'opencode');
+      const bin = join(dir, 'opencode');
       writeFileSync(cli, '#!/bin/sh\nexit 0\n');
-      writeFileSync(desktop, '#!/bin/sh\nexit 0\n');
+      writeFileSync(bin, '#!/bin/sh\nexit 0\n');
       chmodSync(cli, 0o755);
-      chmodSync(desktop, 0o755);
+      chmodSync(bin, 0o755);
       process.env.PATH = dir;
       process.env.OD_AGENT_HOME = dir;
 
-      assert.equal(resolveAgentExecutable(opencode), cli);
-
-      rmSync(cli, { force: true });
-      assert.equal(resolveAgentExecutable(opencode), desktop);
+      assert.equal(resolveAgentExecutable(opencode), bin);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -20,6 +20,52 @@ vi.mock('@open-design/platform', async (importOriginal) => ({
   resolveSystemProxyEnv: resolveSystemProxyEnvMock,
 }));
 
+// SDK-default world: opencode/byok-opencode never spawn a CLI binary.
+// Mock `OpenCode.create()` so connection tests control the SDK host
+// without PATH fake bins. Defaults to a healthy catalog; per-test
+// overrides set list rejections (auth/offline/connectivity).
+const opencodeSdkMocks = vi.hoisted(() => ({
+  create: vi.fn(),
+  list: vi.fn(),
+  close: vi.fn(),
+}));
+
+vi.mock('@opencode/sdk', () => ({
+  OpenCode: { create: opencodeSdkMocks.create },
+}));
+
+function mockSdkCatalog(ids: string[]) {
+  // Production SDK entries carry BARE `id`s with separate `providerID` /
+  // `modelID` (e.g. `{ id: 'beam-free', providerID: 'opencode',
+  // modelID: 'beam-free' }`). Emit that shape — not pre-composed ids — so
+  // the suite guards the composition the probe relies on.
+  opencodeSdkMocks.list.mockResolvedValue({
+    data: ids.map((id) => {
+      const slash = id.indexOf('/');
+      if (slash <= 0) return { id };
+      return { id: id.slice(slash + 1), providerID: id.slice(0, slash), modelID: id.slice(slash + 1) };
+    }),
+  });
+  opencodeSdkMocks.close.mockResolvedValue(undefined);
+  opencodeSdkMocks.create.mockResolvedValue({
+    model: { list: opencodeSdkMocks.list },
+    close: opencodeSdkMocks.close,
+  });
+}
+
+function mockSdkListFailure(error: unknown) {
+  opencodeSdkMocks.list.mockRejectedValue(error);
+  opencodeSdkMocks.close.mockResolvedValue(undefined);
+  opencodeSdkMocks.create.mockResolvedValue({
+    model: { list: opencodeSdkMocks.list },
+    close: opencodeSdkMocks.close,
+  });
+}
+
+function mockSdkCreateFailure(error: unknown) {
+  opencodeSdkMocks.create.mockRejectedValue(error);
+}
+
 import {
   createAgentSink,
   isSmokeOkReply,
@@ -159,10 +205,6 @@ async function withOnlyFakeOpenClaude<T>(script: string, run: () => Promise<T>):
   return withOnlyFakeAgent('openclaude', script, run);
 }
 
-async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promise<T> {
-  return withFakeAgent('opencode', script, run);
-}
-
 async function withFakeCursorAgent<T>(script: string, run: () => Promise<T>): Promise<T> {
   return withFakeAgent('cursor-agent', script, run);
 }
@@ -215,6 +257,9 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   amrModelLoadingCache.resetForTests();
+  opencodeSdkMocks.create.mockReset();
+  opencodeSdkMocks.list.mockReset();
+  opencodeSdkMocks.close.mockReset();
 });
 
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -3807,289 +3852,126 @@ process.stdin.on('end', () => {
   });
 
   it('reports OpenCode structured errors without treating them as raw output', async () => {
-    await withFakeOpenCode(
-      `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('openai/gpt-5');
-  process.exit(0);
-}
-console.log(JSON.stringify({ type: 'error', error: { data: { message: 'OpenCode auth failed: login required' } } }));
-setTimeout(() => process.exit(0), 50);
-`,
-      async () => {
-        const res = await realFetch(`${baseUrl}/api/test/connection`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
-        });
-        expect(res.status).toBe(200);
-        await expect(res.json()).resolves.toMatchObject({
-          ok: false,
-          kind: 'agent_spawn_failed',
-          agentName: 'OpenCode',
-          detail: 'OpenCode auth failed: login required',
-        });
-      },
-    );
+    mockSdkListFailure(new Error('OpenCode auth failed: login required'));
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: false,
+      kind: 'agent_spawn_failed',
+      agentName: 'OpenCode',
+      detail: 'OpenCode SDK model catalog read failed (transport: sdk): OpenCode auth failed: login required',
+    });
   });
 
-  const OPENCODE_INCOMPATIBLE_DETAIL =
-    'OpenCode rejected the command-line flags this connection test uses, so the installed OpenCode build and this OpenDesign build do not match. Update whichever is older (`npm i -g opencode-ai@latest` for OpenCode), then retry the OpenCode connection test.';
-
-  it('reports a 2.x "Unrecognized flag" rejection as a version mismatch instead of raw stderr', async () => {
-    await withFakeOpenCode(
-      `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
-  process.exit(0);
-}
-if (args.includes('--help')) {
-  console.error('FLAGS\\n  --dir  Directory');
-  process.exit(0);
-}
-console.error('ERROR\\n  Unrecognized flag: --pure in command opencode run');
-process.exit(1);
-`,
-      async () => {
-        const res = await realFetch(`${baseUrl}/api/test/connection`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
-        });
-        expect(res.status).toBe(200);
-        await expect(res.json()).resolves.toMatchObject({
-          ok: false,
-          kind: 'agent_spawn_failed',
-          agentName: 'OpenCode',
-          detail: OPENCODE_INCOMPATIBLE_DETAIL,
-        });
-      },
-    );
+  it('reports an SDK host boot failure as a spawn failure (no CLI version probe)', async () => {
+    mockSdkCreateFailure(new Error('router socket unavailable'));
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: false,
+      kind: 'agent_spawn_failed',
+      agentName: 'OpenCode',
+      detail: expect.stringContaining('SDK host failed to start'),
+    });
   });
 
-  it('reports outdated OpenCode CLI argument failures with update guidance', async () => {
-    const expectedDetail = OPENCODE_INCOMPATIBLE_DETAIL;
-
-    await withFakeOpenCode(
-      `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
-  process.exit(0);
-}
-console.error('opencode');
-console.error('Usage: opencode [options] [command]');
-console.error('Options:');
-console.error('  --help  Show help');
-console.error('incompatible opencode args');
-process.exit(1);
-`,
-      async () => {
-        const res = await realFetch(`${baseUrl}/api/test/connection`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
-        });
-        expect(res.status).toBe(200);
-        await expect(res.json()).resolves.toMatchObject({
-          ok: false,
-          kind: 'agent_spawn_failed',
-          agentName: 'OpenCode',
-          detail: expectedDetail,
-        });
-      },
-    );
+  it('reports an unknown OpenCode model against the SDK catalog', async () => {
+    mockSdkCatalog(['github-copilot/gpt-4o']);
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'agent', agentId: 'opencode', model: 'openai/does-not-exist' }),
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: false,
+      kind: 'not_found_model',
+      agentName: 'OpenCode',
+      detail: expect.stringContaining('not in the OpenCode SDK model catalog'),
+    });
   });
 
-  it('preserves unrelated OpenCode missing-required failures', async () => {
-    await withFakeOpenCode(
-      `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
-  process.exit(0);
-}
-console.error('missing required environment variable OPENAI_API_KEY');
-process.exit(1);
-`,
-      async () => {
-        const res = await realFetch(`${baseUrl}/api/test/connection`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
-        });
-        expect(res.status).toBe(200);
-        const body = await res.json() as { detail?: string };
-        expect(body).toMatchObject({
-          ok: false,
-          kind: 'agent_spawn_failed',
-          agentName: 'OpenCode',
-        });
-        expect(body.detail).toContain('missing required environment variable OPENAI_API_KEY');
-        expect(body.detail).not.toContain('OpenCode CLI appears to be outdated');
-      },
-    );
+  it('preserves SDK catalog errors verbatim (no outdated-CLI copy)', async () => {
+    mockSdkListFailure(new Error('missing required environment variable OPENAI_API_KEY'));
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { detail?: string };
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'agent_spawn_failed',
+      agentName: 'OpenCode',
+    });
+    expect(body.detail).toContain('missing required environment variable OPENAI_API_KEY');
+    expect(body.detail).not.toContain('OpenCode CLI appears to be outdated');
   });
 
-  it('launches OpenCode connection tests with 1.3-compatible JSON stdin args', async () => {
-    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
-    const argvFile = path.join(markerDir, 'argv.json');
-    const stdinFile = path.join(markerDir, 'stdin.txt');
-    try {
-      await withFakeOpenCode(
-        `
-const fs = require('node:fs');
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
-  process.exit(0);
-}
-if (args.includes('--help')) {
-  // 1.x help: the workspace/isolation/variant flags exist, the permission
-  // bypass does not (this fake rejects it below).
-  console.error('Options:\\n  --dir      Directory\\n  --pure     No plugins\\n  --variant  Model variant');
-  process.exit(0);
-}
-fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
-let stdin = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
-  fs.writeFileSync(${JSON.stringify(stdinFile)}, stdin);
-  if (args.includes('--dangerously-skip-permissions') || args.includes('--model')) {
-    console.error('incompatible opencode args');
-    process.exit(1);
-    return;
-  }
-  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
-});
-`,
-        async () => {
-          const res = await realFetch(`${baseUrl}/api/test/connection`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              mode: 'agent',
-              agentId: 'opencode',
-              model: 'github-copilot/gpt-4o',
-            }),
-          });
-          expect(res.status).toBe(200);
-          await expect(res.json()).resolves.toMatchObject({
-            ok: true,
-            kind: 'success',
-            agentName: 'OpenCode',
-            model: 'github-copilot/gpt-4o',
-            sample: 'ok',
-          });
-
-          // `--dir` pins OpenCode's workspace to the probe's own temp cwd, so
-          // a connection test cannot adopt the repository root as its
-          // worktree. The path is minted per probe; everything around it still
-          // has to match byte-for-byte, since the 1.3 compatibility this test
-          // guards is a property of the argument ORDER.
-          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
-          expect(argv.slice(0, 3)).toEqual(['run', '--format', 'json']);
-          expect(argv[3]).toBe('--dir');
-          expect(path.isAbsolute(argv[4] ?? '')).toBe(true);
-          expect(argv.slice(5)).toEqual([
-            '-m',
-            'github-copilot/gpt-4o',
-            '--pure',
-            '--title',
-            'Connection test',
-          ]);
-          await expect(fsp.readFile(stdinFile, 'utf8')).resolves.toBe('Reply with only: ok');
-        },
-      );
-    } finally {
-      await fsp.rm(markerDir, { recursive: true, force: true });
-    }
+  it('runs the OpenCode connection test through the SDK (no CLI argv)', async () => {
+    mockSdkCatalog(['github-copilot/gpt-4o', 'opencode/big-pickle']);
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'agent',
+        agentId: 'opencode',
+        model: 'github-copilot/gpt-4o',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      ok: true,
+      kind: 'success',
+      agentName: 'OpenCode',
+      model: 'github-copilot/gpt-4o',
+    });
+    // SDK transport: no CLI binary was resolved or spawned, and the detail
+    // names the in-process transport instead of CLI flags.
+    expect(body.detail).toContain('transport: sdk');
+    expect(body).not.toHaveProperty('binaryPath');
+    expect(body.diagnostics).toMatchObject({ phase: 'connection_smoke_test' });
+    expect(opencodeSdkMocks.create).toHaveBeenCalled();
   });
 
-  it('launches OpenCode 2.x connection tests without the removed 1.x flags', async () => {
-    // OpenCode 2.0 rejects `--dir`, `--pure`, `--variant` and
-    // `--dangerously-skip-permissions` with "Unrecognized flag" and exit 1,
-    // which is exactly what the Settings "Test" button showed on 2.0.29.
-    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-v2-argv-'));
-    const argvFile = path.join(markerDir, 'argv.json');
-    const envFile = path.join(markerDir, 'env.json');
-    try {
-      await withFakeOpenCode(
-        `
-const fs = require('node:fs');
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  if (args.includes('--verbose')) {
-    console.error('ERROR\\n  Unrecognized flag: --verbose in command opencode models');
-    process.exit(1);
-  }
-  console.log('github-copilot/gpt-4o');
-  process.exit(0);
-}
-if (args.includes('--help')) {
-  console.error('FLAGS\\n  --standalone  Run with a private server\\n  --auto  Auto-approve permissions\\n  --model, -m string  Model to use in the format provider/model#variant');
-  process.exit(0);
-}
-for (const flag of ['--dir', '--pure', '--variant', '--dangerously-skip-permissions']) {
-  if (args.includes(flag)) {
-    console.error('ERROR\\n  Unrecognized flag: ' + flag + ' in command opencode run');
-    process.exit(1);
-  }
-}
-fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
-// Resolve both while the probe cwd still exists; the daemon removes it after the test.
-fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
-  PWD: fs.realpathSync(process.env.PWD),
-  cwd: fs.realpathSync(process.cwd()),
-}));
-process.stdin.resume();
-process.stdin.on('end', () => {
-  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
-});
-`,
-        async () => {
-          const res = await realFetch(`${baseUrl}/api/test/connection`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              mode: 'agent',
-              agentId: 'opencode',
-              model: 'github-copilot/gpt-4o',
-            }),
-          });
-          expect(res.status).toBe(200);
-          await expect(res.json()).resolves.toMatchObject({
-            ok: true,
-            kind: 'success',
-            agentName: 'OpenCode',
-            sample: 'ok',
-          });
-
-          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
-          expect(argv).toEqual([
-            'run', '--format', 'json',
-            '--auto', '--standalone',
-            '-m', 'github-copilot/gpt-4o',
-            '--title', 'Connection test',
-          ]);
-          // Without `--dir`, the probe's temp cwd is the workspace; `PWD` is
-          // pinned to it for the 2.0.x builds that consult `PWD` first.
-          const env = JSON.parse(await fsp.readFile(envFile, 'utf8')) as { PWD: string; cwd: string };
-          expect(env.PWD).toBe(env.cwd);
-        },
-      );
-    } finally {
-      await fsp.rm(markerDir, { recursive: true, force: true });
-    }
+  it('runs the OpenCode connection test against the SDK catalog (no CLI flags)', async () => {
+    // The SDK transport has no argv: no `--dir`, `--pure`, `--variant`,
+    // `--dangerously-skip-permissions`, `--auto`, or `--standalone`. The
+    // session carries `location.directory` instead, so this pins the
+    // catalog-membership contract: a catalogued model succeeds.
+    mockSdkCatalog(['github-copilot/gpt-4o']);
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'agent',
+        agentId: 'opencode',
+        model: 'github-copilot/gpt-4o',
+      }),
+    });
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      kind: 'success',
+      agentName: 'OpenCode',
+    });
   });
 
-  it('does not reuse another OpenCode binary variant catalog for an OPENCODE_BIN connection test', async () => {
-    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-variant-scope-'));
-    const bin = path.join(markerDir, 'opencode-other');
-    const argvFile = path.join(markerDir, 'argv.json');
+  it('ignores OPENCODE_BIN for SDK connection tests (no binary to resolve)', async () => {
+    // CLI-era: a custom OPENCODE_BIN scoped the model catalog per binary.
+    // SDK-era: there is no binary, so the env override is inert and the
+    // SDK catalog decides.
+    mockSdkCatalog(['openai/gpt-5.6-sol']);
     const previousModels = getRememberedLiveModels('opencode');
     rememberLiveModels('opencode', [{
       id: 'openai/gpt-5.6-sol',
@@ -4097,63 +3979,33 @@ process.stdin.on('end', () => {
       reasoningOptions: [{ id: 'high', label: 'high' }],
     }]);
     try {
-      await fsp.writeFile(
-        bin,
-        `#!/usr/bin/env node
-const fs = require('node:fs');
-const args = process.argv.slice(2);
-fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
-process.stdin.resume();
-process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } })));
-`,
-      );
-      await fsp.chmod(bin, 0o755);
-
       const result = await testAgentConnection({
         agentId: 'opencode',
         model: 'openai/gpt-5.6-sol',
         reasoning: 'high',
-        agentCliEnv: { opencode: { OPENCODE_BIN: bin } },
+        agentCliEnv: { opencode: { OPENCODE_BIN: '/nonexistent/opencode-other' } },
       });
 
       expect(result).toMatchObject({ ok: true, kind: 'success', agentName: 'OpenCode' });
-      const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
-      expect(argv).toContain('openai/gpt-5.6-sol');
-      expect(argv).not.toContain('--variant');
-      expect(argv).not.toContain('high');
+      expect(opencodeSdkMocks.create).toHaveBeenCalled();
     } finally {
       rememberLiveModels('opencode', previousModels);
-      await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });
 
   it('surfaces OpenCode provider connectivity errors captured before timeout (#4999)', async () => {
-    await withFakeOpenCode(
-      `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('ollama/qwen3.5-9b');
-  process.exit(0);
-}
-console.error('Cannot connect to API: Unable to connect. Is the computer able to access the url?');
-console.log('UNRELATED_STDOUT_TAIL_MARKER');
-setInterval(() => {}, 1000);
-`,
-      async () => {
-        const result = await testAgentConnection({
-          agentId: 'opencode',
-          model: 'ollama/qwen3.5-9b',
-        });
+    mockSdkListFailure(new Error('Cannot connect to API: Unable to connect. Is the computer able to access the url?'));
+    const result = await testAgentConnection({
+      agentId: 'opencode',
+      model: 'ollama/qwen3.5-9b',
+    });
 
-        expect(result.ok).toBe(false);
-        expect(result.kind).toBe('upstream_unavailable');
-        expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
-        expect(result.detail).toContain('Cannot connect to API');
-        expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
-        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
-        expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
-      },
-    );
+    expect(result.ok).toBe(false);
+    expect(result.kind).toBe('upstream_unavailable');
+    expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
+    expect(result.detail).toContain('Cannot connect to API');
+    expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+    expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
   });
 
   it.each([
@@ -4170,28 +4022,16 @@ setInterval(() => {}, 1000);
   ])(
     'surfaces OpenCode provider connectivity errors from %s before timeout (#4999)',
     async (_name, stderrLine, expectedDetail) => {
-      await withFakeOpenCode(
-        `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('ollama/qwen3.5-9b');
-  process.exit(0);
-}
-console.error(${JSON.stringify(stderrLine)});
-setInterval(() => {}, 1000);
-`,
-        async () => {
-          const result = await testAgentConnection({
-            agentId: 'opencode',
-            model: 'ollama/qwen3.5-9b',
-          });
+      mockSdkListFailure(new Error(stderrLine));
+      const result = await testAgentConnection({
+        agentId: 'opencode',
+        model: 'ollama/qwen3.5-9b',
+      });
 
-          expect(result.ok).toBe(false);
-          expect(result.kind).toBe('upstream_unavailable');
-          expect(result.detail).toContain(expectedDetail);
-          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
-        },
-      );
+      expect(result.ok).toBe(false);
+      expect(result.kind).toBe('upstream_unavailable');
+      expect(result.detail).toContain(expectedDetail);
+      expect(result.diagnostics?.phase).toBe('connection_smoke_test');
     },
   );
 
@@ -4322,7 +4162,10 @@ process.stdin.on('end', () => {
     });
   });
 
-  it('keeps OpenCode smoke tests green when git bootstrap is unavailable', async () => {
+  it('keeps OpenCode SDK tests green when git is unavailable', async () => {
+    // SDK transport never shells out to git or a CLI binary: a broken git
+    // on PATH must not affect the connection test.
+    mockSdkCatalog(['github-copilot/gpt-4o']);
     const gitDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-git-missing-'));
     const oldPath = process.env.PATH;
     try {
@@ -4335,30 +4178,17 @@ process.stdin.on('end', () => {
       }
       process.env.PATH = `${gitDir}${path.delimiter}${oldPath ?? ''}`;
 
-      await withFakeOpenCode(
-        `
-const args = process.argv.slice(2);
-if (args[0] === 'models') {
-  console.log('github-copilot/gpt-4o');
-  process.exit(0);
-}
-console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
-`,
-        async () => {
-          const res = await realFetch(`${baseUrl}/api/test/connection`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
-          });
-          expect(res.status).toBe(200);
-          await expect(res.json()).resolves.toMatchObject({
-            ok: true,
-            kind: 'success',
-            agentName: 'OpenCode',
-            sample: 'ok',
-          });
-        },
-      );
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'agent', agentId: 'opencode' }),
+      });
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        agentName: 'OpenCode',
+      });
     } finally {
       process.env.PATH = oldPath;
       await fsp.rm(gitDir, { recursive: true, force: true });

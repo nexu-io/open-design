@@ -47,6 +47,8 @@
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
+    "@opencode/plugin": "2.2.6",
+    "@opencode/sdk": "2.2.6",
     "@opentelemetry/api": "1.9.1",
     "acorn": "8.15.0",
     "better-sqlite3": "12.10.0",
@@ -70,13 +72,13 @@
     "undici": "7.29.0"
   },
   "devDependencies": {
-    "esbuild": "0.28.0",
-    "@typescript/native": "npm:typescript@7.0.2",
     "@babel/types": "7.29.0",
     "@types/better-sqlite3": "7.6.13",
     "@types/express": "5.0.6",
     "@types/multer": "2.1.0",
     "@types/node": "20.19.39",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "esbuild": "0.28.0",
     "jsdom": "29.1.1",
     "vitest": "4.1.6"
   },

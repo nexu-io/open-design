@@ -12,8 +12,9 @@ import type {
 } from '../types';
 import { resolveFixedOriginBaseUrl } from './apiProtocols';
 import {
+  APP_THEME_DEFAULT,
   DEFAULT_ACCENT_COLOR,
-  FORCED_APP_THEME,
+  isAppTheme,
   normalizeAccentColor,
   resolveAppTheme,
 } from './appearance';
@@ -91,7 +92,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   skillId: null,
   designSystemId: null,
   onboardingCompleted: false,
-  theme: FORCED_APP_THEME,
+  theme: APP_THEME_DEFAULT,
   accentColor: DEFAULT_ACCENT_COLOR,
   mediaProviders: {},
   composio: {},
@@ -714,17 +715,17 @@ export function loadConfig(): AppConfig {
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
-      // Coerce on read, not just on default: the theme setting is gone, but
-      // 'dark' / 'system' is still on disk in every install that ever used it.
+      // Coerce on read: very old installs may carry a theme value from before
+      // the tri-state preference existed. Valid 'light' / 'dark' / 'system'
+      // choices pass through untouched.
       theme: resolveAppTheme(parsed.theme),
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
-    // A stored `dark` / `system` theme is dead data now that the app ships
-    // light-only. Flag it so the coerced value is written back once and the old
-    // preference stops existing on disk, instead of being re-coerced forever.
-    let migratedConfig = parsed.theme != null && parsed.theme !== FORCED_APP_THEME;
+    // A stored theme that is not a valid choice is dead data. Flag it so the
+    // coerced value is written back once instead of being re-coerced forever.
+    let migratedConfig = parsed.theme != null && !isAppTheme(parsed.theme);
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
         ? parsed.configMigrationVersion

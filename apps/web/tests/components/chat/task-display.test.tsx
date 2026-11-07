@@ -106,10 +106,13 @@ it('keeps a manual fold when planning hands off to automatic production', () => 
   expect(record(view.container)).not.toHaveAttribute('open');
 });
 
-it('collapses on the final production conclusion without waiting for the stream to close', () => {
+it('keeps the production conclusion outside an always-open record', () => {
   const view = render(chat(productionTurn()));
   view.rerender(chat(productionTurn('running', 'Final design.')));
-  expect(record(view.container)).not.toHaveAttribute('open');
+  // The record no longer folds itself away when the conclusion starts; the
+  // conclusion still renders outside it, so the answer is never buried in the
+  // execution log.
+  expect(record(view.container)).toHaveAttribute('open');
   expect(screen.getByText('Final design.').closest('details')).toBeNull();
 });
 
@@ -117,12 +120,14 @@ it.each(['running', 'completed'] as const)('keeps the final reply after the orde
   const message = productionTurn(state, 'Final design.');
   const verify = (container: HTMLElement) => {
     const outer = record(container);
-    expect(outer).not.toHaveAttribute('open');
+    expect(outer).toHaveAttribute('open');
     expect(screen.getAllByText('Final design.')).toHaveLength(1);
     const finalReply = screen.getByText('Final design.');
     expect(finalReply.closest('details')).toBeNull();
+    // A manual fold still wins over the open default.
     fireEvent.click(outer.querySelector('summary')!);
     fireEvent(outer, new Event('toggle'));
+    expect(outer).not.toHaveAttribute('open');
     const plan = screen.getByText('The plan is ready.');
     const production = screen.getByText('Wrote');
     expect(plan.compareDocumentPosition(production) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -136,13 +141,13 @@ it.each(['running', 'completed'] as const)('keeps the final reply after the orde
   verify(reopened.container);
 });
 
-it.each(['failed', 'canceled'] as const)('keeps the existing %s header and folding behavior', state => {
+it.each(['failed', 'canceled'] as const)('keeps the existing %s header and stays open', state => {
   const view = render(chat(productionTurn()));
   view.rerender(chat(productionTurn(state)));
   const outer = record(view.container);
   expect(outer.querySelector('summary')).toHaveTextContent(state === 'failed' ? 'Run failed' : 'Stopped');
   expect(outer.querySelector('summary')).toHaveTextContent('26s');
-  expect(outer.hasAttribute('open')).toBe(state === 'canceled');
+  expect(outer.hasAttribute('open')).toBe(true);
   expect(outer.querySelector('summary [data-orb]')).toBeNull();
 });
 

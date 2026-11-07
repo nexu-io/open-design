@@ -95,7 +95,7 @@ posixTest('detectAgents finds OpenCode when npm exposes only the opencode binary
       const opencode = agents.find((agent) => agent.id === 'opencode');
 
       assert.equal(opencode?.available, true);
-      assert.equal(opencode?.bin, 'opencode-cli');
+      assert.equal(opencode?.bin, 'opencode');
       assert.equal(opencode?.path, bin);
       assert.equal(opencode?.version, 'opencode 1.17.3');
       assert.equal(opencode?.diagnostics, undefined);

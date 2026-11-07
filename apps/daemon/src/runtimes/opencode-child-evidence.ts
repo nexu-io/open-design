@@ -12,7 +12,15 @@ import {
   type SafeChildPromptInput,
 } from '../prompt-telemetry.js';
 import { execAgentFile } from './invocation.js';
-import type { OpenCodeCliGeneration } from './opencode-permissions.js';
+
+/**
+ * Retired CLI generation marker. `opencode run --format json` spawning was
+ * removed (SDK-only transport); the post-run `opencode export --sanitize`
+ * upgrade that consumed this is gone from the run close path. The type and
+ * the export loader below stay for the existing unit tests and as explicit
+ * dead surface until they are deleted with the loader — nothing spawns them.
+ */
+export type OpenCodeCliGeneration = 'v1' | 'v2' | 'unknown';
 
 export const OPENCODE_CHILD_EVIDENCE_ADAPTER_VERSION =
   'od-opencode-child-evidence/v1' as const;

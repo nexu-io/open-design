@@ -76,9 +76,16 @@ import {
   spawnEnvForAgent,
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
-import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
-import { withOpenCodeWorkspaceEnv } from './runtimes/opencode-permissions.js';
+import {
+  acquireSharedSdkHost,
+  createSdkSession,
+  promptSdkSession,
+  releaseSharedSdkHost,
+  subscribeSdkEvents,
+  toOpenCodeSdkModel,
+} from './runtimes/opencode-sdk-host.js';
+import { sdkEventToStreamRecords } from './runtimes/opencode-sdk-events.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -929,6 +936,73 @@ async function callGoogle(provider, system, user) {
 
 const LOCAL_CLI_TIMEOUT_MS = 60_000;
 
+/**
+ * Tool-less memory extraction through the shared in-process OpenCode host.
+ * Replaces the retired `opencode run --format json` stdin spawn: creates an
+ * SDK session in `cwd`, prompts once, and reduces streamed `text` records
+ * back to the assistant reply (the same reduction `extractJsonEventText`
+ * performed over CLI stdout JSONL).
+ */
+async function runOpencodeSdkMemoryExtraction({ prompt, cwd, model }) {
+  const host = await acquireSharedSdkHost();
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), LOCAL_CLI_TIMEOUT_MS);
+  timeout.unref?.();
+  try {
+    const sdkModel = toOpenCodeSdkModel(typeof model === 'string' ? model : null);
+    const sessionID = await createSdkSession(host, cwd, {
+      ...(sdkModel ? { model: sdkModel } : {}),
+    });
+    let text = '';
+    let terminalError = null;
+    const subscription = subscribeSdkEvents(host, { signal: abort.signal });
+    const drain = (async () => {
+      try {
+        for await (const frame of subscription) {
+          if (abort.signal.aborted) break;
+          for (const record of sdkEventToStreamRecords(frame)) {
+            if (record?.type === 'text' && typeof record?.part?.text === 'string') {
+              text += record.part.text;
+            } else if (record?.type === 'error') {
+              terminalError = typeof record.message === 'string' && record.message
+                ? record.message
+                : 'OpenCode SDK error';
+            } else if (
+              record?.type === 'step_finish' ||
+              (record && typeof record === 'object' && 'type' in record === false)
+            ) {
+              // Usage / terminal markers carry no reply text.
+            }
+          }
+          const frameType = frame && typeof frame === 'object' && !Array.isArray(frame)
+            ? String((frame as Record<string, unknown>).type ?? '')
+            : '';
+          if (
+            frameType === 'session.idle' ||
+            frameType === 'session.execution.succeeded' ||
+            frameType === 'session.execution.failed' ||
+            frameType === 'session.execution.interrupted'
+          ) {
+            break;
+          }
+        }
+      } catch (error) {
+        if (!abort.signal.aborted) throw error;
+      }
+    })();
+    try {
+      await promptSdkSession(host, { sessionID, text: prompt }, { signal: abort.signal });
+    } finally {
+      await drain;
+    }
+    if (terminalError) throw new Error(`OpenCode SDK error: ${terminalError}`);
+    return text.trim();
+  } finally {
+    clearTimeout(timeout);
+    await releaseSharedSdkHost().catch(() => {});
+  }
+}
+
 function extractJsonEventText(kind, raw, agentName) {
   const events = [];
   const handler = createJsonEventStreamHandler(kind, (event) => events.push(event));
@@ -1016,40 +1090,23 @@ async function callLocalCli(provider, system, user, options) {
     );
     parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
   } else if (provider.agentId === 'opencode') {
-    // Deliver the prompt on stdin, matching the chat-run path
-    // (def.promptViaStdin). `opencode run`'s `-f, --file` is a yargs array
-    // option that greedily consumes every trailing non-flag token, so
-    // `--file <prompt-file> "<message>"` made OpenCode treat the message
-    // text as a second attachment and exit with "File not found". Bare
-    // `opencode run --format json` reads the message from stdin instead.
-    // The argv is generation-aware (1.x vs 2.x flags), so warm the
-    // `run --help` capability map first, as the chat path does.
-    await ensureDetectedRuntimeCapabilities(provider.agentId, configuredAgentEnv);
-    args = def.buildArgs(
-      '',
-      [],
-      [],
-      { model: provider.model },
-      { cwd },
-    );
-    parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
+    // SDK-only transport: `opencode run --format json` spawning was removed.
+    // Run the tool-less extraction prompt through the shared in-process host
+    // and reduce the streamed text back to the assistant reply.
+    return await runOpencodeSdkMemoryExtraction({ prompt, cwd, model: provider.model });
   } else {
     throw new Error(`Local CLI memory extraction is not supported for ${provider.agentId}`);
   }
 
-  const env = withOpenCodeWorkspaceEnv(
-    applyAgentLaunchEnv(
-      spawnEnvForAgent(
-        def.id,
-        { ...process.env, ...(def.env || {}) },
-        configuredAgentEnv,
-        undefined,
-        { resolvedBin: launch.selectedPath },
-      ),
-      launch,
+  const env = applyAgentLaunchEnv(
+    spawnEnvForAgent(
+      def.id,
+      { ...process.env, ...(def.env || {}) },
+      configuredAgentEnv,
+      undefined,
+      { resolvedBin: launch.selectedPath },
     ),
-    cwd,
-    def.id,
+    launch,
   );
   const invocation = createCommandInvocation({
     command: launch.launchPath,

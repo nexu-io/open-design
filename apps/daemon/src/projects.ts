@@ -97,8 +97,22 @@ function hasExternalProjectRoot(metadata?) {
 // read funnels through — mirroring the rule buildBatchArchive already enforces
 // for exports. Managed projects (under PROJECTS_DIR, no external baseDir) are
 // unaffected. Callers pass the raw request name; we normalize before checking.
+//
+// Exception: the agent-owned project config `.open-design/project.json` is
+// explicitly writable even for imported folders so the agent can declare where
+// it stores designs / plans / store assets (manifest `outputs`). The match is
+// exact — every other dotfile (`.ssh/*`, `.aws/*`, `.open-design/other.json`)
+// stays blocked.
+export const AGENT_WRITABLE_CONFIG_PATHS = ['.open-design/project.json'];
+
+export function isAgentWritableConfigPath(name) {
+  const normalized = String(name ?? '').replace(/\\/g, '/').split('/').filter(Boolean).join('/');
+  return AGENT_WRITABLE_CONFIG_PATHS.includes(normalized);
+}
+
 export function assertVisibleForImportedProject(name, metadata?) {
   if (!hasExternalProjectRoot(metadata)) return;
+  if (isAgentWritableConfigPath(name)) return;
   const segments = String(name ?? '').replace(/\\/g, '/').split('/').filter(Boolean);
   if (segments.some((segment) => segment.startsWith('.'))) {
     throw new Error('hidden path segments are not accessible in imported folders');
@@ -871,7 +885,10 @@ export async function writeProjectFile(
 ) {
   assertVisibleForImportedProject(name, metadata);
   const dir = await ensureProject(projectsRoot, projectId, metadata);
-  const safeName = sanitizePath(name);
+  // Agent-owned config (`.open-design/project.json`) must keep its leading
+  // dot; sanitizePath would mangle it to `_open-design/...`. Validate without
+  // mangling for that exact path, sanitize everything else as before.
+  const safeName = isAgentWritableConfigPath(name) ? validateProjectPath(name) : sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
   body = normalizeArtifactRuntimeImports(safeName, body);
   if (!overwrite) {
@@ -1519,6 +1536,9 @@ async function resolveExistingPrefix(p) {
 }
 
 export function sanitizePath(raw) {
+  // Preserve the agent-owned config path exactly; sanitizing segments would
+  // mangle `.open-design` to `_open-design` and orphan the manifest.
+  if (isAgentWritableConfigPath(raw)) return validateProjectPath(raw);
   const normalized = validateProjectPath(raw);
   return normalized.split('/').map(sanitizeName).join('/');
 }

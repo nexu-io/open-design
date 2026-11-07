@@ -40,7 +40,6 @@ import {
   applyVelaLiveAccount,
   clearAllVelaLiveAccounts,
   clearVelaAuthorizationState,
-  markVelaAuthorizationExpired,
   parseVelaLoginAttribution,
   peekVelaLiveAccount,
   recordVelaLiveAccountFailure,
@@ -59,7 +58,6 @@ import {
   spawnVelaLoginWithFallback,
   type VelaLiveAccount,
 } from '../integrations/vela.js';
-import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
 import {
   clearVelaWalletSnapshotCache,
   velaWalletSnapshotReader,
@@ -1212,10 +1210,10 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         // A persistent optional billing failure (403, connection refused) must
         // not make every focus/poll spawn a probe and print a stack. Billing is
         // display-only (OPEND-3553): a failed `vela billing summary` — even an
-        // auth-shaped one — must never expire the AMR session by itself, but
-        // the caller still records the auth signal for the credential-recovery
-        // path below. The first failure arms exponential backoff (30s doubling
-        // to 5 min); subsequent probes are gated by
+        // auth-shaped one — must never expire the AMR session. Genuine
+        // credential expiry is detected by the non-billing workspace directory
+        // path. The first failure arms exponential backoff (30s doubling to
+        // 5 min); subsequent probes are gated by
         // shouldRefreshVelaLiveAccount, and only the first failure of a window
         // (or a changed failure) is logged.
         const update = recordVelaLiveAccountFailure(accountCacheKey, err);
@@ -1223,9 +1221,6 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
           console.warn(
             `[amr] live account fetch failed (attempt ${update.failure.failures}, retry at ${new Date(update.failure.retryAt).toISOString()}): ${update.failure.message}`,
           );
-        }
-        if (classifyAmrAccountFailure(err instanceof Error ? err.message : String(err))?.code === 'AMR_AUTH_REQUIRED') {
-          markVelaAuthorizationExpired(env, probe.configuredEnv);
         }
         return null;
       })

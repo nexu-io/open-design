@@ -3,9 +3,97 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { startServer } from '../src/server.js';
+
+// The SDK host module is mocked for the OpenCode case below: the mock
+// records `create` / `prompt` calls and replays scripted stream frames
+// through the real parser path. Claude cases use real fake-CLI binaries.
+vi.mock('../src/runtimes/opencode-sdk-host.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/runtimes/opencode-sdk-host.js')>();
+  const calls: {
+    creates: Array<{ directory: string; init: unknown; sessionID: string }>;
+    prompts: Array<{ sessionID: string; text: string }>;
+  } = { creates: [], prompts: [] };
+  let created: string[] = [];
+  let queuedFrames: unknown[][] = [];
+  let liveFrames: unknown[] = [];
+  let chatSessionIds: string[] = [];
+
+  const isChatDir = (directory: string): boolean => directory.includes('resume_on_failure_');
+
+  async function* fakeSubscribe(): AsyncIterable<unknown> {
+    for (;;) {
+      const next = liveFrames.shift();
+      if (next !== undefined) {
+        yield next;
+        continue;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  return {
+    ...original,
+    __mockState: { calls },
+    __mockReset(state?: { sessions?: string[] }) {
+      calls.creates.length = 0;
+      calls.prompts.length = 0;
+      created = [...(state?.sessions ?? [])];
+      queuedFrames = [];
+      liveFrames = [];
+      chatSessionIds = [];
+    },
+    __mockQueueFrames(frames: unknown[][]) {
+      queuedFrames = frames;
+    },
+    async acquireSharedSdkHost() {
+      return { __fakeSdkHost: true };
+    },
+    async releaseSharedSdkHost() {},
+    async createSdkSession(_host: unknown, directory: string, init?: unknown) {
+      let sessionID: string;
+      if (isChatDir(directory)) {
+        sessionID = created.shift() ?? `ses_e2e_${randomUUID().slice(0, 8)}`;
+        chatSessionIds.push(sessionID);
+      } else {
+        sessionID = `ses_e2e_mem_${randomUUID().slice(0, 8)}`;
+      }
+      calls.creates.push({ directory, init, sessionID });
+      return sessionID;
+    },
+    subscribeSdkEvents() {
+      return fakeSubscribe();
+    },
+    async promptSdkSession(_host: unknown, input: { sessionID: string; text: string }) {
+      calls.prompts.push({ sessionID: input.sessionID, text: input.text });
+      const isChat = chatSessionIds.includes(input.sessionID);
+      const frames = isChat && queuedFrames.length > 0
+        ? queuedFrames.shift()!
+        : [
+            { type: 'text', sessionID: input.sessionID, part: { type: 'text', text: 'Memory reply.' } },
+            { type: 'session.idle', data: { sessionID: input.sessionID } },
+          ];
+      liveFrames.push(...frames);
+      if (!frames.some((frame) => (frame as { type?: unknown })?.type === 'session.idle')) {
+        liveFrames.push({ type: 'session.idle', data: { sessionID: input.sessionID } });
+      }
+      return { id: `inbox_${randomUUID().slice(0, 8)}` };
+    },
+  };
+});
+
+const mockHost = await import('../src/runtimes/opencode-sdk-host.js') as unknown as {
+  __mockState: {
+    calls: {
+      creates: Array<{ directory: string; init: unknown; sessionID: string }>;
+      prompts: Array<{ sessionID: string; text: string }>;
+    };
+  };
+  __mockReset: (state?: { sessions?: string[] }) => void;
+  __mockQueueFrames: (frames: unknown[][]) => void;
+};
 
 // Phase B red spec for resume-on-failure (continue an interrupted run instead
 // of discarding it). A run that produced output AND then hit a *resumable*
@@ -204,10 +292,8 @@ describe('resume-on-failure runtime', () => {
 
   it('does not resume a provider 404 after a committed tool block', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-resume-client-error-bin-'));
-    const { bin: fakeOpenCode, argsLogPath } = await writeClientErrorOpenCode(
-      binDir,
-      'opencode-client-error',
-    );
+    const fakeOpenCode = await writeVersionOnlyOpencode(binDir, 'opencode-client-error');
+    mockHost.__mockReset({ sessions: ['ses_provider_404_committed', 'ses_provider_404_fresh'] });
 
     delete process.env.POSTHOG_KEY;
     delete process.env.POSTHOG_HOST;
@@ -226,6 +312,46 @@ describe('resume-on-failure runtime', () => {
 
     const conversationId = await createConversation(started.url);
 
+    // Turn 1: the SDK session commits a tool block, then the provider
+    // answers 404 (non-retryable client error). No idle/execution terminal
+    // is needed for the failure: the `error` record flips the run, and the
+    // trailing `session.idle` completes the subscription drain.
+    const SESSION = 'ses_provider_404_committed';
+    mockHost.__mockQueueFrames([
+      [
+        { type: 'step_start', sessionID: SESSION },
+        {
+          type: 'tool_use',
+          sessionID: SESSION,
+          part: {
+            type: 'tool',
+            callID: 'tool_provider_404',
+            tool: 'Bash',
+            state: { status: 'completed', input: { command: 'echo committed' }, output: 'committed' },
+          },
+        },
+        {
+          type: 'error',
+          sessionID: SESSION,
+          error: {
+            name: 'APIError',
+            data: { message: 'Not Found: 404 page not found', statusCode: 404, isRetryable: false },
+          },
+        },
+        { type: 'session.idle', data: { sessionID: SESSION } },
+      ],
+      [
+        { type: 'step_start', sessionID: 'ses_provider_404_fresh' },
+        { type: 'text', sessionID: 'ses_provider_404_fresh', part: { type: 'text', text: 'Started fresh.' } },
+        {
+          type: 'step_finish',
+          sessionID: 'ses_provider_404_fresh',
+          part: { type: 'step-finish', tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } },
+        },
+        { type: 'session.idle', data: { sessionID: 'ses_provider_404_fresh' } },
+      ],
+    ]);
+
     const failed = await sendRunAndWait(started.url, conversationId, 'opencode');
     expect(failed.status).toBe('failed');
     expect(failed).toMatchObject({
@@ -237,10 +363,20 @@ describe('resume-on-failure runtime', () => {
     const nextTurn = await sendRunAndWait(started.url, conversationId, 'opencode');
     expect(nextTurn.status).toBe('succeeded');
 
-    const attempts = await readArgs(argsLogPath);
-    expect(attempts).toHaveLength(2);
-    expect(attempts[0]).not.toContain('-s');
-    expect(attempts[1]).not.toContain('-s');
+    // Both turns minted their own SDK session: the invalid provider session
+    // was never persisted or resumed (the SDK equivalent of "no `-s`").
+    const { calls } = mockHost.__mockState;
+    const chatCreates = calls.creates.filter((c) => c.directory.includes('resume_on_failure_'));
+    const chatSessionIds = new Set(chatCreates.map((c) => c.sessionID));
+    const chatPrompts = calls.prompts.filter((p) => chatSessionIds.has(p.sessionID));
+    expect(chatCreates.map((c) => c.sessionID)).toEqual([
+      'ses_provider_404_committed',
+      'ses_provider_404_fresh',
+    ]);
+    expect(chatPrompts.map((p) => p.sessionID)).toEqual([
+      'ses_provider_404_committed',
+      'ses_provider_404_fresh',
+    ]);
   });
 });
 
@@ -376,61 +512,19 @@ setTimeout(() => process.exit(1), 20);
   return { bin };
 }
 
-// Fake OpenCode CLI: the first invocation captures a session and commits a
-// tool block before a provider 404; the next invocation succeeds. Records argv
-// so the test can prove the invalid provider session was not persisted/resumed.
-async function writeClientErrorOpenCode(
+// Version-only fake OpenCode CLI: the SDK path never spawns it, but agent
+// availability probing still resolves the configured executable.
+async function writeVersionOnlyOpencode(
   dir: string,
   name: string,
-): Promise<{ bin: string; argsLogPath: string }> {
+): Promise<string> {
   const bin = path.join(dir, name);
-  const counterPath = path.join(dir, `${name}-attempts`);
-  const argsLogPath = path.join(dir, `${name}-args.jsonl`);
   await writeFile(bin, `#!/usr/bin/env node
-const fs = require('node:fs');
-const counterPath = ${JSON.stringify(counterPath)};
-const argsLogPath = ${JSON.stringify(argsLogPath)};
-const sessionID = 'ses_provider_404_committed';
 if (process.argv.includes('--version')) { console.log('1.17.7'); process.exit(0); }
-if (process.argv.includes('--help')) { console.log('opencode run [message..]'); process.exit(0); }
-if (process.argv[2] === 'models') { console.log('test/provider-model'); process.exit(0); }
-let attempts = 0;
-try { attempts = Number(fs.readFileSync(counterPath, 'utf8')) || 0; } catch {}
-fs.writeFileSync(counterPath, String(attempts + 1));
-fs.appendFileSync(argsLogPath, JSON.stringify(process.argv.slice(2)) + '\\n');
-console.log(JSON.stringify({ type: 'step_start', sessionID, part: { type: 'step-start' } }));
-if (attempts === 0) {
-  console.log(JSON.stringify({
-    type: 'tool_use',
-    sessionID,
-    part: {
-      type: 'tool',
-      callID: 'tool_provider_404',
-      tool: 'Bash',
-      state: { status: 'completed', input: '{"command":"echo committed"}', output: 'committed' }
-    }
-  }));
-  console.log(JSON.stringify({
-    type: 'error',
-    sessionID,
-    error: {
-      name: 'APIError',
-      data: { message: 'Not Found: 404 page not found', statusCode: 404, isRetryable: false }
-    }
-  }));
-  setTimeout(() => process.exit(0), 20);
-} else {
-  console.log(JSON.stringify({ type: 'text', sessionID, part: { type: 'text', text: 'Started fresh.' } }));
-  console.log(JSON.stringify({
-    type: 'step_finish',
-    sessionID,
-    part: { type: 'step-finish', tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }, cost: 0 }
-  }));
-  setTimeout(() => process.exit(0), 20);
-}
+process.exit(0);
 `, 'utf8');
   await chmod(bin, 0o755);
-  return { bin, argsLogPath };
+  return bin;
 }
 
 async function putConfig(url: string, patch: Record<string, unknown>): Promise<void> {

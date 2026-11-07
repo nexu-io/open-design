@@ -44,45 +44,56 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
 }
 
 /**
- * The one appearance OpenDesign ships.
+ * The app ships a theme preference: light / dark / system (follow the OS).
  *
- * Product removed the theme setting: the workspace surfaces have no dark
- * tokens, so a dark app is a broken app. `data-theme` is therefore a constant
- * rather than a preference — and it must always be PRESENT, not merely
- * non-dark. Every dark rule in the app is gated on the attribute being absent
- * (`html:not([data-theme])` in CSS) or falls back to `prefers-color-scheme`
- * when the attribute is missing (`shiki`, `ConnectorLogo`, `SketchEditor`,
- * `TerminalViewer`, `connectorBrandColor`, `MentionNode`). Stamping it
- * unconditionally is what keeps a dark OS from leaking through.
+ * `data-theme` carries the explicit choice: `'light'` / `'dark'` are stamped
+ * on `<html>`, while `'system'` is represented by the attribute being ABSENT —
+ * every dark rule in the app pairs `[data-theme="dark"]` with
+ * `@media (prefers-color-scheme: dark) { html:not([data-theme]) … }`, so an
+ * unstamped document follows the OS automatically. The attribute must always
+ * be *decided* (stamped or deliberately removed), never left over from a
+ * previous choice: a stored `'dark'` leaking into a light session (or vice
+ * versa) paints the wrong tokens.
  */
-export const FORCED_APP_THEME = 'light' as const;
+export const APP_THEME_DEFAULT = 'light' as const;
+
+const APP_THEMES = ['system', 'light', 'dark'] as const;
+
+export function isAppTheme(value: unknown): value is AppTheme {
+  return (
+    value === 'system' || value === 'light' || value === 'dark'
+  );
+}
 
 /**
- * Coerce any persisted theme to the only one that still exists.
+ * Coerce any persisted theme to a valid choice.
  *
- * Changing the default alone cannot fix an existing install: every user who
- * ever opened the old picker has `'dark'` — or `'system'`, which resolves dark
- * on a dark OS — written to localStorage, and a stored value does not move
- * when the default does. Config reads funnel through here so those installs
- * come back light.
+ * Unknown / missing values fall back to the default; valid stored choices
+ * (including `'dark'` and `'system'`) are honored as-is.
  */
 export function resolveAppTheme(persisted?: AppTheme | null): AppTheme {
-  return persisted === FORCED_APP_THEME ? persisted : FORCED_APP_THEME;
+  return isAppTheme(persisted) ? persisted : APP_THEME_DEFAULT;
 }
 
 export function applyAppearanceToDocument({
+  theme,
   accentColor,
 }: {
+  theme?: AppTheme | null;
   accentColor?: string;
 }): void {
   const root = document.documentElement;
-  root.setAttribute('data-theme', FORCED_APP_THEME);
+  const next = resolveAppTheme(
+    theme ?? (root.getAttribute('data-theme') as AppTheme | null),
+  );
+  if (next === 'system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', next);
   // Desktop shell: keep the native window appearance (the macOS vibrancy
   // glass material) in step with the app theme. Without this the glass
   // follows the OS appearance, so the light app over a dark OS sat on dark
   // glass and read as a muddy gray (#94). Feature-detected — browsers and
   // older host builds have no appearance capability.
-  getOpenDesignHost()?.appearance?.setTheme(FORCED_APP_THEME);
+  getOpenDesignHost()?.appearance?.setTheme(next);
 
   const normalized = resolveAccentColor(accentColor);
   const vars = accentVars(normalized);
