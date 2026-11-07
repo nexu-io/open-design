@@ -26,10 +26,10 @@ const tree = (currentFile = file, content = html, comments = [comment], enabled 
   <FileViewer projectId="p" projectKind="prototype" file={currentFile} liveHtml={content} previewComments={comments} />
 </CollabProvider>;
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); });
-async function setup(transport: 'url' | 'srcdoc' = 'url', enabled = false, comments = [comment]) {
+async function setup(transport: 'url' | 'srcdoc' = 'url', enabled = false, comments = [comment], content = html) {
   if (transport === 'srcdoc') window.history.replaceState(null, '', '/?forceInline=1');
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
-  const view = render(tree(file, html, comments, enabled));
+  const view = render(tree(file, content, comments, enabled));
   const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
   Object.defineProperty(frame, 'clientHeight', { configurable: true, value: 600 });
   const post = vi.spyOn(frame.contentWindow!, 'postMessage');
@@ -287,4 +287,56 @@ it('Personal: a replaced preview frame cannot carry loss into the newly loaded s
   await current.dispatch({ type: 'od:comment-targets', targets: [] }, oldWindow);
   await current.dispatch({ type: 'od:comment-location-missing', requestId: old.requestId }, oldWindow);
   expect(screen.queryByTestId('comment-location-unavailable')).toBeNull();
+});
+
+
+it.each([false, true])('locates a statically declared child comment without crossing file boundaries (collab=%s)', async enabled => {
+  const childId = `frame:${encodeURIComponent(JSON.stringify(['child.html', comment.elementId]))}`;
+  const childComment = { ...comment, id: 'child-comment', filePath: 'child.html', elementId: childId };
+  const otherComment = { ...comment, id: 'unlisted-comment', filePath: 'unlisted.html', note: 'Must remain hidden' };
+  const content = '<html><body><iframe src="child.html"></iframe></body></html>';
+  const { view, post, dispatch } = await setup('url', enabled, [childComment, otherComment], content);
+  const target = { ...childComment, position: { x: 57, y: 80, width: 193, height: 29 } };
+  await dispatch({ type: 'od:comment-targets', targets: [target] });
+  expect(screen.getAllByTestId('comment-side-item')).toHaveLength(1);
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const request = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(request).toMatchObject({ elementId: childId, selector: childComment.selector, locate: true });
+  expect(screen.queryByTestId('comment-location-unavailable')).toBeNull();
+  await dispatch({ ...target, type: 'od:comment-active-target-update', requestId: request.requestId });
+  expect(screen.getByTestId('comment-active-pin')).toHaveStyle({ left: '57px', top: '80px' });
+  expect(screen.getByTestId(`comment-saved-marker-${childId}`)).toHaveAttribute('data-anchor-state', 'anchored');
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const repeated = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  await dispatch({ type: 'od:comment-location-missing', requestId: request.requestId });
+  expect(screen.queryByTestId('comment-location-unavailable')).toBeNull();
+  await dispatch({ type: 'od:comment-location-missing', requestId: repeated.requestId });
+  expect(screen.getByTestId('comment-location-unavailable')).toBeInTheDocument();
+  view.rerender(tree({ ...file, name: 'other.html', path: 'other.html' }, '<html><body>Other</body></html>', [childComment], enabled));
+  await dispatch({ ...target, type: 'od:comment-active-target-update', requestId: repeated.requestId });
+  expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+  expect(screen.queryByTestId('comment-side-item')).toBeNull();
+});
+
+
+it('locates a changed legacy child ID without accepting the same structural selector from its sibling', async () => {
+  const qualify = (path: string, id: string) => `frame:${encodeURIComponent(JSON.stringify([path, id]))}`;
+  const childComment = { ...comment, filePath: 'child.html', elementId: qualify('child.html', 'old-id'), selector: 'body > h2' };
+  const content = '<html><body><iframe src="child.html"></iframe><iframe src="sibling.html"></iframe></body></html>';
+  const { post, dispatch } = await setup('url', true, [childComment], content);
+  const target = { ...childComment, elementId: qualify('child.html', 'new-id'), selector: '[data-od-id="new-id"]',
+    domSelector: childComment.selector, position: { x: 57, y: 80, width: 193, height: 29 } };
+  const sibling = { ...target, filePath: 'sibling.html', elementId: qualify('sibling.html', 'new-id'),
+    position: { ...target.position, x: 350 } };
+  await dispatch({ type: 'od:comment-targets', targets: [target, sibling] });
+  fireEvent.click(screen.getByTestId('comment-side-item'));
+  const request = post.mock.calls.map(call => call[0]).filter(data => data?.locate).at(-1);
+  expect(request).toMatchObject({ elementId: childComment.elementId, locate: true });
+  await dispatch({ ...sibling, type: 'od:comment-active-target-update' });
+  expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+  await dispatch({ ...sibling, type: 'od:comment-active-target-update', requestId: request.requestId });
+  expect(screen.queryByTestId('comment-active-pin')).toBeNull();
+  await dispatch({ ...target, type: 'od:comment-active-target-update' });
+  expect(screen.getByTestId('comment-active-pin')).toHaveStyle({ left: '57px', top: '80px' });
+  expect(screen.getByTestId('comment-popover-input')).toHaveValue(childComment.note);
 });

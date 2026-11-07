@@ -51,6 +51,73 @@ export function buildPreviewBaseHrefBridge(
       }, '*');
     } catch (_) {}
   }
+  // This bridge has its own closure, so it keeps a separate private record of
+  // paths confirmed by ready pings. FileViewer remains the write authority.
+  var liveFramePaths = new WeakMap();
+  // #7296 review (R8-3): a static child that self-navigates to a confirmed
+  // path and then leaves again for a destination with no ready ping (an
+  // external URL, a non-HTML file) must not keep resolving to that stale
+  // confirmed path -- otherwise a later scope rotation's rebase can
+  // "resurrect" the departed child instead of leaving its current,
+  // no-longer-project-scoped destination alone. A native load event fires
+  // on essentially every navigation regardless of destination, so clearing
+  // the cache there (not on a timer) is a correctness fix, not a heuristic.
+  var frameLoadListeners = new WeakSet();
+  function observeProjectFrameLoad(frame){
+    if (!frame || frameLoadListeners.has(frame)) return;
+    frameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){
+      try { liveFramePaths.delete(frame); } catch (_) {}
+    });
+  }
+  function projectFramePathFromHref(hrefString){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(hrefString, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      return path && path.indexOf('..') < 0 ? path : null;
+    } catch (_) { return null; }
+  }
+  // #7296 review (R9-3, non-blocking): projectFramePathFromHref intentionally
+  // strips to a bare pathname for the identity check above, but rebasing a
+  // frame to the next scope must preserve its query/hash (e.g.
+  // child.html?slide=2#section) -- otherwise a scope rotation silently
+  // resets deck/slide state carried in the URL. This mirrors the same
+  // validation but keeps child.search + child.hash intact.
+  function projectFrameRelativeFromHref(hrefString){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(hrefString, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      if (!path || path.indexOf('..') >= 0) return null;
+      return path + child.search + child.hash;
+    } catch (_) { return null; }
+  }
+  function projectFrameForSource(source){
+    var frames = document.querySelectorAll('iframe[src]');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === source) return frames[i];
+    }
+    return null;
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:url-selection-bridge-ready') return;
+    var frame = projectFrameForSource(ev.source);
+    var path = frame && projectFramePathFromHref(data.href);
+    if (!path) return;
+    var relative = projectFrameRelativeFromHref(data.href) || path;
+    observeProjectFrameLoad(frame);
+    try { liveFramePaths.set(frame, { path: relative, srcAtCache: frame.getAttribute('src') || '' }); } catch (_) {}
+  });
   window.addEventListener('message', function(ev){
     if (ev.source !== window.parent) return;
     var data = ev && ev.data;
@@ -72,6 +139,59 @@ export function buildPreviewBaseHrefBridge(
       var base = document.querySelector('base[data-od-project-preview-base]');
       if (!base) return;
       base.setAttribute('href', next.href);
+      // #7008: a nested project-local iframe (e.g. a deck viewer's own slide
+      // frame) that already navigated before this scope arrived is not
+      // affected by updating <base> — an iframe's src resolves against the
+      // document's base URL only once, at the time it navigates. Rebase and
+      // reload every still-relative iframe src now, so it lands under the
+      // scope that lets the daemon inject the child selection bridge.
+      //
+      // Derive each frame's current relative path fresh every rotation by
+      // stripping the OLD scope prefix from its live resolved src — do not
+      // cache the relative ref on first sight. A cached value goes stale the
+      // moment a deck navigates the frame to a different slide between two
+      // scope rotations (e.g. a renewed preview scope or a daemon restart
+      // while a deck is open): re-resolving a stale cached ref would
+      // silently revert the frame back to whatever slide was showing at the
+      // first rotation.
+      //
+      // Strip against the SCOPE ROOT (/api/projects/<id>/preview/<scope>/),
+      // not the owner file's own base ('current' above, which the daemon
+      // builds as the scope root PLUS the owner file's directory). A sibling
+      // iframe like <iframe src="../slides/one.html"> from deck/index.html
+      // resolves outside the owner's own .../preview/<scope>/deck/ prefix
+      // but is still well within the same .../preview/<scope>/ scope root —
+      // checking against the owner-specific prefix would incorrectly skip
+      // (never rebase) any project-local child that isn't a descendant of
+      // the owner's own directory.
+      try {
+        var scopeRootMatch = current.pathname.match(/^(\\/api\\/projects\\/[^/]+\\/preview\\/[^/]+\\/)/);
+        var nextScopeRootMatch = next.pathname.match(/^(\\/api\\/projects\\/[^/]+\\/preview\\/[^/]+\\/)/);
+        if (scopeRootMatch && nextScopeRootMatch) {
+          var scopeRoot = current.origin + scopeRootMatch[1];
+          var nextScopeRoot = next.origin + nextScopeRootMatch[1];
+          var frames = document.querySelectorAll('iframe[src]');
+          for (var i = 0; i < frames.length; i++) {
+            var frame = frames[i];
+            var relative = null;
+            try {
+              var cachedFramePath = liveFramePaths.get(frame);
+              var currentFrameSrc = frame.getAttribute ? (frame.getAttribute('src') || '') : '';
+              if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) relative = cachedFramePath.path;
+            } catch (_) {}
+            if (!relative) {
+              var resolvedSrc = frame.src;
+              if (!resolvedSrc || resolvedSrc.indexOf(scopeRoot) !== 0) continue;
+              relative = resolvedSrc.slice(scopeRoot.length);
+              if (!relative || /^(?:[a-z][a-z0-9+.-]*:|\\/\\/|\\/|#)/i.test(relative)) continue;
+            }
+            try {
+              var rebased = new URL(relative, nextScopeRoot).href;
+              if (frame.src !== rebased) frame.src = rebased;
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
       window.parent.postMessage({
         type: 'od:preview-base-updated',
         requestId: typeof data.requestId === 'string' ? data.requestId : '',
