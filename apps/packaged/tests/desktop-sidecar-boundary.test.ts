@@ -29,7 +29,7 @@ describe("packaged desktop sidecar boundary", () => {
 
   it("turns desktop auth transport failures into a false registration result", () => {
     const main = source("../src/index.ts");
-    const registrationStart = main.indexOf("registerDesktopAuth: async (secret) => {");
+    const registrationStart = main.indexOf("registerDesktopAuth: async (");
     const registrationEnd = main.indexOf("windowTitle:", registrationStart);
     expect(registrationStart).toBeGreaterThanOrEqual(0);
     expect(registrationEnd).toBeGreaterThan(registrationStart);
