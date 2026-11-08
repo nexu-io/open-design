@@ -23,6 +23,7 @@ import {
   listMessages,
   loadTabs,
   saveMessage,
+  registerQueuedSubmission,
 } from '../../src/state/projects';
 import { fetchPreviewComments, fetchProjectFiles } from '../../src/providers/registry';
 import { useProjectFileEvents } from '../../src/providers/project-events';
@@ -212,6 +213,9 @@ vi.mock('../../src/state/projects', async () => {
     loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
     patchConversation: vi.fn(),
     patchProject: vi.fn(),
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     saveMessage: vi.fn(),
     saveTabs: vi.fn(),
   };
@@ -815,6 +819,35 @@ describe('ProjectView pending prompt seeding', () => {
     expect(window.sessionStorage.getItem(`od:auto-send-first:${projectId}`)).toBeNull();
   });
 
+  it('records recency once at queue entry, not again when the queued send starts', async () => {
+    const projectId = 'queued-project-recency';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await waitFor(() => expect(chatPaneSpy).toHaveBeenCalled());
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Queued request', [], [], { queueOnly: true });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(onTouchProject).toHaveBeenCalledTimes(1);
+    expect(onTouchProject).toHaveBeenCalledWith(expect.any(Number));
+  });
+
+  it('OPEND-4047 does not register a queued automatic repair as a human submission', async () => {
+    const projectId = 'queued-system-repair';
+    const onTouchProject = vi.fn();
+    renderProjectView(project(projectId), vi.fn(), { onTouchProject });
+    await screen.findByText(`conv-${projectId}`);
+    await act(async () => {
+      await chatPaneSpy.mock.calls.at(-1)?.[0].onSend('Automatic repair', [], [], {
+        queueOnly: true, systemSubmission: true,
+      });
+    });
+    await waitFor(() => expect(mockedSaveMessage.mock.calls.some(([, , message]) => message.role === 'user')).toBe(true));
+    expect(registerQueuedSubmission).not.toHaveBeenCalled();
+    expect(onTouchProject).not.toHaveBeenCalled();
+  });
+
   it('holds the Home auto-send until the picked batch finishes uploading', async () => {
     // OPEND-2585. The project frame now opens while the Home batch is still
     // going up, so the auto-send is the only thing left waiting on it. If it
@@ -1185,7 +1218,7 @@ describe('ProjectView pending prompt seeding', () => {
       expect(mockedContinueBrandExtraction).toHaveBeenCalledWith(projectId);
     });
     await waitFor(() => {
-      expect(mockedListMessages).toHaveBeenCalledWith(projectId, 'conv-brand-replacement', null, expect.any(AbortSignal));
+      expect(mockedListMessages).toHaveBeenCalledWith(projectId, 'conv-brand-replacement', null, expect.any(AbortSignal), expect.any(Function));
     });
     await waitFor(() => {
       expect(screen.getByTestId('active-conversation').textContent).toBe('conv-brand-replacement');

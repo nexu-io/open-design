@@ -106,6 +106,8 @@ export type FakeCollabHub = {
   setEventsAvailable: (memberId: string, available: boolean) => void;
   eventSubscriberCount: (memberId: string) => number;
   emitEvent: (event: HubEvent) => void;
+  /** Model a successful mutation whose directory read has not caught up yet. */
+  setTeamProjectCatalogVisible: (projectId: string, visible: boolean) => void;
   removeMember: (memberId: string) => void;
   setMemberRole: (memberId: string, role: ClientIdentity['role']) => void;
   addWorkspace: (memberId: string, workspaceId: string, workspaceName: string) => void;
@@ -119,10 +121,13 @@ export async function startFakeCollabHub(options: {
   root: string;
   workspaceId: string;
   workspaceName: string;
+  workspaceType?: 'personal' | 'team';
   clients: readonly ClientIdentity[];
   includePersonalWorkspace?: boolean;
   /** Opt into the producer-health contract used by authority-cache E2E. */
   strictAuthorityEvents?: boolean;
+  /** Hold upstream I/O at a deterministic boundary without bypassing daemon sync. */
+  beforeCommand?: (command: CommandLog) => Promise<void>;
 }): Promise<FakeCollabHub> {
   const resourcesRoot = join(options.root, 'resources');
   await mkdir(resourcesRoot, { recursive: true });
@@ -135,6 +140,13 @@ export async function startFakeCollabHub(options: {
   const subscribers = new Set<Subscriber>();
   const blockedEventMembers = new Set<string>();
   const removedMembers = new Set<string>();
+  const hiddenTeamProjectIds = new Set<string>();
+  const memberRemovals: Array<{
+    workspaceId: string;
+    removedMemberId: string;
+    ownerMemberId: string;
+    removedAt: string;
+  }> = [];
   const memberRoles = new Map(
     options.clients.map((client) => [client.memberId, client.role]),
   );
@@ -246,6 +258,14 @@ export async function startFakeCollabHub(options: {
           ],
         });
       }
+      if (url.pathname === `/api/v1/workspaces/${encodeURIComponent(options.workspaceId)}/member-removals`
+        && request.method === 'GET') {
+        if (!identity || removedMembers.has(identity.memberId)
+          || (memberRoles.get(identity.memberId) ?? identity.role) !== 'owner') {
+          return json(response, 403, { error: 'workspace_access_denied' });
+        }
+        return json(response, 200, { removals: memberRemovals });
+      }
       if (url.pathname === '/api/v1/collab/events' && request.method === 'GET') {
         if (!identity) return json(response, 401, { error: 'unauthorized' });
         if (blockedEventMembers.has(identity.memberId)) {
@@ -271,6 +291,7 @@ export async function startFakeCollabHub(options: {
         response.write(
           `event: ready\ndata: ${JSON.stringify({
             workspaceId,
+            workspaceMemberId: memberIdForWorkspace(identity, workspaceId),
             capabilities: options.strictAuthorityEvents
               ? [
                   'authoritative-project-presence-v1',
@@ -307,7 +328,7 @@ export async function startFakeCollabHub(options: {
       }
       if (url.pathname === '/__e2e/command' && request.method === 'POST') {
         if (!identity) return json(response, 401, { error: 'unauthorized' });
-        if (removedMembers.has(identity.memberId)) {
+        if (removedMembers.has(identity.memberId) && workspaceId === options.workspaceId) {
           return json(response, 403, { error: 'workspace_membership_removed' });
         }
         const body = await readJsonBody(request) as { args?: unknown; stdin?: unknown };
@@ -316,6 +337,7 @@ export async function startFakeCollabHub(options: {
           : [];
         const stdin = typeof body.stdin === 'string' ? body.stdin : '';
         commandLog.push({ args, memberId: identity.memberId, workspaceId });
+        await options.beforeCommand?.({ args, memberId: identity.memberId, workspaceId });
         const stdout = await handleCommand({
           args,
           stdin,
@@ -332,6 +354,7 @@ export async function startFakeCollabHub(options: {
           workspaceBalances,
           memberRoles,
           removedMembers,
+          hiddenTeamProjectIds,
           emit,
         });
         return json(response, 200, { stdout });
@@ -399,12 +422,48 @@ export async function startFakeCollabHub(options: {
     eventSubscriberCount: (memberId) =>
       [...subscribers].filter((subscriber) => subscriber.memberId === memberId).length,
     emitEvent: emit,
+    setTeamProjectCatalogVisible: (projectId, visible) => {
+      if (visible) hiddenTeamProjectIds.delete(projectId);
+      else hiddenTeamProjectIds.add(projectId);
+    },
     removeMember: (memberId) => {
+      if (removedMembers.has(memberId)) return;
+      const owner = options.clients.find((client) =>
+        client.memberId !== memberId && !removedMembers.has(client.memberId)
+        && (memberRoles.get(client.memberId) ?? client.role) === 'owner');
+      if (!owner) throw new Error('fake collaboration owner unavailable for member removal');
       removedMembers.add(memberId);
+      memberRemovals.push({
+        workspaceId: options.workspaceId,
+        removedMemberId: memberId,
+        ownerMemberId: owner.memberId,
+        removedAt: new Date().toISOString(),
+      });
+      for (const project of projects.values()) {
+        if (project.workspaceId !== options.workspaceId || project.ownerMemberId !== memberId) continue;
+        project.ownerMemberId = owner.memberId;
+        project.updatedAt = new Date().toISOString();
+        emit({ type: 'team-projects-changed', workspaceId: options.workspaceId, projectId: project.projectId });
+      }
+      for (const resource of resources.values()) {
+        if (resource.workspaceId === options.workspaceId && resource.ownerMemberId === memberId) {
+          resource.ownerMemberId = owner.memberId;
+        }
+      }
+      emit({ type: 'team-resources-changed', workspaceId: options.workspaceId });
       for (const roster of presence.values()) {
         for (const [clientId, entry] of roster) {
           if (entry.memberId === memberId) roster.delete(clientId);
         }
+      }
+      for (const subscriber of [...subscribers]) {
+        if (subscriber.workspaceId !== options.workspaceId || subscriber.memberId !== memberId) continue;
+        subscriber.response.write(`event: access-revoked\ndata: ${JSON.stringify({
+          reason: 'member-removed',
+          workspaceId: options.workspaceId,
+          workspaceMemberId: memberId,
+        })}\n\n`);
+        closeSubscriber(subscriber);
       }
       emit({ type: 'workspace-context-changed', workspaceId: options.workspaceId });
     },
@@ -505,6 +564,7 @@ async function handleCommand(input: {
   workspaceBalances: Map<string, { balanceUsd: string; revision: number }>;
   memberRoles: Map<string, ClientIdentity['role']>;
   removedMembers: Set<string>;
+  hiddenTeamProjectIds: Set<string>;
   emit: (event: HubEvent) => void;
 }): Promise<string> {
   const { args } = input;
@@ -571,28 +631,31 @@ async function handleTeamProjectsCommand(input: {
   identity: ClientIdentity;
   workspaceId: string;
   projects: Map<string, TeamProjectRecord>;
+  hiddenTeamProjectIds: Set<string>;
   resources: Map<string, ResourceRecord>;
   emit: (event: HubEvent) => void;
 }): Promise<string> {
   const [, command, projectId] = input.args;
+  const workspaceMemberId = memberIdForWorkspace(input.identity, input.workspaceId);
   if (command === '--help') return 'team-projects list get ensure-private visibility register-resource upsert remove\n';
   if (command === 'list' || command == null) {
     return jsonLine({
       workspaceId: input.workspaceId,
       projects: [...input.projects.values()].filter(
-        (project) => project.workspaceId === input.workspaceId && project.visibility === 'team',
+        (project) => project.workspaceId === input.workspaceId && project.visibility === 'team'
+          && !input.hiddenTeamProjectIds.has(project.projectId),
       ).map((project) => recordForIdentity(project, input.identity)),
     });
   }
   if (command === 'ensure-private' && projectId) {
     const previous = input.projects.get(projectId);
-    if (previous && previous.ownerMemberId !== input.identity.memberId) throw new Error('team_project_not_found');
+    if (previous && previous.ownerMemberId !== workspaceMemberId) throw new Error('team_project_not_found');
     if (previous) return jsonLine(recordForIdentity(previous, input.identity));
     const now = new Date().toISOString();
     const record: TeamProjectRecord = {
       id: `catalog-${projectId}`, workspaceId: input.workspaceId, projectId,
       resourceId: `server-root-${projectId}`, visibility: 'private',
-      ownerMemberId: input.identity.memberId, displayName: null, syncState: 'pending_upload',
+      ownerMemberId: workspaceMemberId, displayName: null, syncState: 'pending_upload',
       lastSyncedVersionId: null, metadata: null, createdAt: now, updatedAt: now,
       access: { canView: true, canComment: true, canEdit: true, frozen: false },
     };
@@ -601,7 +664,7 @@ async function handleTeamProjectsCommand(input: {
   }
   if ((command === 'visibility' || command === 'register-resource') && projectId) {
     const project = input.projects.get(projectId);
-    if (!project || project.ownerMemberId !== input.identity.memberId) throw new Error('team_project_not_found');
+    if (!project || project.ownerMemberId !== workspaceMemberId) throw new Error('team_project_not_found');
     if (command === 'register-resource') return jsonLine({ ok: true });
     const visibility = input.args[3];
     if (visibility !== 'private' && visibility !== 'team') throw new Error('invalid visibility');
@@ -611,7 +674,7 @@ async function handleTeamProjectsCommand(input: {
   }
   if (command === 'get' && projectId) {
     const project = input.projects.get(projectId);
-    if (!project || (project.visibility === 'private' && project.ownerMemberId !== input.identity.memberId)) throw new Error('team_project_not_found');
+    if (!project || (project.visibility === 'private' && project.ownerMemberId !== workspaceMemberId)) throw new Error('team_project_not_found');
     return jsonLine(recordForIdentity(project, input.identity));
   }
   if (command === 'pull' && projectId) {
@@ -647,7 +710,7 @@ async function handleTeamProjectsCommand(input: {
       schemaVersion: 1,
       workspaceId: input.workspaceId,
       resourceTeamId: input.workspaceId,
-      viewerMemberId: input.identity.memberId,
+      viewerMemberId: workspaceMemberId,
       ownerMemberId: project.ownerMemberId,
       projectId,
       resourceId: project.resourceId,
@@ -672,7 +735,7 @@ async function handleTeamProjectsCommand(input: {
       projectId,
       resourceId,
       visibility: previous?.visibility ?? 'team',
-      ownerMemberId: previous?.ownerMemberId ?? input.identity.memberId,
+      ownerMemberId: previous?.ownerMemberId ?? workspaceMemberId,
       displayName: flag(input.args, '--display-name') ?? previous?.displayName ?? null,
       syncState: flag(input.args, '--sync-state') ?? previous?.syncState ?? 'synced',
       lastSyncedVersionId:
@@ -683,7 +746,7 @@ async function handleTeamProjectsCommand(input: {
       access: {
         canView: true,
         canComment: true,
-        canEdit: input.identity.role === 'owner',
+        canEdit: previous?.ownerMemberId === workspaceMemberId || (!previous && input.identity.role === 'owner'),
         frozen: false,
       },
     };
@@ -712,17 +775,18 @@ async function admitRootCommentFiles(
   previous: TeamProjectRecord | undefined,
   metadata: Record<string, unknown> | null,
 ): Promise<Record<string, unknown> | null> {
+  const workspaceMemberId = memberIdForWorkspace(input.identity, input.workspaceId);
   if (!metadata) return previous?.metadata ?? null;
   const old = previous?.metadata?._commentFiles as CommentFileState | undefined;
   if (metadata._commentFiles === undefined) {
     return old ? { ...metadata, _commentFiles: old } : metadata;
   }
   const mutation = metadata._commentFiles as CommentFileMutation;
-  if (!previous || previous.workspaceId !== input.workspaceId || previous.ownerMemberId !== input.identity.memberId
+  if (!previous || previous.workspaceId !== input.workspaceId || previous.ownerMemberId !== workspaceMemberId
     || !mutation || mutation.schemaVersion !== 1 || !Array.isArray(mutation.files)
     || mutation.baseRevision !== (old?.revision ?? 0)) throw new Error('comment_file_mutation_rejected');
   const resource = input.resources.get(workspaceResourceKey(input.workspaceId, mutation.resourceId));
-  if (!resource || resource.projectId !== previous.projectId || resource.ownerMemberId !== input.identity.memberId
+  if (!resource || resource.projectId !== previous.projectId || resource.ownerMemberId !== workspaceMemberId
     || resource.resourceId !== previous.resourceId || mutation.versionId !== `v${resource.version}`) {
     throw new Error('comment_file_receipt_rejected');
   }
@@ -801,7 +865,7 @@ async function handleResourceCommand(input: {
       projectId,
       resourceId,
       kind,
-      ownerMemberId: previous?.ownerMemberId ?? input.identity.memberId,
+      ownerMemberId: previous?.ownerMemberId ?? memberIdForWorkspace(input.identity, input.workspaceId),
       metadata,
       snapshotDir,
       version,
@@ -1094,19 +1158,19 @@ function recordForIdentity(
     ...project,
     access: {
       ...project.access,
-      canEdit: project.ownerMemberId === identity.memberId,
+      canEdit: project.ownerMemberId === memberIdForWorkspace(identity, project.workspaceId),
     },
   };
 }
 
 function workspaceDirectoryItem(
-  options: { workspaceId: string; workspaceName: string },
+  options: { workspaceId: string; workspaceName: string; workspaceType?: 'personal' | 'team' },
   identity: ClientIdentity,
 ) {
   return {
     workspaceId: options.workspaceId,
     workspaceName: options.workspaceName,
-    workspaceType: 'team',
+    workspaceType: options.workspaceType ?? 'team',
     workspaceMemberId: identity.memberId,
     role: identity.role,
     memberStatus: 'active',
@@ -1132,6 +1196,12 @@ function personalWorkspaceId(memberId: string): string {
   return `personal-${memberId}`;
 }
 
+function memberIdForWorkspace(identity: ClientIdentity, workspaceId: string): string {
+  return workspaceId === personalWorkspaceId(identity.memberId)
+    ? `personal-member-${identity.memberId}`
+    : identity.memberId;
+}
+
 function workspaceMemberKey(workspaceId: string, memberId: string): string {
   return `${workspaceId}\0${memberId}`;
 }
@@ -1145,6 +1215,7 @@ function personalWorkspaceDirectoryItem(identity: ClientIdentity) {
     workspaceId: personalWorkspaceId(identity.memberId),
     workspaceName: `${identity.name} workspace`,
     workspaceType: 'personal',
+    isDefault: true,
     workspaceMemberId: `personal-member-${identity.memberId}`,
     role: 'owner',
     memberStatus: 'active',

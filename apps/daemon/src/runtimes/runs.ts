@@ -26,6 +26,7 @@ import {
 } from '../run-analytics-observability.js';
 import {
   interruptDurableRunAfterDaemonRestart,
+  lastRecordedRunActivityAt,
   RESTART_ERROR_CODE,
   RESTART_ERROR_MESSAGE,
 } from './run-restart-recovery.js';
@@ -584,6 +585,11 @@ function durableRunState(run) {
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    // Absent and null mean different things: null is a run created here that
+    // has not started yet; absent is a record that predates the stamp, which
+    // a reader must fall back from (to createdAt), not treat as never started.
+    // Persisting null for it would freeze that mistake into state.json.
+    ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
     terminalAt: run.terminalAt ?? null,
     exitCode: run.exitCode,
     signal: run.signal,
@@ -841,13 +847,16 @@ export function createChatRunService({
     const statePath = path.join(runsLogDir, id, 'state.json');
     const state = readDurableRunState(statePath);
     if (!state || state.id !== id) return null;
-    const interruptedAfterRestart =
-      interruptDurableRunAfterDaemonRestart(state);
+    const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
+    const events = readDurableRunEvents(eventsLogPath);
+    const interruptedAfterRestart = interruptDurableRunAfterDaemonRestart(
+      state,
+      Date.now(),
+      lastRecordedRunActivityAt(state, events),
+    );
     if (interruptedAfterRestart) writeDurableState(statePath, state);
     backfillDurableTerminal(state);
     if (!TERMINAL_RUN_STATUSES.has(state.status)) return null;
-    const eventsLogPath = path.join(runsLogDir, id, 'events.jsonl');
-    const events = readDurableRunEvents(eventsLogPath);
     if (
       interruptedAfterRestart
       || state.terminalRecoveryReason === 'daemon_restart'
@@ -855,8 +864,13 @@ export function createChatRunService({
       const timestamp = state.terminalAt ?? state.updatedAt;
       const nextEventId =
         events.reduce((max, record) => Math.max(max, record.id), 0) + 1;
-      events.push(
-        {
+      // The replayed terminal frame says what the record says. A Run the
+      // restart interrupted is stopped (P0-24 Q5), so it ends `canceled` with
+      // no error frame; an older record that was failed this way keeps its
+      // failed replay, including the restart error it was reported with.
+      const restartStopped = state.status === 'canceled';
+      if (!restartStopped) {
+        events.push({
           id: nextEventId,
           event: 'error',
           data: {
@@ -867,21 +881,21 @@ export function createChatRunService({
             },
           },
           timestamp,
+        });
+      }
+      events.push({
+        id: restartStopped ? nextEventId : nextEventId + 1,
+        event: 'end',
+        data: {
+          code: restartStopped ? null : 1,
+          signal: null,
+          status: restartStopped ? 'canceled' : 'failed',
+          terminalAt: timestamp,
+          resumable: false,
+          endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
         },
-        {
-          id: nextEventId + 1,
-          event: 'end',
-          data: {
-            code: 1,
-            signal: null,
-            status: 'failed',
-            terminalAt: timestamp,
-            resumable: false,
-            endedWithUnfinishedWork: Boolean(state.endedWithUnfinishedWork),
-          },
-          timestamp,
-        },
-      );
+        timestamp,
+      });
     }
     const run = {
       ...state,
@@ -1030,6 +1044,8 @@ export function createChatRunService({
       status: 'queued',
       createdAt: now,
       updatedAt: now,
+      /** Stamped by the first `start` event; null while still queued. */
+      startedAt: null as number | null,
       terminalAt: null,
       events: [],
       nextEventId: 1,
@@ -1505,6 +1521,9 @@ export function createChatRunService({
     run.events.push(record);
     if (run.events.length > maxEvents) run.events.splice(0, run.events.length - maxEvents);
     run.updatedAt = timestamp;
+    // The first `start` is when the Run left the queue and began executing.
+    // A retry restart emits `start` again; the Run started at the first one.
+    if (event === 'start' && run.startedAt == null) run.startedAt = timestamp;
     // State writes are synchronous so they survive process termination. Keep
     // them on lifecycle boundaries only: agent/text deltas can arrive many
     // times per second and are already streamed to events.jsonl.
@@ -1542,6 +1561,9 @@ export function createChatRunService({
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
+    // Same rule as the durable record: omit a missing stamp rather than send
+    // null, which clients read as "has not started" and drop from the fold.
+    ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
     terminalAt: run.terminalAt ?? null,
     cancelRequested: !!run.cancelRequested,
     cancelOrigin: run.cancelOrigin ?? null,

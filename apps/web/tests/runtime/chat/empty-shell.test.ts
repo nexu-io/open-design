@@ -45,27 +45,36 @@ describe('壳的空态', () => {
   });
 });
 
-describe('B47 · 取消掉的空壳也不留', () => {
+describe('P0-24 N8 · 被停止的一轮始终有回合标题', () => {
   /**
-   * 用户 2026-08-27 指认:一轮被取消、壳里什么都没有,屏幕上却还挂着一句
-   * 「进行中」,底下紧跟着「已取消」——「之前不是说如果 done 之前,没有任何
-   * 工具调用或 thinking 或普通文案,就不出现这个了吗?」
-   *
-   * B47 当时把 `failed` 和 `canceled` 一起留了下来,理由是「壳头是这一轮唯一
-   * 说得出出事了的地方」。那句话**只对 failed 成立** —— 失败那档壳头写的是
-   * 「运行失败」,确实是这一轮唯一说得出原因的地方。取消那档壳头写的是
-   * 「进行中」(手动停止不是第四态,秒数停住、状态词不变),既没有信息,
-   * 又和底下那行「已取消」自相矛盾。
+   * 产品 2026-10-20 N8 答复:被停止的一轮始终显示回合标题,没有可展开内容也显示,
+   * 刚开始即被停止显示「已停止 0s」(PRD 场景 E2)。这推翻了 B47 对取消档的处理 ——
+   * B47 撤掉它的理由是壳头写着「进行中」、和下面那行「已取消」自相矛盾,而 P0-24
+   * 一期起壳头已经写「已停止」。只回复文字的正常轮次仍按 B47 不出壳(上一组)。
    */
-  it('drops an empty shell on a canceled turn', () => {
+  it('keeps exactly one empty shell on a canceled turn', () => {
     const blocks = buildTurnBlocks({
       events: [{ kind: 'status', label: 'start' }] as never,
       runStatus: 'canceled',
     });
-    expect(
-      blocks.filter((b) => b.kind === 'shell'),
-      '取消 + 壳里空的 → 那句「进行中」不该还在',
-    ).toHaveLength(0);
+    const kept = blocks.filter((b): b is ExecutionShell => b.kind === 'shell');
+    expect(kept, '停止 + 壳里空的 → 仍留一行「已停止」').toHaveLength(1);
+    expect(kept[0]!.items).toHaveLength(0);
+  });
+
+  it('keeps a shell even when a canceled turn persisted no events at all', () => {
+    const kept = buildTurnBlocks({ events: [], runStatus: 'canceled', startedAtMs: 1_000, endedAtMs: 1_400 })
+      .filter((b): b is ExecutionShell => b.kind === 'shell');
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.elapsedMs).toBe(400);
+  });
+
+  it('keeps one shell, above the text, when a canceled turn only replied with text', () => {
+    const blocks = buildTurnBlocks({
+      events: [{ kind: 'text', text: '好的,我先看看。' }],
+      runStatus: 'canceled',
+    });
+    expect(blocks.map((b) => b.kind)).toEqual(['shell', 'prose']);
   });
 
   it('still keeps an empty shell on a failed turn', () => {
@@ -86,5 +95,19 @@ describe('B47 · 取消掉的空壳也不留', () => {
       runStatus: 'canceled',
     });
     expect(blocks.filter((b) => b.kind === 'shell')).toHaveLength(1);
+  });
+
+  it('adds no empty shell next to a canceled shell that has content', () => {
+    const blocks = buildTurnBlocks({
+      events: [
+        { kind: 'tool_use', id: 'item_1', name: 'Read', input: { file_path: '/a.ts' } },
+        { kind: 'tool_result', toolUseId: 'item_1', content: 'ok', isError: false },
+        { kind: 'text', text: '读完了。' },
+      ] as never,
+      runStatus: 'canceled',
+    });
+    const kept = blocks.filter((b): b is ExecutionShell => b.kind === 'shell');
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.items.length).toBeGreaterThan(0);
   });
 });

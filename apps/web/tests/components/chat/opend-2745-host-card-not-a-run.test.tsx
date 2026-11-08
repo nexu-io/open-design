@@ -221,7 +221,7 @@ describe('OPEND-2745 没跑过的消息不报运行终态', () => {
     ).toBeNull();
   });
 
-  it('真跑完的那一轮照旧挂「已完成」—— 修复不许顺手把它一起关掉', () => {
+  it('真跑完的那一轮回合末尾也不再挂「已完成」,页脚照旧在(P0-24)', () => {
     render(
       <AssistantMessage
         message={{
@@ -241,7 +241,9 @@ describe('OPEND-2745 没跑过的消息不报运行终态', () => {
         isLast
       />,
     );
-    expect(screen.getByText(en['assistant.doneLabel'])).toBeTruthy();
+    // P0-24 Q6:状态只在壳头说;页脚本身(复制 / 时间)还在。
+    expect(document.querySelector('[data-testid="assistant-footer"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
   });
 });
 

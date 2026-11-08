@@ -27,19 +27,24 @@ const scope: TeamResourceRequestScope = { principal, canShare: true };
 const readOnlyScope: TeamResourceRequestScope = { principal, canShare: false };
 
 describe('team resource share permission gate', () => {
-  it('does not manufacture a Team resource scope for an authoritative Personal workspace', () => {
+  it('keeps a Personal workspace resource scope exact even when sharing is read-only', () => {
     const personalContext = {
       workspaceId: 'personal-1',
       workspaceType: 'personal',
       workspaceMemberId: 'wm-personal',
       memberStatus: 'active',
+      role: 'owner',
+      lifecycleState: 'active',
       permissions: {
         canManageSharedResources: false,
         canShareProjects: false,
       },
     } as WorkspaceCollabContext;
 
-    expect(teamResourceRequestScopeFromContext(personalContext)).toBeNull();
+    expect(teamResourceRequestScopeFromContext(personalContext)).toMatchObject({
+      principal: { teamId: 'personal-1', memberId: 'wm-personal', workspaceType: 'personal' },
+      canShare: false,
+    });
   });
 
   it('resolves a background operation from the exact event Workspace membership', () => {
@@ -68,6 +73,13 @@ describe('team resource share permission gate', () => {
       principal: { teamId: 'team-a', memberId: 'wm-a' },
     });
     expect(teamResourceRequestScopeForWorkspaceId(directory, 'team-b')).toBeNull();
+    const personal = { ...directory[0]!, workspaceId: 'personal-a', workspaceType: 'personal' as const };
+    expect(teamResourceRequestScopeForWorkspaceId([personal], 'personal-a')).toMatchObject({
+      principal: { teamId: 'personal-a', memberId: 'wm-a', workspaceType: 'personal' },
+    });
+    expect(teamResourceRequestScopeForWorkspaceId([personal], 'team-a')).toBeNull();
+    expect(teamResourceRequestScopeForWorkspaceId([{ ...personal, memberStatus: 'removed' }], 'personal-a')).toBeNull();
+
   });
 
   it('uses the request-scoped principal even when the daemon ambient workspace has changed', async () => {

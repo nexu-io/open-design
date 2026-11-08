@@ -513,10 +513,15 @@ export function createAmrTerminalReportFinalizer(
 
   return (run, status, terminalAt) => {
     if (!isBillingTerminalAmrRun(run, status)) return;
+    // P0-24 Q5 records a Run interrupted by a daemon restart as canceled. That
+    // is a display and analytics decision; AMR billing has not agreed to read
+    // such a Run differently, so it keeps receiving the outcome it always got.
+    const outcome: AmrTerminalReportOutcome =
+      status === 'canceled' && run.errorCode === 'DAEMON_RESTARTED' ? 'failed' : status;
     if (pending.has(run.id)) return;
     const report: PendingAmrTerminalReport = {
       runId: run.id,
-      outcome: status,
+      outcome,
       terminalAt,
     };
     try {

@@ -241,7 +241,16 @@ describe('design-system Workspace scope', () => {
       designSystems: [],
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/workspace/design-systems/team', {
+      cache: 'no-store',
+      headers: expect.objectContaining({
+        'x-od-workspace-id': context.workspaceId,
+        'x-od-workspace-type': 'personal',
+        'x-od-workspace-member-id': context.workspaceMemberId,
+      }),
+    });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/design-systems', {
       headers: expect.objectContaining({
@@ -2576,5 +2585,21 @@ describe('deploy provider registry helpers', () => {
       () => { throw new Error('expected deploy to reject'); },
       (err: unknown) => expect((err as { code?: string }).code).toBe('HTTP_404'),
     );
+  });
+});
+
+describe('OPEND-3894 comment reads distinguish errors from empty success', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each(['http', 'network', 'invalid'] as const)('rejects final %s failure after a failed pull', async kind => {
+    vi.stubGlobal('fetch', vi.fn(async input => {
+      if (String(input).endsWith('/pull')) return new Response(null, {status: 503});
+      if (kind === 'network') throw new Error('offline');
+      return kind === 'http' ? new Response(null,{status:500}) : Response.json({});
+    }));
+    await expect(fetchPreviewComments('p','c',personalWorkspaceContext(),true)).rejects.toThrow();
+  });
+  it('accepts an explicitly empty successful response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({comments:[]})));
+    await expect(fetchPreviewComments('p','c')).resolves.toEqual([]);
   });
 });

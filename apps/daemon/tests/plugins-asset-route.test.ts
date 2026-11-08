@@ -42,7 +42,7 @@ beforeAll(async () => {
       version: '1.0.0',
       description: 'fixture',
       license: 'MIT',
-      od: { kind: 'skill', capabilities: ['prompt:inject', 'genui:custom-component'] },
+      od: { kind: 'skill', capabilities: ['prompt:inject', 'genui:custom-component'], context: { assets: ['./display.ttf'] } },
     }),
   );
 
@@ -132,6 +132,37 @@ describe('GET /api/plugins/:id/asset/*', () => {
     expect(response.headers.get('content-type')).toBe('font/ttf');
     expect(response.headers.get('content-security-policy') ?? '').toContain("font-src 'self' data:");
   });
+  it.each(['assets/model/hello.gltf', 'assets/fonts/TikTokSans.ttf', 'assets/sticker_img/s_01.webp'])(
+    'allows sandbox previews to load declared bundled asset %s',
+    async (asset) => {
+      const response = await fetch(`${baseUrl}/api/plugins/example-open-design-homepage/asset/${asset}`, {
+        headers: { origin: 'null' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('access-control-allow-origin')).toBe('null');
+      expect(response.headers.get('access-control-allow-credentials')).toBeNull();
+      expect(response.headers.get('vary')).toContain('Origin');
+      expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    },
+  );
+
+  it.each([
+    'asset-plugin/asset/display.ttf',
+    'example-open-design-homepage/asset/SKILL.md',
+  ])('keeps private or undeclared plugin files unavailable to opaque origins: %s', async (asset) => {
+    const response = await fetch(`${baseUrl}/api/plugins/${asset}`, { headers: { origin: 'null' } });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('does not expose bundled assets to arbitrary web origins', async () => {
+    const response = await fetch(`${baseUrl}/api/plugins/example-open-design-homepage/asset/assets/model/hello.gltf`, {
+      headers: { origin: 'https://untrusted.example' },
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
   it('returns 404 for an unknown plugin', async () => {
     const resp = await fetch(`${baseUrl}/api/plugins/unknown/asset/index.html`);
     expect(resp.status).toBe(404);

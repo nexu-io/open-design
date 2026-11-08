@@ -51,6 +51,7 @@ function project(id: string, updatedAt: number, name = `Project ${id}`): Project
     designSystemId: null,
     createdAt: updatedAt,
     updatedAt,
+    lastUserQueryAt: updatedAt,
   } as Project;
 }
 
@@ -171,6 +172,16 @@ afterEach(() => {
 });
 
 describe('EntryNavRail 最近浏览过 section', () => {
+  it('orders by accepted sends even when content or browsing activity is newer', () => {
+    renderRail({ recentProjects: [
+      { ...project('a', 900), lastUserQueryAt: 10 },
+      { ...project('b', 1), lastUserQueryAt: 20 },
+      { ...project('c', 1000), lastUserQueryAt: null },
+    ] });
+    expect(screen.getAllByTestId('entry-nav-recent-item').map(row => row.textContent))
+      .toEqual(['Project b', 'Project a', 'Project c']);
+  });
+
   it('lists every recent project, newest first, under a disclosure that starts open', () => {
     renderRail();
     const toggle = screen.getByTestId('entry-nav-recent-toggle');

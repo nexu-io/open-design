@@ -161,9 +161,9 @@ describe('G9 side-chat retries preserve the persisted failed turn', () => {
 
   afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-  async function loadSideChat() {
+  async function loadSideChat(onTouchProject = vi.fn()) {
     const hook = renderHook(() => useConversationChat(projectId, conversationId, {
-      config: { ...config, agentId: 'amr' }, agentsById: new Map(), locale: 'en', sessionMode: 'chat',
+      config: { ...config, agentId: 'amr' }, agentsById: new Map(), locale: 'en', sessionMode: 'chat', onTouchProject,
     }));
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.messages).toEqual([originalUser, originalFailure]);
@@ -207,6 +207,31 @@ describe('G9 side-chat retries preserve the persisted failed turn', () => {
     expect(replacement).toEqual(expect.objectContaining({ runId: 'replacement-run', runStatus: terminal }));
     expect(hook.result.current.messages.find((message) => message.id === originalFailure.id)).toEqual(originalFailure);
     expect(hook.result.current.messages.filter((message) => message.role === 'user')).toEqual([originalUser]);
+  });
+
+  it.each(['send', 'retry'] as const)('records the action time once for a side-chat %s', async (action) => {
+    const onTouchProject = vi.fn();
+    const hook = await loadSideChat(onTouchProject);
+    const before = Date.now();
+    act(() => {
+      if (action === 'retry') {
+        hook.result.current.onRetry(originalFailure);
+        hook.result.current.onRetry(originalFailure);
+      } else hook.result.current.onSend('New side message', [], []);
+    });
+    expect(onTouchProject).not.toHaveBeenCalled();
+    const acceptedRequest = mockedStreamViaDaemon.mock.calls[0]![0];
+    await act(async () => acceptedRequest.onUserSubmissionAccepted?.({ id: 'submission',
+      projectId: 'p', conversationId: 'c', acceptedAt: Date.now() }));
+    expect(onTouchProject).toHaveBeenCalledOnce();
+    const sentAt = onTouchProject.mock.calls[0]![0];
+    expect(sentAt).toBeGreaterThanOrEqual(before);
+    expect(sentAt).toBeLessThanOrEqual(Date.now());
+    expect(sentAt).toBeGreaterThan(originalUser.createdAt ?? 0);
+    if (action === 'retry') expectOriginalHistoryIntact();
+    const request = mockedStreamViaDaemon.mock.calls[0]![0];
+    await act(async () => request.handlers.onDone('Done'));
+    expect(onTouchProject).toHaveBeenCalledOnce();
   });
 
   it('keeps the original failed message while the accepted retry is pending', async () => {

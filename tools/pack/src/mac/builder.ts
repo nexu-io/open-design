@@ -1,8 +1,9 @@
 import { assertPackagedSidecarRuntime } from "../resources/runtime-manifest.js";
 import { MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH } from "./prebundle.js";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { assertPackagedConfigBinding } from "../config/amr-endpoint-binding.js";
 import type { ToolPackConfig } from "../config/index.js";
 import { domToPptxBundleResource } from "../dom-to-pptx-resource.js";
 import {
@@ -186,6 +187,10 @@ export async function runElectronBuilder(
       ...(webStandaloneHookConfigPath == null ? {} : { [WEB_STANDALONE_HOOK_CONFIG_ENV]: webStandaloneHookConfigPath }),
     },
   });
+  await assertPackagedConfigBinding(
+    join(paths.appPath, "Contents", "Resources", "open-design-config.json"),
+    await readFile(paths.packagedConfigPath, "utf8"),
+  );
   await assertPackagedSidecarRuntime(join(paths.appPath, "Contents", "Resources", "app"), [
     "main.cjs",
     ...(config.webOutputMode === "standalone" ? [MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH, MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH, MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH].map((entry) => entry.slice("app/".length)) : []),

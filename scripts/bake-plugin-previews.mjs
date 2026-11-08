@@ -70,7 +70,10 @@ import { pathToFileURL } from 'node:url';
 //       in the URL hash, or web storage) reopened there after the reload — so
 //       24 of the official decks baked their agenda page as the poster instead
 //       of the cover (OPEND-2702). Bumped so every deck re-bakes.
-const BAKE_VERSION = 7;
+//   v8: return to the original preview URL after probing. A deck's hash-only
+//       replaceState resolves against the injected asset <base>, changing the
+//       pathname; reloading that URL baked the asset directory's 404 page.
+const BAKE_VERSION = 8;
 
 // ---- config ---------------------------------------------------------------
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:17579';
@@ -411,6 +414,18 @@ export function resetDeckEntryState() {
   return { hadHash, clearedStorage };
 }
 
+export async function resetDeckForCapture(page, previewUrl) {
+  await page.evaluate(resetDeckEntryState);
+  // Never reload page.url(): hash-routed templates can change its pathname
+  // through the injected <base>. Navigate back to the known entry instead.
+  const response = await page.goto(previewUrl,
+    { waitUntil: 'domcontentloaded', timeout: 25000 });
+  // Chromium may report the origin's 304 while rendering the cached HTML.
+  if (!response || (!response.ok() && response.status() !== 304)) {
+    throw new Error(`deck entry status ${response ? response.status() : 'none'}: ${previewUrl}`);
+  }
+}
+
 // Probe which input advances a fixed-viewport deck: press the arrow key, then
 // nudge the wheel, watching deckSignal for a real slide change. Returns 'arrow',
 // 'wheel', or null when nothing moves it (a single static screen). Advances the
@@ -483,8 +498,9 @@ async function cropDeckViewportToSlide(page, fallbackW, fallbackH) {
 async function bakeOne(browser, id, hash, options) {
   const page = await browser.newPage();
   await page.setViewport({ width: RENDER_W, height: VIEW_H, deviceScaleFactor: 1 });
+  const previewUrl = `${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`;
   try {
-    const res = await page.goto(`${BASE_URL}/api/plugins/${encodeURIComponent(id)}/preview`,
+    const res = await page.goto(previewUrl,
       { waitUntil: 'domcontentloaded', timeout: 25000 });
     if (!res || !res.ok()) { await page.close(); return { id, skipped: `status ${res ? res.status() : 'none'}` }; }
   } catch (e) { await page.close(); return { id, skipped: `load ${e.message}` }; }
@@ -521,11 +537,15 @@ async function bakeOne(browser, id, hash, options) {
   if (isDeck) {
     capW = DECK_W; capH = DECK_H;
     await page.setViewport({ width: capW, height: capH, deviceScaleFactor: 1 });
-    // The probe advanced the deck; the reload alone does not bring it back when
+    // The probe advanced the deck; navigation alone does not bring it back when
     // the deck remembers its slide (see resetDeckEntryState) — the poster is
     // the first captured frame, and it must be the cover.
-    try { await page.evaluate(resetDeckEntryState); } catch {}
-    try { await page.reload({ waitUntil: 'domcontentloaded', timeout: 25000 }); } catch {}
+    try {
+      await resetDeckForCapture(page, previewUrl);
+    } catch (error) {
+      await page.close();
+      return { id, skipped: `error deck entry reset: ${error.message}` };
+    }
     await sleep(1000);
   }
 

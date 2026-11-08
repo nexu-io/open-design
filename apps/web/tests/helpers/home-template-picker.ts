@@ -5,7 +5,7 @@ import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips'
 
 export function homeTemplateTrigger(): HTMLButtonElement {
   const selected = screen.queryByTestId('home-hero-template-trigger');
-  return selected?.querySelector('button')
+  return selected?.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')
     ?? screen.getByTestId('home-hero-type-pills-more') as HTMLButtonElement;
 }
 

@@ -70,7 +70,7 @@ describe('DesignKitView iframe sandboxing', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        '/api/projects/project-team/raw/fonts/manifest.json',
+        '/api/projects/project-team/raw/fonts/manifest.json?workspaceId=workspace-team&workspaceMemberId=member-1',
         {
           cache: 'no-store',
           headers: expect.objectContaining({
@@ -81,7 +81,7 @@ describe('DesignKitView iframe sandboxing', () => {
       );
       expect(document.head.querySelector('style[data-brand-fonts="project-team"]')?.textContent)
         .toContain(
-          '/api/projects/project-team/raw/fonts/inter.woff2',
+          '/api/projects/project-team/raw/fonts/inter.woff2?workspaceId=workspace-team&workspaceMemberId=member-1',
         );
     });
     unmount();
