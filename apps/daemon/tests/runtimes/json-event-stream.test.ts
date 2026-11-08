@@ -1,4 +1,5 @@
 import { test } from 'vitest';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { createJsonEventStreamHandler } from '../../src/runtimes/json-event-stream.js';
 import { createToolLoopGuard, type ToolLoopVerdict } from '../../src/tool-loop-guard.js';
@@ -2375,5 +2376,94 @@ test('codex json stream does not mark a non-failed mcp_tool_call as an error', (
       input: { topic: 'orbital-mechanics' },
     },
     { type: 'tool_result', toolUseId: 'item_2', content: '', isError: false },
+  ]);
+});
+
+// Antigravity (`agy --output-format stream-json`). Fixtures: a stream recorded
+// from agy 1.3.1 and the samples published in agy's headless docs — see
+// tests/fixtures/antigravity-stream-json/README.md.
+const ANTIGRAVITY_FIXTURES = new URL('../fixtures/antigravity-stream-json/', import.meta.url);
+
+function readAntigravityFixture(name: string): string {
+  return readFileSync(new URL(name, ANTIGRAVITY_FIXTURES), 'utf8');
+}
+
+test('antigravity stream maps agy agent_response text, tool steps and the result usage', () => {
+  const { events, handler } = collectEvents('antigravity');
+
+  handler.feed(readAntigravityFixture('docs-success.stdout.ndjson'));
+  handler.flush();
+
+  assert.deepEqual(events, [
+    {
+      type: 'status',
+      label: 'initializing',
+      sessionId: 'c3b66b04-872b-4fbe-a3a4-058a026ef20a',
+    },
+    {
+      type: 'tool_use',
+      id: 'edb1c8c1-50ba-4f3f-87eb-412d0e9d47c3:4',
+      name: 'run_command',
+      input: { CommandLine: 'echo hello_headless_demo' },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'edb1c8c1-50ba-4f3f-87eb-412d0e9d47c3:4',
+      content: 'hello_headless_demo\r\n',
+      isError: false,
+    },
+    { type: 'text_delta', delta: 'Git rebase...' },
+    {
+      type: 'usage',
+      usage: {
+        input_tokens: 10418,
+        output_tokens: 589,
+        thought_tokens: 551,
+        cached_read_tokens: 8113,
+      },
+      durationMs: 6880,
+    },
+  ]);
+});
+
+test('antigravity stream surfaces a recorded agy ERROR result as an error event', () => {
+  const { events, handler } = collectEvents('antigravity');
+
+  handler.feed(readAntigravityFixture('quota-exhausted.stdout.ndjson'));
+  handler.flush();
+
+  const errors = events.filter((event) => event.type === 'error');
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0]!.message), /Individual quota reached/);
+  assert.equal(events.some((event) => event.type === 'text_delta'), false);
+  // No unrecognised agy frame may leak through as an unrendered raw event.
+  assert.equal(events.some((event) => event.type === 'raw'), false);
+});
+
+test('antigravity stream falls back to the result response when no text_delta streamed', () => {
+  const { events, handler } = collectEvents('antigravity');
+
+  handler.feed(
+    `${JSON.stringify({ event: 'result', result: { conversation_id: 'c-1', status: 'SUCCESS', response: 'Only in the result.', duration_seconds: 1, num_turns: 1, usage: { input_tokens: 3, output_tokens: 4, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 7 } } })}\n`,
+  );
+  handler.flush();
+
+  assert.deepEqual(events.filter((event) => event.type === 'text_delta'), [
+    { type: 'text_delta', delta: 'Only in the result.' },
+  ]);
+});
+
+test('antigravity stream still parses Gemini-CLI-shaped JSONL from agy-compatible builds', () => {
+  const { events, handler } = collectEvents('antigravity');
+
+  handler.feed(
+    JSON.stringify({ type: 'init', session_id: 'agy-1', model: 'gemini-3.5-flash' }) + '\n' +
+    JSON.stringify({ type: 'message', role: 'assistant', content: 'Hello from Antigravity.', delta: true }) + '\n',
+  );
+  handler.flush();
+
+  assert.deepEqual(events, [
+    { type: 'status', label: 'initializing', model: 'gemini-3.5-flash' },
+    { type: 'text_delta', delta: 'Hello from Antigravity.' },
   ]);
 });

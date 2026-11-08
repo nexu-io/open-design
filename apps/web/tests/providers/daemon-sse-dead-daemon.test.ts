@@ -208,6 +208,52 @@ describe('daemon 死了的时候,重连那一行必须出得来', () => {
     expect(h.view()).toMatchObject({ reason: 'transport', exhausted: true, max: DAEMON_STREAM_RECONNECT_LIMIT });
   });
 
+  /**
+   * P0-24 N15:界面重连用尽**不是**这一轮的结局。以运行记录为准 —— daemon 还说
+   * 在跑、或者根本问不到,都不许由浏览器替它判「运行失败」;那一行〔重新连接〕
+   * 照旧交回给人,恢复后按运行记录显示真实结果。
+   */
+  it.each([
+    ['daemon still reports the run as running', 'running'],
+    ['the status probe cannot reach the daemon', 'unreachable'],
+  ] as const)('does not report the run as failed when reconnects run out and %s', async (_label, probe) => {
+    let eventsCalls = 0;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const u = typeof url === 'string' ? url : url.toString();
+      if (u.includes('/events')) {
+        eventsCalls += 1;
+        if (eventsCalls === 1) return sseResponseOnce(FIRST_EVENT);
+        return deadProxyResponse(502);
+      }
+      if (probe === 'unreachable') return deadProxyResponse(502);
+      return runningStatusResponse();
+    }) as unknown as typeof globalThis.fetch;
+
+    const statuses: string[] = [];
+    const errors: Error[] = [];
+    const states: DaemonReconnectState[] = [];
+    const controller = new AbortController();
+    const settled = reattachDaemonRun({
+      runId: RUN_ID,
+      signal: controller.signal,
+      handlers: {
+        onDelta: () => {},
+        onDone: () => {},
+        onError: (err) => { errors.push(err); },
+        onAgentEvent: () => {},
+        onReconnect: (state) => { states.push(state); },
+      },
+      onRunStatus: (status) => { statuses.push(status); },
+    }).catch(() => {});
+    await vi.advanceTimersByTimeAsync(120_000);
+    await settled;
+
+    expect(states.at(-1)?.phase, '〔重新连接〕仍然交回给人').toBe('exhausted');
+    expect(statuses, '浏览器放弃重连不等于这一轮失败').not.toContain('failed');
+    // 消费方仍要知道「这条流放弃了」,好收起流、排队恢复。
+    expect(errors).toHaveLength(1);
+  });
+
   it('打包版代理回的 502 同样是掉线,不是终局报错', async () => {
     let eventsCalls = 0;
     globalThis.fetch = vi.fn(async (url: string | URL | Request) => {

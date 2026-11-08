@@ -1,4 +1,9 @@
+import { pendingCommentFileRetirements } from './collab/comment-file-retirements.js';
+import { withCommentFileDeletion, type CommentFileDeletion } from './collab/comment-file-deletion.js';
 import type { Express, Response } from 'express';
+import { publicFileMutationHandler } from './routes/public-file-mutation-handler.js';
+import type { PublicFileMutations } from './collab/public-file-mutations.js';
+import { deleteProjectWorkspaceArtifacts } from './chat-artifacts/store.js';
 import {
   PROJECT_EXPORT_MANIFEST_SCHEMA,
   isExportFormat,
@@ -50,7 +55,11 @@ import type { WorkspaceDirectoryFetchResult } from './collab/vela-workspace-cont
 import type { BoundWorkspaceResourceMutationGate } from './collab/workspace-resource-mutation.js';
 
 export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {
+  publicFileMutations?: PublicFileMutations;
+  stopPublicFilesBeforeDelete?: CommentFileDeletion;
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  /** Same explicit local/dev compatibility policy as ordinary project creation. */
+  allowStaticDevWorkspaceContext?: boolean;
   enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
 }
 
@@ -116,6 +125,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         const createWorkspace = await authorizeCreatedProjectWorkspace(
           req,
           ctx.fetchProjectCreationWorkspaceDirectory,
+          {},
+          ctx.allowStaticDevWorkspaceContext === true,
         );
         if (!createWorkspace.ok) {
           fs.promises.unlink(req.file.path).catch(() => {});
@@ -195,9 +206,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   // Replace an existing project's working directory in-place. Mirrors
   // the same trust-gate, realpath, and data-dir checks as folder import,
   // but updates metadata.baseDir on an existing project record.
-  app.post('/api/projects/:id/working-dir', async (req, res) => {
+  app.post('/api/projects/:id/working-dir', publicFileMutationHandler(ctx.publicFileMutations, async (req, res) => {
     try {
-      const projectId = req.params.id;
+      const projectId = typeof req.params.id === 'string' ? req.params.id : '';
       const existing = getProject(db, projectId);
       if (!existing) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
@@ -311,21 +322,37 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
 
       const entryFile = await detectEntryFile(normalizedPath);
-      const existingMeta = existing.metadata ?? {};
-      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
-        existingMeta;
-      const nextMeta = {
-        ...preservedMeta,
-        kind: existingMeta.kind ?? 'prototype',
-        baseDir: normalizedPath,
-        importedFrom: 'folder' as const,
-        entryFile,
-        ...(normalizedOrchestratorWorkspace
-          ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
-          : {}),
-        ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
-      };
-      const updated = updateProject(db, projectId, { metadata: nextMeta });
+      const previousRoot = await fs.promises.realpath(existing.metadata?.baseDir ?? projectDir(PROJECTS_DIR, projectId)).catch(() => null);
+      const replacing = previousRoot !== normalizedPath;
+      const pendingRetirements = pendingCommentFileRetirements(db, projectId);
+      if (!replacing && pendingRetirements.some(row => !row.committed)) throw new Error('COMMENT_FILE_RETIREMENT_PENDING');
+      let updated: ReturnType<typeof updateProject> = null;
+      await withCommentFileDeletion(replacing || pendingRetirements.length ? ctx.stopPublicFilesBeforeDelete : undefined, projectId, undefined, async () => {
+        const existingMeta = getProject(db, projectId)?.metadata ?? {};
+        const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
+          existingMeta;
+        const nextMeta = {
+          ...preservedMeta,
+          kind: existingMeta.kind ?? 'prototype',
+          baseDir: normalizedPath,
+          importedFrom: 'folder' as const,
+          entryFile,
+          ...(normalizedOrchestratorWorkspace
+            ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
+            : {}),
+          ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
+        };
+        // End every old local pointer with the root switch, including local-only
+        // notes with no admitted fact. Remote retirement may fail afterward.
+        return db.transaction((): void | false => {
+          updated = updateProject(db, projectId, { metadata: nextMeta });
+          if (!updated) throw new Error('PROJECT_NOT_FOUND');
+          if (!replacing) return false;
+          deleteProjectWorkspaceArtifacts(db, projectId);
+        })();
+      }, replacing ? undefined : 'committed-retry');
+      // Retirement adopts reserved metadata after the root mutation commits.
+      updated = getProject(db, projectId);
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -339,13 +366,15 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
-  });
+  }));
 
   app.post('/api/import/folder', async (req, res) => {
     try {
       const createWorkspace = await authorizeCreatedProjectWorkspace(
         req,
         ctx.fetchProjectCreationWorkspaceDirectory,
+        {},
+        ctx.allowStaticDevWorkspaceContext === true,
       );
       if (!createWorkspace.ok) {
         return sendCreatedProjectWorkspaceError(res, createWorkspace);
@@ -614,6 +643,7 @@ type ScreenshotExportRequest = {
 export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation' | 'auth' | 'projectPreviewScopes'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
   authorizeProjectToolRequest: AuthorizeProjectToolRequest;
+  resolveAccountScopedTeamExportMember?: (workspaceId: string) => Promise<string | null>;
   isApiTokenAuthorization: (authorization: string | undefined) => boolean;
 }
 
@@ -688,16 +718,47 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         res,
         grant.projectId,
         { mode: 'read' },
+        grant.runId,
       );
       return authority ? { previewWorkspace: authority.workspace } : null;
     }
     if (options.deriveWorkspaceFromProject) {
-      const authority = await ctx.authorizeProjectToolRequest(
-        res,
-        req.params.id,
-        { mode: 'read' },
-      );
-      return authority ? { previewWorkspace: authority.workspace } : null;
+      const binding = ctx.projectStore.getWorkspaceProjectByProjectId(db, req.params.id);
+      let actorRequest = req;
+      let memberId: string | null = null;
+      const hasExplicitWorkspaceHeader = Object.keys(req.headers).some((name) =>
+        name.toLowerCase().startsWith('x-od-workspace-'));
+      if (
+        binding?.workspaceId && binding.visibility === 'team'
+        && ctx.resolveAccountScopedTeamExportMember && !hasExplicitWorkspaceHeader
+      ) {
+        // The project-id-only CLI is authenticated by the current Vela control
+        // account, not by stale workspace flags. Only this export entrypoint
+        // may derive an exact Team member, and only from a fresh unique row.
+        memberId = await ctx.resolveAccountScopedTeamExportMember(binding.workspaceId);
+        if (!memberId) {
+          sendApiError(res, 403, 'WORKSPACE_ACCESS_DENIED', 'a unique active Team member could not be verified');
+          return null;
+        }
+        actorRequest = Object.create(req) as typeof req;
+        actorRequest.get = (name: string) => {
+          if (name.toLowerCase() === 'x-od-workspace-id') return binding.workspaceId;
+          if (name.toLowerCase() === 'x-od-workspace-member-id') return memberId ?? undefined;
+          return req.get(name);
+        };
+      }
+      if (!await ctx.authorizeProjectRequest(actorRequest, res, req.params.id, { mode: 'read' })) return null;
+      const claimed = workspaceResourceContextFromRequest(actorRequest);
+      return {
+        previewWorkspace: binding?.workspaceId
+          ? {
+              workspaceId: binding.workspaceId,
+              workspaceMemberId: claimed && claimed !== 'missing'
+                ? claimed.workspaceMemberId
+                : binding.createdByWorkspaceMemberId ?? 'local-user',
+            }
+          : null,
+      };
     }
     const authorized = await ctx.authorizeProjectRequest(
       req,

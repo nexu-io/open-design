@@ -76,6 +76,7 @@ describe('e2e tools-dev release channel', () => {
     const env = composeToolsDevEnv(SUITE, {}, {});
 
     expect(env.OD_RELEASE_CHANNEL).toBe(E2E_TOOLS_DEV_RELEASE_CHANNEL);
+    expect(env.OD_WEB_DEV_BUNDLER).toBe('turbopack');
     expect(resolveCiShapedChannel(env)).toBe('development');
     expect(whatsNewSourceUrl(env, resolveCiShapedChannel(env))).toBeNull();
   });
@@ -92,6 +93,10 @@ describe('e2e tools-dev release channel', () => {
 
     expect(resolveCiShapedChannel(env)).toBe('beta');
     expect(whatsNewSourceUrl(env, resolveCiShapedChannel(env))).toBe(DEFAULT_WHATS_NEW_URL);
+  });
+
+  test('a spec can still select webpack explicitly', () => {
+    expect(composeToolsDevEnv(SUITE, { OD_WEB_DEV_BUNDLER: 'webpack' }, {}).OD_WEB_DEV_BUNDLER).toBe('webpack');
   });
 
   test('an explicit document URL still overrides the channel, which is what the page route covers', () => {

@@ -566,7 +566,9 @@ describe('ChatPane streaming state', () => {
   });
 
   it.each(['no_result', 'delivery_failed'] as const)(
-    'exposes retry for a %s delivery failure',
+    // P0-24: a delivery outcome does not make the run a failure, so there is
+    // no failure to retry.
+    'does not expose retry for a %s delivery failure',
     (resultDeliveryState) => {
       const deliveryFailure: ChatMessage = {
         id: `assistant-${resultDeliveryState}`,
@@ -581,7 +583,7 @@ describe('ChatPane streaming state', () => {
         deliveryFailure,
       ];
 
-      expect(retryableAssistantMessage(messages, deliveryFailure.id, false)).toBe(deliveryFailure);
+      expect(retryableAssistantMessage(messages, deliveryFailure.id, false)).toBeNull();
     },
   );
 

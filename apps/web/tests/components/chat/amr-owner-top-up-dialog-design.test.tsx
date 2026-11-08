@@ -1,43 +1,8 @@
 // @vitest-environment jsdom
-/**
- * 「找所有者充值」弹窗要**长成产品稿那张卡**。
- *
- * 权威源:产品 2026-09-07 给的 `topup-reminder2.html`。它不是截图,是一份可跑的
- * 页面 —— 下面每一个数都是在真 Chrome 里 `getComputedStyle` 量出来的,不是照着
- * 图估的,也不是 diff CSS 文本猜的(只 diff 源码会漏掉层叠反转,这个仓库栽过)。
- *
- * ## 稿子里量到、我们身上没有的那几件
- *
- * | 项 | 稿子实测 | 改之前我们实测 |
- * |---|---|---|
- * | 插画横幅 | 480×205.71,`cloud-signin-aurora.jpg`(1680×720) | **整个不存在** |
- * | 横幅出血 | `margin:-36px -24px 24px` 正好抵掉卡片 `padding:36px 24px 24px` | — |
- * | 卡片宽 | `min(480px, calc(100vw - 32px))` | `max-width:340px` |
- * | 标题 | 18px / 600 / 居中,是张卡的主标题 | 12px / 600 / 左对齐,压在一条带分隔线的标题栏里 |
- * | 正文 | 13.5px / 400 / 居中 / 下留 18px | 12px / 继承 500 / 左对齐 / 下留 0 |
- * | 「知道了」 | 整宽、40px 高的胶囊 | 58×20,贴在右下角 |
- * | 遮罩 | `#202020 42%` + `blur(4px)` | `#202020 26%`,不模糊 |
- *
- * ## 这把尺子准不准(量法自检)
- *
- * jsdom **不做 `var()` 代入** —— 这是 `amr-owner-top-up-dialog-seam.test.tsx`
- * 头注里那条已经证明过的事:接缝之内 `background` 照样读成 `rgba(0,0,0,0)`。
- * 所以凡是走 `var(--chat-*)` 的那几档(字号、颜色、圆角、遮罩那 42%)在这里
- * **量不出来**,钉在它们身上的断言会是假绿。
- *
- * 于是这份文件只钉 **jsdom 真读得出来的那半边**:
- *   · DOM 结构与属性(横幅那张 `<img>` 的 `src` / `alt` / 固有宽高)
- *   · **字面**声明(`margin` / `padding` / `text-align` / `font-weight` /
- *     `width` / `min-height` / `backdrop-filter` / `overflow`)
- *
- * 另外半边(18px / 13.5px / #fafafa / 42% 这些走变量的)由**真 Chrome 实测**
- * 兜住,不在这里假装量得到。这份文件对它们只保证一件事:它们消费的每一枚
- * `--chat-*` 在接缝里**都解析得出值** —— 解析不出来就是 OPEND-2722 那个现场
- * (声明整条作废,画面不画,而且不报错)。
- *
- * 下面第一组 calibration 先把「哪些读得出、哪些读不出」就地证一遍,再往下断言
- * 才有意义。
- */
+/** Native F10 follows the frozen client 2026-10-20/r506 frame, superseding
+ * the September native blur/skin. Inline catalogue rendering retains its
+ * original non-modal path. jsdom checks literal layout/DOM only; the real
+ * browser design regression owns resolved palette, fonts, scrim and cascade. */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -49,6 +14,7 @@ import { ChatRoot } from '../../../src/components/chat/ChatRoot';
 import { AmrOwnerTopUpDialog } from '../../../src/components/chat/AmrOwnerTopUpDialog';
 import chatRootStyles from '../../../src/components/chat/ChatRoot.module.css';
 import dialogStyles from '../../../src/components/chat/AmrOwnerTopUpDialog.module.css';
+import frameStyles from '../../../src/components/AmrBalanceDialog.module.css';
 import buttonStyles from '../../../../../packages/components/src/button.module.css';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +37,8 @@ const buttonCss = localize(
   readFileSync(resolve(COMPONENTS_SRC, 'button.module.css'), 'utf8'),
   buttonStyles as unknown as Record<string, string>,
 );
+const frameCss = localize(readFileSync(resolve(SRC, 'components/AmrBalanceDialog.module.css'), 'utf8'), frameStyles as unknown as Record<string, string>);
+
 const dialogCssSource = readFileSync(
   resolve(SRC, 'components/chat/AmrOwnerTopUpDialog.module.css'),
   'utf8',
@@ -104,7 +72,7 @@ beforeEach(() => {
   window.localStorage.setItem('open-design:locale-source', 'manual');
   styleEl = document.createElement('style');
   // 顺序照产品里的层叠:先接缝,再 Button primitive,最后弹窗自己的 Module。
-  styleEl.textContent = `${seamCss}\n${buttonCss}\n${dialogCss}`;
+  styleEl.textContent = `${seamCss}\n${buttonCss}\n${frameCss}\n${dialogCss}`;
   document.head.appendChild(styleEl);
 });
 
@@ -123,8 +91,8 @@ function renderDialog(props: { ownerName?: string | null } = {}) {
       </ChatRoot>
     </I18nProvider>,
   );
-  const overlay = screen.getByTestId('amr-balance-owner-dialog');
-  const modal = screen.getByRole('dialog') as HTMLElement;
+  const modal = screen.getByTestId('amr-balance-owner-dialog');
+  const overlay = modal.parentElement!;
   return { overlay, modal };
 }
 
@@ -222,7 +190,7 @@ describe('插画横幅', () => {
     expect(media.marginLeft).toBe('-24px');
     expect(media.marginRight).toBe('-24px');
     // 圆角由卡片裁,横幅自己不重复画一遍
-    expect(card.overflow).toBe('hidden');
+    expect(card.overflow).toBe('auto');
   });
 });
 
@@ -247,16 +215,17 @@ describe('标题', () => {
   it('是这张卡的主标题,不是标题栏里的一行小字', () => {
     renderDialog();
     expect(
-      screen.getByRole('heading', { name: '请联系团队所有者充值' }),
+      screen.getByRole('heading', { name: '团队额度不足' }),
       '稿子里标题坐在插画下面、18px 居中;我们把它塞进了一条 12px 的标题栏',
     ).toBeTruthy();
   });
 
   it('居中、600', () => {
     renderDialog();
-    const title = screen.getByRole('heading', { name: '请联系团队所有者充值' });
+    const title = screen.getByRole('heading', { name: '团队额度不足' });
     const computed = getComputedStyle(title);
-    expect(computed.textAlign).toBe('center');
+    // Native frame supplies inherited centering; jsdom does not resolve it on children.
+    expect(getComputedStyle(screen.getByRole('dialog')).textAlign).toBe('center');
     expect(computed.fontWeight).toBe('600');
   });
 });
@@ -265,21 +234,27 @@ describe('正文', () => {
   it('居中、400,下面留 18px 到按钮', () => {
     renderDialog();
     const message = screen.getByText(
-      '当前仅团队所有者可以为团队充值，请联系团队所有者完成充值后再继续使用。',
+      '当前团队额度不足，请联系团队空间所有者充值或升级订阅。',
     );
     const computed = getComputedStyle(message);
-    expect(computed.textAlign).toBe('center');
+    // Native frame supplies inherited centering; jsdom does not resolve it on children.
+    expect(getComputedStyle(screen.getByRole('dialog')).textAlign).toBe('center');
     expect(computed.fontWeight).toBe('400');
     expect(computed.marginBottom).toBe('18px');
   });
 
-  it('Owner 名字加粗成一档,和普通正文分得开', () => {
+  /*
+   * 本期冻结稿 r271 / QA RUN-004 将付款联系人校准为 Owner（admin 无账单权限）。
+   * OPEND-2849 原定稿仍不插 Owner 名字；这里只校准角色，不改变排版和名字行为。
+   * 定稿句「当前团队额度不足，请联系团队空间所有者充值或升级订阅。」里没有名字的位置,于是名字不再出现 —— 加粗那一档无从谈起。
+   * 改为钉住「拿得到名字也不插、正文仍是一整段 400」,防止有人把名字拼回定稿句。
+   */
+  it('拿得到 Owner 名字时正文仍是定稿那一整段,名字不出现', () => {
     renderDialog({ ownerName: '张三' });
-    // 加粗的是名字本身;两边那对「」是句子的标点,留在正文里(稿子里那个位置
-    // 压根没有括号,所以「括号算不算名字的一部分」没有稿面依据,不自行发挥)。
-    const emphasised = screen.getByText('张三');
-    // 稿子实测:`.owner-name { font-weight: 700 }`,正文是 400 —— 差整整三档。
-    expect(getComputedStyle(emphasised).fontWeight).toBe('700');
+    const message = screen.getByText('当前团队额度不足，请联系团队空间所有者充值或升级订阅。');
+    expect(getComputedStyle(message).fontWeight).toBe('400');
+    expect(message.querySelector('strong')).toBeNull();
+    expect(screen.queryByText('张三')).toBeNull();
   });
 });
 
@@ -295,13 +270,11 @@ describe('「知道了」', () => {
 });
 
 describe('遮罩', () => {
-  it('压得更实、还糊一层', () => {
+  it('采用十月冻结遮罩，不再使用九月原模糊层', () => {
     const { overlay } = renderDialog();
     const computed = getComputedStyle(overlay);
-    // 稿子实测 `rgba(32,32,32,0.42)` + `blur(4px)`;我们是 26%、不糊。
-    // 那 42% 走 `var(--chat-text-strong)`,jsdom 代入不了 —— 由真 Chrome 兜住,
-    // 这里只钉 jsdom 读得出来的这两条。
-    expect(computed.backdropFilter).toBe('blur(4px)');
+    // Oct20 .limit-overlay is black28% with no backdrop filter; browser owns color.
+    expect(computed.backdropFilter).toBe('none');
     expect(computed.padding).toBe('16px');
   });
 });

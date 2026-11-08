@@ -1,11 +1,9 @@
-<h1 align="center">OpenDesign: el primer espacio de trabajo colaborativo con agentes de diseño</h1>
+<h1 align="center">OpenDesign: el primer espacio de trabajo colaborativo con agentes de diseño con IA</h1>
 
-> ✨ **[Presentamos OpenDesign Go](https://open-design.ai/pricing/)**. El Go Plan empieza en 8 USD durante el primer mes e incluye créditos mensuales para más de 10 modelos, entre ellos GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X y MiMo V2.6 Flash. Todos los planes personales incluyen acceso a la API para Codex, Claude Code, DSH, OpenCode y más.
->
-> 🧩 **[DeepSeek Harness ya es compatible.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Conecta el Agent Harness oficial `dsh` de DeepSeek como runtime nativo de OpenDesign, con pensamiento estructurado, llamadas a herramientas, descubrimiento de modelos, cancelación y reanudación de sesiones. Los archivos generados permanecen en el flujo de OpenDesign para previsualización en vivo y entrega.
+> ✨ **[Celebramos 100K estrellas en GitHub con OpenDesign Go](https://open-design.ai/pricing/)** — Duplicamos los créditos de Go: **8 USD el primer mes, con hasta 120 USD en créditos mensuales para modelos incluidos en Design Plan**. Úsalos en más de 10 modelos, incluidos GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X y MiMo V2.6 Flash. Todos los planes personales incluyen acceso a la API para Codex, Claude Code, DSH, OpenCode y más.
 
 <p align="center">
-  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: el primer espacio de trabajo colaborativo con agentes de diseño" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: el primer espacio de trabajo colaborativo con agentes de diseño con IA" width="100%" />
 </p>
 
 <p align="center">
@@ -29,9 +27,9 @@
 
 ## Qué es OpenDesign
 
-OpenDesign es **un espacio de trabajo colaborativo con agentes de diseño**. Empieza con una descripción del proyecto y usa tu agente de programación habitual u OpenDesign Cloud para crear un prototipo fiel a tu sistema de diseño. Compártelo con tu equipo, recoge comentarios y deja que el agente lo perfeccione en el mismo proyecto.
+OpenDesign es **el primer espacio de trabajo colaborativo con agentes de diseño con IA**. Empieza con una descripción del proyecto y usa tu agente de programación habitual u OpenDesign Cloud para crear un prototipo fiel a tu sistema de diseño. Compártelo con tu equipo, recoge comentarios y deja que el agente lo perfeccione en el mismo proyecto.
 
-Ese flujo de trabajo es abierto y ampliable. Como **alternativa de código abierto a Claude Design**, OpenDesign tiene licencia Apache 2.0 y ofrece habilidades, plantillas, sistemas de diseño y plugins que los equipos pueden examinar y adaptar a su propio proceso.
+Ese flujo de trabajo es abierto y ampliable. OpenDesign tiene licencia Apache 2.0 y ofrece habilidades, plantillas, sistemas de diseño y plugins que los equipos pueden examinar y adaptar a su propio proceso.
 
 
 ---
@@ -232,29 +230,12 @@ Cada presentación se exporta a **HTML** (un solo archivo, recursos incorporados
 
 ## Por qué OpenDesign
 
-> **En abril de 2026, Anthropic lanzó Claude Design — la primera vez que un LLM dejó de escribir prosa y empezó a entregar artefactos de diseño directamente.** Se volvió viral. Pero permaneció de código cerrado, solo de pago, solo en la nube, atado al modelo de Anthropic, a los skills de Anthropic, a la superficie de Anthropic. Sin checkout, sin self-host, sin despliegue en Vercel, sin posibilidad de cambiar a tu propio agente.
-
-OpenDesign (OD) es la alternativa de código abierto. El mismo bucle, el mismo modelo mental centrado en el artefacto, sin nada del lock-in:
-
 - 🤖 **Agent-native, agnóstico al modelo.** No distribuimos un agente. Los `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` que ya están en tu `PATH` son el motor de diseño. Cámbialos con un clic.
 - 🧠 **Calidad de marca por defecto.** Cada render lee el `DESIGN.md` del paquete activo como contrato central de marca. El repo incluye 151 paquetes de sistemas de diseño; los paquetes heredados pueden contener solo `DESIGN.md`, mientras los nuevos pueden añadir `manifest.json`, `tokens.css`, componentes, assets y procedencia. Suelta una carpeta y el selector la encuentra.
-- 🖥️ **Local-first, BYOK en cada capa.** Las apps de escritorio nativas siguen siendo local-first, sin ida y vuelta a la nube. Antes de describir rutas de datos del daemon, DEBES leer `AGENTS.md` en la raíz, sección **Daemon data directory contract**.
+- 🖥️ **Local-first, BYOK en cada capa.** Las apps de escritorio nativas siguen siendo local-first. La analítica de producto y la reproducción de sesiones requieren consentimiento; la telemetría de seguridad y fiabilidad con datos depurados permanece activa. Antes de describir rutas de datos del daemon, DEBES leer `AGENTS.md` en la raíz, sección **Daemon data directory contract**.
 - 🌍 **Componible en cuatro planos.** Los **plugins** llevan workflows · los **skills funcionales** llevan comportamiento del agente · las **plantillas de diseño** llevan planos de renderizado · los **sistemas de diseño** llevan la marca.
-- 🔁 **Renueva una base de código existente.** Entrégale un repo `git` + `DESIGN.md` al agente y refactoriza tus componentes reales según la especificación de marca. Plugins dedicados migran flujos de Figma / Pencil a código React / Next.js / Vue.
-- 🔒 **Privacidad por convicción.** Todo se ejecuta donde viven tus datos — tu laptop, el servidor de tu equipo, tu proyecto de Vercel. Cuando se necesita la red, el proxy BYOK está protegido contra SSRF.
-
-### Comparación
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| Código abierto | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| Self-host / escritorio | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent-native (se ejecuta en tu CLI) | Solo Anthropic | ❌ | Solo agente en la nube | **✅ 25 CLIs + BYOK** |
-| `DESIGN.md` de calidad de marca | Propietario | JSON de tema | Tokens limitados | **✅ 151 sistemas incluidos** |
-| Skills / plugins / plantillas | Cerrado | Tienda de plugins | Cerrado | **✅ Más de 100 skills funcionales · catálogo separado de plantillas de renderizado · 277 plugins** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ De primera clase** |
-| Renovar un repo existente a la marca | ❌ | ❌ | ❌ | **✅ vía agente + `DESIGN.md`** |
-| Facturación mínima | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · cualquier endpoint compatible** |
+- 🔁 **Renueva una base de código existente.** Entrégale un repo `git` + `DESIGN.md` al agente y refactoriza tus componentes reales según la especificación de marca.
+- 🔒 **Privacidad por convicción.** Los proyectos pueden ejecutarse localmente o en tu propio despliegue. Las solicitudes a modelos en la nube y a OpenDesign Cloud se envían a los servicios correspondientes. El proxy BYOK incluye protección contra SSRF.
 
 ---
 
@@ -324,7 +305,7 @@ Node `~24`, pnpm `10.33.x`. Usuarios de Windows, consulten [`docs/windows-troubl
 `brief → plugin → dirección → sistema de diseño → artefacto → entrega → memoria`
 
 1. **Un PM envía un brief.** El selector de plugins ofrece landing page · pitch deck · dashboard · publicación social · spec de PM · scorecard de OKR…
-2. **Un diseñador (o el agente) fija la dirección.** ¿Sin marca? Elige entre 5 direcciones curadas. ¿Tienes una marca? Suelta una captura / URL → el agente conecta con GitHub, importa de Figma y codifica un `DESIGN.md` reutilizable.
+2. **Un diseñador (o el agente) fija la dirección.** ¿Sin marca? Elige entre 5 direcciones curadas. ¿Tienes una marca? Suelta una captura / URL → el agente conecta con GitHub y codifica un `DESIGN.md` reutilizable.
 3. **El agente crea la primera entrega.** Las ejecuciones CLI con filesystem escriben archivos canónicos; las ejecuciones BYOK/API sin herramientas de archivos devuelven un bloque `<artifact>` completo.
 4. **Entrega a ingeniería.** El artefacto es HTML/CSS real — suéltalo en Cursor, Codex o Claude Code para seguir construyendo como código. O exporta PPTX / PDF / MP4 directamente a marketing.
 5. **OpenDesign se vuelve más inteligente conforme lo usas.** Tus capturas, fuentes, paletas y artefactos confirmados se acumulan como valores por defecto para la próxima sesión. Menos retrabajo, menos deriva.
@@ -397,9 +378,9 @@ Protocolo y división de directorios → [`docs/skills-protocol.md`](../../docs/
 
 **AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**Developer Tools** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**Developer Tools** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**Productivity** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**Productivity** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -455,7 +436,7 @@ Los plugins tienen plena paridad entre la **UI web** y la **CLI `od`** — los m
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -476,7 +457,7 @@ my-plugin/
 └── examples/           ← optional: concrete use cases
 ```
 
-Campos principales de `open-design.json`: `specVersion`, `name`, `version` y el `compat.agentSkills[].path` opcional cuando la entrada expone un Agent Skill, además de `od.kind`, `od.taskKind`, `od.mode`, `od.capabilities[]` y `od.inputs[]`.
+Campos principales de `open-design.json`: `specVersion`, `name`, `version` y el `compat.agentSkills[].path` opcional cuando la entrada expone un Agent Skill, además de `od.kind`, `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode`, `od.capabilities[]` y `od.inputs[]`.
 
 Genera el esqueleto + valida localmente:
 
@@ -691,11 +672,10 @@ Si esto te ahorró treinta minutos, dale una ★. Las estrellas no pagan el alqu
 
 | Proyecto | Rol |
 |---|---|
-| Claude Design | El producto de código cerrado del que este repo es la alternativa de código abierto. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | La brújula de la filosofía de diseño — flujo de trabajo de diseñador junior, protocolo de recursos de marca, checklist anti-AI-slop, crítica de cinco dimensiones. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | El skill de PPT web estilo revista, empaquetado textualmente bajo [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). Por defecto para el modo presentación. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | La familia HTML PPT Studio — 15 plantillas de presentación, 36 temas, 31 layouts de página, runtime de animación, modo presentador de tarjetas magnéticas. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | La primera alternativa de código abierto a Claude Design; patrones de UX que tomamos prestados (bucle de artefacto en streaming, iframe en entorno aislado, panel de agente en vivo). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | patrones de UX que tomamos prestados (bucle de artefacto en streaming, iframe en entorno aislado, panel de agente en vivo). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | La arquitectura de daemon + adaptador — detección de agentes por escaneo del PATH, daemon local como único proceso privilegiado. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | Fuente histórica del esquema original de 9 secciones de `DESIGN.md` y 70 sistemas derivados del upstream; los paquetes actuales pueden ampliar esa base. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | Origen de los 57 skills de diseño añadidos bajo `design-systems/`. |

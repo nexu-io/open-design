@@ -150,6 +150,21 @@ describe('Vela CLI team-project catalog adapter', () => {
     await expect(catalog.list('team-captured')).resolves.toEqual([]);
   });
 
+  it('rejects catalog rows from another workspace before exposing a Personal member’s list or exact lookup', async () => {
+    const foreign = {
+      workspaceId: 'foreign-team', projectId: 'foreign-project', ownerMemberId: 'foreign-owner',
+      syncState: 'synced', createdAt: '2026-07-01T00:00:00.000Z',
+    };
+    const catalog = createVelaCliTeamProjectCatalog({
+      supportsTeamProjects: () => true,
+      run: async (args) => JSON.stringify(args[0] === 'list'
+        ? { workspaceId: 'personal-workspace', projects: [foreign] }
+        : foreign),
+    });
+    await expect(catalog.list('personal-workspace')).rejects.toThrow('workspace mismatch');
+    await expect(catalog.get('foreign-project', 'personal-workspace')).rejects.toThrow('workspace mismatch');
+  });
+
   it('keeps the rich membership list on its explicit principal when active workspace switches during capability detection', async () => {
     let activeWorkspaceId = 'team-a';
     const calls: Array<{ args: string[]; workspaceId: string | undefined }> = [];
@@ -730,7 +745,7 @@ describe('Vela CLI team-project catalog adapter', () => {
       role: 'member' as const,
       lifecycleState: 'active' as const,
     };
-    await catalog.upsert({ projectId: 'p-fallback' }, principal);
+    await expect(catalog.upsert({ projectId: 'p-fallback' }, principal)).rejects.toThrow('TEAM_PROJECT_CATALOG_UNAVAILABLE');
     await catalog.remove('p-fallback', principal);
     expect(teamCalls).toEqual([['--help']]);
     expect(resourceCalls).toEqual([['shared', '--json']]);

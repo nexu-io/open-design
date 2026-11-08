@@ -73,6 +73,17 @@ function velaBillingHelp(args: readonly string[]): { stderr: string; stdout: str
   };
 }
 
+function velaProjectPolicyHelp(args: readonly string[]): { stderr: string; stdout: string } | null {
+  if (args[0] !== "team-projects") return null;
+  const usage: Record<string, string> = {
+    "ensure-private": "ensure-private <projectId>",
+    visibility: "visibility <projectId> <private|team>",
+    "register-resource": "register-resource <projectId> <resourceId>",
+  };
+  const command = usage[args[1] ?? ""];
+  return command ? { stderr: "", stdout: `Usage:\n  vela team-projects ${command} [flags]\n` } : null;
+}
+
 /**
  * What a pre-0.1.4 CLI prints for `billing preflight --help`: cobra has no
  * such subcommand, so it falls back to the parent `billing` help and still
@@ -107,12 +118,16 @@ async function velaCliCommandWithOptionalStageDir(
   _source: string,
   args: readonly string[],
 ): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "login") return { stderr: "", stdout: "Usage: vela login [flags]\n --completion-receipt" };
+  if (args[0] === "logout") return { stderr: "", stdout: "Usage: vela logout [flags]\n --expected-app-user-id --control-key-id --retry-pending --json" };
   if (args[0] === "--version") {
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
   if (args[0] === "billing") {
     return velaBillingHelp(args);
   }
+  const policyHelp = velaProjectPolicyHelp(args);
+  if (policyHelp) return policyHelp;
   return {
     stderr: "",
     stdout: [
@@ -159,12 +174,16 @@ async function matchingVelaCliCommand(
   _binary: string,
   args: readonly string[],
 ): Promise<{ stderr: string; stdout: string }> {
+  if (args[0] === "login") return { stderr: "", stdout: "Usage: vela login [flags]\n --completion-receipt" };
+  if (args[0] === "logout") return { stderr: "", stdout: "Usage: vela logout [flags]\n --expected-app-user-id --control-key-id --retry-pending --json" };
   if (args[0] === "--version") {
     return { stderr: "", stdout: `${await pinnedVelaCliVersion()}\n` };
   }
   if (args[0] === "billing") {
     return velaBillingHelp(args);
   }
+  const policyHelp = velaProjectPolicyHelp(args);
+  if (policyHelp) return policyHelp;
   return {
     stderr: "",
     stdout: [
@@ -500,6 +519,46 @@ describe("copyOptionalVelaCliBinary", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+
+  it.each(["ensure-private", "visibility", "register-resource"])(
+    "rejects parent help masquerading as the %s project policy capability",
+    async (command) => {
+      const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-policy-"));
+      const source = join(root, "source", "vela");
+      try {
+        await mkdir(dirname(source), { recursive: true });
+        await writeFile(source, "#!/bin/sh\nexit 0\n", "utf8");
+        await writeFakeOpenCodeCompanion(source);
+        await expect(copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source },
+          platform: "mac",
+          requireBundled: true,
+          resourceRoot: join(root, "resources"),
+          runCommand: async (binary, args) => args[0] === "team-projects" && args[1] === command
+            ? { stderr: "", stdout: `Usage:\n  vela team-projects [command]\nAvailable Commands:\n  ${command}\n` }
+            : matchingVelaCliCommand(binary, args),
+        })).rejects.toThrow(new RegExp(`project policy.*${command}`, "i"));
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it("rejects a strict build when the CLI lacks device login or logout support", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-vela-auth-"));
+    try {
+      const source = join(root, "vela");
+      await writeFile(source, "fixture");
+      for (const missing of ["login", "logout"]) {
+        await expect(copyOptionalVelaCliBinary({
+          env: { OPEN_DESIGN_VELA_CLI_BIN: source }, platform: "mac", requireBundled: true, resourceRoot: join(root, "out"),
+          runCommand: async (binary, args) => args[0] === missing
+            ? { stdout: `Usage: vela ${missing}`, stderr: "" }
+            : matchingVelaCliCommand(binary, args),
+        })).rejects.toThrow(new RegExp(`${missing} session support`));
+      }
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it("accepts a Vela CLI that exposes the coding plan preflight", async () => {

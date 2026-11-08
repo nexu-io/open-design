@@ -8,6 +8,8 @@ export type VelaTeamProjectSyncState =
   | 'failed';
 
 export interface VelaTeamProjectRecord {
+  /** Missing only on unchanged pre-policy team rows. Private is never list authority. */
+  visibility?: 'private' | 'team';
   id: string;
   workspaceId: string;
   projectId: string;

@@ -585,6 +585,12 @@ export async function renderVelaVideo(
   }
 
   const wireModel = wireModelForVela(input.model, input.wireModel);
+  const available = await fetchVelaVideoModels(input.workspaceId, runCommand);
+  if (!available.includes(wireModel)) {
+    throw new VelaMediaError(`unknown or unavailable video model: ${wireModel}; no generation was submitted`, {
+      code: 'MEDIA_MODEL_UNAVAILABLE', retryable: false,
+    });
+  }
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'open-design-vela-video-'));
   const outputPath = path.join(tempDir, 'result.mp4');
   const startedAt = Date.now();
@@ -675,4 +681,16 @@ export async function renderVelaVideo(
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+/** Account/workspace-filtered catalogue. Never treat a failed read as an empty catalogue. */
+export async function fetchVelaVideoModels(workspaceId?: string, runCommand: VelaCommandRunner = runVelaCommand): Promise<string[]> {
+  const raw = await runCommand(['media', 'models', '--json'], {
+    ...velaWorkspaceCommandOptions(workspaceId), timeoutMs: VELA_MODELS_TIMEOUT_MS,
+  });
+  const response = parseJsonObject(raw, 'media models');
+  if (!Array.isArray(response.models)) throw new Error('Vela media catalogue is unavailable: missing models');
+  return response.models.filter((entry): entry is JsonRecord => isRecord(entry) && entry.kind === 'video'
+    && typeof entry.model === 'string' && Boolean(entry.model.trim()) && entry.enabled !== false)
+    .map(entry => String(entry.model));
 }

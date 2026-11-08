@@ -15,21 +15,21 @@ describe('chat turn host protocol', () => {
     expect(result.text).not.toContain('OD Next host handoff gate');
   });
 
-  it('gates request-stage markers on completed Direct Edit', () => {
+  it('gives the planning turn one keyed continuation marker and no other output protocol', () => {
     const result = renderChatTurnHostProtocolInstructions(KEY, 'od_next_request');
-
-    expect(result.text).toContain('route=direct_edit');
-    expect(result.text).toContain('inputStage=request');
-    expect(result.text).toContain('outcome=completed');
-    expect(result.text).toContain('plan_ready');
-    expect(result.text).toContain(`<od-done key="${KEY}"/>`);
+    expect(result.text).toContain(`<od-production-ready key="${KEY}" />`);
+    expect(result.text).toContain('last');
+    expect(result.doneMarker).toBe('');
+    expect(result.nextSteps).toBe('');
+    expect(result.artifactFocus).toBe('');
   });
-
-  it('gates production markers on completed Production and emits nothing without a key', () => {
+  it('describes production completion without requiring retired model state declarations', () => {
     const result = renderChatTurnHostProtocolInstructions(KEY, 'od_next_production');
 
-    expect(result.text).toContain('inputStage=production');
-    expect(result.text).toContain('outcome=completed');
+    expect(result.text).not.toContain('response declares');
+    expect(result.text).not.toContain('inputStage=');
+    expect(result.text).not.toContain('outcome=');
+    expect(result.text).toContain('omit all three protocols');
     expect(result.text).toContain(`<od-next key="${KEY}" value="Add an orders list page"/>`);
     expect(renderChatTurnHostProtocolInstructions('', 'od_next_production')).toEqual({
       doneMarker: '',

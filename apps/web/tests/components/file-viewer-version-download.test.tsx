@@ -219,7 +219,7 @@ describe('FileViewer version download actions', () => {
     expect(exportAsPdfMock).not.toHaveBeenCalled();
   });
 
-  it('shows main export errors for historical version PDFs', async () => {
+  it('shows the generic export-failed copy (not the raw renderer error) for historical version PDFs', async () => {
     isOpenDesignHostAvailableMock.mockReturnValue(true);
     exportProjectScreenshotPdfMock.mockResolvedValueOnce({ ok: false, error: 'version renderer failed' });
     const { file } = setupVersionFetch();
@@ -228,7 +228,10 @@ describe('FileViewer version download actions', () => {
     openVersionDownloadMenu(versionDialog);
     fireEvent.click(within(versionDialog).getByRole('menuitem', { name: 'Export as PDF' }));
 
-    expect(await screen.findByText(/version renderer failed/)).toBeTruthy();
+    // OPEND-2849 / S26: raw renderer strings never reach the user.
+    expect(await screen.findByText('Export failed')).toBeTruthy();
+    expect(screen.getByText('This export did not complete. Please try again.')).toBeTruthy();
+    expect(screen.queryByText(/version renderer failed/)).toBeNull();
     expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
     expect(captureHostIframeSnapshotMock).not.toHaveBeenCalled();
     expect(exportSnapshotAsPdfMock).not.toHaveBeenCalled();
@@ -277,11 +280,13 @@ describe('FileViewer version download actions', () => {
       ok: true,
       snapshot: { dataUrl: 'data:image/png;base64,c25hcHNob3Q=', w: 1, h: 1 },
     });
-    imageDataUrlToBlobMock.mockResolvedValueOnce(new Blob(['snapshot'], { type: 'image/png' }));
+    const imageBlob = new Blob(['snapshot'], { type: 'image/png' });
+    const save = vi.fn().mockResolvedValue('desktop');
+    imageDataUrlToBlobMock.mockResolvedValueOnce(imageBlob);
     prepareImageExportTargetMock.mockResolvedValueOnce({
       filename: 'index-v1.png',
       method: 'download',
-      save: vi.fn(),
+      save,
     });
     const { file } = setupVersionFetch();
     const versionDialog = await renderVersionDialog(file);
@@ -305,7 +310,9 @@ describe('FileViewer version download actions', () => {
     });
     expect(imageDataUrlToBlobMock).toHaveBeenCalledWith('data:image/png;base64,c25hcHNob3Q=', 'png');
     expect(prepareImageExportTargetMock).toHaveBeenCalledWith('index-v1', 'png', { useNativePicker: false });
-    expect(downloadImageDataUrlMock).toHaveBeenCalledWith('data:image/png;base64,c25hcHNob3Q=', 'index-v1.png');
+    // Desktop saves through the target so native completion can be observed.
+    await waitFor(() => expect(save).toHaveBeenCalledWith(imageBlob));
+    expect(downloadImageDataUrlMock).not.toHaveBeenCalled();
     expect(requestPreviewSnapshotMock).not.toHaveBeenCalled();
   });
 

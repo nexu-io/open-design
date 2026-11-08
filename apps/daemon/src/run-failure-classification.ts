@@ -1,3 +1,5 @@
+import os from 'node:os';
+
 import { asObject } from './agent-protocol/acp/json.js';
 import type {
   TrackingRunCancelOrigin,
@@ -50,6 +52,17 @@ export interface RunFailureClassificationInput {
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
   admissionEvidence?: RunAdmissionEvidence | undefined;
+  /**
+   * The OS the agent ran on. Defaults to this daemon's host, which is where
+   * every agent child is spawned; tests pass it explicitly.
+   */
+  hostOs?: RunFailureHostOs;
+}
+
+export interface RunFailureHostOs {
+  platform: string;
+  /** `os.release()`, e.g. `10.0.16299` on Windows 10 1709. */
+  release: string;
 }
 
 export interface RunFailureClassification {
@@ -715,6 +728,41 @@ function isAccountSuspendedText(text: string): boolean {
   return /\btemporarily suspended account access\b/i.test(text);
 }
 
+// Oldest Windows build the bundled OpenCode (a Bun-compiled binary) can run on:
+// Bun requires Windows 10 1809 / build 17763 (https://bun.com/docs/installation).
+const MIN_BUN_WINDOWS_BUILD = 17763;
+
+function hostOsOf(input: RunFailureClassificationInput): RunFailureHostOs {
+  return input.hostOs ?? { platform: process.platform, release: os.release() };
+}
+
+function windowsBuildNumber(hostOs: RunFailureHostOs): number | null {
+  if (hostOs.platform !== 'win32') return null;
+  const match = /^\d+\.\d+\.(\d+)/.exec(hostOs.release);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * The bundled OpenCode died at load time because this Windows build is older
+ * than Bun supports. On such builds the loader cannot resolve a Windows API
+ * the binary imports and the process exits with STATUS_ENTRYPOINT_NOT_FOUND
+ * (hex 0xC0000139, or Go/Node's decimal rendering 3221225785) before
+ * readiness. Two gates keep this from mislabeling other failures:
+ * - the status must sit inside vela's bundled-opencode startup wrapper
+ *   (`isManagedRuntimeStartupFailureText`), since any binary can die with a
+ *   missing entry point for unrelated reasons (a broken DLL on PATH);
+ * - the host must be Windows with a build below Bun's floor. On a supported
+ *   build the same status is not explained by the OS version and keeps its
+ *   existing path.
+ * The same binary on the same OS fails deterministically, so this is never
+ * retried.
+ */
+function isWindowsTooOldForBundledRuntime(text: string, hostOs: RunFailureHostOs): boolean {
+  const build = windowsBuildNumber(hostOs);
+  if (build === null || build >= MIN_BUN_WINDOWS_BUILD) return false;
+  return /0xc0000139|\b3221225785\b/i.test(text) && isManagedRuntimeStartupFailureText(text);
+}
+
 function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
@@ -885,7 +933,7 @@ function classification(
   const environment = [
     'auth_required', 'stale_profile', 'refresh_token_reused', 'missing_api_key',
     'invalid_api_key', 'cli_not_installed', 'git_bash_missing',
-    'agent_config_invalid', 'cpu_unsupported', 'host_policy_block',
+    'agent_config_invalid', 'cpu_unsupported', 'os_unsupported', 'host_policy_block',
     'local_storage_failure', 'certificate_failure', 'proxy_configuration',
     'network_configuration',
   ].includes(failure_detail) || localModel;
@@ -1568,6 +1616,18 @@ function classifyRunFailureBase(
     return classification(
       'process_exit',
       'cpu_unsupported',
+      inferFailureStageFromEvents(events, 'session_init'),
+      false,
+      'none',
+    );
+  }
+
+  // Same reasoning as cpu_unsupported: the bundled runtime cannot load on this
+  // Windows build, and the fatal_rpc_error promotion below would retry it.
+  if (isWindowsTooOldForBundledRuntime(text, hostOsOf(input))) {
+    return classification(
+      'process_exit',
+      'os_unsupported',
       inferFailureStageFromEvents(events, 'session_init'),
       false,
       'none',

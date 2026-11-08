@@ -70,6 +70,26 @@ describe('handleHubWorkspaceContextChanged', () => {
 });
 
 describe('handleHubWorkspaceAccessRevoked', () => {
+  it('stops the revoked workspace runs before reconciliation can yield', async () => {
+    const cancelWorkspaceRuns = vi.fn(async () => undefined);
+    const pollWorkspaceInvalidation = vi.fn(async () => undefined);
+
+    handleHubWorkspaceAccessRevoked(
+      'workspace-1',
+      pollWorkspaceInvalidation,
+      vi.fn(),
+      vi.fn(),
+      undefined,
+      cancelWorkspaceRuns,
+    );
+
+    expect(cancelWorkspaceRuns).toHaveBeenCalledWith('workspace-1');
+    expect(cancelWorkspaceRuns.mock.invocationCallOrder[0]).toBeLessThan(
+      pollWorkspaceInvalidation.mock.invocationCallOrder[0]!,
+    );
+    await Promise.resolve();
+  });
+
   it('invalidates directory and billing state before starting reconciliation', () => {
     const pollWorkspaceInvalidation = vi.fn(async () => undefined);
     const invalidateWorkspaceDirectory = vi.fn();

@@ -6,6 +6,20 @@ import { taskObjectDeliveryEnabled } from '../../src/services/evidence-delivery.
 import { redactPromptText } from '../../src/prompt-telemetry.js';
 
 describe('complete Task trace evidence', () => {
+  it('retains actual Discovery reads across production and does not invent a reused read', () => {
+    const result = projectTaskTrace([
+      { runId: 'request', metadata: { skill_discovery_enabled: true, skill_discovery_policy_injected: true,
+        skill_ids_loaded: ['ppt'], skill_load_events: [{ skill_id: 'ppt', tool_use_id: 'r1', status: 'loaded' }],
+        skill_observation_status: 'partial' } },
+      { runId: 'production', metadata: { skill_discovery_enabled: true, skill_discovery_policy_injected: false,
+        skill_ids_loaded: [], skill_load_events: [],
+        skill_observation_status: 'complete' } },
+    ], 100);
+    expect(result?.metadata).toMatchObject({ skill_discovery_enabled: true, skill_discovery_policy_injected: true,
+      skill_ids_loaded: ['ppt'], skill_observation_status: 'partial' });
+    expect(result?.metadata.skill_load_events).toHaveLength(1);
+    expect(result?.metadata).not.toHaveProperty('deliverable_skill_mapping');
+  });
   it('uses current Turn counters for stages without reclassifying cumulative cache counters', () => {
     const provider = { input_tokens: 10000, cache_read_input_tokens: 9000, cache_token_source: 'openai' as const, input_accounting_mode: 'inclusive' as const, token_count_source: 'provider_usage' as const, agent_reported_model: 'm' };
     const usage = taskRunUsage('codex', [{ event: 'agent', data: { type: 'usage', evaluationTurnUsage: { input: 20, output: 3, total: 23, modelCalls: 1 } } }], provider);

@@ -4,6 +4,19 @@
  */
 // ---- Shared enums --------------------------------------------------------
 
+// Persisted product intent is independent of execution strategy or video engine.
+// Unknown preserves old projects without guessing their scene from discovery.
+export type TrackingProjectIntent =
+  | 'live-artifact'
+  | 'web-clone'
+  | 'document'
+  | 'webgl-experience'
+  | 'worker-visualizer'
+  | 'marketing'
+  | 'hyperframes'
+  | 'motion-design'
+  | 'unknown';
+
 export type TrackingProjectKind =
   | 'prototype'
   // `web_clone` / `wireframe` / `mobile` / `live_artifact` are prototype-kind
@@ -365,6 +378,10 @@ export type TrackingRunFailureDetail =
   | 'signal_killed'
   | 'process_crashed'
   | 'cpu_unsupported'
+  // The bundled Bun-compiled runtime cannot load on this OS version (Windows
+  // builds older than 10 1809 exit with STATUS_ENTRYPOINT_NOT_FOUND before
+  // readiness). Deterministic, so never retried.
+  | 'os_unsupported'
   // Risk control suspended the account (vela returns JSON-RPC -32600 with
   // `data.kind: "account_suspended"`, `retryable: false`). Named because
   // retrying is guaranteed to fail the same way: without this it lands in

@@ -87,8 +87,10 @@
 .artifact-card-thumb {
   position: relative;
   display: block;
+  width: 100%;
   aspect-ratio: 16 / 10;
   height: auto;
+  max-height: var(--chat-artifact-max-height, 240px);
   background: var(--bg-subtle);
   border-radius: calc(var(--radius) - 1px);
   overflow: hidden;
@@ -98,7 +100,7 @@
      measured 2026-08-28 in a 1600px window, dropping this line takes the
      frame's scale from 0.140 to 1.111 and the 1440px page renders 1600px
      wide inside a 202px card. */
-  container-type: inline-size;
+  container-type: size;
 }
 /* The grey placeholder: the only placeholder tone in the whole sheet. */
 .artifact-card-mini {
@@ -136,20 +138,22 @@
    desktop three-column layout). Scaling was never the missing part; the base
    was.
 
-   1440x900 because: it is 16/10 like the thumb above, so scaling by width
-   fits both axes exactly with no crop or letterbox; and it clears every
+   1440x900 because: it is 16/10 like the thumb above, and it clears every
    common desktop breakpoint (768 / 1024 / 1280) while staying near the real
    preview pane's width, so both land in the same responsive bucket. Going all
    the way to 1920 would show a wider layout than the pane on the right
-   actually renders, and would shrink type past legibility at card size. */
+   actually renders, and would shrink type past legibility at card size.
+   Motion overrides the viewport height to its native canvas ratio. Fit the
+   viewport by BOTH axes and centre it: the outer card has a height cap, so
+   width-only scaling can clip a portrait canvas or a wide single card. */
 .artifact-card-frame {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 50%;
+  left: 50%;
   width: 1440px;
   height: 900px;
-  transform: scale(calc(100cqw / 1440px));
-  transform-origin: top left;
+  transform: translate(-50%, -50%) scale(min(calc(100cqw / 1440px), calc(100cqh / var(--artifact-frame-height, 900px))));
+  transform-origin: center;
   border: 0;
   background: var(--bg-panel);
   pointer-events: none;
@@ -162,14 +166,8 @@
 .artifact-card--video .artifact-card-thumb {
   display: grid;
   place-items: center;
-  background: var(--bg-panel);
 }
 .artifact-card--video .artifact-card-media {
-  position: relative;
-  inset: auto;
-  width: auto;
-  max-width: 100%;
-  height: 100%;
   object-fit: contain;
 }
 .artifact-card--video .artifact-card-mini {
@@ -215,6 +213,8 @@
   z-index: 2;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: calc(100% - 16px);
   gap: 4px;
 }
 /* The export pill wraps in a relative anchor when it opens a format popover
@@ -230,6 +230,9 @@
    stay on the design baseline. */
 .artifact-card .artifact-card-act {
   flex: none;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -251,6 +254,13 @@
   text-decoration: none;
   cursor: pointer;
   transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* Wrap the pair when translations do not fit side by side. A single long
+   label may truncate, while its icon and the other action remain reachable. */
+.artifact-card-act-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Hover deepens the same glass fill without changing geometry. */
 .artifact-card .artifact-card-act:hover {

@@ -11,7 +11,7 @@
  * a new browser tab.
  */
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -19,6 +19,7 @@ import {
   RailAccountSyncTip,
   resetCloudSignInTipDismissal,
 } from '../../src/components/CloudSignInTip';
+import { resetCoalescedGet } from '../../src/lib/coalesced-get';
 import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 
@@ -46,6 +47,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   globalThis.fetch = originalFetch;
   try {
     window.localStorage.clear();
@@ -63,6 +65,67 @@ function renderTip() {
 }
 
 describe('CloudSignInTip', () => {
+  it('keeps the share login prompt compact and preserves its custom action label', () => {
+    render(
+      <I18nProvider initial="en">
+        <CloudSignInTip sharePrompt className="share-login" actionLabel="Sign in to share" />
+      </I18nProvider>,
+    );
+    const card = screen.getByRole('button', { name: 'Sign in to share' });
+    expect(card.getAttribute('data-testid')).toBe('share-cloud-signin');
+    expect(card.className).toBe('share-login');
+    expect(card.textContent).toBe('Sign in to share');
+    expect(card.querySelector('.entry-local-mode-tip__pitch')).toBeNull();
+  });
+
+  it('turns the call to action into a pending state and offers to reopen the sign-in page only after a delay', async () => {
+    let loginStarted = false;
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          body: loginStarted
+            ? {
+                loggedIn: false,
+                loginInFlight: true,
+                activationUrl: 'https://amr.example/activate',
+                profile: 'prod',
+                user: null,
+                configPath: '/x',
+              }
+            : { loggedIn: false, profile: 'prod', user: null, configPath: '/x' },
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        loginStarted = true;
+        return jsonResponse({ status: 202, body: { pid: 4242 } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    renderTip();
+    const card = await screen.findByTestId('entry-cloud-signin-tip');
+    expect(screen.getByText('Sign up / Sign in')).toBeTruthy();
+    vi.useFakeTimers();
+    fireEvent.click(card);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+
+    expect(screen.getByText('Signing in…')).toBeTruthy();
+    expect(screen.queryByText('Sign up / Sign in')).toBeNull();
+    expect(screen.queryByText("Sign-in page didn't open?")).toBeNull();
+    expect(screen.getAllByRole('button', { name: /cancel/i })).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(screen.getByText("Sign-in page didn't open?")).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Reopen/i }).getAttribute('href')).toBe(
+      'https://amr.example/activate',
+    );
+  });
+
   it('cancels a timed-out login so a retry click can start a fresh vela login', async () => {
     let loginStarted = false;
     let spawnCount = 0;
@@ -123,6 +186,7 @@ describe('CloudSignInTip', () => {
     ).toBe(true);
 
     vi.useRealTimers();
+    resetCoalescedGet();
     const retryCard = await screen.findByTestId('entry-cloud-signin-tip');
     fireEvent.click(retryCard);
     await act(async () => {
@@ -131,7 +195,7 @@ describe('CloudSignInTip', () => {
       await Promise.resolve();
     });
 
-    expect(spawnCount).toBe(2);
+    await waitFor(() => expect(spawnCount).toBe(2));
   });
 
   // Regression for 飞书 recvqbkcLqIFH7: this card used to have a close "×"

@@ -81,12 +81,17 @@ afterEach(async () => {
     }
   } finally {
     started = undefined;
-    if (dataDir) await rm(dataDir, { recursive: true, force: true });
-    dataDir = undefined;
-    if (previousDataDir === undefined) delete process.env.OD_DATA_DIR;
-    else process.env.OD_DATA_DIR = previousDataDir;
-    register.clear();
-    vi.resetModules();
+    try {
+      // Diagnostics can finish writing while recursive removal is in progress.
+      // Bound retries to transient filesystem races; persistent failures still fail the test.
+      if (dataDir) await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    } finally {
+      dataDir = undefined;
+      if (previousDataDir === undefined) delete process.env.OD_DATA_DIR;
+      else process.env.OD_DATA_DIR = previousDataDir;
+      register.clear();
+      vi.resetModules();
+    }
   }
 }, 30_000);
 

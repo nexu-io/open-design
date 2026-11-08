@@ -1,13 +1,11 @@
 <div dir="rtl">
 
-<h1 align="center">OpenDesign: أول مساحة عمل تعاونية لوكلاء التصميم</h1>
+<h1 align="center">OpenDesign: أول مساحة عمل تعاونية لوكلاء التصميم بالذكاء الاصطناعي</h1>
 
-> ✨ **[نقدّم OpenDesign Go](https://open-design.ai/pricing/)**. تبدأ خطة Go Plan من 8 دولارات في الشهر الأول، مع رصيد شهري لأكثر من 10 نماذج، منها GPT-6.1 Sol وGPT-6 Luna وDeepSeek V4.1 Flash وGLM-5.3 Flash-X وMiMo V2.6 Flash. تشمل جميع الخطط الفردية الوصول إلى واجهة API لاستخدامها مع Codex وClaude Code وDSH وOpenCode وغيرها.
->
-> 🧩 **[أصبح DeepSeek Harness مدعومًا الآن.](https://open-design.ai/zh/agents/deepseek-harness-design/)** صِل Agent Harness الرسمي `dsh` من DeepSeek بـ OpenDesign كبيئة تشغيل أصلية، مع التفكير المنظم واستدعاءات الأدوات واكتشاف النماذج والإلغاء واستئناف الجلسات. تبقى الملفات الناتجة ضمن سير عمل OpenDesign للمعاينة الحية والتسليم.
+> ✨ **[نحتفل بـ 100 ألف نجمة على GitHub مع OpenDesign Go](https://open-design.ai/pricing/)** — ضاعفنا رصيد Go: **8 دولارات أمريكية للشهر الأول، مع رصيد شهري يصل إلى 120 دولارًا أمريكيًا لنماذج Design Plan المؤهلة**. استخدمه مع أكثر من 10 نماذج، منها GPT-6 Luna وDeepSeek V4.1 Flash وGLM-5.3 Flash-X وMiMo V2.6 Flash. تشمل جميع الخطط الفردية الوصول إلى واجهة API لاستخدامها مع Codex وClaude Code وDSH وOpenCode وغيرها.
 
 <p align="center">
-  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: أول مساحة عمل تعاونية لوكلاء التصميم" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: أول مساحة عمل تعاونية لوكلاء التصميم بالذكاء الاصطناعي" width="100%" />
 </p>
 
 <p align="center">
@@ -31,9 +29,9 @@
 
 ## ما هو OpenDesign
 
-OpenDesign **مساحة عمل تعاونية لوكلاء التصميم**. ابدأ بوصف موجز، ثم استخدم وكيل البرمجة الذي تعرفه أو OpenDesign Cloud لإنشاء نموذج أولي متوافق مع نظام التصميم لديك. شاركه مع فريقك، واجمع الملاحظات، ودع الوكيل يحسّنه داخل المشروع نفسه.
+OpenDesign **أول مساحة عمل تعاونية لوكلاء التصميم بالذكاء الاصطناعي**. ابدأ بوصف موجز، ثم استخدم وكيل البرمجة الذي تعرفه أو OpenDesign Cloud لإنشاء نموذج أولي متوافق مع نظام التصميم لديك. شاركه مع فريقك، واجمع الملاحظات، ودع الوكيل يحسّنه داخل المشروع نفسه.
 
-سير العمل هذا مفتوح وقابل للتوسعة. وبصفته **بديلاً مفتوح المصدر لـ Claude Design**، يتوفر OpenDesign بترخيص Apache 2.0، ويتيح للفرق فحص المهارات وقوالب التصميم وأنظمة التصميم والإضافات وتكييفها مع طريقة عملها.
+سير العمل هذا مفتوح وقابل للتوسعة. يتوفر OpenDesign بترخيص Apache 2.0، ويتيح للفرق فحص المهارات وقوالب التصميم وأنظمة التصميم والإضافات وتكييفها مع طريقة عملها.
 
 
 ---
@@ -234,29 +232,12 @@ OpenDesign **مساحة عمل تعاونية لوكلاء التصميم**. ا�
 
 ## لماذا OpenDesign
 
-> **في أبريل 2026، أطلقت Anthropic Claude Design — وهي المرة الأولى التي يتوقف فيها نموذج لغوي كبير عن كتابة النثر ويبدأ في تسليم مخرجات تصميم مباشرة.** انتشر بسرعة كبيرة. لكنه ظل مغلق المصدر، مدفوعًا فقط، سحابيًا فقط، مقيَّدًا بنموذج Anthropic ومهارات Anthropic وسطح Anthropic. لا دفع، ولا استضافة ذاتية، ولا نشر على Vercel، ولا إمكانية تبديل بوكيلك الخاص.
-
-‏OpenDesign (OD) هو البديل مفتوح المصدر. الحلقة نفسها، والنموذج الذهني نفسه القائم على المخرجات أولًا، دون أي تقييد:
-
 - 🤖 **أصيل للوكلاء، محايد تجاه النموذج.** نحن لا نشحن وكيلًا. أدوات `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` الموجودة أصلًا في `PATH` لديك هي محرك التصميم. بدّلها بنقرة واحدة.
 - 🧠 **بجودة العلامة التجارية افتراضيًا.** تقرأ كل عملية تصيير `DESIGN.md` من الحزمة النشطة بوصفه عقد العلامة الأساسي. يُشحَن مع المستودع 151 حزمة نظام تصميم؛ قد تقتصر الحزم القديمة على `DESIGN.md`، بينما يمكن للأحدث إضافة `manifest.json` و`tokens.css` والمكوّنات والأصول وبيانات المصدر. أسقِط مجلدًا، فيعثر عليه المُنتقي.
-- 🖥️ **محلي أولًا، BYOK في كل طبقة.** تظل تطبيقات سطح المكتب الأصلية محلية أولًا بلا ذهاب وإياب إلى السحابة. قبل وصف مسارات بيانات الـ daemon، يجب قراءة `AGENTS.md` في جذر المستودع، قسم **Daemon data directory contract**.
+- 🖥️ **محلي أولًا، BYOK في كل طبقة.** تظل تطبيقات سطح المكتب الأصلية محلية أولًا. تتطلب تحليلات المنتج وإعادة تشغيل الجلسات الموافقة؛ وتظل بيانات قياس السلامة والموثوقية المنقحة نشطة. قبل وصف مسارات بيانات الـ daemon، يجب قراءة `AGENTS.md` في جذر المستودع، قسم **Daemon data directory contract**.
 - 🌍 **قابل للتركيب على أربعة مستويات.** **الإضافات** تحمل سير العمل · **المهارات الوظيفية** تحمل سلوك الوكيل · **قوالب التصميم** تحمل مخططات التصيير · **أنظمة التصميم** تحمل العلامة التجارية.
-- 🔁 **حدِّث قاعدة شفرة موجودة.** سلّم مستودع `git` + ملف `DESIGN.md` إلى الوكيل، فيعيد هيكلة مكوناتك الحقيقية وفق مواصفة العلامة التجارية. تنقل إضافات مخصّصة سير عمل Figma / Pencil إلى شفرة React / Next.js / Vue.
-- 🔒 **الخصوصية عن قناعة.** كل شيء يعمل حيث تقيم بياناتك — حاسوبك المحمول، أو خادم فريقك، أو مشروع Vercel الخاص بك. وعند الحاجة إلى الشبكة، يكون وكيل BYOK محميًا ضد SSRF.
-
-### مقارنة
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| مفتوح المصدر | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| استضافة ذاتية / سطح مكتب | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| أصيل للوكلاء (يعمل في واجهة CLI لديك) | Anthropic فقط | ❌ | وكيل سحابي فقط | **✅ 25 واجهة CLI + BYOK** |
-| `DESIGN.md` بجودة العلامة التجارية | احتكاري | Theme JSON | رموز محدودة | **✅ 151 نظامًا مشحونًا** |
-| المهارات / الإضافات / القوالب | مغلقة | متجر إضافات | مغلقة | **✅ أكثر من 100 مهارة وظيفية · كتالوج منفصل لقوالب التصيير · 277 إضافة** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ من الدرجة الأولى** |
-| تحديث مستودع موجود وفق العلامة التجارية | ❌ | ❌ | ❌ | **✅ عبر الوكيل + `DESIGN.md`** |
-| الحد الأدنى للفوترة | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · أي نقطة نهاية متوافقة** |
+- 🔁 **حدِّث قاعدة شفرة موجودة.** سلّم مستودع `git` + ملف `DESIGN.md` إلى الوكيل، فيعيد هيكلة مكوناتك الحقيقية وفق مواصفة العلامة التجارية.
+- 🔒 **الخصوصية عن قناعة.** يمكن تشغيل المشاريع محليًا أو في بيئة النشر الخاصة بك. تُرسل طلبات النماذج السحابية وOpenDesign Cloud إلى الخدمات المعنية. يتضمن وكيل BYOK حماية ضد SSRF.
 
 ---
 
@@ -326,7 +307,7 @@ pnpm tools-dev run web
 `brief → plugin → direction → design system → artifact → handoff → memory`
 
 1. **يقدّم مدير منتج موجزًا.** يعرض مُنتقي الإضافات صفحة هبوط · عرضًا ترويجيًا · لوحة معلومات · منشورًا اجتماعيًا · مواصفة منتج · بطاقة نتائج OKR…
-2. **يثبّت مصمم (أو الوكيل) الاتجاه.** لا علامة تجارية؟ اختر من 5 اتجاهات منسّقة. لديك علامة تجارية؟ أسقِط لقطة شاشة / رابطًا ← يربط الوكيل GitHub، ويستورد Figma، ويصوغ ملف `DESIGN.md` قابلًا لإعادة الاستخدام.
+2. **يثبّت مصمم (أو الوكيل) الاتجاه.** لا علامة تجارية؟ اختر من 5 اتجاهات منسّقة. لديك علامة تجارية؟ أسقِط لقطة شاشة / رابطًا ← يربط الوكيل GitHub، ويصوغ ملف `DESIGN.md` قابلًا لإعادة الاستخدام.
 3. **ينشئ الوكيل أول تسليم.** تشغيلات CLI ذات نظام الملفات تكتب الملفات الأساسية؛ وتشغيلات BYOK/API بلا أدوات ملفات تُرجع كتلة `<artifact>` كاملة.
 4. **سلّم إلى الهندسة.** المخرَج هو HTML/CSS حقيقي — أسقِطه في Cursor أو Codex أو Claude Code لمواصلة البناء كشفرة. أو صدّر PPTX / PDF / MP4 مباشرة إلى التسويق.
 5. **يصبح OpenDesign أذكى كلما استخدمته.** تتراكم لقطات شاشتك وخطوطك ولوحات ألوانك ومخرجاتك المؤكَّدة كقيم افتراضية للجلسة التالية. عمل معاد أقل، وانحراف أقل.
@@ -399,9 +380,9 @@ od skills list --json
 
 **الذكاء الاصطناعي ونماذج اللغة الكبيرة** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**أدوات المطورين** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**أدوات المطورين** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**الإنتاجية** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**الإنتاجية** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **التقنية المالية** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -457,7 +438,7 @@ od skills list --json
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -478,7 +459,7 @@ my-plugin/
 └── examples/           ← optional: concrete use cases
 ```
 
-الحقول الأساسية هي `specVersion` و`name` و`version`، و`compat.agentSkills[].path` الاختياري عند عرض Agent Skill، إضافة إلى `od.kind` و`od.taskKind` و`od.mode` و`od.capabilities[]` و`od.inputs[]`.
+الحقول الأساسية هي `specVersion` و`name` و`version`، و`compat.agentSkills[].path` الاختياري عند عرض Agent Skill، إضافة إلى `od.kind` و`od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`) و`od.mode` و`od.capabilities[]` و`od.inputs[]`.
 
 التهيئة والتحقق محليًا:
 
@@ -693,11 +674,10 @@ gh pr create --fill
 
 | المشروع | الدور |
 |---|---|
-| Claude Design | المنتج مغلق المصدر الذي يُعدّ هذا المستودع البديل مفتوح المصدر له. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | بوصلة فلسفة التصميم — سير عمل المصمم المبتدئ، بروتوكول أصول العلامة التجارية، قائمة تحقق ضد الركاكة بالذكاء الاصطناعي، نقد بخمسة أبعاد. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | مهارة عرض الويب بأسلوب المجلات، مجمَّعة حرفيًا ضمن [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/). افتراضية لوضع العرض التقديمي. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | عائلة HTML PPT Studio — 15 قالب عرض تقديمي، 36 سمة، 31 تخطيط صفحة، وقت تشغيل للحركة، وضع عرض ببطاقات مغناطيسية. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | أول بديل مفتوح المصدر لـ Claude Design؛ أنماط تجربة الاستخدام التي نستعيرها (حلقة بثّ المخرجات، iframe المعزول، لوحة الوكيل الحية). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | أنماط تجربة الاستخدام التي نستعيرها (حلقة بثّ المخرجات، iframe المعزول، لوحة الوكيل الحية). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | بنية الـ daemon + المحوّل — اكتشاف الوكلاء بمسح PATH، الـ daemon المحلي بصفته العملية المميَّزة الوحيدة. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | المصدر التاريخي لمخطط `DESIGN.md` الأصلي ذي الأقسام التسعة و70 نظامًا مشتقًا من المصدر؛ ويمكن للحزم الحالية توسيع هذا الأساس. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | مصدر مهارات التصميم الـ 57 المضافة ضمن `design-systems/`. |

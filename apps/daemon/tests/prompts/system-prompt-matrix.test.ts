@@ -71,6 +71,7 @@ const SECTION_MARKERS = [
   ['filesystem-handoff-override', '## Filesystem handoff'],
   ['skill-write-boundary', '## Editing skills'],
   ['clarifying-questions', '## Structured clarification on any turn'],
+  ['comment-identity-edit', 'Only when editing HTML that already contains data-od-comment-id'],
   ['role-marker-guard', ROLE_MARKER_GUARD_SENTINEL],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
 

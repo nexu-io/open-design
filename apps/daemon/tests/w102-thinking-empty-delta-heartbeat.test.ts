@@ -149,8 +149,10 @@ describe('W102 · 上游本来就是空的思考帧必须照发(心跳 + 思考�
   let baseUrl: string;
   let binDir: string;
   const originalPath = process.env.PATH;
+  const originalRollout = process.env.OD_NEXT_STRATEGY_ROLLOUT;
 
   beforeAll(async () => {
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     binDir = await mkdtemp(join(tmpdir(), 'od-w102-thinking-'));
     const bin = join(binDir, 'claude');
     /*
@@ -205,6 +207,8 @@ setTimeout(() => process.exit(0), 10);
   afterAll(async () => {
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(binDir, { recursive: true, force: true });
+    if (originalRollout == null) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    else process.env.OD_NEXT_STRATEGY_ROLLOUT = originalRollout;
     if (originalPath == null) delete process.env.PATH;
     else process.env.PATH = originalPath;
   });

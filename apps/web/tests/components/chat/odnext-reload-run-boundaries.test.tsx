@@ -94,11 +94,30 @@ function blocksOf(message: ChatMessage): TurnBlock[] {
   });
 }
 
+/**
+ * live 手上真实的那一行:用户答完表单之后,daemon 自动接上的后继 run 由 `ProjectView`
+ * 续写进**同一条**助手消息(`isTaskSuccessor`),而不是另起一条。
+ */
+function liveRow(runs: ChatMessage[]): ChatMessage {
+  return {
+    ...runs[0]!,
+    events: runs.flatMap((run) => run.events ?? []),
+    ...(runs[runs.length - 1]!.endedAt != null ? { endedAt: runs[runs.length - 1]!.endedAt } : {}),
+  };
+}
+
+/*
+ * P0-24 推测项 A-01(N13 ① + Q8 选项 A):提问那一段(run 0)单独一个标题;用户答完之后
+ * daemon 自动接着跑的方案 + 生产(run 1 + run 2)合成**一个**标题,方案说明收进执行记录。
+ */
 describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
-  it('live 与重新打开是同一份编排:折起来 === 三个 run 首尾相接', () => {
-    // live:字段缺席 → 不折叠,三条消息各自成轮
+  it('live 与重新打开是同一份编排:折起来 === 提问一轮 + 答完之后那一轮', () => {
+    // live:字段缺席 → 不折叠;提问那条单独一行,后继 run 续写在答完之后那一行里
     expect(foldStrategyTaskTurns(LIVE)).toBe(LIVE);
-    const liveSignature = RUNS.flatMap((run) => signature(blocksOf(run)));
+    const liveSignature = [
+      ...signature(blocksOf(RUNS[0]!)),
+      ...signature(blocksOf(liveRow(RUNS.slice(1)))),
+    ];
 
     // 重新打开:历史接口带上任务位置 → 折成一条
     const folded = foldStrategyTaskTurns(RELOAD).filter((m) => m.role === 'assistant');
@@ -119,12 +138,17 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
     expect(prose.filter((tag) => tag.includes('+'))).toEqual([]);
   });
 
-  it('每个 run 一张执行壳,run 1 的推理不和 run 2 的工具堆在一起', () => {
+  it('提问一张壳、答完之后一张壳;run 2 的工具不落进提问那一张(推测项 A-01)', () => {
     const folded = foldStrategyTaskTurns(RELOAD).find((m) => m.role === 'assistant')!;
     const shells = blocksOf(folded).filter((b): b is ExecutionShell => b.kind === 'shell');
-    expect(shells).toHaveLength(RUNS.length);
-    // run 2 的两次 Bash 必须落在 run 2 自己那张壳里,而不是 run 0 开的第一张
+    expect(shells).toHaveLength(2);
+    // run 2 的两次 Bash 必须落在答完之后那张壳里,而不是 run 0 开的第一张
     expect(shells[0]!.items.some((it) => it.kind === 'tool')).toBe(false);
+    expect(shells[1]!.items.some((it) => it.kind === 'tool')
+      || shells[1]!.segments.some((seg) => seg.items.some((it) => it.kind === 'tool'))).toBe(true);
+    // 产品 D8 答复「什么都不改」:方案说明(run 1 的结论)照旧留在壳外,不收进执行记录
+    const inside = JSON.stringify(shells[1]!.items) + JSON.stringify(shells[1]!.segments);
+    expect(inside).not.toContain('方向定了：');
   });
 
   /**
@@ -147,18 +171,18 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
       nowMs: folded.endedAt! + 60_000,
     }).filter((b): b is ExecutionShell => b.kind === 'shell');
 
-    expect(shells).toHaveLength(RUNS.length);
-    expect(shells.slice(0, -1).map((s) => s.status)).toEqual(['done', 'done']);
+    expect(shells).toHaveLength(2);
+    expect(shells.slice(0, -1).map((s) => s.status)).toEqual(['done']);
     // 定死的壳不报静默 —— 静默是「这一刻还在等」,它们已经不等了
     expect(shells.slice(0, -1).every((s) => s.quietMs === null)).toBe(true);
     const last = shells[shells.length - 1]!;
     expect(last.status).toBe('running');
-    // 最后这一张只算它自己那一截;把表拨回轮次开头就会 >= 整轮跨度
+    // 最后这一张只算答完之后那几段;把表拨回轮次开头就会 >= 整轮跨度
     expect(last.elapsedMs).not.toBeNull();
     expect(last.elapsedMs!).toBeLessThan(turnSpanMs);
   });
 
-  it('屏幕上:run 0 的壳 → 已确认 → run 1 的壳,而不是「已确认 + 全部回答」黏成一段', () => {
+  it('屏幕上:run 0 的壳 → 已确认 → 答完之后那张壳,而不是「已确认 + 全部回答」黏成一段', () => {
     const folded = foldStrategyTaskTurns(RELOAD).find((m) => m.role === 'assistant')!;
     const { container } = render(
       <I18nProvider initial="zh-CN">
@@ -189,12 +213,13 @@ describe('OD Next 折叠轮次 · run 边界(真机库字节)', () => {
       .find((el) => el.querySelector('[data-testid="question-form-summary"]'))!;
     expect(runTag(answeredBlock.textContent ?? '')).toBe('run0');
 
+    // 推测项 A-01 + D8 答复「什么都不改」:答完之后只剩一张壳(壳里有 index.html,标成 run2),
+    // run 1 的方案说明照旧在壳外、最终答复之前
     expect(order).toEqual([
       'shell:run0',
       'answered+prose',
-      'shell:run1',
-      'prose:run1',
       'shell:run2',
+      'prose:run1',
       'prose:run2',
     ]);
   });

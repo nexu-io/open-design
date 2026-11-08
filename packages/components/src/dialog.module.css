@@ -40,6 +40,12 @@
   animation: dialog-backdrop-fade-in var(--duration-fast, 150ms) var(--curve-decelerate-mid, ease-out);
 }
 
+/* The static panel receives initial focus for modal navigation. Its children
+ * retain their own keyboard focus indicators. */
+.focusTarget:focus {
+  outline: none;
+}
+
 :where(.dialog) {
   background: var(--bg-elevated);
   -webkit-app-region: no-drag;

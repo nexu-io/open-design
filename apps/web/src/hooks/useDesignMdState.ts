@@ -76,6 +76,8 @@ export function useDesignMdState(
   projectId: string,
   refreshKey: number = 0,
   workspaceContext?: WorkspaceCollabContext | null,
+  /** False while the project row does not exist on the daemon yet (OPEND-3334). */
+  enabled = true,
 ): DesignMdState {
   const [state, setState] = useState<Omit<DesignMdState, 'refresh'>>(INITIAL);
 
@@ -193,13 +195,14 @@ export function useDesignMdState(
     // A replay of the same `refreshKey` (StrictMode, a settling dependency) is
     // not new information and may join a read already on the wire; a bumped
     // `refreshKey` is, and must supersede it.
+    if (!enabled) return;
     const previousRefreshKey = computedRefreshKeyRef.current;
     const revalidate = previousRefreshKey !== null && previousRefreshKey !== refreshKey;
     computedRefreshKeyRef.current = refreshKey;
     const controller = new AbortController();
     void compute(controller.signal, { revalidate });
     return () => controller.abort();
-  }, [compute, refreshKey]);
+  }, [compute, enabled, refreshKey]);
 
   const refresh = useCallback(() => compute(undefined, { revalidate: true }), [compute]);
 

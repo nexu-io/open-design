@@ -10,6 +10,18 @@ function assistant(over: Record<string, unknown>): ChatMessage {
 }
 
 describe('foldStrategyTaskTurns', () => {
+  it('preserves production covers and lets a newer failed ref replace an older ready cover', () => {
+    const ref = { id: 'cover', label: 'film.mp4', kind: 'video', displayPolicy: 'latest_with_static_preview', snapshotState: 'ready', thumbnailUrl: '/old.jpg' };
+    const folded = foldStrategyTaskTurns([
+      assistant({ strategyTaskExecutionId: 'motion', strategyTaskRunIndex: 0, artifactRefs: [ref] }),
+      assistant({ strategyTaskExecutionId: 'motion', strategyTaskRunIndex: 1, runStatus: 'succeeded', artifactRefs: [{ ...ref, id: 'new', snapshotState: 'failed', thumbnailUrl: undefined }, { ...ref, id: 'html', label: 'index.html', kind: 'html', thumbnailUrl: '/source.jpg' }] }),
+    ]);
+    expect(folded[0]?.artifactRefs).toEqual([
+      { ...ref, id: 'new', snapshotState: 'failed', thumbnailUrl: undefined },
+      { ...ref, id: 'html', label: 'index.html', kind: 'html', thumbnailUrl: '/source.jpg' },
+    ]);
+  });
+
   it('renders one turn for a Full Plan task without duplicating its output', () => {
     const folded = foldStrategyTaskTurns([
       { id: 'u1', role: 'user', content: '做一个原型' } as ChatMessage,

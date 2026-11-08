@@ -20,6 +20,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
 import { useProjectCollabContext } from '../collab/collab-context';
+import { workspaceResourceUrl } from '../collab/workspace-identity';
 import { artifactKind, type ArtifactKind } from '../runtime/chat/format';
 import {
   countArtifactFileOps,
@@ -32,6 +33,7 @@ import type { ProjectFile } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PixelLiquid } from './PixelLiquid';
 import { RemixIcon } from './RemixIcon';
+import shareEntryStyles from './share/ShareEntry.module.css';
 import { HtmlProjectCoverFrame } from './project-cover';
 import { AudioArtifact } from './chat/AudioArtifact';
 import { ARTIFACT_ANCHOR_ATTR, artifactAnchorId } from './chat/AnchoredMenuShell';
@@ -173,6 +175,7 @@ export function FileOpsSummary({
             name: entry.path,
             kind,
             pending: turnIsLive && entry.status === 'running',
+            sharePending: turnIsLive,
             revision: projectFiles?.find((file) => file.name === entry.path)?.mtime,
             ...(refTargets.get(entry.path) ?? {}),
           },
@@ -437,14 +440,17 @@ function FileOpRow({
 export type ArtifactCardKind = Extract<ArtifactKind, 'html' | 'image' | 'video'> | 'doc';
 
 export interface ArtifactCardItem {
+  motionPreview?: import('@open-design/contracts').MotionArtifactPreview;
   /** Project-relative name; also the key passed to open / publish / export. */
   name: string;
   kind: ArtifactCardKind;
   /** D37: the run is still writing this file — grey breathing placeholder and
-   *  no actions in the corner. The design sheet has no such state; product
-   *  asked for it on 2026-08-21 so a turn does not sit silent and then pop an
+   *  no preview/export actions. Share stays visible but disabled (A27).
+   *  Product asked for the placeholder on 2026-08-21 so a turn does not sit silent and then pop an
    *  artifact out of nowhere. */
   pending?: boolean;
+  /** Share waits for the whole generating turn, even if this file has finished. */
+  sharePending?: boolean;
   /**
    * 这一轮的**静态封面**:HTML / 原型 / slide / 文档是首屏截图,视频是**首帧**
    * (用户 2026-09-02:「视频这个东西,那看起来视频还是要快照一下首帧的」)。
@@ -566,7 +572,7 @@ function ArtifactCard({
   anchorScope: string;
 }) {
   const t = useT();
-  const { workspaceContext } = useProjectCollabContext();
+  const { workspaceContext, viewerOnly } = useProjectCollabContext();
   // A static snapshot is an optimization, not the only representation of the
   // artifact. If it disappears or cannot be decoded, let the normal kind
   // specific rendering below take over (HTML uses the existing live-cover
@@ -574,17 +580,28 @@ function ArtifactCard({
   // the card.
   const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null);
   const src = projectFileUrl(projectId, item.name, workspaceContext);
+  const coverUrl = item.coverUrl ? workspaceResourceUrl(item.coverUrl, workspaceContext) : undefined;
+  const liveUrl = artifactCardLiveUrl(src, item.revision);
+  const [motionSize, setMotionSize] = useState<{ src: string; width: number; height: number }>();
+  // Live HTML can have changed since this turn's snapshot. Its announced
+  // canvas only controls the inner viewport; the card's outer frame is stable.
+  const size = motionSize?.src === liveUrl ? motionSize : item.motionPreview;
   const pending = item.pending === true;
   /*
    * 图片:这一轮那张**不可变快照**才是这张卡的正文 —— 卡面、点击、导出三处都读它。
    * 没有快照(旧会话)就回落到工作区当前同名文件,而且**什么都不加**:不出占位、
    * 不写「历史图片不可用」(产品 2026-09-02 推翻了设计文档 §8 里那条占位文案)。
    */
-  const mediaSrc = item.snapshotUrl ?? src;
+  const mediaSrc = item.snapshotUrl ? workspaceResourceUrl(item.snapshotUrl, workspaceContext) : src;
   // Publish is an HTML-only affordance, so a `.png` card carries one button and
   // an `.html` card carries two. The row is flex/end aligned precisely so that
   // unevenness stays right-aligned instead of shifting the export button.
-  const canPublish = !pending && item.kind === 'html' && !!onPublish;
+  const showPublish = item.kind === 'html' && !!onPublish;
+  const shareDisabledTitle = viewerOnly
+    ? t('fileViewer.readonlySharedNoExport')
+    : pending || item.sharePending
+      ? t('fileViewer.shareAfterGenerationComplete')
+      : undefined;
   const needsFormatChoice = artifactExportNeedsFormatChoice(item.name);
 
   return (
@@ -604,32 +621,31 @@ function ArtifactCard({
           <span className="artifact-card-mini is-loading">
             <PixelLiquid />
           </span>
-        ) : item.coverUrl && item.kind !== 'video' && failedCoverUrl !== item.coverUrl ? (
+        ) : coverUrl && item.kind !== 'video' && !item.motionPreview && failedCoverUrl !== coverUrl ? (
           /*
            * **当轮的静态首屏截图**(HTML / 原型 / slide / 文档)。
            *
            * 视频**不走这一支**:它的封面挂在下面那个 `<video>` 的 `poster` 上。
-           * 换成 `<img>` 会把视频卡的版式一起换掉,而版式这次不动
-           * (用户 2026-09-02:「具体的视频产物卡片样式我再问问同事」)。
+           * 保留 `<video>` 的原件预览与下载语义,在统一外框内完整缩放。
            *
            * 这是这张卡的正解:它冻结在这一轮,三天后回看这条消息,卡面还是当时
            * 那个样子。点击才去开工作区最新版本 —— 两者不一致是产品要的
            * (2026-09-02:「点击行为就是可能不一致的,预期内的」)。
            *
-           * 截图按 1440×900 抓,和卡面 16:10 同比,所以走默认的 `cover`:铺满,
-           * 不裁不留边。图片卡那条 `data-preview-fit="contain"` 是为了竖图完整
-           * 显示,首屏截图不需要,挂上去反而会在卡里留两条空边。
+           * Ordinary HTML snapshots retain their existing cover fit.
+           * Motion sources use the separate live, muted composition path below.
            */
           <img
             className="artifact-card-media"
-            src={item.coverUrl}
+            src={coverUrl}
             alt=""
             loading="lazy"
-            onError={() => setFailedCoverUrl(item.coverUrl ?? null)}
+            onError={() => setFailedCoverUrl(coverUrl ?? null)}
           />
         ) : item.kind === 'html' ? (
           /*
-           * **没有当轮快照时的降级支** —— 旧会话、截图失败、desktop renderer 不在、
+           * Motion 视频源使用静音循环动画;其它 HTML 没有当轮快照时才降级。
+           * 旧会话、截图失败、desktop renderer 不在、
            * 配额满,都走这里:live iframe 显示**最新** html。
            *
            * 产品 2026-09-02:「各种边界情况没有当轮的快照,才是我跟你说的用 live
@@ -638,7 +654,10 @@ function ArtifactCard({
            * 文案显示在上面了?这感觉更奇怪呢」)。
            */
           <HtmlProjectCoverFrame
-            src={artifactCardLiveUrl(src, item.revision)}
+            src={liveUrl}
+            motionThumbnail
+            motionSize={size}
+            onMotionSize={(next) => setMotionSize((current) => current?.src === liveUrl && current.width === next.width && current.height === next.height ? current : { src: liveUrl, ...next })}
             initial=""
             iframeClassName="artifact-card-frame"
             glyphClassName="artifact-card-mini"
@@ -660,17 +679,18 @@ function ArtifactCard({
           </span>
         ) : item.kind === 'video' ? (
           /*
-           * `poster` 是**当轮的首帧**。没有它的时候浏览器自己去画 `src` 的第一帧
+           * `poster` 是当轮冻结的封面(Motion 使用 Agent 指定时刻,其它视频使用首帧)。
+           * 没有它的时候浏览器自己去画 `src` 的第一帧
            * —— 画的是**工作区当前那份**,所以文件一被覆盖,老消息里那张卡的首帧
            * 就跟着变了(图片卡当初那个 bug 的视频版)。
            *
-           * 元素仍然是 `<video>`:这次只接封面,不动版式。拿不到 poster 就是今天
+           * 元素仍然是 `<video>`。拿不到 poster 就是今天
            * 的行为,不出占位、不写失败文案(产品 2026-09-02)。
            */
           <video
             className="artifact-card-media"
             src={mediaSrc}
-            poster={item.coverUrl}
+            poster={coverUrl}
             muted
             preload="metadata"
             playsInline
@@ -698,13 +718,15 @@ function ArtifactCard({
           data-testid={`artifact-card-open-${item.name}`}
         />
       ) : null}
-      {pending ? null : (
+      {pending && !showPublish ? null : (
         <span className="artifact-card-acts">
-          {canPublish && onPublish ? (
+          {showPublish && onPublish ? (
             <button
               type="button"
-              className="artifact-card-act"
+              className={`artifact-card-act ${shareEntryStyles.card}`}
               aria-haspopup="menu"
+              disabled={shareDisabledTitle !== undefined}
+              title={shareDisabledTitle}
               onClick={() => onPublish(item.name, artifactAnchorId('publish', item.name, anchorScope))}
               data-testid={`artifact-card-publish-${item.name}`}
               {...{ [ARTIFACT_ANCHOR_ATTR]: artifactAnchorId('publish', item.name, anchorScope) }}
@@ -713,10 +735,10 @@ function ArtifactCard({
                   reuse the same semantic glyph as the right-side Share action,
                   scaled by the card action's 12px icon-box rule. */}
               <RemixIcon name="share-forward-line" size={12} />
-              {t('chat.artifact.publish')}
+              <span className="artifact-card-act-label">{t('chat.artifact.publish')}</span>
             </button>
           ) : null}
-          {needsFormatChoice && onExport ? (
+          {pending ? null : needsFormatChoice && onExport ? (
             /* 多格式(今天等价于 HTML):把锚点交出去,由预览区把它本来那块
                导出菜单开在这枚按钮旁边 */
             <button
@@ -728,7 +750,7 @@ function ArtifactCard({
               {...{ [ARTIFACT_ANCHOR_ATTR]: artifactAnchorId('export', item.name, anchorScope) }}
             >
               <ArtifactExportIcon />
-              {t('chat.artifact.export')}
+              <span className="artifact-card-act-label">{t('chat.artifact.export')}</span>
             </button>
           ) : (
             /*
@@ -746,7 +768,7 @@ function ArtifactCard({
               data-testid={`artifact-card-export-${item.name}`}
             >
               <ArtifactExportIcon />
-              {t('chat.artifact.export')}
+              <span className="artifact-card-act-label">{t('chat.artifact.export')}</span>
             </a>
           )}
         </span>

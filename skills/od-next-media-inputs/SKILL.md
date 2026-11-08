@@ -36,7 +36,43 @@ Reuse suitable user assets and the same asset across pages. Deduplicate work,
 not distinct subjects or required states. Do not add a new plan, manifest,
 approval step, or review Agent. Preserve every required asset and quality
 condition, including semantic fit, authenticity, licensing, local or inline
-references, and image geometry. Do not hotlink or fabricate real referents.
+references, and image geometry.
+
+## Route each image slot
+
+Decide each slot's route, and which libraries a stock search may use, with
+the Core imagery-by-type rule; it is the only source of those rules.
+
+## Search stock photos
+
+- Fetch every stock slot through the authenticated daemon wrapper in one
+  call, using the company service and your existing Vela login:
+  `"$OD_NODE_BIN" "$OD_BIN" media stock-search --slots '[{"id":"hero","query":"black eyeglasses frame","width":1200,"orientation":"landscape"}]'`.
+  Write queries in English with the subject first. The service follows configured channel priority,
+  tries each channel at most once within its attempt limit, ranks by alt text, and returns
+  each result. The wrapper downloads images into `assets/stock/` and records
+  credits in `assets/stock/credits.json`. Provider keys stay on the server;
+  never ask the user to configure a stock-provider key.
+- If the command fails or times out, or a slot returns `error`, `not_found`,
+  or `budget_exceeded`, keep successful local files and use your available
+  web/image search tools for only the missing slots. This includes unavailable
+  service/login, API errors, rate limits and failed image downloads. Do not
+  call the stock tool again for those failed slots.
+- Search the stock libraries' public pages or the correct official source
+  for a named real subject. Read each result's title/alt text, source and
+  license before selecting its actual image URL; never invent a URL or ID.
+- Batch independent downloads, bound each request to 10–15 seconds, and
+  stop when the existing acquisition budget expires. On HTTP 403/429, switch
+  source instead of looping; at most one alternative web search per missing
+  slot. Keep successful images and disclose a designed placeholder when no
+  usable image is found.
+- Download at display size (long edge 1600 px or less) and keep each JPEG or
+  WebP under about 400 KB.
+- Preserve each photo's page URL, author when shown, and license returned by
+  the source in a sidecar next to the asset. Apply the Core Image attribution
+  rule to decide whether any of that metadata belongs in the visible artifact.
+- When the time budget runs out, keep the files that succeeded. Use a
+  disclosed placeholder for any remaining slot.
 
 ## Reuse capabilities and recover by cause
 
@@ -62,7 +98,8 @@ Classify failures before retrying:
 
 Retry only when the change addresses the cause, the relevant state changes,
 or existing guidance permits retrying a temporary failure.
-Do not impose a new tool-count cap or sacrifice quality to reduce calls.
+Do not sacrifice required quality to reduce calls; bound stock photo search
+with its time budget.
 
 ## Batch independent input work
 
@@ -70,14 +107,17 @@ When the tools support it and inputs are independent, batch search, fetch,
 download, format handling, and intrinsic width/height measurements. Preserve
 each item's result and failures; keep dependent requests ordered. Reuse valid
 measurements for unchanged files; after transformation, remeasure affected
-files before sizing their containers. HTTP success and file/size probes do not
-prove semantic fit. A read invocation alone does not prove the image was seen.
+files before sizing their containers.
+
+HTTP success and file/size probes do not prove semantic fit; decide it as the
+Core imagery rule describes, without reading images back into the
+conversation.
 
 ## Collect results and stop when complete
 
 Retain each actual job ID, status, returned cursor, original response, and
 output location. Use only supported wait or batch operations. Submission and
-exit success alone do not prove generation finished. Stop polling a job after
+exit success alone do not prove an asset is ready. Stop polling a job after
 an explicit terminal result with complete output/error information; a failed
 or interrupted terminal result is not a usable asset. Continue necessary
 retrieval for running jobs, incomplete results, or new errors. Parse the saved

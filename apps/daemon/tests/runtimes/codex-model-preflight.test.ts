@@ -17,6 +17,17 @@ import {
   preflightCodexDefaultModel,
 } from '../../src/runtimes/codex-model-preflight.js';
 
+// These fixtures own the CLI/config layers, including absence of host MDM.
+vi.mock('../../src/runtimes/invocation.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/runtimes/invocation.js')>();
+  return { ...actual, execAgentFile: (...args: Parameters<typeof actual.execAgentFile>) => {
+    if (args[0] === '/usr/bin/defaults') {
+      return Promise.reject(new Error('Domain/default pair (com.openai.codex, config_toml_base64) does not exist'));
+    }
+    return actual.execAgentFile(...args);
+  } };
+});
+
 const { statPathFixtures } = vi.hoisted(() => ({
   statPathFixtures: new Map<string, string>(),
 }));
@@ -25,8 +36,14 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
-    stat: (filePath: Parameters<typeof actual.stat>[0]) =>
-      actual.stat(statPathFixtures.get(String(filePath)) ?? filePath),
+    stat: (filePath: Parameters<typeof actual.stat>[0]) => {
+      const fixture = statPathFixtures.get(String(filePath));
+      if (fixture) return actual.stat(fixture);
+      if (/^\/(?:Library\/Managed Preferences|etc\/codex)(?:\/|$)/.test(String(filePath))) {
+        return Promise.reject(Object.assign(new Error('fixture: no host policy'), { code: 'ENOENT' }));
+      }
+      return actual.stat(filePath);
+    },
   };
 });
 

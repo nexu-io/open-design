@@ -45,4 +45,54 @@ describe('SQLite public file publication store', () => {
     reopened.delete(scope);
     expect(reopened.get(scope)).toBeNull();
   });
+
+  it('enumerates only the publishing creator scope with opaque slugs and publish times', () => {
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'od-public-publication-'));
+    let timestamp = 1_700_000_000_000;
+    const store = createSqlitePublicFilePublicationStore(
+      openDatabase(tempDir, { dataDir: tempDir }),
+      () => timestamp,
+    );
+    const creatorScope = {
+      resourceTeamId: 'team-1',
+      ownerMemberId: 'creator-1',
+      projectId: 'project-1',
+    };
+    const fileScope: PublicFilePublicationScope = {
+      ...creatorScope,
+      filePath: 'page.html',
+    };
+
+    store.set(fileScope, {
+      url: 'https://hub.example.test/public/opaque-slug-a/page.html',
+      slug: 'opaque-slug-a',
+      fileName: 'page.html',
+    });
+    timestamp += 1;
+    store.set({ ...fileScope, ownerMemberId: 'commenter-1' }, {
+      url: 'https://hub.example.test/public/commenter-slug/page.html',
+      slug: 'commenter-slug',
+      fileName: 'page.html',
+    });
+
+    const publications = store.listByProject(creatorScope);
+    expect(publications).toEqual([{
+      filePath: 'page.html',
+      slug: 'opaque-slug-a',
+      publishedAt: 1_700_000_000_000,
+    }]);
+    expect(publications[0]).not.toHaveProperty('shareId');
+
+    timestamp += 1;
+    store.set(fileScope, {
+      url: 'https://hub.example.test/public/opaque-slug-b/page.html',
+      slug: 'opaque-slug-b',
+      fileName: 'page.html',
+    });
+    expect(store.listByProject(creatorScope)).toEqual([{
+      filePath: 'page.html',
+      slug: 'opaque-slug-b',
+      publishedAt: 1_700_000_000_002,
+    }]);
+  });
 });

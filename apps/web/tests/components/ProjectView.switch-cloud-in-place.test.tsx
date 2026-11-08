@@ -78,6 +78,9 @@ vi.mock('../../src/runtime/brands', async (importOriginal) => ({
 }));
 vi.mock('../../src/state/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/state/projects')>()),
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   createConversation: vi.fn(), listConversations: vi.fn(), listMessages: vi.fn(),
   loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
   patchConversation: vi.fn(), patchProject: vi.fn(),

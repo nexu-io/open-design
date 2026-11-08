@@ -224,6 +224,7 @@
   --chat-shadow-lg: var(--shadow-lg);
   /* 单产物与设计稿的附件 / 音频内容道共用这一档上限。 */
   --chat-artifact-single-max-width: 406px;
+  --chat-artifact-max-height: 240px;
   /* 稿子的玻璃浮层(选区浮条、引用芯片的全文浮层):
      `--overlay-glass: rgba(32,32,32,.88)` / `--overlay-glass-text: #fafafa`
      / `--overlay-glass-edge: color-mix(in srgb,#fff 16%,transparent)` */
@@ -352,6 +353,7 @@
   --chat-shadow-md: var(--shadow-md);
   --chat-shadow-lg: var(--shadow-lg);
   --chat-artifact-single-max-width: 406px;
+  --chat-artifact-max-height: 240px;
   /* 稿子的玻璃浮层(选区浮条、引用芯片的全文浮层):
      `--overlay-glass: rgba(32,32,32,.88)` / `--overlay-glass-text: #fafafa`
      / `--overlay-glass-edge: color-mix(in srgb,#fff 16%,transparent)` */

@@ -1,16 +1,15 @@
 {
-  "id": "0.22.1",
-  "title": "The OpenDesign Product Design Hackathon is here!",
-  "body": "Win up to $1,000 in tokens: Share your website, app, or product design built with OpenDesign on X. The 10 entries with the most likes win prizes!\nRewards for the first 50 submissions: Join the OpenDesign Discord or Feishu community and share your work. The first 50 participants each get $5 in tokens!\n40% better prototype designs: Upgrade to version 0.22.0 or later to experience OpenDesign’s latest design improvements!",
+  "id": "0.27.0",
+  "title": "CoRouter for Teams",
+  "body": "One subscription for your whole team: Invite unlimited teammates for free, with no additional seat fees.\nLeading models, shared credits: Share credits across your team to use models like Opus 5.5 in Open Design or through the API.\nClear usage, centralized billing: Track team usage while the workspace owner manages the subscription and top-ups.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://open-design.ai/opendesign-hackathon/",
-  "ctaLabel": "Explore the Hackathon",
+  "linkUrl": "https://corouter.open-design.ai/",
+  "ctaLabel": "Try CoRouter",
   "locales": {
     "zh-CN": {
-      "title": "OpenDesign 产品设计黑客松来了！",
-      "body": "最高获价值 1000 美金 Token：分享用 OpenDesign 做的网页/App/产品设计到 X，点赞 Top 10 均可获奖；\n前50位投稿都有奖：加入OpenDesign Discord/飞书社群分享作品，前 50 名人人可得 $5 Token；\n原型设计效果提升 40%：升级 0.22.0 及以上版本，体验最新OpenDesign设计效果！",
-      "linkUrl": "https://open-design.ai/zh/opendesign-hackathon/",
-      "ctaLabel": "查看活动"
+      "title": "CoRouter：团队共享额度，支持 API 调用",
+      "body": "一份订阅，全队使用：免费邀请同事，不限成员，无需另付席位费\n顶尖模型，全队共享：团队成员共享额度，既能在 Open Design 中使用 Opus 5.5 等顶尖模型，也能通过 API 调用\n用量清晰，付费统一：查看团队使用明细，由所有者统一管理订阅和充值",
+      "ctaLabel": "体验 CoRouter"
     }
   }
 }

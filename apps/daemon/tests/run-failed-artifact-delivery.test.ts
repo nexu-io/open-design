@@ -147,15 +147,23 @@ describe('artifact delivery is independent of a run failure (#8596)', () => {
   });
 
   it('does not treat an empty artifact placeholder as output', async () => {
-    const { status } = await runTurn({ emptyArtifact: true });
-    expect(status.status).toBe('failed');
-    expect(status.failureCategory).toBe('empty_output');
+    const { body, status } = await runTurn({ emptyArtifact: true });
+    // A zero-byte file is not delivery, so the empty-output guard still runs
+    // and reports the empty reply. P0-24 Q6 makes that a normal end rather
+    // than a failure; the run's own artifact accounting may still list the
+    // touched file, which is why the diagnostic — not `artifactCount` — is the
+    // observable this test owns.
+    expect(status.status).toBe('succeeded');
+    expect(body).toContain('empty_reply_ended_normally');
   });
 
-  it.each([false, true])('still fails an empty run without any artifact writes (existing file: %s)', async (existingArtifact) => {
+  it.each([false, true])('ends an empty run without produced files (existing file: %s)', async (existingArtifact) => {
     const { message, status } = await runTurn({ writesArtifact: false, existingArtifact });
-    expect(status.status).toBe('failed');
-    expect(status.failureCategory).toBe('empty_output');
+    // P0-24 Q6 changed the empty-reply verdict to a normal end; what this
+    // control still proves is that the artifact rule never invents delivery
+    // for a run that wrote nothing.
+    expect(status.status).toBe('succeeded');
+    expect(status.failureCategory).toBeFalsy();
     expect(status.artifactCount).toBe(0);
     expect(status.artifactPaths).toEqual([]);
     expect(message.producedFiles ?? []).toEqual([]);
