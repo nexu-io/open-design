@@ -469,6 +469,62 @@ describe('passive Cloud reauth cancel (end to end)', () => {
     expect(lastSynced?.onboardingCompleted).toBe(true);
     expect(vi.mocked(saveConfig)).toHaveBeenCalled();
   });
+
+  it('does not auto-pick the Cloud agent after cancel while the login status is unresolved', async () => {
+    window.history.replaceState(null, '', '/');
+    mockedLoadConfig.mockReturnValue({
+      ...firstRunConfig(),
+      agentId: 'amr',
+      onboardingCompleted: true,
+    });
+    mockedFetchDaemonConfig.mockResolvedValue({
+      agentId: 'amr',
+      onboardingCompleted: true,
+    });
+    // No non-Cloud agent is available, so the cancel revert clears the slot.
+    // The empty-slot auto-pick is then the only thing that could put AMR back.
+    mockedFetchAgentsStream.mockReset();
+    mockedFetchAgentsStream.mockResolvedValue([{ ...amrAgent }]);
+    // Workspace reauth keeps the passive gate active while the vela login
+    // status never resolves. Before the fix, the auto-pick treated the
+    // unresolved status as usable, selected AMR, cleared the dismissal, and
+    // the workspace gate bounced the user back to onboarding.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/workspace/directory') || url.includes('/api/workspace/context')) {
+          return new Response('{}', { status: 401 });
+        }
+        if (url.includes('/api/integrations/vela/status')) {
+          // A failed read leaves the login status unresolved (`null`) without
+          // holding a pending promise that would keep the test alive.
+          return new Response('{}', { status: 500 });
+        }
+        return new Response('{}', { status: 200 });
+      }),
+    );
+
+    render(<App />);
+
+    const cancel = await screen.findByRole(
+      'button',
+      { name: /Cancel and return to OpenDesign/i },
+      { timeout: 10000 },
+    );
+    fireEvent.click(cancel);
+
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    // The revert must leave the Cloud slot empty instead of letting the
+    // empty-slot auto-pick select AMR and re-fire the gate.
+    await waitFor(() => {
+      const lastSynced = vi.mocked(syncConfigToDaemon).mock.calls.at(-1)?.[0] as
+        | AppConfig
+        | undefined;
+      expect(lastSynced?.agentId).not.toBe('amr');
+    });
+    expect(window.location.pathname).toBe('/');
+  });
 });
 
 describe('onboarding -> home AMR selection (end to end)', () => {
