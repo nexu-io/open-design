@@ -66,6 +66,26 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "no_proxy",
   "OD_ALLOWED_INTERNAL_HOSTS",
   "OD_JSON_IPC_TRACE",
+  // Windows structural variables. Without them the packaged daemon (and every
+  // agent it spawns) cannot resolve executables or profile directories: a
+  // missing PATHEXT/COMSPEC breaks npm .cmd shims and cmd.exe chains (issue
+  // #6934 traced the same class of failure to a daemon env with PATHEXT=.CPL),
+  // and missing APPDATA/LOCALAPPDATA/PROGRAMDATA starve CLIs of their config
+  // and cache roots. Harmless on POSIX, where these keys never exist. Keys are
+  // matched case-sensitively, so they are listed in the canonical uppercase
+  // spelling Windows sets.
+  "APPDATA",
+  "COMMONPROGRAMFILES",
+  "COMSPEC",
+  "LOCALAPPDATA",
+  "PATHEXT",
+  "PROGRAMDATA",
+  "PROGRAMFILES",
+  "SYSTEMDRIVE",
+  "SYSTEMROOT",
+  "TEMP",
+  "TMP",
+  "USERPROFILE",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the
