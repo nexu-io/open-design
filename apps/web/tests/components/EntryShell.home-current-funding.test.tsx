@@ -55,6 +55,8 @@ describe('D0 gen53 / client VIEW-015 and RUN-003 current Home funding', () => {
     { decision: 'insufficient', mutation: 'none' },
     { decision: 'unknown', mutation: 'none' },
     { decision: 'available', mutation: 'none' },
+    { decision: 'available', mutation: 'clock-ahead' },
+    { decision: 'available', mutation: 'clock-behind' },
     { decision: 'available', mutation: 'prompt' },
     { decision: 'available', mutation: 'file' },
     { decision: 'available', mutation: 'workspace' },
@@ -118,8 +120,12 @@ describe('D0 gen53 / client VIEW-015 and RUN-003 current Home funding', () => {
     if (mutation === 'late-display') {
       await act(async () => { displayB.resolve(response({ summary: null, workspaceBalance: { workspaceId: a.workspaceId, workspaceMemberId: a.workspaceMemberId, balanceUsd: '100', billingScopeVersion: 2, expiresAt: null, updatedAt: null } })); });
     }
-    await act(async () => { for (const resolve of bFunding) resolve(response({ preflight: preflight(b, decision, '0') })); });
-    if (decision === 'available' && mutation === 'none') {
+    const funding = preflight(b, decision, '0');
+    // The server timestamp is independent of the user's desktop clock.
+    if (mutation === 'clock-ahead') funding.generatedAt = new Date(Date.now() - 104_000).toISOString();
+    if (mutation === 'clock-behind') funding.generatedAt = new Date(Date.now() + 104_000).toISOString();
+    await act(async () => { for (const resolve of bFunding) resolve(response({ preflight: funding })); });
+    if (decision === 'available' && (mutation === 'none' || mutation === 'clock-ahead' || mutation === 'clock-behind')) {
       await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
       expect(begin).toHaveBeenCalledTimes(1);
       expect(create.mock.calls[0]?.[0]).toMatchObject({ pendingPrompt: 'Keep the B draft and file at Home', pendingFiles: [file] });
