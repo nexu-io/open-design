@@ -66,14 +66,18 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "no_proxy",
   "OD_ALLOWED_INTERNAL_HOSTS",
   "OD_JSON_IPC_TRACE",
-  // Windows structural variables. Without them the packaged daemon (and every
-  // agent it spawns) cannot resolve executables or profile directories: a
-  // missing PATHEXT/COMSPEC breaks npm .cmd shims and cmd.exe chains (issue
-  // #6934 traced the same class of failure to a daemon env with PATHEXT=.CPL),
-  // and missing APPDATA/LOCALAPPDATA/PROGRAMDATA starve CLIs of their config
-  // and cache roots. Harmless on POSIX, where these keys never exist. Keys are
-  // matched case-sensitively, so they are listed in the canonical uppercase
-  // spelling Windows sets.
+] as const;
+
+// Windows structural variables. Without them the packaged daemon (and every
+// agent it spawns) cannot resolve executables or profile directories: a
+// missing PATHEXT/COMSPEC breaks npm .cmd shims and cmd.exe chains (issue
+// #6934 traced the same class of failure to a daemon env with PATHEXT=.CPL),
+// and missing APPDATA/LOCALAPPDATA/PROGRAMDATA starve CLIs of their config
+// and cache roots. Windows sets several of these in mixed case (ComSpec,
+// SystemRoot, ProgramData, ProgramFiles, SystemDrive), so this set is matched
+// case-insensitively while the original key/value casing is forwarded verbatim.
+// The keys never exist on POSIX, so the comparison is not platform-gated.
+const PACKAGED_WINDOWS_STRUCTURAL_ENV_KEYS = [
   "APPDATA",
   "COMMONPROGRAMFILES",
   "COMSPEC",
@@ -116,6 +120,9 @@ function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = fal
   return (
     PACKAGED_CHILD_ENV_ALLOWLIST.includes(
       key as (typeof PACKAGED_CHILD_ENV_ALLOWLIST)[number],
+    ) ||
+    PACKAGED_WINDOWS_STRUCTURAL_ENV_KEYS.some(
+      (structural) => structural.toLowerCase() === key.toLowerCase(),
     ) ||
     (includeProviderSecrets && (key.endsWith("_API_KEY") || key.endsWith("_TOKEN")))
   );

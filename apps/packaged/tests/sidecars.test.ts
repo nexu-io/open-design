@@ -303,6 +303,26 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards mixed-case Windows structural variables with their original casing', () => {
+    const env = resolvePackagedChildBaseEnv({
+      ComSpec: 'D:\\Win\\System32\\cmd.exe',
+      ProgramData: 'D:\\ProgramData',
+      ProgramFiles: 'D:\\Program Files',
+      SystemDrive: 'D:',
+      SystemRoot: 'D:\\Win',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env).toMatchObject({
+      ComSpec: 'D:\\Win\\System32\\cmd.exe',
+      ProgramData: 'D:\\ProgramData',
+      ProgramFiles: 'D:\\Program Files',
+      SystemDrive: 'D:',
+      SystemRoot: 'D:\\Win',
+    });
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
     const env = resolvePackagedChildBaseEnv({
       CODEX_HOME: '/tmp/isolated-codex-home',
