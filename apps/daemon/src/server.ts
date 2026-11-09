@@ -1068,6 +1068,7 @@ import { createShareAliasReservations } from './collab/share-alias-reservation.j
 import { createSharePublicationCompletion } from './collab/share-publication-completion.js';
 import { resolvePublicShareLink } from './collab/public-share-viewer-url.js';
 import { ensurePublicShareProject } from './collab/public-share-project-bootstrap.js';
+import { createLocalPublicShareOwnership } from './collab/local-public-share-ownership.js';
 import { createVelaProjectShareState } from './collab/vela-project-share-state.js';
 import { registerPublicFileStopRetryRoutes } from './routes/public-file-stop-retry.js';
 import { runPinnedVelaCommand } from './collab/vela-pinned-command.js';
@@ -5598,13 +5599,8 @@ export async function startServer({
   const recordPublicFilePublication = createPublicFilePublicationRecorder(
     db, publicFilePublicationStore, enqueuePublishedFileComments,
   );
-  const resolveLocalProjectOwner = (projectId: string, workspaceId: string): string | null => {
-    const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (!binding || binding.workspaceId !== workspaceId || binding.resourceState !== 'active'
-      || binding.cloudTombstonedAt != null || !getProject(db, projectId)
-      || projectIsUnmaterializedSharedPlaceholder(projectId)) return null;
-    return typeof binding.createdByWorkspaceMemberId === 'string' ? binding.createdByWorkspaceMemberId : null;
-  };
+  const localPublicShareOwnership = createLocalPublicShareOwnership(db, projectId =>
+    revokedTeamProjectMirrors.has(projectId) || (ownedContentSync?.isApplying(projectId) ?? false));
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
     publicFilePublicationStore,
@@ -5618,7 +5614,7 @@ export async function startServer({
     // (slug + revision token read back after the write), so a half-written
     // publication cannot enqueue work that later resolves against nothing.
     recordPublicFilePublication,
-    resolveLocalPublicShareOwner: resolveLocalProjectOwner,
+    ...localPublicShareOwnership,
     resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, process.env, configuredAmrEnv()),
     sharePublishing: {
       sourceFileId: (scope, project) => localCommentFiles.identity(scope.projectId, scope.filePath, project?.metadata?._commentFiles),
