@@ -10,16 +10,50 @@
   color: #fff;
 }
 .signInAction :global(.onboarding-cloud__primary:disabled) {
-  background: #202020;
-  color: #fff;
-  opacity: 0.65;
+  background: #f5f5f5;
+  color: #dcdcdc;
+  opacity: 1;
+  cursor: default;
+}
+
+.activationHint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+.reopen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.reopen:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .cancel {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 50%;
-  transform: translateX(-50%);
+  display: block;
+  margin: 24px auto 0;
   padding: 0 4px;
   border: 0;
   border-radius: 4px;
@@ -130,36 +164,36 @@
 }
 .welcome > :global(.onboarding-cloud__pane) {
   align-items: center;
-  padding: 48px 24px 32px;
+  justify-content: safe center;
+  min-height: 580px;
+  padding: 48px 24px 128px;
 }
+/* Footer is pinned to the pane's bottom-start corner. Logical insets mirror in
+   RTL; the physical left/right reset stops the global footer rule from
+   stacking a second inset on top. */
 .welcome :global(.onboarding-cloud__footer) {
-  position: static;
+  position: absolute;
+  left: auto;
+  right: auto;
+  inset-inline-start: 64px;
+  inset-inline-end: 24px;
+  bottom: 32px;
   align-items: flex-start;
-  text-align: left;
-  width: min(440px, 100%);
-  margin: 32px auto 0;
+  text-align: start;
+  width: auto;
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .welcome :global(.onboarding-cloud__footer) {
+    inset-inline-start: 24px;
+    inset-inline-end: 24px;
+    bottom: 24px;
+  }
 }
 .logo { width: 52px; height: 52px; object-fit: contain; margin: 0 auto 24px; }
-.loginStatus {
-  position: fixed;
-  inset-inline-start: 16px;
-  bottom: 16px;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 224px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-panel);
-  box-shadow: 0 4px 20px #0000000a;
+.loginError {
+  margin: 14px 0 0;
   text-align: center;
-  font-size: 13px;
-}
-.loginStatus p { margin: 4px 0; }
-@media (max-height: 700px) {
-  .welcome:has(.loginStatus) > :global(.onboarding-cloud__pane) { padding-bottom: 160px; }
 }
 
 .welcome :global(.onboarding-cloud__footer .lang-menu-wrap) { align-self: flex-start; position: relative; inset: auto; width: fit-content; margin: 0; }

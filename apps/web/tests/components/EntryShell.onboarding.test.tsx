@@ -1818,6 +1818,30 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(screen.getAllByRole('button', { name: /cancel/i })).toHaveLength(1);
   });
 
+  it('hides the own-AI alternatives while signing in and keeps reopen under the waiting button', async () => {
+    mockPendingActivation(false);
+    renderOnboarding();
+
+    const signIn = await findCloudSignInButton();
+    vi.useFakeTimers();
+    fireEvent.click(signIn);
+    await act(async () => {});
+    expect(screen.queryByRole('button', { name: /Local AI/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /API Key/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /Cancel sign-in/i })).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-login-status')).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(5100);
+    const reopen = screen.getByRole('button', { name: 'Reopen' });
+    expect(signIn.parentElement?.contains(reopen)).toBe(true);
+    expect(screen.queryByTestId('onboarding-login-status')).toBeNull();
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fireEvent.click(reopen);
+    await act(async () => {});
+    expect(open).toHaveBeenCalledWith('https://amr.example/activate', '_blank', 'noopener,noreferrer');
+    open.mockRestore();
+  });
+
   it('shows the sign-in link right away when the browser could not be opened', async () => {
     mockPendingActivation(true);
     renderOnboarding();
@@ -1850,9 +1874,9 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     await act(async () => {});
     expect(screen.getByText('Signing in…')).toBeTruthy();
     expect(signIn.hasAttribute('disabled')).toBe(true);
-    // Design: the own-AI paths stay available while the browser sign-in is pending.
-    expect((screen.getByRole('button', { name: /Local AI/i }) as HTMLButtonElement).disabled).toBe(false);
-    expect((screen.getByRole('button', { name: /API Key/i }) as HTMLButtonElement).disabled).toBe(false);
+    // Design: the own-AI alternatives are hidden while the browser sign-in is pending.
+    expect(screen.queryByRole('button', { name: /Local AI/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /API Key/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel sign-in/i }));
     await act(async () => {});
