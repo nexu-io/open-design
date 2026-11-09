@@ -6822,19 +6822,22 @@ body[data-web-modal-scroll-lock] .entry-main--scroll {
   align-items: center;
 }
 
+/* OPEND-4599: portalled to <body> and positioned from the pill's measured rect
+   (top/right come in inline). `fixed` + the menu tier is what lifts it above
+   dialogs; `absolute` here stayed trapped in the rail's stacking context, so a
+   sharing modal painted over it no matter what z-index this rule carried. */
 .entry-top-right-credits-panel {
-  position: absolute;
-  z-index: 30;
-  top: 100%;
+  position: fixed;
+  z-index: var(--z-menu);
   /* Right-aligned with the pill: the cluster sits in the window's top-right
-     corner, so a left-aligned or centred panel would hang off the edge. */
-  right: 0;
+     corner, so a left-aligned or centred panel would hang off the edge — the
+     measured `right` keeps that true across resizes. */
   /* The card's own width, not the pill's — the pill is as narrow as "升级" and
      the plan row inside needs room for the tier label plus its wordmark. */
   width: 232px;
   /* 6px of visual gap, paid as PADDING rather than margin/offset so the strip
-     between pill and panel is still inside the anchor and the pointer can
-     cross it without arming the close timer. */
+     between pill and panel belongs to the card itself — the pointer crosses it
+     while the card, not the anchor, owns the enter/leave handlers. */
   padding-top: 6px;
 }
 
