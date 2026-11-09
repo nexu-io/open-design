@@ -54,8 +54,6 @@ for (const theme of ['light', 'dark', 'system-light', 'system-dark'] as const) {
         const rect = button.getBoundingClientRect();
         return {
           label: button.getAttribute('aria-label'), classes: button.className,
-          // The retained export-ready nudge transforms the rect by tiny
-          // fractions; assert the specified CSS height, retain both readings.
           background: css.backgroundColor, color: css.color, height: Number.parseFloat(css.height), rectHeight: rect.height,
           radius: css.borderRadius, padding: css.padding, gap: css.gap,
           icon: button.querySelector('svg')?.outerHTML,

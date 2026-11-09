@@ -527,7 +527,6 @@ function previewViewportIcon(viewport: PreviewViewportId): string {
   return 'computer-line';
 }
 
-const EXPORT_READY_NUDGE_STORAGE_PREFIX = 'open-design:export-ready-nudge:';
 const COMMENT_SIDE_DOCK_WIDTH = 320;
 const COMMENT_SIDE_DOCK_RAIL_WIDTH = 42;
 const COMMENT_SIDE_DOCK_GAP = 12;
@@ -2919,26 +2918,6 @@ function formatDurationMs(ms: number | undefined): string | null {
   const minutes = Math.floor(ms / 60_000);
   const seconds = Math.round((ms % 60_000) / 1000);
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
-}
-
-function exportReadyNudgeKey(projectId: string, fileName: string): string {
-  return `${EXPORT_READY_NUDGE_STORAGE_PREFIX}${projectId}:${fileName}`;
-}
-
-function hasSeenExportReadyNudge(projectId: string, fileName: string): boolean {
-  try {
-    return window.sessionStorage.getItem(exportReadyNudgeKey(projectId, fileName)) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function markExportReadyNudgeSeen(projectId: string, fileName: string) {
-  try {
-    window.sessionStorage.setItem(exportReadyNudgeKey(projectId, fileName), '1');
-  } catch {
-    // Ignore storage-denied contexts; the in-memory state still prevents loops.
-  }
 }
 
 interface RefreshStatusDescriptor {
@@ -7897,8 +7876,6 @@ function HtmlViewer({
   const toolbarMoreTriggerRef = useRef<HTMLButtonElement | null>(null);
   useDismissOnOutsideInteraction(toolbarMoreOpen, toolbarMoreRef, () => setToolbarMoreOpen(false));
   const [versionModalOpen, setVersionModalOpen] = useState<false | 'toolbar' | 'more_menu'>(false);
-  const [exportReadyNudge, setExportReadyNudge] = useState(false);
-  const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -10001,7 +9978,6 @@ function HtmlViewer({
     setShareAccessConfirm(null);
     setToolbarMoreOpen(false);
     setVersionModalOpen(false);
-    setExportReadyNudge(false);
     setTemplateModalOpen(false);
     setDeployModalOpen(false);
     setInTabPresent(false);
@@ -15789,9 +15765,11 @@ function HtmlViewer({
     historyError: projectShareHistoryState.status === 'error',
     enabled: workspaceActive && !viewerOnly && rawCanShare && !streaming,
   });
-  const rawCanDownload = source !== null && (isShareableArtifact || isMarkdownArtifact);
+  // Export eligibility is a file capability, independent of preview source
+  // loading. PDF/ZIP fallbacks read the complete file only when needed.
+  const rawCanDownload = isShareableArtifact || isMarkdownArtifact;
   const canShare = rawCanShare && !viewerOnly;
-  const canDownload = rawCanDownload && !viewerOnly;
+  const canDownload = rawCanDownload && !viewerOnly && !projectResourceReadBlocked;
   const canExportHtml = canShare && source !== null;
   // PPTX export is slide-based, so show it only for explicit decks plus
   // structured deck runtimes. Do not key this off plain `.slide`: ordinary
@@ -15830,10 +15808,28 @@ function HtmlViewer({
     return isDeckArtifact || sourceLooksLikeExportableDeck(context.content);
   }, [deckExportSignal, isDeckArtifact]);
 
+  // Each export closes over its project/file/authority and source snapshot.
+  // Never use the truncated routing preview or write a late read into the
+  // active viewer: the user may switch files while the download is preparing.
+  async function readExportHtml(context?: HtmlVersionExportContext | null): Promise<string> {
+    if (context) return context.content;
+    if (source !== null && sourceFileKeyRef.current === currentSourceIdentity) return source;
+    const text = await fetchProjectFileText(projectId, file.name, {
+      cache: 'no-store',
+      cacheBustKey: `${file.mtime}-${reloadKey}-${filesRefreshKey}`,
+      workspaceContext,
+    });
+    if (text === null) throw new Error('Export source unavailable');
+    return text;
+  }
+
   async function exportHtmlPdf(context?: HtmlVersionExportContext | null) {
     const pdfTitle = context?.title ?? exportTitle;
-    const pdfSource = context?.content ?? source ?? '';
-    const pdfDeck = deckExportSignalForContext(context);
+    // Export may be selected before preview hydration has classified a runtime
+    // deck. Resolve its complete source on this user action so page/deck routing
+    // and the browser fallback use the same file snapshot.
+    const pdfSource = await readExportHtml(context);
+    const pdfDeck = deckExportSignalForContext(context) || sourceLooksLikeExportableDeck(pdfSource);
     if (isOpenDesignHostAvailable()) {
       const res = await exportProjectScreenshotPdf({
         projectId,
@@ -15873,7 +15869,7 @@ function HtmlViewer({
     fireShareExport('zip', () => exportProjectAsZip({
       projectId,
       filePath: file.name,
-      fallbackHtml: context?.content ?? source ?? '',
+      fallbackHtml: () => readExportHtml(context),
       fallbackTitle: context?.title ?? exportTitle,
       workspaceContext,
       ...(context?.versionId ? { versionId: context.versionId } : {}),
@@ -15889,17 +15885,6 @@ function HtmlViewer({
       ...(context?.versionId ? { versionId: context.versionId } : {}),
     }), context);
   }
-
-  useEffect(() => {
-    const nudgeKey = `${projectId}\n${file.name}`;
-    if (!canExportHtml || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
-    exportReadyNudgeSeenRef.current.add(nudgeKey);
-    if (hasSeenExportReadyNudge(projectId, file.name)) return;
-    markExportReadyNudgeSeen(projectId, file.name);
-    setExportReadyNudge(true);
-    const timeout = window.setTimeout(() => setExportReadyNudge(false), 1800);
-    return () => window.clearTimeout(timeout);
-  }, [canExportHtml, file.name, projectId]);
 
   // Chat-side "Share" next-step action: when a new share request arrives, open
   // the share menu (the toolbar's "Share" button → deploy menu, which holds the
@@ -15921,8 +15906,6 @@ function HtmlViewer({
      * 在消费之前检查分享资格，避免只读状态吞掉请求。
      */
     if (!shouldConsumeActionRequest(actionRequestKey('share', projectId, file.name), nonce)) return;
-    setExportReadyNudge(false);
-    markExportReadyNudgeSeen(projectId, file.name);
     /*
      * 开的是**同一块**分享菜单;`anchorId` 只决定它开在哪儿 —— 产物卡传锚点,
      * 菜单就贴着卡上那枚按钮;「下一步引导」那行不传,菜单照旧开在预览区工具栏
@@ -15956,8 +15939,6 @@ function HtmlViewer({
     if (!canDownload) return;
     // 同分享那条:消费记录在组件外,重挂之后不重放。
     if (!shouldConsumeActionRequest(actionRequestKey('download', projectId, file.name), nonce)) return;
-    setExportReadyNudge(false);
-    markExportReadyNudgeSeen(projectId, file.name);
     /* 与分享同一条路,换成导出菜单。 */
     const nextAnchorId = downloadRequest?.anchorId ?? null;
     const wasOpenOnThisEntry = deployMenuOpen
@@ -16008,8 +15989,6 @@ function HtmlViewer({
     sourceLabel: 'share_dropdown' | 'download_dropdown',
   ) => {
     fireArtifactHeaderClick(sourceLabel);
-    setExportReadyNudge(false);
-    markExportReadyNudgeSeen(projectId, file.name);
     // null 选择工具栏按钮自己的锚点；不能保留上一次产物卡的锚点。
     // 两处菜单都 portal 到 body，避免被右侧预览面板裁切。
     setMenuAnchorId(null);
@@ -16030,7 +16009,9 @@ function HtmlViewer({
     });
   };
   const openShareMenu = () => openUnifiedActionMenu('share', 'share_dropdown');
-  const openDownloadMenu = () => openUnifiedActionMenu('export', 'download_dropdown');
+  const openDownloadMenu = () => {
+    if (canDownload) openUnifiedActionMenu('export', 'download_dropdown');
+  };
   const captureExportImageSnapshot = useCallback(async (
     options?: { wholeDeck?: boolean; context?: HtmlVersionExportContext | null },
   ) => {
@@ -16271,66 +16252,15 @@ function HtmlViewer({
    * 才有,而 markdown 根本不走这个 viewer —— 两条都留在菜单里各自的入口。
    */
   const runExportFormat = (format: ArtifactExportFormat) => {
+    if (!canDownload) return;
     if (format === 'image') {
-      void openImageExportModal();
+      if (canExportHtml) void openImageExportModal();
       return;
     }
     setDeployMenuOpen(false);
-    if (format === 'zip') {
-      fireShareExport('zip', () => exportProjectAsZip({
-        projectId,
-        filePath: file.name,
-        fallbackHtml: source ?? '',
-        fallbackTitle: exportTitle,
-        workspaceContext,
-      }));
-      return;
-    }
-    if (format === 'html') {
-      fireShareExport('html', () => exportProjectAsHtml({
-        projectId,
-        filePath: file.name,
-        fallbackTitle: exportTitle,
-        workspaceContext,
-      }));
-      return;
-    }
-    // Pixel-perfect screenshot PDF (matches the preview, same renderer as
-    // image/PPTX). Chosen over Chromium's vector printToPDF because that path
-    // drops CJK glyphs in the packaged runtime (no embedded fonts) —
-    // unacceptable for a Chinese-first product. Falls back to the
-    // vector/browser print path on web or on failure.
-    fireShareExport('pdf', async () => {
-      if (isOpenDesignHostAvailable()) {
-        const res = await exportProjectScreenshotPdf({
-          projectId,
-          fileName: file.name,
-          title: exportTitle,
-          workspaceContext,
-          // Broader deck signal than the viewer's nav so runtime-managed decks
-          // (<deck-stage>) paginate per slide; the vector fallback below uses
-          // the SAME signal, so an artifact exports identically with or without
-          // a desktop host (no per-host divergence).
-          deck: deckExportSignal,
-        });
-        if (res.ok) return res.completion;
-        // A SEMANTIC failure (bad deck routing, unreadable renderer output,
-        // renderer 502, …) must surface — NOT silently downgrade to the vector
-        // PDF, which can reintroduce the CJK-glyph / fidelity bugs the
-        // screenshot path exists to avoid. Only a genuinely unavailable
-        // renderer (no host / 501 / transport) falls through to the vector path
-        // below.
-        if (!('unavailable' in res)) throw new Error(res.error);
-      }
-      return exportProjectAsPdf({
-        deck: deckExportSignal,
-        fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: deckExportSignal, onProgress: onExportProgress }),
-        filePath: file.name,
-        projectId,
-        title: exportTitle,
-        workspaceContext,
-      });
-    });
+    if (format === 'zip') triggerZipExport();
+    else if (format === 'html') triggerHtmlExport();
+    else triggerPdfExport();
   };
 
   // Component-scoped so both the save flow and the modal Cancel button can
@@ -17785,14 +17715,11 @@ function HtmlViewer({
                 {rawCanDownload ? (
                   <button
                     type="button"
-                    className={
-                      `chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified ${shareEntryStyles.toolbarSecondary}` +
-                      (exportReadyNudge ? ' export-ready-nudge' : '')
-                    }
+                    className={`chrome-action chrome-action-secondary chrome-action-with-label chrome-action-text-only chrome-action-unified ${shareEntryStyles.toolbarSecondary}`}
                     aria-haspopup="menu"
                     aria-expanded={deployMenuOpen && unifiedActionTab === 'export'}
                     aria-label={t('fileViewer.unifiedExportTab')}
-                    disabled={viewerOnly}
+                    disabled={!canDownload}
                     title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
                     onClick={openDownloadMenu}
                   >

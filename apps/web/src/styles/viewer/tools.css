@@ -815,44 +815,6 @@
   border-color: var(--accent-hover);
   color: white;
 }
-@keyframes export-ready-nudge {
-  0% {
-    transform: translateY(0);
-    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
-  }
-  18% {
-    transform: translateY(-1px);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
-      0 8px 18px color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-  36% {
-    transform: translateY(0);
-  }
-  54% {
-    transform: translateY(-1px);
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent),
-      0 8px 18px color-mix(in srgb, var(--accent) 28%, transparent);
-  }
-  100% {
-    transform: translateY(0);
-    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chrome-action-export.export-ready-nudge {
-    animation: export-ready-nudge-reduced 1200ms ease-out 1;
-  }
-}
-
-@keyframes export-ready-nudge-reduced {
-  0%, 100% {
-    box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 24%, transparent);
-  }
-  35% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
-  }
-}
 .share-menu-popover {
   position: absolute;
   top: calc(100% + 6px);
