@@ -51,6 +51,15 @@
 /* 稿子 `.errb .d { margin-top: 8px; font-size: var(--t-mini);
    line-height: var(--lh-body); color: var(--text-muted) }` */
 .description {
+  display: -webkit-box;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   margin-top: 8px;
   font-size: var(--chat-t-mini);
   line-height: var(--chat-lh-body);
