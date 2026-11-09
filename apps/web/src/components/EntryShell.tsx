@@ -4052,6 +4052,12 @@ function OnboardingView({
     // a login in flight: it is the only way to resume or restart from here.
     const cloudBusy = amrLoginBusy && !amrLoginError;
     const amrStatusResolving = !amrStatusResolved;
+    // Design: while signing in, the browser-didn't-open fallback sits under the
+    // primary button; it only appears once the hint is due (or the browser failed).
+    const activationHintVisible =
+      cloudBusy &&
+      Boolean(amrStatus?.activationUrl) &&
+      (activationHintDue || Boolean(amrStatus?.browserOpenFailed));
     return (
       <section
         className={`onboarding-view onboarding-view--cloud ${onboardingWelcomeStyles.welcome}`}
@@ -4118,6 +4124,34 @@ function OnboardingView({
                         : t('settings.onboardingCloudSignIn')}
                 </span>
               </button>
+              {activationHintVisible ? (
+                <p className={onboardingWelcomeStyles.activationHint}>
+                  <span>
+                    {amrStatus?.browserOpenFailed ? (
+                      <AmrActivationHintText browserOpenFailed />
+                    ) : (
+                      t('settings.onboardingActivationPrompt')
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className={onboardingWelcomeStyles.reopen}
+                    onClick={() => void reopenCloudSignIn()}
+                  >
+                    <span>{t('settings.onboardingActivationReopen')}</span>
+                    <Icon name="external-link" size={13} />
+                  </button>
+                </p>
+              ) : null}
+              {amrLoginError ? (
+                <p
+                  role="alert"
+                  className={`onboarding-cloud__error ${onboardingWelcomeStyles.loginError}`}
+                  data-testid="onboarding-login-status"
+                >
+                  {t('settings.amrLoginErrorCompact')}
+                </p>
+              ) : null}
               {cloudBusy ? (
                 <button
                   type="button"
@@ -4129,48 +4163,50 @@ function OnboardingView({
                 </button>
               ) : null}
             </div>
-            <div className={onboardingWelcomeStyles.belowAction}>
-              <div
-                className={onboardingWelcomeStyles.belowLayer}
-              >
-                <div className={onboardingWelcomeStyles.alternatives}>
-                  <div className={onboardingWelcomeStyles.divider}>
-                    {t('settings.onboardingOwnAi')}
-                  </div>
-                  <div className={`onboarding-cloud__alts ${onboardingWelcomeStyles.options}`}>
-                    <Button
-                      variant="subtle"
-                      className="onboarding-cloud__alt-btn"
-                      disabled={amrLoginCancelPending}
-                      onClick={() => {
-                        emitOnboardingClick('local_coding_agent', 'select_runtime', {
-                          runtime_type: 'local_cli',
-                        });
-                        setRuntime('local');
-                        void scanCliAgents({ preferExisting: true });
-                        setStep(2);
-                      }}
-                    >
-                      <Icon name="robot" size={16} />
-                      {t('settings.onboardingLocalAi')}
-                    </Button>
-                    <Button
-                      variant="subtle"
-                      className="onboarding-cloud__alt-btn"
-                      disabled={amrLoginCancelPending}
-                      onClick={() => {
-                        emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-                        setRuntime('byok');
-                        setStep(2);
-                      }}
-                    >
-                      <Icon name="key" size={16} />
-                      {t('settings.onboardingApiKey')}
-                    </Button>
+            {cloudBusy ? null : (
+              <div className={onboardingWelcomeStyles.belowAction}>
+                <div
+                  className={onboardingWelcomeStyles.belowLayer}
+                >
+                  <div className={onboardingWelcomeStyles.alternatives}>
+                    <div className={onboardingWelcomeStyles.divider}>
+                      {t('settings.onboardingOwnAi')}
+                    </div>
+                    <div className={`onboarding-cloud__alts ${onboardingWelcomeStyles.options}`}>
+                      <Button
+                        variant="subtle"
+                        className="onboarding-cloud__alt-btn"
+                        disabled={amrLoginCancelPending}
+                        onClick={() => {
+                          emitOnboardingClick('local_coding_agent', 'select_runtime', {
+                            runtime_type: 'local_cli',
+                          });
+                          setRuntime('local');
+                          void scanCliAgents({ preferExisting: true });
+                          setStep(2);
+                        }}
+                      >
+                        <Icon name="robot" size={16} />
+                        {t('settings.onboardingLocalAi')}
+                      </Button>
+                      <Button
+                        variant="subtle"
+                        className="onboarding-cloud__alt-btn"
+                        disabled={amrLoginCancelPending}
+                        onClick={() => {
+                          emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+                          setRuntime('byok');
+                          setStep(2);
+                        }}
+                      >
+                        <Icon name="key" size={16} />
+                        {t('settings.onboardingApiKey')}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
@@ -4179,20 +4215,6 @@ function OnboardingView({
             </span>
           </footer>
         </div>
-        {amrLoginError ||
-        (cloudBusy &&
-          amrStatus?.activationUrl &&
-          (activationHintDue || amrStatus.browserOpenFailed)) ? (
-          <aside className={onboardingWelcomeStyles.loginStatus} aria-live="polite" data-testid="onboarding-login-status">
-            {amrLoginError ? (
-              <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
-            ) : (
-              <Button variant="ghost" onClick={() => void reopenCloudSignIn()}>
-                {t('settings.onboardingActivationReopen')}
-              </Button>
-            )}
-          </aside>
-        ) : null}
       </section>
     );
   }
