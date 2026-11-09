@@ -60,7 +60,7 @@
   color: #333;
   box-shadow: 0 4px 12px #0002;
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.5;
   white-space: normal;
 }
@@ -90,7 +90,7 @@
 .placeholder small {
   color: #999;
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 16px;
 }
 .metered {
@@ -103,7 +103,7 @@
   border-top: 1px solid #ffffff0a;
   color: #999;
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 18px;
 }
 .details {
