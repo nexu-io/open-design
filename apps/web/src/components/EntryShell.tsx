@@ -4143,6 +4143,15 @@ function OnboardingView({
                   </button>
                 </p>
               ) : null}
+              {amrLoginError ? (
+                <p
+                  role="alert"
+                  className={`onboarding-cloud__error ${onboardingWelcomeStyles.loginError}`}
+                  data-testid="onboarding-login-status"
+                >
+                  {t('settings.amrLoginErrorCompact')}
+                </p>
+              ) : null}
               {cloudBusy ? (
                 <button
                   type="button"
@@ -4206,11 +4215,6 @@ function OnboardingView({
             </span>
           </footer>
         </div>
-        {amrLoginError ? (
-          <aside className={onboardingWelcomeStyles.loginStatus} aria-live="polite" data-testid="onboarding-login-status">
-            <p role="alert">{t('settings.amrLoginErrorCompact')}</p>
-          </aside>
-        ) : null}
       </section>
     );
   }

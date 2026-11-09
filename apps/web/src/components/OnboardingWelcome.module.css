@@ -191,23 +191,9 @@
   }
 }
 .logo { width: 52px; height: 52px; object-fit: contain; margin: 0 auto 24px; }
-.loginStatus {
-  position: fixed;
-  inset-inline-start: 16px;
-  bottom: 16px;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 224px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-panel);
-  box-shadow: 0 4px 20px #0000000a;
+.loginError {
+  margin: 14px 0 0;
   text-align: center;
-  font-size: 13px;
 }
-.loginStatus p { margin: 4px 0; }
 
 .welcome :global(.onboarding-cloud__footer .lang-menu-wrap) { align-self: flex-start; position: relative; inset: auto; width: fit-content; margin: 0; }
