@@ -1260,6 +1260,7 @@ describe("renderLinuxAppImageAppRun sandbox policy", () => {
       delete isolatedEnv.OD_LINUX_SANDBOX;
       delete isolatedEnv.APPIMAGE;
       delete isolatedEnv.OD_APPIMAGE_EXTRACTED_RUN;
+      delete isolatedEnv.OD_APPIMAGE_LOCK_HELD;
 
       const child = spawn(appRunPath, options.args ?? [], {
         env: {
@@ -1393,6 +1394,7 @@ exit 97
       };
       delete env.OD_APPIMAGE_EXTRACTED_RUN;
       delete env.OD_APPIMAGE_LOCK_FD;
+      delete env.OD_APPIMAGE_LOCK_HELD;
       Object.assign(env, options.env);
 
       const child = spawn(appRunPath, options.args ?? [], {
