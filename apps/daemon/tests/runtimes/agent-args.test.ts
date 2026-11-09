@@ -84,6 +84,9 @@ test('opencode args pass model-supported variants without changing the default a
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
   assert.deepEqual(opencode.listModels?.args, ['models', '--verbose']);
+  // OpenCode 2 rejects `models --verbose` (exit 1); the plain form still lists
+  // provider/model ids, so the catalog must retry instead of falling back.
+  assert.deepEqual(opencode.listModels?.fallbackArgs, ['models']);
   assert.equal(opencode.fallbackModels.find(
     (model) => model.id === 'openai/gpt-5.6-sol',
   )?.reasoningOptions, undefined);

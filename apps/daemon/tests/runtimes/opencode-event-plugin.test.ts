@@ -46,6 +46,16 @@ test('supported floor and pure mode are explicit', async () => {
   expect(await applyOpenCodeEventPlugin({ OPENCODE_CONFIG_CONTENT: '{"plugin":42}' }, '/not-a-staging-directory', '1.18.30')).toBe(false);
 });
 
+test('OpenCode 2 disables the V1 event plugin and reports why', async () => {
+  // V2 reports `opencode v2.2.6`; the V1 module uses the old plugin contract and
+  // must not be advertised into a V2 config.
+  expect(supportsOpenCodeEventPlugin('opencode v2.2.6')).toBe(false);
+  expect(supportsOpenCodeEventPlugin('2.0.0')).toBe(false);
+  const env: NodeJS.ProcessEnv = { OPENCODE_CONFIG_CONTENT: '{"plugin":["user"]}' };
+  expect(await applyOpenCodeEventPlugin(env, '/not-a-staging-directory', 'opencode v2.2.6')).toBe(false);
+  expect(env.OPENCODE_CONFIG_CONTENT).toBe('{"plugin":["user"]}');
+});
+
 test('reuses an intact module and repairs corrupted content before the next launch', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'od-opencode-repair-'));
   const env: NodeJS.ProcessEnv = {};
