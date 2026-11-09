@@ -433,16 +433,22 @@ appimage_lock_path() {
 # the desktop generation, including payload handoffs. A cached AppRun sees the
 # env var and skips re-acquisition.
 lock_path=""
-if [ -z "\${OD_APPIMAGE_LOCK_FD:-}" ] && [ -n "\${APPIMAGE:-}" ] ; then
+lock_held=0
+if [ -z "\${OD_APPIMAGE_LOCK_FD:-}" ] && [ -z "\${OD_APPIMAGE_LOCK_HELD:-}" ] && [ -n "\${APPIMAGE:-}" ] ; then
   if lock_path="$(appimage_lock_path 2>/dev/null)" ; then
     lock_parent="$(dirname "$lock_path")"
     if mkdir -p "$lock_parent" 2>/dev/null ; then
       if command -v flock >/dev/null 2>&1 && exec 8>"$lock_path" ; then
-        if ! flock -n 8 ; then
-          echo "open-design: Open Design is already running." >&2
-          exit 0
+        if flock -n 8 ; then
+          export OD_APPIMAGE_LOCK_FD=8
+        else
+          # Another generation owns startup. Do not start a competing runtime,
+          # but keep going into the packaged launcher in handoff-only mode so
+          # it can SHOW the existing window and forward an opendesign:// URL.
+          lock_held=1
+          export OD_APPIMAGE_LOCK_HELD=1
+          exec 8>&-
         fi
-        export OD_APPIMAGE_LOCK_FD=8
       fi
     fi
   fi
@@ -455,7 +461,9 @@ case "\${APPDIR:-}" in
       if cache_dir="$(appimage_cache_dir 2>/dev/null)" ; then
         cache_parent="$(dirname "$cache_dir")"
         if mkdir -p "$cache_parent" 2>/dev/null ; then
-          if [ ! -x "$cache_dir/AppRun" ] ; then
+          # A duplicate launch uses a warm cache when it exists, but must not
+          # pay for a cold extraction while the owner generation is starting.
+          if [ ! -x "$cache_dir/AppRun" ] && [ "$lock_held" = 0 ] ; then
             extract_dir="$cache_parent/.extract.$$"
             rm -rf "$extract_dir"
             if mkdir -p "$extract_dir" && ( cd "$extract_dir" && "$APPIMAGE" --appimage-extract >extract.log 2>&1 ) && [ -x "$extract_dir/squashfs-root/AppRun" ] ; then

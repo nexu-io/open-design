@@ -1441,7 +1441,9 @@ exit 97
     expect(out).toContain('exec 8>"$lock_path"');
     expect(out).toContain("flock -n 8");
     expect(out).toContain("export OD_APPIMAGE_LOCK_FD=8");
-    expect(out).toContain("Open Design is already running");
+    expect(out).toContain("lock_held=1");
+    expect(out).toContain("export OD_APPIMAGE_LOCK_HELD=1");
+    expect(out).not.toContain("Open Design is already running");
     expect(out).not.toContain("flock -w 600");
   });
 
@@ -1473,8 +1475,11 @@ exit 97
   linuxOnlyIt("keeps the launch lock across a detached sidecar handoff", async () => {
     const harness = await createHarness();
     const handoffPidPath = join(harness.root, "handoff.pid");
+    const handoffArgsPath = join(harness.root, "handoff-args.txt");
     const handoffEnv: NodeJS.ProcessEnv = {
+      OD_LINUX_SANDBOX: "on",
       OD_TEST_HANDOFF: "1",
+      OD_TEST_HANDOFF_ARGS_PATH: handoffArgsPath,
       OD_TEST_HANDOFF_PID_PATH: handoffPidPath,
       OD_TEST_HANDOFF_SCRIPT: handoffFixturePath,
       OD_TEST_NODE: process.execPath,
@@ -1484,6 +1489,10 @@ exit 97
     try {
       await harness.writeCachedAppRun(
         `#!/bin/bash
+if [ "\${OD_APPIMAGE_LOCK_HELD:-}" = 1 ] ; then
+  printf '%s\\n' "$*" >> "$OD_TEST_HANDOFF_ARGS_PATH"
+  exit 0
+fi
 printf 'started\\n' >> "$OD_TEST_ARGS_PATH"
 if [ "\${OD_TEST_HANDOFF:-1}" = 1 ] ; then
   "$OD_TEST_NODE" --import tsx "$OD_TEST_HANDOFF_SCRIPT" "$OD_TEST_HANDOFF_PID_PATH"
@@ -1499,12 +1508,17 @@ fi
       handoffPid = detachedPid;
 
       // The initial launcher has exited; only the detached handoff child still
-      // owns the lock. A second menu launch must exit before extracting or
-      // starting a competing runtime.
-      const second = await harness.run({ args: ["--second"], env: handoffEnv });
+      // owns the lock. A second menu launch must reach the packaged launcher in
+      // handoff-only mode, forward the deeplink, and never start a competitor.
+      const second = await harness.run({
+        args: ["opendesign://workspace/open", "--second"],
+        env: handoffEnv,
+      });
       expect(second).toMatchObject({ code: 0, signal: null });
-      expect(second.stderr).toContain("Open Design is already running");
+      expect(second.stderr).toBe("");
       expect(await readFile(harness.argsPath, "utf8")).toBe("started\n");
+      expect(await readFile(handoffArgsPath, "utf8")).toBe("opendesign://workspace/open --second\n");
+      expect((await readFile(handoffPidPath, "utf8")).trim()).toBe(String(detachedPid));
 
       process.kill(-detachedPid, "SIGKILL");
       const deadline = Date.now() + 5_000;
@@ -1526,6 +1540,50 @@ fi
         } catch {
           // already gone
         }
+      }
+      await rm(harness.root, { force: true, recursive: true });
+    }
+  });
+
+  linuxOnlyIt("does not cold-extract for a duplicate launch that must hand off", async () => {
+    const harness = await createHarness();
+    const readyPath = join(harness.root, "lock-ready");
+    const lockHeldPath = join(harness.root, "lock-held.txt");
+    const key = (await execFileAsync("bash", [
+      "-c",
+      'printf \'%s\' "$1" | cksum | cut -d\' \' -f1',
+      "bash",
+      harness.runtimePath,
+    ])).stdout.trim();
+    const lockPath = join(harness.cacheRoot, "open-design", "appimage", `${key}.lock`);
+    await mkdir(dirname(lockPath), { recursive: true });
+    const lockHolder = spawn("bash", [
+      "-c",
+      `exec 8>"${lockPath}"; flock 8; : >"${readyPath}"; sleep 30`,
+    ], { detached: true, stdio: "ignore" });
+    let lockPid: number | null = lockHolder.pid ?? null;
+
+    try {
+      await harness.writeRuntime(extractionRuntimeBody);
+      await writeFile(
+        join(harness.fuseAppDir, "Open Design"),
+        `#!/bin/bash\nprintf '%s\\n' "$@" > "$OD_TEST_FALLBACK_ARGS_PATH"\nprintf '%s\\n' "\${OD_APPIMAGE_LOCK_HELD:-}" > "$OD_TEST_LOCK_HELD_PATH"\n`,
+        "utf8",
+      );
+      await chmod(join(harness.fuseAppDir, "Open Design"), 0o755);
+      await waitForFile(readyPath);
+
+      const result = await harness.run({
+        args: ["opendesign://workspace/open"],
+        env: { OD_LINUX_SANDBOX: "on", OD_TEST_LOCK_HELD_PATH: lockHeldPath },
+      });
+      expect(result).toMatchObject({ code: 0, signal: null });
+      expect(await readFile(harness.fallbackArgsPath, "utf8")).toBe("opendesign://workspace/open\n");
+      expect(await readFile(lockHeldPath, "utf8")).toBe("1\n");
+      await expect(access(harness.extractMarkerPath)).rejects.toThrow();
+    } finally {
+      if (lockPid != null) {
+        try { process.kill(-lockPid, "SIGKILL"); } catch { lockHolder.kill("SIGKILL"); }
       }
       await rm(harness.root, { force: true, recursive: true });
     }

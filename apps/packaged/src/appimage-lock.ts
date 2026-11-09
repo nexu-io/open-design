@@ -1,5 +1,8 @@
 import { fstatSync } from "node:fs";
 
+/** AppRun sets this when another generation owns the launch lock. */
+export const APPIMAGE_LOCK_HELD_ENV = "OD_APPIMAGE_LOCK_HELD";
+
 /**
  * The AppRun launch-lock descriptor, when this process inherited one from a
  * FUSE/cache launch.

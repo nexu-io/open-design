@@ -7,7 +7,7 @@ import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import type { StopProcessesResult, stopProcesses, waitForProcessExit } from "@open-design/platform";
 import { describe, expect, it, vi } from "vitest";
 
-import { exitPackagedLauncherForExistingDesktop, inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "../src/launcher-after-quit.js";
+import { exitPackagedLauncherForExistingDesktop, handOffDuplicatePackagedLaunch, inspectExistingDesktopForLauncher, waitForLauncherAfterQuit } from "../src/launcher-after-quit.js";
 import type { PackagedNamespacePaths } from "../src/paths.js";
 
 function stamp(namespace = "release-prerelease"): SidecarStamp {
@@ -252,6 +252,46 @@ describe("inspectExistingDesktopForLauncher", () => {
         paths: fakePaths(root),
       })).resolves.toEqual({ action: "exit", reason: "existing-focused" });
       expect(invoke).toHaveBeenCalledWith(ownerStamp, "show", {}, { timeoutMs: 800 });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("handOffDuplicatePackagedLaunch", () => {
+  it("forwards focus and the deeplink to the existing owner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-duplicate-handoff-"));
+    const deeplink = "opendesign://workspace/open";
+    const invoke = vi.fn(async () => ({ accepted: true }));
+    try {
+      await expect(handOffDuplicatePackagedLaunch(stamp(), {
+        deeplinkUrl: deeplink,
+        getStatus: vi.fn(async (target: SidecarStamp) => {
+          if (target.app !== APP_KEYS.DESKTOP) throw new Error("peer status is not part of handoff");
+          return { pid: 1234, state: "running", updatedAt: new Date().toISOString(), windowVisible: true };
+        }) as never,
+        invoke: invoke as never,
+        paths: fakePaths(root),
+      })).resolves.toEqual({ action: "exit", reason: "existing-focused" });
+      expect(invoke).toHaveBeenCalledWith(stamp(), "show", { deeplinkUrl: deeplink }, { timeoutMs: 800 });
+      expect(await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8")).toContain("duplicate-handoff");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("exits without bootstrapping when no owner answers", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-duplicate-no-owner-"));
+    const invoke = vi.fn(async () => ({ accepted: true }));
+    try {
+      await expect(handOffDuplicatePackagedLaunch(stamp(), {
+        deeplinkUrl: "opendesign://workspace/open",
+        getStatus: vi.fn(async () => { throw new Error("not running"); }) as never,
+        invoke: invoke as never,
+        paths: fakePaths(root),
+      })).resolves.toEqual({ action: "exit", reason: "existing-focus-failed" });
+      expect(invoke).not.toHaveBeenCalled();
+      expect(await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8")).toContain("focus=no-owner");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
