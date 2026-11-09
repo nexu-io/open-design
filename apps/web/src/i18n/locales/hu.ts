@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const hu: Dict = {
+  "referral.notice.label": "Visszaállítási kártya értesítés",
+  "referral.notice.registered": "Szerezz egy visszaállítási kártyát az első előfizetéseddel 48 órán belül",
+  "referral.notice.pending": "Az első előfizetés elkészült. A kártya kiadásra vár.",
+  "referral.notice.pendingAt": "Az első előfizetés elkészült. A kártya várhatóan ekkor érkezik: {time}.",
+  "referral.notice.exhausted": "Elfogyott a Design Plan keret. Hívj meg barátokat kártyákért, és folytasd az alkotást, amikor megérkeznek.",
+  "referral.notice.remaining": "Hátralévő idő: {time}",
+  "referral.notice.invite": "Barátok meghívása",
+  "referral.notice.subscribe": "Előfizetés",
+  "referral.notice.dismiss": "Értesítés bezárása",
+  "referral.notice.openFailed": "Az oldal nem nyitható meg. Próbáld újra.",
   "workspaceInvite.deliveryPending": "A meghívó kézbesítése folyamatban van. Ellenőrizd később.",
   "workspaceInvite.deliveryFailed": "A meghívót nem sikerült kézbesíteni. Próbáld újra.",
   "workspaceInvite.invalidResponse": "A meghívó kézbesítése nem erősíthető meg. Próbáld újra később.",
@@ -280,6 +290,7 @@ export const hu: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'a hálózat nem érhető el',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'rendszerszabályzat blokkolta',
   'chat.runError.clientEnvironmentCause.localStorage': 'a helyi tároló olvasása/írása sikertelen',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Mégse',
   'chat.selectFromLibrary': 'Importálás a könyvtárból',
   'chat.importFigma': 'Importálás Figmából',
@@ -964,6 +975,7 @@ export const hu: Dict = {
   "entry.accountSignOut": "Kijelentkezés",
   "signOut.confirmTitle": "Kijelentkezés",
   "signOut.confirmMessage": "Biztosan ki szeretne jelentkezni?",
+  "signOut.confirmAccountMessage": "Kijelentkezik az alábbi fiókból?",
   "signOut.confirmAction": "Kijelentkezés",
   "entry.navRecents": "Kezdőlap",
   "entry.navDashboard": "Dashboard",

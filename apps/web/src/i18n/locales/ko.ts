@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  "referral.notice.label": "리셋 카드 초대 알림",
+  "referral.notice.registered": "48시간 이내에 처음 구독하면 리셋 카드 1장을 받을 수 있습니다",
+  "referral.notice.pending": "첫 구독이 완료되었습니다. 카드 지급을 기다리고 있습니다.",
+  "referral.notice.pendingAt": "첫 구독이 완료되었습니다. 카드는 {time}에 지급될 예정입니다.",
+  "referral.notice.exhausted": "Design Plan 한도를 모두 사용했습니다. 친구를 초대해 리셋 카드를 받고 지급 후 작업을 계속하세요.",
+  "referral.notice.remaining": "남은 시간 {time}",
+  "referral.notice.invite": "친구 초대",
+  "referral.notice.subscribe": "구독하기",
+  "referral.notice.dismiss": "알림 닫기",
+  "referral.notice.openFailed": "페이지를 열 수 없습니다. 다시 시도해 주세요.",
   "workspaceInvite.deliveryPending": "초대 전달을 기다리는 중입니다. 잠시 후 확인하세요.",
   "workspaceInvite.deliveryFailed": "초대를 전달하지 못했습니다. 다시 시도하세요.",
   "workspaceInvite.invalidResponse": "초대 전달 여부를 확인할 수 없습니다. 나중에 다시 시도하세요.",
@@ -280,6 +290,7 @@ export const ko: Dict = {
   'chat.runError.clientEnvironmentCause.network': '네트워크에 연결할 수 없음',
   'chat.runError.clientEnvironmentCause.hostPolicy': '시스템 정책에 의해 차단됨',
   'chat.runError.clientEnvironmentCause.localStorage': '로컬 저장소 읽기/쓰기 실패',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': '취소',
   'chat.selectFromLibrary': '라이브러리에서 가져오기',
   'chat.importFigma': 'Figma에서 가져오기',
@@ -964,6 +975,7 @@ export const ko: Dict = {
   "entry.accountSignOut": "로그아웃",
   "signOut.confirmTitle": "로그아웃",
   "signOut.confirmMessage": "정말 로그아웃하시겠어요?",
+  "signOut.confirmAccountMessage": "다음 계정에서 로그아웃할까요?",
   "signOut.confirmAction": "로그아웃",
   "entry.navRecents": "홈",
   "entry.navDashboard": "Dashboard",

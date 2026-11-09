@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const de: Dict = {
+  "referral.notice.label": "Reset-Karten-Hinweis",
+  "referral.notice.registered": "Erhalte eine Reset-Karte mit deinem ersten Abo innerhalb von 48 Stunden",
+  "referral.notice.pending": "Dein erstes Abo ist abgeschlossen. Die Reset-Karte wird ausgestellt.",
+  "referral.notice.pendingAt": "Dein erstes Abo ist abgeschlossen. Die Reset-Karte wird voraussichtlich am {time} ausgestellt.",
+  "referral.notice.exhausted": "Dein Design-Plan-Kontingent ist aufgebraucht. Lade Freunde ein, um Reset-Karten zu erhalten und nach deren Erhalt weiterzuarbeiten.",
+  "referral.notice.remaining": "Noch {time}",
+  "referral.notice.invite": "Freunde einladen",
+  "referral.notice.subscribe": "Abonnieren",
+  "referral.notice.dismiss": "Hinweis schließen",
+  "referral.notice.openFailed": "Seite konnte nicht geöffnet werden. Bitte erneut versuchen.",
   "workspaceInvite.deliveryPending": "Die Einladung wird noch zugestellt. Bitte später erneut prüfen.",
   "workspaceInvite.deliveryFailed": "Die Einladung konnte nicht zugestellt werden. Bitte erneut versuchen.",
   "workspaceInvite.invalidResponse": "Die Zustellung konnte nicht bestätigt werden. Bitte später erneut versuchen.",
@@ -280,6 +290,7 @@ export const de: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'Netzwerk nicht erreichbar',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'durch eine Systemrichtlinie blockiert',
   'chat.runError.clientEnvironmentCause.localStorage': 'Lesen/Schreiben im lokalen Speicher fehlgeschlagen',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Abbrechen',
   'chat.selectFromLibrary': 'Aus Bibliothek importieren',
   'chat.importFigma': 'Aus Figma importieren',
@@ -975,6 +986,7 @@ export const de: Dict = {
   "entry.accountSignOut": "Abmelden",
   "signOut.confirmTitle": "Abmelden",
   "signOut.confirmMessage": "Möchten Sie sich wirklich abmelden?",
+  "signOut.confirmAccountMessage": "Von folgendem Konto abmelden?",
   "signOut.confirmAction": "Abmelden",
   "entry.navRecents": "Startseite",
   "entry.navDashboard": "Dashboard",

@@ -413,6 +413,14 @@ async function renderFeishuBuildCard(env: Record<string, string>): Promise<Recor
 }
 
 describe("packaged smoke workflow", () => {
+  it("[P1] uses a supported Apple Silicon runner for release and prerelease smoke", async () => {
+    for (const path of [releaseBetaWorkflowPath, releasePrereleaseWorkflowPath, releasePrereleaseSmokeWorkflowPath, releaseStableWorkflowPath]) {
+      const workflow = await readFile(path, "utf8");
+      expect(workflow, path).not.toMatch(/^\s*runs-on:\s*macos-14\s*$/m);
+      expect(workflow, path).toMatch(/^\s*runs-on:\s*macos-15\s*$/m);
+    }
+  });
+
   it("[P2] keeps packaged smoke outside the main CI gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     expect(workflow).not.toContain("packaged_smoke_");
@@ -1611,6 +1619,9 @@ process.stdin.on("end", () => {
   it("[P2] closes packaged-leaf coverage without duplicating the broad E2E lane", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
+
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/launcher-proto test");
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/launcher test");
 
     expect(workspaceUnit).toContain(`if [ "\${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build

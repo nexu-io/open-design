@@ -1,4 +1,6 @@
+import { openExternalUrl } from "../providers/registry";
 import { useWorkspaceJourney } from '../analytics/use-workspace-journey';
+import { trackWorkspaceFundingRecoveryResult } from '../analytics/events';
 import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -37,6 +39,8 @@ interface Props {
   manualSendOnRecovery?: boolean;
   /** When the caller observed the funding refusal, independent of recovery behavior. */
   stage?: WorkspaceJourneySurfaceProps['stage'];
+  projectId?: string;
+  conversationId?: string;
   modelId?: string | null;
   fundingScope?: AmrBalanceGateScope;
   /**
@@ -103,6 +107,8 @@ export function AmrBalanceDialog({
   reason,
   manualSendOnRecovery = false,
   stage = 'unknown',
+  projectId,
+  conversationId,
   modelId,
   fundingScope,
   profile,
@@ -160,13 +166,34 @@ export function AmrBalanceDialog({
     if (!watchingWallet) return;
     let cancelled = false;
     let inFlight = false;
+    let reported = false;
     const startedAt = Date.now();
+    const report = (result: 'recovered' | 'timeout') => {
+      if (reported || cancelled || !journey.id) return;
+      reported = true;
+      trackWorkspaceFundingRecoveryResult(analytics.track, {
+        page_name: entrySource === 'home_balance_gate_upgrade' ? 'home' : 'chat_panel',
+        area: 'credit_exhausted_dialog',
+        surface_instance_id: journey.id,
+        block_id: journey.id,
+        reason: 'credit_exhausted',
+        stage,
+        ...workspaceAnalyticsDimensions(workspaceContext),
+        ...(projectId ? { project_key: projectId } : {}),
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        result,
+        recovery_method: 'funding_preflight',
+        duration_ms: Math.max(0, Date.now() - startedAt),
+        requires_manual_send: manualSendOnRecovery,
+      });
+    };
     const stopWatching = () => {
       if (cancelled) return;
+      report('timeout');
       setWatchingWallet(false);
     };
     const tick = async () => {
-      if (cancelled || inFlight) return;
+      if (cancelled || inFlight || reported) return;
       if (Date.now() - startedAt > WALLET_WATCH_TIMEOUT_MS) {
         stopWatching();
         return;
@@ -176,6 +203,7 @@ export function AmrBalanceDialog({
         const recovered = await hasAmrFundingRecovered(fundingScope ?? amrBalanceGateScopeForWorkspaceContext(workspaceContext), modelId);
         if (cancelled) return;
         if (recovered) {
+          report('recovered');
           resolveOnce();
           return;
         }
@@ -195,7 +223,7 @@ export function AmrBalanceDialog({
     };
     // resolveOnce is stable via ref; onResolved changes don't re-arm the watch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchingWallet, workspaceContext?.workspaceId, workspaceContext?.workspaceMemberId, fundingScope?.workspaceId, fundingScope?.workspaceMemberId, modelId]);
+  }, [watchingWallet, workspaceContext?.workspaceId, workspaceContext?.workspaceMemberId, fundingScope?.workspaceId, fundingScope?.workspaceMemberId, modelId, projectId, conversationId, journey.id]);
   const openUpgrade = () => {
     if (!upgradeUrl) return;
     setWatchingWallet(true);
@@ -204,18 +232,15 @@ export function AmrBalanceDialog({
     // the consent-gated device id, and open the console for the profile.
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
       metricsConsent,
-      blockContext: { block_id: journey.id, ...(workspaceContext ? { workspace_key: workspaceContext.workspaceId } : {}), reason: 'credit_exhausted', stage },
+      blockContext: { block_id: journey.id, ...(workspaceContext ? { workspace_key: workspaceContext.workspaceId, workspace_member_id: workspaceContext.workspaceMemberId } : {}), ...(projectId ? { project_key: projectId } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), reason: 'credit_exhausted', stage },
     });
     const deviceId = amrHandoffDeviceId({
       metricsConsent,
       resolvedDeviceId: getResolvedDeviceId(),
       installationId,
     });
-    window.open(
-      attributedAmrUrl(upgradeUrl, attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(upgradeUrl, attribution, deviceId));
   };
   const benefits = [
     t(signedOut ? 'chat.amrBalanceGate.benefit1' : 'chat.amrConcurrencyGate.benefit1'),

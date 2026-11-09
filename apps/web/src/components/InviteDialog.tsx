@@ -44,7 +44,6 @@ function onboardingSentences(text: string, locale: Locale) {
     <span className={styles.sentence} dir="auto" key={index}>{segment}</span>
   ));
 }
-
 /** The local form retains authoritative per-row results and never retries sent recipients. */
 export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAssignRoles = true, entryFrom: requestedEntry = 'workspace_switcher', variant = 'dialog', onFinish }: Props) {
   const onboarding = variant === 'onboarding';
@@ -221,6 +220,12 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
     const requestContext = workspaceContext;
     const version = ++requestVersion.current;
     const requested = rows.map(row => ({ email: row.email.trim(), role: owner ? canonicalRole(row.role) : 'member' as const, idempotencyKey: row.idempotencyKey }));
+    const recipientDimensions = {
+      requested_roles: [...new Set(requested.map(row => row.role))].sort(),
+      requested_admin_count: requested.filter(row => row.role === 'admin').length,
+      requested_member_count: requested.filter(row => row.role === 'member').length,
+    };
+    const inviteIds: string[] = [];
     const requestId = analytics.newRequestId();
     const startedAt = performance.now();
     let reported = false;
@@ -230,6 +235,8 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
       return trackWorkspaceInviteResult(analytics.track, {
       page_name: page, area, invite_surface_id: surfaceId.current, entry_from: entryFrom,
       invite_batch_id: batchId,
+      ...recipientDimensions,
+      invite_ids: [...new Set(inviteIds)],
       unknown_count: unknown,
       result: unknown > 0 ? 'unknown' : succeeded === requested.length ? 'success' : succeeded > 0 ? 'partial_success' : 'failed',
       requested_count: requested.length, succeeded_count: succeeded, failed_count: failed,
@@ -237,7 +244,7 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
     }, { requestId });
     };
     trackWorkspaceInviteClick(analytics.track, { page_name: page, area, invite_surface_id: surfaceId.current, element: 'submit',
-      entry_from: entryFrom, invite_batch_id: batchId, invite_count_bucket: countBucket(requested.length), ...dimensions }, { requestId });
+      entry_from: entryFrom, invite_batch_id: batchId, invite_count_bucket: countBucket(requested.length), ...recipientDimensions, ...dimensions }, { requestId });
     setSubmitting(true); setError(null); setPartialCount(null); setOpenRoleIndex(null);
     const abort = new AbortController(); controller.current = abort;
     let networkFailure = false;
@@ -246,7 +253,7 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
         headers: { 'content-type': 'application/json', ...workspaceProjectHeaders(requestContext) }, body: JSON.stringify({ invites: requested }) });
       if (version !== requestVersion.current) return;
       if (!response.ok) { networkFailure = response.status >= 500; result(0, networkFailure ? 0 : requested.length, stableAnalyticsErrorCode(response.status), networkFailure ? requested.length : 0); throw new Error('request_failed'); }
-      const body = await response.json() as { results?: Array<{ email?: string; ok?: boolean; error?: string | undefined }> };
+      const body = await response.json() as { results?: Array<{ email?: string; ok?: boolean; inviteId?: string; error?: string | undefined }> };
       if (version !== requestVersion.current) return;
       const results = body.results;
       const succeeded: InviteRow[] = []; const failed: Row[] = [];
@@ -255,7 +262,10 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
       requested.forEach((row, index) => {
         const match = results?.find(item => item.email?.trim().toLowerCase() === row.email.toLowerCase())
           ?? (results?.length === requested.length && results[index]?.email === undefined ? results[index] : undefined);
-        if (match?.ok === true) succeeded.push(row);
+        if (match?.ok === true) {
+          succeeded.push(row);
+          if (typeof match.inviteId === 'string' && match.inviteId.trim()) inviteIds.push(match.inviteId);
+        }
         else {
           if (!match || match.error === 'create_unreachable') transportFailures += 1;
           const key = workspaceInviteErrorMessageKey(match?.error, onboarding);

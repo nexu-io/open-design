@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  "referral.notice.label": "إشعار بطاقة إعادة الضبط",
+  "referral.notice.registered": "احصل على بطاقة إعادة ضبط عند اشتراكك الأول خلال 48 ساعة",
+  "referral.notice.pending": "اكتمل اشتراكك الأول والبطاقة بانتظار الإصدار.",
+  "referral.notice.pendingAt": "اكتمل اشتراكك الأول ومن المتوقع وصول البطاقة في {time}.",
+  "referral.notice.exhausted": "نفدت حصة Design Plan. ادعُ الأصدقاء للحصول على بطاقات إعادة الضبط ومتابعة العمل بعد وصولها.",
+  "referral.notice.remaining": "المتبقي {time}",
+  "referral.notice.invite": "دعوة الأصدقاء",
+  "referral.notice.subscribe": "اشترك",
+  "referral.notice.dismiss": "إغلاق الإشعار",
+  "referral.notice.openFailed": "تعذر فتح الصفحة. حاول مرة أخرى.",
   "workspaceInvite.deliveryPending": "جارٍ إرسال الدعوة. يرجى التحقق لاحقًا.",
   "workspaceInvite.deliveryFailed": "فشل إرسال الدعوة. يرجى إعادة المحاولة.",
   "workspaceInvite.invalidResponse": "تعذر تأكيد إرسال الدعوة. يرجى المحاولة لاحقًا.",
@@ -280,6 +290,7 @@ export const ar: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'تعذّر الوصول إلى الشبكة',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'تم الحظر بواسطة سياسة النظام',
   'chat.runError.clientEnvironmentCause.localStorage': 'فشل القراءة/الكتابة في التخزين المحلي',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'إلغاء',
   'chat.selectFromLibrary': 'استيراد من المكتبة',
   'chat.importFigma': 'استيراد من Figma',
@@ -975,6 +986,7 @@ export const ar: Dict = {
   "entry.accountSignOut": "تسجيل الخروج",
   "signOut.confirmTitle": "تسجيل الخروج",
   "signOut.confirmMessage": "هل أنت متأكد من أنك تريد تسجيل الخروج؟",
+  "signOut.confirmAccountMessage": "هل تريد تسجيل الخروج من الحساب التالي؟",
   "signOut.confirmAction": "تسجيل الخروج",
   "entry.navRecents": "الرئيسية",
   "entry.navDashboard": "Dashboard",

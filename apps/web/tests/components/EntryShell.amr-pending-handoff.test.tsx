@@ -38,6 +38,11 @@ import { EntryShellWithGateHost } from '../helpers/entry-shell-gate-host';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});
+
 vi.mock('../../src/runtime/amr-balance-gate', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/runtime/amr-balance-gate')>();
   return { ...actual, checkAmrBalanceGate: vi.fn() };

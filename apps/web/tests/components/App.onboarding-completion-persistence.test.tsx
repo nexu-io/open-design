@@ -376,6 +376,23 @@ describe('App onboarding completion persistence', () => {
     });
   });
 
+  it('keeps the selected AMR environment when signing out to use another account', () => {
+    const current = {
+      ...returningUserConfig(),
+      agentCliEnv: {
+        amr: {
+          OPEN_DESIGN_AMR_PROFILE: 'test',
+          VELA_RUNTIME_KEY: 'account-a-key',
+          VELA_LINK_URL: 'https://account-a.example',
+        },
+      },
+    } as AppConfig;
+
+    expect(resetExecutionConfigAfterSignOut(current).agentCliEnv).toEqual({
+      amr: { OPEN_DESIGN_AMR_PROFILE: 'test' },
+    });
+  });
+
   it('persists the Cloud reset without discarding BYOK and returns to onboarding', async () => {
     mockedLoadConfig.mockReturnValue({
       ...returningUserConfig(),
@@ -427,6 +444,29 @@ describe('App onboarding completion persistence', () => {
       { allowOnboardingReset: true },
     );
     expect(await navigatedToOnboarding()).toBe(true);
+  });
+
+  it('persists the selected AMR environment through active sign-out', async () => {
+    const agentCliEnv = {
+      amr: { OPEN_DESIGN_AMR_PROFILE: 'test', VELA_RUNTIME_KEY: 'account-a-key' },
+    };
+    mockedLoadConfig.mockReturnValue({ ...returningUserConfig(), agentCliEnv });
+    mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true, agentCliEnv });
+
+    render(<App />);
+    await waitFor(() => {
+      expect(entryViewCapture.activeSignOut).toEqual(expect.any(Function));
+    });
+    await act(async () => {
+      await entryViewCapture.activeSignOut?.();
+    });
+
+    expect(mockedSyncConfigToDaemon).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
+      }),
+      { allowOnboardingReset: true },
+    );
   });
 
   it('keeps a completed user out of onboarding when the daemon copy still says false', async () => {

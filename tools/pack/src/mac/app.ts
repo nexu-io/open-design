@@ -1,3 +1,5 @@
+import { buildLauncherHostEnvironment } from "../launcher/artifacts.js";
+import { MAC_THIN_LAUNCHER_FILE } from "./thin-launcher.js";
 import { packagedAmrConfigFields, writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
 
 import { finalizeRuntimeManifest } from "../resources/runtime-manifest.js";
@@ -170,6 +172,7 @@ export function renderMacPackagedConfig(options: {
     {
       ...packagedAmrConfigFields(options.config),
       appVersion: options.appVersion,
+      launcherHost: buildLauncherHostEnvironment({ platform: "darwin", arch: process.arch, electronVersion: options.config.electronVersion }),
       ...(options.usePrebundledStandaloneWeb ? { daemonCliEntryRelative: MAC_PREBUNDLED_DAEMON_CLI_RELATIVE_PATH } : {}),
       ...(options.usePrebundledStandaloneWeb
         ? { daemonSidecarEntryRelative: MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH }
@@ -373,6 +376,11 @@ export async function writeAssembledApp(
     renderMacPackagedMainEntry(usePrebundledStandaloneWeb),
     "utf8",
   );
+  await runEsbuild(config, [
+    join(config.workspaceRoot, "packages", "launcher", "src", "index.ts"),
+    "--bundle", "--platform=node", "--format=cjs", "--target=node24",
+    `--outfile=${join(dirname(paths.assembledMainEntryPath), MAC_THIN_LAUNCHER_FILE)}`,
+  ]);
   await writePackagedConfigWithBinding(
     paths.packagedConfigPath,
     renderMacPackagedConfig({

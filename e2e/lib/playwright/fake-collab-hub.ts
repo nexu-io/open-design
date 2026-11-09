@@ -1,4 +1,4 @@
-import { chmod, cp, lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import type { CommentFileFact, CommentFileMutation, CommentFileState } from '@open-design/contracts';
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
@@ -41,6 +41,21 @@ type ResourceRecord = {
   snapshotDir: string;
   version: number;
   versions: Map<number, string>;
+};
+
+type PublicShareRecord = {
+  projectId: string;
+  workspaceId: string;
+  ownerMemberId: string;
+  resourceId: string;
+  sourceFilePath: string;
+  sourceFileId: string;
+  slug: string;
+  status: 'active' | 'stopped';
+  version: number;
+  versionId: string;
+  entryPath: string;
+  publishedAt: number;
 };
 
 type HubEvent = {
@@ -94,7 +109,7 @@ export type FakeCollabHub = {
   commandLog: CommandLog[];
   eventLog: HubEvent[];
   requestLog: RequestLog[];
-  writeVelaBin: (path: string) => Promise<string>;
+  writeVelaBin: (path: string, loginIdentity?: ClientIdentity) => Promise<string>;
   waitForCommand: (
     predicate: (entry: CommandLog) => boolean,
     timeoutMs?: number,
@@ -135,6 +150,8 @@ export async function startFakeCollabHub(options: {
   const identities = new Map(options.clients.map((client) => [client.controlKey, client]));
   const projects = new Map<string, TeamProjectRecord>();
   const resources = new Map<string, ResourceRecord>();
+  const publicShares = new Map<string, PublicShareRecord>();
+  const registeredResources = new Map<string, string>();
   const comments = new Map<string, Array<Record<string, unknown>>>();
   const presence = new Map<string, Map<string, Record<string, unknown>>>();
   const subscribers = new Set<Subscriber>();
@@ -201,6 +218,18 @@ export async function startFakeCollabHub(options: {
         memberId: identity?.memberId ?? null,
         workspaceId,
       });
+
+      const publicFile = /^\/__e2e\/public-files\/([^/]+)$/.exec(url.pathname);
+      if (publicFile && request.method === 'GET') {
+        const share = publicShares.get(decodeURIComponent(publicFile[1]!));
+        if (!share || share.status !== 'active') return json(response, 404, { error: 'share_not_found' });
+        const resource = resources.get(workspaceResourceKey(share.workspaceId, share.resourceId));
+        const snapshot = resource?.versions.get(share.version);
+        if (!snapshot) return json(response, 404, { error: 'version_not_found' });
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(await readFile(join(snapshot, share.entryPath)));
+        return;
+      }
 
       if (url.pathname === '/__e2e/stats' && request.method === 'GET') {
         return json(response, 200, {
@@ -346,6 +375,8 @@ export async function startFakeCollabHub(options: {
           options,
           projects,
           resources,
+          publicShares,
+          registeredResources,
           resourcesRoot,
           comments,
           presence,
@@ -399,8 +430,8 @@ export async function startFakeCollabHub(options: {
     commandLog,
     eventLog,
     requestLog,
-    writeVelaBin: async (path) => {
-      await writeFile(path, fakeVelaScript(), 'utf8');
+    writeVelaBin: async (path, loginIdentity) => {
+      await writeFile(path, fakeVelaScript(loginIdentity), 'utf8');
       await chmod(path, 0o755);
       return path;
     },
@@ -550,7 +581,9 @@ async function handleCommand(input: {
   options: { workspaceId: string; workspaceName: string; clients: readonly ClientIdentity[] };
   projects: Map<string, TeamProjectRecord>;
   resources: Map<string, ResourceRecord>;
+  publicShares: Map<string, PublicShareRecord>;
   resourcesRoot: string;
+  registeredResources: Map<string, string>;
   comments: Map<string, Array<Record<string, unknown>>>;
   presence: Map<string, Map<string, Record<string, unknown>>>;
   accountBilling: Map<
@@ -620,10 +653,67 @@ async function handleCommand(input: {
   if (args[0] === 'resource') {
     return await handleResourceCommand(input);
   }
+  if (args[0] === 'share') {
+    return handlePublicShareCommand(input);
+  }
   if (args[0] === 'collab') {
     return handleCollabCommand(input);
   }
   throw new Error(`unsupported fake Vela command: ${args.join(' ')}`);
+}
+
+function handlePublicShareCommand(input: {
+  args: string[];
+  identity: ClientIdentity;
+  workspaceId: string;
+  projects: Map<string, TeamProjectRecord>;
+  resources: Map<string, ResourceRecord>;
+  publicShares: Map<string, PublicShareRecord>;
+}): string {
+  const [, command, target] = input.args;
+  const ownerMemberId = memberIdForWorkspace(input.identity, input.workspaceId);
+  const url = (share: PublicShareRecord) => `https://share.example.test/artifact/${encodeURIComponent(share.projectId)}/${share.slug}`;
+  if (command === 'project-status' && target) {
+    const project = input.projects.get(target);
+    if (project && (project.workspaceId !== input.workspaceId || project.ownerMemberId !== ownerMemberId)) throw new Error('share_owner_denied');
+    const publications = [...input.publicShares.values()].filter(share => share.projectId === target
+      && share.workspaceId === input.workspaceId && share.ownerMemberId === ownerMemberId)
+      .map(share => ({ sourceFilePath: share.sourceFilePath, sourceFileId: share.sourceFileId,
+        slug: share.slug, status: share.status, ...(share.status === 'active' ? { url: url(share) } : {}) }));
+    return jsonLine({ projectId: target, bindingExists: publications.length > 0, publications });
+  }
+  if (command === 'publish' && target) {
+    const projectId = flag(input.args, '--project-id');
+    const project = projectId ? input.projects.get(projectId) : null;
+    const resource = input.resources.get(workspaceResourceKey(input.workspaceId, target));
+    const slug = flag(input.args, '--slug');
+    const entryPath = flag(input.args, '--entry-path');
+    const versionId = flag(input.args, '--version-id');
+    const sourceFilePath = flag(input.args, '--source-file-path');
+    // Only admitCommentFiles writes this fixture's validated server state.
+    const state = project?.metadata?._commentFiles as CommentFileState | undefined;
+    const file = state?.files
+      .find(item => !item.retired && item.sourceFilePath === sourceFilePath && item.resourceId === target && item.versionId === versionId);
+    if (!project || project.workspaceId !== input.workspaceId || project.ownerMemberId !== ownerMemberId
+      || !resource || resource.ownerMemberId !== ownerMemberId || !file || !slug || !entryPath
+      || versionId !== `v${resource.version}` || entryPath !== file.entryPath) throw new Error('share_receipt_denied');
+    const previous = input.publicShares.get(slug);
+    if (previous && (previous.workspaceId !== input.workspaceId || previous.projectId !== projectId
+      || previous.ownerMemberId !== ownerMemberId || previous.sourceFileId !== file.sourceFileId || previous.status === 'stopped')) throw new Error('share_alias_conflict');
+    const share: PublicShareRecord = { projectId: project.projectId, workspaceId: input.workspaceId,
+      ownerMemberId, resourceId: target, sourceFilePath: file.sourceFilePath, sourceFileId: file.sourceFileId,
+      slug, status: 'active', version: resource.version, versionId, entryPath, publishedAt: Date.now() };
+    input.publicShares.set(slug, share);
+    const receipt = { slug, version: share.version, versionId, entryPath, publishedAt: share.publishedAt };
+    return jsonLine({ status: 'published', ...receipt, receipt, snapshot: { versionId }, url: url(share) });
+  }
+  if ((command === 'stop' || command === 'resume-existing') && target) {
+    const share = input.publicShares.get(target);
+    if (!share || share.workspaceId !== input.workspaceId || share.ownerMemberId !== ownerMemberId) throw new Error('share_owner_denied');
+    share.status = command === 'stop' ? 'stopped' : 'active';
+    return jsonLine({ ...share, ...(share.status === 'active' ? { url: url(share) } : {}) });
+  }
+  throw new Error(`unsupported share command: ${input.args.join(' ')}`);
 }
 
 async function handleTeamProjectsCommand(input: {
@@ -633,6 +723,7 @@ async function handleTeamProjectsCommand(input: {
   projects: Map<string, TeamProjectRecord>;
   hiddenTeamProjectIds: Set<string>;
   resources: Map<string, ResourceRecord>;
+  registeredResources: Map<string, string>;
   emit: (event: HubEvent) => void;
 }): Promise<string> {
   const [, command, projectId] = input.args;
@@ -665,7 +756,15 @@ async function handleTeamProjectsCommand(input: {
   if ((command === 'visibility' || command === 'register-resource') && projectId) {
     const project = input.projects.get(projectId);
     if (!project || project.ownerMemberId !== workspaceMemberId) throw new Error('team_project_not_found');
-    if (command === 'register-resource') return jsonLine({ ok: true });
+    if (command === 'register-resource') {
+      const resourceId = input.args[3];
+      if (!resourceId) throw new Error('missing resource id');
+      const key = workspaceResourceKey(input.workspaceId, resourceId);
+      const registered = input.registeredResources.get(key);
+      if (registered && registered !== projectId) throw new Error('resource_project_conflict');
+      input.registeredResources.set(key, projectId);
+      return jsonLine({ ok: true });
+    }
     const visibility = input.args[3];
     if (visibility !== 'private' && visibility !== 'team') throw new Error('invalid visibility');
     project.visibility = visibility;
@@ -740,7 +839,7 @@ async function handleTeamProjectsCommand(input: {
       syncState: flag(input.args, '--sync-state') ?? previous?.syncState ?? 'synced',
       lastSyncedVersionId:
         flag(input.args, '--last-synced-version-id') ?? previous?.lastSyncedVersionId ?? null,
-      metadata: await admitRootCommentFiles(input, previous, parseJsonFlag(input.args, '--metadata-json')),
+      metadata: await admitCommentFiles(input, previous, parseJsonFlag(input.args, '--metadata-json')),
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
       access: {
@@ -766,12 +865,12 @@ async function handleTeamProjectsCommand(input: {
   throw new Error(`unsupported team-projects command: ${input.args.join(' ')}`);
 }
 
-/** This hub models root receipts only, backed by its actual copied snapshots.
+/** This hub models root and explicitly registered file receipts backed by copied snapshots.
  * Mutation proposals become server state; replaying response state is rejected.
- * Selected/mixed-receipt authority remains covered by the Vela-owned tests.
+ * Mixed-receipt authority remains covered by the Vela-owned tests.
  */
-async function admitRootCommentFiles(
-  input: { workspaceId: string; identity: ClientIdentity; resources: Map<string, ResourceRecord> },
+async function admitCommentFiles(
+  input: { workspaceId: string; identity: ClientIdentity; resources: Map<string, ResourceRecord>; registeredResources: Map<string, string> },
   previous: TeamProjectRecord | undefined,
   metadata: Record<string, unknown> | null,
 ): Promise<Record<string, unknown> | null> {
@@ -787,7 +886,9 @@ async function admitRootCommentFiles(
     || mutation.baseRevision !== (old?.revision ?? 0)) throw new Error('comment_file_mutation_rejected');
   const resource = input.resources.get(workspaceResourceKey(input.workspaceId, mutation.resourceId));
   if (!resource || resource.projectId !== previous.projectId || resource.ownerMemberId !== workspaceMemberId
-    || resource.resourceId !== previous.resourceId || mutation.versionId !== `v${resource.version}`) {
+    || (resource.resourceId !== previous.resourceId
+      && input.registeredResources.get(workspaceResourceKey(input.workspaceId, resource.resourceId)) !== previous.projectId)
+    || mutation.versionId !== `v${resource.version}`) {
     throw new Error('comment_file_receipt_rejected');
   }
   const snapshot = resource.versions.get(resource.version);
@@ -887,7 +988,7 @@ async function handleResourceCommand(input: {
         resourceStatus: 'shared',
       });
     }
-    return jsonLine({ version, versionId: `v${version}` });
+    return jsonLine({ id: `v${version}`, version, versionId: `v${version}` });
   }
   if (command === 'head') {
     const resourceId = input.args[2];
@@ -1223,9 +1324,34 @@ function personalWorkspaceDirectoryItem(identity: ClientIdentity) {
   };
 }
 
-function fakeVelaScript(): string {
+function fakeVelaScript(loginIdentity?: ClientIdentity): string {
   return `#!/usr/bin/env node
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 const args = process.argv.slice(2);
+const loginIdentity = ${JSON.stringify(loginIdentity ?? null)};
+const profile = process.env.VELA_PROFILE || process.env.OPEN_DESIGN_AMR_PROFILE || 'local';
+const configFile = process.env.AMR_HOME ? join(process.env.AMR_HOME, 'config.json') : null;
+if (args[0] === 'login' && loginIdentity) {
+  if (!configFile) throw new Error('isolated AMR_HOME required for fixture login');
+  process.stdout.write('OPEN_DESIGN_AMR_AUTH_COMPLETION\\tstdin-v1\\n');
+  process.stdout.write('Open this URL to continue:\\nhttps://fake-vela.example/cli/activate?deviceId=legacy-share\\n\\n');
+  await mkdir(process.env.AMR_HOME, { recursive: true });
+  await writeFile(configFile, JSON.stringify({ profiles: { [profile]: {
+    controlKey: loginIdentity.controlKey, controlKeyId: 'legacy-share-control-id', runtimeKey: 'legacy-share-runtime-key',
+    apiUrl: process.env.VELA_API_URL, linkUrl: process.env.VELA_API_URL,
+    user: { id: loginIdentity.memberId, email: 'legacy-share@example.test', name: loginIdentity.name, plan: 'plus' },
+  } } }), { mode: 0o600 });
+  process.stdout.write('OPEN_DESIGN_AMR_AUTH_COMPLETION\\tcredentials_persisted\\n');
+  process.stdin.once('data', data => {
+    if (String(data).trim() !== 'credentials_accepted') process.exit(1);
+    process.stdout.write('Login successful.\\n');
+    process.exit(0);
+  });
+  await new Promise(() => {});
+}
+let stored = {};
+try { if (configFile) stored = JSON.parse(await readFile(configFile, 'utf8')).profiles?.[profile] || {}; } catch {}
 let stdin = '';
 const readsStdin = ['--requests-file', '--comment-file'].some((flag) => {
   const index = args.indexOf(flag);
@@ -1235,10 +1361,10 @@ if (readsStdin) {
   process.stdin.setEncoding('utf8');
   for await (const chunk of process.stdin) stdin += chunk;
 }
-const response = await fetch(new URL('/__e2e/command', process.env.VELA_API_URL), {
+const response = await fetch(new URL('/__e2e/command', process.env.VELA_API_URL || stored.apiUrl), {
   method: 'POST',
   headers: {
-    authorization: 'Bearer ' + process.env.VELA_CONTROL_KEY,
+    authorization: 'Bearer ' + (process.env.VELA_CONTROL_KEY || stored.controlKey),
     'content-type': 'application/json',
     'x-vela-workspace-id': process.env.VELA_WORKSPACE_ID || process.env.OPEN_DESIGN_WORKSPACE_ID || '',
   },

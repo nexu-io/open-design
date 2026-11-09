@@ -9,6 +9,11 @@ import { quotaPopoverConsoleUrl } from '../../src/runtime/workspace-quota-links'
 import { I18nProvider } from '../../src/i18n';
 import { workspaceContextFixture } from '../helpers/workspace-context';
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});
+
 const context = workspaceContextFixture({ workspaceId: 'workspace-a', workspaceMemberId: 'member-a', role: 'owner' });
 function view(tier: WorkspaceQuotaTier, balanceUsd = '24', remainingPercent = 75, resetsAt: string | null = '2026-10-22T06:00:00Z'): WorkspaceQuotaView {
   return {

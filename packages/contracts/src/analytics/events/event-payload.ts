@@ -1,3 +1,4 @@
+import type { ClientDisplayRefreshProps } from './result-events.js';
 import type { ClientMetricEventPayload } from '../client-metrics.js';
 import type { UpdateLifecycleObservedProps } from '../update-lifecycle.js';
 import type { MediaStockRequestResultProps, MediaStockSlotResultProps } from '../media-stock.js';
@@ -20,11 +21,12 @@ import type {
   McpToolFinishedProps,
   McpToolStartedProps,
 } from './mcp.js';
-import type { ProjectCommentCreateResultProps, WorkspaceInviteResultProps, WorkspaceProjectActionResultProps, WorkspaceResourceActionResultProps, WorkspaceSharedProjectOpenResultProps, WorkspaceSwitchResultProps } from './workspace.js';
+import type { ProjectCommentCreateResultProps, WorkspaceFundingRecoveryResultProps, WorkspaceInviteResultProps, WorkspaceProjectActionResultProps, WorkspaceResourceActionResultProps, WorkspaceSharedProjectOpenResultProps, WorkspaceSwitchResultProps } from './workspace.js';
 // ---- Discriminated union of all event payloads ---------------------------
 
 export type AnalyticsEventPayload =
   | ClientMetricEventPayload
+  | { event: 'client_display_refresh'; props: ClientDisplayRefreshProps }
   | { event: 'packaged_runtime_failed'; props: PackagedRuntimeFailedProps }
   | { event: 'page_view'; props: PageViewProps }
   | { event: 'ui_click'; props: UiClickProps }
@@ -63,6 +65,7 @@ export type AnalyticsEventPayload =
   | { event: 'workspace_invite_result'; props: WorkspaceInviteResultProps }
   | { event: 'workspace_project_action_result'; props: WorkspaceProjectActionResultProps }
   | { event: 'workspace_shared_project_open_result'; props: WorkspaceSharedProjectOpenResultProps }
+  | { event: 'workspace_funding_recovery_result'; props: WorkspaceFundingRecoveryResultProps }
   | { event: 'workspace_resource_action_result'; props: WorkspaceResourceActionResultProps }
   | { event: 'project_comment_create_result'; props: ProjectCommentCreateResultProps }
   | { event: 'project_comment_send_result'; props: ProjectCommentSendResultProps }

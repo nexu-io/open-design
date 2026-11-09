@@ -155,10 +155,11 @@ export function AmrAccountControl({
   cancelSignInDisabled = false,
 }: AmrAccountControlProps) {
   const { t } = useI18n();
+  const [reopenError, setReopenError] = useState(false);
   const isSignedIn = status === 'signed-in';
   const isSigningIn = status === 'signing-in';
   const isCanceled = status === 'canceled';
-  const hasError = status === 'error';
+  const hasError = status === 'error' || reopenError;
   const badgeLabel = showProfileBadge ? amrProfileBadgeLabel(profile) : null;
   const visibleBadgeLabel = isSignedIn ? badgeLabel : null;
   const consoleBaseUrl = consoleUrl ?? amrConsoleUrlForProfile(profile);
@@ -269,6 +270,14 @@ export function AmrAccountControl({
             <a
               className="amr-login-activation__open"
               href={activationUrl}
+              onClick={async (event) => {
+                event.preventDefault();
+                setReopenError(false);
+                const next = await fetchVelaLoginStatus();
+                if (!next) { setReopenError(true); return; }
+                if (isAmrSessionAuthenticated(next)) { notifyAmrLoginStatusChanged(); return; }
+                if (next?.loginInFlight && next.activationUrl) window.open(next.activationUrl, '_blank', 'noopener,noreferrer');
+              }}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -430,6 +439,15 @@ export function AmrLoginPill({
         setPending(null);
         return;
       }
+      if (outcome === 'cancelled') {
+        stopPolling();
+        loginStartedAtRef.current = null;
+        loginPendingRef.current = false;
+        setPending(null);
+        setErrorMessage(null);
+        notifyAmrLoginStatusChanged('login-canceled');
+        return;
+      }
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopPolling();
         if (outcome === 'timed-out') {
@@ -537,6 +555,17 @@ export function AmrLoginPill({
       if (loginPendingRef.current) return;
       loginPendingRef.current = true;
       loginCancelRequestedRef.current = false;
+      const current = await refresh();
+      if (!current || isAmrSessionAuthenticated(current)) {
+        loginPendingRef.current = false;
+        setErrorMessage(current ? null : t('settings.amrLoginErrorCompact'));
+        return;
+      }
+      if (current.loginInFlight) {
+        setPending('login');
+        startPolling(Date.now(), current.authAttemptId ?? null);
+        return;
+      }
       const startedAt = Date.now();
       loginStartedAtRef.current = startedAt;
       setErrorMessage(null);
@@ -637,7 +666,7 @@ export function AmrLoginPill({
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
         setPending(null);
-        setErrorMessage(result.error || t('settings.amrLoginErrorCompact'));
+        setErrorMessage(t('settings.amrLoginErrorCompact'));
         return;
       }
       // Dispatch only — do not ALSO call `startPolling(startedAt)` directly
@@ -662,6 +691,8 @@ export function AmrLoginPill({
       installationId,
       metricsConsent,
       onSignInStarted,
+      refresh,
+      startPolling,
       t,
     ],
   );
@@ -733,16 +764,20 @@ export function AmrLoginPill({
   // recvqgMWpJZqhL: the pill's sign-out button only ARMS the confirmation
   // dialog; `performLogout` (the real daemon logout) runs on explicit confirm.
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [logoutSnapshot,setLogoutSnapshot] = useState<VelaLoginStatus | null>(null);
 
   const handleLogout = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
+    setLogoutSnapshot(status);
     setConfirmingLogout(true);
-  }, []);
+  }, [status]);
 
   const performLogout = useCallback(async () => {
     setErrorMessage(null);
     setPending('logout');
-    const result = await velaLogout();
+    if (!logoutSnapshot?.credentialRevision) { await refresh(); setPending(null); setErrorMessage(t('settings.amrLoginErrorCompact')); return; }
+    const result = await velaLogout({expectedAppUserId:logoutSnapshot.user?.id ?? '',expectedCredentialRevision:logoutSnapshot.credentialRevision});
+    if (result.status === 409) { const current=await fetchVelaLoginStatus();setLogoutSnapshot(current);await refresh();setPending(null);return; }
     loginStartedAtRef.current = null;
     loginPendingRef.current = false;
     setPending(null);
@@ -755,7 +790,7 @@ export function AmrLoginPill({
     await refresh();
     notifyAmrLoginStatusChanged('status-changed');
     await onSignedOut?.();
-  }, [onSignedOut, refresh, t]);
+  }, [onSignedOut, refresh, t, logoutSnapshot]);
 
   // Keep the management link on the same status snapshot that supplies the
   // visible profile badge and account data. The module-level runtime origin is
@@ -848,6 +883,7 @@ export function AmrLoginPill({
       />
       {confirmingLogout ? (
         <SignOutConfirmDialog
+          email={logoutSnapshot?.user?.email}
           busy={logoutInFlight}
           onCancel={() => setConfirmingLogout(false)}
           onConfirm={() => void performLogout()}

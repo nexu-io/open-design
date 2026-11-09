@@ -1,3 +1,4 @@
+import { openExternalUrl } from '../providers/registry';
 import { useWorkspaceJourney } from '../analytics/use-workspace-journey';
 import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 import type { WorkspaceJourneySurfaceProps } from '@open-design/contracts/analytics';
@@ -74,7 +75,7 @@ export function AmrConcurrencyDialog({ branch, workspaceContext, profile, consol
             : isMax || memberNotice ? 'chat.amrBalanceOwner.dismissCta' : 'common.close')}
         </Button>
         {upgradeUrl ? <Button className={`${frame.cta} ${styles.upgradeButton}`}
-          onClick={() => { journey.click('upgrade'); window.open(upgradeUrl, '_blank', 'noopener,noreferrer'); }}
+          onClick={() => { journey.click('upgrade'); void openExternalUrl(upgradeUrl); }}
           data-testid="amr-concurrency-upgrade">{t('chat.amrBalanceGate.plansCta')}</Button> : null}
       </div>
     </Dialog>

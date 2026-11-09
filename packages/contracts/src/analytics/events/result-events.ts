@@ -415,6 +415,8 @@ export interface RunCreatedProps extends RunTaskLineageProps {
   run_id: string;
   /** Daemon-authorized workspace pinned to this run, never the current UI selection. */
   workspace_id?: string;
+  /** Actual authorized caller, frozen with workspace_id for the run lifetime. */
+  workspace_member_id?: string;
   /** Positive safe integer from that workspace's authorized context; omitted when unknown. */
   member_count?: number;
   project_kind: TrackingProjectKind | null;
@@ -1490,4 +1492,17 @@ export interface PackagedRuntimeFailedProps {
   namespace: string;
   source: string;
   platform: string;
+}
+
+/** Consent-gated native refresh attempt; never a claim that blur was detected or fixed. */
+export interface ClientDisplayRefreshProps {
+  reasons: string[];
+  scale_factor: number;
+  display_count: number;
+  device_pixel_ratio: number;
+  /** Page zoom; null when the desktop host does not report it. */
+  page_zoom: number | null;
+  reduced_transparency: boolean;
+  /** Renderer DPR divided by page zoom differs from the native scale. */
+  scale_mismatch: boolean;
 }

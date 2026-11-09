@@ -1,6 +1,16 @@
 import type { Dict } from '../types';
 
 export const pl: Dict = {
+  "referral.notice.label": "Powiadomienie o karcie resetu",
+  "referral.notice.registered": "Otrzymaj kartę resetu przy pierwszej subskrypcji w ciągu 48 godzin",
+  "referral.notice.pending": "Pierwsza subskrypcja jest aktywna. Karta oczekuje na wydanie.",
+  "referral.notice.pendingAt": "Pierwsza subskrypcja jest aktywna. Karta powinna dotrzeć {time}.",
+  "referral.notice.exhausted": "Limit Design Plan został wyczerpany. Zaproś znajomych, aby zdobyć karty resetu i kontynuować pracę po ich otrzymaniu.",
+  "referral.notice.remaining": "Pozostało {time}",
+  "referral.notice.invite": "Zaproś znajomych",
+  "referral.notice.subscribe": "Subskrybuj",
+  "referral.notice.dismiss": "Zamknij powiadomienie",
+  "referral.notice.openFailed": "Nie udało się otworzyć strony. Spróbuj ponownie.",
   "workspaceInvite.deliveryPending": "Dostarczenie zaproszenia oczekuje. Sprawdź ponownie później.",
   "workspaceInvite.deliveryFailed": "Nie udało się dostarczyć zaproszenia. Spróbuj ponownie.",
   "workspaceInvite.invalidResponse": "Nie można potwierdzić dostarczenia zaproszenia. Spróbuj później.",
@@ -280,6 +290,7 @@ export const pl: Dict = {
   'chat.runError.clientEnvironmentCause.network': 'sieć nieosiągalna',
   'chat.runError.clientEnvironmentCause.hostPolicy': 'zablokowane przez zasady systemowe',
   'chat.runError.clientEnvironmentCause.localStorage': 'odczyt/zapis pamięci lokalnej nie powiódł się',
+  'account.openFailed': 'Could not open the account page. Please try again.',
   'common.cancel': 'Anuluj',
   'chat.selectFromLibrary': 'Importuj z biblioteki',
   'chat.importFigma': 'Importuj z Figmy',
@@ -964,6 +975,7 @@ export const pl: Dict = {
   "entry.accountSignOut": "Wyloguj się",
   "signOut.confirmTitle": "Wyloguj się",
   "signOut.confirmMessage": "Czy na pewno chcesz się wylogować?",
+  "signOut.confirmAccountMessage": "Wylogować się z tego konta?",
   "signOut.confirmAction": "Wyloguj się",
   "entry.navRecents": "Strona główna",
   "entry.navDashboard": "Dashboard",

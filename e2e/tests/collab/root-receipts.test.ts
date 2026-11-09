@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import type { CommentFileMutation, CommentFileState } from '@open-design/contracts';
 import { startFakeCollabHub } from '@/playwright/fake-collab-hub';
 
-test('the root-receipt fixture admits copied bytes, not proposals, foreign receipts or stale CAS', async () => {
+test('the receipt fixture admits copied bytes, not proposals, foreign receipts or stale CAS', async () => {
   const root = await mkdtemp(join(tmpdir(), 'od-root-receipts-'));
   const owner = { controlKey: 'mock-owner', memberId: 'owner', name: 'Owner', role: 'owner' as const };
   const other = { controlKey: 'mock-other', memberId: 'other', name: 'Other', role: 'member' as const };
@@ -58,6 +58,17 @@ test('the root-receipt fixture admits copied bytes, not proposals, foreign recei
     expect((await read()).metadata?._commentFiles).toEqual(admitted);
     expect((await command(['team-projects', 'upsert', 'p', '--metadata-json', JSON.stringify({ label: 'rename' })])).status).toBe(200);
     expect((await read()).metadata?._commentFiles).toEqual(admitted);
+    // A public file upload has its own resource; it must be registered to the
+    // project before its immutable snapshot can authorize comment-file facts.
+    const fileResource = 'registered-file';
+    expect((await command(['resource', 'push', 'project', fileResource, bytes,
+      '--metadata-json', JSON.stringify({ projectId: 'p' })])).status).toBe(200);
+    const selected = { ...mutation, baseRevision: 1, resourceId: fileResource };
+    expect((await upsert(selected)).status).toBe(500);
+    expect((await command(['team-projects', 'register-resource', 'p', fileResource])).status).toBe(200);
+    expect((await upsert(selected)).status).toBe(200);
+    expect(await read()).toMatchObject({ resourceId, metadata: { _commentFiles: { revision: 2,
+      files: [{ ...file, resourceId: fileResource, versionId: 'v1' }] } } });
   } finally {
     await hub.close();
     await rm(root, { recursive: true, force: true });

@@ -1056,6 +1056,11 @@ describe('App AMR polling', () => {
     const workspaceDirectoryReadsBefore = fetchMock.mock.calls.filter(([input]) =>
       input.toString().includes('/api/workspace/directory')).length;
 
+    // The desktop menu returns focus to a long-running renderer immediately
+    // after announcing the profile change. That focus must not start another
+    // agent scan on top of the profile-change scan.
+    const focusedAt = Date.now() + 11_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(focusedAt);
     fireEvent(window, new CustomEvent('open-design:app-config-changed'));
 
     await waitFor(() => {
@@ -1076,6 +1081,10 @@ describe('App AMR polling', () => {
       ).toBeGreaterThan(workspaceDirectoryReadsBefore);
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    fireEvent.focus(window);
+    const agentScansAfterFocus = mockedFetchAgentsStream.mock.calls.length;
+    nowSpy.mockRestore();
+    expect(agentScansAfterFocus).toBe(2);
   });
 
   it('ignores stale in-flight AMR model polls after a desktop app-config change restarts polling', async () => {

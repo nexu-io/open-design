@@ -8,6 +8,11 @@ import { I18nProvider } from '../../src/i18n';
 import { workspaceContextFixture } from '../helpers/workspace-context';
 import { quotaPopoverConsoleUrl } from '../../src/runtime/workspace-quota-links';
 
+vi.mock('../../src/providers/registry', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
+  return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };
+});
+
 const context = workspaceContextFixture({ workspaceId: 'a', workspaceMemberId: 'member-a', planId: 'free', billingState: 'free', role: 'owner' });
 function response(mode: unknown = 'shared', tier = 'free', balance = '0'): WorkspaceBillingResponse {
   const at = new Date().toISOString();

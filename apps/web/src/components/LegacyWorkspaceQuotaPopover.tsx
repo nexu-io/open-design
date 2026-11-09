@@ -1,3 +1,4 @@
+import { openExternalUrl } from '../providers/registry';
 // Preserve the integration quota card until shared billing is explicitly proved.
 import type { WorkspaceQuotaPopoverProps } from './WorkspaceQuotaPopover';
 import { isWorkspaceLifecycleReadable } from '@open-design/contracts';
@@ -42,7 +43,7 @@ export function LegacyWorkspaceQuotaPopover({ view, context, profile, consoleOri
   }
   function navigate(url: string, action: 'upgrade' | 'credits') {
     onNavigate?.(action);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    void openExternalUrl(url);
   }
   function help(kind: 'plan' | 'metered') {
     const label = kind === 'plan'
