@@ -88,7 +88,8 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
   it('keeps every CMS touchpoint host on the home view', () => {
     // `opend.home.*` is the only placement family this app authorizes, so the
     // account badge, the hover entry and the modals are home hosts. The
-    // workbench corner carries none of them.
+    // workbench corner carries none of them, and the registration invite keeps
+    // its own full-screen form on that route without the modals over it.
     expect(entryShellSource).toContain("const homeCampaignHostsVisible = view === 'home';");
     expect(entryShellSource).toMatch(
       /homeCampaignHostsVisible\s*&&\s*canRenderProductionCampaignBadge\(amrLoggedIn === true, amrAccountId\)\s*\?\s*<ProductionCampaignBadge authenticated sessionSubject=\{amrAccountId\}/,
@@ -98,7 +99,7 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     );
     expect(entryNavRailSource).not.toContain('ProductionCampaignBadge');
     expect(appSource).toMatch(
-      /\{route\.kind === 'home' && route\.view === 'home' && \([\s\S]*?<TestCampaignModal[\s\S]*?<ProductionCampaignModal/,
+      /\{route\.kind === 'home' && route\.view === 'home' && !registrationInviteActive && \([\s\S]*?<TestCampaignModal[\s\S]*?<ProductionCampaignModal/,
     );
   });
 
