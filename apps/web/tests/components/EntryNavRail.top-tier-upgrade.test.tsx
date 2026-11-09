@@ -122,8 +122,8 @@ describe('account menu billing card — 升级 at the top plan tier', () => {
     });
 
     const card = billingCard();
-    // The card itself still renders, still labelled 团队版 — only the button goes.
-    expect(card.getByText('团队版')).toBeTruthy();
+    // The card still shows the scoped Max tier; only the upgrade action goes.
+    expect(card.getByRole('img', { name: 'max' })).toBeTruthy();
     expect(card.queryByRole('button', { name: '升级' })).toBeNull();
   });
 

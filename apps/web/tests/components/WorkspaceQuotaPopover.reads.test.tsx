@@ -71,7 +71,7 @@ it('E03 -> E09 switch discards the delayed previous workspace read (VIEW-001/012
   selected = b;
   await act(async () => { mounted.rerender(<Harness context={b} />); });
   expect(screen.getByText('$7.00')).toBeTruthy();
-  expect(screen.getByText('联系 Owner')).toBeTruthy();
+  expect(screen.getByText('升级或充值请联系 Owner')).toBeTruthy();
   await act(async () => { finishA(Response.json(response(a, '100'))); });
   expect(screen.getByText('$7.00')).toBeTruthy();
   expect(screen.queryByText('$100.00')).toBeNull();
@@ -155,7 +155,7 @@ it('keeps both shared Design Plan windows unavailable when the field is absent',
     workspaceSnapshot: snapshotWithWindows(),
   });
   await act(async () => { render(<Harness context={a} />); });
-  expect(screen.getAllByText('明细暂不可用')).toHaveLength(2);
+  expect(screen.getAllByText('暂未获取用量')).toHaveLength(2);
   expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
 });
 
@@ -165,6 +165,6 @@ it('keeps both shared Design Plan windows unavailable for an explicit empty arra
     workspaceSnapshot: snapshotWithWindows([]),
   });
   await act(async () => { render(<Harness context={a} />); });
-  expect(screen.getAllByText('明细暂不可用')).toHaveLength(2);
+  expect(screen.getAllByText('暂未获取用量')).toHaveLength(2);
   expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
 });

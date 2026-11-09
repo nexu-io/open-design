@@ -14,10 +14,10 @@
 // move — it reads in the card the capsule opens, with the currency named
 // (「$10.00」), which is where a number belongs next to an allowance. The
 // original ruling's goal (no permanent alarm beside the avatar) is strictly
-// better served. Free plans still sell the upgrade on the pill instead.
+// better served. Free Owners still see the upgrade prompt on the pill.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import type { WorkspaceBillingResponse, WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
@@ -59,6 +59,7 @@ function billing(overrides: Partial<WorkspaceBillingSummary> = {}): WorkspaceBil
 function renderRail(props: {
   context?: WorkspaceCollabContext;
   billing?: WorkspaceBillingSummary | null;
+  billingResponse?: WorkspaceBillingResponse;
   balanceUsd?: string | null;
 }) {
   return render(
@@ -70,6 +71,7 @@ function renderRail(props: {
         open
         context={props.context ?? context()}
         billing={props.billing === undefined ? billing() : props.billing}
+        billingResponse={props.billingResponse}
         balanceUsd={props.balanceUsd}
       />
     </I18nProvider>,
@@ -157,6 +159,37 @@ describe('top-right credits pill', () => {
     expect(creditsPill()?.textContent).toContain('升级');
     expect(creditsPill()?.textContent).not.toContain('0.00');
     expect((await creditsRow()).textContent).toContain('$0.00');
+  });
+
+  it.each(['admin', 'member'] as const)('shows shared Free quota without an upgrade prompt for %s', async (role) => {
+    renderRail({
+      context: context({
+        workspaceType: 'team', role, planId: null, billingState: undefined,
+        permissions: { canManageBilling: true },
+      } as Partial<WorkspaceCollabContext>),
+      billing: billing({ workspaceId: null, membershipTier: 'max' }),
+      billingResponse: {
+        summary: billing({ workspaceId: null, membershipTier: 'max' }),
+        workspaceBalance: {
+          workspaceId: 'ws-1', workspaceMemberId: 'wm-1', billingScopeVersion: 2,
+          balanceUsd: '0', expiresAt: null, updatedAt: null,
+        },
+        workspaceSnapshot: {
+          schemaVersion: 1, workspaceId: 'ws-1', workspaceMemberId: 'wm-1', billingScopeVersion: 2,
+          billing: { billingState: 'free', planId: null },
+          wallet: { balanceUsd: '0', expiresAt: null, updatedAt: null },
+          revisions: { billing: 'free-ws-1', wallet: 'wallet-ws-1' },
+        },
+      },
+      balanceUsd: '0',
+    });
+    expect(creditsPill()?.textContent).not.toContain('升级');
+    expect(creditsPill()?.getAttribute('aria-label')).toBe('额度');
+    expect(creditsPill()?.parentElement?.classList.contains('entry-top-right-account-pill--upgrade')).toBe(false);
+    expect(creditsPill()?.querySelector('svg.plan-wordmark')?.getAttribute('viewBox')).toBe('0 0 107 49');
+    const card = await creditsRow();
+    expect(card.textContent).toContain('$0.00');
+    expect(screen.queryByRole('button', { name: '升级' })).toBeNull();
   });
 
   it('keeps the pill and the zero balance while the plan is still unknown', async () => {

@@ -18,12 +18,11 @@ export function WorkspaceQuotaPopover({ view, context, profile, consoleOrigin, b
   context: WorkspaceCollabContext | null;
   profile?: string | null;
   consoleOrigin?: string | null;
-  /** Keep the host's existing plan-family branding; quota uses the actual tier. */
   badgeTier?: PlanBadgeTier | null;
   planLabel?: string;
   onNavigate?: (action: 'upgrade' | 'credits') => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const workspaceId = context?.workspaceId;
   const memberId = context?.workspaceMemberId;
   // Entering/reopening and switching reuse the shared read,
@@ -40,36 +39,58 @@ export function WorkspaceQuotaPopover({ view, context, profile, consoleOrigin, b
   const owner = context?.role === 'owner';
   // Preserve the existing contracts billing policy: locked workspaces remain readable.
   const readable = context?.memberStatus === 'active' && isWorkspaceLifecycleReadable(context.lifecycleState);
-  // Only the existing team FAMILY mark survives from the host.
-  // Personal badges must name the same scoped tier as the quota and action.
-  const shownBadge = badgeTier === 'team' ? 'team' : view.tier;
-  const unavailable = t('workspaceQuota.unavailable');
+  const shownBadge = view.tier ?? (badgeTier === 'team' ? 'team' : null);
   // Go has 5h + 7d; other paid tiers only 7d.
   const durations = view.tier === 'free' ? [] : view.tier === 'go' ? [18_000, 604_800] : [604_800];
+  function resetCountdown(raw: string | null | undefined) {
+    if (!raw) return null;
+    const minutes = Math.ceil((new Date(raw).getTime() - Date.now()) / 60_000);
+    if (!Number.isFinite(minutes) || minutes <= 0) return null;
+    const days = Math.floor(minutes / 1_440);
+    const hours = Math.floor((minutes % 1_440) / 60);
+    const rest = minutes % 60;
+    const time = days
+      ? `${t('billing.codingPlanPeriodDays', { count: days })}${hours ? ` ${t('billing.codingPlanPeriodHours', { count: hours })}` : ''}`
+      : hours
+        ? `${t('billing.codingPlanPeriodHours', { count: hours })}${rest ? ` ${t('workspaceQuota.periodMinutes', { count: rest })}` : ''}`
+        : t('workspaceQuota.periodMinutes', { count: rest });
+    return t('workspaceQuota.resetIn', { time });
+  }
   function navigate(url: string, action: 'upgrade' | 'credits') {
     onNavigate?.(action);
     window.open(url, '_blank', 'noopener,noreferrer');
   }
+  function help(kind: 'plan' | 'metered') {
+    const label = kind === 'plan'
+      ? view.modelRestriction ?? t('workspaceQuota.planHelp')
+      : t('workspaceQuota.meteredHelp');
+    return <span className={styles.help}>
+      <button type="button" className={styles.helpTrigger} aria-label={label} aria-describedby={`workspace-quota-${kind}-tip`}>
+        <RemixIcon name="information-line" size={16} />
+      </button>
+      <span className={styles.tooltip} id={`workspace-quota-${kind}-tip`} role="tooltip">{label}</span>
+    </span>;
+  }
   const walletContent = <>
-    <span>{shownBadge === 'team' ? <RemixIcon name="battery-charge-line" size={14} /> : null}{t('workspaceQuota.payAsYouGo')}</span>
-    <span className={quota.value}><bdi>{formatVelaBalanceUsd(view.balanceUsd) ?? unavailable}</bdi>
+    <span className={quota.value}><bdi>{formatVelaBalanceUsd(view.balanceUsd) ?? '—'}</bdi>
       {consoleUrl && readable ? <Icon name="chevron-right" size={14} /> : null}
     </span>
   </>;
   return (
     <div className={`entry-nav-rail__menu-credits ${card.card}`} data-plan-status={view.planStatus ?? undefined}>
       <div className="entry-nav-rail__menu-credits-head">
-        <span className="entry-nav-rail__menu-credits-plan" role={shownBadge !== 'team' ? 'img' : undefined}
-          aria-label={shownBadge !== 'team' ? shownBadge ?? unavailable : undefined}>
+        <span className="entry-nav-rail__menu-credits-plan" role={shownBadge && shownBadge !== 'team' ? 'img' : undefined}
+          aria-label={shownBadge && shownBadge !== 'team' ? shownBadge : undefined}>
           {shownBadge === 'team' ? planLabel : null}
-          {shownBadge ? <PlanWordmark tier={shownBadge} height={shownBadge === 'team' ? 11 : 20} /> : unavailable}
+          {/* A scoped balance alone does not prove a plan tier. */}
+          {shownBadge ? <PlanWordmark tier={shownBadge} height={shownBadge === 'team' ? 11 : 20} /> : null}
         </span>
         {/* Role, not wallet balance, chooses the action. */}
         {readable && owner && view.planKnown && actionUrl ? (
           <Button className="entry-nav-rail__menu-credits-upgrade" onClick={() => navigate(actionUrl, max ? 'credits' : 'upgrade')}>
             {t(max ? 'entry.creditsManage' : 'entry.creditsUpgrade')}
           </Button>
-        ) : readable && !owner ? <span className={styles.contact}>{t('workspaceQuota.contactOwner')}</span> : null}
+        ) : null}
       </div>
       {view.loading ? (
         // Header stays; no spinner, hint, error or retry text.
@@ -84,41 +105,48 @@ export function WorkspaceQuotaPopover({ view, context, profile, consoleOrigin, b
         </div>
       ) : (
         <>
-          <section aria-label={t('billing.codingPlanDesignPlan')}>
+          <section aria-label={t('workspaceQuota.designPlanAllowance')}>
+            <div className={styles.sectionHead}><h3>{t('workspaceQuota.designPlanAllowance')}{help('plan')}</h3></div>
             {/* The Design Plan region is present even on Free. */}
-            {view.tier === 'free' ? <div className={quota.row}>
-              <span title={view.modelRestriction ?? unavailable}>{t('billing.codingPlanDesignPlan')}</span><span>{t('workspaceQuota.unsubscribed')}</span>
+            {view.tier === 'free' ? <div className={styles.placeholder}>
+              <span>{t('workspaceQuota.unsubscribed')}</span><small>{t('workspaceQuota.subscribeToUse')}</small>
             </div> : durations.map(duration => {
               const window = view.windows?.find(item => item.durationSeconds === duration);
               const percent = window?.remainingPercent;
               const known = percent != null && Number.isFinite(percent) && percent >= 0 && percent <= 100;
-              const reset = window?.resetsAt ? new Date(window.resetsAt) : null;
-              const resetLabel = reset && Number.isFinite(reset.getTime())
-                ? new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(reset)
-                : null;
-              return <div className={quota.block} key={duration}>
+              if (!known) return <div className={`${styles.placeholder} ${styles.planBlock}`} key={duration}>
+                <span>—</span><small>{t('workspaceQuota.usageUnavailable')}</small>
+              </div>;
+              const resetLabel = resetCountdown(window?.resetsAt);
+              return <div className={`${quota.block} ${styles.planBlock}`} key={duration}>
                 <div className={quota.row}>
-                  <span className={quota.allowance} title={view.modelRestriction ?? unavailable}>{t('billing.codingPlanDesignPlan')} <small className={quota.period}>
+                  <span className={quota.allowance}>
                     {t(duration === 18_000 ? 'billing.codingPlanPeriodHours' : 'billing.codingPlanPeriodDays', { count: duration === 18_000 ? 5 : 7 })}
-                  </small></span>
-                  <span>{known ? t('billing.codingPlanRemainingPercent', { percent }) : unavailable}</span>
+                  </span>
+                  <span>{t('billing.codingPlanRemainingPercent', { percent })}</span>
                 </div>
-                {known ? <div className={quota.track} role="progressbar" aria-label={t('billing.codingPlanDesignPlan')}
+                <div className={`${quota.track} ${styles.track}`} role="progressbar" aria-label={t('billing.codingPlanDesignPlan')}
                   aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
                   <span className={quota.fill} style={{ width: `${percent}%` }} />
-                </div> : null}
-                {resetLabel ? <div className={styles.details}>{t('workspaceQuota.resetAt', { time: resetLabel })}</div> : null}
+                </div>
+                {resetLabel ? <div className={styles.details}>{resetLabel}</div> : null}
               </div>;
             })}
           </section>
-          <section className={quota.walletWithQuota} aria-label={t('workspaceQuota.payAsYouGo')}>
-            {consoleUrl && readable ? <button type="button" className={`${styles.balance} ${quota.wallet}`}
-              data-testid="entry-nav-credits-row" aria-label={t('workspaceQuota.viewBalance')}
-              onClick={() => navigate(consoleUrl, 'credits')}>{walletContent}</button>
-              : <div className={quota.wallet}>{walletContent}</div>}
+          <section className={`${quota.walletWithQuota} ${styles.metered}`} aria-label={t('workspaceQuota.payAsYouGo')}>
+            <div className={styles.sectionHead}>
+              <h3>{t('workspaceQuota.payAsYouGo')}{help('metered')}</h3>
+              {consoleUrl && readable ? <button type="button" className={`${styles.balance} ${quota.wallet}`}
+                data-testid="entry-nav-credits-row" aria-label={t('workspaceQuota.viewBalance')}
+                onClick={() => navigate(consoleUrl, 'credits')}>{walletContent}</button>
+                : <div className={quota.wallet}>{walletContent}</div>}
+            </div>
           </section>
         </>
       )}
+      {context ? <div className={styles.footer} role="note">
+        {t(owner ? 'workspaceQuota.shared' : 'workspaceQuota.contactOwnerForBilling')}
+      </div> : null}
     </div>
   );
 }
