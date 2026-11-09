@@ -286,14 +286,44 @@ authentication, and the boundary between REST and MCP.
 ### 5.6 OpenCode
 
 - OpenCode runs as `opencode run --format json` with the prompt on stdin.
-  Newer builds that advertise `--dangerously-skip-permissions` from
-  `opencode run --help` receive that flag; older builds keep the compatible
-  argv without it.
-- The adapter discovers models with `opencode models`, parses structured JSON
-  events, and captures OpenCode's `sessionID`. Follow-up turns continue the
-  native session with `-s <session-id>`.
+- **Two CLI generations share the `opencode` binary.** OpenCode 1 accepted
+  `--dir`, `--pure`, `--variant`, and `--dangerously-skip-permissions`; OpenCode
+  2 removed all four, added `--auto` and `--standalone`, and resolves its
+  workspace from the process cwd instead of walking up to the enclosing git
+  root. The adapter therefore never assumes a flag exists: `run --help` is
+  probed once (stdout and stderr) and `agentCapabilities` decides the argv.
+
+  | Capability key | Probed flag | V1 | V2 | Emitted |
+  |---|---|---|---|---|
+  | `skipPermissions` | `--dangerously-skip-permissions` | ✅ | ❌ | permission bypass |
+  | `autoApprove` | `--auto` | ❌ | ✅ | permission bypass fallback |
+  | `standalone` | `--standalone` | ❌ | ✅ | private server |
+  | `pure` | `--pure` | ✅ | ❌ | connection-test isolation |
+  | `variantFlag` | `--variant` | ✅ | ❌ | reasoning variant |
+  | `workspaceDir` | `--dir` | ✅ | ❌ | workspace pin |
+
+  `isOpenCodeV2Surface` requires **both** `standalone === true` and
+  `pure === false`. Every other state — V1, a failed probe, or a fork that
+  advertises only one of the two — keeps the V1 argv, because appending `--dir`
+  to a V2 CLI fails loudly at spawn, while omitting it from a V1 CLI silently
+  writes the deliverable into the enclosing repository root.
+- V1 needs `--dir <project>`; V2 needs the spawn `cwd` and no flag. When the
+  surface is proven V2 the daemon also adds `--standalone`, so a headless Run
+  never attaches to the account-wide background server the user's TUI owns.
+- Reasoning variants: V1 takes `--variant <id>`; V2 carries the same value
+  inside the model reference (`-m provider/model#variant`).
+- The adapter discovers models with `opencode models --verbose`, falling back to
+  plain `opencode models` when the CLI rejects the flag (OpenCode 2), parses
+  structured JSON events, and captures OpenCode's `sessionID`. Follow-up turns
+  continue the native session with `-s <session-id>`.
+- Child-evidence export moved from `opencode export <id> --sanitize --pure` to
+  `opencode session export <id> --sanitize`; the loader records which form
+  worked instead of branching on a version string.
 - External MCP configuration is supplied per invocation through
   `OPENCODE_CONFIG_CONTENT`; selected skills still use the shared §4 path.
+- The injected tool-preview event plugin uses the V1 plugin contract. OpenCode 2
+  does not run it, so the plugin is not advertised there and the daemon logs the
+  degradation once instead of silently losing tool paths.
 
 ### 5.7 GitHub Copilot CLI
 
