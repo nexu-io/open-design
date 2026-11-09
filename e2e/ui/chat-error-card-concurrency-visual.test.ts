@@ -87,8 +87,10 @@ async function seedConcurrencyRejection(page: import('@playwright/test').Page, l
 }
 
 test('[P0] OPEND-4605 concurrency card height is clamped in long-copy locales', async ({ page }, testInfo) => {
-  const geometry: Record<Locale, { card: number; cta: number; ctaTop: number; cardBottom: number }> =
-    {} as never;
+  const geometry: Record<Locale, {
+    card: number; cta: number; ctaTop: number; cardBottom: number;
+    whyH: number; whyLines: number; titleH: number;
+  }> = {} as never;
 
   for (const locale of LOCALES) {
     const card = await seedConcurrencyRejection(page, locale);
