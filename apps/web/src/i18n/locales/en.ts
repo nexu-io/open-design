@@ -666,7 +666,7 @@ export const en: Dict = {
   'settings.amrCancelSignIn': 'Cancel sign-in',
   'settings.onboardingActivationPrompt': 'Sign-in page didn\'t open?',
   'settings.onboardingActivationBrowserFailed': 'Couldn\'t open your browser.',
-  'settings.onboardingActivationReopen': 'Reopen login page',
+  'settings.onboardingActivationReopen': 'Reopen',
   'settings.amrAccountStatus': 'OpenDesign Cloud account status',
   'settings.amrConsole': 'Manage',
   'settings.amrBalance': 'Allowance',
