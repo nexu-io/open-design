@@ -13981,7 +13981,19 @@ export async function startServer({
         scheduleRetryRestart(decision.retryDelayMs);
         return true;
       }
-      if (emptyReplyError) {
+      if (emptyReplyError && run.truncatedMidTurn === true) {
+        // Not the "nothing to say" end below: the output-token limit cut the
+        // reply off before any of it became visible, so the model never
+        // finished answering (#9363). Fail with a retryable error that names
+        // the limit instead of reporting a success with no reply.
+        const truncatedReplyError = createSseErrorPayload(
+          'AGENT_EXECUTION_FAILED',
+          'The model reached its output token limit before it produced a reply. Raise Max tokens in Settings or choose a model with a larger output limit, then retry.',
+          { retryable: true },
+        );
+        run.error = truncatedReplyError.message;
+        send('error', truncatedReplyError);
+      } else if (emptyReplyError) {
         // Not retried: the agent exited cleanly with nothing to say, which is
         // a normal end (P0-24 Q6, same as P7). Keep the evidence as a
         // diagnostic, not as an error the turn would display.

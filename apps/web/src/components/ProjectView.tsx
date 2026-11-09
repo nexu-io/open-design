@@ -59,6 +59,7 @@ import { assistantMessageNeverHadARun } from '../runtime/chat/host-authored-mess
 import { resolveRecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
 import { canRetainSuccessfulRunForBlockedStrategy } from '../runtime/blocked-strategy-result';
 import { loadConversationTranscript } from '../state/load-conversation-transcript';
+import { maxTokensOverride } from '../state/maxTokens';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   deletePreviewComment,
@@ -2036,6 +2037,7 @@ function byokOpenCodeProviderFromConfig(
   ) {
     return undefined;
   }
+  const maxTokens = maxTokensOverride(config);
   return {
     protocol: config.apiProtocol,
     apiKey: config.apiKey.trim(),
@@ -2049,6 +2051,7 @@ function byokOpenCodeProviderFromConfig(
       selectedProvider,
       config.baseUrl,
     ),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
   };
 }
 

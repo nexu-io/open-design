@@ -3503,6 +3503,47 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
   });
 
+  // #9363: the Settings "Max tokens" value must travel with the run-scoped
+  // BYOK provider, or the daemon keeps OpenCode at its 16,384 default.
+  it('forwards the Settings Max tokens with the BYOK OpenCode provider', async () => {
+    listConversations.mockResolvedValue(
+      conversations.map((conversation) => ({ ...conversation, sessionMode: 'chat' as const })),
+    );
+    listMessages.mockResolvedValue([]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onDelta: (delta: string) => void; onDone: () => void };
+    }) => {
+      options.handlers.onDelta('api response');
+      options.handlers.onDone();
+    });
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'byok-test-key',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'api-model',
+      maxTokens: 131072,
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokProvider: expect.objectContaining({
+        protocol: 'openai',
+        model: 'api-model',
+        maxTokens: 131072,
+      }),
+    }));
+  });
+
   it.each([
     {
       mode: 'api' as const,

@@ -272,7 +272,7 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'thumbnail']);
 const RUN_START_STRING_FLAGS = new Set([
   ...PROJECT_RESOURCE_STRING_FLAGS,
-  'byok-protocol', 'byok-base-url', 'byok-api-version', 'byok-key-env',
+  'byok-protocol', 'byok-base-url', 'byok-api-version', 'byok-key-env', 'byok-max-tokens',
 ]);
 const RUN_START_BOOLEAN_FLAGS = new Set([...PROJECT_BOOLEAN_FLAGS, 'byok-keyless']);
 const WORKSPACE_STRING_FLAGS = new Set([
@@ -8602,6 +8602,7 @@ async function runRun(args) {
                [--agent <id>] [--model <id>] [--service-tier <id>]
                [--byok-protocol <protocol>] [--byok-base-url <url>]
                [--byok-api-version <version>] [--byok-key-env <env>] [--byok-keyless]
+               [--byok-max-tokens <n>]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
@@ -8635,6 +8636,8 @@ BYOK start options:
   --byok-key-env <env>        Read the API key from this environment variable.
   --byok-keyless             Explicitly use a provider without an API key.
                               Use --model <id> to select the BYOK model.
+  --byok-max-tokens <n>      Maximum reply length in tokens (the Settings
+                              "Max tokens" value). Omit to keep the default.
 
 Common options:
   --daemon-url <url>         OpenDesign daemon HTTP base.
@@ -8900,6 +8903,7 @@ Common options:
           apiVersion: flags['byok-api-version'],
           keyEnv: flags['byok-key-env'],
           keyless: flags['byok-keyless'] === true,
+          maxTokens: flags['byok-max-tokens'],
         }, process.env);
       } catch (err) {
         console.error(err.message);
