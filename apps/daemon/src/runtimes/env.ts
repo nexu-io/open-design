@@ -209,17 +209,19 @@ export function spawnEnvForAgent(
     // Isolate BYOK OpenCode from the user's global ~/.config/opencode/opencode.json
     // so that version-incompatible keys (e.g. "update", "plugins", "providers" from
     // another opencode build) do not surface as "Configuration is invalid" errors
-    // during BYOK runs. OPENCODE_TEST_HOME makes OpenCode use a clean per-run home
-    // under OD_DATA_DIR instead of the user's persisted global config, but OpenCode
-    // still resolves its config home via XDG_CONFIG_HOME (~/.config/opencode), so we
-    // must also point XDG_CONFIG_HOME at the isolated home to prevent the Vela
-    // companion from picking up incompatible global config. See #9365.
-    if (!env.XDG_CONFIG_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
-      env.XDG_CONFIG_HOME = path.join(
-        env.OD_DATA_DIR.trim(),
-        'byok-opencode-home',
-        '.config',
-      );
+    // during BYOK runs. Both OPENCODE_TEST_HOME and XDG_CONFIG_HOME must point to
+    // the isolated home; OPENCODE_TEST_HOME makes OpenCode use a clean per-run home,
+    // while XDG_CONFIG_HOME prevents the Vela companion from picking up incompatible
+    // global config from an inherited shell environment. See #9365.
+    if (env.OD_DATA_DIR?.trim()) {
+      const isolatedHome = path.join(env.OD_DATA_DIR.trim(), 'byok-opencode-home');
+      env.OPENCODE_TEST_HOME = isolatedHome;
+      // Only override inherited XDG_CONFIG_HOME; respect an explicit BYOK-configured
+      // override from Settings → Local CLI → Advanced.
+      const configuredXdg = String(expandedConfiguredEnv['XDG_CONFIG_HOME'] ?? '').trim();
+      if (!configuredXdg) {
+        env.XDG_CONFIG_HOME = path.join(isolatedHome, '.config');
+      }
     }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
