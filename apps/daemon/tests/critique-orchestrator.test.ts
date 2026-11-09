@@ -155,6 +155,50 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe('runOrchestrator - happy path', () => {
+  it('degrades a claimed SHIP when host-observed rendered evidence is missing or stale', async () => {
+    const { bus, events } = makeBus();
+    const result = await runOrchestrator({
+      runId: 'visual-missing',
+      projectId: 'p1',
+      conversationId: 'c1',
+      artifactId: 'visual-missing',
+      artifactDir: join(tmpDir, 'visual-missing'),
+      adapter: 'opencode',
+      cfg: defaultCritiqueConfig(),
+      db,
+      bus,
+      stdout: streamOf(happyStream3Rounds()),
+      visualEvidenceCheck: async () => ({ ok: false, reason: 'Missing current rendered evidence for 390x844.' }),
+    });
+
+    expect(result.status).toBe('degraded');
+    expect(events.map((event) => event.event)).toContain('critique.degraded');
+    expect(events.map((event) => event.event)).not.toContain('critique.ship');
+  });
+
+  it('ships only after the host gate confirms the final artifact revision', async () => {
+    const { bus, events } = makeBus();
+    const result = await runOrchestrator({
+      runId: 'visual-current',
+      projectId: 'p1',
+      conversationId: 'c1',
+      artifactId: 'visual-current',
+      artifactDir: join(tmpDir, 'visual-current'),
+      adapter: 'opencode',
+      cfg: defaultCritiqueConfig(),
+      db,
+      bus,
+      stdout: streamOf(happyStream3Rounds()),
+      visualEvidenceCheck: async (artifact) => artifact?.body === '<html><body>final</body></html>'
+        ? { ok: true }
+        : { ok: false, reason: 'stale artifact' },
+    });
+
+    expect(result.status).toBe('shipped');
+    expect(events.map((event) => event.event)).toContain('critique.ship');
+    expect(events.map((event) => event.event)).not.toContain('critique.degraded');
+  });
+
   it('3-round shipped run: row reflects shipped + composite + rounds + transcript path', async () => {
     const { bus, events } = makeBus();
     const artifactDir = join(tmpDir, 'run1');

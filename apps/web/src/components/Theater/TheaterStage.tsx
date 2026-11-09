@@ -32,6 +32,9 @@ export function TheaterStage({ state, onInterrupt, interruptPending = false }: P
       <TheaterDegraded reason={state.degraded.reason} adapter={state.degraded.adapter} />
     );
   }
+  if (state.phase === 'skipped') {
+    return <div className="critique-theater-skipped" role="status" aria-live="polite">Design Jury skipped for this run: {state.reason}</div>;
+  }
   if (state.phase === 'shipped' || state.phase === 'interrupted' || state.phase === 'failed') {
     return <TheaterCollapsed state={state} />;
   }

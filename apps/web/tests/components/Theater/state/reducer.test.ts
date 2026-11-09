@@ -47,6 +47,12 @@ function close(role: PanelistRole, round = 1, score = 7.5): Extract<PanelEvent, 
 }
 
 describe('Critique Theater reducer (Phase 7)', () => {
+  it('retains a run-scoped skipped reason before any Jury run starts', () => {
+    const state = reduce(initialState, {
+      type: 'skipped', runId: 'run-skip', reason: 'Ask mode is unsupported.',
+    });
+    expect(state).toMatchObject({ phase: 'skipped', runId: 'run-skip', reason: 'Ask mode is unsupported.' });
+  });
   it('boots from idle to running on run_started', () => {
     const next = reduce(initialState, start());
     expect(next.phase).toBe('running');

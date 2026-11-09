@@ -3714,6 +3714,7 @@ export const esES: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'El adaptador {adapter} no admitía el protocolo Critique.',
   'critiqueTheater.degradedReasonProtocol': 'El adaptador {adapter} envió una versión de protocolo no admitida.',
   'critiqueTheater.degradedReasonMissingArtifact': 'La ejecución finalizó sin un artefacto final.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Reproducir',
   'critiqueTheater.replaySpeed': 'Velocidad de reproducción',
   'critiqueTheater.readOnly': 'Solo lectura',

@@ -3714,6 +3714,7 @@ export const hu: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'A(z) {adapter} adapter nem támogatta a Critique protokollt.',
   'critiqueTheater.degradedReasonProtocol': 'A(z) {adapter} adapter nem támogatott protokollverziót küldött.',
   'critiqueTheater.degradedReasonMissingArtifact': 'A futtatás végső műtárgy nélkül fejeződött be.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Visszajátszás',
   'critiqueTheater.replaySpeed': 'Visszajátszás sebessége',
   'critiqueTheater.readOnly': 'Csak olvasható',

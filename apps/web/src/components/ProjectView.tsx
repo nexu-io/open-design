@@ -13547,7 +13547,7 @@ export function ProjectView({
   // authority for whether a run is actually wired through the critique
   // pipeline; this hook only governs whether the web layer renders the
   // resulting SSE stream.
-  const critiqueTheaterEnabled = useCritiqueTheaterEnabled();
+  const critiqueTheaterEnabled = useCritiqueTheaterEnabled(project.id, projectRunWorkspaceContext);
 
   // CLI / agent selector lives below the chat conversation (composer footer),
   // not in the top-right header.

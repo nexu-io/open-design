@@ -15,9 +15,13 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { migrateCritique, getCritiqueRun } from '../src/critique/persistence.js';
 import { loadCritiqueConfigFromEnv } from '../src/critique/config.js';
+import { isCritiqueEnabled, parseEnvEnabled, parseRolloutPhase } from '../src/critique/rollout.js';
 import { runOrchestrator, type CritiqueSseBus } from '../src/critique/orchestrator.js';
 import type { CritiqueSseEvent } from '@open-design/contracts/critique';
 import { defaultCritiqueConfig } from '@open-design/contracts/critique';
+import { createJsonEventStreamHandler } from '../src/runtimes/json-event-stream.js';
+import { NormalizedTextQueue } from '../src/critique/normalized-text-queue.js';
+import { createCritiqueRegionStripper, createPanelGrammarStripper } from '../src/panel-grammar-strip.js';
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:');
@@ -62,13 +66,13 @@ afterEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Config gate: OD_CRITIQUE_ENABLED=false (legacy path unchanged)
+// Explicit opt-out remains supported.
 // ---------------------------------------------------------------------------
 
-describe('spawn wiring - cfg.enabled=false (M0 default)', () => {
-  it('loadCritiqueConfigFromEnv with empty env returns enabled=false', () => {
+describe('spawn wiring - explicit disabled config', () => {
+  it('loadCritiqueConfigFromEnv with empty env defaults enabled', () => {
     const cfg = loadCritiqueConfigFromEnv({});
-    expect(cfg.enabled).toBe(false);
+    expect(cfg.enabled).toBe(true);
   });
 
   it('loadCritiqueConfigFromEnv with OD_CRITIQUE_ENABLED=false returns enabled=false', () => {
@@ -76,11 +80,14 @@ describe('spawn wiring - cfg.enabled=false (M0 default)', () => {
     expect(cfg.enabled).toBe(false);
   });
 
-  it('when cfg.enabled=false, runOrchestrator is not invoked (legacy path)', async () => {
-    // Simulate what the spawn branch does: check cfg.enabled before calling orchestrator.
-    const cfg = loadCritiqueConfigFromEnv({});
-    expect(cfg.enabled).toBe(false);
-    // No orchestrator call means no row inserted.
+  it('resolver disables the generation path only for an explicit false override', async () => {
+    const enabled = isCritiqueEnabled({
+      phase: parseRolloutPhase(undefined),
+      skillPolicy: null,
+      projectOverride: null,
+      envOverride: parseEnvEnabled('false'),
+    });
+    expect(enabled).toBe(false);
     expect(getCritiqueRun(db, 'legacy-run')).toBeNull();
   });
 });
@@ -179,15 +186,14 @@ describe('spawn wiring - cfg.enabled=true (orchestrator path)', () => {
 // that non-plain adapters skip the orchestrator entirely.
 
 describe('spawn wiring - stream format gating (Defect 1)', () => {
-  const NON_PLAIN_FORMATS = [
+  const UNSUPPORTED_FORMATS = [
     'claude-stream-json',
     'qoder-stream-json',
     'copilot-stream-json',
-    'json-event-stream',
     'acp-json-rpc',
   ] as const;
 
-  for (const fmt of NON_PLAIN_FORMATS) {
+  for (const fmt of UNSUPPORTED_FORMATS) {
     it(`format="${fmt}" skips the orchestrator (no run row inserted)`, async () => {
       // Simulate the server branch: if streamFormat !== 'plain', skip orchestrator.
       const cfg = loadCritiqueConfigFromEnv({ OD_CRITIQUE_ENABLED: '1' });
@@ -249,5 +255,66 @@ describe('spawn wiring - stream format gating (Defect 1)', () => {
 
     expect(result.status).toBe('shipped');
     expect(getCritiqueRun(db, 'plain-format-run')?.status).toBe('shipped');
+  });
+
+  it('feeds fragmented OpenCode JSON text deltas once into the Jury and hides protocol/artifact content from chat', async () => {
+    const queue = new NormalizedTextQueue();
+    const text = [
+      'Starting.',
+      '<CRITIQUE_RUN version="1" maxRounds="1" threshold="8.0" scale="10">',
+      '<ROUND n="1">',
+      '<PANELIST role="designer"><NOTES>review panel prose</NOTES><ARTIFACT mime="text/html"><![CDATA[<html>jury artifact payload</html>]]></ARTIFACT></PANELIST>',
+      '<PANELIST role="critic" score="9"><DIM name="layout" score="9">aligned</DIM></PANELIST>',
+      '<PANELIST role="brand" score="9"><DIM name="tokens" score="9">on brand</DIM></PANELIST>',
+      '<PANELIST role="a11y" score="9"><DIM name="contrast" score="9">clear</DIM></PANELIST>',
+      '<PANELIST role="copy" score="9"><DIM name="labels" score="9">concise</DIM></PANELIST>',
+      '<ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>ready</REASON></ROUND_END>',
+      '</ROUND>',
+      '<SHIP round="1" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<html>final artifact</html>]]></ARTIFACT><SUMMARY>approved</SUMMARY></SHIP>',
+      '</CRITIQUE_RUN>',
+      ' Done.',
+    ].join('');
+    const regionStripper = createCritiqueRegionStripper();
+    const grammarStripper = createPanelGrammarStripper();
+    let visible = '';
+    const decodedEvents: Array<{ type?: string; delta?: string }> = [];
+    const decoded = createJsonEventStreamHandler('opencode', (event) => {
+      decodedEvents.push(event);
+      if (event.type !== 'text_delta' || typeof event.delta !== 'string') return;
+      expect(queue.push(event.delta)).toBe(true);
+      visible += grammarStripper.strip(regionStripper.strip(event.delta));
+    });
+
+    // Fragment the wire JSON independently of the decoded text token sizes.
+    const wire = [...text].map((char) => JSON.stringify({ type: 'text', part: { text: char } }) + '\n').join('');
+    for (let offset = 0; offset < wire.length; offset += 13) decoded.feed(wire.slice(offset, offset + 13));
+    decoded.flush();
+    queue.close();
+    visible += grammarStripper.flush() + regionStripper.flush();
+
+    // Neither a reasoning frame nor a tool frame may enter the text queue.
+    decodedEvents.push({ type: 'thinking_delta', delta: 'non-assistant reasoning' });
+    decodedEvents.push({ type: 'tool_use' });
+    const { bus, events } = makeBus();
+    const result = await runOrchestrator({
+      runId: 'opencode-json-jury-run',
+      projectId: 'p1',
+      conversationId: null,
+      artifactId: 'a1',
+      artifactDir: join(tmpDir, 'json-event-run'),
+      adapter: 'opencode',
+      cfg: defaultCritiqueConfig(),
+      db,
+      bus,
+      stdout: queue,
+    });
+
+    expect(result.status).toBe('shipped');
+    expect(events.map((event) => event.event)).toContain('critique.run_started');
+    expect(events.map((event) => event.event)).toContain('critique.ship');
+    expect(visible).toBe('Starting. Done.');
+    expect(visible).not.toMatch(/CRITIQUE_RUN|PANELIST|ARTIFACT|jury artifact payload|final artifact/u);
+    expect(decodedEvents.filter((event) => event.type === 'text_delta').length).toBe(text.length);
+    expect(getCritiqueRun(db, 'opencode-json-jury-run')?.status).toBe('shipped');
   });
 });

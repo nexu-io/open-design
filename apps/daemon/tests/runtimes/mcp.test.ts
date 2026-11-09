@@ -69,13 +69,16 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
     'live_artifacts_list',
     'live_artifacts_update',
     'live_artifacts_refresh',
+    'capture_design_jury_viewports',
     'connectors_list',
     'connectors_execute',
   ]);
 
   for (const tool of tools) {
     assert.equal(typeof tool.description, 'string');
-    assert.match(tool.description, /POSIX equivalent: `"\$OD_NODE_BIN" "\$OD_BIN" tools /u);
+    if (tool.name !== 'capture_design_jury_viewports') {
+      assert.match(tool.description, /POSIX equivalent: `"\$OD_NODE_BIN" "\$OD_BIN" tools /u);
+    }
     assert.equal(tool.inputSchema.type, 'object');
   }
 
@@ -96,6 +99,37 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
 
+});
+
+test('Design Jury MCP capture forwards project entry and returns image content blocks', async () => {
+  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456';
+  process.env.OD_TOOL_TOKEN = 'test-tool-token';
+  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify(calls.length === 1 ? {
+      ok: true,
+      receipt: 'receipt-1', artifactPath: 'index.html', revision: 'sha256',
+      captures: [390, 1024, 1280].map((width) => ({ width, height: width === 390 ? 844 : width === 1024 ? 768 : 800, evidencePath: `${width}.png`, geometry: { viewport: { width } }, image: 'aGVsbG8=', mimeType: 'image/png' })),
+    } : { ok: true }), { status: 200 });
+  };
+
+  const response = await handleLiveArtifactsMcpRequest({
+    jsonrpc: '2.0', id: 7, method: 'tools/call',
+    params: { name: 'capture_design_jury_viewports', arguments: { entryFile: 'index.html' } },
+  }) as { result?: { content?: Array<Record<string, unknown>> } };
+
+  assert.equal(calls.length, 2);
+  const call = calls[0];
+  assert.ok(call);
+  assert.ok(call.init);
+  assert.equal(call.url, 'http://127.0.0.1:17456/api/tools/visual-capture');
+  assert.deepEqual(JSON.parse(call.init.body as string), { entryFile: 'index.html' });
+  assert.equal(calls[1]?.url, 'http://127.0.0.1:17456/api/tools/visual-capture/ack');
+  assert.deepEqual(JSON.parse(calls[1]?.init?.body as string), { receipt: 'receipt-1' });
+  assert.deepEqual(response.result?.content?.map((item) => item.type), ['text', 'image', 'image', 'image']);
+  assert.equal(response.result?.content?.[1]?.data, 'aGVsbG8=');
+  assert.equal(response.result?.content?.[1]?.mimeType, 'image/png');
 });
 
 test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {

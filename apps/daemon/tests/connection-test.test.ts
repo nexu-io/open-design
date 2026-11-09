@@ -45,6 +45,7 @@ import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
 import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
+import { agentCapabilities } from '../src/runtimes/capabilities.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
@@ -3899,10 +3900,11 @@ process.exit(1);
     );
   });
 
-  it('launches OpenCode connection tests with 1.3-compatible JSON stdin args', async () => {
+  it('launches OpenCode V2 connection tests with supported JSON stdin args', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     const stdinFile = path.join(markerDir, 'stdin.txt');
+    agentCapabilities.set('opencode', { standalone: true, autoPermissions: true });
     try {
       await withFakeOpenCode(
         `
@@ -3945,15 +3947,14 @@ process.stdin.on('end', () => {
             sample: 'ok',
           });
 
-          // `--dir` pins OpenCode's workspace to the probe's own temp cwd, so
-          // a connection test cannot adopt the repository root as its
-          // worktree. The path is minted per probe; everything around it still
-          // has to match byte-for-byte, since the 1.3 compatibility this test
-          // guards is a property of the argument ORDER.
+          // V2 uses the actual spawned cwd rather than the unsupported V1
+          // --dir flag. Keep the private server and deny-preserving auto mode.
           const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
-          expect(argv.slice(0, 3)).toEqual(['run', '--format', 'json']);
-          expect(argv[3]).toBe('--dir');
-          expect(path.isAbsolute(argv[4] ?? '')).toBe(true);
+          expect(argv.slice(0, 5)).toEqual([
+            'run', '--format', 'json', '--auto', '--standalone',
+          ]);
+          expect(argv).not.toContain('--dir');
+          expect(argv).not.toContain('--dangerously-skip-permissions');
           expect(argv.slice(5)).toEqual([
             '-m',
             'github-copilot/gpt-4o',
@@ -3965,6 +3966,7 @@ process.stdin.on('end', () => {
         },
       );
     } finally {
+      agentCapabilities.delete('opencode');
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });

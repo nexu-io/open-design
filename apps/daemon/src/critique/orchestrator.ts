@@ -100,6 +100,8 @@ export interface OrchestratorParams {
    * 'failed' rather than waiting for the parser to time out.
    */
   childExitPromise?: Promise<{ code: number | null; signal: string | null }>;
+  /** Host-verified rendered evidence requirement for default prototype Jury runs. */
+  visualEvidenceCheck?: (artifact: { body: string; mime: string } | null) => Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
 export interface OrchestratorResult {
@@ -435,7 +437,41 @@ export async function runOrchestrator(
     // single normalized ship event so the transcript and SSE bus reflect the
     // daemon-authoritative status/composite, not the agent's claim.
     let resolvedShip = shipEvent;
-    if (resolvedShip !== null) {
+    let visualEvidenceFailure: string | null = null;
+    if (params.visualEvidenceCheck) {
+      try {
+        const evidence = await params.visualEvidenceCheck(artifactBuffer.value);
+        if (!evidence.ok) visualEvidenceFailure = evidence.reason;
+      } catch (error) {
+        visualEvidenceFailure = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    if (visualEvidenceFailure !== null) {
+      finalStatus = 'degraded';
+      finalComposite = completedRounds.at(-1)?.composite ?? null;
+      const captured = artifactBuffer.value;
+      if (captured) {
+        try {
+          await fs.mkdir(artifactDir, { recursive: true });
+          const written = await writeShipArtifact(artifactDir, captured.body, captured.mime, {
+            maxBytes: cfg.parserMaxBlockBytes,
+          });
+          artifactPath = written.absPath;
+        } catch (error) {
+          console.warn(`[critique] runId=${runId}: could not persist degraded artifact: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      const degradedEvent: Extract<PanelEvent, { type: 'degraded' }> = {
+        type: 'degraded',
+        runId,
+        reason: 'visual_evidence_missing',
+        adapter,
+      };
+      collectedEvents.push(degradedEvent);
+      bus.emit(panelEventToSse(degradedEvent));
+      logCritique({ event: 'degraded', runId, reason: visualEvidenceFailure, adapter });
+    } else if (resolvedShip !== null) {
       const shippedRound = completedRounds.find((r) => r.n === resolvedShip!.round);
       if (shippedRound === undefined) {
         // The agent claimed a SHIP for a round that was never closed by the
@@ -447,7 +483,7 @@ export async function runOrchestrator(
       }
     }
 
-    if (resolvedShip !== null) {
+    if (visualEvidenceFailure === null && resolvedShip !== null) {
       // Daemon-authoritative scoring: derive status from decideRound(...)
       // using the daemon's computed composite/mustFix rather than the
       // agent's <SHIP composite=... status=...> attributes. A composite
@@ -543,7 +579,7 @@ export async function runOrchestrator(
       // SSE subscribers can fetch /artifact without racing the writer.
       collectedEvents.push(normalizedShip);
       bus.emit(panelEventToSse(normalizedShip));
-    } else {
+    } else if (visualEvidenceFailure === null) {
       // No SHIP arrived (or the agent SHIP was rejected as malformed above).
       // Apply fallback policy over the daemon's closed rounds.
       killChild();
@@ -551,6 +587,19 @@ export async function runOrchestrator(
       if (fallback !== null) {
         finalStatus = 'below_threshold';
         finalComposite = fallback.composite;
+        const captured = artifactBuffer.value;
+        if (captured) {
+          try {
+            await fs.mkdir(artifactDir, { recursive: true });
+            const written = await writeShipArtifact(artifactDir, captured.body, captured.mime, {
+              maxBytes: cfg.parserMaxBlockBytes,
+            });
+            artifactPath = written.absPath;
+            updateCritiqueRun(db, runId, { artifactPath });
+          } catch (error) {
+            console.warn(`[critique] runId=${runId}: could not persist below-threshold artifact: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
         // Emit a synthetic ship event.
         const syntheticShip: Extract<PanelEvent, { type: 'ship' }> = {
           type: 'ship',

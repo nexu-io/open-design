@@ -6,6 +6,14 @@ const DEFAULT_BRAND = { name: 'editorial-monocle', design_md: '## Palette\n--acc
 const DEFAULT_SKILL = { id: 'magazine-poster' };
 
 describe('renderPanelPrompt', () => {
+  it('requires host capture and image inspection before Jury scoring', () => {
+    const out = renderPanelPrompt({ cfg: defaultCritiqueConfig(), brand: DEFAULT_BRAND, skill: DEFAULT_SKILL });
+    expect(out).toContain('capture_design_jury_viewports');
+    expect(out).toContain('Before any scoring panelist emits a score');
+    expect(out).toContain('390x844, 1024x768, and 1280x800');
+    expect(out).toContain('model-authored evidence claim');
+  });
+
   it('renders with default config: contains CRITIQUE_RUN with correct attributes', () => {
     const out = renderPanelPrompt({ cfg: defaultCritiqueConfig(), brand: DEFAULT_BRAND, skill: DEFAULT_SKILL });
     expect(out).toContain(`<CRITIQUE_RUN version="${CRITIQUE_PROTOCOL_VERSION}"`);

@@ -3714,6 +3714,7 @@ export const pl: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'Adapter {adapter} nie obsługiwał protokołu Critique.',
   'critiqueTheater.degradedReasonProtocol': 'Adapter {adapter} wysłał nieobsługiwaną wersję protokołu.',
   'critiqueTheater.degradedReasonMissingArtifact': 'Przebieg zakończył się bez końcowego artefaktu.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Odtwórz ponownie',
   'critiqueTheater.replaySpeed': 'Prędkość odtwarzania',
   'critiqueTheater.readOnly': 'Tylko do odczytu',

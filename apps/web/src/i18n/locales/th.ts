@@ -3714,6 +3714,7 @@ export const th: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'อะแดปเตอร์ {adapter} ไม่รองรับโปรโตคอล Critique',
   'critiqueTheater.degradedReasonProtocol': 'อะแดปเตอร์ {adapter} ส่งเวอร์ชันโปรโตคอลที่ไม่รองรับ',
   'critiqueTheater.degradedReasonMissingArtifact': 'การรันเสร็จสิ้นโดยไม่มีอาร์ติแฟกต์สุดท้าย',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'เล่นซ้ำ',
   'critiqueTheater.replaySpeed': 'ความเร็วในการเล่นซ้ำ',
   'critiqueTheater.readOnly': 'อ่านอย่างเดียว',

@@ -30,6 +30,8 @@ export type RuntimeBuildOptions = {
 
 export type RuntimeContext = {
   cwd?: string;
+  /** OpenDesign generation uses a run-scoped execution agent, never global lead. */
+  openDesignExecution?: boolean;
   // True when the current chat run has at least one prior persisted
   // assistant message in the same conversation — i.e. this isn't the
   // first user turn. Plain-streaming adapters that support a "continue

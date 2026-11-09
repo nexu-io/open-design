@@ -3714,6 +3714,7 @@ export const tr: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'Adaptör {adapter} Critique protokolünü desteklemedi.',
   'critiqueTheater.degradedReasonProtocol': 'Adaptör {adapter} desteklenmeyen bir protokol sürümü gönderdi.',
   'critiqueTheater.degradedReasonMissingArtifact': 'Çalıştırma nihai bir çıktı oluşturmadan tamamlandı.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Yeniden oynat',
   'critiqueTheater.replaySpeed': 'Yeniden oynatma hızı',
   'critiqueTheater.readOnly': 'Salt okunur',

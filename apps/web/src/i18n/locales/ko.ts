@@ -3714,6 +3714,7 @@ export const ko: Dict = {
   'critiqueTheater.degradedReasonAdapter': '어댑터 {adapter}이(가) 비평 프로토콜을 지원하지 않습니다.',
   'critiqueTheater.degradedReasonProtocol': '어댑터 {adapter}이(가) 지원하지 않는 프로토콜 버전을 사용했습니다.',
   'critiqueTheater.degradedReasonMissingArtifact': '실행이 완료되었으나 최종 산출물이 없습니다.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': '리플레이',
   'critiqueTheater.replaySpeed': '리플레이 속도',
   'critiqueTheater.readOnly': '읽기 전용',

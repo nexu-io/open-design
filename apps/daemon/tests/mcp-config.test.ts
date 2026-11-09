@@ -392,6 +392,42 @@ describe('buildAcpMcpServers', () => {
 });
 
 describe('buildOpenCodeMcpConfigContent', () => {
+  it('emits run-scoped OpenDesign agent config even when no MCP servers are enabled', () => {
+    const raw = buildOpenCodeMcpConfigContent([], {}, {
+      extraConfig: {
+        agent: {
+          'open-design': {
+            mode: 'primary',
+            permission: {
+              '*': 'allow',
+              external_directory: {
+                '*': 'deny',
+                '/tmp/od-project': 'allow',
+                '/tmp/od-project/*': 'allow',
+                '/tmp/od-project/**': 'allow',
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(JSON.parse(raw as string)).toMatchObject({
+      agent: {
+        'open-design': {
+          mode: 'primary',
+          permission: {
+            '*': 'allow',
+            external_directory: {
+              '*': 'deny',
+              '/tmp/od-project': 'allow',
+              '/tmp/od-project/*': 'allow',
+              '/tmp/od-project/**': 'allow',
+            },
+          },
+        },
+      },
+    });
+  });
   it('returns null when no enabled servers (avoids polluting OPENCODE_CONFIG_CONTENT)', () => {
     expect(buildOpenCodeMcpConfigContent([])).toBeNull();
     expect(

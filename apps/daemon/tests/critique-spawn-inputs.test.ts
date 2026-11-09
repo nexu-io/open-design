@@ -19,7 +19,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { normalizeCritiquePolicy } from '../src/skills.js';
-import { narrowProjectCritiqueOverride } from '../src/critique/spawn-inputs.js';
+import { narrowProjectCritiqueOverride, shouldRunCritique } from '../src/critique/spawn-inputs.js';
+import { isCritiqueEnabled, parseEnvEnabled, parseRolloutPhase } from '../src/critique/rollout.js';
 
 describe('normalizeCritiquePolicy (skill frontmatter input)', () => {
   it('passes through the three canonical tokens', () => {
@@ -125,5 +126,83 @@ describe('narrowProjectCritiqueOverride (project metadata input)', () => {
       critiqueTheaterEnabled: true,
     };
     expect(narrowProjectCritiqueOverride(metadata)).toBe(true);
+  });
+});
+
+describe('project defaults for Design Jury', () => {
+  it('enables new and existing projects without an explicit value by default', () => {
+    const phase = parseRolloutPhase(undefined);
+    for (const metadata of [{}, { kind: 'design' }]) {
+      expect(isCritiqueEnabled({
+        phase,
+        skillPolicy: null,
+        projectOverride: narrowProjectCritiqueOverride(metadata),
+        envOverride: null,
+      })).toBe(true);
+    }
+  });
+
+  it('preserves explicit project opt-out and skill opt-out overrides', () => {
+    const phase = parseRolloutPhase(undefined);
+    expect(isCritiqueEnabled({
+      phase,
+      skillPolicy: null,
+      projectOverride: narrowProjectCritiqueOverride({ critiqueTheaterEnabled: false }),
+      // Even if the browser's transient preference says on, the persisted
+      // project setting remains authoritative for server generation routing.
+      envOverride: parseEnvEnabled('true'),
+    })).toBe(false);
+    expect(isCritiqueEnabled({
+      phase,
+      skillPolicy: 'opt-out',
+      projectOverride: null,
+      envOverride: null,
+    })).toBe(false);
+  });
+});
+
+describe('generation path Design Jury gate', () => {
+  it('routes globally enabled eligible runs through the Jury and respects exclusions', () => {
+    const enabled = isCritiqueEnabled({
+      phase: parseRolloutPhase(undefined),
+      skillPolicy: null,
+      projectOverride: null,
+      envOverride: null,
+    });
+    expect(shouldRunCritique({
+      enabled,
+      hasBrand: true,
+      hasSkill: true,
+      isMediaSurface: false,
+      streamFormat: 'plain',
+    })).toBe(true);
+    expect(shouldRunCritique({
+      enabled: false,
+      hasBrand: true,
+      hasSkill: true,
+      isMediaSurface: false,
+      streamFormat: 'plain',
+    })).toBe(false);
+    expect(shouldRunCritique({
+      enabled,
+      hasBrand: true,
+      hasSkill: true,
+      isMediaSurface: false,
+      streamFormat: 'json-event-stream',
+    })).toBe(true);
+    expect(shouldRunCritique({
+      enabled, hasBrand: false, hasSkill: true,
+      isMediaSurface: false, streamFormat: 'json-event-stream',
+    })).toBe(false);
+    expect(shouldRunCritique({
+      enabled, hasBrand: true, hasSkill: false,
+      isMediaSurface: false, streamFormat: 'json-event-stream',
+    })).toBe(false);
+    for (const mode of ['ask', 'chat']) {
+      expect(shouldRunCritique({
+        enabled, hasBrand: true, hasSkill: true,
+        isMediaSurface: false, streamFormat: 'plain', mode,
+      })).toBe(false);
+    }
   });
 });

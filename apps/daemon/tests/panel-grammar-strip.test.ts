@@ -2,9 +2,25 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import {
+  createCritiqueRegionStripper,
   createPanelGrammarStripper,
   strippingConsumedTheWholeFrame,
 } from '../src/panel-grammar-strip.js';
+
+test('active Design Jury display filter suppresses fragmented complete regions but preserves surrounding prose', () => {
+  const region = createCritiqueRegionStripper();
+  const grammar = createPanelGrammarStripper();
+  const chunks = [
+    'Before jury. <CRITIQUE_',
+    'RUN version="1"><PANELIST role="designer">Review panel prose.</PANELIST>',
+    '<ARTIFACT mime="text/html"><![CDATA[<html>secret markup</html>]]></ARTIFACT>',
+    '</CRITIQUE_RUN> After jury.',
+  ];
+  const visible = chunks.map((chunk) => grammar.strip(region.strip(chunk))).join('')
+    + grammar.flush() + region.flush();
+  assert.equal(visible, 'Before jury.  After jury.');
+  assert.doesNotMatch(visible, /PANELIST|ARTIFACT|secret markup|CRITIQUE_RUN/u);
+});
 
 /**
  * 红测:评审剧场的通信语法**永远不许进可见正文**。

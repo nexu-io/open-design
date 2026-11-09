@@ -3909,6 +3909,7 @@ export const zhTW: Dict = {
   "critiqueTheater.degradedReasonProtocol":
     "介接器 {adapter} 使用了不支援的協定版本。",
   "critiqueTheater.degradedReasonMissingArtifact": "執行結束但未產出最終成果。",
+  "critiqueTheater.degradedReasonVisualEvidenceMissing": "Rendered visual evidence is missing, stale, or could not be verified.",
   "critiqueTheater.replay": "回放",
   "critiqueTheater.replaySpeed": "回放速度",
   "critiqueTheater.readOnly": "唯讀",

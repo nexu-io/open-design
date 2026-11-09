@@ -15,6 +15,7 @@ import multer from 'multer';
 import JSZip from 'jszip';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -477,9 +478,13 @@ import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
 import {
+  createCritiqueRegionStripper,
   createPanelGrammarStripper,
   strippingConsumedTheWholeFrame,
 } from './panel-grammar-strip.js';
+import { NormalizedTextQueue } from './critique/normalized-text-queue.js';
+import { captureDesignJuryViewports, DESIGN_JURY_VIEWPORTS } from './critique/visual-capture.js';
+import { readReviewedArtifact, VisualEvidenceTracker } from './critique/visual-evidence.js';
 import { createArtifactFocusMarkerStripper } from './artifact-focus-marker.js';
 import { createNextStepMarkerStripper } from './next-step-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
@@ -497,7 +502,7 @@ import {
   parseRolloutPhase,
   type SkillCritiquePolicy,
 } from './critique/rollout.js';
-import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
+import { narrowProjectCritiqueOverride, shouldRunCritique } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import {
@@ -696,6 +701,7 @@ import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
   buildClaudeMcpJson,
+  buildOpenCodeExternalDirectoryAllowlist,
   buildOpenCodeMcpConfigContent,
   isManagedProjectCwd,
   readMcpConfig,
@@ -1559,6 +1565,7 @@ const workspaceEventSinks =
 // the inactivity watchdog without the chat path having to poll a
 // store.
 const activeChatRunHandles = new Map();
+const activeVisualEvidenceRuns = new Map();
 
 function emitChatAgentEvent(runId, payload) {
   const sink = activeChatAgentEventSinks.get(runId);
@@ -1785,7 +1792,8 @@ const promptFileBootstrap = (fp) =>
 
 // Load Critique Theater config once at startup so a bad OD_CRITIQUE_* value
 // surfaces immediately as a boot-time RangeError instead of silently at
-// run time. Default: enabled=false (M0 dark launch).
+// run time. Default: enabled=true (global rollout); OD_CRITIQUE_ENABLED=false
+// remains an explicit operator override.
 const critiqueCfg = loadCritiqueConfigFromEnv();
 // Per-run baselines of the project's artifact files, captured before the agent
 // runs and diffed at run-finish to derive `artifact_count` agent-agnostically
@@ -1799,7 +1807,6 @@ const runArtifactBaselines = createRunArtifactBaselines();
 // warning explaining why the Critique Theater orchestrator was bypassed.
 // Adapter denylist for orchestrator routing is implicit: anything that is
 // not the 'plain' streamFormat falls through to legacy single-pass.
-const critiqueWarnedAdapters = new Set<string>();
 
 // In-process registry of in-flight critique runs so the interrupt endpoint
 // can cascade an AbortController to the matching orchestrator invocation.
@@ -3271,6 +3278,14 @@ export async function startServer({
       ) {
         return next();
       }
+      if (
+        req.method === 'POST'
+        && /^\/tools\/visual-capture(?:\/ack)?$/u.test(req.path)
+        && toolTokenRegistry.validate(bearerTokenFromRequest(req), {
+          endpoint: '/api/tools/visual-capture',
+          operation: 'project:visual-capture',
+        }).ok
+      ) return next();
       res.setHeader('WWW-Authenticate', API_TOKEN_BASIC_CHALLENGE);
       return res.status(401).json({
         error: {
@@ -3297,6 +3312,143 @@ export async function startServer({
       );
     });
   }
+
+  app.post('/api/tools/visual-capture', async (req, res) => {
+    const auth = toolTokenRegistry.validate(bearerTokenFromRequest(req), {
+      endpoint: '/api/tools/visual-capture',
+      operation: 'project:visual-capture',
+    });
+    if (!auth.ok) return res.status(403).json({ error: { code: auth.code, message: auth.message } });
+    const runContext = activeVisualEvidenceRuns.get(auth.grant.runId);
+    if (!runContext || runContext.projectId !== auth.grant.projectId) {
+      return sendApiError(res, 409, 'RUN_NOT_ACTIVE', 'Visual capture is unavailable outside this active Design Jury run.');
+    }
+    const entryFile = typeof req.body?.entryFile === 'string' ? req.body.entryFile.replaceAll('\\', '/') : '';
+    const segments = entryFile.split('/');
+    if (
+      !entryFile
+      || path.posix.isAbsolute(entryFile)
+      || segments.some((segment) => !segment || segment === '.' || segment === '..')
+      || !/\.html?$/iu.test(entryFile)
+    ) return sendApiError(res, 400, 'BAD_REQUEST', 'entryFile must be a project-relative HTML path.');
+
+    const project = getProject(db, auth.grant.projectId);
+    if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+    const projectRoot = await fs.promises.realpath(resolveProjectDir(PROJECTS_DIR, project.id, project.metadata));
+    const entryPath = path.resolve(projectRoot, ...segments);
+    const isInside = (candidate: string) => candidate === projectRoot || candidate.startsWith(projectRoot + path.sep);
+    try {
+      const realEntryPath = await fs.promises.realpath(entryPath);
+      if (!isInside(realEntryPath)) return sendApiError(res, 403, 'FORBIDDEN', 'entryFile resolves outside this project.');
+      const entryStat = await fs.promises.stat(realEntryPath);
+      if (!entryStat.isFile()) return sendApiError(res, 400, 'BAD_REQUEST', 'entryFile is not a regular file.');
+      const source = await fs.promises.readFile(realEntryPath);
+      const revision = createHash('sha256').update(source).digest('hex');
+      const scope = projectPreviewScopes.mint(project.id, null, { ttlMs: 120_000 });
+      const origin = new URL(daemonUrlRef.current);
+      if (!['127.0.0.1', 'localhost'].includes(origin.hostname)) {
+        projectPreviewScopes.revoke(scope);
+        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'Visual capture requires the local loopback daemon origin.');
+      }
+      const daemonPathPrefix = origin.pathname.replace(/\/+$/u, '');
+      const encodedEntry = segments.map(encodeURIComponent).join('/');
+      const previewUrl = new URL(
+        `${daemonPathPrefix}/api/projects/${encodeURIComponent(project.id)}/preview/${encodeURIComponent(scope)}/${encodedEntry}`,
+        origin,
+      ).toString();
+      const abort = new AbortController();
+      const onRequestAborted = () => abort.abort();
+      req.once('aborted', onRequestAborted);
+      if (runContext.signal) {
+        if (runContext.signal.aborted) abort.abort();
+        else runContext.signal.addEventListener('abort', onRequestAborted, { once: true });
+      }
+      try {
+        const rendered = await captureDesignJuryViewports({ runId: auth.grant.runId, url: previewUrl, signal: abort.signal });
+        const captures = [];
+        for (const capture of rendered.captures) {
+          const relativePath = path.posix.join(
+            'visual-evidence', 'design-jury', auth.grant.runId, revision,
+            `${capture.width}x${capture.height}.png`,
+          );
+          const outputPath = path.resolve(projectRoot, ...relativePath.split('/'));
+          if (!isInside(outputPath)) return sendApiError(res, 403, 'FORBIDDEN', 'Evidence output resolves outside this project.');
+          const parentParts = path.relative(projectRoot, path.dirname(outputPath)).split(path.sep).filter(Boolean);
+          let safeParent = projectRoot;
+          for (const part of parentParts) {
+            safeParent = path.join(safeParent, part);
+            try { await fs.promises.mkdir(safeParent); }
+            catch (error) { if (error?.code !== 'EEXIST') throw error; }
+            const parentStat = await fs.promises.lstat(safeParent);
+            const realParent = await fs.promises.realpath(safeParent);
+            if (parentStat.isSymbolicLink() || !parentStat.isDirectory() || !isInside(realParent)) {
+              return sendApiError(res, 403, 'FORBIDDEN', 'Evidence directory resolves outside this project.');
+            }
+          }
+          try {
+            const existing = await fs.promises.lstat(outputPath);
+            if (existing.isSymbolicLink() || !existing.isFile()) {
+              return sendApiError(res, 403, 'FORBIDDEN', 'Evidence path is not a regular project file.');
+            }
+          } catch (error) {
+            if (error?.code !== 'ENOENT') throw error;
+          }
+          const fileHandle = await fs.promises.open(
+            outputPath,
+            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW,
+            0o600,
+          );
+          try { await fileHandle.writeFile(capture.png); }
+          finally { await fileHandle.close(); }
+          captures.push({
+            artifactPath: entryFile,
+            revision,
+            width: capture.width,
+            height: capture.height,
+            evidencePath: relativePath,
+            geometry: capture.geometry,
+            image: capture.png.toString('base64'),
+            mimeType: 'image/png',
+          });
+        }
+        const receipt = randomUUID();
+        runContext.receipts.set(receipt, { createdAt: Date.now(), captures });
+        while (runContext.receipts.size > 4) runContext.receipts.delete(runContext.receipts.keys().next().value);
+        return res.json({ ok: true, receipt, artifactPath: entryFile, revision, captures });
+      } finally {
+        req.removeListener('aborted', onRequestAborted);
+        runContext.signal?.removeEventListener('abort', onRequestAborted);
+        projectPreviewScopes.revoke(scope);
+      }
+    } catch (error) {
+      return sendApiError(res, 502, 'VISUAL_CAPTURE_FAILED', error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  app.post('/api/tools/visual-capture/ack', (req, res) => {
+    const auth = toolTokenRegistry.validate(bearerTokenFromRequest(req), {
+      endpoint: '/api/tools/visual-capture', operation: 'project:visual-capture',
+    });
+    if (!auth.ok) return res.status(403).json({ error: { code: auth.code, message: auth.message } });
+    const runContext = activeVisualEvidenceRuns.get(auth.grant.runId);
+    const receipt = typeof req.body?.receipt === 'string' ? req.body.receipt : '';
+    const pending = runContext?.receipts.get(receipt);
+    if (!runContext || runContext.projectId !== auth.grant.projectId || !pending || Date.now() - pending.createdAt > 30_000) {
+      runContext?.receipts.delete(receipt);
+      return sendApiError(res, 409, 'VISUAL_EVIDENCE_STALE', 'Capture receipt is missing, expired, or belongs to another run.');
+    }
+    runContext.receipts.delete(receipt);
+    runContext.currentArtifactPath = pending.captures[0]?.artifactPath ?? null;
+    runContext.tracker.record(pending.captures.map((capture) => ({
+      artifactPath: capture.artifactPath,
+      revision: capture.revision,
+      width: capture.width,
+      height: capture.height,
+      deliveredImageContent: true,
+      evidencePath: capture.evidencePath,
+    })));
+    return res.json({ ok: true });
+  });
 
   const designSystemServices = createDesignSystemServerServices({
     // `db` (below) is not initialized yet at this point in `startServer` —
@@ -10357,10 +10509,9 @@ export async function startServer({
     // candidate run through the rollout resolver instead of reading the
     // env-var flag directly. The resolver carries the full priority
     // matrix: skill `od.critique.policy` veto > project override > env
-    // override > rollout phase default. On a fresh install with M0
-    // dark-launch defaults the resolver returns `false`, so prod traffic
-    // is unchanged until an operator flips the env var or a project
-    // opts in. The skill-policy input is sourced from
+    // override > rollout phase default. A fresh install resolves to `true`;
+    // explicit project and environment preferences remain available. The
+    // skill-policy input is sourced from
     // `od.critique.policy` in the active skill's SKILL.md frontmatter
     // (parsed in `skills.ts:normalizeCritiquePolicy`). The project
     // override input is sourced from the `critiqueTheaterEnabled`
@@ -10383,11 +10534,11 @@ export async function startServer({
       envOverride: parseEnvEnabled(process.env.OD_CRITIQUE_ENABLED),
     });
     const critiqueBrand = critiqueEnabledForRun
-      && typeof designSystemTitle === 'string'
-      && typeof designSystemBody === 'string'
+      && typeof designSystemTitle === 'string' && designSystemTitle.trim().length > 0
+      && typeof designSystemBody === 'string' && designSystemBody.trim().length > 0
       ? { name: designSystemTitle, design_md: designSystemBody }
       : undefined;
-    const critiqueSkill = critiqueEnabledForRun && typeof critiqueSkillId === 'string'
+    const critiqueSkill = critiqueEnabledForRun && typeof critiqueSkillId === 'string' && critiqueSkillId.trim().length > 0
       ? { id: critiqueSkillId }
       : undefined;
     // Single-source-of-truth eligibility check. The composer downstream
@@ -10395,13 +10546,9 @@ export async function startServer({
     // the spawn path routes runs through runOrchestrator(...) only when the
     // SAME flag is true, so prompt and orchestrator stay in lockstep.
     //
-    // Non-plain adapters (claude-stream-json, copilot-stream-json,
-    // json-event-stream, acp-json-rpc, pi-rpc) emit their own wrapper
-    // protocol; the v1 critique parser only understands plain stdout. The
-    // spawn path falls through to legacy generation for those, so the
-    // panel addendum has to be suppressed here too: otherwise the model
-    // is instructed to emit Critique Theater tags that no orchestrator
-    // consumes.
+    // The normalized JSON-event stream bridge supplies decoded assistant text
+    // to the jury parser. Other structured transports remain ineligible until
+    // they share that boundary.
     const resolvedExclusiveSurface = resolveExclusiveSurface({
       metadata,
       skillMode,
@@ -10411,12 +10558,33 @@ export async function startServer({
       resolvedExclusiveSurface === 'image'
       || resolvedExclusiveSurface === 'video'
       || resolvedExclusiveSurface === 'audio';
-    const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
-    const critiqueShouldRun = critiqueEnabledForRun
-      && critiqueBrand !== undefined
-      && critiqueSkill !== undefined
-      && !isMediaSurface
-      && isPlainAdapter;
+    const critiqueShouldRun = shouldRunCritique({
+      enabled: critiqueEnabledForRun,
+      hasBrand: critiqueBrand !== undefined,
+      hasSkill: critiqueSkill !== undefined,
+      isMediaSurface,
+      streamFormat: streamFormat ?? 'plain',
+      mode: typeof sessionMode === 'string' ? sessionMode : null,
+    });
+    const critiqueSkippedReason = !critiqueShouldRun
+      ? skillCritiquePolicy === 'opt-out'
+        ? 'The resolved skill opts out of Design Jury.'
+        : projectCritiqueOverride === false
+          ? 'Design Jury is disabled for this project in its settings.'
+          : critiqueEnabledForRun === false
+            ? 'Design Jury is disabled by the resolved skill or rollout policy.'
+            : !critiqueBrand
+              ? 'No design system is available for this run.'
+              : !critiqueSkill
+                ? 'No eligible design skill is available for this run.'
+                : isMediaSurface
+                  ? 'This media surface is not supported by Design Jury.'
+                  : sessionMode === 'ask' || sessionMode === 'chat'
+                    ? `Design Jury does not run in ${sessionMode} mode.`
+                      : !['plain', 'json-event-stream'].includes(streamFormat ?? 'plain')
+                        ? `The ${streamFormat} adapter does not support Design Jury yet.`
+                      : 'This run is not eligible for Design Jury.'
+      : null;
     // Only thread the critique fields when the run is actually eligible;
     // otherwise the composer's own internal eligibility check (cfg.enabled
     // && brand && skill && !isMediaSurface) might still fire on
@@ -10752,6 +10920,9 @@ export async function startServer({
       activeSkillDir,
       activeSkillDirs: odNextStrategyRecipe ? [] : activeSkillDirs,
       critiqueShouldRun: odNextStrategyRecipe ? false : critiqueShouldRun,
+      critiqueSkippedReason: odNextStrategyRecipe
+        ? 'OD Next execution is not routed through Design Jury yet.'
+        : critiqueSkippedReason,
       designSystemSelection: {
         id: activeDesignSystemId,
         requestedId: effectiveDesignSystemId,
@@ -11495,6 +11666,7 @@ export async function startServer({
       prompt: daemonSystemPrompt,
       activeSkillDirs,
       critiqueShouldRun,
+      critiqueSkippedReason,
       designSystemSelection,
       promptTelemetryParts,
       stableSectionInputs,
@@ -13216,6 +13388,16 @@ export async function startServer({
       command: process.execPath,
       argsPrefix: [OD_BIN],
     });
+    const juryVisualMcpServer = critiqueShouldRun && toolTokenGrant?.token && cwd
+      ? {
+          id: 'open-design-design-jury',
+          label: 'OpenDesign Design Jury visual evidence',
+          transport: 'stdio',
+          enabled: true,
+          command: process.execPath,
+          args: [OD_BIN, 'mcp', 'live-artifacts'],
+        }
+      : null;
 
     // External MCP servers configured by the user in Settings → External MCP.
     // OpenDesign relays them to the agent so the model can call those tools.
@@ -13261,10 +13443,10 @@ export async function startServer({
     ) {
       {
         const target = path.join(cwd, '.mcp.json');
-        if (enabledExternalMcp.length > 0) {
+        if (enabledExternalMcp.length > 0 || juryVisualMcpServer) {
           try {
             const claudeMcp = buildClaudeMcpJson(
-              enabledExternalMcp,
+              [...enabledExternalMcp, ...(juryVisualMcpServer ? [juryVisualMcpServer] : [])],
               oauthTokensForSpawn,
             );
             if (claudeMcp) {
@@ -13317,13 +13499,44 @@ export async function startServer({
     if (isOpenCodeContent || isMiMoContent) {
       try {
         opencodeConfigContent = buildOpenCodeMcpConfigContent(
-          enabledExternalMcp,
+          [...enabledExternalMcp, ...(juryVisualMcpServer ? [juryVisualMcpServer] : [])],
           oauthTokensForSpawn,
           {
             allowedDirectories: [effectiveCwd, ...extraAllowedDirs],
-            ...(byokOpenCodeProvider
-              ? { extraConfig: byokOpenCodeProvider.config }
-              : {}),
+            ...((def.id === 'opencode' || def.id === 'byok-opencode')
+              ? {
+                  extraConfig: {
+                    ...(byokOpenCodeProvider?.config ?? {}),
+                    agent: {
+                      'open-design': {
+                        mode: 'primary',
+                        ...(critiqueShouldRun
+                          ? {
+                              prompt: [
+                                'OpenDesign Design Jury run protocol (authoritative for this run):',
+                                'You are completing the prototype implementation and its automatic Design Jury evaluation in one run. Finish implementation, then perform Jury evaluation now; do not stop after a prose quality report or an od-done marker.',
+                                'Use the injected capture_design_jury_viewports MCP tool on the actual project HTML entry file and inspect every returned image. Then emit the existing OpenDesign critique protocol exactly: one <CRITIQUE_RUN_STARTED ...> header, real panelist role blocks with scores/findings, each required <ROUND_END ...>, and a final <SHIP ...><ARTIFACT><![CDATA[...]]></ARTIFACT></SHIP> block containing the reviewed HTML. Do not claim scores or verdicts that were not emitted in these protocol blocks.',
+                                'Preserve the requested implementation, project design system, skill, references, file-access boundary, and existing tool/security boundaries. This run-scoped Jury requirement overrides conflicting project narrative instructions that prohibit inline artifacts or require prose after completion markers; do not modify global agent settings or model selection.',
+                              ].join('\n\n'),
+                            }
+                          : {}),
+                        permission: {
+                          '*': 'allow',
+                          external_directory: {
+                            '*': 'deny',
+                            ...buildOpenCodeExternalDirectoryAllowlist([
+                              effectiveCwd,
+                              ...extraAllowedDirs,
+                            ]),
+                          },
+                        },
+                      },
+                    },
+                  },
+                }
+              : byokOpenCodeProvider
+                ? { extraConfig: byokOpenCodeProvider.config }
+                : {}),
           },
         );
       } catch (err) {
@@ -13720,6 +13933,7 @@ export async function startServer({
           agentLogFilePath,
           promptFilePath: promptFile?.path,
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
+          openDesignExecution: def.id === 'opencode' || def.id === 'byok-opencode',
           newSessionId: agentResumeCtx.newSessionId,
           disablePlugins:
             def.id === 'codex'
@@ -14695,164 +14909,85 @@ export async function startServer({
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
 
-    // Critique Theater branch (M0 dark launch, default disabled).
-    // Only plain-stream adapters are routed through runOrchestrator in v1.
-    // Adapters that emit structured wrappers (claude-stream-json,
-    // qoder-stream-json, copilot-stream-json, json-event-stream,
-    // acp-json-rpc, pi-rpc) fall
-    // through to the legacy single-pass code path below with a one-time
-    // stderr warning so the parser never sees wrapper bytes. Per-format
-    // decoding into the orchestrator is a v2 concern.
-    //
-    // Use critiqueShouldRun (computed in the prompt builder) instead of
-    // just the env var or the rollout resolver so the orchestrator gate
-    // is in lockstep with the panel addendum. Media surfaces and runs
-    // missing brand/skill context never get the panel prompt, so they
-    // must also skip the orchestrator and fall through to legacy
-    // generation; otherwise the parser waits for <CRITIQUE_RUN> tags
-    // the model was never told to emit.
-    if (critiqueShouldRun) {
-      const adapterStreamFormat: string = def.streamFormat ?? 'plain';
-      if (adapterStreamFormat !== 'plain') {
-        if (!critiqueWarnedAdapters.has(adapterStreamFormat)) {
-          critiqueWarnedAdapters.add(adapterStreamFormat);
-          console.warn(`[critique] adapter format=${adapterStreamFormat} is not plain-stream; skipping orchestrator and falling through to legacy generation`);
-        }
-      } else {
-        const critiqueRunId = run.id;
-        // Per-run artifact directory keeps concurrent or sequential runs in the
-        // same project from overwriting each other's transcript or final HTML.
-        // Spec: artifacts/<projectId>/<runId>/transcript.ndjson(.gz).
-        const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
-        const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
-        const stdoutIterable = (async function* () {
-          for await (const chunk of child.stdout) yield String(chunk);
-        })();
-        // Forward each CritiqueSseEvent on its own contract-defined channel
-        // (critique.run_started, critique.ship, critique.failed, ...) rather
-        // than wrapping the frame inside the legacy 'agent' channel. Clients
-        // that subscribe to the new event names see them directly with the
-        // contract payload as event.data.
-        //
-        // Critique events go to TWO sinks (codex P1 on PR #1338):
-        //
-        //   1. `design.runs.emit(...)` via `send(...)`, which fans out on
-        //      `/api/runs/:runId/events`. Existing transport, unchanged.
-        //   2. The per-project event-sinks map, which fans out on
-        //      `/api/projects/:projectId/events`. This is the transport the
-        //      web `CritiqueTheaterMount` actually subscribes to (the mount
-        //      is project-scoped, not run-scoped, because it lives at the
-        //      project workspace level and follows the user across runs).
-        //      Without this second sink the mount sees no frames in
-        //      production and only the e2e tests' stubbed routes deliver
-        //      anything to the reducer.
-        //
-        // The project-events route emits via `sse.send(payload.type,
-        // payload)`, so we pack the SSE channel name onto `payload.type`
-        // and let the sink push the right channel name. The web's
-        // `sseToPanelEvent` overwrites `type` from the channel name on the
-        // way back into a PanelEvent, so this round-trip stays correct.
-        const critiqueProjectIdForBus =
-          typeof projectId === 'string' && projectId ? projectId : null;
-        const critiqueBus = {
-          emit: (e) => {
-            // Two transports for every critique event: the run-scoped
-            // SSE send back to the originating chat run, plus the
-            // project-scoped fan-out so the Theater mount (subscribed
-            // to /api/projects/:id/events) sees it too. Route the
-            // project fan-out through emitProjectEvent so empty-sink
-            // cleanup and any future broadcast policy (rate limiting,
-            // schema validation, telemetry) apply uniformly across
-            // every project emitter (PerishCode P3 on PR #1338).
-            send(e.event, e.data);
-            if (critiqueProjectIdForBus) {
-              emitProjectEvent(critiqueProjectIdForBus, { ...e.data, type: e.event });
-            }
-          },
-        };
-
-        // Register this run with the in-process registry so the interrupt
-        // endpoint can cascade an AbortController to the orchestrator. The
-        // register call must run BEFORE runOrchestrator is invoked, so a
-        // request that arrives between spawn and orchestrator-start cannot
-        // miss a runId that already has a live child process.
-        const critiqueAbort = new AbortController();
-        critiqueRunRegistry.register({
-          runId: critiqueRunId,
-          projectId: critiqueProjectKey,
-          abort: critiqueAbort,
-          startedAt: Date.now(),
-        });
-
-        // Stderr forwarding and child.on('error') must be wired BEFORE the
-        // orchestrator awaits stdout. Otherwise a CLI that floods stderr can
-        // fill the OS pipe and deadlock the run until the total timeout, and
-        // an early child error fired before the orchestrator returns has no
-        // listener. Both registrations are idempotent and the run lifecycle
-        // is owned solely by the orchestrator's awaited result below.
-        child.stderr.on('data', (chunk) => {
-          noteAgentActivity();
-          emitVisibleAgentStderr(chunk);
-        });
-        child.on('error', (err) => {
-          flushVisibleAgentStderr();
-          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err.message));
-        });
-
-        // Wrap the child's close event so the orchestrator can race child
-        // exit against parser completion, abort, and timeouts in one awaited
-        // flow. Without this the orchestrator can't tell a non-zero exit
-        // apart from a clean ship and may misclassify failures.
-        const childExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-          child.once('close', (code, signal) => {
-            flushVisibleAgentStderr();
-            resolve({ code, signal });
-          });
-        });
-        try {
-          const orchestratorResult = await runOrchestrator({
-            runId: critiqueRunId,
-            projectId: typeof projectId === 'string' ? projectId : '',
-            conversationId: typeof conversationId === 'string' ? conversationId : null,
-            artifactId: critiqueRunId,
-            artifactDir: critiqueArtifactDir,
-            adapter: typeof agentId === 'string' ? agentId : 'unknown',
-            // startChatRun resolves this once after loading the project:
-            // request-level skill first, persisted project skill second.
-            skill: typeof effectiveRunSkillId === 'string' && effectiveRunSkillId
-              ? effectiveRunSkillId
-              : undefined,
-            cfg: critiqueCfg,
-            db,
-            bus: critiqueBus,
-            stdout: stdoutIterable,
-            child,
-            childExitPromise,
-            signal: critiqueAbort.signal,
-          });
-          // Map the critique terminal status to the chat run lifecycle.
-          // 'shipped' and 'below_threshold' both ran to a ship decision and
-          // finalize as 'succeeded'; every other status (timed_out,
-          // interrupted, degraded, failed, legacy) is a failure path so the
-          // run reflects the real outcome instead of a misleading success.
-          const succeeded = orchestratorResult.status === 'shipped'
-            || orchestratorResult.status === 'below_threshold';
-          if (run.cancelRequested) {
-            finishStrategyAwarePhysicalRun('canceled', 1, null);
-          } else if (succeeded) {
-            finishRun('succeeded', 0, null);
-          } else {
-            finishStrategyAwarePhysicalRun('failed', 1, null);
-          }
-        } catch (err) {
-          flushVisibleAgentStderr();
-          send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
-          finishStrategyAwarePhysicalRun('failed', 1, null);
-        } finally {
-          critiqueRunRegistry.unregister(critiqueProjectKey, critiqueRunId);
-        }
-        return;
+    let critiqueTextQueue: NormalizedTextQueue | null = null;
+    let critiqueOrchestratorPromise: Promise<Awaited<ReturnType<typeof runOrchestrator>>> | null = null;
+    let critiqueAbort: AbortController | null = null;
+    let critiqueResult: Awaited<ReturnType<typeof runOrchestrator>> | null = null;
+    let critiqueProjectKeyForRun: string | null = null;
+    if (critiqueSkippedReason) {
+      const skipped = { runId: run.id, reason: critiqueSkippedReason };
+      send('critique.skipped', skipped);
+      if (typeof projectId === 'string' && projectId) {
+        emitProjectEvent(projectId, { type: 'critique.skipped', ...skipped });
       }
+    }
+    if (critiqueShouldRun) {
+      const critiqueRunId = run.id;
+      const critiqueProjectKey = typeof projectId === 'string' && projectId ? projectId : critiqueRunId;
+      critiqueProjectKeyForRun = critiqueProjectKey;
+      const critiqueArtifactDir = path.join(ARTIFACTS_DIR, critiqueProjectKey, critiqueRunId);
+      critiqueTextQueue = new NormalizedTextQueue();
+      critiqueAbort = new AbortController();
+      const visualEvidenceTracker = new VisualEvidenceTracker();
+      if (typeof projectId === 'string' && projectId) {
+        activeVisualEvidenceRuns.set(critiqueRunId, {
+          projectId,
+          tracker: visualEvidenceTracker,
+          receipts: new Map(),
+          signal: critiqueAbort.signal,
+          currentArtifactPath: null,
+        });
+      }
+      critiqueRunRegistry.register({
+        runId: critiqueRunId,
+        projectId: critiqueProjectKey,
+        abort: critiqueAbort,
+        startedAt: Date.now(),
+      });
+      const critiqueProjectIdForBus = typeof projectId === 'string' && projectId ? projectId : null;
+      const critiqueBus = {
+        emit: (e) => {
+          send(e.event, e.data);
+          if (critiqueProjectIdForBus) emitProjectEvent(critiqueProjectIdForBus, { ...e.data, type: e.event });
+        },
+      };
+      const childExitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+        child.once('close', (code, signal) => resolve({ code, signal }));
+      });
+      critiqueOrchestratorPromise = runOrchestrator({
+        runId: critiqueRunId,
+        projectId: typeof projectId === 'string' ? projectId : '',
+        conversationId: typeof conversationId === 'string' ? conversationId : null,
+        artifactId: critiqueRunId,
+        artifactDir: critiqueArtifactDir,
+        adapter: typeof agentId === 'string' ? agentId : 'unknown',
+        skill: typeof effectiveRunSkillId === 'string' && effectiveRunSkillId ? effectiveRunSkillId : undefined,
+        cfg: critiqueCfg,
+        db,
+        bus: critiqueBus,
+        stdout: critiqueTextQueue,
+        child,
+        childExitPromise,
+        signal: critiqueAbort.signal,
+        visualEvidenceCheck: async (artifact) => {
+          if (!artifact || !cwd || typeof projectId !== 'string' || !projectId) {
+            return { ok: false, reason: 'No project-bound HTML artifact is available for rendered inspection.' };
+          }
+          const context = activeVisualEvidenceRuns.get(critiqueRunId);
+          const artifactPath = context?.currentArtifactPath;
+          if (!artifactPath || !/\.html?$/iu.test(artifactPath)) {
+            return { ok: false, reason: 'No host-observed screenshot set was returned to the Jury.' };
+          }
+          const evidence = await readReviewedArtifact({ projectRoot: cwd, artifactPath, tracker: visualEvidenceTracker });
+          if (!evidence.ok) return evidence;
+          // SHIP's CDATA serialization is not byte preserving (template indentation
+          // and newlines can be normalized). The captured project file is the
+          // authoritative reviewed artifact; persist those exact bytes.
+          artifact.body = evidence.body;
+          return { ok: true };
+        },
+      });
+      void critiqueOrchestratorPromise.catch(() => undefined);
     }
 
     // Structured streams (Claude Code) go through a line-delimited JSON
@@ -14969,6 +15104,8 @@ export async function startServer({
     // Claude has its own per-message guards in claude-stream.ts.
     const runGuard = createRoleMarkerGuard('run');
     let runWarned = false;
+    const plainStdoutDecoder = new StringDecoder('utf8');
+    let plainStdoutDecoderEnded = false;
     const visibleStdoutControlStripper = new TerminalControlSequenceStripper();
     // Strip on every Run, announce on the Runs that asked for a title. The
     // directive lives in the agent's own session history, so a resumed CLI can
@@ -14994,6 +15131,7 @@ export async function startServer({
      * 但两个都必须有各自的半截缓冲,否则会闪出半截标签。
      */
     const panelGrammarStripper = createPanelGrammarStripper();
+    const critiqueRegionStripper = createCritiqueRegionStripper();
     /*
      * **思考流**的那一份 —— 独立实例,不和正文共用。
      *
@@ -15045,7 +15183,9 @@ export async function startServer({
       strip: (delta: string) =>
         nextStepMarkerStripper.strip(
           artifactFocusStripper.strip(
-            panelGrammarStripper.strip(rawTitleMarkerStripper.strip(delta)),
+            panelGrammarStripper.strip(rawTitleMarkerStripper.strip(
+              critiqueShouldRun ? critiqueRegionStripper.strip(delta) : delta,
+            )),
           ),
         ),
       flush: () => {
@@ -15058,7 +15198,7 @@ export async function startServer({
           artifactFocusStripper.strip(panelGrammarStripper.flush()),
         );
         const tail = nextStepMarkerStripper.strip(artifactFocusStripper.flush());
-        return head + mid + tail + nextStepMarkerStripper.flush();
+        return head + mid + tail + critiqueRegionStripper.flush() + nextStepMarkerStripper.flush();
       },
     };
 
@@ -15088,6 +15228,49 @@ export async function startServer({
 
     function guardTextDelta(delta) {
       return runGuard.feedText(delta);
+    }
+
+    function feedCritiqueText(text: string): void {
+      if (!critiqueTextQueue || !text) return;
+      if (!critiqueTextQueue.push(text)) {
+        critiqueAbort?.abort();
+        child.kill('SIGTERM');
+      }
+    }
+
+    function publishPlainStdoutText(text: string): void {
+      if (!text) return;
+      feedCritiqueText(text);
+      noteCliReadyAt();
+      const strippedText = visibleStdoutControlStripper.write(text);
+      const visibleText = titleMarkerStripper.strip(
+        critiqueShouldRun ? critiqueRegionStripper.strip(strippedText) : strippedText,
+      );
+      const safe = guardTextDelta(visibleText);
+      if (safe.length > 0) {
+        noteFirstTokenAt();
+        send('stdout', { chunk: safe });
+      }
+      if (runGuard.contaminated && !runWarned) {
+        runWarned = true;
+        const warn = runGuard.warningEvent();
+        if (warn) {
+          send('agent', warn);
+          abortForRoleMarker(warn.marker);
+        }
+      }
+    }
+
+    function finishPlainStdoutDecoder(): void {
+      if (plainStdoutDecoderEnded || def.streamFormat !== 'plain') return;
+      plainStdoutDecoderEnded = true;
+      const tail = plainStdoutDecoder.end();
+      if (!tail) return;
+      if (def.id === 'antigravity') {
+        plaintextStdoutBuffer.push({ text: tail, receivedAt: Date.now() });
+      } else {
+        publishPlainStdoutText(tail);
+      }
     }
 
     // Shared helper for emitting guarded text deltas across all agent
@@ -15367,6 +15550,12 @@ export async function startServer({
       noteAgentActivity();
       // Role-marker guard for qoder / json-event-stream / pi-rpc (#3247).
       if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+        // Feed the jury parser from normalized assistant text before display
+        // sanitizers. Thinking and raw transport frames never enter this path.
+        if (critiqueTextQueue && !critiqueTextQueue.push(ev.delta)) {
+          critiqueAbort?.abort();
+          child.kill('SIGTERM');
+        }
         // Decode time, captured BEFORE the emit. The gate has to run first to
         // learn whether these bytes are a token at all, but the emit inside it
         // fans the delta out to every SSE client and stamps
@@ -15412,8 +15601,11 @@ export async function startServer({
         noteFirstTokenAt(firstBufferedStdoutAt);
       }
       for (const chunk of plaintextStdoutBuffer) {
+        feedCritiqueText(chunk.text);
         const strippedText = visibleStdoutControlStripper.write(chunk.text);
-        const visibleText = titleMarkerStripper.strip(strippedText);
+        const visibleText = titleMarkerStripper.strip(
+          critiqueShouldRun ? critiqueRegionStripper.strip(strippedText) : strippedText,
+        );
         if (visibleText) send('stdout', { chunk: visibleText });
       }
       const flushedControlText = visibleStdoutControlStripper.flush();
@@ -16035,32 +16227,19 @@ export async function startServer({
         noteAgentActivity();
         const receivedAt = Date.now();
         if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = receivedAt;
-        plaintextStdoutBuffer.push({ text: String(chunk), receivedAt });
+        const text = plainStdoutDecoder.write(
+          Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8'),
+        );
+        if (text) plaintextStdoutBuffer.push({ text, receivedAt });
       });
     } else {
       // Plain / BYOK mode: guard raw stdout chunks (#3247).
       child.stdout.on('data', (chunk) => {
         noteAgentActivity();
-        const text = typeof chunk === 'string' ? chunk : String(chunk);
-        // First non-empty stdout chunk = CLI ready for the plain family
-        // (#3408 §4 marker). A plain adapter has no structured preamble, so
-        // this typically coincides with its first model output.
-        if (text.length > 0) noteCliReadyAt();
-        const strippedText = visibleStdoutControlStripper.write(text);
-        const visibleText = titleMarkerStripper.strip(strippedText);
-        const safe = guardTextDelta(visibleText);
-        if (safe.length > 0) {
-          noteFirstTokenAt();
-          send('stdout', { chunk: safe });
-        }
-        if (runGuard.contaminated && !runWarned) {
-          runWarned = true;
-          const warn = runGuard.warningEvent();
-          if (warn) {
-            send('agent', warn);
-            abortForRoleMarker(warn.marker);
-          }
-        }
+        const text = plainStdoutDecoder.write(
+          Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8'),
+        );
+        publishPlainStdoutText(text);
       });
     }
     // Wire the acpSession onto the run so cancel() can call abort()
@@ -16102,12 +16281,16 @@ export async function startServer({
       return true;
     };
 
-    child.on('error', (err) => {
+    child.on('error', async (err) => {
       clearInactivityWatchdog();
       clearFirstOutputWatchdog();
       cleanupPromptFile();
       flushVisibleAgentStderr();
       revokeToolToken('child_exit');
+      critiqueTextQueue?.fail(err);
+      if (critiqueOrchestratorPromise) {
+        try { critiqueResult = await critiqueOrchestratorPromise; } catch { /* terminal close path reports failure */ }
+      }
       if (!attemptStillOwnsRun()) return;
       unregisterChatAgentEventSink();
       if (run.pendingTerminalFinish) return;
@@ -16118,6 +16301,7 @@ export async function startServer({
     });
     child.on('close', async (code, signal) => {
       try {
+      finishPlainStdoutDecoder();
       clearInactivityWatchdog();
       clearFirstOutputWatchdog();
       clearForcedChildShutdown();
@@ -16485,8 +16669,23 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
+      // The Antigravity plaintext buffer is held until auth detection is
+      // complete; feed it before EOF so plain Jury runs parse the same text
+      // that is subsequently released to chat.
+      flushBufferedPlaintextStdout();
+      critiqueTextQueue?.close();
+      if (critiqueOrchestratorPromise) {
+        try {
+          critiqueResult = await critiqueOrchestratorPromise;
+        } catch (error) {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            error instanceof Error ? error.message : String(error),
+          ));
+        }
+      }
       const runArtifactSideEffects = runSideEffectsForRun(run);
-      const status = classifyChatRunCloseStatus({
+      let status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
         signal,
@@ -16497,11 +16696,17 @@ export async function startServer({
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
+      if (critiqueShouldRun) {
+        if (run.cancelRequested) status = 'canceled';
+        else if (
+          !critiqueResult
+          || (critiqueResult.status !== 'shipped' && critiqueResult.status !== 'below_threshold' && critiqueResult.status !== 'degraded')
+        ) status = 'failed';
+        else status = 'succeeded';
+      }
       // Authentication guards above have now ruled out Antigravity's OAuth
-      // prompt. Publish any remaining guarded plaintext before a close error
-      // so both the emit-time admission ledger and durable-log reconciliation
-      // observe the genuine assistant response before the terminal boundary.
-      flushBufferedPlaintextStdout();
+      // prompt and the buffered text has been published before the terminal
+      // boundary.
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
       // run — sending its error and clearing run.clients/eventsLogStream —
@@ -17227,6 +17432,11 @@ export async function startServer({
         );
       }
       } finally {
+        activeVisualEvidenceRuns.delete(run.id);
+        critiqueTextQueue?.close();
+        if (critiqueProjectKeyForRun && critiqueOrchestratorPromise) {
+          critiqueRunRegistry.unregister(critiqueProjectKeyForRun, run.id);
+        }
         // Superseded attempts and early/error exits also release their own
         // receipt. The cleanup owner separately fences the shutdown deadline.
         completeCodexEvidenceCollection();

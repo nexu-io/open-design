@@ -5,34 +5,7 @@ import { delimiter, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-/*
- * 2026-08-26 产品裁决(B46,`specs/current/chat-panel-feedback.md`,落在 52131c2cf6):
- * 评审剧场(Critique Theater)**已下线**。`isCritiqueEnabled` 在总闸上恒返回 false
- * (`apps/daemon/src/critique/rollout.ts` 的 `CRITIQUE_THEATER_RETIRED`),skill /
- * project / env / phase 四层一起失效 —— 提示词不再注入,编排器不再启动。
- *
- * 这个文件**原来**断言的是另一件事:请求没带 skillId 时,评审指标要用项目的
- * **规范** skill id 打标。项目行里存着老 id `editorial-collage-deck`,
- * `resolveSkillId`(`apps/daemon/src/skills.ts` 的 `SKILL_ID_ALIASES`)把它归一成
- * `open-design-landing-deck`,于是 `/api/metrics` 上出现:
- *
- *   open_design_critique_runs_total{status="shipped",adapter="qwen",skill="open-design-landing-deck"} 1
- *
- * 那条归一逻辑**没坏、也没改名**。把 `CRITIQUE_THEATER_RETIRED` 翻成 false,
- * 下面这套 fixture 原封不动,老的三条断言(SSE 上出现 `critique.run_started`、
- * 指标带规范 skill、不带 `skill="unknown"` / `skill="editorial-collage-deck"`)
- * 会全部通过 —— 实测过。坏掉的只是「跑不跑」这一层。
- *
- * 所以 fixture 一行不删,只把期望改成裁决后的样子;哪天要把剧场放回来,照上面
- * 那三条恢复断言即可,不用重建现场。
- *
- * 顺带守住裁决的另一半:这个假 CLI 会把整套 `<CRITIQUE_RUN>` 语法原样打到
- * stdout —— 正是用户在真实客户端里连撞四次的那个形状。编排器不再接管 stdout
- * 之后,这些字节直接走可见文本路径,所以兜底剥离
- * (`apps/daemon/src/panel-grammar-strip.ts`)必须把标记全吃掉、把标记之间的
- * 人话原样留下。这是本仓唯一一条把这套语法推过真实 /api/chat 的用例。
- */
-describe('project skill critique label —— 评审剧场已下线', () => {
+describe('project skill Design Jury integration', () => {
   let server: http.Server;
   let baseUrl: string;
   let fakeBinDir: string;
@@ -96,7 +69,7 @@ setTimeout(() => process.exit(0), 250);
     else process.env.OD_CRITIQUE_ENABLED = originalCritiqueEnabled;
   });
 
-  it('keeps the theater retired for a project that opted in, and lets no panel grammar reach the chat body', async () => {
+  it('starts the default-enabled Jury, preserves canonical skill metrics, and hides jury markup from chat', async () => {
     const projectId = `project-skill-label-${randomUUID()}`;
     const createResponse = await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
@@ -106,8 +79,7 @@ setTimeout(() => process.exit(0), 250);
         name: 'Project skill critique label fixture',
         skillId: 'open-design-landing-deck',
         designSystemId: 'sleek',
-        // 项目级开关打开 —— 裁决前这是优先级最高的「开」信号之一。
-        metadata: { critiqueTheaterEnabled: true },
+        metadata: {},
       }),
     });
     expect(createResponse.ok).toBe(true);
@@ -137,9 +109,7 @@ setTimeout(() => process.exit(0), 250);
     expect(chatResponse.ok).toBe(true);
     const chatBody = await chatResponse.text();
 
-    // 1) 总闸关死:项目开关 true + `OD_CRITIQUE_ENABLED=1` 也打不开编排器。
-    expect(chatBody).not.toContain('critique.run_started');
-    // 这一轮照常走完 legacy 单轮生成 —— 「不跑评审」不等于「这一轮没跑」。
+    expect(chatBody).toContain('event: critique.run_started');
     expect(chatBody).toContain('event: end');
 
     // 2) 兜底剥离:假 CLI 吐的剧场语法一个标记都不许进正文。
@@ -153,8 +123,29 @@ setTimeout(() => process.exit(0), 250);
 
     const metricsResponse = await fetch(`${baseUrl}/api/metrics`);
     const metrics = await metricsResponse.text();
-    // 3) 编排器没启动 => 一条评审计数都不该落。既然没有序列,也就不存在
-    //    把 skill 误标成 `unknown` / `editorial-collage-deck` 的机会。
-    expect(metrics).not.toContain('open_design_critique_runs_total{');
+    expect(metrics).toContain('skill="open-design-landing-deck"');
+    expect(metrics).not.toContain('skill="unknown"');
+    expect(metrics).not.toContain('skill="editorial-collage-deck"');
+  });
+
+  it('honors an explicit project opt-out', async () => {
+    const projectId = `project-skill-label-${randomUUID()}`;
+    const createResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId, name: 'Jury opt-out fixture', skillId: 'open-design-landing-deck',
+        designSystemId: 'sleek', metadata: { critiqueTheaterEnabled: false },
+      }),
+    });
+    expect(createResponse.ok).toBe(true);
+    const chatResponse = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: 'qwen', projectId, designSystemId: 'sleek', message: 'Create the landing page.' }),
+    });
+    expect(chatResponse.ok).toBe(true);
+    const chatBody = await chatResponse.text();
+    expect(chatBody).not.toContain('event: critique.run_started');
+    expect(chatBody).toContain('event: critique.skipped');
+    expect(chatBody).toContain('disabled for this project');
   });
 });

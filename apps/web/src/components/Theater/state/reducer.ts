@@ -78,6 +78,7 @@ export interface CritiqueDegradedInfo {
 
 export type CritiqueState =
   | { phase: 'idle' }
+  | { phase: 'skipped'; runId: string; reason: string; config: null; rounds: []; warnings: [] }
   | {
       phase: 'running';
       runId: string;
@@ -208,6 +209,10 @@ export function reduce(state: CritiqueState, action: CritiqueAction): CritiqueSt
     };
   }
 
+  if (action.type === 'skipped') {
+    return { phase: 'skipped', runId: action.runId, reason: action.reason, config: null, rounds: [], warnings: [] };
+  }
+
   if (state.phase === 'idle') return state;
   if (state.runId !== action.runId) return state;
 
@@ -227,6 +232,7 @@ export function reduce(state: CritiqueState, action: CritiqueAction): CritiqueSt
     }
     return state;
   }
+  if (state.phase === 'skipped') return state;
 
   switch (action.type) {
     case 'panelist_open': {

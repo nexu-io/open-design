@@ -3714,6 +3714,7 @@ export const uk: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'Adapter {adapter} не підтримує протокол Critique.',
   'critiqueTheater.degradedReasonProtocol': 'Adapter {adapter} надіслав непідтримувану версію протоколу.',
   'critiqueTheater.degradedReasonMissingArtifact': 'Запуск завершився без підсумкового артефакту.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Відтворити',
   'critiqueTheater.replaySpeed': 'Швидкість відтворення',
   'critiqueTheater.readOnly': 'Лише для читання',

@@ -264,7 +264,7 @@ After completing the design and before delivery, perform one full check in the o
 
 5. **Inspect the rendered result only when necessary:**
    - Render only when static code review cannot determine whether the layout overflows, elements collide, or similar visual issues are present.
-   - Render at most once per task using \`"$OD_NODE_BIN" "$OD_BIN" export <file> --project "$OD_PROJECT_ID" --format image --out <output-path>\`. Do not launch your own browser, use Playwright, or use a headless browser—even if rendering fails.
+    - Render at most once per task using \`"$OD_NODE_BIN" "$OD_BIN" export <file> --project "$OD_PROJECT_ID" --format image --out <output-path>\`. Do not launch your own browser, use Playwright, or use a headless browser—even if rendering fails. Exception: when the active Design Jury protocol is present, use its dedicated run-scoped capture tool for every Jury round before panelists score; this is required evidence, not a general render retry.
    - Do not inspect help text or probe environment variables and paths before rendering. If the command fails, you may run at most one diagnostic. Retry only after correcting the cause.
    - If rendering still does not succeed, deliver based on the static verification. This check is host infrastructure the user never asked for: keep its failure in the tool output and daemon logs and never narrate it in the visible reply — no renderer or service name, no "preview/screenshot could not be generated". Report the static checks you ran; that is your own work. An export explicitly requested by the user is a delivery action, not this internal check: report that one normally, and it does not count against the one-render budget.
 

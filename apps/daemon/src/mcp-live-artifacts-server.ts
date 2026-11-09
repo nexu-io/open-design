@@ -88,6 +88,18 @@ export function createLiveArtifactsMcpTools(): McpTool[] {
       },
     },
     {
+      name: 'capture_design_jury_viewports',
+      description: 'For an active Design Jury run only, capture the current project-relative HTML entry at 390x844, 1024x768, and 1280x800. Returns the actual PNG images and host-measured DOM geometry. Requires entryFile; do not use for arbitrary URLs.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['entryFile'],
+        properties: {
+          entryFile: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+    {
       name: 'connectors_list',
       description: 'List connector catalog and available read-only tools through the daemon tool endpoint. Use `{ "useCase": "personal_daily_digest" }` for curated daily-digest tools. POSIX equivalent: `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --use-case personal_daily_digest --format compact` or fallback `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`.',
       inputSchema: CONNECTORS_LIST_INPUT_SCHEMA,
@@ -188,6 +200,26 @@ async function callTool(name: string, args: JsonObject): Promise<unknown> {
   if (name === 'live_artifacts_refresh') {
     return await requestJson('/api/tools/live-artifacts/refresh', { method: 'POST', body: JSON.stringify({ artifactId: args.artifactId }) });
   }
+  if (name === 'capture_design_jury_viewports') {
+    const capture = await requestJson<{
+      ok?: boolean;
+      receipt?: string;
+      artifactPath?: string;
+      revision?: string;
+      captures?: Array<{ width: number; height: number; evidencePath: string; geometry: JsonObject; image: string; mimeType: string }>;
+    }>('/api/tools/visual-capture', {
+      method: 'POST',
+      body: JSON.stringify({ entryFile: args.entryFile }),
+    });
+    if (capture.ok !== true || !capture.receipt || !Array.isArray(capture.captures) || capture.captures.length !== 3) {
+      throw new Error('The host did not return all required rendered evidence.');
+    }
+    await requestJson('/api/tools/visual-capture/ack', {
+      method: 'POST',
+      body: JSON.stringify({ receipt: capture.receipt }),
+    });
+    return capture;
+  }
   if (name === 'connectors_list') {
     const useCase = args.useCase === 'personal_daily_digest' ? '?useCase=personal_daily_digest' : '';
     return await requestJson(`/api/tools/connectors/list${useCase}`, { method: 'GET' });
@@ -229,6 +261,36 @@ export async function handleLiveArtifactsMcpRequest(request: JsonRpcRequest): Pr
       const name = typeof params.name === 'string' ? params.name : '';
       const args = params.arguments && typeof params.arguments === 'object' && !Array.isArray(params.arguments) ? (params.arguments as JsonObject) : {};
       const result = await callTool(name, args);
+      if (name === 'capture_design_jury_viewports' && result && typeof result === 'object') {
+        const response = result as { receipt?: unknown; artifactPath?: unknown; revision?: unknown; captures?: unknown };
+        const captures = Array.isArray(response.captures) ? response.captures : [];
+        const content: Array<Record<string, unknown>> = [{
+          type: 'text',
+          text: JSON.stringify({
+            receipt: response.receipt,
+            artifactPath: response.artifactPath,
+            revision: response.revision,
+            captures: captures.map((capture) => {
+              if (!capture || typeof capture !== 'object') return capture;
+              const item = capture as Record<string, unknown>;
+              const { image: _image, ...metadata } = item;
+              return metadata;
+            }),
+          }),
+        }];
+        for (const capture of captures) {
+          if (!capture || typeof capture !== 'object') continue;
+          const item = capture as Record<string, unknown>;
+          if (typeof item.image === 'string' && item.mimeType === 'image/png') {
+            content.push({ type: 'image', data: item.image, mimeType: 'image/png' });
+          }
+        }
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: { content },
+        };
+      }
       return {
         jsonrpc: '2.0',
         id,

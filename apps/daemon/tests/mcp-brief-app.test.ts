@@ -646,7 +646,7 @@ describe('local OpenDesign MCP brief app', () => {
     );
 
     expect(confirmed.structuredContent).toMatchObject({ locale: 'zh-CN' });
-    expect(String(confirmed.structuredContent?.summary)).toContain(
+    expect(String((confirmed.structuredContent as Record<string, unknown> | undefined)?.['summary'])).toContain(
       '这个网站需要实现什么目标？',
     );
     expect(confirmed.content[0]?.text).toContain('需求已确认。');
@@ -719,10 +719,10 @@ describe('local OpenDesign MCP brief app', () => {
       view: 'brief-confirmed',
       artifactType: 'website',
     });
-    expect(String(confirmed.structuredContent?.summary)).toContain(
+    expect(String((confirmed.structuredContent as Record<string, unknown> | undefined)?.['summary'])).toContain(
       'What should this website do?',
     );
-    expect(String(confirmed.structuredContent?.summary)).not.toMatch(
+    expect(String((confirmed.structuredContent as Record<string, unknown> | undefined)?.['summary'])).not.toMatch(
       /^brief-confirmation-v1\./u,
     );
     expect(confirmed.content[0]?.text).toContain('Brief confirmed.');
@@ -817,7 +817,7 @@ describe('local OpenDesign MCP brief app', () => {
       );
 
       expect(confirmed.structuredContent).toMatchObject({ locale });
-      expect(String(confirmed.structuredContent?.summary)).toContain(
+      expect(String((confirmed.structuredContent as Record<string, unknown> | undefined)?.['summary'])).toContain(
         expectedQuestion,
       );
       expect(confirmed.content[0]?.text).not.toContain('Brief confirmed.');

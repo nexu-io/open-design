@@ -3899,6 +3899,7 @@ export const zhCN: Dict = {
   "critiqueTheater.degradedReasonProtocol":
     "适配器 {adapter} 使用了不支持的协议版本。",
   "critiqueTheater.degradedReasonMissingArtifact": "运行结束但未产出最终产物。",
+  "critiqueTheater.degradedReasonVisualEvidenceMissing": "Rendered visual evidence is missing, stale, or could not be verified.",
   "critiqueTheater.replay": "回放",
   "critiqueTheater.replaySpeed": "回放速度",
   "critiqueTheater.readOnly": "只读",

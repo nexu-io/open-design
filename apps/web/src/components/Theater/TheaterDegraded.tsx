@@ -14,6 +14,7 @@ const REASON_KEY: Record<DegradedReason, keyof Dict> = {
   adapter_unsupported: 'critiqueTheater.degradedReasonAdapter',
   protocol_version_mismatch: 'critiqueTheater.degradedReasonProtocol',
   missing_artifact: 'critiqueTheater.degradedReasonMissingArtifact',
+  visual_evidence_missing: 'critiqueTheater.degradedReasonVisualEvidenceMissing',
 };
 
 /**

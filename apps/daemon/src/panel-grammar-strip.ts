@@ -88,6 +88,81 @@ export interface PanelGrammarStripper {
   flush(): string;
 }
 
+export interface CritiqueRegionStripper {
+  strip(delta: string): string;
+  flush(): string;
+}
+
+/** Hide the entire active Design Jury envelope from the chat display. */
+export function createCritiqueRegionStripper(): CritiqueRegionStripper {
+  const openPrefix = '<CRITIQUE_RUN';
+  const closeTag = '</CRITIQUE_RUN>';
+  let held = '';
+  let inside = false;
+
+  const suffixPrefixLength = (text: string, marker: string): number => {
+    const max = Math.min(text.length, marker.length - 1);
+    for (let length = max; length > 0; length -= 1) {
+      if (marker.slice(0, length).toLowerCase() === text.slice(-length).toLowerCase()) return length;
+    }
+    return 0;
+  };
+
+  return {
+    strip(delta: string): string {
+      let input = held + String(delta ?? '');
+      held = '';
+      let visible = '';
+
+      while (input.length > 0) {
+        if (inside) {
+          const closeAt = input.toLowerCase().indexOf(closeTag.toLowerCase());
+          if (closeAt >= 0) {
+            input = input.slice(closeAt + closeTag.length);
+            inside = false;
+            continue;
+          }
+          const keep = suffixPrefixLength(input, closeTag);
+          held = keep > 0 ? input.slice(-keep) : '';
+          break;
+        }
+
+        const openAt = input.toLowerCase().indexOf(openPrefix.toLowerCase());
+        if (openAt < 0) {
+          const keep = suffixPrefixLength(input, openPrefix);
+          visible += keep > 0 ? input.slice(0, -keep) : input;
+          held = keep > 0 ? input.slice(-keep) : '';
+          break;
+        }
+
+        const afterName = input[openAt + openPrefix.length];
+        if (afterName !== undefined && !/[\s/>]/u.test(afterName)) {
+          visible += input.slice(0, openAt + openPrefix.length);
+          input = input.slice(openAt + openPrefix.length);
+          continue;
+        }
+        const tagEnd = input.indexOf('>', openAt + openPrefix.length);
+        if (tagEnd < 0) {
+          visible += input.slice(0, openAt);
+          held = input.slice(openAt, openAt + 256);
+          break;
+        }
+        visible += input.slice(0, openAt);
+        input = input.slice(tagEnd + 1);
+        inside = true;
+      }
+
+      return visible;
+    },
+    flush(): string {
+      // A partial jury opener is protocol, not user prose. Do not leak it.
+      held = '';
+      inside = false;
+      return '';
+    },
+  };
+}
+
 /**
  * 剥离**吃掉了整帧**吗 —— 也就是这一帧该不该整条扔掉。
  *

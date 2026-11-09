@@ -39,3 +39,21 @@ export function narrowProjectCritiqueOverride(
     .critiqueTheaterEnabled;
   return typeof raw === 'boolean' ? raw : null;
 }
+
+/** Shared generation gate: prompt injection and orchestrator dispatch use the same result. */
+export function shouldRunCritique(input: {
+  enabled: boolean;
+  hasBrand: boolean;
+  hasSkill: boolean;
+  isMediaSurface: boolean;
+  streamFormat: string;
+  mode?: string | null;
+}): boolean {
+  return input.enabled
+    && input.hasBrand
+    && input.hasSkill
+    && !input.isMediaSurface
+    && input.mode !== 'ask'
+    && input.mode !== 'chat'
+    && (input.streamFormat === 'plain' || input.streamFormat === 'json-event-stream');
+}

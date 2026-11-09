@@ -3714,6 +3714,7 @@ export const fa: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'آداپتور {adapter} از پروتکل Critique پشتیبانی نکرد.',
   'critiqueTheater.degradedReasonProtocol': 'آداپتور {adapter} نسخه‌ای از پروتکل را ارسال کرد که پشتیبانی نمی‌شود.',
   'critiqueTheater.degradedReasonMissingArtifact': 'اجرا بدون آرتیفکت نهایی به پایان رسید.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'بازپخش',
   'critiqueTheater.replaySpeed': 'سرعت بازپخش',
   'critiqueTheater.readOnly': 'فقط‌خواندنی',

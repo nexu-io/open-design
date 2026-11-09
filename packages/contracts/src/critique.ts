@@ -57,7 +57,7 @@ export type CritiqueConfig = z.infer<typeof CritiqueConfigSchema>;
 
 export function defaultCritiqueConfig(): CritiqueConfig {
   return {
-    enabled: false,
+    enabled: true,
     cast: [...PANELIST_ROLES],
     maxRounds: 3,
     scoreScale: 10,
@@ -79,6 +79,7 @@ export const DEGRADED_REASONS = [
   'adapter_unsupported',
   'protocol_version_mismatch',
   'missing_artifact',
+  'visual_evidence_missing',
 ] as const;
 export type DegradedReason = typeof DEGRADED_REASONS[number];
 
@@ -121,12 +122,14 @@ export type PanelEvent =
   | { type: 'degraded';          runId: string; reason: DegradedReason; adapter: string }
   | { type: 'interrupted';       runId: string; bestRound: number; composite: number }
   | { type: 'failed';            runId: string; cause: FailedCause }
-  | { type: 'parser_warning';    runId: string; kind: ParserWarningKind; position: number };
+  | { type: 'parser_warning';    runId: string; kind: ParserWarningKind; position: number }
+  | { type: 'skipped'; runId: string; reason: string };
+
 
 const PANEL_EVENT_TYPE_LIST = [
   'run_started', 'panelist_open', 'panelist_dim', 'panelist_must_fix',
   'panelist_close', 'round_end', 'ship', 'degraded', 'interrupted',
-  'failed', 'parser_warning',
+  'failed', 'parser_warning', 'skipped',
 ] as const satisfies readonly PanelEvent['type'][];
 
 const PANEL_EVENT_TYPES = new Set<PanelEvent['type']>(PANEL_EVENT_TYPE_LIST);
@@ -253,6 +256,8 @@ export function isPanelEvent(value: unknown): value is PanelEvent {
     case 'parser_warning':
       return isString(o['kind']) && PARSER_WARNING_KIND_SET.has(o['kind'])
         && isNonNegativeInt(o['position']);
+    case 'skipped':
+      return isString(o['reason']) && o['reason'].length > 0;
   }
 }
 
@@ -279,7 +284,8 @@ export type CritiqueSseEvent =
   | SseTransportEvent<'critique.degraded',          PayloadOf<'degraded'>>
   | SseTransportEvent<'critique.interrupted',       PayloadOf<'interrupted'>>
   | SseTransportEvent<'critique.failed',            PayloadOf<'failed'>>
-  | SseTransportEvent<'critique.parser_warning',    PayloadOf<'parser_warning'>>;
+  | SseTransportEvent<'critique.parser_warning',    PayloadOf<'parser_warning'>>
+  | SseTransportEvent<'critique.skipped', PayloadOf<'skipped'>>;
 
 export const CRITIQUE_SSE_EVENT_NAMES = [
   'critique.run_started',
@@ -293,6 +299,7 @@ export const CRITIQUE_SSE_EVENT_NAMES = [
   'critique.interrupted',
   'critique.failed',
   'critique.parser_warning',
+  'critique.skipped',
 ] as const satisfies readonly CritiqueSseEvent['event'][];
 
 export type CritiqueSseEventName = typeof CRITIQUE_SSE_EVENT_NAMES[number];

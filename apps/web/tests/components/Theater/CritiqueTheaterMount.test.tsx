@@ -151,7 +151,7 @@ describe('<TestCritiqueTheaterMount> (Phase 9.1)', () => {
     expect(screen.getByText('Interrupted')).toBeTruthy();
   });
 
-  it('tears down the connection when enabled flips to false', () => {
+  it('keeps the project stream connected when enabled flips to false', () => {
     const { factory, handles } = makeFactory();
     const { rerender } = render(
       <TestCritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />,
@@ -162,7 +162,14 @@ describe('<TestCritiqueTheaterMount> (Phase 9.1)', () => {
     rerender(
       <TestCritiqueTheaterMount projectId="p-1" enabled={false} connectionFactory={factory} />,
     );
-    expect(handles[0]!.closed).toBe(true);
+    expect(handles[0]!.closed).toBe(false);
+  });
+
+  it('shows the per-run skipped reason from project events', () => {
+    const { factory, handles } = makeFactory();
+    render(<TestCritiqueTheaterMount projectId="p-1" enabled connectionFactory={factory} />);
+    act(() => handles[0]!.send({ type: 'skipped', runId: 'r-skip', reason: 'Unsupported media surface.' }));
+    expect(screen.getByRole('status').textContent).toContain('Unsupported media surface.');
   });
 
   it('POSTs to the daemon interrupt endpoint on Interrupt click (PR #1315 review)', () => {

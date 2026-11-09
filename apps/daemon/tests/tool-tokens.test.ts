@@ -15,6 +15,23 @@ afterEach(() => {
 });
 
 describe('run-scoped tool tokens', () => {
+  it('limits visual capture authorization to its endpoint and operation tuple', () => {
+    const registry = new ToolTokenRegistry();
+    const endpoint = '/api/tools/visual-capture';
+    const operation = 'project:visual-capture';
+    expect(CHAT_TOOL_ENDPOINTS).toContain(endpoint);
+    expect(CHAT_TOOL_OPERATIONS).toContain(operation);
+    const grant = registry.mint({
+      runId: 'jury-run',
+      projectId: 'project-a',
+      allowedEndpoints: [endpoint],
+      allowedOperations: [operation],
+    });
+    expect(registry.validate(grant.token, { endpoint, operation })).toMatchObject({ ok: true });
+    expect(registry.validate(grant.token, { endpoint: '/api/tools/live-artifacts/create', operation })).toMatchObject({ ok: false });
+    registry.revokeRun(grant.runId, 'child_exit');
+  });
+
   it('keeps chat tokens alive beyond the runtime inactivity window', () => {
     const thirtyMinutes = 30 * 60 * 1000;
 

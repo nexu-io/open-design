@@ -731,8 +731,6 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
-          '--dir',
-          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/deepseek-v4-flash',
         ]);
@@ -826,8 +824,6 @@ process.stdin.on('end', () => {
           'run',
           '--format',
           'json',
-          '--dir',
-          expect.stringContaining(projectId),
           '-m',
           'open-design-byok/model',
         ]);
@@ -3847,6 +3843,90 @@ process.stdin.on('end', () => {
         expect(runsBody.runs[0]?.designSystemDigest).toMatch(/^[a-f0-9]{64}$/);
       },
     );
+  });
+
+  it('feeds plain Aider stdout into the built-in Jury before display filtering', async () => {
+    const projectId = `jury-plain-${randomUUID()}`;
+    const createResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plain Jury fixture',
+        designSystemId: 'default',
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(createResponse.ok).toBe(true);
+
+    const transcript = [
+      '<CRITIQUE_RUN version="1" maxRounds="3" threshold="8.0" scale="10">',
+      '<ROUND n="1"><PANELIST role="designer"><NOTES>Draft</NOTES><ARTIFACT mime="text/html"><![CDATA[<html><main>fixture</main></html>]]></ARTIFACT></PANELIST>',
+      '<PANELIST role="critic" score="9"><DIM name="hierarchy" score="9">clear</DIM></PANELIST>',
+      '<PANELIST role="brand" score="9"><DIM name="palette" score="9">aligned</DIM></PANELIST>',
+      '<PANELIST role="a11y" score="9"><DIM name="contrast" score="9">legible</DIM></PANELIST>',
+      '<PANELIST role="copy" score="9"><DIM name="voice" score="9">concise</DIM></PANELIST>',
+      '<ROUND_END n="1" composite="9" must_fix="0" decision="ship"><REASON>Ready</REASON></ROUND_END></ROUND>',
+      '<SHIP round="1" composite="9" status="shipped"><ARTIFACT mime="text/html"><![CDATA[<html><main>fixture</main></html>]]></ARTIFACT><SUMMARY>Ready</SUMMARY></SHIP>',
+      '</CRITIQUE_RUN>',
+    ].join('\n');
+
+    await withFakeAgent('aider', `process.stdout.write(${JSON.stringify(transcript)});`, async () => {
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'aider',
+          projectId,
+          designSystemId: 'default',
+          skillIds: ['frontend-dev'],
+          message: 'Build a responsive prototype',
+        }),
+      });
+      const body = await response.text();
+      expect(response.ok).toBe(true);
+      expect(body).toContain('critique.run_started');
+      expect(body).toContain('critique.degraded');
+      expect(body).not.toContain('critique.ship');
+      expect(body).toContain('visual_evidence_missing');
+      expect(body).toContain('"status":"succeeded"');
+    });
+  });
+
+  it('injects the run-scoped visual-capture MCP server into a Jury OpenCode run', async () => {
+    const projectId = `jury-mcp-${randomUUID()}`;
+    const createResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Visual Jury MCP fixture', designSystemId: 'default', skipDiscoveryBrief: true }),
+    });
+    expect(createResponse.ok).toBe(true);
+
+    const script = `
+const config = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}');
+const jury = config.mcp?.['open-design-design-jury'];
+const result = jury
+  ? 'visual-mcp-present:' + JSON.stringify({ name: 'open-design-design-jury', command: jury.command })
+  : 'visual-mcp-missing';
+console.log(JSON.stringify({ type: 'step_start' }));
+console.log(JSON.stringify({ type: 'text', part: { text: result } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+`;
+    await withFakeAgent('opencode', script, async () => {
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'opencode', projectId, designSystemId: 'default',
+          skillIds: ['frontend-dev'], message: 'Build a responsive prototype',
+        }),
+      });
+      const body = await response.text();
+      expect(response.ok).toBe(true);
+      expect(body).toContain('visual-mcp-present');
+      expect(body).toContain('open-design-design-jury');
+      expect(body).toContain('live-artifacts');
+    });
   });
 
   it('does not compose another member Personal design system from a persisted project id', async () => {

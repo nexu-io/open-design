@@ -514,7 +514,7 @@ export function buildOpenCodeMcpConfigContent(
   return JSON.stringify(config);
 }
 
-function buildOpenCodeExternalDirectoryAllowlist(
+export function buildOpenCodeExternalDirectoryAllowlist(
   directories: string[] | undefined,
 ): Record<string, 'allow'> | null {
   const normalized = Array.from(

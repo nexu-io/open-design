@@ -3714,6 +3714,7 @@ export const ja: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'アダプター {adapter} は批評プロトコルをサポートしていません。',
   'critiqueTheater.degradedReasonProtocol': 'アダプター {adapter} はサポート対象外のプロトコルバージョンを使用しています。',
   'critiqueTheater.degradedReasonMissingArtifact': '実行は完了しましたが最終成果物がありません。',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'リプレイ',
   'critiqueTheater.replaySpeed': 'リプレイ速度',
   'critiqueTheater.readOnly': '読み取り専用',

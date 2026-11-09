@@ -8923,7 +8923,7 @@ function CritiqueTheaterSectionContent({
 }) {
   const { t } = useI18n();
   const analytics = useAnalytics();
-  const enabled = useCritiqueTheaterEnabled();
+  const enabled = useCritiqueTheaterEnabled(activeProjectId, workspaceContext);
 
   const handleToggle = () => {
     const next = !enabled;

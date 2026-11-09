@@ -107,10 +107,16 @@ interface McpPluginAttribution {
 }
 interface McpToolCallResult {
   [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string }>;
+  content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>;
   structuredContent?: JsonObject;
   isError?: boolean;
 }
+type TextMcpToolCallResult = Omit<McpToolCallResult, 'content'> & {
+  content: Array<{ type: 'text'; text: string }>;
+};
+type McpToolNameResult<TName extends string> = TName extends 'capture_design_jury_viewports'
+  ? McpToolCallResult
+  : TextMcpToolCallResult;
 
 const SAFE_MCP_DAEMON_RETRY_CALLS = new Set([
   'get_active_context',
@@ -136,7 +142,7 @@ function normalizeDaemonUrl(value: string | URL): string {
 function isDaemonUnreachableResult(result: McpToolCallResult): boolean {
   return result.isError === true
     && result.content.some((item) =>
-      item.text.includes('cannot reach the OpenDesign daemon'),
+      item.type === 'text' && item.text.includes('cannot reach the OpenDesign daemon'),
     );
 }
 
@@ -190,7 +196,7 @@ export function createMcpDaemonTarget(options: RunMcpOptions): {
         // not replay a mutation and risk duplicate projects/runs/files.
         if (recoveredUrl === firstUrl) return first;
         return errorResult([
-          ...first.content.map((item) => item.text),
+          ...first.content.flatMap((item) => item.type === 'text' ? [item.text] : []),
           `OpenDesign restarted its local service while "${name}" was in progress `
             + '(for example because the app switched to its desktop window), '
             + 'so this change may or may not have been applied. '
@@ -494,6 +500,23 @@ export const TOOL_DEFS = [
       additionalProperties: false,
     },
     annotations: { ...READ_ANNOTATIONS, title: 'Pull design bundle' },
+  },
+  {
+    name: 'capture_design_jury_viewports',
+    description:
+      'For an active Design Jury run only: capture the current project-relative HTML entry at 390x844, 1024x768, and 1280x800. Saves screenshots as project evidence and returns the actual images plus host-measured DOM geometry. Requires entryFile; do not use for arbitrary URLs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entryFile: {
+          type: 'string',
+          description: 'The current HTML artifact path relative to the active project root.',
+        },
+      },
+      required: ['entryFile'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Capture rendered Jury evidence' },
   },
   {
     name: 'get_project',
@@ -1051,7 +1074,7 @@ export async function _readMcpResource(
     const result = await daemonTarget.call('read_resource', {}, async (baseUrl) =>
       ok(await getJson<ActiveContext>(`${baseUrl}/api/active`)),
     );
-    if (result.isError === true) throw new Error(result.content[0]?.text);
+    if (result.isError === true) throw new Error(result.content.find((item) => item.type === 'text')?.text);
     const data = parseMcpResult(result);
     return {
       contents: [
@@ -1083,7 +1106,7 @@ export async function _readMcpResource(
       headers,
     ));
   });
-  if (result.isError === true) throw new Error(result.content[0]?.text);
+  if (result.isError === true) throw new Error(result.content.find((item) => item.type === 'text')?.text);
   const data = parseMcpResult(result) as ResourcePayload | null;
   const text =
     data?.skill?.body ??
@@ -1492,7 +1515,7 @@ function mcpSourceProperties(
 }
 
 function parseMcpResult(result: McpToolCallResult): JsonObject | null {
-  const text = result.content[0]?.text;
+  const text = result.content.find((item) => item.type === 'text')?.text;
   if (typeof text !== 'string') return null;
   try {
     const parsed = JSON.parse(text) as unknown;
@@ -1509,7 +1532,7 @@ function mcpFailureFacts(
   result: McpToolCallResult,
 ): Record<string, unknown> {
   if (result.isError !== true) return {};
-  const message = result.content[0]?.text ?? '';
+  const message = result.content.find((item) => item.type === 'text')?.text ?? '';
   const errorCode = message.includes('PLUGIN_CONTRACT_REJECTED')
     ? 'PLUGIN_CONTRACT_REJECTED'
     : message.includes('cannot reach the OpenDesign daemon')
@@ -2101,13 +2124,13 @@ async function runMcpStdioImplementation(options: RunMcpOptions): Promise<void> 
   }
 }
 
-function ok(payload: unknown): McpToolCallResult {
+function ok(payload: unknown): TextMcpToolCallResult {
   const text =
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
   return { content: [{ type: 'text', text }] };
 }
 
-function errorResult(message: string): McpToolCallResult {
+function errorResult(message: string): TextMcpToolCallResult {
   return { isError: true, content: [{ type: 'text', text: message }] };
 }
 
@@ -2159,6 +2182,12 @@ const PROJECT_OR_RUN_TOOLS = new Set([
   'cancel_run',
 ]);
 
+function handleMcpToolCall<TName extends string>(
+  baseUrl: string,
+  name: TName,
+  args: McpArgs,
+  options?: HandleMcpToolCallOptions,
+): Promise<McpToolNameResult<TName>>;
 async function handleMcpToolCall(
   baseUrl: string,
   name: unknown,
@@ -2313,6 +2342,47 @@ async function handleMcpToolCall(
           args.maxBytes,
           headers,
         );
+      case 'capture_design_jury_viewports': {
+        const token = process.env.OD_TOOL_TOKEN?.trim();
+        if (!token) return errorResult('Rendered Jury capture requires an active OpenDesign run.');
+        requireString(args.entryFile, 'entryFile');
+        const endpoint = `${baseUrl}/api/tools/visual-capture`;
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entryFile: args.entryFile }),
+        });
+        if (!response.ok) return errorResult(await formatDaemonError(response, endpoint));
+        const payload = await response.json() as {
+          ok?: boolean; receipt?: string; artifactPath?: string; revision?: string;
+          captures?: Array<{ width: number; height: number; evidencePath: string; geometry: JsonObject; image: string; mimeType: string }>;
+        };
+        if (payload.ok !== true || !payload.receipt || !Array.isArray(payload.captures) || payload.captures.length !== 3) {
+          return errorResult('The host did not return all required rendered evidence.');
+        }
+        const images = payload.captures.map((capture) => {
+          if (!/^image\/(png|jpeg)$/u.test(capture.mimeType) || !capture.image) {
+            throw new Error('The host returned an invalid screenshot image.');
+          }
+          return { type: 'image' as const, data: capture.image, mimeType: capture.mimeType };
+        });
+        const ack = await fetch(`${baseUrl}/api/tools/visual-capture/ack`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ receipt: payload.receipt }),
+        });
+        if (!ack.ok) return errorResult(await formatDaemonError(ack, `${baseUrl}/api/tools/visual-capture/ack`));
+        const captures = payload.captures.map(({ width, height, evidencePath, geometry }) => ({
+          viewport: { width, height }, evidencePath, geometry,
+        }));
+        return {
+          content: [
+            { type: 'text', text: JSON.stringify({ evidence: 'host-captured', artifactPath: payload.artifactPath, revision: payload.revision, captures }) },
+            ...images,
+          ],
+          structuredContent: { artifactPath: payload.artifactPath ?? '', revision: payload.revision ?? '', captures, imageContentReturned: true },
+        };
+      }
       case 'search_files': {
         const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
         requireString(args.query, 'query');
@@ -3166,7 +3236,7 @@ async function getFile(
   offset = 0,
   limit = 2000,
   headers?: Record<string, string>,
-) {
+): Promise<TextMcpToolCallResult> {
   const segments = String(relPath)
     .split('/')
     .filter((s) => s.length > 0)
@@ -3266,7 +3336,7 @@ async function getArtifact(
   includeMode: unknown,
   maxBytesArg: unknown,
   headers?: Record<string, string>,
-) {
+): Promise<TextMcpToolCallResult> {
   const include = includeMode == null || includeMode === '' ? 'auto' : includeMode;
   if (typeof include !== 'string' || !VALID_INCLUDE_MODES.has(include)) {
     return errorResult(

@@ -30,6 +30,14 @@ const baseSummary = {
 };
 
 describe('composeSystemPrompt — metadata.promptTemplate', () => {
+  it('does not fall back to the default-on Jury config when resolved context is absent', () => {
+    const out = composeSystemPrompt({
+      critiqueBrand: { name: 'Fixture DS', design_md: '# Tokens' },
+      critiqueSkill: { id: 'prototype' },
+    });
+    expect(out).not.toContain('<CRITIQUE_RUN');
+  });
+
   it('pins the API batch-mode discovery skip before the normal discovery rules', () => {
     const out = composeSystemPrompt({
       metadata: {

@@ -1453,7 +1453,7 @@ export function composeSystemPrompt({
   // the critique flag is a no-op there until a media-aware panel template
   // lands.
   const cfg = critique ?? defaultCritiqueConfig();
-  if (cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface && !isAskMode) {
+  if (critique !== undefined && cfg.enabled && critiqueBrand && critiqueSkill && !isMediaSurface && !isAskMode) {
     parts.push('\n\n' + renderPanelPrompt({ cfg, brand: critiqueBrand, skill: critiqueSkill }));
   }
 

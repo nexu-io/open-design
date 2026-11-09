@@ -35,6 +35,7 @@ export const CHAT_TOOL_ENDPOINTS = [
   PROJECT_EXPORT_TOOL_ENDPOINT,
   '/api/tools/library/search',
   '/api/tools/library/apply',
+  '/api/tools/visual-capture',
 ] as const;
 
 export const CHAT_TOOL_OPERATIONS = [
@@ -51,6 +52,7 @@ export const CHAT_TOOL_OPERATIONS = [
   'project:export',
   'library:search',
   'library:apply',
+  'project:visual-capture',
 ] as const;
 
 export type ToolEndpoint = (typeof CHAT_TOOL_ENDPOINTS)[number] | (string & {});

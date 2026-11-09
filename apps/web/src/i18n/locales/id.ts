@@ -3714,6 +3714,7 @@ export const id: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'Adapter {adapter} tidak mendukung protokol Critique.',
   'critiqueTheater.degradedReasonProtocol': 'Adapter {adapter} mengirim versi protokol yang tidak didukung.',
   'critiqueTheater.degradedReasonMissingArtifact': 'Run selesai tanpa artefak final.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Putar ulang',
   'critiqueTheater.replaySpeed': 'Kecepatan putar ulang',
   'critiqueTheater.readOnly': 'Hanya-baca',

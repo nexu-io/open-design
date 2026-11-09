@@ -143,6 +143,7 @@ export const opencodeAgentDef = {
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
       appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      if (runtimeContext.openDesignExecution === true) args.push('--agent', 'open-design');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the

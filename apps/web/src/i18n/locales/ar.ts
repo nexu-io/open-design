@@ -3714,6 +3714,7 @@ export const ar: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'المحوّل {adapter} لا يدعم بروتوكول Critique.',
   'critiqueTheater.degradedReasonProtocol': 'أرسل المحوّل {adapter} إصدار بروتوكول غير مدعوم.',
   'critiqueTheater.degradedReasonMissingArtifact': 'انتهت الجلسة دون عنصر نهائي.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'إعادة التشغيل',
   'critiqueTheater.replaySpeed': 'سرعة إعادة التشغيل',
   'critiqueTheater.readOnly': 'للقراءة فقط',

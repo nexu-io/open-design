@@ -38,13 +38,38 @@ interface ConfigShape {
  * lag the user's actual toggle. Storage events (cross-tab) do not
  * carry a typed payload, so they still fall back to `readToggle()`.
  */
-export function useCritiqueTheaterEnabled(): boolean {
-  const [enabled, setEnabled] = useState<boolean>(() => readToggle());
+export function useCritiqueTheaterEnabled(
+  projectId: string | null = null,
+  workspaceContext?: WorkspaceCollabContext | null,
+): boolean {
+  const [enabled, setEnabled] = useState<boolean>(() => projectId ? true : readToggle());
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const reload = (): void => setEnabled(readToggle());
+    let cancelled = false;
+    const reload = (): void => {
+      if (!projectId) {
+        setEnabled(readToggle());
+        return;
+      }
+      void fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'GET',
+        ...(workspaceContext
+          ? { headers: workspaceProjectHeaders(workspaceContext) }
+          : {}),
+      }).then(async (response) => {
+        if (!response.ok) throw new Error(`Project settings returned ${response.status}`);
+        const body = await response.json() as { project?: { metadata?: unknown } };
+        const metadata = body.project?.metadata;
+        const stored = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+          ? (metadata as { critiqueTheaterEnabled?: unknown }).critiqueTheaterEnabled
+          : undefined;
+        if (!cancelled) setEnabled(typeof stored === 'boolean' ? stored : true);
+      }).catch(() => {
+        if (!cancelled) setEnabled(true);
+      });
+    };
     const onStorage = (evt: StorageEvent): void => {
-      if (evt.key !== null && evt.key !== STORAGE_KEY) return;
+      if (projectId || (evt.key !== null && evt.key !== STORAGE_KEY)) return;
       reload();
     };
     const onCustom = (evt: Event): void => {
@@ -52,21 +77,24 @@ export function useCritiqueTheaterEnabled(): boolean {
       // reflects in the UI even when localStorage is unwritable.
       const detail = (evt as CustomEvent<{ enabled?: unknown }>).detail;
       if (detail && typeof detail.enabled === 'boolean') {
-        setEnabled(detail.enabled);
+        const scopedProjectId = (evt as CustomEvent<{ projectId?: unknown }>).detail?.projectId;
+        if (projectId === null && !scopedProjectId) setEnabled(detail.enabled);
+        else if (projectId && scopedProjectId === projectId) setEnabled(detail.enabled);
         return;
       }
       // Malformed CustomEvent (no detail, or detail.enabled not
       // boolean): degrade to the localStorage path.
-      reload();
+      if (!projectId) reload();
     };
     window.addEventListener('storage', onStorage);
     window.addEventListener(TOGGLE_EVENT, onCustom);
     reload();
     return () => {
+      cancelled = true;
       window.removeEventListener('storage', onStorage);
       window.removeEventListener(TOGGLE_EVENT, onCustom);
     };
-  }, []);
+  }, [projectId, workspaceContext]);
   return enabled;
 }
 
@@ -147,16 +175,18 @@ export function setCritiqueTheaterEnabled(
   } catch {
     /* fall through to fresh object */
   }
-  parsed.critiqueTheaterEnabled = next;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-  } catch {
-    /* private mode / quota / disabled storage: the in-session event
-       below still propagates to other mounts so the UI stays
-       consistent for the rest of the session. */
+  if (!options.projectId) {
+    parsed.critiqueTheaterEnabled = next;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    } catch {
+      /* private mode / quota / disabled storage: event remains available. */
+    }
   }
   try {
-    window.dispatchEvent(new CustomEvent(TOGGLE_EVENT, { detail: { enabled: next } }));
+    window.dispatchEvent(new CustomEvent(TOGGLE_EVENT, {
+      detail: { enabled: next, ...(options.projectId ? { projectId: options.projectId } : {}) },
+    }));
   } catch {
     /* CustomEvent shim missing: single mount remains correct. */
   }
@@ -248,19 +278,20 @@ export function setCritiqueTheaterEnabled(
 }
 
 function readToggle(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   let raw: string | null;
   try {
     raw = window.localStorage.getItem(STORAGE_KEY);
   } catch {
-    return false;
+    return true;
   }
-  if (!raw) return false;
+  if (!raw) return true;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return false;
-    return (parsed as ConfigShape).critiqueTheaterEnabled === true;
+    if (!parsed || typeof parsed !== 'object') return true;
+    const override = (parsed as ConfigShape).critiqueTheaterEnabled;
+    return typeof override === 'boolean' ? override : true;
   } catch {
-    return false;
+    return true;
   }
 }

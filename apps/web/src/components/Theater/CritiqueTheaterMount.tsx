@@ -56,12 +56,11 @@ interface Props {
  * settles. Idle returns `null` so projects without a live run stay
  * visually unchanged.
  *
- * The `enabled` prop is the M1 settings toggle: when false the hook
- * tears down its connection and the mount renders nothing, regardless
- * of any in-flight runs the user opened previously.
+ * `enabled` hides an idle stage only. The project stream remains connected
+ * so an in-flight run and its interrupt remain available if the setting flips.
  */
 export function CritiqueTheaterMount(props: Props) {
-  if (!props.enabled || !props.projectId) return null;
+  if (!props.projectId) return null;
 
   const sharedProps = {
     projectId: props.projectId,
@@ -74,6 +73,7 @@ export function CritiqueTheaterMount(props: Props) {
     return (
       <ResolvedCritiqueTheaterMount
         {...sharedProps}
+        enabled={props.enabled}
         workspaceContext={props.workspaceContext ?? null}
       />
     );
@@ -81,13 +81,14 @@ export function CritiqueTheaterMount(props: Props) {
   return (
     <PersistedScopeCritiqueTheaterMount
       {...sharedProps}
+      enabled={props.enabled}
       callerWorkspaceContext={props.callerWorkspaceContext ?? null}
       persistedProjectWorkspaceId={props.persistedProjectWorkspaceId}
     />
   );
 }
 
-type ResolvedProps = Pick<Props, 'connectionFactory' | 'fetchInterrupt'> & {
+type ResolvedProps = Pick<Props, 'connectionFactory' | 'fetchInterrupt' | 'enabled'> & {
   projectId: string;
   workspaceContext: WorkspaceCollabContext | null;
 };
@@ -98,6 +99,7 @@ function PersistedScopeCritiqueTheaterMount({
   fetchInterrupt,
   callerWorkspaceContext,
   persistedProjectWorkspaceId,
+  enabled,
 }: Omit<ResolvedProps, 'workspaceContext'> & {
   callerWorkspaceContext: WorkspaceCollabContext | null;
   persistedProjectWorkspaceId?: string | null;
@@ -137,6 +139,7 @@ function PersistedScopeCritiqueTheaterMount({
       projectId={projectId}
       {...(connectionFactory ? { connectionFactory } : {})}
       {...(fetchInterrupt ? { fetchInterrupt } : {})}
+      enabled={enabled}
       workspaceContext={pinnedRef.current.context}
     />
   );
@@ -147,6 +150,7 @@ function ResolvedCritiqueTheaterMount({
   connectionFactory,
   fetchInterrupt,
   workspaceContext,
+  enabled,
 }: ResolvedProps) {
   const options = useMemo(
     () => ({
@@ -155,6 +159,8 @@ function ResolvedCritiqueTheaterMount({
     }),
     [connectionFactory, workspaceIdentityCacheKey(workspaceContext)],
   );
+  // Keep the stream attached for this project's lifetime so turning the
+  // setting off cannot tear down an already-active Jury or its interrupt.
   const { state, dispatch } = useCritiqueStream(projectId, true, options);
   const [interruptPending, setInterruptPending] = useState(false);
 
@@ -234,7 +240,7 @@ function ResolvedCritiqueTheaterMount({
     workspaceIdentityCacheKey(workspaceContext),
   ]);
 
-  if (state.phase === 'idle') return null;
+  if (state.phase === 'idle' || (!enabled && state.phase !== 'running' && state.phase !== 'skipped')) return null;
 
   return (
     <TheaterStage

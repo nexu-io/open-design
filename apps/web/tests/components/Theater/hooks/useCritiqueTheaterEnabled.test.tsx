@@ -29,8 +29,8 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-function Probe({ sink }: { sink: { enabled?: boolean } }) {
-  sink.enabled = useCritiqueTheaterEnabled();
+function Probe({ sink, projectId = null, context }: { sink: { enabled?: boolean }; projectId?: string | null; context?: WorkspaceCollabContext }) {
+  sink.enabled = useCritiqueTheaterEnabled(projectId, context);
   return null;
 }
 
@@ -55,10 +55,26 @@ function teamContext(): WorkspaceCollabContext {
 }
 
 describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
-  it('returns false on first read with no stored config', () => {
+  it('defaults on when no browser preference has been persisted', () => {
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
+    expect(sink.enabled).toBe(true);
+  });
+
+  it('uses project metadata (including explicit false) instead of localStorage', async () => {
+    window.localStorage.setItem('open-design:config', JSON.stringify({ critiqueTheaterEnabled: false }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({ project: { metadata: { critiqueTheaterEnabled: true } } }),
+    );
+    const sink: { enabled?: boolean } = {};
+    await act(async () => { render(<Probe sink={sink} projectId="project-a" />); });
+    expect(sink.enabled).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith('/api/projects/project-a', expect.objectContaining({ method: 'GET' }));
+    fetchSpy.mockResolvedValue(Response.json({ project: { metadata: { critiqueTheaterEnabled: false } } }));
+    cleanup();
+    await act(async () => { render(<Probe sink={sink} projectId="project-a" />); });
     expect(sink.enabled).toBe(false);
+    fetchSpy.mockRestore();
   });
 
   it('reads the toggle from the existing open-design:config blob', () => {
@@ -77,7 +93,7 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
   it('flips when the same-tab CustomEvent fires (Settings save handshake)', () => {
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
-    expect(sink.enabled).toBe(false);
+    expect(sink.enabled).toBe(true);
     act(() => {
       setCritiqueTheaterEnabled(true);
     });
@@ -106,17 +122,17 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     expect(stored.apiKey).toBe('sk-test');
   });
 
-  it('tolerates corrupted JSON in the stored config (returns false, does not throw)', () => {
+  it('tolerates corrupted JSON in the stored config (defaults on, does not throw)', () => {
     window.localStorage.setItem('open-design:config', 'not json');
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
-    expect(sink.enabled).toBe(false);
+    expect(sink.enabled).toBe(true);
   });
 
   it('reacts to cross-tab storage events', () => {
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
-    expect(sink.enabled).toBe(false);
+    expect(sink.enabled).toBe(true);
     act(() => {
       window.localStorage.setItem(
         'open-design:config',
@@ -140,27 +156,27 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
   // in a future refactor.
   // ---------------------------------------------------------------------------
 
-  it('returns false and does not throw when stored JSON is a non-object value (array)', () => {
+  it('defaults on when stored JSON is a non-object value (array)', () => {
     // `JSON.parse('[1,2,3]')` is a valid array, not an object. The hook must
     // not treat that as a config blob; the `critiqueTheaterEnabled` lookup
-    // would fall through to `undefined` and the function should return false.
+    // falls through to the global-on default.
     window.localStorage.setItem('open-design:config', '[1,2,3]');
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
-    expect(sink.enabled).toBe(false);
+    expect(sink.enabled).toBe(true);
   });
 
-  it('returns false and does not throw when stored JSON parses to null', () => {
+  it('defaults on when stored JSON parses to null', () => {
     // `null` is JSON-valid and `typeof null === 'object'` in JS, so the
     // guard has to check for null explicitly. If it did not, `null.critique...`
     // would throw on read.
     window.localStorage.setItem('open-design:config', 'null');
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
-    expect(sink.enabled).toBe(false);
+    expect(sink.enabled).toBe(true);
   });
 
-  it('returns false when localStorage.getItem throws (private mode / disabled storage)', () => {
+  it('defaults on when localStorage.getItem throws (private mode / disabled storage)', () => {
     const original = window.localStorage.getItem;
     const restore = () => {
       Object.defineProperty(window.localStorage, 'getItem', {
@@ -180,9 +196,9 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
       });
       const sink: { enabled?: boolean } = {};
       render(<Probe sink={sink} />);
-      // Hook swallows the throw; UI sees `false` and the rest of the app
+       // Hook swallows the throw; UI sees the default-on value and the rest of the app
       // keeps running.
-      expect(sink.enabled).toBe(false);
+      expect(sink.enabled).toBe(true);
     } finally {
       restore();
     }
@@ -256,7 +272,7 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
 
       const sink: { enabled?: boolean } = {};
       render(<Probe sink={sink} />);
-      expect(sink.enabled).toBe(false);
+      expect(sink.enabled).toBe(true);
       act(() => {
         setCritiqueTheaterEnabled(true);
       });
@@ -445,7 +461,7 @@ describe('useCritiqueTheaterEnabled (Phase 15.3)', () => {
     };
     const sink: { enabled?: boolean } = {};
     render(<Probe sink={sink} />);
-    expect(sink.enabled).toBe(false);
+    expect(sink.enabled).toBe(true);
     await act(async () => {
       setCritiqueTheaterEnabled(true, {
         projectId: 'proj-abc',

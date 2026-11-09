@@ -74,7 +74,7 @@ describe('MCP daemon target recovery', () => {
     expect(call).toHaveBeenCalledTimes(1);
     expect(target.currentUrl()).toBe('http://127.0.0.1:62002');
     // The caller learns the write is ambiguous because the service restarted.
-    expect(result.content.map((item) => item.text).join('\n')).toContain(
+    expect(result.content.filter((item) => item.type === 'text').map((item) => item.text).join('\n')).toContain(
       'may or may not have been applied',
     );
   });

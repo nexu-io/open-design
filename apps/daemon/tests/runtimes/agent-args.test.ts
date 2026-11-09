@@ -5,6 +5,7 @@ import {
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
+import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   getRememberedLiveModels,
@@ -89,12 +90,17 @@ test('opencode args pass model-supported variants without changing the default a
   )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
   assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--auto'], 'autoPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--standalone'], 'standalone');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
     'run',
     '--format',
     'json',
+  ]);
+  assert.deepEqual(opencode.buildArgs(prompt, [], [], {}, { openDesignExecution: true }), [
+    'run', '--format', 'json', '--agent', 'open-design',
   ]);
 
   const withModel = opencode.buildArgs(
@@ -223,6 +229,30 @@ test('opencode parses live verbose variant metadata and only forwards variants a
   }
 });
 
+test('opencode preserves V1 permission and directory flags when advertised', () => {
+  agentCapabilities.set('opencode', { skipPermissions: true, workspaceDir: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.deepEqual(args, [
+      'run', '--format', 'json', '--dangerously-skip-permissions', '--dir', '/projects/p1',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode uses V2 private server and auto mode without stale V1 flags', () => {
+  agentCapabilities.set('opencode', { standalone: true, autoPermissions: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto', '--standalone']);
+    assert.equal(args.includes('--dir'), false);
+    assert.equal(args.includes('--dangerously-skip-permissions'), false);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
 test('opencode passes --dangerously-skip-permissions when the help probe finds it', () => {
   agentCapabilities.set('opencode', { skipPermissions: true });
   try {
@@ -238,15 +268,59 @@ test('opencode passes --dangerously-skip-permissions when the help probe finds i
   }
 });
 
-test('opencode pins its workspace to the project cwd', () => {
+test('opencode pins its workspace to the project cwd when --dir is advertised', () => {
   // OpenCode resolves its project by walking up to the nearest enclosing git
   // root, not by using its process cwd. A managed project directory is not a
   // repository, so a development install (daemon data dir under the checkout)
   // made OpenCode adopt the whole Open Design repository as the workspace: it
   // wrote the deliverable at the repository root, the project stayed empty, and
   // the Run reported `no_artifact`.
+  agentCapabilities.set('opencode', { workspaceDir: true });
   const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+  agentCapabilities.delete('opencode');
   assert.deepEqual(args, ['run', '--format', 'json', '--dir', '/projects/p1']);
+});
+
+test('opencode without --dir refuses a project nested inside a git workspace', () => {
+  const gitRoot = mkdtempSync(join(tmpdir(), 'od-opencode-git-root-'));
+  const nestedProject = join(gitRoot, 'managed-project');
+  try {
+    writeFileSync(join(gitRoot, '.git'), 'gitdir: .git/worktrees/test\n');
+    writeFileSync(join(gitRoot, 'managed-project'), '');
+    agentCapabilities.set('opencode', { standalone: true, autoPermissions: true });
+    assert.throws(
+      () => opencode.buildArgs('', [], [], {}, { cwd: nestedProject }),
+      /does not advertise --dir.*nested inside git workspace/,
+    );
+  } finally {
+    agentCapabilities.delete('opencode');
+    rmSync(gitRoot, { recursive: true, force: true });
+  }
+});
+
+test('BYOK OpenCode uses the shared version-gated workspace and permission args', () => {
+  agentCapabilities.set('byok-opencode', { standalone: true, autoPermissions: true });
+  try {
+    assert.deepEqual(
+      byokOpenCodeAgentDef.buildArgs('', [], [], {}, { openDesignExecution: true }),
+      ['run', '--format', 'json', '--auto', '--standalone', '--agent', 'open-design'],
+    );
+    assert.deepEqual(
+      byokOpenCodeAgentDef.buildArgs('', [], [], {}, { cwd: '/projects/managed' }),
+      ['run', '--format', 'json', '--auto', '--standalone'],
+    );
+  } finally {
+    agentCapabilities.delete('byok-opencode');
+  }
+  agentCapabilities.set('byok-opencode', { skipPermissions: true, workspaceDir: true });
+  try {
+    assert.deepEqual(
+      byokOpenCodeAgentDef.buildArgs('', [], [], {}, { cwd: '/projects/managed' }),
+      ['run', '--format', 'json', '--dir', '/projects/managed', '--dangerously-skip-permissions'],
+    );
+  } finally {
+    agentCapabilities.delete('byok-opencode');
+  }
 });
 
 test('opencode omits --dir for a run with no project directory', () => {

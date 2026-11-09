@@ -3714,6 +3714,7 @@ export const ptBR: Dict = {
   'critiqueTheater.degradedReasonAdapter': 'O adaptador {adapter} não suportou o protocolo Critique.',
   'critiqueTheater.degradedReasonProtocol': 'O adaptador {adapter} enviou uma versão de protocolo não suportada.',
   'critiqueTheater.degradedReasonMissingArtifact': 'A execução terminou sem um artefato final.',
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': 'Rendered visual evidence is missing, stale, or could not be verified.',
   'critiqueTheater.replay': 'Reproduzir',
   'critiqueTheater.replaySpeed': 'Velocidade de reprodução',
   'critiqueTheater.readOnly': 'Somente leitura',

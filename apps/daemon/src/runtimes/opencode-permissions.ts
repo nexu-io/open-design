@@ -1,5 +1,7 @@
 import { agentCapabilities } from './capabilities.js';
 import type { RuntimeAgentDef } from './types.js';
+import { existsSync, realpathSync } from 'node:fs';
+import { dirname, join, parse, resolve } from 'node:path';
 
 export const OPENCODE_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 export const OPENCODE_WORKSPACE_DIR_FLAG = '--dir';
@@ -8,13 +10,21 @@ export const OPENCODE_PERMISSION_CAPABILITY = {
   helpArgs: ['run', '--help'],
   capabilityFlags: {
     [OPENCODE_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    '--auto': 'autoPermissions',
+    '--standalone': 'standalone',
+    [OPENCODE_WORKSPACE_DIR_FLAG]: 'workspaceDir',
   },
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
 export function appendOpenCodePermissionBypass(args: string[], agentId: string): void {
-  if (agentCapabilities.get(agentId)?.skipPermissions) {
+  const capabilities = agentCapabilities.get(agentId);
+  if (capabilities?.autoPermissions) {
+    // OpenCode V2 auto-approves all permissions except explicit denies.
+    args.push('--auto');
+  } else if (capabilities?.skipPermissions) {
     args.push(OPENCODE_SKIP_PERMISSIONS_FLAG);
   }
+  if (capabilities?.standalone) args.push('--standalone');
 }
 
 /**
@@ -33,15 +43,39 @@ export function appendOpenCodePermissionBypass(args: string[], agentId: string):
  * `no_artifact`. `permission.external_directory` cannot catch it either — once
  * the repository is the worktree, writing inside it is an in-project write.
  *
- * Sent unconditionally, matching the BYOK OpenCode definition that already
- * carried this workaround. Gating it on the `--help` capability probe would
- * turn a missing flag back into the silent data-loss bug; an OpenCode build
- * without `--dir` should fail loudly at spawn instead.
+ * Pass the directory flag only when the installed CLI advertises it. On
+ * versions without that flag, process cwd remains the project boundary; refuse
+ * to launch when that cwd is nested in a different git root rather than
+ * silently widening OpenCode's workspace.
  */
 export function appendOpenCodeWorkspaceDir(
   args: string[],
   cwd: string | null | undefined,
+  agentId = 'opencode',
 ): void {
   if (typeof cwd !== 'string' || cwd.length === 0) return;
-  args.push(OPENCODE_WORKSPACE_DIR_FLAG, cwd);
+  const capabilities = agentCapabilities.get(agentId);
+  if (capabilities?.workspaceDir) {
+    args.push(OPENCODE_WORKSPACE_DIR_FLAG, cwd);
+    return;
+  }
+  assertOpenCodeCwdIsolated(cwd);
+}
+
+export function assertOpenCodeCwdIsolated(cwd: string): void {
+  let current: string;
+  try {
+    current = realpathSync(resolve(cwd));
+  } catch {
+    current = resolve(cwd);
+  }
+  const root = parse(current).root;
+  for (let parent = dirname(current); parent !== current; parent = dirname(parent)) {
+    if (existsSync(join(parent, '.git'))) {
+      throw new Error(
+        `OpenCode cannot safely use project directory ${cwd}: this CLI does not advertise --dir and the directory is nested inside git workspace ${parent}. Choose a project directory outside that workspace or use another agent.`,
+      );
+    }
+    if (parent === root) break;
+  }
 }

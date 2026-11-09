@@ -4812,6 +4812,7 @@ export interface Dict {
   'critiqueTheater.degradedReasonAdapter': string;
   'critiqueTheater.degradedReasonProtocol': string;
   'critiqueTheater.degradedReasonMissingArtifact': string;
+  'critiqueTheater.degradedReasonVisualEvidenceMissing': string;
   'critiqueTheater.replay': string;
   'critiqueTheater.replaySpeed': string;
   'critiqueTheater.readOnly': string;
