@@ -216,8 +216,11 @@ export function spawnEnvForAgent(
     if (env.OD_DATA_DIR?.trim()) {
       const isolatedHome = path.join(env.OD_DATA_DIR.trim(), 'byok-opencode-home');
       env.OPENCODE_TEST_HOME = isolatedHome;
-      // Only override inherited XDG_CONFIG_HOME; respect an explicit BYOK-configured
-      // override from Settings → Local CLI → Advanced.
+      // Isolate inherited XDG_CONFIG_HOME by default: an inherited value from the
+      // user's shell or desktop session can point at an incompatible opencode.json
+      // and re-introduce the original validation failure. Always override it with
+      // the managed BYOK directory unless an explicit BYOK-configured override is
+      // present (Settings → Local CLI → Advanced), which takes precedence.
       const configuredXdg = String(expandedConfiguredEnv['XDG_CONFIG_HOME'] ?? '').trim();
       if (!configuredXdg) {
         env.XDG_CONFIG_HOME = path.join(isolatedHome, '.config');
