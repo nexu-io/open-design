@@ -385,6 +385,47 @@ test('spawnEnvForAgent gives AMR a stable OpenCode home under OD_DATA_DIR', () =
   }
 });
 
+// Regression guard for nexu-io/open-design#9365 — BYOK runs must not read the
+// user's global ~/.config/opencode/opencode.json because version drift between
+// bundled and installed OpenCode can make that file contain unrecognized keys
+// ("update", "plugins", "providers"), which causes "Configuration is invalid" to
+// surface as an agent crash before any run. Setting OPENCODE_TEST_HOME makes
+// OpenCode use a clean isolated home for byok-opencode only; plain opencode
+// retains access to the user's global config.
+test('spawnEnvForAgent isolates byok-opencode from the global config via OPENCODE_TEST_HOME', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-byok-data-'));
+  try {
+    // Plain opencode does NOT get OPENCODE_TEST_HOME (it respects the user's global config).
+    const plainOpencode = spawnEnvForAgent('opencode', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+    });
+    assert.equal(plainOpencode.OPENCODE_TEST_HOME, undefined);
+
+    // byok-opencode gets an isolated home under OD_DATA_DIR.
+    const byokWithDatDir = spawnEnvForAgent('byok-opencode', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+    });
+    assert.equal(byokWithDatDir.OPENCODE_TEST_HOME, join(dataDir, 'byok-opencode-home'));
+
+    // Explicitly configured value should be preserved for byok-opencode.
+    const overridden = spawnEnvForAgent('byok-opencode', {
+      OD_DATA_DIR: dataDir,
+      OPENCODE_TEST_HOME: '/custom/byok/opencode/home',
+      PATH: '/usr/bin',
+    });
+    assert.equal(overridden.OPENCODE_TEST_HOME, '/custom/byok/opencode/home');
+
+    // Without OD_DATA_DIR, byok-opencode also stays at undefined (no isolation needed when
+    // there is no managed data directory to isolate into).
+    const noDataDir = spawnEnvForAgent('byok-opencode', { PATH: '/usr/bin' });
+    assert.equal(noDataDir.OPENCODE_TEST_HOME, undefined);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test('spawnEnvForAgent preserves a configured AMR OpenCode home override', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'od-amr-data-'));
   try {

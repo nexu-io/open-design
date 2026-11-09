@@ -188,7 +188,39 @@ export function spawnEnvForAgent(
     }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
-  if (agentId === 'opencode' || agentId === 'byok-opencode') {
+  if (agentId === 'byok-opencode') {
+    stripKeysCaseInsensitive(env, [
+      'OPENCODE',
+      'OPENCODE_PID',
+      'OPENCODE_RUN_ID',
+      'OPENCODE_SERVER_PASSWORD',
+    ]);
+    // OpenCode is bun-based and, left to its defaults, walks up from its cwd to
+    // the nearest project root and runs `bun install` there at startup to set up
+    // local plugins. When that root is a pnpm workspace (the daemon's own repo,
+    // or a project nested inside it), the install replaces the pnpm `.pnpm` store
+    // with a bun `node_modules/.bun` + `bun.lock` and breaks the workspace.
+    // Disable project-config discovery (and its install) so OpenCode only honors
+    // the config the daemon injects via OPENCODE_CONFIG_CONTENT — this is exactly
+    // what the AMR path already does for its private OpenCode server.
+    if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
+      env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
+    }
+    // Isolate BYOK OpenCode from the user's global ~/.config/opencode/opencode.json
+    // so that version-incompatible keys (e.g. "update", "plugins", "providers" from
+    // another opencode build) do not surface as "Configuration is invalid" errors
+    // during BYOK runs. OPENCODE_TEST_HOME makes OpenCode use a clean per-run home
+    // under OD_DATA_DIR instead of the user's persisted global config.
+    // See nexu-io/open-design#9365.
+    if (!env.OPENCODE_TEST_HOME?.trim() && env.OD_DATA_DIR?.trim()) {
+      env.OPENCODE_TEST_HOME = path.join(
+        env.OD_DATA_DIR.trim(),
+        'byok-opencode-home',
+      );
+    }
+    return finalizeRuntimeEnv(env, sandboxRuntime);
+  }
+  if (agentId === 'opencode') {
     stripKeysCaseInsensitive(env, [
       'OPENCODE',
       'OPENCODE_PID',
