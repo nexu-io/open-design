@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useI18n } from '../i18n';
+import { getOpenDesignHost } from '@open-design/host';
+import { subscribeDesktopDisplayRefresh } from '../observability/desktop-display-refresh';
 import {
   ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
@@ -347,6 +349,8 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     },
     [identity, locale, appVersion],
   );
+
+  useEffect(() => subscribeDesktopDisplayRefresh(getOpenDesignHost(), track), [track]);
 
   const value = useMemo<AnalyticsContextValue>(
     () => ({
