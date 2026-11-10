@@ -1,4 +1,5 @@
 import { expect, test } from '@/playwright/suite';
+import type { Page } from '@playwright/test';
 import { applyStandardMocks, routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
 import { mockSignedInVelaAccount } from '@/playwright/visual';
 import { AMR_PERSONAL_WORKSPACE_CONTEXT, createProjectViaApi, gotoProject, seedBrowserConfig } from '@/playwright/amr';
@@ -10,7 +11,7 @@ const OUT = '/Users/luogao/Documents/works/auto-plane/engine/data/visual/OPEND-4
 const AMR_AGENT = { id: 'amr', name: 'OpenDesign AMR', bin: 'vela', available: true,
   version: 'test', models: [{ id: 'glm-5', label: 'glm-5' }] };
 
-async function seedConcurrencyFlow(page, locale, testInfo, tag) {
+async function seedConcurrencyFlow(page: Page, locale: 'fr' | 'zh-CN', tag: string) {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.addInitScript((loc) => {
     localStorage.setItem('open-design:locale', loc);
@@ -75,7 +76,7 @@ async function seedConcurrencyFlow(page, locale, testInfo, tag) {
 
 for (const locale of ['fr', 'zh-CN'] as const) {
   test(`[o4605] ${locale} — PR 修复后（含钳制）`, async ({ page }, testInfo) => {
-    const card = await seedConcurrencyFlow(page, locale, testInfo, 'after');
+    const card = await seedConcurrencyFlow(page, locale, 'after');
     const box = await card.boundingBox();
     await mkdir(OUT, { recursive: true });
     await writeFile(`${OUT}/after-${locale}.png`, await card.screenshot());
@@ -92,7 +93,7 @@ for (const locale of ['fr', 'zh-CN'] as const) {
   });
 
   test(`[o4605] ${locale} — 修复前基线（撤掉钳制）`, async ({ page }, testInfo) => {
-    const card = await seedConcurrencyFlow(page, locale, testInfo, 'before');
+    const card = await seedConcurrencyFlow(page, locale, 'before');
     // 注入：撤掉 .whyBody 钳制（还原修复前行为）
     await card.evaluate(() => {
       const style = document.createElement('style');
