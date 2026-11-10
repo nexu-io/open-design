@@ -1,7 +1,7 @@
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
-import { mockAmrPersonalWorkspace, AMR_PERSONAL_WORKSPACE_CONTEXT } from '../lib/playwright/amr';
+import { mockAmrPersonalWorkspace, AMR_PERSONAL_WORKSPACE_CONTEXT } from '@/playwright/amr';
 import { T } from '@/timeouts';
 
 // OPEND-4599 — 右上角「升级」的 hover 卡片被分享弹窗遮住。
