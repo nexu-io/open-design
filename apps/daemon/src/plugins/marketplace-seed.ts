@@ -121,22 +121,62 @@ function mergeMarketplaceEntries(
   entries: readonly MarketplaceSeedEntry[],
 ): string {
   try {
-    const parsed = JSON.parse(manifestText) as { metadata?: unknown; plugins?: unknown };
+    const parsed = JSON.parse(manifestText) as {
+      metadata?: unknown;
+      plugins?: unknown;
+    };
+
     const plugins = Array.isArray(parsed.plugins) ? parsed.plugins : [];
-    const seen = new Set(plugins.map((entry) => String(asRecord(entry)?.name ?? '').toLowerCase()));
+
+    const bundledByName = new Map(
+      entries.map((entry) => [entry.name.toLowerCase(), entry]),
+    );
+
+    const seen = new Set(
+      plugins.map((entry) =>
+        String(asRecord(entry)?.name ?? '').toLowerCase(),
+      ),
+    );
+
+    // Add bundled translations to existing marketplace entries.
+    const mergedPlugins = plugins.map((plugin) => {
+      const existing = asRecord(plugin);
+      if (!existing) return plugin;
+
+      const name = String(existing.name ?? '').toLowerCase();
+      const bundled = bundledByName.get(name);
+
+      if (!bundled) return plugin;
+
+      return {
+        ...existing,
+        ...(existing.title_i18n == null && bundled.title_i18n != null
+          ? { title_i18n: bundled.title_i18n }
+          : {}),
+        ...(existing.description_i18n == null &&
+        bundled.description_i18n != null
+          ? { description_i18n: bundled.description_i18n }
+          : {}),
+      };
+    });
+
+    // Keep adding bundled plugins that are not already registered.
     const generated = entries.filter((entry) => {
       const key = String(entry.name ?? '').toLowerCase();
+
       if (!key || seen.has(key)) return false;
+
       seen.add(key);
       return true;
     });
+
     return JSON.stringify({
       ...parsed,
       metadata: {
         ...(isRecord(parsed.metadata) ? parsed.metadata : {}),
         bundledPreinstallCount: entries.length,
       },
-      plugins: [...plugins, ...generated],
+      plugins: [...mergedPlugins, ...generated],
     });
   } catch {
     return manifestText;
