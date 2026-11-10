@@ -957,6 +957,28 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     );
   });
 
+  it('offers UberLLM as an OpenAI-compatible gateway preset', () => {
+    renderSettingsDialog({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+    selectGatewayPreset('UberLLM');
+
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
+      'anthropic/claude-sonnet-4.6',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://api.uberllm.dev/v1',
+    );
+    expect(screen.getByRole('link', { name: 'Get key ↗' }).getAttribute('href')).toBe(
+      'https://uberllm.dev/signup',
+    );
+  });
+
   it('keeps Anthropic-compatible gateway presets selectable', () => {
     renderSettingsDialog();
 
