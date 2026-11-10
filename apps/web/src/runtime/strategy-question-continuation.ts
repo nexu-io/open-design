@@ -2,6 +2,7 @@ import { strategyTaskProvesDelivery } from '@open-design/contracts';
 import type {
   ChatRunStatusResponse,
   StrategyTaskProjectionV2,
+  TaskDisplayProjection,
 } from '@open-design/contracts';
 
 type FetchRunStatus = (runId: string) => Promise<ChatRunStatusResponse | null>;
@@ -70,13 +71,14 @@ export function strategySettledMessageFields(
 ):
   | { strategyTaskBlocked: true; strategyTaskBlockedText: string | null }
   | { strategyTaskDelivered: true }
+  | { taskDisplay: TaskDisplayProjection }
   | null {
   const blocked = strategyBlockedMessageFields(strategyTask);
-  if (blocked) return blocked;
+  if (blocked) return { ...blocked, ...(strategyTask?.display ? { taskDisplay: strategyTask.display } : {}) };
   if (strategyTaskProvesDelivery(strategyTask)) {
-    return { strategyTaskDelivered: true };
+    return { strategyTaskDelivered: true, ...(strategyTask?.display ? { taskDisplay: strategyTask.display } : {}) };
   }
-  return null;
+  return strategyTask?.display ? { taskDisplay: strategyTask.display } : null;
 }
 
 /** Resolve a physical Run's task position only from the daemon's matching map.

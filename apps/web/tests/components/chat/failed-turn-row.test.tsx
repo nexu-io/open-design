@@ -129,27 +129,25 @@ describe('整轮失败 · 回合状态行', () => {
 });
 
 describe('整轮失败 · 静态对照(证明没一刀切)', () => {
-  it('跑通的那一轮照旧是「已完成」', () => {
+  // P0-24 Q6:回合结束后页脚不再出状态词,状态只在壳头。
+  it('跑通的那一轮回合末尾不再出「已完成」(P0-24)', () => {
     const { container } = renderAfterFollowUp(
       failedTurn({ id: 'm-ok', runStatus: 'succeeded', events: [] as ChatMessage['events'] }),
     );
-    const label = container.querySelector('[data-testid="assistant-label"]');
-    expect(label?.textContent).toBe(en['assistant.doneLabel']);
+    expect(container.querySelector('[data-testid="assistant-label"]')).toBeNull();
   });
 
-  it('手动停止的那一轮照旧是「已手动停止」', () => {
+  it('手动停止的那一轮回合末尾不再出「任务已停止」(P0-24)', () => {
     const { container } = renderAfterFollowUp(
       failedTurn({ id: 'm-stop', runStatus: 'canceled', events: [] as ChatMessage['events'] }),
     );
-    const label = container.querySelector('[data-testid="assistant-label"]');
-    expect(label?.textContent).toBe(en['assistant.canceledLabel']);
+    expect(container.querySelector('[data-testid="assistant-label"]')).toBeNull();
   });
 
-  it('API 空回复保留 failed,状态词使用批准的「任务未能完成」', () => {
+  it('API 空回复回合末尾不再出「任务未能完成」(P0-24)', () => {
     // 出处:`ProjectView.tsx` 的 `emptyApiResponse` 分支把空流写成
     // `runStatus:'failed'` + `status(label:'empty_response')`;
-    // `e2e/ui/api-empty-response.test.ts` 那条 P0 使用补充文档批准的失败标题、
-    // 且 `Done` 计数为 0。这里把那条判据下沉到便宜层。
+    // P0-24 Q6 点名去掉了「任务未能完成」,页脚不再出状态词。
     const { container } = renderAfterFollowUp(
       failedTurn({
         id: 'm-empty',
@@ -159,8 +157,7 @@ describe('整轮失败 · 静态对照(证明没一刀切)', () => {
         ] as ChatMessage['events'],
       }),
     );
-    const label = container.querySelector('[data-testid="assistant-label"]');
-    expect(label?.textContent).toBe('The task could not be completed');
+    expect(container.querySelector('[data-testid="assistant-label"]')).toBeNull();
   });
 
   it('报错卡还归这一轮时,让位的理由仍是 B36 那条,不是新加的这条', () => {

@@ -149,3 +149,12 @@ it('accepts three configured channels while rejecting repeated channel attempts'
   body.slots[0]!.attempts[1] = attempts[0]!;
   await expect(searchVelaStockPhotos(input, async () => JSON.stringify(body))).rejects.toThrow('invalid stock service slot');
 });
+
+
+it('clears configured and ambient workspace selection for a proven account-scoped stock call', async () => {
+  const runner = vi.fn(async () => JSON.stringify({ providers: ['pexels'], slots: [{ id: 'hero', status: 'not_found', attempts: [] }] }));
+  await searchVelaStockPhotos({ slots: [{ id: 'hero', query: 'dog' }], requestTimeoutMs: 12000, budgetMs: 180000, concurrency: 6 }, runner);
+  expect(runner.mock.calls[0]).toMatchObject([['media', 'stock-search', '--request-file', '-', '--json'], {
+    configuredEnv: { VELA_WORKSPACE_ID: '', VELA_INVOCATION_SOURCE: 'open-design' },
+  }]);
+});

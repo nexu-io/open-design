@@ -43,6 +43,7 @@ export interface UseCollabOptions {
 
 export interface UseCollabResult {
   ownedContentUpdate: OwnedProjectContentUpdate | null;
+  contentUpdatePending: boolean;
   requestContentUpdate: (request: OwnedProjectContentUpdateRequest) => Promise<OwnedProjectContentUpdate | null>;
   present: CollabPresenceMember[];
   publishedVersion: number | null;
@@ -260,6 +261,7 @@ export function useCollab(options: UseCollabOptions): UseCollabResult {
 
   return {
     ownedContentUpdate: snapshot.ownedContentUpdate ?? null,
+    contentUpdatePending: snapshot.contentUpdatePending ?? false,
     requestContentUpdate,
     present: snapshot.present,
     publishedVersion: snapshot.publishedVersion,

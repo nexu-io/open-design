@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id":"brand","type":"string","label":"品牌","default":"TixFox","maxLength":12},{"id":"domain","type":"string","label":"网址","default":"tixfox.co","maxLength":24},{"id":"fee","type":"string","label":"单票费用","default":"39¢","maxLength":7},{"id":"eventName","type":"string","label":"活动名称","default":"Maple Street Music Fest","maxLength":28},{"id":"logo","type":"image","label":"品牌图标","default":"assets/fox-logo.png"},{"id":"coin","type":"image","label":"硬币图案","default":"assets/fox-coin.png"},{"id":"microphone","type":"image","label":"活动图片","default":"assets/microphone.png"},{"id":"qr","type":"image","label":"票面二维码","default":"assets/ticket-qr.png"},{"id":"tickets","type":"image","label":"票根装饰","default":"assets/fox-tickets.png"}]'>
+<head><meta charset="utf-8"><meta name="od-motion-output" content="video"><title>TixFox</title>
+<style>
+@font-face{font-family:Roboto;src:url(assets/Roboto-regular.ttf);font-weight:100 900;font-style:normal}
+:root{--od-font-heading:"Roboto","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--od-font-body:"Roboto","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+@font-face{font-family:RobotoMono;src:url(assets/RobotoMono-regular.ttf);font-weight:100 700;font-style:normal}
+:root{--od-font-mono:"RobotoMono","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",monospace}.od-mono{font-family:var(--od-font-mono)}
+*{box-sizing:border-box}body{margin:0;background:#191919;display:grid;min-height:100vh;place-items:center;font-family:var(--od-font-body)}h1{font-family:var(--od-font-heading)}#main{position:relative;width:min(100vw,177.7778vh);aspect-ratio:16/9;overflow:hidden}canvas{width:100%;height:100%;display:block}#controls{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);display:flex;gap:12px;align-items:center;background:#fffD;padding:8px 15px;opacity:0.2}#controls:hover{opacity:1}#controls input{width:300px}html.od-export body{display:block;background:transparent;min-height:0}html.od-export #main{width:100vw;height:auto;aspect-ratio:16/9}html.od-export #controls{display:none}
+</style><style data-od-font-synthesis>html{font-synthesis:none}</style>
+<style data-od-preview-chrome>
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);box-sizing:border-box;padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent,#3b6cf6);color:#fff;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px;white-space:nowrap}
+#controls input[type=range]{flex:1;width:auto;min-width:0;accent-color:var(--accent,#3b6cf6)}
+#controls span,#controls output{white-space:nowrap;font-variant-numeric:tabular-nums}
+html.od-export #controls{display:none!important}
+</style>
+</head><body><div id="main" data-composition-id="main" data-od-motion-layout="stage" data-start="0" data-duration="38.549333" data-width="1920" data-height="1080">
+<audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="38.549" data-track-index="2" data-volume="1" preload="auto"></audio><canvas id="film" width="1920" height="1080" data-od-id="film"></canvas></div><div id="controls"><button id="play">PLAY</button><input id="seek" type="range" min="0" step="0.01"><span id="time">0.00 / 38.55</span></div>
+<script src="assets/gsap.min.js"></script><script>
+const VARS=(window.__hyperframes && window.__hyperframes.getVariables?.())||{};
+const CFG={duration:38.549333,brand:'TixFox',domain:'tixfox.co',fee:'39¢',eventName:'Maple Street Music Fest',logo:'assets/fox-logo.png',coin:'assets/fox-coin.png',microphone:'assets/microphone.png',qr:'assets/ticket-qr.png',tickets:'assets/fox-tickets.png',scenes:[
+{id:'hook',name:'开场提问',dur:3.8,minDur:3.8,maxDur:5.7},{id:'problem',name:'费用问题',dur:2.65,minDur:2.65,maxDur:4},{id:'meet',name:'认识品牌',dur:1.95,minDur:1.95,maxDur:2.9},{id:'pricing',name:'透明定价',dur:5.05,minDur:5.05,maxDur:7.5},{id:'make',name:'建活动与销售',dur:5.9,minDur:5.9,maxDur:8.8},{id:'checkout',name:'购票与二维码',dur:4.3,minDur:4.3,maxDur:6.4},{id:'paid',name:'即时到账',dur:4.3,minDur:4.3,maxDur:6.4},{id:'scan',name:'手机检票',dur:3.65,minDur:3.65,maxDur:5.4},{id:'close',name:'品牌收尾',dur:6.949333,minDur:6.949333,maxDur:10.4}],cues:[
+{id:'hook-copy',scene:'hook',at:1.55},{id:'hook-out',scene:'hook',at:0.15,from:'end'},
+{id:'fees-enter',scene:'problem',at:0.15},{id:'problem-out',scene:'problem',at:0.12,from:'end'},
+{id:'cards-fan',scene:'meet',at:0.35},{id:'meet-out',scene:'meet',at:0.1,from:'end'},
+{id:'pricing-enter',scene:'pricing',at:0.6},{id:'pricing-out',scene:'pricing',at:0.15,from:'end'},
+{id:'publish',scene:'make',at:1.95},{id:'sales-live',scene:'make',at:3.15},{id:'make-out',scene:'make',at:0.15,from:'end'},
+{id:'pay-tap',scene:'checkout',at:1.6},{id:'qr-land',scene:'checkout',at:2.7},{id:'checkout-out',scene:'checkout',at:0.12,from:'end'},
+{id:'payout',scene:'paid',at:2.0},{id:'paid-out',scene:'paid',at:0.15,from:'end'},
+{id:'scan-valid',scene:'scan',at:1.42},{id:'scan-out',scene:'scan',at:0.15,from:'end'},
+{id:'close-logo',scene:'close',at:0.1},{id:'close-cta',scene:'close',at:2.5},{id:'close-out',scene:'close',at:0,from:'end'}],...VARS};
+const SCENE_START={};CFG.scenes.reduce((t,s)=>(SCENE_START[s.id]=t,t+s.dur),0);
+const cueTime=id=>{const c=CFG.cues.find(c=>c.id===id),s=CFG.scenes.find(s=>s.id===c.scene);return SCENE_START[c.scene]+(c.from==='end'?s.dur-c.at:c.at)};
+const C=document.getElementById('film').getContext('2d'), O='#f67d36',Y='#f4f339',K='#121214',W='#fff';
+const mono=getComputedStyle(document.documentElement).getPropertyValue('--od-font-mono');
+const heading=getComputedStyle(document.documentElement).getPropertyValue('--od-font-heading'),body=getComputedStyle(document.documentElement).getPropertyValue('--od-font-body');
+const imgs={};for(const k of ['logo','coin','microphone','qr','tickets']){let i=new Image();i.src=CFG[k];imgs[k]=i;}
+const clamp=x=>Math.max(0,Math.min(1,x)),ease=x=>1-Math.pow(1-clamp(x),3);
+function box(x,y,w,h,col,r=12,stroke=K,sw=3){C.beginPath();C.roundRect(x,y,w,h,r);C.fillStyle=col;C.fill();if(stroke){C.strokeStyle=stroke;C.lineWidth=sw;C.stroke();}}
+function txt(s,x,y,size=50,color=K,weight=500){C.fillStyle=color;const face=(size<=28||s==='ONE $50 TICKET'||s==='YOUR BANK ACCOUNT')?mono:heading;C.font=`${weight} ${size}px ${face}`;C.fillText(s,x,y);}
+function line(x1,y1,x2,y2,color=K,width=4){C.beginPath();C.moveTo(x1,y1);C.lineTo(x2,y2);C.strokeStyle=color;C.lineWidth=width;C.stroke()}
+function poly(points,col){C.beginPath();points.forEach((p,i)=>i?C.lineTo(...p):C.moveTo(...p));C.closePath();C.fillStyle=col;C.fill()}
+function image(k,x,y,w,h){let im=imgs[k];if(im.complete&&im.naturalWidth)C.drawImage(im,x,y,w,h)}
+function panel(x,y,w,h,color=W){box(x+8,y+8,w,h,K,16,null);box(x,y,w,h,color,16)}
+// Original fox geometry, sampled into a coarse dot screen, deterministic at every seek.
+const foxCanvas=document.createElement('canvas');foxCanvas.width=360;foxCanvas.height=470;const F=foxCanvas.getContext('2d');
+function fox(x,y,scale,t,pose='normal'){
+ const old=C; F.clearRect(0,0,360,470);F.save();F.translate(0,Math.sin(t*3)*2);let c=F;
+ function p(a,col){c.beginPath();a.forEach((v,i)=>i?c.lineTo(...v):c.moveTo(...v));c.closePath();c.fillStyle=col;c.fill()}
+ function e(x,y,rx,ry,col){c.beginPath();c.ellipse(x,y,rx,ry,0,0,Math.PI*2);c.fillStyle=col;c.fill()}
+ e(183,357,104,118,O);e(185,370,62,94,W);e(83,334,30,24,O);e(288,334,30,24,O);e(89,345,22,25,K);e(280,345,22,25,K);
+ p([[74,255],[73,22],[145,109],[227,105],[299,12],[306,257],[280,293],[105,297]],O);
+ p([[240,111],[299,32],[306,257],[280,293],[240,292]],'#b15a2d');
+ p([[85,48],[91,146],[137,119]],K);p([[282,41],[238,118],[291,147]],K);
+ p([[63,225],[128,248],[182,242],[235,247],[305,224],[310,281],[235,310],[91,300],[30,275]],W);
+ const blink=pose==='close'?Math.sin((t-35.8)*7)>0.55:(Math.sin(t*2.3)>0.985);e(105,207,19,blink?3:29,K);e(207,207,23,blink?3:30,K);if(!blink){e(101,196,4,6,W);e(201,197,4,6,W)}
+ c.fillStyle=K;c.fillRect(78,165,59,12);c.fillRect(180,166,62,12);e(pose==='close'?295:47,264,pose==='close'?30:25,18,K);c.lineWidth=4;c.strokeStyle=K;c.beginPath();c.arc(82,273,19,0,Math.PI);c.stroke();
+ for(let n=0;n<5;n++){c.fillStyle=W;c.fillRect(177,119+n*18,10,7)}
+ if(pose==='close'){const wave=(1+Math.sin((t-35.8)*8))/2;e(320,275-wave*54,27,25,K);c.strokeStyle=K;c.lineWidth=14;c.beginPath();c.moveTo(282,296);c.quadraticCurveTo(330,310,320,275-wave*54);c.stroke();}
+ if(pose==='whisper'){e(51,281,35,28,K);e(83,259,25,24,K)}
+ // Bayer-like dot density follows face and right-side shadow.
+ const d=c.getImageData(0,0,360,470);for(let yy=0;yy<470;yy+=4)for(let xx=0;xx<360;xx+=4){let k=(yy*360+xx)*4;if(d.data[k+3]&&d.data[k]>30){let dense=xx>265?3.8:xx>225?3:xx>180?2:1;if(((xx/4+yy/4)%4)<dense){c.fillStyle=K;c.fillRect(xx,yy,xx>230?2.7:1.7,1.7)}}}
+ F.restore();C.save();C.translate(x,y+Math.sin(t*3.1)*5*scale);C.rotate(Math.sin(t*1.6)*0.012);C.imageSmoothingEnabled=false;C.drawImage(foxCanvas,0,0,360*scale,470*scale);C.restore();
+}
+function avatar(t){C.save();C.beginPath();C.arc(200,872,139,0,Math.PI*2);C.fillStyle=W;C.fill();C.lineWidth=6;C.strokeStyle=K;C.stroke();C.clip();fox(70,759,.72,t);C.restore();}
+function coins(t,close=false){if(close){
+ const props=[[195,185,.92,'coin'],[255,900,.88,'coin'],[1725,170,.85,'tickets'],[1700,905,1,'tickets'],[550,175,.38,'coin'],[1235,125,.33,'coin'],[120,470,.32,'coin'],[1800,675,.33,'coin'],[1405,1000,.3,'coin'],[700,1000,.33,'coin']];
+ props.forEach(([x,y,z,k],j)=>{const phase=t*2.8+j*1.7;C.save();C.translate(x+Math.sin(t*1.3+j)*18,y+Math.sin(t*1.7+j)*20);C.rotate(k==='tickets'?Math.sin(t*2+j)*.4:Math.sin(t+j)*.12);C.scale((.07+.93*Math.abs(Math.cos(phase)))*z,z);image(k,-85,-90,k==='tickets'?200:170,180);C.restore()});return;}
+for(const [x,y,z]of (close?[[170,85,.85],[210,827,.65]]:[[850,85,.65],[170,827,.75]])){C.save();C.translate(x+Math.sin(t*.8+x)*12,y+Math.sin(t*1.5+x)*18);C.scale(.15+.85*Math.abs(Math.cos(t*2+x)),1);image('coin',-40,0,145*z,160*z);C.restore()}for(const [x,y,z]of [[1700,130,.6],[1610,830,.8]]){C.save();C.translate(x,y+Math.sin(t*1.5+x)*18);C.rotate(Math.sin(t*2)*.2);C.scale(.12+.88*Math.abs(Math.cos(t*2+x)),1);image('tickets',-40,0,200*z,160*z);C.restore()}}
+let highlight=O;
+function copy(lines,u,base=380,size=108,color=K,step=.25){let wordsBefore=0;lines.forEach((v,i)=>{let [plain,accent]=v.includes('*')?v.split('*'): [v,''];let full=plain+accent;let words=full.split(' ');let visible=Math.max(0,Math.min(words.length,Math.floor((u-wordsBefore*.17)/.17)+1));let shown=words.slice(0,visible).join(' ');wordsBefore+=words.length;let q=ease((u-(wordsBefore-words.length)*.17)/.16);if(!q||!shown)return;let y=base+i*126+(1-q)*18;C.save();C.globalAlpha=q;C.font=`500 ${size}px ${heading}`;if(accent){let n=plain.length;let before=shown.slice(0,Math.min(n,shown.length));let tail=shown.slice(n);txt(before,123,y,size,color);if(tail){let dx=C.measureText(before).width;box(113+dx,y-size+8,C.measureText(tail).width+14,size+12,highlight,0,null);txt(tail,123+dx,y,size,K)}}else txt(shown,123,y,size,color);C.restore()})}
+function ticket(x,y,w,u,fees=false){C.save();C.translate(x,y+Math.sin(u*2)*5);C.rotate(-.017);let h=fees?540:330;panel(0,0,w,h);txt('ONE $50 TICKET',35,62,25);box(35,100,w-70,95,K,12);C.save();C.beginPath();C.roundRect(35,100,w-70,95,12);C.clip();box(35,100,(w-70)*(fees?Math.max(.65,1-u*.08):.992),95,O,0,null);C.restore();txt('$50.00',61,166,52);if(fees){['monthly fee','setup fee','hidden fees','upgrade tier'].forEach((s,i)=>{if(u>.7+i*.3){txt('−',35,270+i*54,35,'#df4960');txt(s,73,270+i*54,30);txt('···············',380,270+i*54,23);txt('?',w-65,270+i*54,28,'#df4960')}})}else if(u>1.4){txt(CFG.brand+' fee',36,250,25);txt('$0.39',w-120,250,25);txt('✓ instant · no commitments',36,290,20,'#777')}C.restore()}
+function zeroCard(x,y,label,u){C.save();C.translate(x,y+Math.sin(u*2)*4);C.rotate(.025);panel(0,0,415,220);txt(label,25,45,23);txt('$0',25,154,98);txt(label==='SETUP COSTS'?'ONCE':'/ month',200,152,28);C.restore()}
+function eventPanel(u,t){panel(930,180,860,720);txt(u>1.95?CFG.eventName:'New event',970,243,32);box(1585,198,168,55,u>1.95?'#20a45a':O);txt(u>1.95?'✓ Published':'Publish',1600,236,24);box(970,288,780,250,O,14);image('microphone',1290,332,152,183);txt('EVENT NAME',972,586,20,'#777');box(972,605,780,66,W,8);txt(CFG.eventName.slice(0,Math.max(0,Math.floor((u-.25)*32))),990,650,30);txt('Sat, Oct 24 · 6:00 PM · Maple Street Park',972,714,24);if(u>1.05){box(972,748,780,60,Y);txt('General Admission',992,790,27);txt('$25',1670,790,27);box(972,822,780,60,'#c6b3fa');txt('VIP',992,864,27);txt('$60',1670,864,27)}if(u>1.95){box(1030,932,650,56,W,28);txt('↗ '+CFG.domain+'/maple-fest',1070,970,27)}}
+function dashboard(u){
+ panel(930,156,860,760);txt(CFG.eventName,970,218,28);box(1610,190,140,46,K,24);txt('● LIVE',1627,222,20,W);
+ txt('REVENUE',970,293,20,'#666');txt('TICKETS SOLD',1510,293,20,'#666');
+ const keys=[[0,7258,247],[.5,7704,262],[.9,10339,351],[1.3,11638,396],[1.8,12120,412]];
+ let k=keys.findIndex(v=>u<v[0]);if(k<0)k=keys.length-1;k=Math.max(1,k);const a=keys[k-1],b=keys[k],f=clamp((u-a[0])/(b[0]-a[0]));
+ txt('$'+Math.round(a[1]+(b[1]-a[1])*f).toLocaleString('en-US'),970,375,82);txt(String(Math.round(a[2]+(b[2]-a[2])*f)),1510,375,82);
+ const growth=ease((u-.45)/.7),count=Math.round(13+8*growth);
+ for(let n=0;n<count;n++){let h=22+(n*n*.30+Math.sin(n*2)*5)*growth;box(970+n*37,559-h,31,h,n===20?O:K,2,null)}line(970,568,1750,568,K,3);
+ const orders=[{at:.78,name:'Maya R.',detail:'2 × General Admission',amount:50,col:O},{at:1.18,name:'Jordan P.',detail:'1 × VIP',amount:60,col:'#c6b4fa'},{at:1.58,name:'Priya S.',detail:'4 × General Admission',amount:100,col:'#80c2fa'}];
+ const active=orders.filter(v=>u>v.at).reverse();active.forEach((v,i)=>{let q=ease((u-v.at)/.22),y=600+i*92+(1-q)*60;C.save();C.globalAlpha=q;box(970,y,775,80,i===0?Y:W,10);box(990,y+13,44,44,v.col,24);txt(v.name[0],1004,y+44,23);txt(v.name,1050,y+30,26);txt(v.detail,1050,y+57,17);txt('+$'+v.amount.toFixed(2),1605,y+49,26,'#159d50');C.restore()});
+}
+function phoneBase(dark=false){box(1180,190,410,870,K,60,null);box(1194,204,382,832,dark?'#090b12':W,45,null);box(1320,219,120,35,K,24,null);txt('8:24',1228,254,20,dark?W:K)}
+function qrTicket(x,y,w,h){box(x,y,w,h,Y,12);txt('ADMIT 2',x+18,y+38,22);image('qr',x+20,y+60,w-40,w-40);txt(CFG.eventName,x+15,y+h-46,14);txt('2 × General Admission',x+15,y+h-19,14)}
+function checkout(u,t){phoneBase();box(1212,289,336,172,O,17);txt('♫',1328,409,108);txt(CFG.eventName,1214,500,25);txt('Sat, Oct 24 · 6:00 PM',1214,531,17);['General Admission','VIP'].forEach((s,i)=>{box(1212,555+i*96,336,82,W,15);txt(s,1230,593+i*96,20);txt(i?'$60.00':'$25.00',1230,620+i*96,18);txt(i||u<.9?'0':'2',1444,605+i*96,25);box(1484,576+i*96,40,40,K,22,null);txt('+',1494,605+i*96,28,W)});txt('Total',1215,818,24);txt(u<.9?'$0.00':'$50.00',1430,818,30);box(1212,852,336,72,u<1.4?'#d4d3d7':K,36,null);txt(u<1.4?'Pay':'Pay $50.00',1280,899,25,W);
+ if(u>2.1){box(1194,314,382,722,W,30,null);box(1350,346,60,60,'#19a451',30,null);txt('✓',1361,390,40,W);txt("You're in!",1303,448,35);if(u>2.7){C.save();C.translate(0,25*(1-ease((u-2.7)/.4)));qrTicket(1230,485,300,420);C.restore()}}if(u>.6){box(1640,263,195,72,Y,40);txt((u<1.2?'1':u<1.6?'2':'3')+' taps',1675,311,31)}}
+function bank(u){C.save();C.translate(930,196+(1-ease(u/.7))*630);C.rotate(-.013);panel(0,0,860,190);box(32,37,120,120,O);image('logo',45,45,96,100);txt('New order · Maya R.',180,92,35);txt('2 × General Admission',180,137,25);txt('+$50.00',620,110,49,'#159e51');C.restore();C.save();C.translate(930,575+(1-ease((u-.85)/.5))*700);C.rotate(.015);panel(0,0,860,405,K);C.strokeStyle=W;C.lineWidth=4;C.strokeRect(2,2,856,401);txt('YOUR BANK ACCOUNT',40,68,24,'#bbb');txt('Available balance',40,173,25,'#bbb');let n=2340+50*ease((u-2.0)/.7);txt('$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}),40,271,80,W);txt('•••• 4821',40,355,30,'#ccc');if(u>2.4){box(688,326,132,42,'#16a150',24,null);txt('+$50.00',703,356,22,W)}C.restore();if(u>2.0){for(let j=0;j<6;j++){C.save();C.translate(1190+j*85,400+((u-2.0)*250+j*35)%150);C.scale(.2+.3*Math.abs(Math.cos(u*4+j)),.4);image('coin',0,0,100,110);C.restore()}box(1550,470,240,43,Y,24);txt('⚡ Instant payout',1565,500,22)}}
+function scanner(u,t){
+ const hit=t-cueTime('scan-valid'),valid=hit>.28,flash=hit>=0&&hit<.28;
+ C.save();C.translate(100,12);C.translate(1180,190);C.scale(.94,.96);C.translate(-1180,-190);
+ phoneBase(true);if(flash)box(1194,204,382,832,'#103f27',45,null);
+ txt('Check-in',1220,312,32,W);txt(hit>=0?'320 / 412':'318 / 412',1415,312,24,W);box(1220,334,325,12,'#303039',8,null);box(1220,334,250,12,O,8,null);
+ const corner=hit>=0?'#16c754':O;
+ for(const [x,y,sx,sy]of [[1240,420,1,1],[1538,420,-1,1],[1240,710,1,-1],[1538,710,-1,-1]]){line(x,y,x+45*sx,y,corner,8);line(x,y,x,y+45*sy,corner,8)}
+ if(u>1.02){C.save();C.translate(1257,455+(1-ease((u-1.02)/.25))*340);C.rotate(-.025);qrTicket(0,0,260,310);
+ if(flash){C.globalAlpha=.35;box(0,0,260,310,'#14c94e',10,null);C.globalAlpha=1;}
+ if(valid){const q=ease((hit-.28)/.16);C.translate(130,143);C.scale(q,q);box(-65,-65,130,130,'#16a451',65,W,5);txt('✓',-43,35,92,W)}C.restore()}
+ if(!valid){const sy=450+((u*190)%250);line(1250,sy,1520,sy,flash?'#19d45f':O,4)}
+ if(valid){const q=ease((hit-.28)/.2);C.save();C.globalAlpha=q;box(1212,840+(1-q)*50,336,160,'#16a451',18,null);txt('Valid ticket',1235,893+(1-q)*50,30,W);txt('Maya R. · 2 × GA',1235,941+(1-q)*50,21,W);C.restore()}
+ C.restore();if(u>2.85){txt('▦',735,760,115,'#999');line(723,790,843,650,'#e24559',7)}}
+function coinsPricing(t){for(const [x,y]of [[850,80],[845,900]]){C.save();C.translate(x,y+Math.sin(t*2)*15);C.scale(.1+.6*Math.abs(Math.cos(t*2)),.7);image('coin',0,0,120,135);C.restore()}}
+function render(t){if(window.__odFrameRenderer)document.documentElement.classList.add('od-export');C.setTransform(1,0,0,1,0,0);C.clearRect(0,0,1920,1080);let idx=CFG.scenes.findIndex(s=>t<SCENE_START[s.id]+s.dur);if(idx<0)idx=8;const s=CFG.scenes[idx],u=t-SCENE_START[s.id];let bg=['#f2f0e9','#ffb176',K,'#8fa5e9',u<3.15?Y:'#7de0b6','#80c2fa','#c6b4fa',K,'#f2f0e9'][idx];C.fillStyle=bg;C.fillRect(0,0,1920,1080);let white=idx===2||idx===7;
+ // End-relative transition reads remain attached when durations change.
+ const outs=[cueTime('hook-out'),cueTime('problem-out'),cueTime('meet-out'),cueTime('pricing-out'),cueTime('make-out'),cueTime('checkout-out'),cueTime('paid-out'),cueTime('scan-out'),cueTime('close-out')];
+ highlight=[O,Y,O,O,O,Y,Y,O,O][idx];
+ C.save();if(t>outs[idx]&&idx<8)C.translate(-ease((t-outs[idx])/.15)*85,0);
+ if(idx!==8){C.globalAlpha=.55;txt(['// for event organizers','// 01 · the problem','// 02 · meet tixfox','// 03 · pricing',u<3.15?'// 04 · make it':'// 05 · sell it','// 06 · checkout','// 07 · get paid','// 08 · check-in'][idx],123,151,28,white?W:K);txt(CFG.brand.toUpperCase()+'  00:00:'+String(Math.floor(t)).padStart(2,'0')+':'+String(Math.floor(t%1*60)).padStart(2,'0'),1500,151,26,white?W:K);C.globalAlpha=1;}
+ if(idx===0){coins(t);let a=ease(t/.6);fox(930,110+(1-a)*600,2.6,t,'whisper');let c=t-cueTime('hook-copy');copy(['Selling tickets','to your','*next event?'],c,420,112,K,.4);if(t>.9){box(970,520,180,80,W,42);txt('psst…',1000,575,39)}}
+ if(idx===1){avatar(t);copy(['Tired of fees','eating into','*every sale?'],u-.05,380,104,K,.5);ticket(950,255,840,t-cueTime('fees-enter'),true)}
+ if(idx===2){copy(['Meet','*'+CFG.brand+'.'],u-.05,470,145,W,.3);if(u>.6)txt('The most affordable way to sell event tickets.',128,760,35,'#aaa');fox(1110,190,1.85,t);let a=ease(t-cueTime('cards-fan'));['Concerts','Festivals','Fairs','Museums'].forEach((name,j)=>{C.save();C.translate(1190+j*135,585+(1-a)*500+Math.sin(t*3+j)*7);C.rotate((j-1.5)*.13);panel(-90,0,190,270,[O,Y,'#80c2fa','#c6b4fa'][j]);txt(['♫','△','☸','▧'][j],-50,130,100);txt(name,-70,195,25);box(-72,217,150,38,W,7);txt(CFG.fee+' fee',-57,244,23);C.restore()})}
+ if(idx===3){avatar(t);coinsPricing(t);let q=t-cueTime('pricing-enter');if(q<1.5)copy(['Just','*'+CFG.fee,'a ticket.'],q,380,120);else if(q<3.1)copy(['No monthly','*fees.'],q-1.5,380,112);else copy(['No setup','*costs.'],q-3.1,380,112);if(u>.6)ticket(950,555,840,Math.max(0,u-1.5));if(q>1.5)zeroCard(950,325,'MONTHLY FEE',u);if(q>3.1)zeroCard(1390,325,'SETUP COSTS',u)}
+ if(idx===4){avatar(t);C.save();if(u<.45)C.translate((1-ease((u-.2)/.25))*1950,0);if(t<cueTime('sales-live')){if(t<cueTime('publish'))copy(['Build your','event page','in minutes.'],u-.1,380);else copy(['Share','the *link.'],u-1.95,380);eventPanel(u,t)}else{copy(['Watch sales','roll in,','*live.'],(t-cueTime('sales-live')-.1)*.53,380);dashboard(t-cueTime('sales-live'))}C.restore()}
+ if(idx===5){avatar(t);if(t<cueTime('qr-land'))copy(['Buyers','check out','in a few *taps.'],u-.25,360,108,K,.35);else copy(['*QR tickets','land right on','their phone.'],t-cueTime('qr-land'),360,106,K,.25);C.save();C.translate(0,(1-ease(u/.4))*850);checkout(u,t);C.restore();let pulse=t-cueTime('pay-tap');if(pulse>0&&pulse<.5){C.beginPath();C.arc(1380,890,pulse*100,0,7);C.strokeStyle=Y;C.lineWidth=5;C.stroke()}}
+ if(idx===6){avatar(t);if(u<1.2)copy(['And your','*money?'],u-.4,380);else if(u<2.9)copy(['Paid out','*instantly.'],u-1.2,380);else copy(['Straight to','your own','*bank.'],u-2.9,380);bank(t-cueTime('payout')+2.0)}
+ if(idx===7){avatar(t);if(u<.95)copy(['At the','*door?'],u,410,128,W);else if(u<2.85)copy(['Scan tickets','with your','*phone.'],(u-.95)*.56,380,128,W);else{copy(['No','*hardware.'],u-2.85,380,128,W);txt('Just the TixFox app. iOS & Android.',125,610,25,'#aaa')}scanner(u,t)}
+ if(idx===8){coins(t,true);let a=ease(t-cueTime('close-logo'));C.save();C.translate(0,(1-a)*250);C.save();C.beginPath();C.rect(760,65,500,405);C.clip();fox(745,75,1.43,t,'close');C.restore();image('logo',480,430,236,244);txt(CFG.brand.slice(0,3),775,638,215,'#001b05',700);txt(CFG.brand.slice(3),1098,638,215,O,700);C.restore();if(u>.9){txt('Start free at',580,778,62);C.font=`500 62px ${heading}`;box(920,728,C.measureText(CFG.domain).width+15,68,O,0,null);txt(CFG.domain,926,778,62)}if(t>cueTime('close-cta')){box(854,850,395,83,O,10);txt('Start selling tickets',890,902,29);txt(CFG.fee+' a ticket · no monthly fees · instant payouts',779,978,20,'#888')}}
+ C.restore();document.getElementById('time').textContent=t.toFixed(2)+' / '+CFG.duration.toFixed(2);document.getElementById('seek').value=t;
+}
+const clock={t:0};const timeline=gsap.timeline({paused:true,onUpdate:()=>render(clock.t)});timeline.to(clock,{t:CFG.duration,duration:CFG.duration,ease:'none'});window.__odRenderAt=t=>{timeline.pause();timeline.time(t);clock.t=t;render(t)};document.getElementById('seek').max=CFG.duration;document.getElementById('seek').oninput=e=>window.__odRenderAt(+e.target.value);document.getElementById('play').onclick=()=>{if(timeline.paused()){timeline.play();document.getElementById('play').textContent='PAUSE'}else{timeline.pause();document.getElementById('play').textContent='PLAY'}};
+Promise.all([document.fonts.ready,...Object.values(imgs).map(i=>i.decode().catch(()=>{}))]).then(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));window.__timelines={main:timeline};render(2.8);window.__odReady=true});
+</script><script data-od-preview-audio>
+(function(){var a=document.getElementById('soundtrack');if(!a||document.documentElement.classList.contains('od-export'))return;
+function tick(){if(window.__odMotionSourcePlayer||window.__odMotionRender)return;var tl=window.__timelines&&window.__timelines.main;
+if(tl){var t=tl.time(),on=tl.isActive();if(on){if(a.paused)a.play().catch(function(){});if(Math.abs(a.currentTime-t)>0.2)a.currentTime=t;}else{if(!a.paused)a.pause();if(Math.abs(a.currentTime-t)>0.05)a.currentTime=t;}}
+requestAnimationFrame(tick);}requestAnimationFrame(tick);})();
+</script>
+</body></html>

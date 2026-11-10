@@ -1,0 +1,266 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-kinetic-motion-designer",
+  "title": "Kinetic Motion Designer",
+  "title_i18n": {
+    "en": "Kinetic Motion Designer",
+    "id": "Perancang Gerak Kinetik",
+    "de": "Kinetischer Bewegungsdesigner",
+    "zh-CN": "动效设计师名片",
+    "zh-TW": "動力學運動設計師",
+    "pt-BR": "Designer de movimento cinético",
+    "es-ES": "Diseñador de movimiento cinético",
+    "ru": "Кинетический моушен-дизайнер",
+    "fa": "طراح حرکت جنبشی",
+    "ar": "مصمم الحركة الحركية",
+    "ja": "キネティックモーションデザイナー",
+    "ko": "키네틱 모션 디자이너",
+    "pl": "Projektant ruchu kinetycznego",
+    "hu": "Animációs tervező bemutatkozása",
+    "fr": "Concepteur de mouvements cinétiques",
+    "uk": "Візитівка моушн-дизайнера",
+    "tr": "Kinetik Hareket Tasarımcısı",
+    "th": "นักออกแบบ Kinetic Motion",
+    "it": "Progettista del movimento cinetico"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "CLAUDE demonstrates animation principles in a kinetic designer reel.",
+  "description_i18n": {
+    "en": "CLAUDE demonstrates animation principles in a kinetic designer reel.",
+    "id": "CLAUDE mendemonstrasikan prinsip-prinsip animasi dalam gulungan desainer kinetik.",
+    "de": "CLAUDE demonstriert Animationsprinzipien in einer kinetischen Designerrolle.",
+    "zh-CN": "CLAUDE 通过弹跳、缓动与粒子跟随展示动效设计原理。",
+    "zh-TW": "CLAUDE 演示了動態設計師卷軸中的動畫原理。",
+    "pt-BR": "CLAUDE demonstra princípios de animação em um carretel de designer cinético.",
+    "es-ES": "CLAUDE demuestra los principios de animación en un carrete de diseño cinético.",
+    "ru": "CLAUDE демонстрирует принципы анимации в ролике кинетического дизайнера.",
+    "fa": "CLAUDE اصول انیمیشن را در یک حلقه طراح جنبشی نشان می دهد.",
+    "ar": "يوضح CLAUDE مبادئ الرسوم المتحركة في بكرة مصممة حركية.",
+    "ja": "CLAUDE は、キネティック デザイナー リールのアニメーション原理を示しています。",
+    "ko": "CLAUDE은 키네틱 디자이너 릴의 애니메이션 원리를 보여줍니다.",
+    "pl": "CLAUDE demonstruje zasady animacji w kinetycznej szpuli projektanta.",
+    "hu": "CLAUDE bemutatja az animációs elveket egy kinetikus tervezőtekercsen.",
+    "fr": "CLAUDE démontre les principes d'animation dans une bobine de conception cinétique.",
+    "uk": "CLAUDE демонструє принципи анімації в динамічній відеопрезентації дизайнера.",
+    "tr": "CLAUDE, kinetik tasarım makarasında animasyon ilkelerini gösteriyor.",
+    "th": "CLAUDE สาธิตหลักการแอนิเมชั่นในม้วนของนักออกแบบจลนศาสตร์",
+    "it": "CLAUDE dimostra i principi dell'animazione in una bobina di Kinetic Designer."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "typography",
+    "portfolio"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "name",
+        "type": "string",
+        "label": "designer name",
+        "default": "CLAUDE",
+        "label_i18n": {
+          "en": "designer name",
+          "id": "nama desainer",
+          "de": "Designername",
+          "zh-CN": "设计师姓名",
+          "zh-TW": "設計師姓名",
+          "pt-BR": "nome do designer",
+          "es-ES": "nombre del diseñador",
+          "ru": "имя дизайнера",
+          "fa": "نام طراح",
+          "ar": "اسم المصمم",
+          "ja": "デザイナー名",
+          "ko": "디자이너 이름",
+          "pl": "nazwisko projektanta",
+          "hu": "tervezői név",
+          "fr": "nom du créateur",
+          "uk": "ім'я дизайнера",
+          "tr": "tasarımcı adı",
+          "th": "ชื่อนักออกแบบ",
+          "it": "nome del progettista"
+        }
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "label": "Career",
+        "default": "MOTION DESIGNER",
+        "label_i18n": {
+          "en": "Career",
+          "id": "Karir",
+          "de": "Karriere",
+          "zh-CN": "职业",
+          "zh-TW": "職業生涯",
+          "pt-BR": "Carreira",
+          "es-ES": "carrera",
+          "ru": "Карьера",
+          "fa": "شغلی",
+          "ar": "مهنة",
+          "ja": "キャリア",
+          "ko": "경력",
+          "pl": "Kariera",
+          "hu": "Karrier",
+          "fr": "Carrière",
+          "uk": "Кар'єра",
+          "tr": "Kariyer",
+          "th": "อาชีพ",
+          "it": "Carriera"
+        }
+      },
+      {
+        "name": "headline",
+        "type": "string",
+        "label": "main title",
+        "default": "I MAKE THINGS",
+        "label_i18n": {
+          "en": "main title",
+          "id": "judul utama",
+          "de": "Haupttitel",
+          "zh-CN": "主标题",
+          "zh-TW": "主標題",
+          "pt-BR": "título principal",
+          "es-ES": "título principal",
+          "ru": "основное название",
+          "fa": "عنوان اصلی",
+          "ar": "العنوان الرئيسي",
+          "ja": "メインタイトル",
+          "ko": "메인 타이틀",
+          "pl": "główny tytuł",
+          "hu": "főcím",
+          "fr": "titre principal",
+          "uk": "основна назва",
+          "tr": "ana başlık",
+          "th": "ชื่อหลัก",
+          "it": "titolo principale"
+        }
+      },
+      {
+        "name": "verb",
+        "type": "string",
+        "label": "Dynamic large characters",
+        "default": "MOVE",
+        "label_i18n": {
+          "en": "Dynamic large characters",
+          "id": "Karakter besar yang dinamis",
+          "de": "Dynamische große Zeichen",
+          "zh-CN": "动效大字",
+          "zh-TW": "動態大字",
+          "pt-BR": "Personagens grandes dinâmicos",
+          "es-ES": "Personajes grandes dinámicos.",
+          "ru": "Динамичные крупные символы",
+          "fa": "شخصیت های بزرگ پویا",
+          "ar": "شخصيات كبيرة ديناميكية",
+          "ja": "ダイナミックな大きな文字",
+          "ko": "동적 대형 문자",
+          "pl": "Dynamiczne duże znaki",
+          "hu": "Dinamikus nagy karakterek",
+          "fr": "Grands caractères dynamiques",
+          "uk": "Динамічні великі символи",
+          "tr": "Dinamik büyük karakterler",
+          "th": "ตัวอักษรขนาดใหญ่แบบไดนามิก",
+          "it": "Personaggi grandi e dinamici"
+        }
+      },
+      {
+        "name": "availability",
+        "type": "string",
+        "label": "contact phrases",
+        "default": "open to new projects",
+        "label_i18n": {
+          "en": "contact phrases",
+          "id": "frase kontak",
+          "de": "Kontaktphrasen",
+          "zh-CN": "联系短句",
+          "zh-TW": "聯繫短語",
+          "pt-BR": "frases de contato",
+          "es-ES": "frases de contacto",
+          "ru": "контактные фразы",
+          "fa": "عبارات تماس",
+          "ar": "عبارات الاتصال",
+          "ja": "連絡先フレーズ",
+          "ko": "연락 문구",
+          "pl": "zwroty kontaktowe",
+          "hu": "kapcsolattartási kifejezések",
+          "fr": "expressions de contact",
+          "uk": "контактні фрази",
+          "tr": "iletişim ifadeleri",
+          "th": "วลีติดต่อ",
+          "it": "frasi di contatto"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a kinetic portfolio reel for {{name}}, a {{role}}, featuring {{headline}} and {{verb}}, ending on {{availability}}.",
+        "id": "Buat gulungan portofolio kinetik untuk {{name}}, {{role}}, menampilkan {{headline}} dan {{verb}}, berakhir pada {{availability}}.",
+        "de": "Erstellen Sie eine kinetische Portfoliorolle für {{name}}, eine {{role}} mit {{headline}} und {{verb}}, die mit {{availability}} endet.",
+        "zh-CN": "为 {{name}} 制作动效作品展示名片，职业为 {{role}}，以 {{headline}} 和 {{verb}} 为主标题，结尾使用 {{availability}}。",
+        "zh-TW": "創建 {{name}}、{{role}} 的動態投資組合卷軸，其中包含 {{headline}} 和 {{verb}}，最後爲 {{availability}}。",
+        "pt-BR": "Crie um carretel de portfólio cinético para {{name}}, um {{role}}, apresentando {{headline}} e {{verb}}, terminando em {{availability}}.",
+        "es-ES": "Cree un carrete de cartera cinético para {{name}}, un {{role}}, con {{headline}} y {{verb}}, que finalice en {{availability}}.",
+        "ru": "Создайте кинетический ролик портфолио для {{name}}, {{role}}, включающий {{headline}} и {{verb}}, заканчивающийся на {{availability}}.",
+        "fa": "یک حلقه پورتفولیو جنبشی برای {{name}}، یک {{role}} با {{headline}} و {{verb}} ایجاد کنید که به {{availability}} ختم می شود.",
+        "ar": "أنشئ بكرة محفظة حركية لـ {{name}}، {{role}}، تضم {{headline}} و{{verb}}، وتنتهي بـ {{availability}}.",
+        "ja": "{{availability}} で終わる、{{headline}} と {{verb}} を特徴とする {{name}}、{{role}} のキネティック ポートフォリオ リールを作成します。",
+        "ko": "{{headline}}와 {{verb}}를 특징으로 하고 {{availability}}으로 끝나는 {{name}}, {{role}}에 대한 키네틱 포트폴리오 릴을 만듭니다.",
+        "pl": "Utwórz szpulę portfolio kinetycznego dla {{name}}, {{role}}, zawierającą {{headline}} i {{verb}}, kończącą się na {{availability}}.",
+        "hu": "Hozzon létre egy kinetikus portfóliótekercset {{name}}, a {{role}}, melyben {{headline}} és {{verb}}, végződik {{availability}}.",
+        "fr": "Créez une bobine de portfolio cinétique pour {{name}}, un {{role}}, comprenant {{headline}} et {{verb}}, se terminant par {{availability}}.",
+        "uk": "Створіть динамічну відеопрезентацію для {{name}}, {{role}}, із заголовками {{headline}} та {{verb}}. Завершіть її повідомленням {{availability}}.",
+        "tr": "{{name}}, {{role}}, {{headline}} ve {{verb}}'i içeren ve {{availability}} ile biten bir kinetik portföy makarası oluşturun.",
+        "th": "สร้างม้วนพอร์ตโฟลิโอจลน์สำหรับ {{name}}, {{role}} ที่มี {{headline}} และ {{verb}} ซึ่งสิ้นสุดที่ {{availability}}",
+        "it": "Crea un portfolio reel cinetico per {{name}}, un {{role}}, con {{headline}} e {{verb}}, che termina con {{availability}}."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Kinetic Motion Designer"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "@himanshutwtxs",
+      "url": "https://x.com/himanshutwtxs/status/2103495232637882858"
+    }
+  ]
+}

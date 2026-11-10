@@ -29,8 +29,15 @@ export async function searchVelaStockPhotos(
   input: VelaStockSearchInput,
   runCommand: typeof runVelaCommand = runVelaCommand,
 ): Promise<StockSearchServiceReport> {
+  const workspaceOptions = velaWorkspaceCommandOptions(input.workspaceId);
   const stdout = await runCommand(['media', 'stock-search', '--request-file', '-', '--json'], {
-    ...velaWorkspaceCommandOptions(input.workspaceId),
+    ...workspaceOptions,
+    configuredEnv: {
+      ...workspaceOptions.configuredEnv,
+      // The route has already proven a bound or genuinely unbound project.
+      // Clear a saved/ambient selection for the latter instead of borrowing it.
+      VELA_WORKSPACE_ID: input.workspaceId?.trim() ?? '',
+    },
     input: JSON.stringify({ slots: input.slots, request_timeout_ms: input.requestTimeoutMs,
       budget_ms: input.budgetMs, concurrency: input.concurrency, max_attempts: 6 }),
     timeoutMs: input.budgetMs + 5_000,

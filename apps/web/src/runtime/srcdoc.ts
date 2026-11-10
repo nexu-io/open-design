@@ -1375,7 +1375,9 @@ function annotateMissingOdIds(doc: string): string {
       const tag = el.tagName.toLowerCase();
       if (skipTags.has(tag)) return;
       const path = sourcePathForElement(el);
-      el.setAttribute('data-od-id', path || `od-${tag}-${fallbackIndex++}`);
+      const generatedId = path || `od-${tag}-${fallbackIndex++}`;
+      el.setAttribute('data-od-id', generatedId);
+      el.setAttribute('data-od-runtime-id', generatedId);
     });
     return serializeHtmlDocument(parsed);
   } catch {
@@ -2073,13 +2075,20 @@ function meaningfulDomFallbackTarget(el) {
   function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
+    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    // Preview-generated annotations are useful to Inspect, but do not exist
+    // in published source bytes. Comments use the existing version-bound DOM
+    // selector fallback; authored IDs and dedicated comment IDs stay stable.
+    if (allowDomFallback && el && id && el.getAttribute('data-od-runtime-id') === id) {
+      id = '';
+      selector = '';
+    }
     if ((validateForSave || (commentEnabled && !inspectEnabled)) && (!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
       var identity = ownCommentIdentity(el);
       if (!identity) return null;
       id = identity.elementId;
       selector = identity.selector;
     }
-    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
     if (!id && allowDomFallback && (validateForSave || meaningfulDomFallbackTarget(el))) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
@@ -2094,6 +2103,7 @@ function meaningfulDomFallbackTarget(el) {
     if (!elementVisibleForComment(el, position)) return null;
     var payload = {
       type: 'od:comment-target',
+      domSelector: domSelectorFor(el),
       elementId: id,
       selector: selector,
       label: tag + cls,
@@ -2461,7 +2471,7 @@ function meaningfulDomFallbackTarget(el) {
       if (el.id) annotation.id = String(el.id);
       var odId = el.getAttribute('data-od-id');
       if (odId) annotation.odId = String(odId);
-      var names = ['data-od-source-path', 'data-od-id', 'data-od-edit', 'data-od-label'];
+      var names = ['data-od-source-path', 'data-od-id', 'data-od-runtime-id', 'data-od-edit', 'data-od-label'];
       for (var n = 0; n < names.length; n++) {
         if (el.hasAttribute(names[n])) annotation.attrs[names[n]] = String(el.getAttribute(names[n]) || '');
       }
@@ -2481,6 +2491,7 @@ function meaningfulDomFallbackTarget(el) {
         if (
           name !== 'data-od-source-path' &&
           name !== 'data-od-id' &&
+          name !== 'data-od-runtime-id' &&
           name !== 'data-od-edit' &&
           name !== 'data-od-label'
         ) continue;

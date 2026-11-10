@@ -114,7 +114,9 @@ describe('od amr login CLI', () => {
   });
 
   it('logs out through the daemon and emits machine-readable JSON', async () => {
-    stub.setResponder((req) => req.method === 'POST'
+    stub.setResponder((req) => req.method === 'GET' && req.url === '/api/integrations/vela/status'
+      ? {status: 200, body: {user: {id: 'user-A'}, credentialRevision: 'revision-A'}}
+      : req.method === 'POST'
       && req.url === '/api/integrations/vela/logout'
       ? { status: 200, body: { ok: true } }
       : { status: 404, body: { error: 'unexpected request' } });
@@ -123,6 +125,7 @@ describe('od amr login CLI', () => {
 
     expect(result.code).toBe(0);
     expect(stub.requests).toEqual([
+      {method: 'GET', url: '/api/integrations/vela/status'},
       { method: 'POST', url: '/api/integrations/vela/logout' },
     ]);
     expect(JSON.parse(result.stdout)).toEqual({ ok: true });

@@ -7,6 +7,7 @@ import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
+import { applyAmrEndpointBinding, assertAmrBindingCredentials } from '../integrations/amr-endpoint-binding.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 import { resolveProjectRootFromNestedModule } from '../project-root.js';
 import {
@@ -19,6 +20,8 @@ import {
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 type SpawnEnvOptions = {
   resolvedBin?: string | null;
+  /** Login replaces credentials, and sends no stored keys to its device-auth endpoint. */
+  allowAmrCredentialMismatch?: boolean;
 };
 
 const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
@@ -105,17 +108,19 @@ export function spawnEnvForAgent(
   baseEnv: RuntimeEnvMap,
   configuredEnv: unknown = {},
   systemProxyEnv: RuntimeEnvMap = resolveSystemProxyEnv(),
-  _options: SpawnEnvOptions = {},
+  options: SpawnEnvOptions = {},
 ): NodeJS.ProcessEnv {
   const sandboxRuntime = sandboxRuntimeConfigForBaseEnv(baseEnv);
   const expandedConfiguredEnv = expandConfiguredEnv(configuredEnv);
-  const env = mergeProxyAwareEnv(
+  let env = mergeProxyAwareEnv(
     process.platform,
     systemProxyEnv,
     baseEnv,
     expandedConfiguredEnv,
   );
   if (agentId === 'amr') {
+    env = applyAmrEndpointBinding(env);
+    if (!options.allowAmrCredentialMismatch) assertAmrBindingCredentials(env);
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
     // `execAgentFile` REPLACES the child environment (execFile with `env`

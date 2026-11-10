@@ -317,7 +317,9 @@ describe.skipIf(process.platform === 'win32')('leftover agent after a daemon abo
       runningAfterDaemonDied: wholeAgentGroup,
       runningAtRestart: wholeAgentGroup,
       runningAfterRestart: [],
-      run: { status: 'failed', errorCode: 'DAEMON_RESTARTED', messageRunStatus: 'failed' },
+      // P0-24 Q5: a run the dead daemon left behind is recorded as stopped,
+      // with the restart kept as its reason.
+      run: { status: 'canceled', errorCode: 'DAEMON_RESTARTED', messageRunStatus: 'canceled' },
     });
   }, 480_000);
 });
