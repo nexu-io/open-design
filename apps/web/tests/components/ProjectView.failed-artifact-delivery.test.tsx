@@ -63,13 +63,22 @@ vi.mock('../../src/components/AppChromeHeader', () => ({ AppChromeHeader: () => 
 vi.mock('../../src/components/AvatarMenu', () => ({ AvatarMenu: () => null }));
 vi.mock('../../src/components/Loading', () => ({ CenteredLoader: () => null }));
 vi.mock('../../src/components/ChatPane', () => ({
-  ChatPane: ({ messages, onSend, viewerOnly }: {
+  ChatPane: ({ messages, onSend, sendDisabled, viewerOnly }: {
     messages: ChatMessage[];
     onSend: (prompt: string, attachments: [], comments: []) => void;
+    sendDisabled?: boolean;
     viewerOnly?: boolean;
   }) => (
     <section>
-      <button disabled={viewerOnly} onClick={() => onSend('Create the requested deliverable.', [], [])}>
+      {/*
+       * The real ChatPane disables its send control from `sendDisabled`, which
+       * includes the transcript read-pending gate. A stub that only honours
+       * `viewerOnly` lets this test click while the authoritative read is still
+       * in flight; ProjectView then refuses the send before it reaches
+       * `streamViaDaemon`, so the test races the transcript load instead of
+       * exercising artifact attribution.
+       */}
+      <button disabled={viewerOnly || sendDisabled} onClick={() => onSend('Create the requested deliverable.', [], [])}>
         Send owner test
       </button>
       <output data-testid="assistant-produced-files">{JSON.stringify(
