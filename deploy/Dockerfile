@@ -90,14 +90,16 @@ RUN apk add --no-cache tini poppler-utils bash git && \
     adduser -S -D -H -u 1001 -G open-design open-design
 
 # Install a pinned OpenCode CLI so BYOK `opencode`/`byok-opencode` agents
-# work headless without requiring a Vela Cloud login (see #8227). The daemon
-# prefers the VELA_OPENCODE_BIN path when it is set, so point it at the
-# installed binary. `npm` ships with the node:24-alpine runtime image.
+# work headless without requiring a Vela Cloud login (see #8227). Point the
+# standalone agent's OPENCODE_BIN at the installed binary. Do not set
+# VELA_OPENCODE_BIN here: that is AMR's private-server override and would
+# shadow the OpenCode companion bundled with the selected Vela release.
+# `npm` ships with the node:24-alpine runtime image.
 ARG OPENCODE_VERSION=1.18.30
 RUN npm install --global --omit=dev "opencode-ai@${OPENCODE_VERSION}" && \
     test -x /usr/local/bin/opencode && \
     /usr/local/bin/opencode --version
-ENV VELA_OPENCODE_BIN=/usr/local/bin/opencode
+ENV OPENCODE_BIN=/usr/local/bin/opencode
 
 WORKDIR /app
 COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daemon
