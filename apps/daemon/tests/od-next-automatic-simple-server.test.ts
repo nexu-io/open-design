@@ -870,6 +870,28 @@ process.stdin.on('end', () => {
     expect((await waitForRunTerminal(started.url, next.runId as string)).status).toBe('succeeded');
   }, 30_000);
 
+  it('rejects a project-only run while automatic production owns the conversation', async () => {
+    const fixture = await createPublicRolloutFixture('marker-production-hold', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Build a page.', 'automatic-owner'));
+    await waitForInvocationCount(fixture.logPath, fixture.projectId, 2);
+    const task = getStrategyTaskExecution(database(), created.strategyTask!.taskExecutionId)!;
+    expect(task.runs.map(run => run.inputStage)).toEqual(['request', 'production']);
+    const production = await getRun(started.url, task.latestRunId);
+    expect(production.status).toBe('running');
+    const response = await fetch(`${started.url}/api/runs`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectId: fixture.projectId, agentId: 'codex',
+        clientRequestId: 'competing-headless-request', message: 'Refine the same page.' }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: 'RUN_IN_PROGRESS' } });
+    expect(await readProjectInvocations(fixture.logPath, fixture.projectId)).toHaveLength(2);
+    await writeFile(`${fixture.logPath}.production-release`, 'continue');
+    expect((await waitForRunTerminal(started.url, task.latestRunId)).status).toBe('succeeded');
+  }, 30_000);
+
   it('Discovery resumes Codex once and delivers multiple real files without the default canonical entry', async () => {
     const fixture = await createPublicRolloutFixture('marker-production', 'design');
     await verifyProductionHostProtocol(fixture, 'marker-production');
@@ -3168,6 +3190,17 @@ process.stdin.on('end', () => {
   console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(label.startsWith('marker-') ? THREAD_ID : 'public-rollout-session')} }));
   }
   console.log(JSON.stringify({ type: 'turn.started' }));
+  if (${JSON.stringify(label)} === 'marker-production-hold' && stdin.includes('This is the production turn')) {
+    const waiting = setInterval(() => {
+      if (!fs.existsSync(logPath + '.production-release')) return;
+      clearInterval(waiting);
+      fs.writeFileSync('index.html', '<!doctype html><html><body>Delivered</body></html>');
+      console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text: 'Delivered index.html.' } }));
+      console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
+      process.exit(0);
+    }, 10);
+    return;
+  }
   if (${JSON.stringify(label)} === 'marker-frozen-representation') {
     const emit = (text) => {
       console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text } }));
@@ -3242,7 +3275,7 @@ process.stdin.on('end', () => {
       if (!key) throw new Error('Current host marker key was not injected');
       text = 'Plan: deliver a standalone dog image only.\\n<od-production-ready key="' + key + '" />';
     }
-  } else if (['marker-production', 'marker-production-suggestions', 'marker-missing-session', 'marker-expired-session', 'marker-expired-side-effect', 'marker-tool-split'].includes(${JSON.stringify(label)})) {
+  } else if (['marker-production', 'marker-production-hold', 'marker-production-suggestions', 'marker-missing-session', 'marker-expired-session', 'marker-expired-side-effect', 'marker-tool-split'].includes(${JSON.stringify(label)})) {
     if (stdin.includes('This is the production turn')) {
       fs.writeFileSync('landing.html', '<!doctype html><html><body>Landing</body></html>');
       fs.writeFileSync('deck.html', '<!doctype html><html><body>Deck</body></html>');
