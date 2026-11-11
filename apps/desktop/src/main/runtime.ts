@@ -2023,6 +2023,7 @@ async function showDirectoryPickerForSender(
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
   applyDockIcon();
+  const inputTelemetryEnabled = process.env.OD_INPUT_TRIAL_CAPABILITY === '1';
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -2267,7 +2268,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
-      additionalArguments: osLocaleAdditionalArguments(options.osLocale),
+      additionalArguments: [...(osLocaleAdditionalArguments(options.osLocale) ?? []), ...(inputTelemetryEnabled ? ['--od-input-telemetry'] : [])],
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -3077,6 +3078,16 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         timer = null;
       }
       unsubscribeUpdater();
+      if (inputTelemetryEnabled && !window.isDestroyed()) await new Promise<void>(resolve => {
+        const nonce = randomUUID();
+        const finish = () => { clearTimeout(timeout); ipcMain.removeListener('od:input-telemetry:flushed', acknowledge); resolve(); };
+        const acknowledge = (event: Electron.IpcMainEvent, value: unknown) => {
+          if (value === nonce && event.sender === window.webContents && event.senderFrame === event.sender.mainFrame) finish();
+        };
+        const timeout = setTimeout(finish, 2000);
+        ipcMain.on('od:input-telemetry:flushed', acknowledge);
+        window.webContents.send('od:input-telemetry:flush', nonce);
+      });
       ipcMain.removeAllListeners("desktop-pet:set-visible");
       ipcMain.removeAllListeners("od:appearance:set-theme");
       ipcMain.removeAllListeners("od:window:show");

@@ -348,8 +348,23 @@ ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
   window.dispatchEvent(new CustomEvent(APP_CONFIG_CHANGED_EVENT));
 });
 
+const inputShutdownListeners = new Set<() => Promise<void>>();
+if (process.argv.includes('--od-input-telemetry')) {
+  ipcRenderer.on('od:input-telemetry:flush', async (_event: unknown, nonce: unknown) => {
+    if (typeof nonce !== 'string') return;
+    await Promise.allSettled([...inputShutdownListeners].map(listener => Promise.resolve().then(listener)));
+    ipcRenderer.send('od:input-telemetry:flushed', nonce);
+  });
+}
+
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
+  ...(process.argv.includes('--od-input-telemetry') ? { inputTelemetry: {
+    subscribeShutdown: (listener: () => Promise<void>): (() => void) => {
+      inputShutdownListeners.add(listener);
+      return () => { inputShutdownListeners.delete(listener); };
+    },
+  } } : {}),
   startup: {
     context: () => ipcRenderer.invoke('od:startup:context'),
     signal: (value: Parameters<NonNullable<OpenDesignHostBridge['startup']>['signal']>[0]) =>
