@@ -1,5 +1,4 @@
 import { readLauncherHost } from "@open-design/launcher-proto";
-import { chromiumDisabledFeatures } from "./chromium-features.js";
 import type { AmrEndpointBinding } from "@open-design/contracts";
 import { recordIncomingUpdateStageResults, recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 export { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
@@ -193,11 +192,12 @@ export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): v
     // 相对「滚不动」这个代价可以接受。
     //
     // 必须在 whenReady 之前:Chromium 在会话初始化时就消费这些开关。
-    electronApp.commandLine.appendSwitch("disable-features", chromiumDisabledFeatures(process.platform));
+    electronApp.commandLine.appendSwitch(
+      "disable-features",
+      "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
+    );
   }
 }
-
-export { chromiumDisabledFeatures };
 
 export type DesktopMainOptions = {
   /** Immutable endpoint binding supplied by the packaged runtime. */
