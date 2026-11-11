@@ -2283,6 +2283,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     screen,
     powerMonitor,
     getWindows: () => [window],
+    readRendererScale: async () => {
+      const ratio: unknown = await window.webContents.executeJavaScript("window.devicePixelRatio");
+      return Number(ratio) / window.webContents.getZoomFactor();
+    },
     notify: (_window, refresh) => {
       if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
         window.webContents.send("od:appearance:display-refreshed", {
