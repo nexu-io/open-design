@@ -184,6 +184,7 @@ test('[P0] an AMR send from Home shows one loading state until the first turn is
     accountBalanceUsd: '20.00',
     accountCredits: 2_000,
     accountPlan: 'free',
+    fundingCheck: 'available',
   });
   await routeSuccessfulRuns(page, { runId: 'home-single-loading-amr' });
   await gotoEntryHome(page);

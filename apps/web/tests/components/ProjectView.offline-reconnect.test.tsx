@@ -88,6 +88,9 @@ vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.
 vi.mock('../../src/router', () => ({ navigate: vi.fn() }));
 
 vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   cacheTabsLocally: vi.fn((projectId: string, tabs: unknown) => ({ projectId, tabs })),
   createConversation: vi.fn(),
   deleteConversation: vi.fn(),

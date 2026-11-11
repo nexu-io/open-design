@@ -18,6 +18,7 @@ export function workspaceAnalyticsDimensions(
   const planBucket = !plan || plan === 'free' ? 'free' : 'paid';
   return {
     workspace_key: context.workspaceId,
+    workspace_member_id: context.workspaceMemberId,
     workspace_type: context.workspaceType,
     workspace_role: context.role,
     workspace_lifecycle: context.lifecycleState,

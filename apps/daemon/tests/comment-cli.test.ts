@@ -139,6 +139,13 @@ describe('od comment CLI', () => {
     expect(JSON.parse(stub.requests[0]!.body)).toEqual({ readAt: 123 });
   });
 
+  it('acknowledges only explicitly displayed IDs through the same read API', async () => {
+    stub = await startStubServer();
+    const result = await runCli(['comment','read','project-1','--file','a.html','--comment-ids','a,b','--read-at','123','--daemon-url',stub.baseUrl,'--json']);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(stub.requests[0]!.body)).toEqual({readAt:123,filePath:'a.html',commentIds:['a','b']});
+  });
+
   it('uses the existing comment HTTP API for list, create, update, status, and delete', async () => {
     stub = await startStubServer();
     const common = ['--workspace', 'ws-1', '--workspace-member', 'member-1', '--daemon-url', stub.baseUrl, '--json'];

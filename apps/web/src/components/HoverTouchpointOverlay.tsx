@@ -408,11 +408,14 @@ export function HoverTouchpointOverlay({
 
 	const relatedTargetIsInUnion = (relatedTarget: EventTarget | null) =>
 		relatedTarget instanceof Node && rootRef.current?.contains(relatedTarget);
-	const closeIfOutsideUnion = () =>
+	const closeIfOutsideUnion = (event: React.FocusEvent) => {
+		// During an internal focus transfer activeElement may still be BODY.
+		if (relatedTargetIsInUnion(event.relatedTarget)) return;
 		queueMicrotask(() => {
 			const active = document.activeElement;
 			if (!rootRef.current?.contains(active)) close();
 		});
+	};
 	if (!ready && !entryRef.current) {
 		// Elements must exist for the adapter mount effect; visibility follows ready.
 	}

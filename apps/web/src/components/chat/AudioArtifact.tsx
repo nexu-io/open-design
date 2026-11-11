@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Icon } from '../Icon';
-import { ChatPlayIcon } from './primitives/icons';
+import { AudioPlaybackIcon } from './AudioPlaybackIcon';
 import { useT } from '../../i18n';
 import { fallbackWave, formatClock, playedBars } from '../../runtime/chat/audio-wave';
 import styles from './AudioArtifact.module.css';
@@ -121,13 +121,7 @@ export function AudioArtifact({
           onClick={toggle}
           aria-label={playing ? t('chat.audio.pause') : t('chat.audio.play')}
         >
-          {playing ? (
-            <Icon name="pause" size={12} />
-          ) : (
-            <span className={styles.playGlyph}>
-              <ChatPlayIcon size={12} />
-            </span>
-          )}
+          <AudioPlaybackIcon playing={playing} />
         </button>
       </div>
       <button type="button" className={styles.download} onClick={onDownload} aria-label={t('chat.audio.download', { name })}>

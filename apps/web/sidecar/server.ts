@@ -3,6 +3,7 @@ import {
   Agent as HttpAgent,
   createServer as createHttpServer,
   request as createHttpRequest,
+  type ClientRequest,
   type IncomingMessage,
   type Server as HttpServer,
   type ServerResponse,
@@ -548,7 +549,32 @@ async function proxyHttpRequest(
 
   const body = await captureProxyRequestBody(request);
 
+  // The client may have disconnected while its request body was captured.
+  if (response.destroyed || request.aborted) return;
+
   await new Promise<void>((resolveProxy) => {
+    let upstreamRequest: ClientRequest | undefined;
+    let upstreamResponse: IncomingMessage | undefined;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      response.off("close", cancel);
+      response.off("finish", finish);
+      request.off("aborted", cancel);
+      resolveProxy();
+    };
+    const cancel = () => {
+      if (!body.replayable && upstreamRequest) body.stream.unpipe(upstreamRequest);
+      upstreamResponse?.unpipe(response);
+      upstreamResponse?.destroy();
+      upstreamRequest?.destroy();
+      finish();
+    };
+    response.once("close", cancel);
+    response.once("finish", finish);
+    request.once("aborted", cancel);
+
     const sendAttempt = (attempt: number): void => {
       const proxyRequest = proxyRequestFactory(
         target,
@@ -560,13 +586,22 @@ async function proxyHttpRequest(
           agent: attempt === 0 ? (secure ? proxyHttpsAgent : proxyHttpAgent) : false,
         },
         (proxyResponse) => {
+          upstreamResponse = proxyResponse;
+          if (settled || response.destroyed) {
+            proxyResponse.destroy();
+            return;
+          }
+          // An interrupted upstream must stay an interrupted response, never
+          // a successful stream with an error string appended to its body.
+          proxyResponse.on("error", () => response.destroy());
           response.writeHead(proxyResponse.statusCode ?? 502, proxyResponse.headers);
           proxyResponse.pipe(response);
-          proxyResponse.on("end", resolveProxy);
         },
       );
 
+      upstreamRequest = proxyRequest;
       proxyRequest.on("error", (error) => {
+        if (settled || response.destroyed) return;
         if (
           shouldReplayProxyRequest({
             attempt,
@@ -579,12 +614,13 @@ async function proxyHttpRequest(
           sendAttempt(attempt + 1);
           return;
         }
-        if (!response.headersSent) {
-          response.statusCode = 502;
-          response.setHeader("content-type", "text/plain; charset=utf-8");
+        if (response.headersSent) {
+          response.destroy();
+          return;
         }
+        response.statusCode = 502;
+        response.setHeader("content-type", "text/plain; charset=utf-8");
         response.end(error instanceof Error ? error.message : String(error));
-        resolveProxy();
       });
 
       if (body.replayable) {
