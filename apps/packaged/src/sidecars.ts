@@ -900,19 +900,60 @@ export async function closeManagedChild(child: ManagedSidecarChild, observe?: (e
   }
 }
 
+const WEB_URL_REGISTRATION_ATTEMPT_TIMEOUT_MS = 1_200;
+const WEB_URL_REGISTRATION_RETRY_DELAY_MS = 250;
+const WEB_URL_REGISTRATION_BUDGET_MS = 15_000;
+
+function isIpcRequestTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("IPC request timed out: ");
+}
+
+/**
+ * Register the web sidecar's dynamic URL with the daemon.
+ *
+ * Invariant: a daemon that is alive but briefly busy does not fail the launch.
+ * The daemon has already answered its status poll by the time this runs, yet
+ * its event loop can still stall for seconds at boot (issue #9245: a large
+ * `data/runs` history), so one 1.2s attempt turned that stall into a
+ * deterministic exit on every launch. Only an unanswered request is retried,
+ * within a bounded budget; registration is idempotent on the daemon side. A
+ * daemon that answered and rejected the URL, or an IPC failure other than a
+ * timeout, still fails at once.
+ */
 export async function registerPackagedWebUrl(
   daemonStamp: SidecarStamp,
   webUrl: string,
   invoke: typeof invokeSidecar = invokeSidecar,
+  options: {
+    budgetMs?: number;
+    now?: () => number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
 ): Promise<void> {
-  const result = await invoke<RegisterWebUrlResult>(
-    daemonStamp,
-    SIDECAR_MESSAGES.REGISTER_WEB_URL,
-    { url: webUrl },
-    { timeoutMs: 1_200 },
-  );
-  if (result.accepted !== true) {
-    throw new Error("daemon rejected packaged web URL registration");
+  const now = options.now ?? Date.now;
+  const pause = options.sleep ?? (async (ms: number) => { await sleep(ms); });
+  const deadline = now() + (options.budgetMs ?? WEB_URL_REGISTRATION_BUDGET_MS);
+  for (;;) {
+    let result: RegisterWebUrlResult;
+    try {
+      result = await invoke<RegisterWebUrlResult>(
+        daemonStamp,
+        SIDECAR_MESSAGES.REGISTER_WEB_URL,
+        { url: webUrl },
+        { timeoutMs: WEB_URL_REGISTRATION_ATTEMPT_TIMEOUT_MS },
+      );
+    } catch (error) {
+      const nextAttemptEndsAt = now()
+        + WEB_URL_REGISTRATION_RETRY_DELAY_MS
+        + WEB_URL_REGISTRATION_ATTEMPT_TIMEOUT_MS;
+      if (!isIpcRequestTimeout(error) || nextAttemptEndsAt > deadline) throw error;
+      await pause(WEB_URL_REGISTRATION_RETRY_DELAY_MS);
+      continue;
+    }
+    if (result.accepted !== true) {
+      throw new Error("daemon rejected packaged web URL registration");
+    }
+    return;
   }
 }
 
