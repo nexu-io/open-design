@@ -6676,7 +6676,7 @@ export function ProjectView({
     ) => {
       if (projectCollab.materializationPending) return null;
       let commentConversationId = activeConversationId ?? routeConversationId;
-      if (!commentConversationId && projectWorkspaceScopeState.scope?.kind !== 'unbound' && projectRunWorkspaceContext) {
+      if (!commentConversationId && sharedProjectScope && projectRunWorkspaceContext) {
         // A read-only preview can be ready before its chat list. Resolve the
         // existing server-owned route without creating a conversation or
         // granting artifact-write permission to the commenter.
