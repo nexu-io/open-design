@@ -807,11 +807,14 @@ describe('native OpenCode child evidence', () => {
     const load = createOpenCodeSanitizedExportLoader({
       launchPath: '/opt/open-design/opencode',
       env: { XDG_DATA_HOME: '/run/od/share' },
+      // 2.x advertises `--auto` without `--variant`.
+      capabilities: { autoApprove: true },
     });
 
     await expect(load('ses_child_synthetic')).resolves.toMatchObject({
       info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
     });
+    // A 2.x capability map selects `session export` without probing `export`.
     expect(execAgentFileMock).toHaveBeenCalledWith(
       '/opt/open-design/opencode',
       ['session', 'export', 'ses_child_synthetic', '--sanitize'],
@@ -902,6 +905,52 @@ describe('native OpenCode child evidence', () => {
       ['export', 'ses_child_synthetic', '--sanitize'],
       expect.anything(),
     );
+  });
+
+  it('selects the isolated 1.x export shape from capabilities without probing session export', async () => {
+    const data = fixture();
+    execAgentFileMock.mockResolvedValue({
+      stdout: JSON.stringify(data.sanitizedChildExport),
+      stderr: '',
+    });
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+      // OpenCode 1.18.18 advertises both `--auto` and `--variant`; `--variant`
+      // is the discriminator that keeps this on the 1.x export shape.
+      capabilities: { autoApprove: true, variantFlag: true },
+    });
+
+    await expect(load('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
+    });
+    // A confirmed 1.x line must not pay for the 2.x `session export` shape,
+    // which 1.18.18 rejects.
+    expect(execAgentFileMock).toHaveBeenCalledTimes(1);
+    expect(execAgentFileMock).toHaveBeenCalledWith(
+      '/opt/open-design/opencode',
+      ['export', 'ses_child_synthetic', '--sanitize', '--pure'],
+      expect.anything(),
+    );
+  });
+
+  it('surfaces a real 1.x export failure instead of retrying a valid invocation', async () => {
+    execAgentFileMock.mockRejectedValueOnce(Object.assign(new Error('exit 1'), {
+      stdout: '',
+      stderr: 'Unrecognized command: session in command opencode session',
+    }));
+    // `--pure` is accepted but the session genuinely does not exist: this is a
+    // real outcome, not a shape mismatch, so it must not be retried bare.
+    execAgentFileMock.mockRejectedValueOnce(Object.assign(new Error('exit 1'), {
+      stdout: 'Session not found',
+      stderr: '',
+    }));
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+    });
+    await expect(load('ses_child_synthetic')).rejects.toThrow(/exit 1/u);
+    expect(execAgentFileMock).toHaveBeenCalledTimes(2);
   });
 
   it('labels the fixture contract-only so it cannot become production evidence', () => {

@@ -506,6 +506,7 @@ import {
   getDetectedRuntimeVersions,
   ensureDetectedRuntimeCapabilities,
 } from './runtimes/detection.js';
+import { agentCapabilities } from './runtimes/capabilities.js';
 
 import {
   antigravityQuotaGuidance,
@@ -17091,6 +17092,7 @@ export async function startServer({
               loadSanitizedExport: createOpenCodeSanitizedExportLoader({
                 launchPath,
                 env: spawnedAgentEnv,
+                capabilities: agentCapabilities.get(def.id) ?? null,
               }),
             });
             for (const fact of facts) {

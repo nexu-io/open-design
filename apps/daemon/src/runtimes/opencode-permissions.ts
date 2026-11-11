@@ -219,12 +219,43 @@ export function shouldUseOpenCodeVariantFlag(agentId: string): boolean {
  * `--variant`, 1.x is the other way round. Anything unresolved stays on the
  * 1.x assumption, which is the conservative direction.
  */
+export type OpenCodeCliLine = '1x' | '2x' | 'unknown';
+
+/**
+ * Classify an OpenCode executable into its 1.x or 2.x line from capabilities.
+ *
+ * The line is identified by advertised flags, never by version string or by
+ * the error text of a rejected probe: 2.x advertises `--auto` and dropped
+ * `--variant`; 1.x still advertises `--variant` (1.18.x also advertises
+ * `--auto`). The rejection wording differs between 2.0.24 (help on stdout,
+ * exit 1, no message) and 2.0.32 (`Unrecognized flag: ...`). A map that
+ * advertises neither is `unknown`, not 1.x: callers that choose an invocation
+ * shape must keep a tolerant fallback rather than silently assuming the
+ * legacy line.
+ */
+export function classifyOpenCodeCliLine(
+  caps: RuntimeCapabilityMap | null | undefined,
+): OpenCodeCliLine {
+  if (!caps) return 'unknown';
+  if (caps.autoApprove === true && caps.variantFlag !== true) return '2x';
+  if (caps.variantFlag === true) return '1x';
+  return 'unknown';
+}
+
+/**
+ * Whether a resolved `run --help` capability map describes OpenCode 2.x.
+ *
+ * Kept as the boolean shorthand for argv builders that only need to choose
+ * between the 2.x and legacy flag shapes. Anything unresolved stays on the
+ * 1.x assumption, which is the conservative direction: the 1.x shapes fail
+ * loudly, while a wrong 2.x assumption would silently drop a flag. Callers
+ * that must distinguish "confirmed 1.x" from "probe failed" use
+ * `classifyOpenCodeCliLine` instead.
+ */
 export function isOpenCode2xCapabilities(
   caps: RuntimeCapabilityMap | null | undefined,
 ): boolean {
-  if (!caps) return false;
-  if (caps.autoApprove !== true) return false;
-  return caps.variantFlag !== true;
+  return classifyOpenCodeCliLine(caps) === '2x';
 }
 
 /**
