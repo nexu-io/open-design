@@ -27,6 +27,7 @@ import {
   recordIncomingUpdateLifecycle,
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
+  chromiumDisabledFeatures,
   createSplashWindow,
   setSplashStage,
   createDesktopStartupTiming,
@@ -160,10 +161,9 @@ async function main(): Promise<void> {
   // 相对「滚不动」这个代价可以接受。
   //
   // 必须在 whenReady 之前:Chromium 在会话初始化时就消费这些开关。
-  app.commandLine.appendSwitch(
-    "disable-features",
-    "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
-  );
+  // 取值统一来自 chromiumDisabledFeatures:appendSwitch 对同一个 key 是整体替换,
+  // 这里自己拼一份子集会把 desktop 那边加的 feature(如 macOS 的 SkiaGraphite)冲掉。
+  app.commandLine.appendSwitch("disable-features", chromiumDisabledFeatures(process.platform));
 
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
   const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));
