@@ -150,6 +150,54 @@ describe('useWorkspaceContext sign-in refresh', () => {
     await settleAll(SIGNED_IN);
   });
 
+  it('drops the previous account\'s reauth-required answer once a sign-in refresh starts', async () => {
+    // OPEND-4754: switching account leaves the old credentials rejected (401),
+    // so the hook settles on `failure: 'reauth-required'`. EntryShell treats
+    // that as "send the user back to the sign-in gate". After the new account
+    // signs in, onboarding announces the identity change and returns Home —
+    // but if the rejected answer survives the refresh, the shell bounces the
+    // user straight back to onboarding, which signs them in again, and the two
+    // ping-pong forever while the button flickers between loading states.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () => new Response(null, { status: 401 })),
+    );
+    const { result } = renderHook(() => useWorkspaceContext());
+
+    await waitFor(() => expect(result.current.failure).toBe('reauth-required'));
+
+    // The new account signs in. Hold the re-read open: in the real loop each
+    // bounce issues another identity refresh that retires the previous read,
+    // so this in-flight window is all the shell ever sees. The rejection
+    // belonged to the identity just left and must not be reported here.
+    const { settleAll } = deferredContextFetch();
+    await act(async () => {
+      notifyWorkspaceContextRefresh();
+    });
+    expect(result.current.failure).toBeUndefined();
+
+    await settleAll(SIGNED_IN);
+    await waitFor(() => expect(result.current.context).toEqual(SIGNED_IN));
+    expect(result.current.failure).toBeUndefined();
+  });
+
+  it('keeps reporting reauth-required across ambient revalidation', async () => {
+    // Only an explicit identity change may retract the rejection; a focus
+    // re-read is not new evidence that the credentials are valid again.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(async () => new Response(null, { status: 401 })),
+    );
+    const { result } = renderHook(() => useWorkspaceContext());
+
+    await waitFor(() => expect(result.current.failure).toBe('reauth-required'));
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(result.current.failure).toBe('reauth-required');
+  });
+
   it.each([
     [404, 'unsupported'],
     [503, 'unavailable'],
