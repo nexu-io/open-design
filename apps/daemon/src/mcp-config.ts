@@ -455,6 +455,13 @@ export interface OpenCodeConfigBuildOptions {
   /** Worktrees OpenCode versions may check relative edit paths against. */
   readOnlyEditBaseDirs?: string[];
   extraConfig?: Record<string, unknown>;
+  /**
+   * Keep the agent loop running after a permission is rejected. Headless
+   * `opencode run` auto-rejects every `ask`, and by default a rejection ends
+   * the session (exit 0, unfinished todos). With this set the model receives
+   * the rejection as a tool error and can continue without that action.
+   */
+  continueLoopOnDeny?: boolean;
 }
 
 export function buildOpenCodeMcpConfigContent(
@@ -501,11 +508,19 @@ export function buildOpenCodeMcpConfigContent(
   if (
     Object.keys(mcp).length === 0 &&
     !externalDirectory &&
+    !options.continueLoopOnDeny &&
     Object.keys(extraConfig).length === 0
   ) return null;
 
   const config: Record<string, unknown> = { ...extraConfig };
   if (Object.keys(mcp).length > 0) config.mcp = mcp;
+  if (options.continueLoopOnDeny) {
+    const priorExperimental =
+      config.experimental && typeof config.experimental === 'object' && !Array.isArray(config.experimental)
+        ? config.experimental as Record<string, unknown>
+        : {};
+    config.experimental = { ...priorExperimental, continue_loop_on_deny: true };
+  }
   if (externalDirectory) {
     const priorPermission =
       config.permission && typeof config.permission === 'object' && !Array.isArray(config.permission)

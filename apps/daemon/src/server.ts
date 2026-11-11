@@ -15328,6 +15328,8 @@ export async function startServer({
               // Only the verified loader result may authorize rule cards.
               readOnlyDirectories,
               readOnlyEditBaseDirs,
+              // MiMo reuses this builder but its config schema is not OpenCode's.
+              continueLoopOnDeny: isOpenCodeContent,
               ...(byokOpenCodeProvider
                 ? { extraConfig: byokOpenCodeProvider.config }
                 : {}),
