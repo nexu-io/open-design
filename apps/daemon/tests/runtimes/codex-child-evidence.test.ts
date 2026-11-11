@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
-import { chmod, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,9 +11,11 @@ import {
   normalizeAgentObservationV1,
   type NormalizedAgentObservationV1,
 } from '@open-design/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { collectCodexChildEvidence } from '../../src/runtimes/codex-child-evidence.js';
+
+vi.mock('node:fs/promises', { spy: true });
 
 const PARENT = '10000000-0000-4000-8000-000000000001';
 const CHILD = '20000000-0000-4000-8000-000000000002';
@@ -26,6 +28,11 @@ const sanitizedRealSeedPath = fileURLToPath(new URL(
 ));
 
 const temporaryRoots: string[] = [];
+const nativePlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
+function simulateWindows(): void {
+  Object.defineProperty(process, 'platform', { ...nativePlatform, value: 'win32' });
+}
 
 function timestamp(offsetMs: number): string {
   return new Date(BASE_TIME + offsetMs).toISOString();
@@ -169,6 +176,8 @@ function root(
 }
 
 afterEach(async () => {
+  Object.defineProperty(process, 'platform', nativePlatform);
+  vi.resetAllMocks();
   await Promise.all(temporaryRoots.splice(0).map((rootPath) => (
     rm(rootPath, { recursive: true, force: true })
   )));
@@ -203,7 +212,7 @@ describe('collectCodexChildEvidence', () => {
     expect(after.observations).toEqual(before.observations);
   });
 
-  it('retains indexed parent and child evidence in an archive larger than the scan limit', async () => {
+  it.each(['native', 'win32'] as const)('collects active and indexed archived evidence on %s', async (platform) => {
     const home = await codexHome();
     const parentPath = await writeRollout(home, PARENT, [
       metadata(PARENT),
@@ -215,11 +224,22 @@ describe('collectCodexChildEvidence', () => {
       metadata(CHILD, PARENT),
       ...turn({ id: 'child-turn', startedAtMs: 300, prompt: 'Retain this child' }),
     ]);
-    const before = await collectCodexChildEvidence(collectInput(home));
+    if (platform === 'win32') {
+      // Node on Windows can report group/other write bits for readable entries.
+      await chmod(path.join(home, 'sessions'), 0o777);
+      await chmod(path.dirname(parentPath), 0o777);
+      await chmod(parentPath, 0o666);
+      await chmod(childPath, 0o666);
+      simulateWindows();
+    }
+    const input = collectInput(home, { maxDirectoryEntries: 2 });
+    const before = await collectCodexChildEvidence(input);
     expect(before.availability).toBe('complete');
+    expect(before.observations.filter(o => o.kind === 'child_agent' && o.status === 'completed')).toHaveLength(1);
     const archive = path.join(home, 'archived_sessions');
     await mkdir(archive);
-    const db = new Database(path.join(home, 'state_5.sqlite'));
+    const dbPath = path.join(home, 'state_5.sqlite');
+    const db = new Database(dbPath);
     try {
       db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, archived INTEGER NOT NULL)');
       for (const [id, filePath] of [[PARENT, parentPath], [CHILD, childPath]] as const) {
@@ -228,10 +248,55 @@ describe('collectCodexChildEvidence', () => {
         db.prepare('INSERT INTO threads VALUES (?, ?, 1)').run(id, archivedPath);
       }
     } finally { db.close(); }
-    for (let i = 0; i < 4_097; i += 1) writeFileSync(path.join(archive, `unrelated-${i}`), '');
-    const after = await collectCodexChildEvidence(collectInput(home));
+    if (platform === 'win32') {
+      await chmod(archive, 0o777);
+      await chmod(dbPath, 0o666);
+    }
+    await writeFile(path.join(archive, 'unrelated'), '');
+    const after = await collectCodexChildEvidence(input);
     expect(after.availability).toBe(before.availability);
     expect(after.observations).toEqual(before.observations);
+  });
+
+  it('distinguishes missing, empty, and inaccessible Windows sessions directories', async () => {
+    const home = await codexHome();
+    simulateWindows();
+    const sessions = path.join(home, 'sessions');
+    const input = collectInput(home);
+    const unavailable = {
+      availability: 'unavailable',
+      observations: [],
+      diagnostics: [{ code: 'sessions_root_unavailable', count: 1 }],
+    };
+
+    await expect(collectCodexChildEvidence(input)).resolves.toMatchObject(unavailable);
+    await mkdir(sessions);
+    await expect(collectCodexChildEvidence(input)).resolves.toMatchObject({
+      availability: 'unavailable',
+      observations: [],
+      diagnostics: [{ code: 'rollout_not_found', count: 1 }],
+    });
+
+    vi.mocked(readdir).mockClear().mockRejectedValueOnce(
+      Object.assign(new Error('Access denied'), { code: 'EACCES' }),
+    );
+    await expect(collectCodexChildEvidence(input)).resolves.toMatchObject(unavailable);
+    expect(readdir).toHaveBeenCalledWith(sessions, { withFileTypes: true });
+  });
+
+  it('rejects a Windows sessions root linked outside CODEX_HOME', async () => {
+    const home = await codexHome();
+    const outsideHome = await codexHome();
+    await writeRollout(outsideHome, PARENT, [metadata(PARENT), ...turn({
+      id: 'parent-turn', startedAtMs: 100,
+    })]);
+    await symlink(path.join(outsideHome, 'sessions'), path.join(home, 'sessions'), 'junction');
+    simulateWindows();
+    await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
+      availability: 'unavailable',
+      observations: [],
+      diagnostics: [{ code: 'sessions_root_unavailable', count: 1 }],
+    });
   });
 
   it('rejects ambiguous active/archive copies and ignores unrelated archived threads', async () => {
@@ -650,12 +715,21 @@ describe('collectCodexChildEvidence', () => {
         diagnostics: [{ code: 'codex_home_not_declared', count: 1 }],
       });
 
-    await chmod(parentPath, 0o666);
-    await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
-      availability: 'unavailable',
-      diagnostics: [{ code: 'unsafe_rollout_file', count: 1 }],
-    });
-    await chmod(parentPath, 0o600);
+    if (process.platform !== 'win32') {
+      await chmod(path.join(home, 'sessions'), 0o777);
+      await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
+        availability: 'unavailable',
+        diagnostics: [{ code: 'sessions_root_unavailable', count: 1 }],
+      });
+      await chmod(path.join(home, 'sessions'), 0o700);
+
+      await chmod(parentPath, 0o666);
+      await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
+        availability: 'unavailable',
+        diagnostics: [{ code: 'unsafe_rollout_file', count: 1 }],
+      });
+      await chmod(parentPath, 0o600);
+    }
 
     await writeRollout(home, PARENT, parentRecords, '2026/08/13');
     await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
@@ -688,16 +762,19 @@ describe('collectCodexChildEvidence', () => {
         childActivities: [{ sessionId: CHILD, kind: 'started', atMs: 1_000 }],
       }),
     ]);
-    const outside = path.join(home, 'outside.jsonl');
-    await writeFile(outside, `${JSON.stringify(metadata(CHILD, PARENT))}\n`, { mode: 0o600 });
-    const day = path.join(home, 'sessions', '2026', '08', '14');
-    await symlink(outside, path.join(day, `rollout-symlink-${CHILD}.jsonl`));
+    if (process.platform !== 'win32') {
+      const outside = path.join(home, 'outside.jsonl');
+      await writeFile(outside, `${JSON.stringify(metadata(CHILD, PARENT))}\n`, { mode: 0o600 });
+      const day = path.join(home, 'sessions', '2026', '08', '14');
+      const link = path.join(day, `rollout-symlink-${CHILD}.jsonl`);
+      await symlink(outside, link);
 
-    const symlinkResult = await collectCodexChildEvidence(collectInput(home));
-    expect(symlinkResult.observations).toEqual([]);
-    expect(symlinkResult.diagnostics).toContainEqual({ code: 'rollout_not_found', count: 1 });
+      const symlinkResult = await collectCodexChildEvidence(collectInput(home));
+      expect(symlinkResult.observations).toEqual([]);
+      expect(symlinkResult.diagnostics).toContainEqual({ code: 'rollout_not_found', count: 1 });
 
-    await rm(path.join(day, `rollout-symlink-${CHILD}.jsonl`));
+      await rm(link);
+    }
     await writeRollout(home, CHILD, [
       metadata(CHILD, PARENT),
       metadata(CHILD, GRANDCHILD),

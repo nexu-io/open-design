@@ -416,16 +416,19 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
   };
 }
 
-function isUnsafeDirectoryStat(stat: Stats): boolean {
-  if (!stat.isDirectory() || stat.isSymbolicLink()) return true;
+function hasUnsafePosixPermissions(stat: Stats): boolean {
+  // Windows access is decided by ACLs when the directory or file is read.
+  if (process.platform === 'win32') return false;
   if ((stat.mode & 0o022) !== 0) return true;
   return typeof process.getuid === 'function' && stat.uid !== process.getuid();
 }
 
+function isUnsafeDirectoryStat(stat: Stats): boolean {
+  return !stat.isDirectory() || stat.isSymbolicLink() || hasUnsafePosixPermissions(stat);
+}
+
 function isUnsafeFileStat(stat: Stats): boolean {
-  if (!stat.isFile() || stat.isSymbolicLink()) return true;
-  if ((stat.mode & 0o022) !== 0) return true;
-  return typeof process.getuid === 'function' && stat.uid !== process.getuid();
+  return !stat.isFile() || stat.isSymbolicLink() || hasUnsafePosixPermissions(stat);
 }
 
 async function safeDirectoryEntries(
