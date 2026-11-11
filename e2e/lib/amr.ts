@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 export type FakeVelaOptions = {
   assistantText?: string;
   endpoints?: VelaEndpoints;
+  membershipRpmFailureOnce?: string;
   failAuthAtPrompt?: boolean;
   failAuthAtPromptOnce?: boolean;
   failBalanceAtPrompt?: boolean;
@@ -281,6 +282,17 @@ function handle(msg) {
     const sid = (params && params.sessionId) || SESSION_ID;
     if (REQUIRE_SET_MODEL && !sessionsWithModel.has(sid)) {
       writeError(id, 'session/set_model must be called before session/prompt');
+      return;
+    }
+    const rpmFailure = ${JSON.stringify(options.membershipRpmFailureOnce ?? null)};
+    if (rpmFailure && shouldFailOnce('rpm')) {
+      writeNotification('session/update', { sessionId: sid, update: {
+        sessionUpdate: 'tool_call', toolCallId: 'rpm-read', title: 'Read file', kind: 'read', status: 'in_progress',
+      } });
+      writeNotification('session/update', { sessionId: sid, update: {
+        sessionUpdate: 'tool_call_update', toolCallId: 'rpm-read', status: 'completed',
+      } });
+      writeMessage({ jsonrpc: '2.0', id, error: { code: -32000, message: rpmFailure, data: { retryable: false } } });
       return;
     }
     if (AUTH_FAIL || (AUTH_FAIL_ONCE && shouldFailOnce('auth'))) {

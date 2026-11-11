@@ -3021,6 +3021,9 @@ export interface Dict {
   'chat.runError.title.signInRequired.amr': string;
   'chat.runError.title.rateLimited': string;
   'chat.runError.title.modelWindowLimit': string;
+  'chat.runError.title.membershipRpmLimit': string;
+  'chat.runError.membershipRpmLimitMessage': string;
+  'chat.runError.membershipRpmLimitMessageNoTime': string;
   'chat.runError.title.membershipConcurrencyLimit': string;
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;

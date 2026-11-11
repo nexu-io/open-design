@@ -5,7 +5,7 @@
 // without a circular dependency.
 import {
   isModelWindowLimitFailure,
-  readMembershipConcurrencyResetAt,
+  readMembershipLimitResetAt,
   readModelWindowResetAt,
 } from '@open-design/contracts';
 import type { RunFailureAction } from '@open-design/contracts';
@@ -342,6 +342,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
   | 'chat.runError.modelWindowLimitMessageNoTime'
+  | 'chat.runError.membershipRpmLimitMessage'
+  | 'chat.runError.membershipRpmLimitMessageNoTime'
   | 'chat.runError.membershipConcurrencyLimitMessage'
   | 'chat.runError.membershipConcurrencyLimitMessageNoTime'
   | 'chat.runError.upstreamUnavailableMessage'
@@ -514,6 +516,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.signInRequired.amr'
   | 'chat.runError.title.rateLimited'
   | 'chat.runError.title.modelWindowLimit'
+  | 'chat.runError.title.membershipRpmLimit'
   | 'chat.runError.title.membershipConcurrencyLimit'
   | 'chat.amrBalanceGate.title'
   | 'chat.runError.title.cliMissing'
@@ -1721,11 +1724,21 @@ function resolveRunFailureUiIgnoringSelfPromotion(
       retryAt ? { messageVars: { retryAt } } : {},
     );
   }
+  if (detail === 'membership_rpm_limit') {
+    const parsed = readMembershipLimitResetAt(rawMessage);
+    const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    return failureCard(
+      { transient: true },
+      'chat.runError.title.membershipRpmLimit',
+      retryAt ? 'chat.runError.membershipRpmLimitMessage' : 'chat.runError.membershipRpmLimitMessageNoTime',
+      retryAt ? { messageVars: { retryAt } } : {},
+    );
+  }
   // Membership concurrency is a temporary policy gate carried inside an ACP
   // fatal envelope. Keep the Retry button manual, name the wait explicitly,
   // and preserve the upstream reset instant when one is present.
   if (detail === 'membership_concurrency_limit') {
-    const parsed = readMembershipConcurrencyResetAt(rawMessage);
+    const parsed = readMembershipLimitResetAt(rawMessage);
     const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
     return {
       primaryAction: 'retry',
