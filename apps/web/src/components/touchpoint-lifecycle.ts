@@ -101,6 +101,16 @@ export function resolveAuthorizationDeadline(timing: AuthorizationTiming, maximu
 }
 
 /**
+ * How long the schedule itself still runs, on the server's clock: the window a
+ * production lease may be held for once offline fallback has begun
+ * (OPEND-3436 AC2, `offlineValidForMs`). Measured from `serverTime`, the same
+ * base as the authorization window, so the lifecycle ages both identically.
+ * Not finite when the timing is unreadable, which the lifecycle ignores.
+ */
+export const touchpointScheduleWindowMs = (timing: Pick<AuthorizationTiming, "serverTime" | "endsAt">) =>
+	Date.parse(timing.endsAt) - Date.parse(timing.serverTime);
+
+/**
  * The identity a lease key exists to compare: is this still the same content,
  * for the same person, from the same deployment?
  *
@@ -193,7 +203,14 @@ export type TouchpointLifecycleLoad<T> =
 	 * hook is shared with the Test channel, so the mapping stays at the loader
 	 * that already speaks that vocabulary.
 	 */
-	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number; offlineRecovery?: TouchpointOfflineRecovery }>
+	/**
+	 * `offlineValidForMs` (OPEND-3436 AC2) is how long this decision may stay on
+	 * screen while this client cannot reach the runtime: the schedule's last
+	 * known `endsAt`, measured from the same `serverTime` as `validForMs`. See
+	 * {@link holdThroughSchedule} for when it applies.
+	 */
+	/** Composite leases update their placement set while retaining the session generation. */
+	| Readonly<{ kind: "decision"; value: T; key: string; validForMs: number; replaceValue?: boolean; offlineValidForMs?: number; offlineRecovery?: TouchpointOfflineRecovery }>
 	| Readonly<{ kind: "waiting"; retryAfterMs: number }>
 	| Readonly<{ kind: "retain" }>
 	| Readonly<{ kind: "clear"; ended?: boolean }>;
@@ -209,14 +226,14 @@ export type TouchpointLifecycleOptions<T> = Readonly<{
 	 * was not reached suspends the poll and the backoff chain, and recovery
 	 * becomes one deduplicated revalidation per user-visible event.
 	 *
-	 * Off by default, and that default is load-bearing rather than cautious. The
-	 * Test channel is an operator watching a schedule they are editing; its
-	 * whole job is to keep asking, its authorization is capped at sixty seconds,
-	 * and there is no cached content behind it to fall back ON. Only the three
-	 * production placements, whose daemon holds a package and a schedule, have
-	 * anything to gain by going quiet.
+	 * Production also holds through the cached schedule and probes every five
+	 * minutes. Test stops failed requests separately, without either behavior.
 	 */
 	offlineFallback?: boolean;
+	/** Stop failed Test loads until a recovery event, without extending authority. */
+	stopOnFailure?: boolean;
+	/** A sibling request chain can pause automatic requests for the same campaign. */
+	pauseAutomaticRequests?: () => boolean;
 }>;
 
 type Clock = { monotonic: number; wall: number };
@@ -241,6 +258,8 @@ const clock = (): Clock => ({ monotonic: performance.now(), wall: Date.now() });
  */
 const elapsed = (start: Clock) => Math.max(0, performance.now() - start.monotonic, Date.now() - start.wall);
 const POLL_MS = 30_000;
+/** The renewal interval, for callers that must hold authority across one round. */
+export const TOUCHPOINT_POLL_MS = POLL_MS;
 /**
  * One refresh fetches a context and every enabled placement's content, so the
  * budget has to cover a whole round, not one request. A ten-second budget was
@@ -301,10 +320,10 @@ export const touchpointEntersOfflineFallback = (error: unknown) =>
  * the fault ending, and that turns on one thing only — whether the browser's
  * OWN connection is what failed.
  *
- *  - `"announced"`. The device's network is what broke: a refused connection,
- *    a dead DNS, a request that burned its whole budget. Its repair fires
- *    `online`, usually with `focus` or `visibilitychange` behind it. The four
- *    events ARE the recovery signal and nothing else is needed.
+ *  - `"announced"`. The device explicitly reports offline. Wait for `online`,
+ *    `focus`, or `visibilitychange` to recheck instead of probing periodically.
+ *    A refused connection, DNS failure, or timeout alone does not establish
+ *    this state: when the device still reports online, recovery needs probes.
  *  - `"unannounced"`. Everything the browser can see is healthy and something
  *    it CANNOT see is down. `navigator.onLine` stays true, so `online` will
  *    never fire; a user who simply leaves the app open on the page the
@@ -317,11 +336,8 @@ export type TouchpointOfflineRecovery = "announced" | "unannounced";
  * The `"unannounced"` half of {@link TouchpointOfflineRecovery}, for a failure
  * that arrived as a thrown error.
  *
- * This covers a 5xx from the daemon ITSELF — the request crossed the network
- * and came back with an answer, so the network never broke. A timeout is
- * deliberately excluded: `refresh` already classifies a spent budget as "the
- * same condition as a refused connection, reported by a different observer",
- * and this must not quietly reclassify it.
+ * This covers a 5xx from the daemon itself. Transport failures and timeouts
+ * also need bounded probes whenever the device still reports online.
  *
  * Note what this does NOT cover, because it is most of the real traffic. An
  * unreachable RUNTIME never reaches this client as an error at all: the daemon
@@ -368,21 +384,81 @@ export const touchpointFallbackFromServerError = (error: unknown) =>
 export const SERVER_FAULT_HEARTBEAT_MS = 5 * 60_000;
 
 /**
+ * Whether the browser itself says there is no network (OPEND-3436 AC3).
+ *
+ * Only an explicit `false` counts. `true` proves nothing — a captive portal or
+ * a dead runtime both leave it true — so it can suppress a request but never
+ * justify one. While it is false, a `focus`, `pageshow` or `visibilitychange`
+ * is a person looking at the app, not a sign the network came back, and a
+ * request would fail exactly as the last one did. The `online` event is the
+ * announcement that ends this, and it fires with `onLine` already true.
+ */
+const browserReportsOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
+
+/**
+ * The window a lease may be held for once this client has entered offline
+ * fallback (OPEND-3436 AC2): the longer of its own authorization and the
+ * schedule's last known end.
+ *
+ * The product decision behind it is explicit in the ticket: offline, a
+ * campaign may be shown until the last `endsAt` the server stated, not only
+ * until a short credential lapses. Without this, a revalidation that timed out
+ * left a sixty-second authorization to run out while the daemon's cached
+ * replay had not yet been delivered, and the campaign disappeared mid-schedule.
+ *
+ * It never shortens anything, and it only applies on the offline path: a live
+ * answer replaces `validForMs` outright, a withdrawal (410, 401, 403) still
+ * revokes, and `elapsed` still ages the lease on both clocks, so a clock set
+ * back cannot stretch the schedule either.
+ */
+const holdThroughSchedule = <L extends { validForMs: number; offlineValidForMs?: number }>(held: L): L =>
+	held.offlineValidForMs !== undefined && Number.isFinite(held.offlineValidForMs) && held.offlineValidForMs > held.validForMs
+		? { ...held, validForMs: held.offlineValidForMs }
+		: held;
+
+/**
  * One scheduling implementation for both runtime adapters. A response supplies
  * server-relative authority, never a client activation time. Renewing the same
  * immutable decision keeps its mount identity while replacing its lease.
  */
-export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, offlineFallback = false }: TouchpointLifecycleOptions<T>) {
+export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, offlineFallback = false, stopOnFailure = false, pauseAutomaticRequests }: TouchpointLifecycleOptions<T>) {
 	const [state, setState] = useState<{ identity: string | null; current: T | null; generation: number; status: LifecycleStatus }>({ identity: null, current: null, generation: 0, status: null });
 	const generation = useRef(0);
-	const lease = useRef<{ identity: string; key: string; value: T; generation: number; start: Clock; validForMs: number } | null>(null);
-	const inputs = useRef({ enabled, identity, onError });
-	inputs.current = { enabled, identity, onError };
+	const lease = useRef<{ identity: string; key: string; value: T; generation: number; start: Clock; validForMs: number; offlineValidForMs?: number } | null>(null);
+	/**
+	 * OPEND-3378. The generation whose host gave up a mount because
+	 * {@link isCurrent} said no while that mount was still being prepared.
+	 *
+	 * `isCurrent` is not monotonic: `elapsed` can rise past the window on a
+	 * wall-clock step and fall back under it on the correction, and a hidden
+	 * page becomes visible again. For a CLICK that is fine — it is refused now
+	 * and allowed later. For an unfinished MOUNT it is not: the host disposes
+	 * and returns, and when the same-key grant becomes current again nothing
+	 * restarts it, because a same-key renewal deliberately keeps the value and
+	 * generation so mounted content is not rebuilt. The screen stays blank for
+	 * the rest of the lease.
+	 *
+	 * So a host that abandons a mount says so, and the next renewal of that
+	 * same generation is published as a new presentation instead. Content that
+	 * did finish mounting never reports, so it is never rebuilt.
+	 */
+	const fencedMount = useRef<number | null>(null);
+	const inputs = useRef({ enabled, identity, onError, pauseAutomaticRequests });
+	inputs.current = { enabled, identity, onError, pauseAutomaticRequests };
 	const clearRef = useRef<() => void>(() => {});
 	const clear = useCallback(() => clearRef.current(), []);
 	const isCurrent = useCallback((expected: number) => {
 		const current = lease.current;
 		return Boolean(current && inputs.current.enabled && current.identity === inputs.current.identity && current.generation === expected && elapsed(current.start) < current.validForMs && !document.hidden);
+	}, []);
+	/**
+	 * Report that a host discarded its unfinished mount for `expected` because
+	 * {@link isCurrent} was false. Only a mount that never reached the screen
+	 * may report; see {@link fencedMount}. A report for a generation that is no
+	 * longer the lease's is moot — a new generation already remounts.
+	 */
+	const reportFencedMount = useCallback((expected: number) => {
+		if (lease.current?.generation === expected) fencedMount.current = expected;
 	}, []);
 
 	useEffect(() => {
@@ -484,7 +560,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		 * runtime exactly as unreachable as it was.
 		 */
 		const applyOfflineRecovery = (recovery: TouchpointOfflineRecovery | null) => {
-			if (recovery === "unannounced") armServerFaultHeartbeat();
+			if (recovery === "unannounced" && !browserReportsOffline()) armServerFaultHeartbeat();
 			else stopServerFaultHeartbeat();
 		};
 		/**
@@ -497,6 +573,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		 */
 		const abandonAttempt = (error: unknown) => {
 			cancelRequest();
+			if (stopOnFailure) offline = true;
 			// Judge the lease that is still recoverable — the active one, or the
 			// one `wake` set aside — by its OWN window. Asking whether there is an
 			// ACTIVE lease and calling "none" expired is what made a single
@@ -504,16 +581,21 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			// revalidates, so the next failure met that branch, spent the
 			// set-aside lease too, and the retry that succeeded came back
 			// `{kind:"retain"}` with nothing left to restore.
-			const recoverable = lease.current ?? revalidationLease;
+			let recoverable = lease.current ?? revalidationLease;
 			if (offlineFallback && touchpointEntersOfflineFallback(error)) {
 				offline = true;
-				// Keyed on the LATEST failure rather than the one that entered
-				// fallback, so the heartbeat is armed exactly while the current
-				// evidence says nothing will announce recovery. A 5xx that decays
-				// into a dead transport hands the job back to `online`; a dead
-				// transport that comes back to a still-broken server takes it up
-				// again on that server's next 5xx.
-				applyOfflineRecovery(touchpointFallbackFromServerError(error) ? "unannounced" : "announced");
+				if (recoverable) {
+					const held = holdThroughSchedule(recoverable);
+					if (held !== recoverable) {
+						if (recoverable === lease.current) {
+							lease.current = held;
+							armExpiry();
+						} else revalidationLease = held;
+						recoverable = held;
+					}
+				}
+				// Only an explicit device-offline signal can announce recovery reliably.
+				applyOfflineRecovery(browserReportsOffline() ? "announced" : "unannounced");
 			}
 			if (touchpointWithdrawsDisplay(error) || !recoverable || elapsed(recoverable.start) >= recoverable.validForMs) {
 				revalidationLease = null;
@@ -537,6 +619,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// answer at all for "there is no network", where every attempt in
 				// the chain fails the same way for the same reason.
 				!offline &&
+				!inputs.current.pauseAutomaticRequests?.() &&
 				!touchpointWithdrawsDisplay(error) &&
 				retryIndex < RETRY_BACKOFF_MS.length &&
 				delay + REQUEST_TIMEOUT_MS <= remainingInCycle
@@ -564,7 +647,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 					// is holding, and it does not wait for a network that may never
 					// come back. One request at a boundary is not a retry chain — the
 					// lease it belonged to is gone, so there is no second boundary.
-					if (offline) revalidateOnce();
+					if (offlineFallback && offline) revalidateOnce();
 				} else expiryTimer = setTimeout(tick, Math.min(remaining, MAX_TIMER_MS));
 			};
 			tick();
@@ -575,7 +658,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		 * exhaust its retries would leave every later cycle with none.
 		 */
 		const refresh = async (retrying = false) => {
-			if (stopped || ended || request || document.hidden) return;
+			if (stopped || ended || request || document.hidden || (stopOnFailure && browserReportsOffline())) return;
 			if (!retrying) {
 				retryIndex = 0;
 				cycleStart = clock();
@@ -665,12 +748,19 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 				// mounted lease that has genuinely lapsed is not reachable here
 				// either — `armExpiry` retires it, which empties `lease.current`.
 				const resumed = previous !== null && previous !== lease.current;
+				//
+				// The one exception is a renewal whose earlier mount was fenced off
+				// before it ever reached the screen (OPEND-3378, `fencedMount`):
+				// there is nothing mounted to preserve, and keeping the generation
+				// would leave that host blank for the rest of the lease.
 				const same =
 					previous?.key === result.key &&
 					previous.identity === identity &&
+					fencedMount.current !== previous.generation &&
 					(!resumed || elapsed(previous.start) < previous.validForMs);
 				if (!same) ++generation.current;
-				lease.current = { identity, key: result.key, value: same ? previous.value : result.value, generation: generation.current, start: started, validForMs: result.validForMs };
+				fencedMount.current = null;
+				lease.current = { identity, key: result.key, value: same && !result.replaceValue ? previous.value : result.value, generation: generation.current, start: started, validForMs: result.validForMs, offlineValidForMs: result.offlineValidForMs };
 				revalidationLease = null;
 				publish();
 				armExpiry();
@@ -738,7 +828,18 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			}
 			const current = lease.current;
 			const live = current !== null && elapsed(current.start) < current.validForMs;
-			if (offline) {
+			// Known offline: a return to the page may still retire a lapsed lease,
+			// but it may not ask (OPEND-3436 AC3). `online` is what asks next.
+			if ((offlineFallback || stopOnFailure) && browserReportsOffline()) {
+				if (current && !live) {
+					// Set aside exactly as `wake` would, unless fallback already
+					// reclaimed it — see the `offline` branch below.
+					if (!offline) revalidationLease = current;
+					revoke();
+				}
+				return;
+			}
+			if (offline || inputs.current.pauseAutomaticRequests?.()) {
 				// A device that slept past the end of an activity comes back with
 				// `armExpiry`'s timer still PENDING — sleep stops the timer queue
 				// while the wall clock runs on — so the lease it was going to retire
@@ -756,12 +857,12 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			if (live) void refresh();
 			else wake();
 		};
-		const cancelOnOffline = () => cancelRequest();
+		const cancelOnOffline = () => { cancelRequest(); stopServerFaultHeartbeat(); };
 		void refresh();
 		// A tick is a question the network cannot answer while it is down, so the
 		// interval stands down and recovery is event-driven until it is back.
 		const interval = setInterval(() => {
-			if (offline) return;
+			if (offline || inputs.current.pauseAutomaticRequests?.()) return;
 			void refresh();
 		}, POLL_MS);
 		window.addEventListener("focus", resume);
@@ -781,7 +882,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 			window.removeEventListener("offline", cancelOnOffline);
 			document.removeEventListener("visibilitychange", resume);
 		};
-	}, [enabled, identity, load, offlineFallback]);
+	}, [enabled, identity, load, offlineFallback, stopOnFailure]);
 
 	return {
 		current: enabled && state.identity === identity ? state.current : null,
@@ -789,6 +890,7 @@ export function useTouchpointLifecycle<T>({ enabled, identity, load, onError, of
 		generation: state.generation,
 		clear,
 		isCurrent,
+		reportFencedMount,
 		get deadline() {
 			const current = lease.current;
 			return current && inputs.current.enabled && current.identity === inputs.current.identity ? Date.now() + Math.max(0, current.validForMs - elapsed(current.start)) : 0;

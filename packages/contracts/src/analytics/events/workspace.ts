@@ -25,6 +25,8 @@ export type TrackingWorkspacePage =
 export interface TrackingWorkspaceDimensions {
   /** Opaque workspace id. Never a display name. */
   workspace_key?: string;
+  /** Authorized caller's membership, not the workspace creator's membership. */
+  workspace_member_id?: string;
   workspace_type?: TrackingWorkspaceType;
   workspace_role?: TrackingWorkspaceRole;
   workspace_lifecycle?: string;
@@ -68,6 +70,7 @@ export interface AccountMenuClickProps extends TrackingWorkspaceDimensions {
     | 'feature_request'
     | 'github'
     | 'discord'
+    | 'feishu'
     | 'twitter'
     | 'email'
     | 'logout';
@@ -82,17 +85,29 @@ export interface WorkspaceSwitcherClickProps extends TrackingWorkspaceDimensions
   is_current_workspace?: boolean;
 }
 
-export interface WorkspaceInviteClickProps extends TrackingWorkspaceDimensions {
-  page_name: 'home' | 'all_projects';
-  area: 'workspace_invite_dialog';
+export type WorkspaceInviteEntry = 'workspace_switcher' | 'all_projects' | 'onboarding' | 'home_banner' | 'home_header';
+
+export interface WorkspaceInviteRecipientDimensions {
+  /** Effective recipient roles in this batch, distinct from the inviter's workspace_role. */
+  requested_roles?: Array<'admin' | 'member'>;
+  requested_admin_count?: number;
+  requested_member_count?: number;
+}
+
+export interface WorkspaceInviteClickProps extends TrackingWorkspaceDimensions, WorkspaceInviteRecipientDimensions {
+  page_name: 'home' | 'all_projects' | 'onboarding';
+  area: 'workspace_invite_dialog' | 'onboarding_invite_step';
+  invite_surface_id?: string;
+  invite_batch_id?: string;
   element:
     | 'submit'
     | 'add_recipient_row'
     | 'remove_recipient_row'
     | 'role_select'
     | 'upgrade'
-    | 'close';
-  entry_from: 'workspace_switcher' | 'all_projects';
+    | 'close'
+    | 'skip_invite';
+  entry_from: WorkspaceInviteEntry;
   invite_count_bucket?: TrackingCountBucket;
 }
 
@@ -137,6 +152,10 @@ export interface CommunityTemplateClickProps extends TrackingWorkspaceDimensions
   resource_scope?: TrackingWorkspaceScope;
   filter_type?: 'category' | 'subtype';
   filter_value?: string;
+  /** use_prompt only: the surface whose Use control was clicked. */
+  use_source?: 'card' | 'detail_modal';
+  /** use_prompt only: plain Use, or Use that also loads the template prompt. */
+  use_action?: 'use' | 'use_with_query';
 }
 
 export interface ExtensionMarketplaceClickProps extends TrackingWorkspaceDimensions {
@@ -150,8 +169,10 @@ export interface ExtensionMarketplaceClickProps extends TrackingWorkspaceDimensi
 
 export interface WorkspaceSurfaceViewProps extends TrackingWorkspaceDimensions {
   page_name: TrackingWorkspacePage;
-  area: 'account_menu' | 'workspace_switcher' | 'workspace_invite_dialog';
-  entry_from?: 'workspace_switcher' | 'all_projects';
+  area: 'account_menu' | 'workspace_switcher' | 'workspace_invite_dialog' | 'workspace_content';
+  surface_instance_id?: string;
+  entry_from?: WorkspaceInviteEntry;
+  invite_surface_id?: string;
 }
 
 export interface WorkspaceSwitchResultProps extends TrackingWorkspaceDimensions {
@@ -163,11 +184,16 @@ export interface WorkspaceSwitchResultProps extends TrackingWorkspaceDimensions 
   error_code?: string;
 }
 
-export interface WorkspaceInviteResultProps extends TrackingWorkspaceDimensions {
-  page_name: 'home' | 'all_projects';
-  area: 'workspace_invite_dialog';
-  entry_from: 'workspace_switcher' | 'all_projects';
-  result: 'success' | 'partial_success' | 'failed';
+export interface WorkspaceInviteResultProps extends TrackingWorkspaceDimensions, WorkspaceInviteRecipientDimensions {
+  page_name: 'home' | 'all_projects' | 'onboarding';
+  area: 'workspace_invite_dialog' | 'onboarding_invite_step';
+  invite_surface_id?: string;
+  invite_batch_id?: string;
+  /** Authoritative successful invitation IDs; no recipient emails or invite tokens. */
+  invite_ids?: string[];
+  entry_from: WorkspaceInviteEntry;
+  result: 'success' | 'partial_success' | 'failed' | 'unknown';
+  unknown_count?: number;
   requested_count: number;
   succeeded_count: number;
   failed_count: number;
@@ -195,6 +221,7 @@ export interface WorkspaceProjectActionResultProps extends TrackingWorkspaceDime
 }
 
 export interface WorkspaceSharedProjectOpenResultProps extends TrackingWorkspaceDimensions {
+  project_key: string;
   page_name: 'all_projects' | 'drafts' | 'home';
   area: 'project_collection';
   result: 'success' | 'failed';
@@ -226,6 +253,41 @@ export interface ProjectCommentCreateResultProps extends TrackingWorkspaceDimens
   result: 'success';
   target_project_relation: TrackingProjectRelation;
   comment_level: 'top_level' | 'reply';
+  /** Saved comment from the existing successful create result. */
+  comment_id?: string;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+}
+
+
+export interface WorkspaceJourneySurfaceProps extends TrackingWorkspaceDimensions {
+  page_name: 'home' | 'chat_panel';
+  area: 'home_invite_banner' | 'home_invite_header' | 'workspace_quota_popover'
+    | 'credit_exhausted_dialog' | 'concurrency_limit_dialog' | 'workspace_membership_removed';
+  surface_instance_id: string;
+  entry_from?: WorkspaceInviteEntry;
+  block_id?: string;
+  reason?: 'credit_exhausted' | 'concurrency_limit';
+  stage?: 'before_run' | 'mid_run' | 'unknown';
+  run_id?: string;
+}
+export interface WorkspaceJourneyClickProps extends WorkspaceJourneySurfaceProps {
+  element: 'invite_teammates' | 'close' | 'upgrade' | 'return_personal_workspace';
+}
+
+/** Funding admission recovered; this does not assert payment or a resumed run. */
+export interface WorkspaceFundingRecoveryResultProps extends WorkspaceJourneySurfaceProps {
+  result: 'recovered' | 'timeout';
+  recovery_method: 'funding_preflight';
+  duration_ms: number;
+  requires_manual_send: boolean;
+  project_key?: string;
+  conversation_id?: string;
+}
+export interface WorkspaceInvitePageViewProps extends TrackingWorkspaceDimensions {
+  page_name: 'onboarding';
+  area: 'onboarding_invite_step';
+  step_name: 'invite_teammates';
+  entry_from: 'onboarding';
+  invite_surface_id: string;
 }

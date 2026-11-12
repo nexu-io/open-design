@@ -1569,6 +1569,396 @@ const HOME_PRESET_COPY: Record<string, Record<Locale, HomePresetCopy>> = {
       prompt: 'Progetta un sito ispirato alle riviste per il mio marchio, presentando il prodotto con titoli d’impatto, collage di immagini e animazioni di scorrimento.',
     },
   },
+  'example-motion-showreel': {
+    'zh-CN': {
+      title: '动效设计师自荐片',
+      prompt: '做一段动感的 15 秒动效视频，展示你是一位多么出色的动效设计师，就像放进简历里的作品集自荐片。全力以赴。',
+    },
+    'zh-TW': {
+      title: '動效設計師自薦片',
+      prompt: '做一段動感的 15 秒動效影片，展示你是一位多麼出色的動效設計師，就像放進履歷裡的作品集自薦片。全力以赴。',
+    },
+    en: {
+      title: 'Motion Designer Showreel',
+      prompt: 'make a dynamic 15-second motion graphics video that shows what an incredible motion designer you are, like it\'s your showreel for a résumé. go all out.',
+    },
+    id: {
+      title: 'Showreel Desainer Motion',
+      prompt: 'buat video motion graphics dinamis 15 detik yang menunjukkan betapa hebatnya kamu sebagai desainer motion, seperti showreel untuk CV-mu. kerahkan semuanya.',
+    },
+    de: {
+      title: 'Motion-Designer-Showreel',
+      prompt: 'Mach ein dynamisches 15-Sekunden-Motion-Graphics-Video, das zeigt, was für ein unglaublicher Motion Designer du bist – wie dein Showreel für den Lebenslauf. Gib alles.',
+    },
+    'pt-BR': {
+      title: 'Showreel de Motion Designer',
+      prompt: 'faça um vídeo de motion graphics dinâmico de 15 segundos que mostre o motion designer incrível que você é, como o seu showreel para o currículo. capriche ao máximo.',
+    },
+    'es-ES': {
+      title: 'Showreel de motion designer',
+      prompt: 'haz un vídeo de motion graphics dinámico de 15 segundos que muestre el increíble motion designer que eres, como tu showreel para el currículum. dalo todo.',
+    },
+    ru: {
+      title: 'Шоурил моушн-дизайнера',
+      prompt: 'сделай динамичное 15-секундное моушн-видео, которое покажет, какой ты потрясающий моушн-дизайнер, — как шоурил для резюме. выложись на полную.',
+    },
+    fa: {
+      title: 'شوریل طراح موشن',
+      prompt: 'یک ویدیوی موشن‌گرافیک پویا و ۱۵ ثانیه‌ای بساز که نشان دهد چه طراح موشن فوق‌العاده‌ای هستی، مثل شوریل رزومه‌ات. سنگ تمام بگذار.',
+    },
+    ar: {
+      title: 'شوريل مصمم موشن',
+      prompt: 'اصنع فيديو موشن جرافيك ديناميكيًا مدته 15 ثانية يُظهر كم أنت مصمم موشن مذهل، كأنه الشوريل الخاص بسيرتك الذاتية. ابذل أقصى ما لديك.',
+    },
+    ja: {
+      title: 'モーションデザイナーのショーリール',
+      prompt: 'あなたがどれほどすごいモーションデザイナーかを見せる、ダイナミックな 15 秒のモーショングラフィックス動画を作って。履歴書に添えるショーリールのように。全力で。',
+    },
+    ko: {
+      title: '모션 디자이너 쇼릴',
+      prompt: '당신이 얼마나 뛰어난 모션 디자이너인지 보여 주는 역동적인 15초 모션 그래픽 영상을 만들어 줘. 이력서용 쇼릴처럼. 전력을 다해서.',
+    },
+    pl: {
+      title: 'Showreel motion designera',
+      prompt: 'zrób dynamiczny, 15-sekundowy film motion graphics, który pokaże, jak niesamowitym motion designerem jesteś — jak showreel do CV. daj z siebie wszystko.',
+    },
+    hu: {
+      title: 'Motion designer showreel',
+      prompt: 'készíts egy dinamikus, 15 másodperces motion graphics videót, ami megmutatja, milyen elképesztő motion designer vagy — mint egy showreel az önéletrajzodhoz. hozd ki belőle a maximumot.',
+    },
+    fr: {
+      title: 'Showreel de motion designer',
+      prompt: 'fais une vidéo de motion design dynamique de 15 secondes qui montre quel motion designer incroyable tu es, comme ton showreel pour un CV. donne tout.',
+    },
+    uk: {
+      title: 'Шоурил моушн-дизайнера',
+      prompt: 'зроби динамічне 15-секундне моушн-відео, яке покаже, який ти неймовірний моушн-дизайнер, — як шоурил для резюме. викладись на повну.',
+    },
+    tr: {
+      title: 'Motion tasarımcısı showreel',
+      prompt: 'ne kadar inanılmaz bir motion tasarımcısı olduğunu gösteren, özgeçmişin için bir showreel gibi dinamik, 15 saniyelik bir motion graphics videosu yap. elinden gelenin en iyisini yap.',
+    },
+    th: {
+      title: 'โชว์รีลนักออกแบบโมชัน',
+      prompt: 'ทำวิดีโอโมชันกราฟิกไดนามิกยาว 15 วินาทีที่แสดงให้เห็นว่าคุณเป็นนักออกแบบโมชันที่เก่งแค่ไหน เหมือนโชว์รีลสำหรับเรซูเม่ ทุ่มให้สุด',
+    },
+    it: {
+      title: 'Showreel da motion designer',
+      prompt: 'crea un video di motion graphics dinamico di 15 secondi che mostri che motion designer incredibile sei, come il tuo showreel per il curriculum. dai il massimo.',
+    },
+  },
+  'example-motion-product-promo': {
+    'zh-CN': {
+      title: '产品宣传片',
+      prompt: '为虚构的创作者支付产品 Pennyflow 做一支 15 秒的产品宣传片，按节拍剪辑。一个网点风格的 3D 吉祥物小声说「psst…」，然后问「Got something to sell?」。课程、电子书、App 三张商品卡片弹到蓝色画面上，手机商店逐项填满，结账面板依次处理刷卡付款、加购、增值税和收款，最后盖上「Handled.」印章。结尾是「You create. We handle the flow.」和带 Start selling 按钮的 Pennyflow 品牌字。',
+    },
+    'zh-TW': {
+      title: '產品宣傳片',
+      prompt: '為虛構的創作者支付產品 Pennyflow 做一支 15 秒的產品宣傳片，依節拍剪輯。一個網點風格的 3D 吉祥物小聲說「psst…」，然後問「Got something to sell?」。課程、電子書、App 三張商品卡片彈到藍色畫面上，手機商店逐項填滿，結帳面板依序處理刷卡付款、加購、增值稅和收款，最後蓋上「Handled.」印章。結尾是「You create. We handle the flow.」和帶 Start selling 按鈕的 Pennyflow 品牌字。',
+    },
+    en: {
+      title: 'Product Promo',
+      prompt: 'Make a 15-second product promo for Pennyflow, a fictional payments product for creators, cut on the beat. A halftone 3D mascot whispers "psst…" and asks "Got something to sell?". Cards for courses, ebooks and apps pop onto a blue screen, a phone store fills in, and a checkout board handles card payment, an upsell, VAT and payouts before a "Handled." stamp lands. End on "You create. We handle the flow." and the Pennyflow wordmark with a Start selling button.',
+    },
+    id: {
+      title: 'Video Promosi Produk',
+      prompt: 'Buat video promosi produk 15 detik untuk Pennyflow, produk pembayaran fiktif untuk kreator, dipotong mengikuti ketukan. Maskot 3D bergaya halftone berbisik "psst…" lalu bertanya "Got something to sell?". Kartu kursus, ebook, dan aplikasi muncul di layar biru, toko di ponsel terisi, dan papan checkout menangani pembayaran kartu, upsell, PPN, serta pencairan dana sebelum cap "Handled." mendarat. Tutup dengan "You create. We handle the flow." dan logo Pennyflow dengan tombol Start selling.',
+    },
+    de: {
+      title: 'Produkt-Promo',
+      prompt: 'Mach ein 15-sekündiges Produkt-Promo für Pennyflow, ein fiktives Zahlungsprodukt für Creator, im Takt geschnitten. Ein 3D-Maskottchen im Halftone-Look flüstert „psst…“ und fragt „Got something to sell?“. Karten für Kurse, E-Books und Apps springen auf einen blauen Screen, ein Handy-Shop füllt sich, und ein Checkout-Board erledigt Kartenzahlung, Upsell, Mehrwertsteuer und Auszahlungen, bevor der Stempel „Handled.“ landet. Schluss mit „You create. We handle the flow.“ und der Pennyflow-Wortmarke mit einem Start-selling-Button.',
+    },
+    'pt-BR': {
+      title: 'Vídeo promocional de produto',
+      prompt: 'Faça um vídeo promocional de 15 segundos para a Pennyflow, um produto fictício de pagamentos para criadores, cortado no ritmo. Um mascote 3D em meio-tom sussurra "psst…" e pergunta "Got something to sell?". Cards de cursos, e-books e apps surgem numa tela azul, uma loja no celular se preenche e um painel de checkout cuida do pagamento com cartão, do upsell, do imposto e dos repasses até o carimbo "Handled." cair. Termine com "You create. We handle the flow." e a logomarca Pennyflow com um botão Start selling.',
+    },
+    'es-ES': {
+      title: 'Vídeo promocional de producto',
+      prompt: 'Haz un vídeo promocional de 15 segundos para Pennyflow, un producto ficticio de pagos para creadores, montado al ritmo. Una mascota 3D en semitono susurra "psst…" y pregunta "Got something to sell?". Tarjetas de cursos, ebooks y apps aparecen sobre una pantalla azul, una tienda en el móvil se completa y un panel de pago gestiona el cobro con tarjeta, la venta adicional, el IVA y los pagos hasta que cae el sello "Handled.". Termina con "You create. We handle the flow." y el logotipo de Pennyflow con un botón Start selling.',
+    },
+    ru: {
+      title: 'Промо-ролик продукта',
+      prompt: 'Сделай 15-секундный промо-ролик для Pennyflow — вымышленного платёжного продукта для авторов, с монтажом в ритм. 3D-маскот в растровой стилистике шепчет «psst…» и спрашивает «Got something to sell?». Карточки курсов, электронных книг и приложений появляются на синем экране, магазин в телефоне заполняется, а панель оплаты обрабатывает оплату картой, допродажу, НДС и выплаты, пока не опускается штамп «Handled.». Финал — «You create. We handle the flow.» и логотип Pennyflow с кнопкой Start selling.',
+    },
+    fa: {
+      title: 'ویدیوی تبلیغاتی محصول',
+      prompt: 'یک ویدیوی تبلیغاتی ۱۵ ثانیه‌ای برای Pennyflow بساز، محصول پرداخت خیالی برای سازندگان محتوا، با تدوین هماهنگ با ضرب. یک شخصیت سه‌بعدی با بافت نقطه‌ای آرام می‌گوید «psst…» و می‌پرسد «Got something to sell?». کارت‌های دوره، کتاب الکترونیکی و اپلیکیشن روی صفحه‌ای آبی ظاهر می‌شوند، فروشگاهی در گوشی پر می‌شود و صفحهٔ پرداخت، پرداخت با کارت، فروش افزوده، مالیات و تسویه را انجام می‌دهد تا مهر «Handled.» بخورد. با «You create. We handle the flow.» و لوگوی Pennyflow همراه دکمهٔ Start selling تمام کن.',
+    },
+    ar: {
+      title: 'فيديو ترويجي لمنتج',
+      prompt: 'اصنع فيديو ترويجيًا مدته 15 ثانية لـ Pennyflow، وهو منتج دفع خيالي لصنّاع المحتوى، مع مونتاج على الإيقاع. تميمة ثلاثية الأبعاد بنمط النقاط النصفية تهمس "psst…" ثم تسأل "Got something to sell?". تظهر بطاقات للدورات والكتب الإلكترونية والتطبيقات على شاشة زرقاء، ويمتلئ متجر على الهاتف، وتتولى لوحة الدفع الدفع بالبطاقة والبيع الإضافي وضريبة القيمة المضافة والتحويلات حتى يهبط ختم "Handled.". اختم بعبارة "You create. We handle the flow." وشعار Pennyflow مع زر Start selling.',
+    },
+    ja: {
+      title: '製品プロモーション動画',
+      prompt: 'クリエイター向けの架空の決済サービス Pennyflow の 15 秒プロモーション動画を、ビートに合わせた編集で作って。網点スタイルの 3D マスコットが「psst…」とささやき、「Got something to sell?」と問いかける。講座・電子書籍・アプリのカードが青い画面にポップし、スマホのストアが埋まり、決済ボードがカード決済、アップセル、付加価値税、入金を処理して「Handled.」のスタンプが押される。最後は「You create. We handle the flow.」と、Start selling ボタン付きの Pennyflow のロゴで締める。',
+    },
+    ko: {
+      title: '제품 홍보 영상',
+      prompt: '크리에이터를 위한 가상의 결제 서비스 Pennyflow의 15초 제품 홍보 영상을 비트에 맞춰 편집해서 만들어 줘. 망점 스타일의 3D 마스코트가 "psst…"라고 속삭이고 "Got something to sell?"라고 묻는다. 강의, 전자책, 앱 카드가 파란 화면에 튀어나오고, 휴대폰 스토어가 채워지고, 결제 보드가 카드 결제, 추가 판매, 부가세, 정산을 처리한 뒤 "Handled." 도장이 찍힌다. 마지막은 "You create. We handle the flow."와 Start selling 버튼이 있는 Pennyflow 로고로 끝낸다.',
+    },
+    pl: {
+      title: 'Film promocyjny produktu',
+      prompt: 'Zrób 15-sekundowy film promocyjny dla Pennyflow, fikcyjnego produktu płatniczego dla twórców, zmontowany do rytmu. Maskotka 3D w stylu rastra szepcze „psst…” i pyta „Got something to sell?”. Karty kursów, e-booków i aplikacji wyskakują na niebieskim ekranie, sklep w telefonie się zapełnia, a panel płatności obsługuje płatność kartą, dosprzedaż, VAT i wypłaty, aż spada pieczątka „Handled.”. Zakończ hasłem „You create. We handle the flow.” i logo Pennyflow z przyciskiem Start selling.',
+    },
+    hu: {
+      title: 'Termékpromóciós videó',
+      prompt: 'Készíts egy 15 másodperces termékpromót a Pennyflow-nak, egy kitalált, alkotóknak szóló fizetési terméknek, ütemre vágva. Egy rasztermintás 3D kabalafigura azt suttogja: „psst…”, majd megkérdezi: „Got something to sell?”. Kurzus-, e-könyv- és alkalmazáskártyák ugranak egy kék képernyőre, megtelik egy mobilos webshop, a fizetési panel pedig intézi a kártyás fizetést, a kiegészítő vásárlást, az áfát és a kifizetéseket, mire lecsap a „Handled.” pecsét. Zárd a „You create. We handle the flow.” felirattal és a Pennyflow logóval egy Start selling gombbal.',
+    },
+    fr: {
+      title: 'Vidéo promo produit',
+      prompt: 'Fais une vidéo promo produit de 15 secondes pour Pennyflow, un produit de paiement fictif pour les créateurs, montée sur le rythme. Une mascotte 3D en trame chuchote « psst… » puis demande « Got something to sell? ». Des cartes de cours, d’ebooks et d’apps surgissent sur un écran bleu, une boutique sur téléphone se remplit, et un tableau de paiement gère le paiement par carte, la vente additionnelle, la TVA et les versements avant que le tampon « Handled. » ne tombe. Termine sur « You create. We handle the flow. » et le logo Pennyflow avec un bouton Start selling.',
+    },
+    uk: {
+      title: 'Промо-ролик продукту',
+      prompt: 'Зроби 15-секундний промо-ролик для Pennyflow — вигаданого платіжного продукту для авторів, із монтажем у ритм. 3D-маскот у растровій стилістиці шепоче «psst…» і питає «Got something to sell?». Картки курсів, електронних книжок і застосунків з’являються на синьому екрані, магазин у телефоні заповнюється, а панель оплати обробляє оплату карткою, допродаж, ПДВ і виплати, доки не опускається штамп «Handled.». Фінал — «You create. We handle the flow.» і логотип Pennyflow з кнопкою Start selling.',
+    },
+    tr: {
+      title: 'Ürün Tanıtım Videosu',
+      prompt: 'İçerik üreticileri için kurgusal bir ödeme ürünü olan Pennyflow için ritme göre kurgulanmış 15 saniyelik bir tanıtım videosu yap. Raster dokulu 3D bir maskot "psst…" diye fısıldıyor ve "Got something to sell?" diye soruyor. Kurs, e-kitap ve uygulama kartları mavi bir ekrana fırlıyor, telefondaki mağaza doluyor ve ödeme panosu kartla ödemeyi, ek satışı, KDV’yi ve ödemeleri hallediyor; ardından "Handled." damgası iniyor. "You create. We handle the flow." ve Start selling düğmeli Pennyflow logosuyla bitir.',
+    },
+    th: {
+      title: 'วิดีโอโปรโมตสินค้า',
+      prompt: 'ทำวิดีโอโปรโมตสินค้า 15 วินาทีให้ Pennyflow ผลิตภัณฑ์รับชำระเงินสมมติสำหรับครีเอเตอร์ ตัดต่อตามจังหวะ มาสคอต 3D ลายฮาล์ฟโทนกระซิบว่า "psst…" แล้วถามว่า "Got something to sell?" การ์ดคอร์ส อีบุ๊ก และแอปเด้งขึ้นบนจอสีน้ำเงิน ร้านค้าในมือถือค่อย ๆ เต็ม และแผงชำระเงินจัดการการจ่ายด้วยบัตร การขายเพิ่ม ภาษีมูลค่าเพิ่ม และการโอนเงิน ก่อนตรา "Handled." จะประทับลง ปิดท้ายด้วย "You create. We handle the flow." และโลโก้ Pennyflow พร้อมปุ่ม Start selling',
+    },
+    it: {
+      title: 'Video promozionale di prodotto',
+      prompt: 'Crea un video promozionale di 15 secondi per Pennyflow, un prodotto di pagamento di fantasia per creator, montato a tempo. Una mascotte 3D a retino sussurra "psst…" e chiede "Got something to sell?". Schede di corsi, ebook e app spuntano su uno schermo blu, un negozio sul telefono si riempie e un pannello di pagamento gestisce pagamento con carta, upsell, IVA e accrediti prima che cada il timbro "Handled.". Chiudi con "You create. We handle the flow." e il logo Pennyflow con un pulsante Start selling.',
+    },
+  },
+  'example-motion-ui-morph': {
+    'zh-CN': {
+      title: '纯代码 UI 动效',
+      prompt: '做一段 14 秒、Dribbble 水准的 UI 动效，120 BPM，7 小节，每一拍都有变化。全程只有一个形状、不切镜：从 Generate 按钮依次变成加载、对勾、灵动岛、带播放/暂停变形的音乐播放器、被拖动的进度条、拖过最大值会被拉长的音量滑块、开关、液态标签指示器、自动绘制并带悬停提示的图表、可以输入的 ⌘K 命令面板、提示条，最后回到按钮。所有变化都由光标真实的点击和拖拽驱动。浅暖灰背景、黑白组件、一款干净的界面字体（Geist）。全程弹簧动画，最多一点点回弹。最后一帧和第一帧相同，可以无缝循环。',
+    },
+    'zh-TW': {
+      title: '純程式碼 UI 動效',
+      prompt: '做一段 14 秒、Dribbble 水準的 UI 動效，120 BPM，7 小節，每一拍都有變化。全程只有一個形狀、不切鏡：從 Generate 按鈕依序變成載入、勾號、動態島、帶播放/暫停變形的音樂播放器、被拖動的進度條、拖過最大值會被拉長的音量滑桿、開關、液態分頁指示器、自動繪製並帶懸停提示的圖表、可以輸入的 ⌘K 指令面板、提示條，最後回到按鈕。所有變化都由游標真實的點擊和拖曳驅動。淺暖灰背景、黑白元件、一款乾淨的介面字體（Geist）。全程彈簧動畫，最多一點點回彈。最後一格和第一格相同，可以無縫循環。',
+    },
+    en: {
+      title: 'One-Shape UI Motion',
+      prompt: 'Make a 14-second Dribbble-level UI motion piece at 120 BPM, 7 bars, something happening on every beat. One shape, never cut: it morphs from a Generate button into a loader, a check, a dynamic island, a music player with a play/pause morph, a scrubbed progress bar, a volume slider that stretches when dragged past max, a toggle, a liquid tab indicator, a chart that draws itself with a hover tooltip, a ⌘K palette you type into, a toast, and back to the button. A cursor drives every change with real clicks and drags. Light warm-gray canvas, black and white components, one clean UI font (Geist). Springs everywhere, a tiny overshoot at most. The last frame is the first frame, so it loops.',
+    },
+    id: {
+      title: 'Motion UI Satu Bentuk',
+      prompt: 'Buat karya motion UI 14 detik setara Dribbble pada 120 BPM, 7 bar, ada sesuatu di setiap ketukan. Satu bentuk tanpa potongan: berubah dari tombol Generate menjadi loader, centang, dynamic island, pemutar musik dengan morf play/pause, progress bar yang digeser, slider volume yang meregang saat ditarik melewati maksimum, toggle, indikator tab cair, grafik yang menggambar dirinya dengan tooltip saat hover, palet ⌘K yang diketik, toast, lalu kembali ke tombol. Kursor menggerakkan setiap perubahan dengan klik dan seret nyata. Kanvas abu-abu hangat terang, komponen hitam putih, satu font UI bersih (Geist). Spring di mana-mana, overshoot sangat kecil. Frame terakhir sama dengan frame pertama agar berulang mulus.',
+    },
+    de: {
+      title: 'UI-Motion aus einer Form',
+      prompt: 'Erstelle ein 14-sekündiges UI-Motion-Stück auf Dribbble-Niveau bei 120 BPM, 7 Takte, auf jedem Beat passiert etwas. Eine Form, kein Schnitt: Sie morpht vom Generate-Button zu Loader, Häkchen, Dynamic Island, Musikplayer mit Play/Pause-Morph, gescrubbtem Fortschrittsbalken, Lautstärkeregler, der sich über das Maximum hinaus dehnt, Toggle, flüssigem Tab-Indikator, einem sich selbst zeichnenden Chart mit Hover-Tooltip, einer ⌘K-Palette mit Eingabe, einem Toast und zurück zum Button. Ein Cursor steuert jede Änderung mit echten Klicks und Drags. Heller warmgrauer Hintergrund, schwarze und weiße Komponenten, eine klare UI-Schrift (Geist). Überall Federn, höchstens minimales Überschwingen. Das letzte Bild ist das erste, damit es loopt.',
+    },
+    'pt-BR': {
+      title: 'Motion de UI em uma forma',
+      prompt: 'Crie uma peça de motion de UI de 14 segundos no nível do Dribbble, a 120 BPM, 7 compassos, algo acontecendo em cada batida. Uma forma, sem cortes: ela vira de um botão Generate para um loader, um check, uma dynamic island, um player de música com morph de play/pause, uma barra de progresso arrastada, um slider de volume que estica ao passar do máximo, um toggle, um indicador de abas líquido, um gráfico que se desenha com tooltip no hover, uma paleta ⌘K em que se digita, um toast e de volta ao botão. Um cursor conduz cada mudança com cliques e arrastes reais. Fundo cinza-quente claro, componentes em preto e branco, uma fonte de UI limpa (Geist). Molas em tudo, no máximo um overshoot mínimo. O último frame é igual ao primeiro, para fazer loop.',
+    },
+    'es-ES': {
+      title: 'Motion de UI con una sola forma',
+      prompt: 'Crea una pieza de motion de UI de 14 segundos al nivel de Dribbble, a 120 BPM, 7 compases, algo en cada tiempo. Una sola forma, sin cortes: pasa de un botón Generate a un loader, un check, una dynamic island, un reproductor con morph de play/pausa, una barra de progreso arrastrada, un slider de volumen que se estira al pasar del máximo, un interruptor, un indicador de pestañas líquido, un gráfico que se dibuja solo con tooltip al pasar el cursor, una paleta ⌘K en la que se escribe, un toast y vuelta al botón. Un cursor provoca cada cambio con clics y arrastres reales. Fondo gris cálido claro, componentes en blanco y negro, una fuente de UI limpia (Geist). Muelles en todo, como mucho un rebote mínimo. El último fotograma es el primero, para que haga bucle.',
+    },
+    ru: {
+      title: 'UI-моушн из одной формы',
+      prompt: 'Сделай 14-секундный UI-моушн уровня Dribbble, 120 BPM, 7 тактов, на каждую долю что-то происходит. Одна форма без склеек: она превращается из кнопки Generate в лоадер, галочку, dynamic island, плеер с морфингом play/pause, прокручиваемый прогресс-бар, слайдер громкости, который растягивается при перетягивании за максимум, переключатель, «жидкий» индикатор вкладок, график, рисующий себя с тултипом при наведении, палитру ⌘K с вводом текста, тост — и обратно в кнопку. Каждое изменение запускает курсор настоящими кликами и перетаскиванием. Светлый тёплый серый фон, чёрно-белые компоненты, один чистый UI-шрифт (Geist). Пружины везде, максимум крошечный перелёт. Последний кадр совпадает с первым, чтобы зацикливалось.',
+    },
+    fa: {
+      title: 'موشن رابط کاربری با یک شکل',
+      prompt: 'یک قطعهٔ موشن رابط کاربری ۱۴ ثانیه‌ای در سطح Dribbble بساز، ۱۲۰ BPM، ۷ میزان، روی هر ضرب اتفاقی بیفتد. فقط یک شکل، بدون برش: از دکمهٔ Generate به لودر، تیک، dynamic island، پخش‌کنندهٔ موسیقی با دگردیسی play/pause، نوار پیشرفتی که کشیده می‌شود، اسلایدر صدایی که وقتی از حداکثر بیشتر کشیده شود کش می‌آید، سوئیچ، نشانگر سیال تب، نموداری که خودش رسم می‌شود با راهنمای هاور، پالت ⌘K که در آن تایپ می‌شود، اعلان و دوباره دکمه تبدیل می‌شود. نشانگر ماوس هر تغییر را با کلیک و کشیدن واقعی انجام می‌دهد. پس‌زمینهٔ خاکستری گرم روشن، اجزای سیاه و سفید، یک فونت رابط کاربری تمیز (Geist). همه‌جا فنری، حداکثر کمی برگشت. فریم آخر همان فریم اول است تا حلقه شود.',
+    },
+    ar: {
+      title: 'موشن واجهة بشكل واحد',
+      prompt: 'اصنع عمل موشن لواجهة مستخدم مدته 14 ثانية بمستوى Dribbble، على إيقاع 120 BPM، 7 مازورات، وحدث في كل نبضة. شكل واحد دون قطع: يتحول من زر Generate إلى مؤشر تحميل، علامة صح، dynamic island، مشغل موسيقى مع تحول تشغيل/إيقاف، شريط تقدم يُسحب، شريط صوت يتمدد عند سحبه بعد الحد الأقصى، مفتاح تبديل، مؤشر تبويبات سائل، رسم بياني يرسم نفسه مع تلميح عند المرور، لوحة ⌘K يُكتب فيها، إشعار، ثم يعود إلى الزر. يقود مؤشر الفأرة كل تغيير بنقرات وسحب حقيقي. خلفية رمادية دافئة فاتحة، مكونات بالأبيض والأسود، خط واجهة نظيف واحد (Geist). نوابض في كل مكان، وارتداد ضئيل على الأكثر. الإطار الأخير هو الأول ليتكرر بسلاسة.',
+    },
+    ja: {
+      title: 'ワンシェイプ UI モーション',
+      prompt: 'Dribbble レベルの 14 秒の UI モーションを作って。120 BPM、7 小節、毎拍なにかが起きる。ひとつの図形をカットなしで、Generate ボタン → ローダー → チェック → ダイナミックアイランド → 再生/一時停止がモーフする音楽プレーヤー → ドラッグされるプログレスバー → 最大を超えて引っ張ると伸びる音量スライダー → トグル → 液体のようなタブインジケーター → ホバーでツールチップが出る自動描画チャート → 入力できる ⌘K パレット → トースト → ボタンへ戻る。すべての変化はカーソルの実際のクリックとドラッグで起こす。明るいウォームグレーの背景、白黒のコンポーネント、クリーンな UI フォント 1 種（Geist）。全部スプリングで、オーバーシュートはごくわずか。最後のフレームを最初のフレームと同じにしてループさせる。',
+    },
+    ko: {
+      title: '원 셰이프 UI 모션',
+      prompt: 'Dribbble 수준의 14초 UI 모션을 만들어 줘. 120 BPM, 7마디, 매 박자마다 무언가 일어나야 해. 하나의 도형을 컷 없이: Generate 버튼에서 로더, 체크, 다이내믹 아일랜드, 재생/일시정지가 모핑되는 뮤직 플레이어, 드래그되는 진행 바, 최대치를 넘겨 끌면 늘어나는 볼륨 슬라이더, 토글, 액체 같은 탭 인디케이터, 호버 툴팁이 있는 스스로 그려지는 차트, 입력하는 ⌘K 팔레트, 토스트를 거쳐 다시 버튼으로. 모든 변화는 커서의 실제 클릭과 드래그로 일어나. 밝은 웜 그레이 배경, 흑백 컴포넌트, 깔끔한 UI 폰트 하나(Geist). 전부 스프링, 오버슈트는 아주 살짝만. 마지막 프레임이 첫 프레임과 같아 루프되게.',
+    },
+    pl: {
+      title: 'UI motion z jednego kształtu',
+      prompt: 'Stwórz 14-sekundowy UI motion na poziomie Dribbble, 120 BPM, 7 taktów, coś dzieje się na każdym uderzeniu. Jeden kształt, bez cięć: zmienia się z przycisku Generate w loader, ptaszek, dynamic island, odtwarzacz muzyki z morfem play/pause, przewijany pasek postępu, suwak głośności rozciągający się po przeciągnięciu za maksimum, przełącznik, płynny wskaźnik zakładek, wykres rysujący się sam z tooltipem po najechaniu, paletę ⌘K z wpisywaniem, toast i z powrotem w przycisk. Kursor wywołuje każdą zmianę prawdziwymi kliknięciami i przeciągnięciami. Jasne, ciepłoszare tło, czarno-białe komponenty, jedna czysta czcionka UI (Geist). Wszędzie sprężyny, najwyżej minimalne przestrzelenie. Ostatnia klatka jest pierwszą, żeby się zapętlało.',
+    },
+    hu: {
+      title: 'Egyformás UI motion',
+      prompt: 'Készíts egy 14 másodperces, Dribbble-szintű UI motiont, 120 BPM, 7 ütem, minden ütemre történik valami. Egyetlen forma vágás nélkül: Generate gombból töltésjelző, pipa, dynamic island, lejátszás/szünet morfos zenelejátszó, húzott folyamatjelző, maximumon túlhúzva megnyúló hangerőcsúszka, kapcsoló, folyékony fülindikátor, önmagát kirajzoló diagram hover-tooltippel, gépelhető ⌘K paletta, értesítés, majd vissza a gombba. Minden változást a kurzor valódi kattintásai és húzásai indítanak. Világos meleg szürke háttér, fekete-fehér komponensek, egy tiszta UI-betűtípus (Geist). Mindenhol rugó, legfeljebb minimális túllendülés. Az utolsó képkocka megegyezik az elsővel, hogy ismétlődjön.',
+    },
+    fr: {
+      title: 'Motion d’UI en une seule forme',
+      prompt: 'Crée une pièce de motion d’UI de 14 secondes au niveau Dribbble, à 120 BPM, 7 mesures, il se passe quelque chose à chaque temps. Une seule forme, sans coupe : elle passe d’un bouton Generate à un loader, une coche, une dynamic island, un lecteur audio avec morph lecture/pause, une barre de progression qu’on fait défiler, un curseur de volume qui s’étire au-delà du maximum, un interrupteur, un indicateur d’onglets liquide, un graphique qui se dessine avec une info-bulle au survol, une palette ⌘K où l’on tape, un toast, puis retour au bouton. Un curseur déclenche chaque changement par de vrais clics et glisser-déposer. Fond gris chaud clair, composants noir et blanc, une seule police d’UI nette (Geist). Des ressorts partout, au plus un minuscule dépassement. La dernière image est la première, pour que ça boucle.',
+    },
+    uk: {
+      title: 'UI-моушн з однієї форми',
+      prompt: 'Зроби 14-секундний UI-моушн рівня Dribbble, 120 BPM, 7 тактів, на кожну долю щось відбувається. Одна форма без склейок: вона перетворюється з кнопки Generate на лоадер, галочку, dynamic island, плеєр із морфінгом play/pause, прогрес-бар, який перемотують, повзунок гучності, що розтягується при перетягуванні за максимум, перемикач, «рідкий» індикатор вкладок, графік, що малює себе з підказкою при наведенні, палітру ⌘K з введенням тексту, тост — і назад у кнопку. Кожну зміну запускає курсор справжніми кліками й перетягуванням. Світлий теплий сірий фон, чорно-білі компоненти, один чистий UI-шрифт (Geist). Пружини всюди, максимум крихітний переліт. Останній кадр збігається з першим, щоб зациклювалося.',
+    },
+    tr: {
+      title: 'Tek şekilli UI motion',
+      prompt: 'Dribbble seviyesinde, 120 BPM’de, 7 ölçü, her vuruşta bir şey olan 14 saniyelik bir UI motion yap. Tek bir şekil, kesme yok: Generate butonundan yükleyiciye, onay işaretine, dynamic island’a, play/pause dönüşümlü müzik çalara, kaydırılan ilerleme çubuğuna, maksimumun ötesine çekilince uzayan ses kaydırıcısına, anahtara, sıvı sekme göstergesine, hover’da ipucu gösteren kendini çizen grafiğe, içine yazılan ⌘K paletine, bildirime ve tekrar butona dönüşür. Her değişimi imleç gerçek tıklama ve sürüklemelerle yönetir. Açık sıcak gri zemin, siyah beyaz bileşenler, tek bir temiz UI fontu (Geist). Her yerde yay hareketi, en fazla minicik bir aşma. Son kare ilk kareyle aynı, döngü olsun.',
+    },
+    th: {
+      title: 'UI โมชันจากรูปทรงเดียว',
+      prompt: 'สร้าง UI โมชันระดับ Dribbble ยาว 14 วินาที 120 BPM 7 ห้อง มีอะไรเกิดขึ้นทุกจังหวะ ใช้รูปทรงเดียวไม่มีการตัด: เปลี่ยนจากปุ่ม Generate เป็นตัวโหลด เครื่องหมายถูก dynamic island เครื่องเล่นเพลงที่มอร์ฟปุ่มเล่น/หยุด แถบความคืบหน้าที่ถูกลาก สไลเดอร์เสียงที่ยืดออกเมื่อลากเกินสุด สวิตช์ ตัวบอกแท็บแบบของเหลว กราฟที่วาดตัวเองพร้อมทูลทิปเมื่อชี้ พาเลตต์ ⌘K ที่พิมพ์ได้ toast แล้วกลับมาเป็นปุ่ม เคอร์เซอร์เป็นตัวสั่งทุกการเปลี่ยนแปลงด้วยการคลิกและลากจริง พื้นหลังเทาอุ่นอ่อน คอมโพเนนต์ขาวดำ ฟอนต์ UI สะอาดหนึ่งแบบ (Geist) ใช้สปริงทั้งหมด เด้งเกินได้นิดเดียว เฟรมสุดท้ายเหมือนเฟรมแรกเพื่อให้วนลูป',
+    },
+    it: {
+      title: 'UI motion da una sola forma',
+      prompt: 'Crea un pezzo di UI motion di 14 secondi da Dribbble, a 120 BPM, 7 battute, succede qualcosa a ogni battito. Una sola forma, senza tagli: passa da un pulsante Generate a un loader, una spunta, una dynamic island, un player musicale con morph play/pausa, una barra di avanzamento trascinata, uno slider del volume che si allunga oltre il massimo, un interruttore, un indicatore di tab liquido, un grafico che si disegna da solo con tooltip al passaggio, una palette ⌘K in cui si scrive, un toast e di nuovo il pulsante. Un cursore guida ogni cambiamento con clic e trascinamenti reali. Sfondo grigio caldo chiaro, componenti in bianco e nero, un solo font UI pulito (Geist). Molle ovunque, al massimo un minimo overshoot. L’ultimo fotogramma è il primo, così va in loop.',
+    },
+  },
+  'example-motion-visual-lesson': {
+    'zh-CN': {
+      title: '让灵感成真',
+      prompt: '做一支 20 秒的纸张拼贴动画。窗边的女孩写下「OpenDesign, what can you design?」，折成纸飞机寄给 OpenDesign 小伙伴。它通过点按原型、展开网站、翻动 PPT、贴上海报和放映动效来回答，把五件作品收成一本小册子寄回。女孩翻开看到「It starts with your idea.」。保留手工撕纸、水粉笔触、纸片人物和背景音乐。 结尾女孩抱住作品册、挥手感谢，再把写着“What will you design?”的纸贴到窗边，双手收回胸前，向观众发出设计邀请。',
+    },
+    'zh-TW': {
+      title: '讓靈感成真',
+      prompt: '做一支 20 秒的紙張拼貼動畫。窗邊的女孩寫下「OpenDesign, what can you design?」，摺成紙飛機寄給 OpenDesign 小夥伴。它透過點按原型、展開網站、翻動 PPT、貼上海報和放映動效來回答，把五件作品收成一本小冊子寄回。女孩翻開看到「It starts with your idea.」。保留手工撕紙、水粉筆觸、紙片人物和背景音樂。 結尾女孩抱住作品冊、揮手感謝，再把寫著“What will you design?”的紙貼到窗邊，雙手收回胸前，向觀眾發出設計邀請。',
+    },
+    en: {
+      title: 'Bring Ideas to Life',
+      prompt: 'Make a 20-second paper-cutout story. A girl sends “OpenDesign, what can you design?” on a paper plane. The OpenDesign buddy answers by tapping an interactive prototype, unfolding a website, turning PPT pages, sticking a poster and animating a filmstrip. The five works become a little book that returns to her: “It starts with your idea.” Keep torn paper, gouache brushwork, cutout characters and the background music. To close, she hugs the book, waves thanks, pins a note reading “What will you design?” beside the window and brings her hands together: an invitation to the viewer.',
+    },
+    id: {
+      title: 'Wujudkan Ide',
+      prompt: 'Cerita potongan kertas 20 detik: seorang gadis bertanya apa yang bisa didesain OpenDesign. Prototipe interaktif, situs web, PPT, poster dan film animasi menjadi buku kemungkinan. Semuanya dimulai dari idemu. Di akhir, ia memeluk buku, melambaikan tangan sebagai terima kasih, lalu menempelkan catatan “What will you design?” di dekat jendela dan menyatukan kedua tangan: undangan bagi penonton untuk mendesain.',
+    },
+    de: {
+      title: 'Ideen zum Leben erwecken',
+      prompt: 'Eine 20-sekündige Papiercollage: Ein Mädchen fragt OpenDesign, was es gestalten kann. Interaktive Prototypen, Websites, Präsentationen, Poster und Animationsfilme werden zu einem Buch voller Möglichkeiten. Alles beginnt mit deiner Idee. Zum Schluss drückt sie das Buch an sich, winkt zum Dank, klebt „What will you design?“ neben das Fenster und legt die Hände zusammen: eine Einladung an das Publikum.',
+    },
+    'pt-BR': {
+      title: 'Dê vida às ideias',
+      prompt: 'Um conto de 20 segundos em recortes de papel: uma menina pergunta o que o OpenDesign pode criar. Protótipos interativos, sites, apresentações, pôsteres e animações viram um livro de possibilidades. Tudo começa com sua ideia. No final, ela abraça o livro, acena em agradecimento, cola “What will you design?” junto à janela e une as mãos, convidando o público a criar seu próprio design.',
+    },
+    'es-ES': {
+      title: 'Da vida a tus ideas',
+      prompt: 'Una historia de 20 segundos en papel recortado: una niña pregunta qué puede diseñar OpenDesign. Prototipos interactivos, webs, presentaciones, carteles y animaciones forman un libro de posibilidades. Todo empieza con tu idea. Al final, abraza el libro, saluda en agradecimiento, pega “What will you design?” junto a la ventana y junta las manos: una invitación al público a diseñar.',
+    },
+    ru: {
+      title: 'Воплощай идеи в жизнь',
+      prompt: '20-секундная бумажная история: девочка спрашивает, что умеет создавать OpenDesign. Интерактивные прототипы, сайты, презентации, плакаты и анимация собираются в книгу возможностей. Всё начинается с вашей идеи. В финале она обнимает книгу, благодарно машет, приклеивает у окна записку “What will you design?” и складывает ладони: это приглашение зрителю придумать свой дизайн.',
+    },
+    fa: {
+      title: 'به ایده‌ها جان بده',
+      prompt: 'داستان کاغذبری ۲۰ ثانیه‌ای: دختری می‌پرسد OpenDesign چه چیزی می‌تواند طراحی کند. نمونه‌های تعاملی، وب‌سایت‌ها، ارائه‌ها، پوسترها و فیلم‌های متحرک به کتابی از امکان‌ها تبدیل می‌شوند. همه‌چیز با ایدهٔ شما آغاز می‌شود. در پایان، دختر کتاب را در آغوش می‌گیرد، برای تشکر دست تکان می‌دهد، یادداشت «What will you design?» را کنار پنجره می‌چسباند و دست‌هایش را جمع می‌کند؛ دعوتی از تماشاگر برای طراحی.',
+    },
+    ar: {
+      title: 'امنح أفكارك الحياة',
+      prompt: 'قصة من قصاصات الورق مدتها 20 ثانية: تسأل فتاة عمّا يستطيع OpenDesign تصميمه. نماذج تفاعلية ومواقع وعروض تقديمية وملصقات وأفلام متحركة تجتمع في كتاب من الإمكانات. كل شيء يبدأ بفكرتك. في النهاية تحتضن الكتاب وتلوّح بالشكر، ثم تلصق ورقة تحمل “What will you design?” بجانب النافذة وتضم يديها: دعوة للمشاهد إلى التصميم.',
+    },
+    ja: {
+      title: 'アイデアをかたちに',
+      prompt: '20秒の切り絵風ストーリー。女の子がOpenDesignに「何をデザインできる？」と尋ねると、インタラクティブなプロトタイプ、Webサイト、PPT、ポスター、モーション動画が一冊の作品集になります。始まりは、あなたのアイデア。 最後に女の子が本を抱きしめ、感謝して手を振り、「What will you design?」と書いた紙を窓辺に貼って両手を合わせます。観客にデザインを呼びかける締めくくりです。',
+    },
+    ko: {
+      title: '아이디어를 현실로',
+      prompt: '20초 종이 콜라주 이야기. 소녀가 OpenDesign에게 무엇을 디자인할 수 있는지 물으면 인터랙티브 프로토타입, 웹사이트, PPT, 포스터, 모션 영상이 작품집으로 모입니다. 당신의 아이디어에서 시작됩니다. 마지막에는 소녀가 책을 안고 감사의 손인사를 한 뒤 “What will you design?” 쪽지를 창가에 붙이고 두 손을 모읍니다. 관객에게 디자인을 권하는 마무리입니다.',
+    },
+    pl: {
+      title: 'Tchnij życie w pomysły',
+      prompt: '20-sekundowa opowieść z papierowych wycinanek: dziewczynka pyta, co potrafi projektować OpenDesign. Interaktywne prototypy, strony, prezentacje, plakaty i animacje tworzą książkę możliwości. Wszystko zaczyna się od twojego pomysłu. Na końcu przytula książkę, macha na podziękowanie, przykleja obok okna kartkę „What will you design?” i składa dłonie: to zaproszenie dla widza do projektowania.',
+    },
+    hu: {
+      title: 'Keltsd életre az ötleteket',
+      prompt: '20 másodperces papírkollázs-történet: egy kislány megkérdezi, mit tud tervezni az OpenDesign. Interaktív prototípusok, weboldalak, prezentációk, plakátok és animációk állnak össze a lehetőségek könyvévé. Minden az ötleteddel kezdődik. Végül magához öleli a könyvet, köszönetképpen integet, az ablak mellé ragasztja a „What will you design?” feliratot, és összeteszi a kezét: ezzel a nézőt hívja tervezésre.',
+    },
+    fr: {
+      title: 'Donnez vie à vos idées',
+      prompt: 'Une histoire de 20 secondes en papier découpé : une fillette demande ce qu’OpenDesign peut créer. Prototypes interactifs, sites, présentations, affiches et animations composent un livre de possibilités. Tout commence par votre idée. Pour finir, elle serre le livre contre elle, fait un signe de remerciement, colle « What will you design? » près de la fenêtre et joint les mains : une invitation adressée au public.',
+    },
+    uk: {
+      title: 'Втілюй ідеї в життя',
+      prompt: '20-секундна історія з паперової аплікації: дівчинка запитує, що вміє створювати OpenDesign. Інтерактивні прототипи, сайти, презентації, плакати й анімації складаються в книгу можливостей. Усе починається з вашої ідеї. Наприкінці вона обіймає книжку, вдячно махає, приклеює біля вікна записку “What will you design?” і складає долоні: це запрошення глядачеві створити власний дизайн.',
+    },
+    tr: {
+      title: 'Fikirlerine Hayat Ver',
+      prompt: '20 saniyelik kâğıt kolaj hikâyesi: bir kız OpenDesign’a neler tasarlayabildiğini sorar. Etkileşimli prototipler, web siteleri, sunumlar, posterler ve animasyonlar bir olasılıklar kitabına dönüşür. Her şey fikrinle başlar. Sonunda kitabı kucaklar, teşekkür için el sallar, pencerenin yanına “What will you design?” yazılı notu yapıştırıp ellerini birleştirir: izleyiciye bir tasarım daveti.',
+    },
+    th: {
+      title: 'ทำไอเดียให้เป็นจริง',
+      prompt: 'เรื่องราวกระดาษตัดแปะ 20 วินาที เด็กผู้หญิงถามว่า OpenDesign ออกแบบอะไรได้บ้าง ต้นแบบโต้ตอบ เว็บไซต์ สไลด์ PPT โปสเตอร์ และภาพเคลื่อนไหวรวมเป็นหนังสือแห่งความเป็นไปได้ ทุกอย่างเริ่มจากไอเดียของคุณ ตอนจบเธอกอดหนังสือ โบกมือขอบคุณ แล้วติดกระดาษ “What will you design?” ไว้ข้างหน้าต่างและประสานมือ เป็นคำเชิญให้ผู้ชมออกแบบผลงานของตนเอง',
+    },
+    it: {
+      title: 'Dai vita alle idee',
+      prompt: 'Una storia di 20 secondi in carta ritagliata: una bambina chiede cosa sa progettare OpenDesign. Prototipi interattivi, siti, presentazioni, poster e animazioni compongono un libro di possibilità. Tutto inizia dalla tua idea. Alla fine abbraccia il libro, saluta per ringraziare, attacca “What will you design?” accanto alla finestra e unisce le mani: un invito a progettare rivolto al pubblico.',
+    },
+  },
+  'example-motion-future': {
+    'zh-CN': {
+      title: '未来已来',
+      prompt: '做一支 20 秒的高能科技短片，主题是「未来已来」（The future is already here），120 BPM 卡点，配色为电光蓝、黑、白和镀铬。开场是 3D 方块从 1 个裂变到 64 个，接着是 SIGNAL、扫描中的视网膜和 97.2%、写着 WAKE UP 的文字隧道、液态金属质感的 THE FUTURE。然后出现 FUTURE.EXE 桌面窗口、LOADING 99% 进度条和 3-2-1 倒计时，再是标着 PRISM、BOLT、PLANET、MIND 的四个玻璃质感物体、环形漩涡和棋盘格网格。最后落在巨大的镀铬 3D 字 FUTURE 和 IS ALREADY HERE.，以故障效果切到 END OF TRANSMISSION 收尾。粗重的展示字体（Unbounded Black），细等宽字体的 HUD 带时间码和画面标签，全程按节拍硬切。',
+    },
+    'zh-TW': {
+      title: '未來已來',
+      prompt: '做一支 20 秒的高能科技短片，主題是「未來已來」（The future is already here），120 BPM 卡點，配色為電光藍、黑、白和鍍鉻。開場是 3D 方塊從 1 個裂變到 64 個，接著是 SIGNAL、掃描中的視網膜和 97.2%、寫著 WAKE UP 的文字隧道、液態金屬質感的 THE FUTURE。然後出現 FUTURE.EXE 桌面視窗、LOADING 99% 進度條和 3-2-1 倒數，再是標著 PRISM、BOLT、PLANET、MIND 的四個玻璃質感物件、環形漩渦和棋盤格網格。最後落在巨大的鍍鉻 3D 字 FUTURE 和 IS ALREADY HERE.，以故障效果切到 END OF TRANSMISSION 收尾。粗重的展示字體（Unbounded Black），細等寬字體的 HUD 帶時間碼和畫面標籤，全程按節拍硬切。',
+    },
+    en: {
+      title: 'The Future Is Already Here',
+      prompt: 'Make a 20-second high-energy tech reel titled "The future is already here", cut to 120 BPM in electric blue, black, white and chrome. Open with 3D cubes multiplying from 1 to 64, then SIGNAL, a scanning retina with 97.2%, a word tunnel that reads WAKE UP, and THE FUTURE in liquid chrome. Show a FUTURE.EXE desktop window, a LOADING 99% bar and a 3-2-1 countdown, then four glass objects labelled PRISM, BOLT, PLANET and MIND, a ring vortex and a checker grid. Land on a big chrome 3D FUTURE with IS ALREADY HERE. and end on a glitch into END OF TRANSMISSION. Heavy display type (Unbounded Black), a thin monospace HUD with timecode and frame labels, hard cuts on the beat.',
+    },
+    id: {
+      title: 'Masa Depan Sudah Tiba',
+      prompt: 'Buat reel teknologi penuh energi 20 detik berjudul "The future is already here", dipotong pada 120 BPM dengan warna biru elektrik, hitam, putih, dan krom. Buka dengan kubus 3D yang berlipat dari 1 menjadi 64, lalu SIGNAL, retina yang dipindai dengan 97.2%, terowongan kata bertuliskan WAKE UP, dan THE FUTURE dalam krom cair. Tampilkan jendela desktop FUTURE.EXE, bilah LOADING 99%, dan hitung mundur 3-2-1, lalu empat objek kaca berlabel PRISM, BOLT, PLANET, dan MIND, pusaran cincin, dan grid papan catur. Akhiri pada FUTURE krom 3D besar dengan IS ALREADY HERE. lalu glitch menjadi END OF TRANSMISSION. Tipografi display tebal (Unbounded Black), HUD monospace tipis dengan timecode dan label frame, potongan tajam mengikuti ketukan.',
+    },
+    de: {
+      title: 'Die Zukunft ist schon da',
+      prompt: 'Erstelle ein energiegeladenes 20-Sekunden-Tech-Reel mit dem Titel „The future is already here“, geschnitten auf 120 BPM in Elektroblau, Schwarz, Weiß und Chrom. Starte mit 3D-Würfeln, die sich von 1 auf 64 vervielfachen, dann SIGNAL, eine gescannte Netzhaut mit 97.2 %, ein Worttunnel mit WAKE UP und THE FUTURE in flüssigem Chrom. Zeig ein FUTURE.EXE-Desktopfenster, einen LOADING-99-%-Balken und einen 3-2-1-Countdown, dann vier Glasobjekte mit den Labels PRISM, BOLT, PLANET und MIND, einen Ringwirbel und ein Schachbrettraster. Lande auf einem großen Chrom-3D-FUTURE mit IS ALREADY HERE. und ende mit einem Glitch zu END OF TRANSMISSION. Schwere Display-Schrift (Unbounded Black), ein dünnes Monospace-HUD mit Timecode und Frame-Labels, harte Schnitte auf dem Beat.',
+    },
+    'pt-BR': {
+      title: 'O futuro já chegou',
+      prompt: 'Crie um reel tech de 20 segundos cheio de energia chamado "The future is already here", cortado a 120 BPM em azul elétrico, preto, branco e cromo. Abra com cubos 3D se multiplicando de 1 para 64, depois SIGNAL, uma retina sendo escaneada com 97.2%, um túnel de palavras com WAKE UP e THE FUTURE em cromo líquido. Mostre uma janela de desktop FUTURE.EXE, uma barra LOADING 99% e uma contagem 3-2-1, depois quatro objetos de vidro rotulados PRISM, BOLT, PLANET e MIND, um vórtice de anéis e uma grade quadriculada. Termine num grande FUTURE cromado em 3D com IS ALREADY HERE. e feche com um glitch para END OF TRANSMISSION. Tipografia display pesada (Unbounded Black), um HUD monoespaçado fino com timecode e rótulos de quadro, cortes secos no ritmo.',
+    },
+    'es-ES': {
+      title: 'El futuro ya está aquí',
+      prompt: 'Crea un reel tecnológico de 20 segundos lleno de energía titulado "The future is already here", montado a 120 BPM en azul eléctrico, negro, blanco y cromo. Empieza con cubos 3D que se multiplican de 1 a 64, después SIGNAL, una retina escaneada con 97.2 %, un túnel de palabras que dice WAKE UP y THE FUTURE en cromo líquido. Muestra una ventana de escritorio FUTURE.EXE, una barra LOADING 99 % y una cuenta atrás 3-2-1, luego cuatro objetos de cristal con las etiquetas PRISM, BOLT, PLANET y MIND, un vórtice de anillos y una cuadrícula de ajedrez. Termina en un gran FUTURE cromado en 3D con IS ALREADY HERE. y cierra con un glitch hacia END OF TRANSMISSION. Tipografía display pesada (Unbounded Black), un HUD monoespaciado fino con código de tiempo y etiquetas de plano, cortes secos al ritmo.',
+    },
+    ru: {
+      title: 'Будущее уже здесь',
+      prompt: 'Сделай 20-секундный энергичный технологичный рил под названием «The future is already here», смонтированный под 120 BPM, в электрик-синем, чёрном, белом и хроме. Начни с 3D-кубов, которые размножаются от 1 до 64, затем SIGNAL, сканируемая сетчатка с 97.2%, туннель из слов WAKE UP и THE FUTURE из жидкого хрома. Покажи окно рабочего стола FUTURE.EXE, полосу LOADING 99% и отсчёт 3-2-1, затем четыре стеклянных объекта с подписями PRISM, BOLT, PLANET и MIND, кольцевой вихрь и шахматную сетку. Заверши большим хромированным 3D-словом FUTURE с IS ALREADY HERE. и глитчем в END OF TRANSMISSION. Тяжёлый акцидентный шрифт (Unbounded Black), тонкий моноширинный HUD с таймкодом и подписями кадров, жёсткие склейки в такт.',
+    },
+    fa: {
+      title: 'آینده همین حالاست',
+      prompt: 'یک ریل فناوری پرانرژی ۲۰ ثانیه‌ای با عنوان «The future is already here» بساز، با تدوین ۱۲۰ BPM و رنگ‌های آبی الکتریک، مشکی، سفید و کروم. با مکعب‌های سه‌بعدی که از ۱ به ۶۴ تکثیر می‌شوند شروع کن، سپس SIGNAL، شبکیه‌ای در حال اسکن با 97.2%، تونل کلماتی با WAKE UP و THE FUTURE از کروم مایع. پنجرهٔ دسکتاپ FUTURE.EXE، نوار LOADING 99% و شمارش معکوس ۳-۲-۱ را نشان بده، بعد چهار شیء شیشه‌ای با برچسب‌های PRISM، BOLT، PLANET و MIND، گردابی از حلقه‌ها و شبکهٔ شطرنجی. روی FUTURE کرومی سه‌بعدی بزرگ با IS ALREADY HERE. فرود بیا و با گلیچ به END OF TRANSMISSION تمام کن. فونت نمایشی سنگین (Unbounded Black)، HUD نازک تک‌فاصله با تایم‌کد و برچسب فریم، برش‌های تند روی ضرب.',
+    },
+    ar: {
+      title: 'المستقبل هنا بالفعل',
+      prompt: 'اصنع ريلًا تقنيًا عالي الطاقة مدته 20 ثانية بعنوان "The future is already here"، بمونتاج على 120 BPM وبألوان الأزرق الكهربائي والأسود والأبيض والكروم. ابدأ بمكعبات ثلاثية الأبعاد تتضاعف من 1 إلى 64، ثم SIGNAL، وشبكية عين تُمسح مع 97.2%، ونفق كلمات يقول WAKE UP، وTHE FUTURE بالكروم السائل. اعرض نافذة سطح مكتب FUTURE.EXE وشريط LOADING 99% وعدًا تنازليًا 3-2-1، ثم أربعة أجسام زجاجية بعناوين PRISM وBOLT وPLANET وMIND، ودوامة حلقات وشبكة شطرنجية. انتهِ بكلمة FUTURE كروم ثلاثية الأبعاد ضخمة مع IS ALREADY HERE. ثم خلل بصري إلى END OF TRANSMISSION. خط عرض ثقيل (Unbounded Black)، وواجهة HUD رفيعة بخط أحادي المسافة مع رمز زمني وعناوين إطارات، وقطعات حادة على الإيقاع.',
+    },
+    ja: {
+      title: '未来はもう来ている',
+      prompt: '「The future is already here」をテーマに、120 BPM でカットするエレクトリックブルー・黒・白・クロームの 20 秒ハイエナジーなテックリールを作って。3D キューブが 1 から 64 に増える開幕、SIGNAL、97.2% と表示されるスキャン中の網膜、WAKE UP と書かれたワードトンネル、液体クロームの THE FUTURE。FUTURE.EXE のデスクトップウィンドウ、LOADING 99% のバー、3-2-1 のカウントダウン、PRISM・BOLT・PLANET・MIND とラベルのついた 4 つのガラスのオブジェクト、リングの渦、チェッカーグリッド。最後は巨大なクローム 3D の FUTURE と IS ALREADY HERE. に着地し、グリッチで END OF TRANSMISSION へ。重いディスプレイ書体（Unbounded Black）、タイムコードとフレームラベル付きの細い等幅 HUD、ビートに合わせたハードカット。',
+    },
+    ko: {
+      title: '미래는 이미 와 있다',
+      prompt: '"The future is already here"를 주제로 한 20초 하이 에너지 테크 릴을 만들어 줘. 120 BPM 컷, 일렉트릭 블루·검정·흰색·크롬. 3D 큐브가 1개에서 64개로 늘어나며 시작하고, SIGNAL, 97.2%가 뜨는 스캔 중인 망막, WAKE UP이 적힌 단어 터널, 리퀴드 크롬 THE FUTURE. FUTURE.EXE 데스크톱 창, LOADING 99% 바, 3-2-1 카운트다운, PRISM·BOLT·PLANET·MIND 라벨이 붙은 유리 오브젝트 4개, 링 소용돌이, 체커 그리드. 마지막은 거대한 크롬 3D FUTURE와 IS ALREADY HERE.로 착지하고 글리치로 END OF TRANSMISSION에서 끝내. 굵은 디스플레이 서체(Unbounded Black), 타임코드와 프레임 라벨이 있는 얇은 고정폭 HUD, 비트에 맞춘 하드 컷.',
+    },
+    pl: {
+      title: 'Przyszłość już tu jest',
+      prompt: 'Stwórz 20-sekundowy, energetyczny reel technologiczny zatytułowany „The future is already here”, cięty w 120 BPM, w elektrycznym błękicie, czerni, bieli i chromie. Zacznij od sześcianów 3D mnożących się z 1 do 64, potem SIGNAL, skanowana siatkówka z 97.2%, tunel słów z napisem WAKE UP i THE FUTURE z płynnego chromu. Pokaż okno pulpitu FUTURE.EXE, pasek LOADING 99% i odliczanie 3-2-1, następnie cztery szklane obiekty podpisane PRISM, BOLT, PLANET i MIND, wir pierścieni i szachownicę. Zakończ wielkim chromowanym 3D FUTURE z IS ALREADY HERE. i glitchem w END OF TRANSMISSION. Ciężki krój display (Unbounded Black), cienki monospace HUD z kodem czasowym i etykietami klatek, ostre cięcia w rytm.',
+    },
+    hu: {
+      title: 'A jövő már itt van',
+      prompt: 'Készíts egy 20 másodperces, energikus tech reelt „The future is already here” címmel, 120 BPM-re vágva, elektromos kék, fekete, fehér és króm színekben. Kezdd 3D kockákkal, amelyek 1-ről 64-re sokszorozódnak, aztán SIGNAL, egy szkennelt retina 97.2%-kal, egy WAKE UP feliratú szóalagút és folyékony krómból THE FUTURE. Mutass egy FUTURE.EXE asztali ablakot, egy LOADING 99% sávot és egy 3-2-1 visszaszámlálást, majd négy PRISM, BOLT, PLANET és MIND feliratú üvegtárgyat, egy gyűrűörvényt és egy sakktáblarácsot. Érkezz meg egy nagy króm 3D FUTURE-re az IS ALREADY HERE. sorral, és zárd egy glitch-csel END OF TRANSMISSION-be. Nehéz display betű (Unbounded Black), vékony monospace HUD időkóddal és képkockacímkékkel, kemény vágások ütemre.',
+    },
+    fr: {
+      title: 'Le futur est déjà là',
+      prompt: 'Crée un reel tech de 20 secondes très énergique intitulé « The future is already here », monté à 120 BPM en bleu électrique, noir, blanc et chrome. Ouvre sur des cubes 3D qui se multiplient de 1 à 64, puis SIGNAL, une rétine scannée avec 97.2 %, un tunnel de mots qui dit WAKE UP et THE FUTURE en chrome liquide. Montre une fenêtre de bureau FUTURE.EXE, une barre LOADING 99 % et un compte à rebours 3-2-1, puis quatre objets en verre étiquetés PRISM, BOLT, PLANET et MIND, un vortex d’anneaux et une grille en damier. Termine sur un grand FUTURE chromé en 3D avec IS ALREADY HERE. et finis par un glitch vers END OF TRANSMISSION. Typo d’affichage lourde (Unbounded Black), un HUD fin en chasse fixe avec timecode et libellés de plans, coupes franches sur le temps.',
+    },
+    uk: {
+      title: 'Майбутнє вже тут',
+      prompt: 'Зроби 20-секундний енергійний технологічний рил під назвою «The future is already here», змонтований під 120 BPM, в електрик-синьому, чорному, білому й хромі. Почни з 3D-кубів, що розмножуються від 1 до 64, далі SIGNAL, сітківка, яку сканують, із 97.2%, тунель зі слів WAKE UP і THE FUTURE з рідкого хрому. Покажи вікно робочого столу FUTURE.EXE, смугу LOADING 99% і відлік 3-2-1, потім чотири скляні об’єкти з підписами PRISM, BOLT, PLANET і MIND, кільцевий вихор і шахову сітку. Заверши великим хромованим 3D-словом FUTURE з IS ALREADY HERE. і глітчем у END OF TRANSMISSION. Важкий акцидентний шрифт (Unbounded Black), тонкий моноширинний HUD з таймкодом і підписами кадрів, жорсткі склейки в такт.',
+    },
+    tr: {
+      title: 'Gelecek çoktan geldi',
+      prompt: '"The future is already here" başlıklı, 120 BPM’e göre kesilmiş, elektrik mavisi, siyah, beyaz ve krom renklerde 20 saniyelik yüksek enerjili bir teknoloji reel’i yap. 1’den 64’e çoğalan 3D küplerle aç, ardından SIGNAL, 97.2% gösteren taranan bir retina, WAKE UP yazan bir kelime tüneli ve sıvı kromdan THE FUTURE. Bir FUTURE.EXE masaüstü penceresi, LOADING 99% çubuğu ve 3-2-1 geri sayımı göster; sonra PRISM, BOLT, PLANET ve MIND etiketli dört cam nesne, halka girdabı ve dama ızgarası. Büyük krom 3D FUTURE ve IS ALREADY HERE. ile bitir, bir glitch ile END OF TRANSMISSION’a geç. Kalın display yazı (Unbounded Black), zaman kodlu ve kare etiketli ince monospace HUD, vuruşta sert kesmeler.',
+    },
+    th: {
+      title: 'อนาคตมาถึงแล้ว',
+      prompt: 'สร้างเทครีลพลังสูงยาว 20 วินาทีชื่อ "The future is already here" ตัดตามจังหวะ 120 BPM ในโทนน้ำเงินไฟฟ้า ดำ ขาว และโครม เปิดด้วยลูกบาศก์ 3D ที่ทวีคูณจาก 1 เป็น 64 ตามด้วย SIGNAL เรตินาที่กำลังถูกสแกนพร้อม 97.2% อุโมงค์คำที่เขียนว่า WAKE UP และ THE FUTURE แบบโครมเหลว แสดงหน้าต่างเดสก์ท็อป FUTURE.EXE แถบ LOADING 99% และนับถอยหลัง 3-2-1 แล้วตามด้วยวัตถุแก้วสี่ชิ้นที่ติดป้าย PRISM, BOLT, PLANET และ MIND วังวนวงแหวน และกริดลายตาราง จบที่ตัวอักษรโครม 3D ขนาดใหญ่ FUTURE พร้อม IS ALREADY HERE. แล้วกลิตช์ไปสู่ END OF TRANSMISSION ใช้ฟอนต์ดิสเพลย์หนา (Unbounded Black) HUD ฟอนต์โมโนสเปซบางพร้อมไทม์โค้ดและป้ายเฟรม และตัดฉับตามจังหวะ',
+    },
+    it: {
+      title: 'Il futuro è già qui',
+      prompt: 'Crea un reel tech di 20 secondi ad alta energia intitolato "The future is already here", montato a 120 BPM in blu elettrico, nero, bianco e cromo. Apri con cubi 3D che si moltiplicano da 1 a 64, poi SIGNAL, una retina scansionata con 97.2%, un tunnel di parole che dice WAKE UP e THE FUTURE in cromo liquido. Mostra una finestra desktop FUTURE.EXE, una barra LOADING 99% e un conto alla rovescia 3-2-1, poi quattro oggetti in vetro etichettati PRISM, BOLT, PLANET e MIND, un vortice di anelli e una griglia a scacchi. Chiudi su un grande FUTURE cromato in 3D con IS ALREADY HERE. e finisci con un glitch verso END OF TRANSMISSION. Tipografia display pesante (Unbounded Black), un sottile HUD monospazio con timecode ed etichette di fotogramma, tagli netti a tempo.',
+    },
+  },
 };
 
 export function homePresetCopy(pluginId: string, locale: string): HomePresetCopy | undefined {

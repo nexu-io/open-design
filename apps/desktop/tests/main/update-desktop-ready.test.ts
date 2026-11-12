@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import ts from 'typescript';
+import { stripTypeScriptTypes } from 'node:module';
 import { expect, it, vi } from 'vitest';
 
 it.each([
@@ -15,7 +15,7 @@ it.each([
   expect(end).toBeGreaterThan(start);
   let now = 0;
   const report = vi.fn();
-  const code = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const code = stripTypeScriptTypes(source.slice(start, end));
   const run = runInNewContext(`let revealed=false;let revealing=false;const revealMainWindow=()=>{revealed=true;};${code}\nrevealWhenReady`, {
     stopped: false, rendererFailed: failed, window: { isDestroyed: () => false, webContents: { executeJavaScript: async () => mounted } },
     Date: { now: () => now }, delay: async (ms: number) => { now += ms; }, setSplashStage() {}, splash: null,

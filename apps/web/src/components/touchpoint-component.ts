@@ -1,3 +1,4 @@
+import { getTopModalDialog } from "@open-design/components";
 import {
 	type TouchpointComponentV2Manifest as ContentPackageManifest,
 	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
@@ -566,7 +567,7 @@ export function resolveWebTouchpointLocale(
 ): string | undefined {
 	const normalized = requestedLocale.replace(/_/g, "-");
 	const baseLanguage = normalized.split("-")[0] ?? normalized;
-	const candidates = [normalized, baseLanguage, "en-US"];
+	const candidates = [normalized, baseLanguage, "en", "en-US"];
 	return candidates.find((candidate) => placementLocales.includes(candidate));
 }
 
@@ -629,14 +630,27 @@ export function emitWebTouchpointDiagnostic(diagnostic: TouchpointDiagnostic) {
 }
 
 const FOCUSABLE_SELECTOR =
-	'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+	'button:not([disabled]), a[href], area[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** Returns host controls in composed-tree order, including open component ShadowRoots. */
+/**
+ * Returns host controls in composed-tree order, including open component
+ * ShadowRoots. A control the user cannot reach is left out: a hidden input,
+ * anything inside an `inert`, `hidden` or `display: none` subtree, and a
+ * control whose own `visibility` hides it (a descendant may still show).
+ */
 function composedFocusableElements(root: ParentNode): HTMLElement[] {
 	const focusable: HTMLElement[] = [];
 	for (const child of Array.from(root.children)) {
-		if (!(child instanceof HTMLElement) || child.hidden) continue;
-		if (child.matches(FOCUSABLE_SELECTOR)) focusable.push(child);
+		if (!(child instanceof HTMLElement) || child.hidden || child.inert) continue;
+		const style = getComputedStyle(child);
+		if (style.display === "none") continue;
+		if (
+			child.matches(FOCUSABLE_SELECTOR) &&
+			child.tabIndex >= 0 &&
+			style.visibility !== "hidden" &&
+			style.visibility !== "collapse"
+		)
+			focusable.push(child);
 		if (child.shadowRoot)
 			focusable.push(...composedFocusableElements(child.shadowRoot));
 		focusable.push(...composedFocusableElements(child));
@@ -652,34 +666,30 @@ function composedActiveElement(): Element | null {
 	return active;
 }
 
-const modalScrollLocks = new WeakMap<
-	HTMLElement,
-	{ count: number; overflow: string }
->();
+export { lockWebModalScroll as lockWebTouchpointModalScroll } from "./modal-scroll-lock";
 
-/** Keeps a concurrent CMS modal from releasing the host scroll lock owned by another modal. */
-export function lockWebTouchpointModalScroll(
-	body: HTMLElement = document.body,
-): () => void {
-	const existing = modalScrollLocks.get(body);
-	if (existing) {
-		existing.count += 1;
-	} else {
-		modalScrollLocks.set(body, { count: 1, overflow: body.style.overflow });
-		body.style.overflow = "hidden";
+/** Share keyboard ownership with Dialog, including its CSS stacking order. */
+export function ownsWebTouchpointModalKeyboard(modal: HTMLElement | null): boolean {
+	if (!modal) return false;
+	const top = getTopModalDialog(modal.ownerDocument);
+	return !top || top === modal || top.contains(modal);
+}
+
+/**
+ * Gives a host-owned modal its initial focus in composed-tree order, so the
+ * first control inside the component's ShadowRoot (a light-DOM query cannot
+ * reach it) receives focus. The container itself is focused only when the
+ * content offers no control at all.
+ */
+export function focusWebTouchpointModal(modal: HTMLElement | null) {
+	if (!modal || !ownsWebTouchpointModalKeyboard(modal)) return;
+	// A control can still refuse focus (a style this check cannot see); the
+	// next one is tried, and the container keeps focus inside the modal last.
+	for (const candidate of composedFocusableElements(modal)) {
+		candidate.focus({ preventScroll: true });
+		if (composedActiveElement() === candidate) return;
 	}
-	let released = false;
-	return () => {
-		if (released) return;
-		released = true;
-		const lock = modalScrollLocks.get(body);
-		if (!lock) return;
-		lock.count -= 1;
-		if (lock.count === 0) {
-			body.style.overflow = lock.overflow;
-			modalScrollLocks.delete(body);
-		}
-	};
+	modal.focus({ preventScroll: true });
 }
 
 /** Keeps keyboard focus inside a host-owned modal without exposing host DOM to content. */
@@ -687,23 +697,20 @@ export function trapWebTouchpointModalFocus(
 	event: KeyboardEvent,
 	modal: HTMLElement | null,
 ) {
-	if (event.key !== "Tab" || !modal) return;
+	if (event.key !== "Tab" || !modal || !ownsWebTouchpointModalKeyboard(modal)) return;
 	const focusable = composedFocusableElements(modal);
-	if (focusable.length === 0) {
-		event.preventDefault();
-		modal.focus();
-		return;
-	}
-	const first = focusable[0]!;
-	const last = focusable[focusable.length - 1]!;
 	const active = composedActiveElement();
-	if (event.shiftKey && active === first) {
-		event.preventDefault();
-		last.focus();
-	} else if (!event.shiftKey && active === last) {
-		event.preventDefault();
-		first.focus();
+	const ordered = event.shiftKey ? [...focusable].reverse() : focusable;
+	const index = ordered.findIndex((candidate) => candidate === active);
+	const candidates = [...ordered.slice(index + 1), ...ordered.slice(0, index + 1)];
+	// Selector matches can refuse focus. Walk the actual Tab direction and wrap
+	// past those controls, rather than letting a refusing boundary escape the trap.
+	event.preventDefault();
+	for (const candidate of candidates) {
+		candidate.focus();
+		if (composedActiveElement() === candidate) return;
 	}
+	modal.focus();
 }
 
 export function webTouchpointContext(

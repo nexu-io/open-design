@@ -450,6 +450,10 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
  */
 export interface OpenCodeConfigBuildOptions {
   allowedDirectories?: string[];
+  /** Admit external reads while denying OpenCode's edit/write/patch tools. */
+  readOnlyDirectories?: string[];
+  /** Worktrees OpenCode versions may check relative edit paths against. */
+  readOnlyEditBaseDirs?: string[];
   extraConfig?: Record<string, unknown>;
 }
 
@@ -490,8 +494,9 @@ export function buildOpenCodeMcpConfigContent(
     }
   }
   const externalDirectory = buildOpenCodeExternalDirectoryAllowlist(
-    options.allowedDirectories,
+    [...(options.allowedDirectories ?? []), ...(options.readOnlyDirectories ?? [])],
   );
+  const readOnlyDirectory = buildOpenCodeExternalDirectoryAllowlist(options.readOnlyDirectories);
   const extraConfig = options.extraConfig ?? {};
   if (
     Object.keys(mcp).length === 0 &&
@@ -509,9 +514,31 @@ export function buildOpenCodeMcpConfigContent(
     config.permission = {
       ...priorPermission,
       external_directory: externalDirectory,
+      ...(readOnlyDirectory ? {
+        edit: restrictOpenCodeResourceEdits(priorPermission.edit, readOnlyDirectory, options.readOnlyEditBaseDirs),
+      } : {}),
     };
   }
   return JSON.stringify(config);
+}
+
+/** Resource denials must be last: OpenCode uses the last matching pattern. */
+function restrictOpenCodeResourceEdits(
+  prior: unknown,
+  directories: Record<string, 'allow'>,
+  editBaseDirs: string[] = [],
+): Record<string, unknown> {
+  const rules = typeof prior === 'string'
+    ? { '*': prior }
+    : prior && typeof prior === 'object' && !Array.isArray(prior) ? prior : {};
+  const patterns = new Set(Object.keys(directories).flatMap((pattern) => [
+    pattern,
+    ...editBaseDirs.map((base) => path.relative(base, pattern)),
+  ]));
+  return Object.fromEntries([
+    ...Object.entries(rules).filter(([pattern]) => !patterns.has(pattern)),
+    ...Array.from(patterns, (pattern) => [pattern, 'deny']),
+  ]);
 }
 
 function buildOpenCodeExternalDirectoryAllowlist(

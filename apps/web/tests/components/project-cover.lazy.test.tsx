@@ -74,12 +74,7 @@ const flush = async (hops = 6): Promise<void> => {
 };
 
 const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
-  return {
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    text: async () => '',
-  } as unknown as Response;
+  return new Response('', { status: 200 });
 });
 
 beforeEach(() => {
@@ -115,5 +110,16 @@ describe('HtmlProjectCoverFrame lazy loading (Batch A §4.2)', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(document.querySelector('iframe')).not.toBeNull();
+  });
+
+  it('recognizes a homepage Motion source without historical preview metadata', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 200, headers: { 'x-od-motion-output': 'video' } }));
+    render(<HtmlProjectCoverFrame src="/api/projects/motion/raw/index.html?v=1" initial="M" iframeClassName="thumb-iframe" glyphClassName="project-thumb-glyph" diagnostic="motion:index.html" />);
+    intersectAll();
+    await flush(20);
+    const frame = document.querySelector('iframe')!;
+    expect(frame.getAttribute('src')).toBe('/api/projects/motion/raw/index.html?v=1&odMotionPreview=1&odMotionThumbnail=1');
+    expect(frame.dataset.odActive).toBe('true');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

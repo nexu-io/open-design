@@ -35,6 +35,8 @@ export type PiRpcSessionOptions = {
 /** Handle returned by `attachPiRpcSession` for querying run state and requesting abort. */
 export type PiRpcSession = {
   hasFatalError(): boolean;
+  completedSuccessfully(): boolean;
+  completionShutdownRequested(): boolean;
   abort(): void;
   getLastSessionPath(): string | null;
 };
@@ -159,7 +161,7 @@ export function resolveSessionPathChangedSince(
  * Attaches the daemon's run lifecycle to an already-spawned `pi --mode rpc` child process.
  *
  * Responsibilities:
- * - Sends a `new_session` RPC command (with `parentSession`) before the prompt when
+ * - Loads `parentSession` with `switch_session` before the prompt when
  *   resuming a prior conversation, waiting for acknowledgement before the prompt is sent.
  *   This preserves conversation history across edit rounds; if the parent session is
  *   rejected, the run is failed immediately rather than continuing without prior context.
@@ -169,7 +171,7 @@ export function resolveSessionPathChangedSince(
  * - Streams pi's stdout through `createJsonLineStream`, delegating each parsed object to
  *   `mapPiRpcEvent` for typed SSE event dispatch, and auto-resolving extension-UI requests
  *   via `replyExtensionUi` so pi does not block waiting for interactive dialogs.
- * - On `agent_end`, captures the changed `.pi/sessions/` file path for conversational
+ * - Queries the native `sessionFile`; on `agent_end`, captures it for conversational
  *   resume, closes stdin, and schedules a SIGTERM fallback after
  *   `PI_GRACEFUL_SHUTDOWN_MS` ms (default 5000).
  *
@@ -203,6 +205,10 @@ export function attachPiRpcSession({
   let fatal = false;
   const sentFirstToken = { value: false };
   let capturedSessionPath: string | null = null;
+  let reportedSessionPath: string | null = null;
+  let promptCompleted = false;
+  let agentErrorObserved = false;
+  let completionShutdownRequested = false;
 
   let nextRpcId = 1;
   let stdinOpen = true;
@@ -219,6 +225,7 @@ export function attachPiRpcSession({
   // it loaded the parent session.
   let parentSessionRpcId: number | null = null;
   let promptRpcId: number | null = null;
+  let sessionStateRpcId: number | null = null;
 
   const fail = (message: string, code?: string): void => {
     if (finished) return;
@@ -236,7 +243,7 @@ export function attachPiRpcSession({
     model: typeof model === 'string' && model ? model : null,
   });
 
-  // ---- Outbound: send new_session (if parentSession provided) then prompt via RPC ----
+  // ---- Outbound: load an existing session, then prompt via RPC ----
   stdin.on('error', (err: unknown) => {
     if (errorCode(err) !== 'EPIPE') {
       fail(`stdin: ${errorMessage(err)}`);
@@ -246,9 +253,7 @@ export function attachPiRpcSession({
     stdinOpen = false;
   });
 
-  // If a prior session file path is provided, send new_session with
-  // parentSession so pi loads the prior conversation history into the
-  // new session, enabling conversational continuity across edit rounds.
+  // Images accompany the prompt after any existing session has been loaded.
   // Build the images array for pi's prompt command. pi's RPC protocol
   // accepts `images` as an array of {type, data, mimeType} objects where
   // `data` is base64-encoded file contents. The daemon's safeImages guard
@@ -310,14 +315,13 @@ export function attachPiRpcSession({
     });
   };
 
-  // If a prior session file path is provided, send new_session with
-  // parentSession so pi loads the prior conversation history into the
-  // new session, enabling conversational continuity across edit rounds.
+  // `new_session.parentSession` records ancestry but starts with no history.
+  // `switch_session` restores the native conversation used by a trimmed prompt.
   // Do not send the prompt until pi acknowledges this RPC: resumed prompts
   // intentionally contain only the latest user turn, so continuing after a
   // failed parent load would silently drop prior conversation context.
   if (parentSession) {
-    parentSessionRpcId = sendCommand(stdin, 'new_session', { parentSession });
+    parentSessionRpcId = sendCommand(stdin, 'switch_session', { sessionPath: parentSession });
   } else {
     sendPromptCommand();
   }
@@ -325,6 +329,17 @@ export function attachPiRpcSession({
   // ---- Inbound: parse stdout events ----
   const parser = createJsonLineStream((raw: unknown) => {
     if (!isRecord(raw)) return;
+    // Metadata belongs to this process/RPC id, even when its reply follows
+    // agent_end in the same stdout batch. It never delays or fails generation.
+    if (raw.type === 'response' && sessionStateRpcId !== null && raw.id === sessionStateRpcId) {
+      sessionStateRpcId = null;
+      const sessionFile = getRecord(raw.data)?.sessionFile;
+      if (raw.success === true && typeof sessionFile === 'string' && sessionFile.trim()) {
+        reportedSessionPath = sessionFile;
+        if (promptCompleted) capturedSessionPath = sessionFile;
+      }
+      return;
+    }
     // Once finished (agent_end or abort), stop processing — the run is
     // over, so no more agent events should be emitted. We still drain
     // stdout via parser.feed() so the pipe doesn't break; we just skip
@@ -340,7 +355,12 @@ export function attachPiRpcSession({
     // RPC responses (prompt accepted, set_model ack, etc.) — not
     // agent events. Log the prompt acceptance, ignore the rest.
     if (raw.type === 'response') {
-      if (raw.id === parentSessionRpcId) {
+      if (parentSessionRpcId !== null && raw.id === parentSessionRpcId) {
+        parentSessionRpcId = null;
+        if (getRecord(raw.data)?.cancelled === true) {
+          fail('Parent session loading was canceled by a Pi extension.', 'PI_PARENT_SESSION_FAILED');
+          return;
+        }
         if (raw.success === false) {
           fail(
             `parent session rejected: ${String(raw.error ?? 'unknown')}`,
@@ -351,21 +371,35 @@ export function attachPiRpcSession({
         sendPromptCommand();
         return;
       }
-      if (raw.id === promptRpcId && raw.success === false) {
+      if (promptRpcId !== null && raw.id === promptRpcId && raw.success === false) {
         fail(`prompt rejected: ${String(raw.error ?? 'unknown')}`);
+      } else if (promptRpcId !== null && raw.id === promptRpcId && raw.success === true) {
+        promptRpcId = null;
+        try {
+          sessionStateRpcId = sendCommand(stdin, 'get_state');
+        } catch {
+          // Older runtimes and closed pipes may not answer a metadata query.
+        }
       }
       return;
     }
 
     // Agent events: delegate to the pure mapper.
-    const result = mapPiRpcEvent(raw, send, { runStartedAt, sentFirstToken });
+    const result = mapPiRpcEvent(raw, (channel, data) => {
+      if (channel === 'error' || (channel === 'agent' && data.type === 'error')) {
+        agentErrorObserved = true;
+      }
+      send(channel, data);
+    }, { runStartedAt, sentFirstToken });
 
     if (result === 'agent_end') {
       finished = true;
-      // Capture only the session file changed by this run. If another pi
-      // process wrote to the shared session directory concurrently, the
-      // resolver returns null instead of risking cross-conversation resume.
-      capturedSessionPath = resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt);
+      promptCompleted = true;
+      // Pi owns its session location (normally under its external agent home).
+      // Legacy fixtures/runtimes without get_state may still write the old
+      // project-local directory; only one changed file is safe to associate.
+      capturedSessionPath = reportedSessionPath
+        ?? resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt);
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
       // so close stdin and let the process exit naturally, or kill it
@@ -379,7 +413,9 @@ export function attachPiRpcSession({
       // for resource-constrained machines where the event loop drains slowly.
       const shutdownMs = Number(process.env.PI_GRACEFUL_SHUTDOWN_MS) || 5000;
       setTimeout(() => {
-        if (!child.killed) child.kill('SIGTERM');
+        if (!child.killed && child.exitCode == null && child.signalCode == null) {
+          completionShutdownRequested = child.kill('SIGTERM');
+        }
       }, shutdownMs);
     }
   });
@@ -397,6 +433,16 @@ export function attachPiRpcSession({
   return {
     hasFatalError() {
       return fatal;
+    },
+    completedSuccessfully() {
+      // The fallback SIGTERM ends the process, not an already-completed turn.
+      // An abort before agent_end, RPC rejection, or native error stays unclean.
+      return promptCompleted && !fatal && !agentErrorObserved;
+    },
+    completionShutdownRequested() {
+      // Some Pi builds trap this signal and report code 143 instead. Keep the
+      // actual host signal separate from a naturally failing process exit.
+      return completionShutdownRequested;
     },
     getLastSessionPath() {
       return capturedSessionPath;

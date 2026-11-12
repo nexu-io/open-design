@@ -1,12 +1,15 @@
+import { classifyProcessExit } from "@open-design/contracts/analytics";
+import { attachDisplayRefresh } from "./display-refresh.js";
+import { reportDesktopObservabilityEvent } from "./observability.js";
 import { execFile } from "node:child_process";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { release } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell, webFrameMain } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, session, shell, webFrameMain } from "electron";
 import type { WebFrameMain } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
@@ -387,6 +390,7 @@ export type DesktopStatusSnapshot = {
 };
 
 export type DesktopRuntime = {
+  ownsWebContents(id: number): boolean;
   close(): Promise<void>;
   click(input: DesktopClickInput): Promise<DesktopClickResult>;
   console(): DesktopConsoleResult;
@@ -402,6 +406,7 @@ export type DesktopRuntime = {
 };
 
 export type DesktopRuntimeOptions = {
+  telemetryContext?: { app_session_id: string; launch_attempt_id: string | null; app_version: string | null };
   // Per-process secret shared with the daemon at startup (over its
   // sidecar IPC) so the main process can mint HMAC tokens for the
   // `dialog:pick-and-import` flow. The secret stays in main-process
@@ -1867,12 +1872,20 @@ export function saveAsDialogOptionsForFilename(filename: string): SaveAsDialogOp
   return { title: "Save As", defaultPath: filename, filters, properties: ["dontAddToRecent"] };
 }
 
-function attachDownloadSaveAsDialog(window: BrowserWindow): void {
-  window.webContents.session.on("will-download", (_event, item) => {
+export function attachDownloadSaveAsDialog(window: BrowserWindow): void {
+  const contents = window.webContents;
+  const session = contents.session;
+  const onDownload = (_event: Electron.Event, item: Electron.DownloadItem, source: Electron.WebContents) => {
+    if (source !== contents) return;
     const options = saveAsDialogOptionsForFilename(item.getFilename());
-    if (!options) return;
-    item.setSaveDialogOptions(options);
-  });
+    if (options) item.setSaveDialogOptions(options);
+    const url = item.getURL();
+    item.once("done", (_done, state) => {
+      if (!contents.isDestroyed()) contents.send("od:download-finished", { url, state });
+    });
+  };
+  session.on("will-download", onDownload);
+  window.once("closed", () => session.removeListener("will-download", onDownload));
 }
 
 function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
@@ -1968,22 +1981,13 @@ async function reportRendererCrash(
     // reachable from main-process Node fetch.
     const baseUrl = (await (options.discoverDaemonUrl?.() ?? options.discoverUrl())) ?? null;
     if (!baseUrl) return;
-    const url = new URL("/api/observability/event", baseUrl).toString();
-    await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        event: "desktop_renderer_crash",
-        properties: {
-          reason: properties.reason,
-          exit_code: properties.exit_code,
-          // Marks the single crash that tripped the loop breaker, so a crash
-          // loop is one flagged event instead of thousands of anonymous ones.
-          loop_tripped: properties.loop_tripped ?? false,
-          // Present on the bounded recovery-attempt signal; null on real crashes.
-          recovery_attempt: properties.recovery_attempt ?? null,
-        },
-      }),
+    await reportDesktopObservabilityEvent(async () => baseUrl, "desktop_renderer_crash", {
+      ...options.telemetryContext,
+      event_id: randomUUID(), occurred_at: new Date().toISOString(),
+      reason: properties.reason, exit_reason: classifyProcessExit(properties.reason),
+      exit_code: properties.exit_code, loop_tripped: properties.loop_tripped ?? false,
+      recovery_suppressed: properties.loop_tripped ?? false,
+      recovery_attempt: properties.recovery_attempt ?? null,
     });
   } catch {
     // Best-effort. The user is already in a degraded state — failing to
@@ -2019,6 +2023,7 @@ async function showDirectoryPickerForSender(
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
   applyDockIcon();
+  const inputTelemetryEnabled = process.env.OD_INPUT_TRIAL_CAPABILITY === '1';
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -2263,7 +2268,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     autoHideMenuBar: true,
     ...MAC_WINDOW_CHROME,
     webPreferences: {
-      additionalArguments: osLocaleAdditionalArguments(options.osLocale),
+      additionalArguments: [...(osLocaleAdditionalArguments(options.osLocale) ?? []), ...(inputTelemetryEnabled ? ['--od-input-telemetry'] : [])],
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -2273,6 +2278,30 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
     width: 1280,
   });
+  const disposeDisplayRefresh = attachDisplayRefresh({
+    platform: process.platform,
+    screen,
+    powerMonitor,
+    getWindows: () => [window],
+    readRendererScale: async () => {
+      const ratio: unknown = await window.webContents.executeJavaScript("window.devicePixelRatio");
+      return Number(ratio) / window.webContents.getZoomFactor();
+    },
+    notify: (_window, refresh) => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send("od:appearance:display-refreshed", {
+          ...refresh,
+          zoomFactor: window.webContents.getZoomFactor(),
+        });
+      }
+    },
+  });
+  const stopDisplayRefresh = () => {
+    disposeDisplayRefresh();
+    app.removeListener("before-quit", stopDisplayRefresh);
+  };
+  app.once("before-quit", stopDisplayRefresh);
+  window.once("closed", stopDisplayRefresh);
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
@@ -2800,6 +2829,40 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   let revealed = false;
   let revealing = false;
 
+  /**
+   * The runtime's canonical bring-to-front, shared by `show()` and the
+   * renderer's `od:window:show` request (a system-notification click).
+   */
+  const showMainWindow = (): void => {
+    if (window.isDestroyed()) return;
+    // Before the splash reveal gate has fired (revealWhenReady), the main
+    // window is still hidden and surfacing it here would show the half-loaded
+    // web shell and bypass the gate — reintroducing the startup flash this is
+    // meant to remove (e.g. a packaged second-instance focus arriving mid
+    // boot). Bring the splash forward instead; the main window is revealed on
+    // its own once the app has mounted.
+    if (!revealed) {
+      if (splash != null && !splash.isDestroyed()) {
+        splash.show();
+        splash.focus();
+      }
+      return;
+    }
+    // A minimized window must be restored before focus — `focus()` alone
+    // leaves it in the Dock, silently breaking the deeplink hand-off whose
+    // entire payload is this bring-to-front.
+    ensureWindowVisible(window);
+  };
+
+  // A click on a system notification the renderer raised must bring the
+  // window back even when it is minimized or hidden by the close button: the
+  // renderer's own `window.focus()` reaches neither (P0-24 N11).
+  ipcMain.removeAllListeners("od:window:show");
+  ipcMain.on("od:window:show", (event) => {
+    if (window.isDestroyed() || event.sender !== window.webContents) return;
+    showMainWindow();
+  });
+
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
     revealed = true;
@@ -2997,6 +3060,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   void tick();
 
   return {
+    ownsWebContents(id: number): boolean { return !window.isDestroyed() && window.webContents.id === id; },
     async click(input) {
       if (window.isDestroyed()) return { clicked: false, found: false };
       const selector = JSON.stringify(input.selector);
@@ -3011,14 +3075,26 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       );
     },
     async close() {
+      stopDisplayRefresh();
       stopped = true;
       if (timer != null) {
         clearTimeout(timer);
         timer = null;
       }
       unsubscribeUpdater();
+      if (inputTelemetryEnabled && !window.isDestroyed()) await new Promise<void>(resolve => {
+        const nonce = randomUUID();
+        const finish = () => { clearTimeout(timeout); ipcMain.removeListener('od:input-telemetry:flushed', acknowledge); resolve(); };
+        const acknowledge = (event: Electron.IpcMainEvent, value: unknown) => {
+          if (value === nonce && event.sender === window.webContents && event.senderFrame === event.sender.mainFrame) finish();
+        };
+        const timeout = setTimeout(finish, 2000);
+        ipcMain.on('od:input-telemetry:flushed', acknowledge);
+        window.webContents.send('od:input-telemetry:flush', nonce);
+      });
       ipcMain.removeAllListeners("desktop-pet:set-visible");
       ipcMain.removeAllListeners("od:appearance:set-theme");
+      ipcMain.removeAllListeners("od:window:show");
       for (const channel of UPDATER_IPC_CHANNELS) {
         ipcMain.removeHandler(channel);
       }
@@ -3088,24 +3164,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { path: outputPath };
     },
     show() {
-      if (window.isDestroyed()) return;
-      // Before the splash reveal gate has fired (revealWhenReady), the main
-      // window is still hidden and surfacing it here would show the half-loaded
-      // web shell and bypass the gate — reintroducing the startup flash this is
-      // meant to remove (e.g. a packaged second-instance focus arriving mid
-      // boot). Bring the splash forward instead; the main window is revealed on
-      // its own once the app has mounted.
-      if (!revealed) {
-        if (splash != null && !splash.isDestroyed()) {
-          splash.show();
-          splash.focus();
-        }
-        return;
-      }
-      // A minimized window must be restored before focus — `focus()` alone
-      // leaves it in the Dock, silently breaking the deeplink hand-off whose
-      // entire payload is this bring-to-front.
-      ensureWindowVisible(window);
+      showMainWindow();
     },
     status() {
       return {

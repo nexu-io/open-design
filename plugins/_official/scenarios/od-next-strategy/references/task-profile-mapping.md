@@ -1,4 +1,4 @@
-# OD Next Task Profile Mapping v2.0.0
+# OD Next Task Profile Mapping v2.0.1
 
 Use explicit project metadata before interpreting free-form text.
 
@@ -8,6 +8,7 @@ Use explicit project metadata before interpreting free-form text.
 | `ppt` | `deck` | `../assets/task-profiles/ppt.md` | active |
 | `marketing` | `image` or explicit marketing metadata | `../assets/task-profiles/marketing.md` | active |
 | `hyperframes` | `video` with HyperFrames metadata | `../assets/task-profiles/hyperframes.md` | active |
+| `motion-design` | `video` with `intent: motion-design` | `../assets/task-profiles/motion-design.md` | active |
 
 If metadata cannot identify one profile reliably, use task type `generic` when
 the generic contract is sufficient. Otherwise report blocked with the missing

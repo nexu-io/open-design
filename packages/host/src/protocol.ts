@@ -163,6 +163,15 @@ export const OPEN_DESIGN_HOST_APPEARANCE_THEMES = Object.freeze({
   SYSTEM: "system",
 } as const);
 
+/** Structural evidence after a native macOS display refresh; no display identifiers. */
+export type OpenDesignHostDisplayRefresh = {
+  reasons: string[];
+  scaleFactor: number;
+  displayCount: number;
+  /** Page zoom of the notified window; absent from hosts that predate it. */
+  zoomFactor?: number;
+};
+
 export type OpenDesignHostAppearanceTheme =
   (typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES)[keyof typeof OPEN_DESIGN_HOST_APPEARANCE_THEMES];
 
@@ -372,11 +381,30 @@ export type OpenDesignHostUpdaterOpenDialogRequest = {
 
 export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
 
+export type OpenDesignHostDownloadResult = {
+  url: string;
+  state: "completed" | "cancelled" | "interrupted";
+};
+
 export type OpenDesignHostBridge = {
+  /** Opt-in shutdown barrier for saving the input collector tail. Storage stays daemon-owned. */
+  inputTelemetry?: {
+    subscribeShutdown(listener: () => Promise<void>): () => void;
+  };
+  startup?: {
+    context(): Promise<{ launch_attempt_id: string; app_session_id: string } | null>;
+    signal(value: { launch_attempt_id: string; app_session_id: string;
+      readiness_point: 'first_visible' | 'interactive_ready'; required_data_ready?: boolean; actions_ready?: boolean }): Promise<boolean>;
+  };
+  /** Optional on older hosts. Reports actual disk completion, never initiation. */
+  downloads?: {
+    subscribe(listener: (result: OpenDesignHostDownloadResult) => void): () => void;
+  };
   // Optional so older host builds still satisfy the bridge shape; callers
   // must feature-detect before invoking.
   appearance?: {
     setTheme(theme: OpenDesignHostAppearanceTheme): void;
+    subscribeDisplayRefresh?(listener: (refresh: OpenDesignHostDisplayRefresh) => void): () => void;
   };
   browser: {
     clearData(options?: OpenDesignHostBrowserClearDataOptions): Promise<OpenDesignHostActionResult>;
@@ -390,6 +418,12 @@ export type OpenDesignHostBridge = {
   };
   pet: {
     setVisible(visible: boolean): void;
+  };
+  // Optional so web builds and older desktop hosts keep the same contract.
+  // Brings the app window to the front even when it is minimized or hidden,
+  // which the renderer's own `window.focus()` cannot do.
+  window?: {
+    show(): void;
   };
   // Optional so web builds and older desktop hosts keep the same contract.
   // Electron is the only layer that can observe a compositor-affecting

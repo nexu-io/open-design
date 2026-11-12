@@ -1,0 +1,2 @@
+Error: authentication required. Run 'agy' to log in, then retry.
+error: authentication failed or timed out

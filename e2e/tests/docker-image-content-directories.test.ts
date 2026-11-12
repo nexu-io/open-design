@@ -46,6 +46,15 @@ describe("deploy/Dockerfile content directories", () => {
     }
   });
 
+  it("makes bundled plugin manifests available before the web type check", async () => {
+    const { build } = stageSections(await readFile(dockerfile, "utf8"));
+    const webBuild = build.indexOf("pnpm --filter @open-design/web build");
+    expect(webBuild).toBeGreaterThan(0);
+    const pluginCopy = build.indexOf("COPY plugins/_official ./plugins/_official");
+    expect(pluginCopy).toBeGreaterThanOrEqual(0);
+    expect(pluginCopy).toBeLessThan(webBuild);
+  });
+
   it("ships the checked-in plugin preview manifest", async () => {
     // Narrower than the directory check above and stated separately: this is the
     // file whose absence is silent, so it is worth failing on its own terms

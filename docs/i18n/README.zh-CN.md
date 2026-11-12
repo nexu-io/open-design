@@ -1,11 +1,9 @@
-<h1 align="center">OpenDesign：首个协作式设计 Agent 工作区</h1>
+<h1 align="center">OpenDesign：首个协作式 AI 设计 Agent 工作台</h1>
 
-> ✨ **[全新推出 OpenDesign Go](https://open-design.ai/pricing/)**。Go Plan 套餐首月 8 美元起，每月提供可用于 10 多款模型的额度，包括 GPT-6.1 Sol、GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X 和 MiMo V2.6 Flash. 所有个人套餐均提供 API 接入，可用于 Codex、Claude Code、DSH、OpenCode 等工具。
->
-> 🧩 **[现已支持 DeepSeek Harness。](https://open-design.ai/zh/agents/deepseek-harness-design/)** 将 DeepSeek 官方 `dsh` Agent Harness 作为原生运行时接入 OpenDesign，支持结构化思考、工具调用、模型发现、取消与会话恢复；生成文件仍进入 OpenDesign 的实时预览与交付流程。
+> ✨ **[庆祝 GitHub 100K Star，OpenDesign Go 额度翻倍](https://open-design.ai/pricing/)**。**首月仅需 8 美元，指定 Design Plan 模型每月最高可享 120 美元使用额度**，可用于 GPT-6 Luna、DeepSeek V4.1 Flash、GLM-5.3 Flash-X、MiMo V2.6 Flash 等 10 多款模型。 所有个人套餐均提供 API 接入，可用于 Codex、Claude Code、DSH、OpenCode 等工具。
 
 <p align="center">
-  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：首个协作式设计 Agent 工作区" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign：首个协作式 AI 设计 Agent 工作台" width="100%" />
 </p>
 
 <p align="center">
@@ -29,9 +27,9 @@
 
 ## 什么是 OpenDesign
 
-OpenDesign 是**协作式设计 Agent 工作区**。从需求描述出发，使用你熟悉的编程 Agent 或 OpenDesign Cloud，创建符合设计系统的原型。与团队分享并收集反馈，再让 Agent 在同一个项目中继续完善。
+OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出发，使用你熟悉的编程 Agent 或 OpenDesign Cloud，创建符合设计系统的原型。与团队分享并收集反馈，再让 Agent 在同一个项目中继续完善。
 
-这套工作流开放且可扩展。作为 **Claude Design 的开源替代方案**，OpenDesign 采用 Apache 2.0 许可证；团队可以查看并按自己的流程调整技能、设计模板、设计系统和插件。
+这套工作流开放且可扩展。OpenDesign 采用 Apache 2.0 许可证；团队可以查看并按自己的流程调整技能、设计模板、设计系统和插件。
 
 
 ---
@@ -236,29 +234,12 @@ OpenDesign 是**协作式设计 Agent 工作区**。从需求描述出发，使�
 
 ## 为什么选择 OpenDesign
 
-> **2026 年 4 月，Anthropic 发布了 Claude Design——LLM 第一次不再写文章，而是直接交付设计工件。** 它迅速传播。然而它始终闭源、仅付费、仅云端，锁定 Anthropic 的模型、Anthropic 的技能、Anthropic 的表面。没有 Checkout，没有自托管，没有 Vercel 部署，不能换成你自己的 Agent。
-
-OpenDesign (OD) 是开源替代品。同样的循环，同样的工件优先心智模型，没有任何锁定：
-
 - 🤖 **Agent 原生，不绑定模型。** 我们不发布 Agent。你 `PATH` 上已有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是设计引擎。一键切换。
 - 🧠 **默认品牌级。** 每次渲染都把当前包的 `DESIGN.md` 作为核心品牌契约读取。仓库随附 151 个设计系统包；旧包可以仅含 `DESIGN.md`，新包还可加入 `manifest.json`、`tokens.css`、组件、资产和来源信息。放入文件夹，选择器自动识别。
-- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先，不发生云端往返。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
+- 🖥️ **本地优先，每一层都可 BYOK。** 原生桌面应用保持本地优先。产品分析和会话回放需经用户同意；经清理的安全与可靠性遥测始终开启。在描述 daemon 数据路径之前，必须阅读仓库根目录 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **四个平面上可组合。** **插件**承载可运行的工作流 · 功能**技能**承载 Agent 行为 · **设计模板**承载渲染蓝图 · **设计系统**承载品牌。四者都采用可移植、可版本控制的目录，任何人都可以编写和发布。
-- 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。专门的插件用于将 Figma / Pencil 工作流迁移到 React / Next.js / Vue 代码。
-- 🔒 **隐私信条。** 一切都运行在持有你数据的环境中——你的笔记本、你团队的服务器、你的 Vercel 项目。需要网络时有 SSRF 防护的 BYOK 代理。
-
-### 对比
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| 开源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| 自托管 / 桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Agent 原生（在 CLI 中运行） | 仅 Anthropic | ❌ | 仅云端 Agent | **✅ 25 CLI + BYOK** |
-| 品牌级 `DESIGN.md` | 私有 | Theme JSON | 有限 token | **✅ 151 系统随附** |
-| 技能 / 插件 / 模板 | 封闭 | 插件商店 | 封闭 | **✅ 100+ 功能技能 · 独立渲染模板目录 · 277 插件** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 一等公民** |
-| 将现有仓库刷新到品牌 | ❌ | ❌ | ❌ | **✅ 通过 Agent + `DESIGN.md`** |
-| 最低费用 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 任意兼容端点** |
+- 🔁 **刷新现有代码库。** 将 `git` 仓库 + `DESIGN.md` 交给 Agent，它就能将你的真实组件重构到品牌规范。
+- 🔒 **隐私信条。** 项目可在本地或自行部署的环境中运行。使用云端模型或 OpenDesign Cloud 时，相关请求会发送至相应服务。BYOK 代理包含 SSRF 防护。
 
 ---
 
@@ -328,7 +309,7 @@ Node `~24`，pnpm `10.33.x`。Windows 用户请参见 [`docs/windows-troubleshoo
 `需求 → 插件 → 方向 → 设计系统 → 工件 → 交付 → 记忆`
 
 1. **PM 提交需求。** 插件选择器提供落地页 · 路演 Deck · 仪表盘 · 社交媒体帖 · PM 规范 · OKR 记分卡……
-2. **设计师（或 Agent）锁定方向。** 没有品牌？从 5 个精选方向中选择。有品牌？放入截图 / URL → Agent 连接 GitHub、导入 Figma、编纂可复用的 `DESIGN.md`。
+2. **设计师（或 Agent）锁定方向。** 没有品牌？从 5 个精选方向中选择。有品牌？放入截图 / URL → Agent 连接 GitHub、编纂可复用的 `DESIGN.md`。
 3. **Agent 创建首个交付物。** 插件 + 功能技能或设计模板 + `DESIGN.md` 已绑定。有文件系统的 CLI 运行写入规范项目文件，预览随文件更新；没有文件工具的 BYOK/纯 API 运行返回一个完整的 `<artifact>` 块。
 4. **交付给工程团队。** 工件是真实的 HTML/CSS——放入 Cursor、Codex 或 Claude Code 中继续作为代码开发。或直接导出 PPTX / PDF / MP4 交给营销团队。
 5. **OpenDesign 越用越聪明。** 你的截图、字体、色板和已确认的工件会累积为下次会话的默认值。更少的重复劳动，更少的偏差。
@@ -401,9 +382,9 @@ od skills list --json
 
 **AI 与 LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**开发者工具** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**开发者工具** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**生产力** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**生产力** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **金融科技** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -459,7 +440,7 @@ od skills list --json
 od plugin list                       # 列出已安装插件（--task-kind / --mode / --tag 过滤）
 od plugin search "landing page"      # 按关键词搜
 od plugin info od-default            # 看某个插件的元数据、输入、权限
-od plugin install od-figma-migration # 从注册中心装；也支持 ./本地文件夹 或 https://… 直链
+od plugin install od-default        # 从注册中心装；也支持 ./本地文件夹 或 https://… 直链
 od plugin apply od-default --input brief="给我们的种子轮做一页 pitch"
 od plugin upgrade od-default         # 升级
 od plugin uninstall od-default       # 卸载
@@ -700,11 +681,10 @@ gh pr create --fill
 
 | 项目 | 角色 |
 |---|---|
-| Claude Design | 本仓库作为开源替代品所对标的闭源产品。 |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | 设计哲学指南针——初级设计师工作流、品牌资产协议、反 AI 泛滥清单、五维评审。 |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 杂志风格 Web PPT 技能，完整打包在 [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 下。Deck 模式默认技能。 |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio 系列——15 套 Deck 模板，36 个主题，31 种页面布局，动画运行时，磁力卡片演示模式。 |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 首个开源 Claude Design 替代品；我们借鉴的 UX 模式（流式工件循环、沙箱 iframe、实时 Agent 面板）。 |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 我们借鉴的 UX 模式（流式工件循环、沙箱 iframe、实时 Agent 面板）。 |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | 守护进程 + 适配器架构——PATH 扫描 Agent 检测、本地守护进程作为唯一特权进程。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 最初 9 节 `DESIGN.md` schema 和 70 个上游衍生系统的历史来源；当前包可在此基础上扩展。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 下新增的 57 个设计技能的来源。 |

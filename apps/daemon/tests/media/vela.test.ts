@@ -547,9 +547,18 @@ describe('Vela media provider', () => {
     await expect(stat(tempOutputDirs[0]!)).rejects.toThrow();
   });
 
+  it('rejects an unavailable cloud video model before uploading a first frame or generating', async () => {
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({models:[{model:'gpt-image-2',kind:'image'}]}));
+    await expect(generateMedia({...baseArgs(),surface:'video',model:'vela/doubao-seedance-2-0-260128',images:refs.slice(0,1),output:'clip.mp4',workspaceId:'scope-one'})).rejects.toThrow(/unknown or unavailable video model/);
+    expect(runVelaCommandMock.mock.calls).toHaveLength(1);
+    expect(runVelaCommandMock.mock.calls[0]![0]).toEqual(['media','models','--json']);
+    expect(runVelaCommandMock.mock.calls[0]![1]).toMatchObject({configuredEnv:{VELA_WORKSPACE_ID:'scope-one'}});
+  });
+
   it('submits and polls video with first-frame/references, progress heartbeats, and one terminal download', async () => {
     const progress: string[] = [];
     runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]});
       if (args[0] === 'video' && args[1] === 'gen') {
         return JSON.stringify({ task_id: 'mt_test', status: 'queued' });
       }
@@ -580,7 +589,7 @@ describe('Vela media provider', () => {
     expect(result.providerId).toBe('vela');
     expect(result.name).toBe('clip.mp4');
     expect(result.providerNote).not.toContain('mt_test');
-    const submit = runVelaCommandMock.mock.calls[0]![0] as string[];
+    const submit = runVelaCommandMock.mock.calls.find(([args])=>args[0]==='video' && args[1]==='gen')![0] as string[];
     expect(submit.slice(0, 2)).toEqual(['video', 'gen']);
     expect(submit).toContain('--no-wait');
     expect(submit).not.toContain('--wait');
@@ -597,7 +606,7 @@ describe('Vela media provider', () => {
     expect(valueAfter(submit, '--resolution')).toBe('720p');
     expect(submit).not.toContain('--generate-audio');
 
-    const polls = runVelaCommandMock.mock.calls.slice(1).map(([args]) => args as string[]);
+    const polls = runVelaCommandMock.mock.calls.filter(([args])=>args[0]==='video' && args[1]==='get').map(([args]) => args as string[]);
     expect(polls).toHaveLength(2);
     for (const poll of polls) {
       expect(poll.slice(0, 3)).toEqual(['video', 'get', 'mt_test']);
@@ -613,6 +622,7 @@ describe('Vela media provider', () => {
 
   it('preserves a failed video status and provider error', async () => {
     runVelaCommandMock
+      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]}))
       .mockResolvedValueOnce(JSON.stringify({ task_id: 'mt_failed', status: 'queued' }))
       .mockResolvedValueOnce(JSON.stringify({
         task_id: 'mt_failed',
@@ -632,6 +642,7 @@ describe('Vela media provider', () => {
   it('times out with the last video status and cleans temporary output', async () => {
     process.env.OD_VELA_VIDEO_TIMEOUT_MS = '3';
     runVelaCommandMock
+      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]}))
       .mockResolvedValueOnce(JSON.stringify({ task_id: 'mt_slow', status: 'queued' }))
       .mockImplementation(async (args: string[]) => {
         tempOutputDirs.push(path.dirname(valueAfter(args, '--output')));

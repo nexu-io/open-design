@@ -49,9 +49,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ReactElement } from 'react';
+import { AudioArtifact } from '../../../src/components/chat/AudioArtifact';
 
 import {
   ChatCloseIcon,
@@ -207,7 +208,6 @@ describe('聊天面板内的调用点换过去了 —— 面板外一个都不�
   const chatPane = src('components/ChatPane.tsx');
   const plusMenu = src('components/ComposerPlusMenu.tsx');
   const dsPicker = src('components/DesignSystemPicker.tsx');
-  const audio = src('components/chat/AudioArtifact.tsx');
 
   it('发送键用 main 那枚实心箭头(2026-09-05 裁决)', () => {
     /*
@@ -272,9 +272,33 @@ describe('聊天面板内的调用点换过去了 —— 面板外一个都不�
     expect(chatComposer).toContain('<Icon name="close" size={11} />');
   });
 
-  it('音频播放键用 ChatPlayIcon,设置页 / 任务页那几处不动', () => {
-    expect(audio).toContain('<ChatPlayIcon size={12} />');
-    expect(audio).not.toMatch(/<Icon name="play"/);
+  it('音频播放键在同一 SVG 内呈现圆底和字形,并随音频事件切换', () => {
+    // OPEND-3933: 用户确认独立的 26px 图标,取代旧的 12px ChatPlayIcon。
+    const { container, getByRole } = render(<AudioArtifact src="/voice.wav" name="voice.wav" />);
+    const button = getByRole('button', { name: /^(Play|播放)$/ });
+    const svg = button.querySelector('svg')!;
+    expect(button.querySelectorAll('svg')).toHaveLength(1);
+    expect(attr(svg, 'viewBox')).toBe('0 0 26 26');
+    expect(attr(svg, 'aria-hidden')).toBe('true');
+    const disc = svg.querySelector('circle')!;
+    expect(['cx', 'cy', 'r'].map((name) => attr(disc, name))).toEqual(['13', '13', '13']);
+    expect(paths(svg)).toEqual(['M10 7.75v10.5L18.25 13z']);
+    expect(attr(svg.querySelector('path')!, 'fill')).toBe('var(--chat-bg)');
+
+    const audio = container.querySelector('audio')!;
+    fireEvent.play(audio);
+    expect(getByRole('button', { name: /^(Pause|暂停)$/ })).toBe(button);
+    expect(paths(svg)).toEqual(['M10 9h2v8h-2zM14 9h2v8h-2z']);
+    fireEvent.pause(audio);
+    expect(getByRole('button', { name: /^(Play|播放)$/ })).toBe(button);
+    expect(paths(svg)).toEqual(['M10 7.75v10.5L18.25 13z']);
+    fireEvent.play(audio);
+    fireEvent.ended(audio);
+    expect(getByRole('button', { name: /^(Play|播放)$/ })).toBe(button);
+    expect(paths(svg)).toEqual(['M10 7.75v10.5L18.25 13z']);
+  });
+
+  it('设置页 / 任务页的播放图标不动', () => {
     expect(src('components/TasksView.tsx')).toContain('<Icon name="play" size={14} />');
     expect(src('components/SettingsDialog.tsx')).toContain('<Icon name="play" size={14} />');
   });

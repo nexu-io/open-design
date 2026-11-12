@@ -204,3 +204,16 @@ describe('传输层那一行的读数没被改动', () => {
     expect(view!.reason).toBe('transport');
   });
 });
+
+// OPEND-2849 S09a:限流原因要从信号一路带到那一行的读数上。
+describe('自动重试的原因', () => {
+  it('限流重试把 retryCause 带进读数', () => {
+    const view = nextChatReconnectView(null, { ...retrying(1, 1), cause: 'rate_limit' as const });
+    expect(view?.retryCause).toBe('rate_limit');
+  });
+
+  it('其他原因的重试不带 retryCause', () => {
+    const view = nextChatReconnectView(null, retrying(1, 1));
+    expect(view?.retryCause).toBeUndefined();
+  });
+});

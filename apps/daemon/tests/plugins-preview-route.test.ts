@@ -37,12 +37,14 @@ let baseUrl: string;
 beforeEach(async () => {
   pluginRoot = await mkdtemp(path.join(os.tmpdir(), 'od-preview-'));
   const folder = path.join(pluginRoot, PLUGIN_ID);
-  await mkdir(path.join(folder, 'preview'), { recursive: true });
+  await mkdir(path.join(folder, 'preview', 'assets'), { recursive: true });
+  await writeFile(path.join(folder, 'preview', 'assets', 'dynamic.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+  await writeFile(path.join(folder, 'preview', 'assets', 'font.ttf'), 'bundled font bytes');
   await mkdir(path.join(folder, 'examples', 'desk-warm'), { recursive: true });
   await mkdir(path.join(folder, 'examples', 'wrapped'), { recursive: true });
   await writeFile(
     path.join(folder, 'preview', 'index.html'),
-    '<!DOCTYPE html><title>preview</title><p>preview body</p>',
+    '<!DOCTYPE html><!-- <head> --><head data-note=">"><title>preview</title><style>@font-face{font-family:F;src:url(assets/font.ttf)}</style></head><p>preview body</p><script>const CFG={image:"assets/dynamic.svg"};if(CFG.image.startsWith("assets/")){const image=new Image();image.src=CFG.image}</script>',
   );
   await writeFile(
     path.join(folder, 'examples', 'desk-warm', 'index.html'),
@@ -54,7 +56,7 @@ beforeEach(async () => {
   );
   await writeFile(
     path.join(folder, 'examples', 'wrapped', 'inner.html'),
-    '<!DOCTYPE html><title>wrapped</title><img src="./hero.png"><p>wrapped body</p>',
+    '<!DOCTYPE html><title>wrapped</title><style>@font-face{font-family:F;src:url(\'assets/display.ttf\') format("truetype")}body{background:url("data:image/png;base64,AA")}i{background:url(../../../escape.png)}</style><img src="./hero.png"><p>wrapped body</p>',
   );
   await writeFile(
     path.join(folder, 'open-design.json'),
@@ -148,6 +150,23 @@ describe('GET /api/plugins/:id/preview', () => {
     expect(resp.headers.get('x-content-type-options')).toBe('nosniff');
     const body = await resp.text();
     expect(body).toContain('preview body');
+    expect(body).toContain(`data:font/ttf;base64,${Buffer.from('bundled font bytes').toString('base64')}`);
+  });
+
+  it('resolves script-created image paths against the actual preview directory', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/${PLUGIN_ID}/preview`);
+    const body = await resp.text();
+    const href = /<base\b[^>]*href=["']([^"']+)["']/i.exec(body)?.[1];
+    expect(href).toBe(`/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/preview/`);
+    expect(body).toContain('<!-- <head> -->');
+    expect(body).toContain(`<head data-note=">"><base href="${href}">`);
+    expect(body).toContain('CFG={image:"assets/dynamic.svg"}');
+    const imageUrl = new URL('assets/dynamic.svg', new URL(href!, resp.url));
+    expect(imageUrl.pathname).toBe(`/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/preview/assets/dynamic.svg`);
+    const image = await fetch(imageUrl);
+    expect(image.status).toBe(200);
+    expect(image.headers.get('content-type')).toContain('image/svg+xml');
+    expect(await image.text()).toContain('<svg');
   });
 
   it('returns 404 when the plugin id is unknown', async () => {
@@ -176,10 +195,23 @@ describe('GET /api/plugins/:id/example/:name', () => {
     expect(resp.status).toBe(200);
     const body = await resp.text();
     expect(body).toContain('wrapped body');
+    expect(body).toContain(`<base href="/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/examples/wrapped/">`);
     expect(body).not.toContain('<iframe');
     expect(body).toContain(
       `/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/examples/wrapped/hero.png`,
     );
+  });
+
+  it('lets inline stylesheets load bundled fonts through the asset route', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/${PLUGIN_ID}/example/wrapped`);
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-security-policy') ?? '').toContain("font-src 'self' data:");
+    const body = await resp.text();
+    expect(body).toContain(
+      `url('/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/examples/wrapped/assets/display.ttf')`,
+    );
+    expect(body).toContain('url("data:image/png;base64,AA")');
+    expect(body).toContain('url(../../../escape.png)');
   });
 
   it('rejects traversal segments with 400', async () => {

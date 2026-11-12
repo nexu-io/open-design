@@ -1,0 +1,21 @@
+/* OD-2: the signing/error message renders below the button, not squeezed
+   inside its fixed-height box (the overflow risk OD-2 flagged). Not a state
+   any capture in this pass exercises, so no pixel-parity constraint here.
+
+   Plain block flow, NOT `display: flex; flex-direction: column` — the
+   button's own `flex: 0 0 <width>` (soft variant) is meaningful only when
+   the button is a ROW-direction flex item (as it is in every other call
+   site, e.g. ShareNoticeRow's own row); nesting it inside a COLUMN flex
+   container reinterprets that same shorthand as a HEIGHT basis instead of a
+   width, stretching the button's height to fill `.wrap`. A plain div avoids
+   creating a flex context for the button at all. */
+.wrap {
+  display: block;
+}
+
+.status {
+  margin: 6px 0 0;
+  color: var(--share-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}

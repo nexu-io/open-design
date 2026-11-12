@@ -223,3 +223,37 @@ describe('preview observability white-screen bridge', () => {
     ]);
   });
 });
+
+it('answers only parent metric probes with visible content and echoes the attempt id', () => {
+  const harness = createBridgeHarness('<p>Hello</p>'); harnesses.push(harness);
+  const win = harness.window;
+  const replies: unknown[] = [];
+  win.postMessage = ((data: unknown) => { replies.push(data); }) as typeof win.postMessage;
+  win.requestAnimationFrame = ((callback: FrameRequestCallback) => { callback(0); return 1; }) as typeof win.requestAnimationFrame;
+  Object.defineProperty(win.document.querySelector('p')!, 'getBoundingClientRect', { value: () => ({ width: 100, height: 20, top: 0, left: 0, bottom: 20, right: 100 }) });
+  const probe = { type: 'od:preview-metric-probe', attemptId: 'attempt-1' };
+  win.dispatchEvent(new win.MessageEvent('message', { source: null, data: probe }));
+  expect(replies).toHaveLength(0);
+  win.dispatchEvent(new win.MessageEvent('message', { source: win.parent, data: probe }));
+  expect(replies).toContainEqual({ type: 'od:preview-metric-result', attemptId: 'attempt-1', result: 'success' });
+  replies.length = 0; harness.setVisibility('hidden');
+  win.dispatchEvent(new win.MessageEvent('message', { source: win.parent, data: probe }));
+  expect(replies).toHaveLength(0);
+});
+
+it('bounds metric replies during an authored error storm to one per attempt', () => {
+  const harness = createBridgeHarness(); harnesses.push(harness);
+  const win = harness.window;
+  const replies: Array<{ type?: string; attemptId?: string }> = [];
+  win.postMessage = ((data: { type?: string }) => replies.push(data)) as typeof win.postMessage;
+  win.requestAnimationFrame = ((callback: FrameRequestCallback) => { callback(0); return 1; }) as typeof win.requestAnimationFrame;
+  const probe = (attemptId: string) => win.dispatchEvent(new win.MessageEvent('message', {
+    source: win.parent, data: { type: 'od:preview-metric-probe', attemptId },
+  }));
+  probe('storm-1');
+  for (let i = 0; i < 200; i++) win.dispatchEvent(new win.ErrorEvent('error', { message: `fixture error ${i}` }));
+  probe('storm-2');
+  for (let i = 0; i < 200; i++) win.dispatchEvent(new win.ErrorEvent('error', { message: `fixture error ${i}` }));
+  const metric = replies.filter(r => r.type === 'od:preview-metric-result');
+  expect(metric.map(r => r.attemptId)).toEqual(['storm-1', 'storm-2']);
+});

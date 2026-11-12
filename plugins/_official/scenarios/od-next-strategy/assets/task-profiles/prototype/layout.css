@@ -1,6 +1,10 @@
-/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio.
-   Put this @layer first; product CSS outside the layer always wins. */
+/* OD-LAYOUT-PRIMITIVES v1 — structure only: display, flex/grid, overflow, wrapping, ratio, geometry.
+   Put this @layer first; product CSS outside the layer wins ordinary layout rules.
+   Native hidden and closed-dialog states take precedence over component display rules. */
 @layer od-layout {
+  [hidden]:not([hidden="until-found" i]) { display: none !important; }
+  dialog:not([open]) { display: none !important; }
+
   :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
 
   /* containers */
@@ -26,6 +30,9 @@
   .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
   .od-media-cover { object-fit: cover; }
 
+  /* functional inline SVG icons opt into bounded geometry; content SVGs keep their own */
+  .od-icon { display: inline-block; inline-size: var(--od-icon-size, 1em); block-size: var(--od-icon-size, 1em); flex: none; }
+
   /* data text only — authored copy is rewritten to its budget instead */
   .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
@@ -49,4 +56,5 @@
   .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
   .od-touch  { min-width: 44px; min-height: 44px; }
 }
+:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }
 /* /OD-LAYOUT-PRIMITIVES v1 */

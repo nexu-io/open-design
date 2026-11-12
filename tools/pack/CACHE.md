@@ -60,6 +60,12 @@ The build-graph cache is almost entirely Windows-specific.
 
 `mac` and `linux` have `<platform>.workspace-build` only.
 
+The workspace build delegates Web type validation to independent same-commit
+CI/release checks (`next typegen` plus the full Web tsconfig, including tests).
+The build recipe explicitly sets `OD_WEB_TYPECHECK=external`; this recipe is
+part of the workspace node key. Local ordinary `next build` still checks its
+production-only tsconfig. Declaration outputs remain part of the cache contract.
+
 ## Determinant rules
 
 **R1 — A node key must cover every input that determines the node's output.**
@@ -109,11 +115,18 @@ Current materialization-time parameters:
   carries `namespace`, `amrProfile`, `telemetryRelayUrl`, `updateMetadataUrl`,
   `posthogKey`/`posthogHost`, `webOutputMode`, and `namespaceBaseRoot` — is
   regenerated on the materialization path by `writePackagedConfig`.
+  The optional `amrEndpointBinding` is stamped together with its test profile
+  and console origin; `writePackagedConfigWithBinding` reads the written file
+  back and fails if the binding/profile/console differ. The Windows unpacked
+  copy is checked against that freshly stamped config as well.
 
 The downstream `win.nsis-payload-overlay`, `win.nsis-installer`,
 `win.portable-zip`, and `win.launcher-payload` nodes carry `namespace` and the
 full `packagedVersion` in their keys, because their content includes the
-already-stamped payload. `win.nsis-payload-base` instead carries only
+already-stamped payload. The NSIS overlay and portable ZIP also carry the
+complete stamped config body, so changing an endpoint binding at the same
+version cannot reuse an archive for another environment.
+`win.nsis-payload-base` instead carries only
 `versionCore`: its content excludes `Open Design.exe`,
 `resources/app/package.json`, and `resources/open-design-config.json`, which
 are assigned to the version-bearing overlay.

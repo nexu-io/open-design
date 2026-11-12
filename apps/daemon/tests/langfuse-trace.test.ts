@@ -98,6 +98,16 @@ function bodyOf(
 }
 
 describe('readLangfuseConfig', () => {
+  it('includes ID-only Discovery observations in the real trace payload with content disabled', () => {
+    const discovery = { skill_discovery_enabled: true, skill_discovery_policy_injected: true,
+      skill_ids_loaded: ['ppt'], deliverable_skill_ids: ['ppt', 'video'],
+      deliverable_skill_mapping: [{ id: 'slides', skillId: 'ppt' }, { id: 'clip', skillId: 'video' }],
+      skill_load_events: [{ skill_id: 'ppt', version: '1.0.0', tool_use_id: 'read-1', source: 'file_read', status: 'loaded' }],
+      skill_observation_status: 'complete' };
+    const trace = bodyOf(buildTracePayload(makeCtx({ skillDiscovery: discovery })), 'trace-create');
+    expect(trace.metadata).toMatchObject(discovery);
+    expect(trace.metadata.skill_load_events[0]).not.toHaveProperty('content');
+  });
   it('returns null when keys are missing', () => {
     expect(readLangfuseConfig({})).toBeNull();
     expect(readLangfuseConfig({ LANGFUSE_PUBLIC_KEY: 'pk' })).toBeNull();

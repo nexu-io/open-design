@@ -119,6 +119,8 @@ export interface WorkspaceTeamResourcesChangedSsePayload {
 /** Seat count / entitlement / role / lifecycle in the workspace context changed. */
 export interface WorkspaceContextChangedSsePayload {
   type: 'workspace-context-changed';
+  /** Only a verified exact-member terminal upstream revocation may set this. */
+  memberRemoval?: { workspaceId: string; workspaceMemberId: string; reason: 'member-removed' };
   at?: number;
 }
 

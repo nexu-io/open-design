@@ -1,22 +1,5 @@
-// Regression: OD Next admission must verify what the *installed* CLI
-// advertises, not only what the bundled fixture registry says the runtime
-// *path* is capable of.
-//
-// `claude.buildArgs` refuses to launch an admitted OD Next Run whose CLI does
-// not advertise `--forward-subagent-text`. Admission used to derive
-// `runtimeCapabilityVerified` purely from the bundled capability fixture plus a
-// `--version` probe, so a Claude build without that flag was still admitted and
-// the user's Run then died at spawn with AGENT_EXECUTION_FAILED.
-//
-// The symptom hid on developer machines: a real Claude Code install had already
-// populated `agentCapabilities` through full detection, so the cached map
-// answered "advertised" for a fake CLI that never advertised anything. On a
-// host with no Claude Code (CI) the map was empty and every OD Next-eligible
-// design run failed.
-//
-// Correct behaviour: an installed CLI that does not advertise the flags OD Next
-// will demand loses admission and takes the ordinary route, and the Run
-// succeeds.
+// Native child forwarding is optional. A Claude build without the flag must
+// execute OD Next without receiving an unsupported startup argument.
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -53,7 +36,7 @@ describe('OD Next admission vs advertised CLI capabilities', () => {
     binDir = null;
   });
 
-  it('does not admit a Claude build whose help omits --forward-subagent-text', async () => {
+  it('runs active OD Next when Claude help omits optional child forwarding', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-next-advertised-caps-'));
     const fakeClaude = await writeUnadvertisedClaude(binDir, 'claude-unadvertised');
 
@@ -63,22 +46,13 @@ describe('OD Next admission vs advertised CLI capabilities', () => {
       agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
       telemetry: { metrics: false, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
-      // This case is about an opted-in installation still refusing a build
-      // that cannot carry the strategy, so the opt-in has to be explicit —
-      // otherwise the run is declined for being switched off and never
-      // reaches the capability gate at all.
       odNextStrategyMode: 'active',
     });
 
     const run = await createAndWaitForRun(started.url);
 
-    // Admission, not spawn, is where the gap is enforced.
-    expect(run.strategyRolloutDecision?.effectiveMode).not.toBe('active');
-    expect(run.strategyRolloutDecision?.reasonCodes ?? []).toContain(
-      'od_next_rollout_capability_advertised_capability_missing',
-    );
-    expect(run.strategyTask).toBeUndefined();
-    // The ordinary route still runs the turn end to end.
+    expect(run.strategyRolloutDecision?.effectiveMode).toBe('active');
+    expect(run.strategyTask).toBeDefined();
     expect(run.error ?? null).toBeNull();
     expect(run.status).toBe('succeeded');
   });
@@ -90,6 +64,7 @@ async function writeUnadvertisedClaude(dir: string, name: string): Promise<strin
 const fs = require('node:fs');
 if (process.argv.includes('--version')) { console.log('claude-code 2.1.233 (Claude Code)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]'); process.exit(0); }
+if (process.argv.includes('--forward-subagent-text')) { console.error('unsupported child forwarding flag'); process.exit(2); }
 const W = (o) => fs.writeSync(1, JSON.stringify(o) + '\\n');
 W({ type: 'system', subtype: 'init', model: 'advertised-caps-test' });
 W({ type: 'assistant', message: { id: 'm_done', content: [

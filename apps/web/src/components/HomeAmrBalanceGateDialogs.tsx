@@ -5,10 +5,9 @@ import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
 
 /**
- * A hard block from the Home pre-run balance gate (empty wallet or signed
- * out). The dialog resolves the promise the submit handler is awaiting:
- * 'retry' (sign-in completed / recharge landed) re-runs the gate and continues
- * the very same create-and-run; 'dismiss' hands the composer back to the user.
+ * A Home gate for confirmed insufficient funding or sign-out. The dialog resolves the promise the submit handler is awaiting:
+ * 'retry' after sign-in re-runs authorization for the pending submit. Funding
+ * recovery only dismisses the block and returns the draft for a manual Send.
  */
 export interface HomeAmrBalanceGateBlock {
   reason: 'insufficient' | 'signed_out';
@@ -31,18 +30,20 @@ export interface HomeAmrBalanceGateBlock {
 
 interface Props {
   block: HomeAmrBalanceGateBlock | null;
+  /** Resolved daemon profile; explicit null waits instead of guessing production. */
+  runtimeProfile?: string | null;
+  consoleOrigin?: string | null;
   metricsConsent: boolean;
   installationId: string | null | undefined;
 }
 
 /**
- * Host for the Home balance-gate dialog. It is mounted by App rather than by
- * EntryShell because the gate now resolves behind the optimistic pending frame
- * (OPEND-2614): the Home send hands off to the project route on the click
- * tick, EntryShell unmounts with it, and the verdict — including this dialog —
- * lands over the pending frame. A dismiss rolls the hand-off back to Home.
+ * App owns this dialog both before navigation (a cached insufficient hint)
+ * and behind the pending project frame (the asynchronous sign-in gate).
+ * Dismissing a cached hint keeps the Home draft; dismissing a sign-in block
+ * rolls the optimistic hand-off back to Home.
  */
-export function HomeAmrBalanceGateDialogs({ block, metricsConsent, installationId }: Props) {
+export function HomeAmrBalanceGateDialogs({ block, runtimeProfile, consoleOrigin, metricsConsent, installationId }: Props) {
   if (!block) return null;
   if (block.dialog === 'ask_owner') {
     /*
@@ -50,21 +51,24 @@ export function HomeAmrBalanceGateDialogs({ block, metricsConsent, installationI
      * 主按钮取自 `workspaceUpgradeUrl` —— 对这类成员返回 `null`,于是
      * 弹窗上只剩一颗「暂不需要」(§6.Y)。这张弹窗至少给得出一条路。
      */
-    return <AmrOwnerTopUpDialog onClose={() => block.resolve('dismiss')} />;
+    return <AmrOwnerTopUpDialog pageName="home" stage="before_run" onClose={() => block.resolve('dismiss')} />;
   }
   return (
     <AmrBalanceDialog
       reason={block.reason}
+      stage="before_run"
+      manualSendOnRecovery={block.reason === 'insufficient'}
       modelId={block.modelId}
       fundingScope={block.fundingScope}
       balanceUsd={block.snapshot.balanceUsd}
-      profile={block.snapshot.profile}
+      profile={runtimeProfile !== undefined ? runtimeProfile : block.snapshot.profile}
+      consoleOrigin={consoleOrigin}
       entrySource="home_balance_gate_upgrade"
       upgradeIntent={block.upgradeIntent}
       metricsConsent={metricsConsent}
       installationId={installationId}
       onClose={() => block.resolve('dismiss')}
-      onResolved={() => block.resolve('retry')}
+      onResolved={() => block.resolve(block.reason === 'signed_out' ? 'retry' : 'dismiss')}
     />
   );
 }

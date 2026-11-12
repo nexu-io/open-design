@@ -1,3 +1,4 @@
+import { getOpenDesignHost } from '@open-design/host';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 // Direct-fetch safety telemetry transport.
 //
@@ -35,10 +36,19 @@ import { reportExperienceEvent } from '../observability/experience-diagnostics';
 // single source of truth for browser exception capture.
 
 import {
-  EVENT_SCHEMA_VERSION,
+  buildClientTelemetryParams,
+  isClientMetricEventName,
+  parseClientMetricEvent,
+  parseInputAggregationTrial,
+  type InputAggregationTrial,
+  type ClientMetricProps,
   type AnalyticsClientType,
 } from '@open-design/contracts/analytics';
+import { isResolvedAppVersion } from './app-version';
 import { scrubExceptionList, scrubFilePath } from './scrub';
+import { InputAggregation } from './input-aggregation';
+import { openInputAggregationStore } from './input-aggregation-store';
+import { inputAggregationSender, inputTelemetryCapture } from './input-aggregation-transport';
 
 export type BrowserOsName =
   | 'Mac OS X'
@@ -98,6 +108,14 @@ interface ExceptionTrackingContext {
   appVersion?: string;
   sessionId?: string;
   telemetryEnv?: string;
+  channel?: string;
+  appSessionId?: string;
+  platform?: string;
+  osVersion?: string;
+  arch?: string;
+  /** Bootstrap had no installation id yet (fresh install, not opted out). */
+  identityPending?: boolean;
+  inputAggregation?: InputAggregationTrial | null;
 }
 
 interface BufferedSafetyEvent {
@@ -118,16 +136,152 @@ const MAX_BUFFER_SIZE = 50;
 const FRAME_PLATFORM = 'web:javascript';
 
 let context: ExceptionTrackingContext | null = null;
+// Installation identity pushed by the provider; survives a late bootstrap.
+let installationDistinctId: string | null = null;
 const buffer: BufferedSafetyEvent[] = [];
 let installed = false;
+let inputAggregation: { instance: InputAggregation; destination: string; unsubscribeShutdown?: () => void } | null = null;
+let retiringInputAggregation: Promise<void> = Promise.resolve();
+let inputAggregationTimer: ReturnType<typeof setInterval> | null = null;
+let flushInputCollector: (() => void) | null = null;
+let lastInputStatusAt = 0;
+let lastInputStatus = '';
+
+export function registerInputCollectorFlush(flush: () => void): () => void {
+  flushInputCollector = flush;
+  return () => { if (flushInputCollector === flush) flushInputCollector = null; };
+}
+
+function ensureInputAggregation(): InputAggregation | null {
+  if (typeof window === 'undefined' || window.location.pathname === '/desktop-pet' || !context || holdsMetricsForIdentity()) return null;
+  const trial = parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey);
+  if (!trial) {
+    void inputAggregation?.instance.setMode('paused');
+    return null;
+  }
+  const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`;
+  const contextHost = context.host.replace(/\/+$/, '');
+  const key = context.apiKey;
+  const scope = `${destination}:${key}:${context.distinctId}`;
+  const owner = `${scope}:shadow`;
+  if (!inputAggregation || inputAggregation.destination !== owner) {
+    if (inputAggregation) {
+      inputAggregation.unsubscribeShutdown?.();
+      const previous = inputAggregation.instance;
+      retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
+    }
+    const summaries = inputAggregationSender(contextHost, key);
+    const originals = inputAggregationSender(contextHost, key, true);
+    const send = async (events: Parameters<typeof summaries>[0]) => {
+      for (const event of events.filter(e => e.event === 'client_input_responsiveness')) {
+        if (!await originals([event])) return false;
+      }
+      const batch = events.filter(e => e.event === 'client_input_responsiveness_summary');
+      return !batch.length || await summaries(batch);
+    };
+    const instance = new InputAggregation(send, retiringInputAggregation.then(() => openInputAggregationStore(scope)),
+      { retryBackoff: true, mode: trial.mode });
+    inputAggregation = { instance, destination: owner };
+    inputAggregation.unsubscribeShutdown = getOpenDesignHost()?.inputTelemetry?.subscribeShutdown?.(async () => {
+      if (inputAggregation?.instance !== instance) return;
+      flushInputCollector?.();
+      await instance.prepareShutdown();
+    });
+    void instance.tick();
+    if (!inputAggregationTimer) {
+      inputAggregationTimer = setInterval(() => {
+        const instance = inputAggregation?.instance;
+        if (!instance) return;
+        void instance.tick().then(() => {
+          const trial = context && parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey);
+          if (!trial) return;
+          const status = instance.diagnostics();
+          const key = `${instance.pageId}:${trial.revision}:${status.mode}:${status.stopped_reason}:${status.persistence_ready}`;
+          if (Date.now() - lastInputStatusAt < 3_600_000 && key === lastInputStatus) return;
+          lastInputStatusAt = Date.now(); lastInputStatus = key;
+          reportSafetyEvent('client_input_aggregation_status', { metric_schema_version: 1, telemetry_capability: 'supported',
+            aggregation_page_id: instance.pageId, input_trial_id: trial.trial_id, input_trial_revision: trial.revision, ...status });
+        });
+      }, 5000);
+      window.addEventListener('pagehide', () => { flushInputCollector?.(); void inputAggregation?.instance.flush('pagehide'); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') { flushInputCollector?.(); void inputAggregation?.instance.flush('hidden'); }
+      });
+      // A network flap retries saved facts without bypassing the hourly summary deadline.
+      window.addEventListener('online', () => { flushInputCollector?.(); void inputAggregation?.instance.tick(); });
+    }
+  }
+  void inputAggregation.instance.setMode(trial?.mode ?? 'shadow');
+  return inputAggregation.instance;
+}
+
+/** A missing/invalid runtime configuration pauses only summaries; original safety events keep flowing. */
+export function patchInputAggregationTrial(value: unknown): void {
+  if (!context) return;
+  const next = parseInputAggregationTrial(value, context.host, context.apiKey);
+  if (JSON.stringify(next) === JSON.stringify(context.inputAggregation ?? null)) return;
+  flushInputCollector?.();
+  context = { ...context, inputAggregation: next };
+  ensureInputAggregation();
+}
+
+// Upper bound on how long stability metrics wait for the installation id. If
+// the id never arrives (e.g. a failed config write), held metrics are released
+// under the bootstrap identity rather than lost.
+const IDENTITY_HOLD_MS = 60_000;
+let identityHoldTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Metrics are held while a fresh install has not minted its installation id. */
+function holdsMetricsForIdentity(): boolean {
+  return context?.identityPending === true && installationDistinctId == null;
+}
+
+/** Every safety event except exceptions waits for the installation id, so
+ * legacy stability events (e.g. client_boot_timing) share the session identity
+ * too. Exceptions keep flowing immediately: capture beats attribution. */
+function heldForIdentity(eventName: string): boolean {
+  return eventName !== '$exception';
+}
+
+function releaseHeldMetrics(): void {
+  if (identityHoldTimer !== null) { clearTimeout(identityHoldTimer); identityHoldTimer = null; }
+  if (context) context = { ...context, identityPending: false };
+  drainBuffer();
+}
+
+function drainBuffer(): void {
+  ensureInputAggregation();
+  if (context == null || buffer.length === 0) return;
+  const holding = holdsMetricsForIdentity();
+  const keep: BufferedSafetyEvent[] = [];
+  for (const item of buffer.splice(0, buffer.length)) {
+    if (holding && heldForIdentity(item.eventName)) keep.push(item);
+    else dispatch(item);
+  }
+  buffer.push(...keep);
+}
 
 export function setExceptionTrackingContext(next: ExceptionTrackingContext): void {
-  context = next;
-  if (buffer.length === 0) return;
-  const drain = buffer.splice(0, buffer.length);
-  for (const item of drain) {
-    dispatch(item);
+  const updated = {
+    ...next,
+    // An installation id learned via setIdentity outranks a bootstrap that
+    // resolved its config before the id was minted (OPEND-4220).
+    distinctId: installationDistinctId ?? next.distinctId,
+    appSessionId: next.appSessionId ?? context?.appSessionId,
+    // A later re-bridge that does not know about identity keeps the hold.
+    identityPending: next.identityPending ?? context?.identityPending,
+  };
+  if (context && ['apiKey', 'host', 'distinctId', 'appSessionId', 'appVersion', 'channel', 'telemetryEnv'].some(k =>
+    context?.[k as keyof ExceptionTrackingContext] !== updated[k as keyof ExceptionTrackingContext])) flushInputCollector?.();
+  context = updated;
+  // Invariant (OPEND-4220 retest 2): on a fresh install, stability metrics
+  // emitted before the installation id exists are held, not sent under the
+  // anonymous id, so one first session never splits across device ids — e.g.
+  // a navigation's `started` and its terminal events. Exceptions still flow.
+  if (holdsMetricsForIdentity() && identityHoldTimer === null) {
+    identityHoldTimer = setTimeout(() => { identityHoldTimer = null; releaseHeldMetrics(); }, IDENTITY_HOLD_MS);
   }
+  drainBuffer();
 }
 
 export function clearExceptionTrackingContext(): void {
@@ -135,7 +289,31 @@ export function clearExceptionTrackingContext(): void {
   // POSTHOG_KEY, e.g. a fork build). The buffered events stay in memory
   // until the page unloads — no key, nowhere to send them, but also
   // nothing leaks.
+  flushInputCollector?.();
   context = null;
+  installationDistinctId = null;
+  if (inputAggregation) {
+    inputAggregation.unsubscribeShutdown?.();
+    const previous = inputAggregation.instance;
+    retiringInputAggregation = retiringInputAggregation.then(() => previous.setMode('paused')).then(() => previous.close());
+  }
+  inputAggregation = null;
+  if (identityHoldTimer !== null) { clearTimeout(identityHoldTimer); identityHoldTimer = null; }
+}
+
+// Switches the safety channel to the installation identity once it exists.
+// On a fresh install bootstrap runs before the installation id is minted and
+// falls back to the anonymous id; without this patch every stability event in
+// that session keeps the anonymous id while native events use the
+// installation id (OPEND-4220). No-op until a context exists.
+export function patchExceptionTrackingDistinctId(distinctId: string | null): void {
+  if (!distinctId) return;
+  if (context && context.distinctId !== distinctId) flushInputCollector?.();
+  installationDistinctId = distinctId;
+  if (!context) return;
+  if (context.distinctId !== distinctId) context = { ...context, distinctId };
+  // Held first-session metrics now go out under the installation id.
+  releaseHeldMetrics();
 }
 
 // Patches only the appVersion field on an existing context. Safe to call
@@ -143,7 +321,8 @@ export function clearExceptionTrackingContext(): void {
 // resolves after the initial '0.0.0' placeholder). No-op if context hasn't
 // been set yet.
 export function patchExceptionTrackingAppVersion(version: string): void {
-  if (!context || !version) return;
+  if (!context || !isResolvedAppVersion(version)) return;
+  if (context.appVersion !== version) flushInputCollector?.();
   context = { ...context, appVersion: version };
 }
 
@@ -262,11 +441,24 @@ function captureException(
 // guarantees apply. Callers should namespace event names with `client_*`
 // (or `desktop_*` / `daemon_*` for cross-process forwards) so they're
 // easy to filter against posthog-js-captured product events.
+/** Registered stability metrics share the safety buffer and schema projection. */
+export function reportClientMetricEvent(event: string, properties: Record<string, unknown>): boolean {
+  if (!isClientMetricEventName(event)) return false;
+  reportSafetyEvent(event, properties);
+  return true;
+}
+
 export function reportSafetyEvent(
   eventName: string,
   properties: Record<string, unknown> = {},
   options: { currentUrlOverride?: string } = {},
 ): void {
+  if (isClientMetricEventName(eventName)) {
+    // Use the safety buffer without legacy URL fields or extra local diagnostics.
+    // Dispatch projects the strict metric schema before sending.
+    enqueue(eventName, { ...properties, $insert_id: typeof properties.event_id === 'string' ? properties.event_id : randomId() });
+    return;
+  }
   reportExperienceEvent(eventName, properties);
   const merged: Record<string, unknown> = {
     ...properties,
@@ -274,7 +466,7 @@ export function reportSafetyEvent(
       options.currentUrlOverride
         ?? (typeof window !== 'undefined' ? window.location.href : ''),
     ),
-    $insert_id: randomId(),
+    $insert_id: typeof properties.event_id === 'string' ? properties.event_id : randomId(),
     capture_source: 'web/error-tracking',
   };
   enqueue(eventName, merged);
@@ -287,7 +479,7 @@ function enqueue(eventName: string, properties: Record<string, unknown>): void {
     body: { properties },
     timestamp,
   };
-  if (context == null) {
+  if (context == null || (holdsMetricsForIdentity() && heldForIdentity(eventName))) {
     if (buffer.length >= MAX_BUFFER_SIZE) buffer.shift();
     buffer.push(item);
     return;
@@ -295,32 +487,87 @@ function enqueue(eventName: string, properties: Record<string, unknown>): void {
   dispatch(item);
 }
 
+function telemetryParams(original: Record<string, unknown>, timestamp: string) {
+  const ctx = context!;
+  return buildClientTelemetryParams(original, {
+    eventId: String(original.$insert_id), deviceId: ctx.distinctId,
+    appSessionId: ctx.appSessionId ?? ctx.sessionId ?? null,
+    appVersion: ctx.appVersion ?? null,
+    ...(ctx.channel ? { channel: ctx.channel } : {}),
+    clientType: ctx.clientType, captureSource: 'web/error-tracking',
+    env: ctx.telemetryEnv ?? 'unknown',
+    platform: ctx.platform ?? null, osVersion: ctx.osVersion ?? null,
+    arch: ctx.arch ?? null, occurredAt: timestamp, reportedAt: new Date().toISOString(),
+  });
+}
+
+/** A cumulative source window stays mutable until it is finalized. */
+export function checkpointInputResponsiveness(properties: Record<string, unknown>, final: boolean): boolean {
+  if (!['settings', 'search'].includes(String(properties.area))) return false;
+  const aggregation = ensureInputAggregation();
+  if (!aggregation || !aggregation.collectingEnabled || !context) return false;
+  const trial = context.inputAggregation;
+  const tagged = { ...properties, aggregation_page_id: aggregation.pageId,
+    ...(trial ? { input_trial_id: trial.trial_id, input_trial_revision: trial.revision } : {}) };
+  const common = telemetryParams({ ...tagged, $insert_id: properties.event_id }, new Date().toISOString());
+  const metric = parseClientMetricEvent('client_input_responsiveness', { ...tagged, ...common });
+  if (!metric) return false;
+  const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`, key = context.apiKey;
+  void aggregation.checkpointSource(metric, final).then(saved => {
+    if (!saved && final && !aggregation.ownsSource(common.event_id)) sendSafetyPayload(destination, { api_key: key, ...inputTelemetryCapture({ event: 'client_input_responsiveness',
+      properties: metric as ClientMetricProps<'client_input_responsiveness'> }) });
+  });
+  return true;
+}
+
 function dispatch(item: BufferedSafetyEvent): void {
   if (context == null) return;
+  const trial = item.eventName === 'client_input_responsiveness'
+    ? parseInputAggregationTrial(context.inputAggregation, context.host, context.apiKey) : null;
+  const original = trial ? { ...item.body.properties, input_trial_id: trial.trial_id, input_trial_revision: trial.revision,
+    ...(inputAggregation ? { aggregation_page_id: inputAggregation.instance.pageId } : {}) } : item.body.properties;
+  const common = telemetryParams(original, item.timestamp);
+  const metric = isClientMetricEventName(item.eventName)
+    ? parseClientMetricEvent(item.eventName, { ...original, ...common }) : null;
+  if (isClientMetricEventName(item.eventName) && !metric) return;
   const payload = {
     api_key: context.apiKey,
     event: item.eventName,
-    distinct_id: context.distinctId,
-    properties: {
+    distinct_id: common.device_id ?? context.distinctId,
+    properties: metric ? { ...metric, $insert_id: common.event_id } : {
       ...item.body.properties,
-      // Keep the direct-fetch web safety envelope aligned with daemon and
-      // packaged-runtime telemetry. Stamp this after caller properties so a
-      // stale producer cannot accidentally override the canonical version.
-      event_schema_version: EVENT_SCHEMA_VERSION,
       $lib: 'web/error-tracking',
       $os: context.osName,
-      client_type: context.clientType,
-      ...(context.telemetryEnv ? { env: context.telemetryEnv } : {}),
-      ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
       ...(context.sessionId ? { session_id: context.sessionId } : {}),
+      ...common,
+      ui_version: common.app_version,
+      $insert_id: common.event_id,
     },
-    timestamp: item.timestamp,
+    timestamp: common.occurred_at,
   };
+  const destination = `${context.host.replace(/\/+$/, '')}/i/v0/e/`;
+  const send = (properties = payload.properties) => sendSafetyPayload(destination, { ...payload, properties });
+  if (metric && item.eventName === 'client_input_responsiveness') {
+    const aggregation = ensureInputAggregation();
+    if (aggregation) {
+      // The durable outbox sends raw and summary events; never also dispatch the raw witness here.
+      const source = parseClientMetricEvent('client_input_responsiveness', { ...metric, aggregation_page_id: aggregation.pageId }) as ClientMetricProps<'client_input_responsiveness'>;
+      void aggregation.observe(source).then(saved => {
+        if (!saved && !aggregation.ownsSource(common.event_id)) sendSafetyPayload(destination, { api_key: payload.api_key,
+          ...inputTelemetryCapture({ event: 'client_input_responsiveness', properties: source }) });
+      });
+      return;
+    }
+  }
+  send();
+}
+
+function sendSafetyPayload(destination: string, payload: unknown): void {
   // `keepalive` ensures the request survives an immediate window unload —
   // important for events that fire during navigation that are followed by
   // a route change a millisecond later.
   try {
-    void fetch(`${context.host.replace(/\/+$/, '')}/i/v0/e/`, {
+    void fetch(destination, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),

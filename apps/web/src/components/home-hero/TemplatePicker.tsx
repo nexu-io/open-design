@@ -1,5 +1,6 @@
-// Selected creation type with category-switch controls.
+// The creation type keeps its dropdown and an independent clear action.
 import { useEffect, useId, useRef, useState } from 'react';
+import { Button } from '@open-design/components';
 import type { HomeHeroChip } from './chips';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
@@ -10,6 +11,7 @@ interface Props {
   templates: HomeHeroChip[];
   activeChipId: string | null;
   onPick?: (chip: HomeHeroChip) => void;
+  onClear?: () => void;
   disabled?: boolean;
   // Localized label for a chip id (reuses HomeHero's chip copy).
   labelFor: (chipId: string) => string;
@@ -19,6 +21,7 @@ export function TemplatePicker({
   templates,
   activeChipId,
   onPick,
+  onClear,
   disabled = false,
   labelFor,
 }: Props) {
@@ -66,18 +69,33 @@ export function TemplatePicker({
       <div
         className="home-hero__footer-select-trigger home-hero__template-trigger"
         data-testid="home-hero-template-trigger"
-        title={t('homeHero.templatePicker.label')}
       >
-        {active ? <span className="home-hero__footer-option-icon home-hero__footer-option-icon--compact" aria-hidden="true">
-          <Icon name={active.icon} size={16} className="home-hero__template-icon-glyph" />
-        </span> : null}
-        <button type="button" ref={triggerRef} className={styles.switcher}
+        {active ? <>
+          {onClear ? <Button
+            className={styles.clear}
+            aria-label={t('chat.removeAria', { name: valueLabel })}
+            title={t('chat.removeAria', { name: valueLabel })}
+            data-testid="home-hero-template-clear"
+            disabled={disabled}
+            onClick={() => { setOpen(false); onClear(); }}
+          >
+            <Icon name={active.icon} size={18} className={styles.typeGlyph} />
+            <Icon name="close" size={18} className={styles.clearGlyph} />
+          </Button> : <Icon name={active.icon} size={18} />}
+          <button type="button" ref={triggerRef} className={styles.switcher}
+            aria-label={t('homeHero.templatePicker.label')} aria-haspopup="listbox"
+            aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled}
+            onClick={() => setOpen((value) => !value)}>
+            <span className="home-hero__footer-select-label">{valueLabel}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="6 6 12 12" fill="currentColor" aria-hidden="true"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z" /></svg>
+          </button>
+        </> : <button type="button" ref={triggerRef} className={styles.switcher}
           aria-label={t('homeHero.templatePicker.label')} aria-haspopup="listbox"
           aria-expanded={open} aria-controls={open ? menuId : undefined} disabled={disabled}
           onClick={() => setOpen((value) => !value)}>
           <span className="home-hero__footer-select-label">{valueLabel}</span>
           <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="6 6 12 12" fill="currentColor" aria-hidden="true"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z" /></svg>
-        </button>
+        </button>}
       </div>
       {open ? <div id={menuId} role="listbox" aria-label={t('homeHero.templatePicker.label')}
         className="home-hero__footer-select-menu" data-testid="home-hero-template-menu">

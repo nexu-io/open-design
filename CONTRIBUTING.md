@@ -256,7 +256,8 @@ Beyond that:
 ## Commits & pull requests
 
 - **One concern per PR.** Adding a skill + refactoring the parser + bumping a dep is three PRs.
-- **Title is imperative + scope.** `add dating-web skill`, `fix daemon SSE backpressure when CLI hangs`, `docs: clarify storage contract`.
+- **Team PRs start with a verified Plane item.** Example: `[OPEND-3693] fix(web): restore home scrolling`. Keep the prefix when editing. Spaces are accepted; multiple consecutive identifiers link all items, but only the first receives code-line attribution. The existing PR body template remains sufficient.
+- **The Plane gate applies to internal accounts and ODCrew.** External contributors are exempt. Once enabled, `quality/plane` must pass before merging. Emergency bypass requires `lefarcen` or `mrcfps` to Approve the current commit with `quality-bypass: <specific reason>` in the review; ordinary approval does not bypass it.
 - **Use the PR template.** Fill every section of [`.github/pull_request_template.md`](.github/pull_request_template.md) — Why, What users will see, Surface area, Screenshots (if UI), Bug fix verification (if bug fix), Validation. Empty sections earn a "please fill in" reply.
 - **Body explains the why.** "What does this do" is usually obvious from the diff; "why does this need to exist" rarely is.
 - **Reference an issue** if there is one. If there isn't and the PR is non-trivial, open one first so we can agree the change is wanted before you spend the time.

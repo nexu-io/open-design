@@ -1,5 +1,6 @@
 import type { AgentEvent, ChatMessage } from '../types';
 import { toolCategoryForName } from '../components/ToolCard';
+import { dedupeToolUsesById, dropSupersededInFlightToolUses } from './tool-events';
 
 /** One tool call, reduced to the line the Design Files empty state shows. */
 export interface RunProgressStep {
@@ -59,10 +60,13 @@ export function runProgressSteps(messages: ChatMessage[]): RunProgressStep[] {
 }
 
 function stepsFromEvents(events: AgentEvent[]): RunProgressStep[] {
+  // Progress snapshots and the terminal input belong to one call. Fold them
+  // before rendering or applying the cap, preserving the latest complete input.
+  const displayEvents = dedupeToolUsesById(dropSupersededInFlightToolUses(events));
   const steps: RunProgressStep[] = [];
   // Backwards: the newest step leads, and the cap then drops the oldest.
-  for (let i = events.length - 1; i >= 0 && steps.length < MAX_STEPS; i--) {
-    const event = events[i];
+  for (let i = displayEvents.length - 1; i >= 0 && steps.length < MAX_STEPS; i--) {
+    const event = displayEvents[i];
     if (!event || event.kind !== 'tool_use') continue;
     const category = toolCategoryForName(event.name);
     // The todo list has its own pinned card above the composer; repeating it

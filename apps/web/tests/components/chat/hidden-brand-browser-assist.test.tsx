@@ -76,7 +76,9 @@ describe.each(['shell', 'prose'] as const)('hidden brand-browser-assist in %s', 
         vi.stubGlobal('fetch', fetchMock);
         // Real HTTP client/DTO decoding, not a claim of a daemon/database E2E.
         const rows = await listMessages('project-1', 'conversation-1');
-        expect(fetchMock).toHaveBeenCalledWith(endpoint, undefined);
+        expect(fetchMock).toHaveBeenCalledWith(endpoint, {
+          headers: { Accept: 'application/x-ndjson' },
+        });
         const row = rows[0];
         if (!row) throw new Error('Missing history fixture');
         loaded = row;

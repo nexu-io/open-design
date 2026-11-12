@@ -560,6 +560,9 @@ export const SearchableModelSelect = forwardRef<
           aria-disabled="true"
           aria-labelledby={optionLabelId}
           aria-describedby={optionDescriptionIds}
+          /* The row label is ellipsised, and a long catalog can share a prefix
+             across many rows, so the full name must survive on hover. */
+          title={option.label}
           className={`model-select-searchable__option${active ? ' is-active' : ''} is-disabled`}
           data-selected={active ? 'true' : undefined}
         >
@@ -576,6 +579,7 @@ export const SearchableModelSelect = forwardRef<
         aria-disabled={disabled}
         aria-labelledby={optionLabelId}
         aria-describedby={optionDescriptionIds}
+        title={option.label}
         className={`model-select-searchable__option${active ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
         data-selected={active ? 'true' : undefined}
         disabled={disabled}
@@ -605,6 +609,9 @@ export const SearchableModelSelect = forwardRef<
         aria-controls={listboxId}
         aria-haspopup="listbox"
         aria-describedby={buttonDescriptionIds}
+        /* The trigger readout truncates the same way its option rows do; the
+           full name stays reachable on hover. A caller-supplied title wins. */
+        title={buttonProps.title ?? selectedOption?.label ?? undefined}
         className={className}
         onClick={(event) => {
           buttonProps.onClick?.(event);

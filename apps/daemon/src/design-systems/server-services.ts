@@ -890,7 +890,7 @@ export function createDesignSystemServerServices({
       .map((file) => (file && typeof file === 'object' ? (file as { path?: unknown }).path : undefined))
       .filter(
         (candidate): candidate is string =>
-          typeof candidate === 'string' && (candidate === 'assets' || candidate.startsWith('assets/')),
+          typeof candidate === 'string' && (candidate === 'brand.json' || candidate === 'assets' || candidate.startsWith('assets/')),
       );
 
     const files: Array<{ path: string; content: Buffer }> = [];

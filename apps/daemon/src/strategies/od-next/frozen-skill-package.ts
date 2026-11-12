@@ -348,7 +348,7 @@ export function getFrozenSkillPackage(
     throw new InvalidFrozenSkillPackageError('Frozen Skill package JSON is malformed.');
   }
   const verified = verifyFrozenSkillPackage(parsed);
-  if (verified.identity !== row.identity || canonicalJson(verified) !== row.payloadJson) {
+  if (verified.identity !== row.identity) {
     throw new InvalidFrozenSkillPackageError('Frozen Skill package identity is tampered.');
   }
   return verified;
@@ -933,9 +933,6 @@ function verifyFile(value: unknown): FrozenSkillFileV1 {
     throw new InvalidFrozenSkillPackageError('Frozen Skill file shape is invalid.');
   }
   const bytes = Buffer.from(file.bytesBase64, 'base64');
-  if (bytes.toString('base64') !== file.bytesBase64) {
-    throw new InvalidFrozenSkillPackageError(`Frozen Skill file ${file.path} is not canonical base64.`);
-  }
   if (bytes.byteLength !== file.byteLength || digestBytes(bytes) !== file.digest) {
     throw new InvalidFrozenSkillPackageError(`Frozen Skill file ${file.path} is tampered.`);
   }

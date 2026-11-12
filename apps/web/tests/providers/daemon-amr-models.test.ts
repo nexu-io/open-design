@@ -5,6 +5,7 @@ import {
   fetchAmrModels,
   fetchAmrWalletSnapshot,
 } from '../../src/providers/daemon';
+import { workspaceContextFixture } from '../helpers/workspace-context';
 
 describe('canUpgradeVelaPlan', () => {
   it('is upgradeable for a known tier below the top', () => {
@@ -50,6 +51,24 @@ describe('fetchAmrModels', () => {
       refreshing: true,
     });
     expect(fetch).toHaveBeenCalledWith('/api/amr/models', { cache: 'no-store' });
+  });
+
+  it('carries the selected workspace principal instead of an ambient CLI workspace', async () => {
+    const context = workspaceContextFixture({ workspaceId: 'free-a', workspaceMemberId: 'member-a' });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      source: 'remote',
+      models: [{ id: 'deepseek-v4.1-flash', label: 'Flash', enabled: true }],
+    }), { status: 200 })));
+
+    await fetchAmrModels(context);
+
+    expect(fetch).toHaveBeenCalledWith('/api/amr/models', {
+      cache: 'no-store',
+      headers: expect.objectContaining({
+        'x-od-workspace-id': 'free-a',
+        'x-od-workspace-member-id': 'member-a',
+      }),
+    });
   });
 
   it('returns null when the daemon does not return AMR models', async () => {

@@ -17,6 +17,11 @@ export const PREVIEW_REDIRECT_LOOP_MESSAGE = 'od:redirect-loop-blocked';
  */
 export const PREVIEW_URL_GUARD_MAX_HTML_BYTES = 2 * 1024 * 1024;
 
+/** Keep inactive controls hidden while allowing later explicit [hidden] overrides. */
+export function buildPreviewVisibilityGuard(): string {
+  return '<style data-od-preview-hidden-guard>:root [hidden]:where(:not([hidden="until-found" i])) { display: none; }</style>';
+}
+
 export function previewHtmlHasLoadTimeLocationNavigation(source: string): boolean {
   if (/\blocation\s*\.\s*(?:reload|replace|assign)\s*\(/i.test(source)) return true;
   if (/\blocation\s*\.\s*href\s*=[^=]/i.test(source)) return true;
@@ -61,7 +66,70 @@ export function buildPreviewSandboxShim(): string {
   }
   shimHistoryMethod('pushState');
   shimHistoryMethod('replaceState');
+  // A strict iframe blocks native form submission before a submit event is
+  // dispatched. Preserve local JS handlers without invoking native navigation.
+  var localSubmitActivations = new WeakMap();
+  var localSubmitCounts = new WeakMap();
+  document.addEventListener('submit', function(e){
+    if (e.target instanceof HTMLFormElement) {
+      localSubmitCounts.set(e.target, (localSubmitCounts.get(e.target) || 0) + 1);
+    }
+  }, true);
+  function rememberLocalSubmit(e){
+    if (!(e.target instanceof Element)) return;
+    var control;
+    if (e.type === 'click') {
+      control = e.target.closest('button, input');
+      if (!control || control.type !== 'submit') return;
+    } else {
+      if (e.key !== 'Enter' || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      var input = e.target;
+      if (!(input instanceof HTMLInputElement) || !/^(text|email|tel|url|search|password|number)$/.test(input.type)) return;
+      var inputForm = input.form;
+      if (!inputForm) return;
+      control = Array.from(inputForm.elements).find(function(el){
+        return (el instanceof HTMLButtonElement || el instanceof HTMLInputElement) && el.type === 'submit' && !el.matches(':disabled');
+      });
+    }
+    if (!control || control.matches(':disabled') || !control.form) return;
+    localSubmitActivations.set(e, { form: control.form, submitter: control, count: localSubmitCounts.get(control.form) || 0 });
+  }
+  function finishLocalSubmit(e){
+    var activation = localSubmitActivations.get(e);
+    if (!activation) return;
+    // Let authored handlers and any native submit complete first. A genuine
+    // submit or canceled action must never cause a second local mutation.
+    setTimeout(function(){
+      var form = activation.form;
+      var submitter = activation.submitter;
+      if (e.defaultPrevented || !form.isConnected || submitter.matches(':disabled')) return;
+      if ((localSubmitCounts.get(form) || 0) !== activation.count) return;
+      if (!form.noValidate && !submitter.formNoValidate && !form.reportValidity()) return;
+      form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: submitter }));
+    }, 0);
+  }
+  ['click', 'keydown'].forEach(function(type){
+    document.addEventListener(type, rememberLocalSubmit, true);
+    document.addEventListener(type, finishLocalSubmit);
+  });
+  function setLocalHash(hash){
+    if (location.hash === hash) return;
+    if (location.protocol === 'blob:') {
+      // Chromium rejects fragment navigation of an opaque sandboxed blob.
+      // A same-document history update keeps the artifact and its scripts alive.
+      var oldUrl = location.href;
+      try {
+        history.pushState(null, '', oldUrl.split('#')[0] + hash);
+        if (location.hash === hash) {
+          window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: oldUrl, newURL: location.href }));
+        }
+      } catch (_) {}
+      return;
+    }
+    location.hash = hash;
+  }
   document.addEventListener('click', function(e){
+    if (e.defaultPrevented) return;
     if (!e.target || !(e.target instanceof Element)) return;
     var link = e.target.closest('a[href]');
     if (!link) return;
@@ -79,7 +147,11 @@ export function buildPreviewSandboxShim(): string {
         if (target) {
           target.scrollIntoView();
           if (location.hash === href) history.replaceState(null, '', ' ');
-          location.hash = href;
+          setLocalHash(href);
+        } else {
+          // Hash routers do not have matching element IDs. Keep navigation
+          // inside this document rather than following its asset base URL.
+          setLocalHash(href);
         }
       }
     } else if (link.getAttribute('target') === '_blank') {

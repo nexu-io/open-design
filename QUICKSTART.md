@@ -209,6 +209,8 @@ pnpm typecheck                 # workspace typecheck
 
 `tools-dev` automatically loads workspace env files before resolving ports, namespaces, and child process environments. Default precedence is `.env.development.local`, then `.env.local`, then `.env.development`, then `.env`; env files override ambient shell exports so project-local config wins. Use `--no-env-file` to disable loading or repeat `--env-file <path>` to use explicit env files instead.
 
+The development daemon defaults to the workspace-pinned Vela CLI installed by `pnpm install`, including its matching OpenCode companion. This prevents an older global `vela` from accepting sign-in but failing workspace billing or task launch. An explicit `VELA_BIN` or Settings → CLI env selection still takes precedence. Startup prints the selected workspace binary; if the optional package is absent it warns before falling back to PATH.
+
 During local development, `tools-dev` starts the daemon first, passes its port into `apps/web`, and `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to that daemon port so the App Router app can talk to the sibling Express process without CORS setup.
 
 ## Media generation / agent dispatcher checks

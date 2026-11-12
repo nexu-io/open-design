@@ -35,6 +35,7 @@ import {
   loadDeckCover,
   resolveProjectCover,
 } from '../../lib/project-cover-pipeline';
+import { mutedMotionCoverUrl } from '../../lib/muted-motion-cover-url';
 import { projectCoverUrl, type ProjectCoverOverride } from '../project-cover';
 import type { Project } from '../../types';
 
@@ -216,7 +217,7 @@ function HoverHtmlCover({
       {ready ? (
         <iframe
           className={`entry-nav-rail__recent-preview-frame${deck ? ' is-deck' : ''}`}
-          {...(deck ? { srcDoc: srcDoc ?? '', sandbox: '' } : { src, sandbox: 'allow-scripts' })}
+          {...(deck ? { srcDoc: srcDoc ?? '', sandbox: '' } : { src: mutedMotionCoverUrl(src), sandbox: 'allow-scripts' })}
           title=""
           tabIndex={-1}
           style={holdingGlyph ? HIDDEN_UNTIL_LOADED : undefined}

@@ -1,6 +1,7 @@
 import { OPEN_DESIGN_HOST_UPDATER_ACTIONS } from "./protocol.js";
 import type {
   OpenDesignHostActionResult,
+  OpenDesignHostDownloadResult,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -170,6 +171,22 @@ export function setHostPetVisible(visible: boolean, scope: OpenDesignHostGlobalS
   }
 }
 
+/**
+ * Bring the host's app window to the front, restoring it when minimized or
+ * hidden. Fails as unavailable on a host without the capability (web, or an
+ * older desktop build), so the caller can fall back to `window.focus()`.
+ */
+export function showHostWindow(scope: OpenDesignHostGlobalScope = globalThis): OpenDesignHostActionResult {
+  const host = getOpenDesignHost(scope);
+  if (typeof host?.window?.show !== "function") return unavailable("OpenDesign host window control is not available");
+  try {
+    host.window.show();
+    return { ok: true };
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
 /** Read the latest Electron-observed preview subframe navigation failure. */
 export function getLatestHostPreviewNavigationFailure(
   scope: OpenDesignHostGlobalScope = globalThis,
@@ -309,4 +326,12 @@ export async function setHostUpdaterMenuLabels(
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }
+}
+
+/** Observe native download completion when the host supports it. */
+export function subscribeHostDownloads(
+  listener: (result: OpenDesignHostDownloadResult) => void,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): (() => void) | null {
+  return getOpenDesignHost(scope)?.downloads?.subscribe(listener) ?? null;
 }
