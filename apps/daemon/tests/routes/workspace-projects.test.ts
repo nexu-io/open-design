@@ -3109,6 +3109,89 @@ describe('workspace project list authority cache boundary', () => {
     }
   });
 
+  it.each([
+    { label: 'fresh personal owner', workspaceType: 'personal', role: 'owner', memberStatus: 'active', directoryCase: 'valid', expectedStatus: 200, expectedVisible: true },
+    { label: 'fresh personal member', workspaceType: 'personal', role: 'member', memberStatus: 'active', directoryCase: 'valid', expectedStatus: 200, expectedVisible: false },
+    { label: 'fresh team member', workspaceType: 'team', role: 'member', memberStatus: 'active', directoryCase: 'valid', expectedStatus: 200, expectedVisible: false },
+    { label: 'fresh removed member', workspaceType: 'personal', role: 'owner', memberStatus: 'removed', directoryCase: 'valid', expectedStatus: 403, expectedVisible: false },
+    { label: 'fresh wrong workspace', workspaceType: 'personal', role: 'owner', memberStatus: 'active', directoryCase: 'wrong-workspace', expectedStatus: 403, expectedVisible: false },
+    { label: 'fresh wrong member', workspaceType: 'personal', role: 'owner', memberStatus: 'active', directoryCase: 'wrong-member', expectedStatus: 403, expectedVisible: false },
+  ] as const)(
+    'uses fresh verified authority, not cached personal-owner context, for a legacy personal row: $label',
+    async ({ workspaceType, role, memberStatus, directoryCase, expectedStatus, expectedVisible }) => {
+      const workspaceId = 'catalog-fresh-boundary-workspace';
+      const projectId = 'catalog-fresh-boundary-legacy-project';
+      const memberId = 'catalog-fresh-boundary-member';
+      const membership = {
+        workspaceId,
+        workspaceName: 'Private test workspace',
+        workspaceType: 'personal' as const,
+        workspaceMemberId: memberId,
+        role: 'owner' as const,
+        memberStatus: 'active' as const,
+        lifecycleState: 'active' as const,
+      };
+
+      const readDirectory = vi.fn(async (): Promise<WorkspaceDirectoryFetchResult> =>
+        ({ ok: true, items: [membership] }));
+      const freshDirectory = vi.fn(async (): Promise<WorkspaceDirectoryFetchResult> =>
+        ({
+          ok: true,
+          items: [{
+            ...membership,
+            workspaceId: directoryCase === 'wrong-workspace' ? 'another-test-workspace' : workspaceId,
+            workspaceMemberId: directoryCase === 'wrong-member' ? 'another-test-member' : memberId,
+            workspaceType,
+            role,
+            memberStatus,
+          }],
+        }));
+      const verifyWith = (directory: () => Promise<WorkspaceDirectoryFetchResult>) =>
+        (req: express.Request) => verifyWorkspaceRequestContext({ req, fetchWorkspaceDirectory: directory });
+
+      const deps = workspaceProjectRouteDeps({
+        workspaceId,
+        projectId,
+        dbDeleteProject: vi.fn(),
+        removeProjectDir: vi.fn(),
+        workspaceRowOverrides: {
+          workspaceVisibility: 'personal',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: null,
+        },
+      }) as any;
+      deps.verifyWorkspaceReadAuthority = verifyWith(readDirectory);
+      deps.verifyWorkspaceRequestAuthority = verifyWith(freshDirectory);
+
+      const app = express();
+      app.use(express.json());
+      registerProjectRoutes(app, deps);
+      const routeServer = await listen(app);
+      try {
+        const response = await fetch(
+          `${routeServer.url}/api/workspaces/${workspaceId}/projects?view=drafts`,
+          { headers: {
+            'x-od-workspace-id': workspaceId,
+            'x-od-workspace-member-id': memberId,
+            // Claimed role/type cannot elevate the fresh verified directory result.
+            'x-od-workspace-type': 'personal',
+            'x-od-workspace-role': 'owner',
+          } },
+        );
+        expect(response.status).toBe(expectedStatus);
+        if (expectedStatus === 200) {
+          const body = await response.json() as { projects: Array<{ id: string }> };
+          expect(body.projects.map((project) => project.id).includes(projectId))
+            .toBe(expectedVisible);
+        }
+        expect(readDirectory).toHaveBeenCalledTimes(1);
+        expect(freshDirectory).toHaveBeenCalledTimes(1);
+      } finally {
+        await close(routeServer.server);
+      }
+    },
+  );
+
   it('rejects a removed member after a missed event, even while the Team display cache is warm', async () => {
     const workspaceId = 'mem009-cache-team';
     const projectId = 'mem009-cache-project';
