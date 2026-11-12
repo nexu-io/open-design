@@ -220,7 +220,7 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl: () => Promise<string | null>;
-  registerDesktopAuth: (secret: Buffer) => Promise<boolean>;
+  registerDesktopAuth: (secret: Buffer, timeoutMs?: number) => Promise<boolean>;
   /** Stable installed launcher used for Windows opendesign:// registration. */
   inviteProtocolClientPath?: string | null;
   preloadPath?: string;
@@ -1068,7 +1068,7 @@ async function runDesktopMainWithTiming(
     // (after a daemon restart, or after a missed startup window). The
     // runtime then mints a FRESH token (new nonce + new exp — replay
     // protection still works) and POSTs once more.
-    registerDesktopAuthWithDaemon: () => options.registerDesktopAuth(desktopAuthSecret),
+    registerDesktopAuthWithDaemon: (timeoutMs) => options.registerDesktopAuth(desktopAuthSecret, timeoutMs),
     rendererLogPath,
     // Mark "reached running" only when the window is ACTUALLY revealed (web app
     // mounted + shown), not when createDesktopRuntime returns — it starts async
@@ -1248,13 +1248,13 @@ if (isDirectEntry()) {
               return null;
             }
           },
-          registerDesktopAuth: async (secret) => {
+          registerDesktopAuth: async (secret, timeoutMs = REGISTER_DESKTOP_AUTH_TIMEOUT_MS) => {
             try {
               const result = await client.invoke<RegisterDesktopAuthResult>(
                 APP_KEYS.DAEMON,
                 SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
                 { secret: secret.toString("base64") },
-                { timeoutMs: REGISTER_DESKTOP_AUTH_TIMEOUT_MS },
+                { timeoutMs },
               );
               return result.accepted === true;
             } catch {

@@ -1,10 +1,68 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mintHomeWorkingDirToken } from "../../src/main/runtime.js";
 
 const SECRET = Buffer.from("test-desktop-auth-secret");
 
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
 describe("mintHomeWorkingDirToken", () => {
+  it("waits for a slow daemon acknowledgement before minting the picked-directory token", async () => {
+    vi.useFakeTimers();
+    // Model the sidecar's deadline: absent an override, registration uses the
+    // 800 ms startup budget. A busy daemon can acknowledge several seconds later.
+    const registerDesktopAuth = vi.fn((timeoutMs = 800) => new Promise<boolean>((resolve) => {
+      const deadline = setTimeout(() => resolve(false), timeoutMs);
+      setTimeout(() => {
+        clearTimeout(deadline);
+        resolve(true);
+      }, 6_000);
+    }));
+    const mintToken = vi.fn(() => "selected-directory-token");
+    const settled = vi.fn();
+    const pending = mintHomeWorkingDirToken({
+      baseDir: "/Users/me/external",
+      desktopAuthSecret: SECRET,
+      registerDesktopAuth,
+      mintToken,
+    }).then((result) => { settled(result); return result; });
+
+    await vi.advanceTimersByTimeAsync(5_999);
+    expect(settled).not.toHaveBeenCalled();
+    expect(mintToken).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toEqual({
+      baseDir: "/Users/me/external", ok: true, token: "selected-directory-token",
+    });
+    expect(registerDesktopAuth).toHaveBeenCalledOnce();
+    expect(mintToken).toHaveBeenCalledOnce();
+  });
+
+  it("still rejects an unresponsive daemon within a bounded wait without minting or retrying", async () => {
+    vi.useFakeTimers();
+    const registerDesktopAuth = vi.fn((timeoutMs = 800) => new Promise<boolean>((resolve) => {
+      setTimeout(() => resolve(false), timeoutMs);
+    }));
+    const mintToken = vi.fn(() => "must-not-be-minted");
+    const settled = vi.fn();
+    const pending = mintHomeWorkingDirToken({
+      baseDir: "/Users/me/external",
+      desktopAuthSecret: SECRET,
+      registerDesktopAuth,
+      mintToken,
+    }).then((result) => { settled(result); return result; });
+
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(settled).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toMatchObject({ ok: false, reason: expect.stringMatching(/desktop auth handshake/i) });
+    expect(registerDesktopAuth).toHaveBeenCalledOnce();
+    expect(mintToken).not.toHaveBeenCalled();
+  });
+
   it("runs the desktop-auth handshake before minting the token", async () => {
     const calls: string[] = [];
     const registerDesktopAuth = vi.fn(async () => {

@@ -452,7 +452,7 @@ export type DesktopRuntimeOptions = {
    * retry once. Optional so test runtimes and web-only deployments can
    * skip it (the lazy retry then collapses into a single attempt).
    */
-  registerDesktopAuthWithDaemon?: () => Promise<boolean>;
+  registerDesktopAuthWithDaemon?: (timeoutMs?: number) => Promise<boolean>;
   /**
    * Optional file path to append renderer-process error/warning console
    * messages to. Lets the diagnostics export pick up UI errors that would
@@ -754,7 +754,7 @@ export type MintHomeWorkingDirTokenDeps = {
   baseDir: string;
   desktopAuthSecret: Buffer;
   /** Lazy desktop-auth handshake. Mirrors the import/replace flows. */
-  registerDesktopAuth?: () => Promise<boolean>;
+  registerDesktopAuth?: (timeoutMs?: number) => Promise<boolean>;
   /** Injected for tests; defaults to the production HMAC mint. */
   mintToken?: (secret: Buffer, baseDir: string) => string;
 };
@@ -776,7 +776,9 @@ export async function mintHomeWorkingDirToken(
   // deferred working-dir POST would fail anyway, so report it now while the
   // user is still in the picker rather than as a silent late create failure.
   if (deps.registerDesktopAuth != null) {
-    const registered = await deps.registerDesktopAuth();
+    // This user-initiated handshake must tolerate a busy daemon; the short
+    // startup budget can expire before its event loop handles registration.
+    const registered = await deps.registerDesktopAuth(15_000);
     if (!registered) {
       return {
         ok: false,
