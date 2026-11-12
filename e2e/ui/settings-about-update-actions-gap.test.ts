@@ -98,6 +98,32 @@ async function stubPackagedDesktopWithReadyUpdate(page: Page) {
   });
 }
 
+test('[P1] OPEND-4598 localizes the Japanese About page navigation and reset controls', async ({ page }, testInfo) => {
+  await applyStandardMocks(page);
+  await stubPackagedDesktopWithReadyUpdate(page);
+  await page.addInitScript(() => {
+    localStorage.setItem('open-design:locale', 'ja');
+    localStorage.setItem('open-design:locale-source', 'manual');
+  });
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const settings = await openSettingsDialog(page);
+  await settings.getByRole('button', { name: /^概要/ }).click();
+  await expect(settings.getByText('0.20.0-prerelease.13', { exact: true })).toBeVisible();
+  await testInfo.attach('japanese-settings-about', {
+    body: await page.screenshot({ animations: 'disabled' }),
+    contentType: 'image/png',
+  });
+
+  await expect(settings.getByRole('button', { name: 'ホームに戻る', exact: true })).toBeVisible();
+  await expect(settings.getByRole('heading', { name: '初期設定をリセット', exact: true })).toBeVisible();
+  await expect(settings.getByText('ブランド情報の抽出を含む初期設定をやり直します。', { exact: true })).toBeVisible();
+  await expect(settings.getByRole('button', { name: 'リセット', exact: true })).toBeVisible();
+  for (const value of ['prerelease', 'darwin', 'arm64']) {
+    await expect(settings.getByText(value, { exact: true })).toBeVisible();
+  }
+});
+
 test('[P2] Settings > About keeps the update action and release-notes link visually separated', async ({ page }) => {
   await applyStandardMocks(page);
   await stubPackagedDesktopWithReadyUpdate(page);
