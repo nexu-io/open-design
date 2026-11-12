@@ -104,6 +104,7 @@ OpenDesign **أول مساحة عمل تعاونية لوكلاء التصميم
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ مدعوم | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ مدعوم | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ مدعوم | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ مدعوم | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ مدعوم | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ مدعوم | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ مدعوم | `od mcp install cline` |

@@ -16,7 +16,7 @@
 //                We deep-merge one server entry, never clobbering the
 //                rest of the file. Used for cursor / copilot / cline /
 //                opencode / openclaw / antigravity / kiro / raven / trae /
-//                claude-desktop.
+//                zcode / claude-desktop.
 //   - 'manual' : we could not verify the agent's config path/format
 //                authoritatively (pi / hermes / vibe). We refuse to write
 //                a guessed path and instead print a ready-to-paste
@@ -47,6 +47,7 @@ export const AGENT_SLUGS = [
   'kiro',
   'trae',
   'opencode',
+  'zcode',
   'claude-desktop',
 ] as const;
 
@@ -269,6 +270,19 @@ export function planAgentInstall(
         kind: 'json',
         slug,
         configPath: path.join(home, '.openclaw', 'openclaw.json'),
+        keyPath: ['mcp', 'servers'],
+        serverKey: serverName,
+        entry: jsonEntry(spec),
+      };
+    case 'zcode':
+      // ZCode reads user-scope MCP servers from ~/.zcode/cli/config.json
+      // under a nested `mcp.servers` map ({ command, args, env } entries,
+      // no `type` discriminator). `~/.agents/mcp.json` is only a
+      // compatibility fallback, so the primary file is the right target.
+      return {
+        kind: 'json',
+        slug,
+        configPath: path.join(home, '.zcode', 'cli', 'config.json'),
         keyPath: ['mcp', 'servers'],
         serverKey: serverName,
         entry: jsonEntry(spec),
