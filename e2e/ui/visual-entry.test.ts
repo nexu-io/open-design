@@ -218,13 +218,14 @@ test('[P2] plugin detail owns vertical scrolling inside the fixed workspace shel
   const detail = page.locator('.plugin-suite-detail');
   await expect(detail).toBeVisible();
   await expect(detail).toHaveCSS('overflow-y', 'auto');
-  const before = await detail.evaluate((element) => ({
-    clientHeight: element.clientHeight,
-    scrollHeight: element.scrollHeight,
-    scrollTop: element.scrollTop,
-  }));
-  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
-  expect(before.scrollTop).toBe(0);
+  // The loading placeholder reuses `.plugin-suite-detail`, so wait for the
+  // loaded record before measuring. Overflow is then polled because layout
+  // can still settle after the viewport shrink and late section content.
+  await expect(detail.locator('#plugin-suite-title')).toBeVisible();
+  await expect
+    .poll(() => detail.evaluate((element) => element.scrollHeight - element.clientHeight))
+    .toBeGreaterThan(0);
+  expect(await detail.evaluate((element) => element.scrollTop)).toBe(0);
 
   await detail.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
   await expect.poll(() => detail.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
