@@ -2,6 +2,15 @@ import { ShareAliasIdentityMismatchError, type createShareAliasReservations } fr
 import { currentFileSharePublication, type ProjectShareState } from './vela-project-share-state.js';
 import type { PublicFilePublicationScope, PublicFilePublicationStore } from './public-file-publication-store.js';
 import type { ShareBindingOutbox } from './share-binding-outbox.js';
+import { findEmptyFiles } from "./share-binding-outbox";
+
+/** Fail fast, naming every zero-byte entry, before a tree is pushed. */
+export async function assertNoEmptyFiles(root: string): Promise<void> {
+  const empty = await findEmptyFiles(root);
+  if (empty.length > 0) {
+    throw new Error(`cannot share tree: zero-byte file(s) not supported: ${empty.join(", ")}`);
+  }
+}
 
 /** Only authoritative absence permits a new alias. A matching cloud lifetime
  * restores its original alias; a local unpublished reservation is not authority
