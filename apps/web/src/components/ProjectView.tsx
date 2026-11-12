@@ -6676,10 +6676,10 @@ export function ProjectView({
     ) => {
       if (projectCollab.materializationPending) return null;
       let commentConversationId = activeConversationId ?? routeConversationId;
-      if (!commentConversationId && sharedProjectScope && projectRunWorkspaceContext) {
-        // A read-only preview can be ready before its chat list. Resolve the
-        // existing server-owned route without creating a conversation or
-        // granting artifact-write permission to the commenter.
+      // Resolve an existing server-owned conversation for read-only previews
+      // before a chat session has started. Gate only on having a workspace
+      // context — do NOT require team visibility (#9305).
+      if (!commentConversationId && projectRunWorkspaceContext) {
         try {
           const list = await listConversationsWithRetry(
             project.id,
