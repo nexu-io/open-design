@@ -1898,12 +1898,13 @@ export function ExtensionsMarketplace({
           .map((record) => pluginRecordCard(record, true));
       if (scope === 'official') {
         return availablePlugins.map((plugin) => {
-          const title = availablePluginTitle(plugin.entry, locale);
           const installed = plugin.installedRecord ?? null;
+          const title = installed ? localizePluginTitle(locale, installed) : availablePluginTitle(plugin.entry, locale);
+          const description = installed ? localizePluginDescription(locale, installed) : availablePluginDescription(plugin.entry, locale) || '';
           return {
             id: plugin.key,
             title,
-            description: availablePluginDescription(plugin.entry, locale) || '',
+            description,
             accent: marketAccent(plugin.entry.name),
             action: installed
               ? { kind: 'try', record: installed }
@@ -3126,9 +3127,9 @@ function AvailablePluginsPanel({
       ) : (
         <div className="plugins-view__available-list">
           {filteredPlugins.map((plugin) => {
-            const title = availablePluginTitle(plugin.entry, locale);
             const installedRecord = plugin.installedRecord ?? null;
-            const description = availablePluginDescription(plugin.entry, locale);
+            const title = installedRecord ? localizePluginTitle(locale, installedRecord) : availablePluginTitle(plugin.entry, locale);
+            const description = installedRecord ? localizePluginDescription(locale, installedRecord) : availablePluginDescription(plugin.entry, locale);
             return (
               <article key={plugin.key} className="plugins-view__available-card">
                 <div className="plugins-view__available-main">
@@ -3196,6 +3197,7 @@ function AvailablePluginDetailsModal({
   onInstall: (plugin: AvailableMarketplacePlugin) => void;
 }) {
   const { locale, t } = useI18n();
+  const installedRecord = plugin.installedRecord ?? null;
   const versions = useMemo(() => availablePluginVersions(plugin.entry), [plugin.entry]);
   const [selectedVersion, setSelectedVersion] = useState(
     () => versions[0]?.version ?? plugin.entry.version ?? 'latest',
@@ -3203,7 +3205,7 @@ function AvailablePluginDetailsModal({
   const [copiedInstall, setCopiedInstall] = useState(false);
   const selectedVersionInfo =
     versions.find((version) => version.version === selectedVersion) ?? versions[0] ?? null;
-  const title = availablePluginTitle(plugin.entry, locale);
+  const title = installedRecord ? localizePluginTitle(locale, installedRecord) : availablePluginTitle(plugin.entry, locale);
   const sourceName = plugin.marketplace.manifest.name ?? plugin.marketplace.url;
   const publisher = plugin.entry.publisher;
   const publisherLabel =
@@ -3221,7 +3223,6 @@ function AvailablePluginDetailsModal({
     version: selectedVersionInfo,
     t,
   });
-  const installedRecord = plugin.installedRecord ?? null;
 
   async function copyInstallCommand() {
     const ok = await copyToClipboard(installCommand);
@@ -3306,7 +3307,7 @@ function AvailablePluginDetailsModal({
               <h3 className="plugin-details-modal__section-title">About</h3>
             </div>
             <p className="plugin-details-modal__description">
-              {availablePluginDescription(plugin.entry, locale) ?? 'No description provided.'}
+              {installedRecord ? localizePluginDescription(locale, installedRecord) : availablePluginDescription(plugin.entry, locale) ?? 'No description provided.'}
             </p>
           </section>
 
