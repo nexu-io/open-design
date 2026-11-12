@@ -147,7 +147,8 @@ export async function inlineRelativeAssets(
     const rel = readHtmlAttr(tag, 'rel');
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, href);
+    const resolved = resolveProjectRelativePath(ownerFileName, decodeHtmlEntity(href ?? ''))
+      ?? resolveProjectRelativePath(ownerFileName, href);
     if (!resolved) continue;
     pending.push({
       start,
@@ -164,7 +165,8 @@ export async function inlineRelativeAssets(
     const start = match.index!;
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, src);
+    const resolved = resolveProjectRelativePath(ownerFileName, decodeHtmlEntity(src))
+      ?? resolveProjectRelativePath(ownerFileName, src);
     if (!resolved) continue;
     pending.push({
       start,
@@ -338,14 +340,14 @@ function buildInlineStyleBlock(tag: string, href: string, css: string): string {
   const carried: string[] = [];
   for (const name of STYLE_PRESERVED_LINK_ATTRS) {
     const value = readHtmlAttr(tag, name);
-    if (value != null) carried.push(`${name}="${escapeHtmlAttr(value)}"`);
+    if (value != null) carried.push(`${name}="${value}"`);
   }
   for (const name of STYLE_PRESERVED_BOOLEAN_ATTRS) {
     if (hasBooleanHtmlAttr(tag, name)) carried.push(name);
   }
   const attrString = carried.length === 0 ? '' : ` ${carried.join(' ')}`;
   return (
-    `<style data-od-inline-asset="${escapeHtmlAttr(href)}"${attrString}>\n` +
+    `<style data-od-inline-asset="${href}"${attrString}>\n` +
     `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`
   );
 }
@@ -380,7 +382,7 @@ export function resolveProjectRelativePath(
 
 export function readHtmlAttr(tag: string, name: string): string | null {
   const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
-  return match?.[2] != null ? decodeHtmlEntity(match[2]) : null;
+  return match?.[2] ?? null;
 }
 
 /**
