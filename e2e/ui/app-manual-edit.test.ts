@@ -91,8 +91,9 @@ test.describe('K8 scoped comment sync banner', () => {
     let reads = 0;
     // Controlled upstream states prove the running UI consumption path, not
     // successful cloud authentication or real scoped outbox delivery.
-    await page.route(`**/api/projects/${projectId}/comment-sync-state`, async route => {
+    await page.route(url => url.pathname === `/api/projects/${projectId}/comment-sync-state`, async route => {
       expect(route.request().method()).toBe('GET');
+      expect(new URL(route.request().url()).searchParams.get('filePath')).toBe('sync.html');
       reads += 1;
       await route.fulfill({ json: { pending: sessionMissing ? 1 : 0, lastError: 'COMMENT_SYNC_DELIVERY_FAILED', sessionMissing, shareStopped: null } });
     });
@@ -398,9 +399,25 @@ test('[P0] saving a root Inspect edit preserves an unsaved nested child edit (#7
   await expect(page.getByTestId('inspect-panel').locator('.inspect-panel-title code')).toHaveText('root-title');
   await page.getByTestId('inspect-font-size').fill('36');
   await expect(artifactPreviewFrame(page).locator('[data-od-id="root-title"]')).toHaveCSS('font-size', '36px');
+  const previousGeneration = await artifactPreviewFrame(page)
+    .locator('template[data-od-srcdoc-transport-body-complete]')
+    .getAttribute('data-od-srcdoc-transport-body-complete');
+  expect(previousGeneration).toBeTruthy();
   await page.getByTestId('inspect-save').click();
   await expectFileSource(page, projectId, 'root.html', ['font-size: 36px']);
   await expectFileSourceExcludes(page, projectId, 'child.html', ['data-od-inspect-overrides']);
+
+  // A successful file write is not a completed preview navigation. Wait for
+  // the new saved document (including child loads), rather than resolving a
+  // child frame while its previous root document is being replaced.
+  await expect.poll(async () => {
+    const { ready, generation } = await artifactPreviewFrame(page).locator('html').evaluate(() => ({
+      ready: document.readyState,
+      generation: document.querySelector('template[data-od-srcdoc-transport-body-complete]')
+        ?.getAttribute('data-od-srcdoc-transport-body-complete'),
+    }));
+    return ready === 'complete' && Boolean(generation) && generation !== previousGeneration;
+  }).toBe(true);
 
   // The child's still-unsaved edit must survive the root save, both in the
   // live preview and as something that can still be saved afterward.

@@ -14783,9 +14783,17 @@ function HtmlViewer({
       if (!saved.ok) {
         throw new Error(saved.message || `Save failed (${saved.status ?? ''})`);
       }
-      if (!frameTarget) setSource(next);
+      if (frameTarget) {
+        // Child bytes changed without changing the root source.
+        setReloadKey((k) => k + 1);
+      } else {
+        // The new source already replaces the preview once its annotation
+        // snapshot settles. Bumping reloadKey here first navigates the old
+        // snapshot, then navigates again with the saved bytes, interrupting
+        // nested frames in flight. An unchanged save needs no navigation.
+        setSource(next);
+      }
       setInspectSavedAt(Date.now());
-      setReloadKey((k) => k + 1);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed';
       setInspectError(msg);
