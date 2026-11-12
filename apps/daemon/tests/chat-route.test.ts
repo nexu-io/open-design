@@ -28,7 +28,7 @@ import {
 } from '../src/server.js';
 import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
-import { resetLiveModelsForTests } from '../src/runtimes/models.js';
+import { rememberRemoteLiveModels, resetLiveModelsForTests } from '../src/runtimes/models.js';
 import { getAgentDef } from '../src/agents.js';
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
@@ -148,7 +148,7 @@ describe('/api/chat', () => {
     };
   }
 
-  async function runAmrModelRequest(model: string, extraEnv: Record<string, string> = {}): Promise<{
+  async function runAmrModelRequest(model: string, extraEnv: Record<string, string> = {}, warmRemote = false, emptyScopeSentinel = false): Promise<{
     body: string;
     invocations: string[];
     responseOk: boolean;
@@ -202,6 +202,22 @@ child.on('exit', (code, signal) => {
 });
 `,
         async () => {
+          if (warmRemote) {
+            const warmResponse = await fetch(`${baseUrl}/api/chat`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...workspaceFixture.headers },
+              body: JSON.stringify({
+                agentId: 'amr', projectId: workspaceFixture.projectId,
+                message: 'Warm the caller catalog.', model: 'default',
+              }),
+            });
+            expect(warmResponse.ok).toBe(true);
+            expect(await warmResponse.text()).toContain('"status":"succeeded"');
+            writeFileSync(invocationLog, '');
+          }
+          if (emptyScopeSentinel) {
+            rememberRemoteLiveModels('amr', [{ id: 'empty-scope-sentinel', label: 'sentinel', default: true }]);
+          }
           const response = await fetch(`${baseUrl}/api/chat`, {
             method: 'POST',
             headers: {
@@ -1404,6 +1420,22 @@ process.exit(1);
     ]);
     expect(body).toContain('"label":"model_fallback"');
     expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('"status":"succeeded"');
+  });
+
+  it.each([false, true])('uses the caller remote default after warming (empty-scope sentinel: %s)', async (sentinel) => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('deepseek-v4-flash', {
+      FAKE_VELA_SET_MODEL_UNAVAILABLE: 'deepseek-v4-flash',
+      FAKE_VELA_MODEL_LIST_JSON: JSON.stringify({
+        source: 'remote', data: [{ id: 'glm-5.3-flash', default: true }],
+      }),
+    }, true, sentinel);
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([
+      'new', 'set_model_rejected:deepseek-v4-flash', 'set_model:glm-5.3-flash', 'prompt',
+    ]);
+    expect(body).toContain('"label":"model_fallback"');
     expect(body).toContain('"status":"succeeded"');
   });
 

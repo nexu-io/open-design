@@ -14388,7 +14388,7 @@ export async function startServer({
         ));
         return finishStrategyAwarePhysicalRun('failed', 1, null);
       }
-      amrFallbackModel = amrRunFallbackModel(def.id, amrModelScope, safeModel);
+      amrFallbackModel = amrRunFallbackModel(def.id, liveAmrModelScope, safeModel);
       // NOTE: when the selected model is absent from the (possibly preset-only
       // or stale) catalog we intentionally do NOT fail-close. The cached/preset
       // catalog can lag the live one, and a logged-in user picked a concrete
