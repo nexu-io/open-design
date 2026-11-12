@@ -380,7 +380,39 @@ export function resolveProjectRelativePath(
 
 export function readHtmlAttr(tag: string, name: string): string | null {
   const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
-  return match?.[2] ?? null;
+  return match?.[2] != null ? decodeHtmlEntity(match[2]) : null;
+}
+
+/**
+ * Decodes HTML character references (named entities, decimal numeric, and
+ * hexadecimal numeric) found in an attribute value returned by a regex match.
+ * This handles cases like &#38;=&gt;&amp;, &amp;amp;, &gt; etc. so that paths
+ * and stylesheet attributes resolve against the decoded value rather than the
+ * raw encoded source text. No DOM parser is required — this is a pure
+ * substring scan over the capture from readHtmlAttr.
+ */
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: '\u00A0',
+};
+export function decodeHtmlEntity(s: string): string {
+  // Named entities: &name;
+  s = s.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (_, name) => NAMED_HTML_ENTITIES[name] ?? `&${name};`);
+  // Decimal numeric: &#digits;
+  s = s.replace(/&#(\d+);/g, (_, digits) => {
+    const code = parseInt(digits, 10);
+    return Number.isNaN(code) ? `&#${digits};` : String.fromCodePoint(code);
+  });
+  // Hex numeric: &#xHH; or &#xHHH;
+  s = s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    const code = parseInt(hex, 16);
+    return Number.isNaN(code) ? `&#x${hex};` : String.fromCodePoint(code);
+  });
+  return s;
 }
 
 // HTML boolean attribute presence test — matches `<tag … name>` or
