@@ -134,7 +134,7 @@ function snapshotWithWindows(designPlanWindows?: unknown) {
   };
 }
 
-it('renders shared Design Plan windows as remaining percentages (UI-002(a))', async () => {
+it('renders shared Coding Plan windows as remaining percentages (UI-002(a))', async () => {
   read = async () => Response.json({
     ...response(a, '100'),
     workspaceSnapshot: snapshotWithWindows([
@@ -149,7 +149,7 @@ it('renders shared Design Plan windows as remaining percentages (UI-002(a))', as
   expect(screen.queryByText('明细暂不可用')).toBeNull();
 });
 
-it('keeps both shared Design Plan windows unavailable when the field is absent', async () => {
+it('keeps both shared Coding Plan windows unavailable when the field is absent', async () => {
   read = async () => Response.json({
     ...response(a, '100'),
     workspaceSnapshot: snapshotWithWindows(),
@@ -159,7 +159,7 @@ it('keeps both shared Design Plan windows unavailable when the field is absent',
   expect(screen.queryAllByRole('progressbar')).toHaveLength(0);
 });
 
-it('keeps both shared Design Plan windows unavailable for an explicit empty array', async () => {
+it('keeps both shared Coding Plan windows unavailable for an explicit empty array', async () => {
   read = async () => Response.json({
     ...response(a, '100'),
     workspaceSnapshot: snapshotWithWindows([]),
