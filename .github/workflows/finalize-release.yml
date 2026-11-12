@@ -154,8 +154,8 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Bump only the synchronized set: every workspace package.json whose version
-          # equals the current monorepo version. Independently-versioned packages
+          # Bump the synchronized set plus the packaged release base, which may
+          # have advanced separately on main. Independently-versioned packages
           # (components, agui-adapter, tools/serve, …) keep their own
           # version. `npm pkg set version` touches only the top-level "version" field,
           # never a pinned dependency that happens to share the number (e.g. @xterm/addon-fit).
@@ -163,7 +163,7 @@ jobs:
           for f in package.json apps/*/package.json packages/*/package.json tools/*/package.json e2e/package.json; do
             [ -f "$f" ] || continue
             v=$(node -p "require('./$f').version" 2>/dev/null || echo '')
-            if [ "$v" = "$current" ]; then
+            if [ "$v" = "$current" ] || [ "$f" = "apps/packaged/package.json" ]; then
               ( cd "$(dirname "$f")" && npm pkg set version="$NEXT" )
               changed=$((changed+1))
             fi
