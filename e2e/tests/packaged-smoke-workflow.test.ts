@@ -1041,6 +1041,7 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
     // cut-release owns); independently-versioned packages are skipped via npm pkg set version.
     expect(workflow).toContain("sort -V");
     expect(workflow).toContain("npm pkg set version");
+    expect(workflow).toContain('[ "$v" = "$current" ] || [ "$f" = "apps/packaged/package.json" ]');
     expect(workflow).toContain("changed=true");
 
     // Approval exemption is only used by trusted version-tree validation, never a direct merge.
