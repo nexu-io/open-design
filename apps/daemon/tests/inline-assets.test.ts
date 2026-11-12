@@ -227,4 +227,19 @@ describe('inlineRelativeAssets (FS-backed)', () => {
     const out = await inlineRelativeAssets(html, 'index.html', fsReader());
     expect(out).toContain('.p{}');
   });
+
+  // Additional P2 regression tests per nettee review
+  it('handles named entity eacute (&eacute;) in asset path (#8891)', async () => {
+    write('café.css', '.c{color:red}');
+    const html = '<link rel="stylesheet" href="caf&amp;eacute;.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('.c{color:red}');
+  });
+
+  it('bounds-checks invalid numeric reference &amp;#1114112; without throwing (#8891)', async () => {
+    const html = '<link rel="stylesheet" href="bad&amp;#1114112;.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    // Should not throw; tag stays as URL ref since file won't exist
+    expect(out).toContain('<link rel="stylesheet"');
+  });
 });
