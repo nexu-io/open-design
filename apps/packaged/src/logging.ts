@@ -77,8 +77,9 @@ export function isHarmlessSocketOptionError(value: unknown): boolean {
 let packagedShutdownInProgress = false;
 
 /**
- * Mark that the packaged main process has begun quitting. Called from the
- * quiesce step, which aborts in-flight `od://` proxy fetches; Electron's
+ * Mark that the packaged main process has begun quitting. Called at the start
+ * of desktop shutdown, before the window closes and the quiesce step aborts
+ * in-flight `od://` proxy fetches; Electron's
  * net.fetch streams can reject with an AbortError that nothing awaits, and
  * that rejection must not surface as a fatal "JavaScript error in main
  * process" dialog while the app is already tearing down.

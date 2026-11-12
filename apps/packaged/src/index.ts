@@ -477,10 +477,11 @@ const electronReadyAtMs = performance.now();
         await sidecars.close(record);
       }
     },
+    // Armed at the very start of shutdown: closing the window cancels in-flight
+    // od:// requests and quiesce() aborts the rest; their AbortError
+    // rejections are expected teardown, not fatal main-process errors.
+    onShutdownStarted: markPackagedShutdownInProgress,
     quiesceRendererTransport() {
-      // Arm the shutdown flag first: quiesce() aborts in-flight od:// fetches,
-      // and their AbortError rejections must be tolerated, not treated as fatal.
-      markPackagedShutdownInProgress();
       odProtocol.quiesce();
     },
     async discoverWebUrl() {

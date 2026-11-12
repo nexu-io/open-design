@@ -206,6 +206,12 @@ export type DesktopMainOptions = {
   /** Carries the packaged process origin and sidecar phases into desktop. */
   startupTiming?: StartupTiming | null;
   beforeShutdown?: (record?: (event: UpdateLifecycleObservation) => Promise<void>) => Promise<void>;
+  /**
+   * Called synchronously when shutdown begins, before the window closes and
+   * cancels in-flight renderer requests. Packaged uses it to treat the
+   * resulting AbortErrors as expected teardown rather than fatal errors.
+   */
+  onShutdownStarted?: () => void;
   /** Prevent packaged renderer traffic from reaching sidecars as they retire. */
   quiesceRendererTransport?: () => void | Promise<void>;
   onExternalShow?: () => void | Promise<void>;
@@ -939,6 +945,7 @@ async function runDesktopMainWithTiming(
       const startedAt = Date.now();
       let shutdownFailed = false;
       console.info("[open-design desktop] shutdown started");
+      options.onShutdownStarted?.();
       updateScheduler?.stop("shutdown");
       await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
       // Stop the request-producing renderer before retiring its web/daemon
