@@ -79,6 +79,7 @@ import {
   watchUserDesktopIntent,
 } from "./managed-headless.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
+import { DESKTOP_AUTH_TIMEOUT_MS, registerDesktopAuthWithRetry } from "./desktop-auth.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { resolvePackagedElectronNodeCommand, startPackagedSidecars } from "./sidecars.js";
 import { classifyStartupFailure, reportLaunchEvent, reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
@@ -492,19 +493,19 @@ const electronReadyAtMs = performance.now();
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
     },
-    registerDesktopAuth: async (secret) => {
-      try {
-        const result = await client.invoke<{ accepted: true }>(
-          APP_KEYS.DAEMON,
-          "register-desktop-auth",
-          { secret: secret.toString("base64") },
-          { timeoutMs: 800 },
-        );
-        return result.accepted === true;
-      } catch {
-        return false;
-      }
-    },
+    registerDesktopAuth: (secret) =>
+      registerDesktopAuthWithRetry({
+        attempt: async () => {
+          const result = await client.invoke<{ accepted: true }>(
+            APP_KEYS.DAEMON,
+            "register-desktop-auth",
+            { secret: secret.toString("base64") },
+            { timeoutMs: DESKTOP_AUTH_TIMEOUT_MS },
+          );
+          return result.accepted === true;
+        },
+        logger: packagedLogger,
+      }),
     windowTitle: resolvePackagedWindowTitle(activeConfig),
     inviteProtocolClientPath:
       process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
