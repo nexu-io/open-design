@@ -1,15 +1,15 @@
 {
-  "id": "0.26.1",
-  "title": "OpenDesign Intelligent Router is here",
-  "body": "Understand your intent in one sentence and route the best skills straight to the work you want to create.\nShare work with a link so people can view it and comment exactly where changes are needed.\nMotion videos track smoothly, with audio dropouts and glitches fixed for steadier sync.",
+  "id": "0.27.1",
+  "title": "OpenDesign 0.27.1 — Invite Friends, Earn Reset",
+  "body": "Get up to 6 RESET on OpenDesign 🎉\nInvite a friend to subscribe. Both earn a Reset Card.\nFirst month $8. Up to $220 in DeepSeek usage.\nMotion videos, design & slides, all in OpenDesign.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.26.1",
-  "ctaLabel": "View release notes",
+  "linkUrl": "https://open-design.ai/cloud/reset",
+  "ctaLabel": "Invite Friends",
   "locales": {
     "zh-CN": {
-      "title": "OpenDesign Intelligent Router 正式上线",
-      "body": "一句话就懂你：自动路由优质 skill，直奔你想要的作品\n支持链接分享作品：对方点开就能看，想改哪里就评哪里\n动效视频丝滑跟拍：修复音频断续、跳音问题，音画同步更稳",
-      "ctaLabel": "查看更新说明"
+      "title": "OpenDesign 0.27.1 — 邀请好友，获重置卡",
+      "body": "好友来订阅，重置卡一起拿 🎉\n邀请好友订阅，你和好友各得 1 张重置卡\n首月 $8，享最高 $220 DeepSeek 额度\n动效视频、设计、幻灯片，尽在 OpenDesign",
+      "ctaLabel": "邀请好友"
     }
   }
 }

@@ -335,7 +335,7 @@ describe('tool_input_delta 是心跳,不是界面', () => {
     // 秒数在走 = 界面**有**反馈。壳头这一行整段时间都在变。
     expect(later).toContain('进行中');
     expect(later, '壳头秒数冻住了 —— 那才是真的「没有任何反应」').not.toBe(first);
-    expect(later).toMatch(/\d+m \d+s/);
+    expect(later).toMatch(/\d+ 分 \d+ 秒/);
 
     // 跑完的那一对落了语义化的搜索行(对照组:这个 harness 确实会画工具行)
     expect(container.textContent ?? '').toContain('搜索 docs');

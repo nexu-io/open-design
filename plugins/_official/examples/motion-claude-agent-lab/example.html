@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en" data-composition-variables='[{"id": "brand", "type": "string", "label": "实验室名称", "default": "CLAUDE / AGENT LAB", "maxLength": 25}, {"id": "tagline", "type": "string", "label": "实验室说明", "default": "6 ROOMS · AGENTS CARRY EVERY FILE OUT", "maxLength": 48}, {"id": "referenceTitle", "type": "string", "label": "参考阶段标题", "default": "REFERENCE", "maxLength": 14}, {"id": "dataTitle", "type": "string", "label": "数据阶段标题", "default": "DATA", "maxLength": 14}, {"id": "storyTitle", "type": "string", "label": "叙事阶段标题", "default": "STORY", "maxLength": 14}, {"id": "motionTitle", "type": "string", "label": "动效阶段标题", "default": "MOTION", "maxLength": 14}, {"id": "directTitle", "type": "string", "label": "指导阶段标题", "default": "DIRECT", "maxLength": 14}, {"id": "shipTitle", "type": "string", "label": "交付阶段标题", "default": "SHIP", "maxLength": 14}, {"id": "referenceCopy", "type": "string", "label": "参考阶段说明", "default": "show it a video you love", "maxLength": 44}, {"id": "dataCopy", "type": "string", "label": "数据阶段说明", "default": "real numbers before motion", "maxLength": 44}, {"id": "storyCopy", "type": "string", "label": "叙事阶段说明", "default": "one point, one hero number", "maxLength": 44}, {"id": "motionCopy", "type": "string", "label": "动效阶段说明", "default": "every frame written as code", "maxLength": 44}, {"id": "directCopy", "type": "string", "label": "指导阶段说明", "default": "notes in words, 1-line diffs", "maxLength": 44}, {"id": "shipCopy", "type": "string", "label": "交付阶段说明", "default": "checked, then you approve", "maxLength": 44}, {"id": "agentImage", "type": "image", "label": "橙色代理角色", "default": "assets/agent.png"}, {"id": "creditImage", "type": "image", "label": "原作者署名", "default": "assets/credit.png"}, {"id": "paper", "type": "color", "label": "纸面颜色", "default": "#F0F2E9"}, {"id": "ink", "type": "color", "label": "线条颜色", "default": "#1C211A"}, {"id": "referenceFile", "type": "string", "label": "阶段文件", "default": "spec.md", "maxLength": 18}, {"id": "referenceDetail", "type": "string", "label": "焦点说明", "default": "cut → 60/128 → 1 s", "maxLength": 44}, {"id": "dataFile", "type": "string", "label": "阶段文件", "default": "data.json", "maxLength": 18}, {"id": "dataDetail", "type": "string", "label": "焦点说明", "default": "71% · data.json : query_04", "maxLength": 44}, {"id": "storyFile", "type": "string", "label": "阶段文件", "default": "story.md", "maxLength": 18}, {"id": "storyDetail", "type": "string", "label": "焦点说明", "default": "1 point · 1 hero · 3 beats", "maxLength": 44}, {"id": "motionFile", "type": "string", "label": "阶段文件", "default": "Scene.tsx", "maxLength": 18}, {"id": "motionDetail", "type": "string", "label": "焦点说明", "default": "e(t) = 1 - (1 - t)³", "maxLength": 44}, {"id": "directFile", "type": "string", "label": "阶段文件", "default": "timing.ts", "maxLength": 18}, {"id": "directDetail", "type": "string", "label": "焦点说明", "default": "titleIn: 0.2 → 0.0  (-1 ln)", "maxLength": 44}, {"id": "shipFile", "type": "string", "label": "阶段文件", "default": "final.mp4", "maxLength": 18}, {"id": "shipDetail", "type": "string", "label": "焦点说明", "default": "match 0.91 ≥ 0.85 · approved", "maxLength": 44}, {"id": "referenceCount", "type": "number", "label": "参考数", "default": 24, "min": 0, "max": 99}, {"id": "roomCount", "type": "number", "label": "房间数", "default": 6, "min": 0, "max": 99}, {"id": "skillCount", "type": "number", "label": "技能数", "default": 10, "min": 0, "max": 99}, {"id": "sceneCount", "type": "number", "label": "场景数", "default": 18, "min": 0, "max": 99}, {"id": "rerollCount", "type": "number", "label": "重试数", "default": 0, "min": 0, "max": 99}]'>
+<head><meta charset="utf-8"><meta name="od-motion-output" content="video"><title>Claude Agent Lab</title>
+<style>
+@font-face{font-family:"Roboto Mono";src:url(assets/RobotoMono-400-700.ttf);font-weight:100 700;font-style:normal}
+:root{--od-font-heading:"Roboto Mono","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",monospace;--od-font-body:"Roboto Mono","Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",monospace}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#e5e7e0;overflow:hidden}body{display:grid;place-items:center;font-family:var(--od-font-body)}.od-heading{font-family:var(--od-font-heading)}#main{position:relative;width:min(100vw,80vh);aspect-ratio:4/5}canvas{width:100%;height:100%;display:block}#controls{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center;background:#ffffffdf;padding:8px;opacity:0;z-index:3}#controls:hover,#controls:focus-within{opacity:1}#controls input{width:200px}html.od-export #controls{display:none}html.od-export body{display:block}html.od-export #main{width:720px;height:900px}
+</style><style data-od-font-synthesis>html{font-synthesis:none}</style>
+<style data-od-preview-chrome>
+#controls{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:14px;width:min(900px,92vw);box-sizing:border-box;padding:12px 18px;border-radius:14px;background:#101214dd;color:#fff;font:600 13px ui-monospace,Menlo,monospace;opacity:0;transition:opacity .2s}
+#controls:hover,#controls:focus-within{opacity:1}
+#controls button{font:inherit;letter-spacing:.06em;background:var(--accent,#3b6cf6);color:#fff;border:0;border-radius:999px;padding:9px 16px;cursor:pointer;min-width:88px;white-space:nowrap}
+#controls input[type=range]{flex:1;width:auto;min-width:0;accent-color:var(--accent,#3b6cf6)}
+#controls span,#controls output{white-space:nowrap;font-variant-numeric:tabular-nums}
+html.od-export #controls{display:none!important}
+</style>
+</head><body><main id="main" data-composition-id="main" data-od-motion-layout="stage" data-start="0" data-duration="24.055873" data-width="720" data-height="900">
+<audio id="soundtrack" src="assets/soundtrack.mp3" data-start="0" data-duration="24.056" data-track-index="2" data-volume="1" preload="auto"></audio><canvas id="film" width="720" height="900" data-od-id="agent-lab"></canvas></main><div id="controls"><button>PLAY</button><input type="range" min="0" step="0.01"><span></span></div><script src="assets/gsap.min.js"></script><script>
+const VARS = (window.__hyperframes && window.__hyperframes.getVariables?.()) || {};
+const CFG = {
+  "duration": 24.055873,
+  "scenes": [
+    {
+      "id": "reference",
+      "name": "参考",
+      "dur": 4,
+      "minDur": 3,
+      "maxDur": 6
+    },
+    {
+      "id": "data",
+      "name": "数据",
+      "dur": 4,
+      "minDur": 3,
+      "maxDur": 6
+    },
+    {
+      "id": "story",
+      "name": "叙事",
+      "dur": 4,
+      "minDur": 3,
+      "maxDur": 6
+    },
+    {
+      "id": "motion",
+      "name": "动效",
+      "dur": 4,
+      "minDur": 3,
+      "maxDur": 6
+    },
+    {
+      "id": "direct",
+      "name": "指导",
+      "dur": 4,
+      "minDur": 3,
+      "maxDur": 6
+    },
+    {
+      "id": "ship",
+      "name": "交付",
+      "dur": 4.055873,
+      "minDur": 3,
+      "maxDur": 6
+    }
+  ],
+  "cues": [
+    {
+      "id": "reference-focus",
+      "scene": "reference",
+      "at": 0.12
+    },
+    {
+      "id": "reference-out",
+      "scene": "reference",
+      "at": 0.08,
+      "from": "end"
+    },
+    {
+      "id": "data-focus",
+      "scene": "data",
+      "at": 0.12
+    },
+    {
+      "id": "data-out",
+      "scene": "data",
+      "at": 0.08,
+      "from": "end"
+    },
+    {
+      "id": "story-focus",
+      "scene": "story",
+      "at": 0.12
+    },
+    {
+      "id": "story-out",
+      "scene": "story",
+      "at": 0.08,
+      "from": "end"
+    },
+    {
+      "id": "motion-focus",
+      "scene": "motion",
+      "at": 0.12
+    },
+    {
+      "id": "motion-out",
+      "scene": "motion",
+      "at": 0.08,
+      "from": "end"
+    },
+    {
+      "id": "direct-focus",
+      "scene": "direct",
+      "at": 0.12
+    },
+    {
+      "id": "direct-out",
+      "scene": "direct",
+      "at": 0.08,
+      "from": "end"
+    },
+    {
+      "id": "ship-focus",
+      "scene": "ship",
+      "at": 0.12
+    },
+    {
+      "id": "ship-out",
+      "scene": "ship",
+      "at": 0.08,
+      "from": "end"
+    }
+  ],
+  "brand": "CLAUDE / AGENT LAB",
+  "tagline": "6 ROOMS · AGENTS CARRY EVERY FILE OUT",
+  "referenceTitle": "REFERENCE",
+  "dataTitle": "DATA",
+  "storyTitle": "STORY",
+  "motionTitle": "MOTION",
+  "directTitle": "DIRECT",
+  "shipTitle": "SHIP",
+  "referenceCopy": "show it a video you love",
+  "dataCopy": "real numbers before motion",
+  "storyCopy": "one point, one hero number",
+  "motionCopy": "every frame written as code",
+  "directCopy": "notes in words, 1-line diffs",
+  "shipCopy": "checked, then you approve",
+  "agentImage": "assets/agent.png",
+  "creditImage": "assets/credit.png",
+  "paper": "#F0F2E9",
+  "ink": "#1C211A",
+  "referenceFile": "spec.md",
+  "referenceDetail": "cut → 60/128 → 1 s",
+  "dataFile": "data.json",
+  "dataDetail": "71% · data.json : query_04",
+  "storyFile": "story.md",
+  "storyDetail": "1 point · 1 hero · 3 beats",
+  "motionFile": "Scene.tsx",
+  "motionDetail": "e(t) = 1 - (1 - t)³",
+  "directFile": "timing.ts",
+  "directDetail": "titleIn: 0.2 → 0.0  (-1 ln)",
+  "shipFile": "final.mp4",
+  "shipDetail": "match 0.91 ≥ 0.85 · approved",
+  "referenceCount": 24,
+  "roomCount": 6,
+  "skillCount": 10,
+  "sceneCount": 18,
+  "rerollCount": 0
+,...VARS};
+const SCENE_START={};CFG.scenes.reduce((t,s)=>(SCENE_START[s.id]=t,t+s.dur),0);
+const cueTime=id=>{const c=CFG.cues.find(c=>c.id===id),s=CFG.scenes.find(s=>s.id===c.scene);return SCENE_START[c.scene]+(c.from==='end'?s.dur-c.at:c.at)};
+const focusCues=[()=>cueTime('reference-focus'),()=>cueTime('data-focus'),()=>cueTime('story-focus'),()=>cueTime('motion-focus'),()=>cueTime('direct-focus'),()=>cueTime('ship-focus')];
+const outCues=[()=>cueTime('reference-out'),()=>cueTime('data-out'),()=>cueTime('story-out'),()=>cueTime('motion-out'),()=>cueTime('direct-out'),()=>cueTime('ship-out')];
+const canvas=document.getElementById('film'),ctx=canvas.getContext('2d');
+const heading=getComputedStyle(document.documentElement).getPropertyValue('--od-font-heading');
+const bodyFont=getComputedStyle(document.documentElement).getPropertyValue('--od-font-body');
+const imgs={};for(const id of ['agentImage','creditImage']){imgs[id]=new Image();imgs[id].src=CFG[id]}
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));const lerp=(a,b,t)=>a+(b-a)*t;
+const rnd=n=>{let v=Math.sin(n*127.1+311.7)*43758.5453;return v-Math.floor(v)};
+function text(s,x,y,size=6,weight=400,color=CFG.ink){ctx.fillStyle=color;ctx.font=`${weight} ${size}px ${size>9?heading:bodyFont}`;ctx.fillText(s,x,y)}
+function line(x1,y1,x2,y2,color=CFG.ink,w=.5){ctx.strokeStyle=color;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()}
+function box(x,y,w,h,color,stroke){ctx.fillStyle=color;ctx.fillRect(x,y,w,h);if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=.65;ctx.strokeRect(x+.5,y+.5,w-1,h-1)}}
+const titles=['referenceTitle','dataTitle','storyTitle','motionTitle','directTitle','shipTitle'];
+const copies=['referenceCopy','dataCopy','storyCopy','motionCopy','directCopy','shipCopy'];
+const files=["reference", "data", "story", "motion", "direct", "ship"].map(id=>CFG[id+'File']);
+const focusNames=['REFERENCE SPEC','TRACE CHECK','STORY SOLVE','EASING SOLVE','DIRECTION DIFF','OWNER GATE'];
+const focusCopy=["reference", "data", "story", "motion", "direct", "ship"].map(id=>CFG[id+'Detail']);
+const CAMERA=[[0.0, [-310.8425657447313, 349.7890283280614, 559.7297570254013], [-313.63972524942466, 349.7629895774131, 710.4992358994009]], [0.5, [-333.95655080212146, 340.75941564430093, 575.7542974443838], [-334.5680370554132, 340.7934762282269, 728.2848723189628]], [1.0, [-341.03176224673405, 338.18699794694794, 578.0356555105242], [-347.37465655102017, 337.50512113717576, 737.37426475798]], [1.5, [-339.62782046470375, 342.50916262329395, 575.04123200101], [-336.3291622010562, 342.81116649145326, 723.0662283321752]], [2.0, [-318.1374906264838, 353.75272550624607, 556.2379353627272], [-319.4713512499006, 353.667240462056, 704.3403069776248]], [2.5, [-298.60392084737066, 363.5624189312222, 540.6648300563978], [-304.0036395333469, 364.5497435743351, 689.9167239836391]], [3.0, [-299.38494100947895, 365.98343019857333, 546.0454534391145], [-301.865488684302, 365.8553130564158, 692.7088818689145]], [3.5, [-308.8661999153472, 368.92252906860136, 558.0034438540371], [-310.6260951807514, 367.6303520107473, 708.4107884017476]], [4.0, [-321.23946288082124, 363.4362530967353, 574.8523863449022], [-321.46720392878, 363.4774397672756, 726.9413912098512]], [4.5, [-347.8683069610973, 359.53670832058936, 606.2638133080663], [-349.4342086029409, 359.2929910651171, 767.923634655979]], [5.0, [-450.0492745680145, 388.0423736426432, 724.6483591779267], [-457.893381357575, 387.7869155703728, 922.9437512784482]], [5.5, [-461.1876947636416, 388.9814155919301, 743.0034789752875], [-457.12956160570707, 388.76493020365166, 934.6638284138213]], [6.0, [-443.80806874833746, 383.24058069316857, 723.8079200101097], [-441.5899366599225, 383.32633873349255, 912.0791811496105]], [6.5, [-421.1672313058311, 370.83848808139203, 693.9873029074284], [-422.9316593004545, 370.8810764867681, 878.5675587078233]], [7.0, [-325.18650490177356, 300.1897079927977, 587.0535875903869], [-325.3037920666364, 300.18856981542103, 742.1009654474861]], [7.5, [-310.461045258308, 291.08208748476153, 565.6521466866463], [-311.2425140683013, 290.77250202267305, 715.9648350217453]], [8.0, [-330.24839009034406, 300.5892001382438, 578.6055091384177], [-329.1708832632597, 300.5832105013519, 730.5139089897724]], [8.5, [-356.31220606815145, 313.6191630591026, 601.1571361724848], [-356.4043083053288, 313.6780246075493, 760.0695006991472]], [9.0, [-452.2102918075538, 369.109029440429, 700.9568792704653], [-455.1743751100213, 369.16416000563476, 888.800018393587]], [9.5, [-460.4476660696125, 375.9456020996275, 716.8217361042014], [-464.3793479121318, 376.0709303244317, 909.2285231654648]], [10.0, [-439.7694549141676, 358.4314676179549, 702.4497709574241], [-442.92867631793723, 358.2663317905376, 890.613125172131]], [10.5, [-429.6927813400543, 323.95409112791054, 688.2977194805916], [-436.0301158263239, 323.7002931958326, 876.0596465156837]], [11.0, [-387.50072928236807, 211.27225985075108, 613.4319979513533], [-385.08561241200977, 212.4285673125704, 772.8460222371791]], [11.5, [-394.0925293864465, 179.96231414851104, 614.7427349824164], [-374.27874284532857, 184.5254539317936, 753.1588246774504]], [12.0, [-384.70284070934343, 193.9505731091583, 603.6947431176615], [-383.47034530393216, 194.53696969010988, 762.4724833931485]], [12.5, [-392.75892401772364, 222.21640126432007, 614.9723210430222], [-390.53625571322317, 222.89025974876813, 775.0664601811667]], [13.0, [-409.3647286139666, 316.13240830820405, 671.5224669775571], [-409.62537117178414, 316.29776179963767, 848.348109859635]], [13.5, [-399.9688316333817, 348.4184459516453, 676.4454152756965], [-398.35570565727903, 348.42315973435217, 852.8585756047305]], [14.0, [-402.7309422700443, 345.0460609044181, 673.9736927093828], [-406.00854501267435, 345.27056302480327, 854.1427588705856]], [14.5, [-416.2137718151569, 353.6634710184407, 670.6784750765923], [-419.76186737351526, 353.5050177524598, 850.6713777448307]], [15.0, [-406.6480581574338, 443.79672231977264, 612.9428983481347], [-406.40788328664127, 443.76658918235023, 774.1704210240631]], [15.5, [-406.70964271967307, 466.10031950973223, 599.5961631360419], [-408.20131556557726, 466.1926301446742, 759.1240670791151]], [16.0, [-403.5633061052901, 461.86508767819265, 596.5282293913516], [-405.20252471936493, 462.06895079450754, 755.8450110564461]], [16.5, [-403.1787343997347, 441.8046484599971, 604.1429310797979], [-405.0804449488384, 441.9761367722564, 765.5691855103565]], [17.0, [-456.23611525839016, 319.535072034992, 698.4558434481212], [-462.0975206162355, 319.50509257864053, 888.117078712517]], [17.5, [-453.33471359482405, 286.524192778065, 721.1251604173935], [-455.8651009299481, 286.8234262372485, 913.714249591066]], [18.0, [-457.8406703513966, 293.96826942901157, 731.3058090231849], [-454.2556914264047, 294.47864613984297, 919.8554476389498]], [18.5, [-451.0807227556032, 267.06157482886533, 728.1521783564084], [-447.57084089532157, 267.65961436296834, 916.1200931107608]], [19.0, [-318.5807668841788, 138.40337009462357, 614.4762819901224], [-315.26986709763895, 139.60745683447243, 773.760375282753]], [19.5, [-301.00943174423634, 90.21153609689858, 611.3158792140085], [-269.82214320729287, 102.44584593361893, 732.7021944171462]], [20.0, [-284.40881272160755, 88.84493486516436, 595.8043740438309], [-260.2912270518178, 98.61089524326604, 722.1136414130295]], [20.5, [-291.85634455422013, 105.29772420719493, 596.4796749309828], [-265.03881264724765, 115.18172903169341, 719.9176896748398]], [21.0, [-373.58886276285835, 205.02378405025996, 654.2896205600015], [-367.376637278131, 207.0772491188557, 820.1406144908666]], [21.5, [-412.1400486601223, 245.0815666408279, 683.3449949368169], [-410.4846821305218, 245.81618677812668, 861.3194556623245]], [22.0, [-435.4041571337217, 251.14560866374342, 698.1234090354964], [-432.7710554770919, 251.88620177093563, 879.2286061258171]], [22.5, [-456.22065433569355, 269.3279172597661, 702.7705506725548], [-458.1045300447824, 269.8275940928105, 889.2192094595994]], [23.0, [-417.642460570563, 344.11317119620253, 621.189048848263], [-417.22227637134034, 344.33740280193433, 784.699905399828]], [23.5, [-390.99647911702516, 362.0386352804493, 589.465215621883], [-392.3909822490379, 362.10214223293315, 746.2055668464463]], [23.95, [-368.75364299085834, 355.82776355024504, 574.4734005819804], [-368.77174531382394, 356.01129944784606, 726.3687576540959]]];
+const FOCUS=[[0, 180], [0.5, 168], [1.0, 165], [1.5, 195], [2.0, 189], [2.5, 219], [3.0, 255], [3.5, 285], [4.5, 354], [5.0, 351], [5.5, 348], [6.0, 348], [6.5, 336], [7.5, 282], [9.0, 366], [9.5, 384], [10.0, 360], [10.5, 348], [11.0, 282], [11.5, 249], [12.5, 372], [13.0, 348], [13.5, 366], [14.0, 330], [14.5, 375], [15.0, 438], [15.5, 462], [16.5, 516], [17.0, 399], [18.0, 363], [18.5, 333], [19.0, 291], [19.5, 288], [20.5, 351], [21.0, 363], [21.5, 363], [22.5, 342], [23.0, 432], [23.5, 432], [23.95, 423]];
+function cameraAt(t){let i=0;while(i<CAMERA.length-2&&t>CAMERA[i+1][0])i++;const p=clamp((t-CAMERA[i][0])/(CAMERA[i+1][0]-CAMERA[i][0]));return [1,2].map(k=>CAMERA[i][k].map((v,j)=>lerp(v,CAMERA[i+1][k][j],p)))}
+function focusAt(t){let i=0;while(i<FOCUS.length-2&&t>FOCUS[i+1][0])i++;return lerp(FOCUS[i][1],FOCUS[i+1][1],clamp((t-FOCUS[i][0])/(FOCUS[i+1][0]-FOCUS[i][0])))}
+function chart(t,chapter,local){
+ ctx.save();ctx.beginPath();ctx.rect(0,40,720,624);ctx.clip();box(0,40,720,624,CFG.paper);
+ // The absolute local clock survives scene stretching; the extra hold keeps rotating.
+ const virtual=chapter*4+Math.min(local,4)+(local>4?Math.sin(local-4)*.35:0);
+ const [inner,outer]=cameraAt(virtual);const gap=outer[2]-inner[2],mx=inner[0]+inner[2],cy=inner[1];
+ const X=(y,off=0)=>{const f=off/gap,cx=lerp(inner[0],outer[0],f),yy=lerp(inner[1],outer[1],f),r=lerp(inner[2],outer[2],f);return cx+Math.sqrt(Math.max(0,r*r-(y-yy)*(y-yy)))};
+ const slope=y=>-(y-cy)/Math.sqrt(Math.max(2500,inner[2]*inner[2]-(y-cy)*(y-cy)));
+ // A translucent moving paper fan behind the orbiting agents.
+ box(0,40,720,624,CFG.paper);
+ for(let j=0;j<17;j++){const yy=160+j*30+18*Math.sin(t*.3);ctx.beginPath();ctx.moveTo(X(yy,gap),yy);ctx.lineTo(720,yy+80);ctx.lineTo(720,yy+108);ctx.closePath();ctx.fillStyle=`rgba(150,159,145,${.015+.012*Math.sin(j)})`;ctx.fill()}
+ // Tangled chord network: changing destinations, persistent deterministic identities.
+ for(let j=0;j<235;j++){
+  let ya=-340+rnd(j+5)*1550+55*Math.sin(t*.85+j),yb=-250+rnd(j+700)*1350+75*Math.sin(t*.75+j*.1);
+  let xa=X(ya)-rnd(j+19)*65,xb=X(yb)-100-rnd(j+30)*1000;
+  line(xa,ya,xb,yb,`rgba(47,57,43,${.10+rnd(j+3)*.23})`,.35+rnd(j)*.35);
+ }
+ for(let group=0;group<7;group++){
+ const anchor=-160+group*150+65*Math.sin(t*.65+group*.9),ax=X(anchor)-3;
+ const yy=anchor+100*Math.sin(group*1.9+t*.7);
+ for(let j=0;j<24;j++)line(-70-rnd(group*11+j)*100,yy+(rnd(j+group*23)-.5)*90,ax,anchor+(rnd(j+500)-.5)*7,`rgba(36,46,30,${.16+rnd(j+group)*.23})`,.3+rnd(j)*.45);
+ }
+ let fy=focusAt(virtual)+[0,-11,-10,10,-12,-8][chapter]+2*Math.sin(t*1.2);
+ const fanOffsets=[170,100,50,110,-110,95];
+ const fx=X(fy);for(let j=0;j<47;j++){line(-80,fy+fanOffsets[chapter]+24*Math.sin(t*.8)+(rnd(j+44)-.5)*53,fx,fy+(rnd(j+3)-.5)*9,`rgba(18,25,16,${.28+rnd(j)*.45})`,.5)}
+ // Short chains with circular anchor points.
+ for(let j=0;j<9;j++){let yy=490+j*13+35*Math.sin(t*.18),xx=25+j*22+12*Math.sin(t*.22);ctx.strokeStyle='#747c70';ctx.lineWidth=.55;ctx.beginPath();ctx.arc(xx,yy,2.2+(j%3),0,Math.PI*2);ctx.stroke();if(j)line(xx-22,yy-13,xx,yy,'#929b89',.5)}
+ // Clean index annulus masks the lines and supports rotating microcharts.
+ ctx.beginPath();ctx.moveTo(X(-500),-500);for(let y=-500;y<=1200;y+=8)ctx.lineTo(X(y),y);for(let y=1200;y>=-500;y-=8)ctx.lineTo(X(y,gap),y);ctx.closePath();ctx.fillStyle=CFG.paper;ctx.fill();
+ for(const off of [0,gap-26,gap]){ctx.beginPath();for(let y=-100;y<=1000;y+=3){if(y===-100)ctx.moveTo(X(y,off),y);else ctx.lineTo(X(y,off),y)}ctx.strokeStyle=off===gap-26?'#747d6d':CFG.ink;ctx.lineWidth=off===gap-26?.6:1.1;ctx.stroke()}
+ const zoom=outer[2]/728;
+ // Reference patch tracking: 5–11 px / 0.1 s down the annulus.
+ // Keep identities on the unwrapped scroll, including during stretched holds.
+ const scroll=(70*t+8*Math.sin(t*1.6))*zoom;
+ for(let n=-110;n<45;n++){
+  const step=31*zoom;const y=n*step+scroll;if(y < -90 || y > 1000)continue;const x=X(y);const a=Math.atan(-slope(y));
+  ctx.save();ctx.translate(x+13,y);ctx.rotate(a);ctx.scale(zoom,zoom);const seed=n+160,n3=((n%3)+3)%3,n4=((n%4)+4)%4;
+  if(n3===0){for(let k=0;k<6;k++)text(['frame 0'+((n+80)%10),'opacity 1.0','scale 0.98','ease expo','duration .4','scene ready'][k],0,k*4.4,3.8,400,'#56604e')}
+  else if(n3===1){for(let r=0;r<4;r++)for(let c=0;c<5;c++){if(rnd(seed*29+r*7+c)>.3)box(c*4.5,r*4.5,2.7,2.7,rnd(seed+r+c)>.5?'#273222':'#7f8778')}}
+  else {for(let r=0;r<5;r++)box(0,r*4,12+rnd(seed*6+r)*25,1.6,'#4d5845')}
+  ctx.restore();ctx.save();ctx.translate(X(y,gap*.48),y);ctx.rotate(a);ctx.scale(zoom,zoom);
+  if(n4===0){for(let k=0;k<5;k++)text(['x: 128 y: 64','width 720','height 900','render frame','style token'][k],0,k*4.2,3.7)}
+  else if(n3===0){for(let r=0;r<4;r++)for(let c=0;c<5;c++){if(rnd(seed*33+r*7+c)>.2)box(c*5,r*4.5,3.1,3.1,rnd(seed+r+c)>.5?'#293223':'#939a8a')}}
+  else for(let k=0;k<5;k++)box(0,k*3.4,14+rnd(seed*5+k)*24,1.8,'#404a37');
+  ctx.restore();text(String((n+120)%80),X(y,gap-18),y+3,4.2,700);line(X(y,gap-3),y,X(y,gap),y,'#47513e',.65);
+ }
+ // Hundreds of individual reference-cut Clawd agents; each follows its orbit.
+ for(let row=-18;row<40;row++){
+  const rowStep=29*zoom;const yy=row*rowStep+(t*7)%rowStep;const angle=(yy-outer[1])/Math.sqrt(Math.max(90000,outer[2]*outer[2]-(yy-outer[1])**2));const start=X(yy,gap+38);
+  ctx.setLineDash([5,5]);line(start-30,yy,760,yy+(760-start)*angle,'#7e887480',.65);ctx.setLineDash([]);
+  for(let col=-24;col<14;col++){
+   let x=start+col*29*zoom+18*t+3*Math.sin(t*.7+row*.5);let y=yy+(x-start)*angle;
+   if(x<start-8||x>740||y<20||y>680)continue;
+   let s=(15+1.6*Math.sin(row*.7+t*.6))*zoom;let alpha=(.38+.53*rnd(row*131+col+299))*(.82+.18*Math.sin(t*2.2-row*.55));y+=1.1*Math.sin(t*5+row+col*.7);
+   ctx.save();ctx.globalAlpha=alpha;ctx.drawImage(imgs.agentImage,0,8,27,21,x-s/2,y-s*.4,s,s*.78);ctx.restore();
+  }
+ }
+ // Active bundle and focus label, travelling with its index entry.
+ const activeAngle=(fy-cy)/Math.sqrt(Math.max(90000,inner[2]*inner[2]-(fy-cy)**2));const x0=X(fy)+9;
+ ctx.save();ctx.translate(x0,fy);ctx.rotate(Math.atan(activeAngle));box(0,-21,54*zoom,34*zoom,'#11170f');for(let i=0;i<5;i++)text(['task active',files[chapter],'read · build','carry file','room '+(chapter+1)][i],3,-9+i*4.5,4,400,'#f2f4ed');ctx.restore();
+ line(fx,fy,750,fy+(750-fx)*activeAngle,'#172013',1.05);
+ const sx=X(fy,gap+40);for(let i=-24;i<12;i++){let x=sx+i*29*zoom+18*t;if(x<sx+12||x>750)continue;let y=fy+(x-fx)*activeAngle+14;const z=(17+1*Math.sin(t*3+i))*zoom;ctx.drawImage(imgs.agentImage,x-z/2,y-z/2,z,z*1.07);if(i%3===1){box(x-10,y-8,31,7,'#131a10');text(files[chapter],x-8,y-3,3.8,400,'#fff')}}
+ if(local>.3){const lx=Math.min(560,sx+90),ly=clamp(fy+(lx-fx)*activeAngle+70,140,590);line(fx+gap+15,fy,lx,ly,'#68725f',.6);box(lx,ly,125,30,'#fbfcf8','#25301c');text(focusNames[chapter],lx+6,ly+10,5,700);text(focusCopy[chapter],lx+6,ly+23,6.3,500)}
+ ctx.restore();
+}
+function panels(t,chapter){
+ box(0,664,720,236,'#eceee7');const names=['DIRECTION FEED','MOTION / TIMING SOLVER','STUDIO WORKSPACE','REFERENCE / RENDER FIELD','SOURCE / EXTRACTION ROUTES','VALIDATION / TIMING BUFFER','6 ROOMS / DISPATCH','SKILL / REFERENCE INDEX'];
+ for(let i=0;i<8;i++){const x=8+(i%4)*178,y=i<4?669:783;box(x,y,171,109,'#f7f8f2','#bbc0b4');text(names[i],x+7,y+10,5.2,700)}
+ const lines=['read   load reference video','check  extract cut rhythm','read   pull figures from csv','check  trace every number','build  write story.md','build  one point, one hero','build  compile Scene.tsx','check  easing vs spec.md','note   title is a beat late','build  tighten the tail','check  compare frames','ship   final.mp4'];let count=Math.min(12,Math.floor(t/2)+1);
+ for(let i=0;i<count;i++)text(String(50+i).padStart(3,'0')+'   '+lines[i],15,692+i*7.6,4.8);
+ // solver strokes move on their own local clock
+ for(let j=0;j<140;j++){let x=192+rnd(j*3)*158,y=690+rnd(j*4)*63;let v=Math.sin(t*(2+3*rnd(j)) +j);line(x,y,x+2+5*rnd(j),y+v*3,'#5c6553',.55)}
+ ['REFERENCE','CODE','RENDER'].forEach((s,i)=>{const x=191+i*53;box(x,760,49,11,i===Math.floor(t/8)%3?'#969c90':'#f0f2eb');text(s,x+3,767,4.8,500,i===Math.floor(t/8)%3?'#fff':'#525c49')});
+ const code=['spec = read_reference(video)','data = trace_numbers(sheet)','story = one_point(data)','skills.load("motion-design")','scene = remotion.build(spec)','t.timing = 0.0','check.numbers(scene, data)','compare_frames(render)','preview = render(scene)','approve(final.mp4)'];
+ let chars=Math.floor(t*10.5);for(let i=0;i<code.length;i++){const s=code[i].slice(0,Math.max(0,chars));if(s){text(String(10+i*2).padStart(3,'0'),370,692+i*8.8,4.8);text(s,391,692+i*8.8,5.1,500);line(391,694+i*8.8,391+s.length*3,694+i*8.8,'#3f4836',.4)}chars-=code[i].length;if(chars<=0){if(Math.floor(t*3)%2===0)box(392+s.length*3,686+i*8.8,3,7,'#18200f');break}}
+ text('REFERENCE',549,689,4.8);text('RENDER',630,689,4.8);
+ for(let p=0;p<2;p++)for(let y=0;y<19;y++)for(let x=0;x<24;x++){let v=127+80*Math.sin(x*.45+t*2.7)*Math.cos(y*.35+t*2.6)+25*Math.sin(x+y+t*3);v=clamp(v,65,230);box(549+p*80+x*3,694+y*2.8,2.5,2.2,`rgb(${v},${v+3},${v-4})`)}
+ for(let j=0;j<49;j++){const v=3+5*rnd(j)+Math.sin(t*2+j)*2;box(549+j*3.12,761-v,2,v,'#4a5144')}text('same paper / local wireframe',549,771,4.5);
+ const cols=['VIDEO','SPEC','CODE','CHECK'],route=['pacing','first motif','cut rhythm','text entry','payoff','numbers'];cols.forEach((s,i)=>text(s,15+i*41,805,4.8,700));
+ for(let r=0;r<6;r++)for(let c=0;c<4;c++){let x=15+c*41,y=816+r*10;if(c>0&&(Math.floor(t*.7+r)%4===c))box(x-1,y-6,36,8,'#a4aa9d');text(c===0?route[r]:['','extract','attach','inspect'][c],x,y,4.7)}text('frames → spec → runnable source',15,885,4.4);
+ ['TIMING','EASING','BEAT'].forEach((s,i)=>{let y=812+i*25;text(s,193,y,4.8,700);ctx.beginPath();for(let k=0;k<115;k++){const val=3*Math.sin(k*.12+i+t*.4)+1.7*Math.sin(k*.23+t)+((k+Math.floor(t*3))%28<2?4:0);if(k===0)ctx.moveTo(235+k,y-val);else ctx.lineTo(235+k,y-val)}ctx.strokeStyle='#404c36';ctx.lineWidth=.7;ctx.stroke()});text('illustrative / simulated run',193,885,4.4);
+ for(let i=0;i<6;i++){let x=370+(i%2)*91,y=810+Math.floor(i/2)*27;text('0'+(i+1)+'  '+['reference','data','story','motion','direct','ship'][i],x,y,4.7,700);box(x+13,y+4,62,5,'#dfe2d8');box(x+13,y+4,62*clamp((t-i*3.3)/4),5,i===chapter?'#303d25':'#7b8471');text(files[i],x+13,y+17,4.2);text(t>i*3.3?'queued':'working',x+54,y+17,3.8)}text('one narrow job / one file each',370,885,4.4);
+ text('SKILL',550,805,4.5);text('STATE',683,805,4.5);
+ ['remotion','reaction-skills','gsap','lottie-web','motion-design','hyperframes','motion-graphics','claude-motion'].forEach((s,r)=>{text(s,550,815+r*8,4.4);text('match',685,815+r*8,4.2);for(let c=0;c<9;c++){let v=rnd(r*19+c+Math.floor(t*.7));box(612+c*6.8,810+r*8,4.4,4.4,v>.5?'#27301f':v>.2?'#aeb5a5':'#e2e6da')}});
+ ctx.drawImage(imgs.creditImage,634,879,80,18);
+}
+function render(t){
+ ctx.clearRect(0,0,720,900);let chapter=CFG.scenes.findIndex(s=>t<SCENE_START[s.id]+s.dur);if(chapter<0)chapter=5;const scene=CFG.scenes[chapter],local=t-SCENE_START[scene.id];
+ chart(t,chapter,local);panels(t,chapter);
+ box(0,0,720,40,'#edf0e6');text(CFG.brand,8,15,10.5,700);text(CFG.tagline,8,26,4.8,500);
+ [['REFERENCES',CFG.referenceCount],['ROOMS',CFG.roomCount],['SKILLS',CFG.skillCount],['SCENES',CFG.sceneCount],['RE-ROLLS',CFG.rerollCount]].forEach((v,i)=>{let x=249+i*95;text(v[0],x,10,4.6);text(v[1],x,23,7,700)});
+ for(let i=0;i<6;i++){box(8+i*119,33,114,2,'#c8cfc0');box(8+i*119,33,114*(i<chapter?1:i===chapter?clamp(local/4):0),2,'#17220e');if(i===chapter)text(CFG[titles[i]],75+i*119,30,3.7,700)}
+ box(12,48,227,51,'#fcfdf9','#21281b');let alpha=clamp((t-focusCues[chapter]()+.12)/.14);alpha*=clamp((outCues[chapter]()+.08-t)/.08);
+ ctx.save();ctx.globalAlpha=alpha;text('STEP '+(chapter+1)+' / 6 · '+files[chapter],20,62,6.2,500);text(CFG[titles[chapter]],20,79,13,700);text(CFG[copies[chapter]],20,92,6.2,400);ctx.restore();
+ for(let i=0;i<6;i++){box(12+i*38,102,34,2,i<=chapter?'#293420':'#c0c8b5')}
+}
+const clock={t:0};const timeline=gsap.timeline({paused:true});timeline.fromTo(clock,{t:0},{t:CFG.duration,duration:CFG.duration,ease:'none',immediateRender:false,onUpdate:()=>render(clock.t)},0);window.__odRenderAt=t=>{const target=clamp(t,0,CFG.duration);timeline.pause();timeline.time(target,true);clock.t=target;render(target)};
+document.getElementById('main').dataset.duration=CFG.duration;
+const btn=document.querySelector('#controls button'),range=document.querySelector('#controls input'),stamp=document.querySelector('#controls span');range.max=CFG.duration;
+btn.onclick=()=>{if(timeline.paused()){if(timeline.time()>=CFG.duration)timeline.time(0);timeline.play()}else timeline.pause()};range.oninput=()=>window.__odRenderAt(+range.value);
+function tick(){requestAnimationFrame(tick);range.value=timeline.time();stamp.textContent=timeline.time().toFixed(2)+' / '+CFG.duration.toFixed(2);btn.textContent=timeline.paused()?'PLAY':'PAUSE'}
+Promise.all([document.fonts.ready,...Object.values(imgs).map(im=>im.decode())]).then(()=>{render(1);window.__timelines={main:timeline};tick();window.__odReady=true});
+</script><script data-od-preview-audio>
+(function(){var a=document.getElementById('soundtrack');if(!a||document.documentElement.classList.contains('od-export'))return;
+function tick(){if(window.__odMotionSourcePlayer||window.__odMotionRender)return;var tl=window.__timelines&&window.__timelines.main;
+if(tl){var t=tl.time(),on=tl.isActive();if(on){if(a.paused)a.play().catch(function(){});if(Math.abs(a.currentTime-t)>0.2)a.currentTime=t;}else{if(!a.paused)a.pause();if(Math.abs(a.currentTime-t)>0.05)a.currentTime=t;}}
+requestAnimationFrame(tick);}requestAnimationFrame(tick);})();
+</script>
+</body></html>

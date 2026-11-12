@@ -192,4 +192,5 @@ export interface AnalyticsConfigResponse {
   key: string | null;
   host: string | null;
   installationId?: string | null;
+  inputAggregation?: import('./input-aggregation.js').InputAggregationTrial | null;
 }

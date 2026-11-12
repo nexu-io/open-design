@@ -105,10 +105,10 @@ describe('workspace-scoped AMR URLs', () => {
   it('pins both console links to the workspace', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?workspaceId=workspace-a&source=open_design`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?workspaceId=workspace-a&source=open_design&billing=plan`,
     );
   });
 

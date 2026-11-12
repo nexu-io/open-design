@@ -305,3 +305,108 @@ it('refreshes selected-backed UUID to explicit Team root without relinking its i
   expect(files.identity('p', 'a.html')).toBe(id);
   expect(publications.get(scope)?.slug).toBe('selected-alias');
 });
+
+it.each(['before', 'during'] as const)('OPEND-4083 comment created %s admission must be included', async timing => {
+  const db = setup();
+  const files = createLocalCommentFiles(db);
+  const B = '11111111-1111-4111-8111-111111111111';
+  const remote: CommentFileState = { schemaVersion: 1, revision: 3, files: [{sourceFileId: B,
+    sourceFilePath: 'a.html', entryPath: 'a.html', resourceId: 'root', versionId: 'old', retired: false}] };
+  const cloud = catalog(remote);
+  let enter!: () => void, release!: () => void;
+  const entered = new Promise<void>(r => { enter = r; });
+  const gate = new Promise<void>(r => { release = r; });
+  const run = vi.fn(async (args: string[]) => {
+    if (args[1] === 'upsert') { enter(); await gate; }
+    return cloud.run(args);
+  });
+  const add = () => upsertPreviewComment(db, 'p', 'c', { id: 'race-comment', sourceFileId: files.identity('p', 'a.html'),
+    authorMemberId: 'creator', note: 'keep this comment', target: {filePath:'a.html', elementId:'hero', selector:'#hero', label:'Hero',
+    position:{x:1,y:2,width:3,height:4}} });
+  if (timing === 'before') add();
+  const sourceFileId = files.identity('p', 'a.html', remote);
+  const input = {projectId:'p', workspaceId:'w', creatorMemberId:'creator', resourceId:'selected', versionId:'fresh',
+    paths:[{sourceFilePath:'a.html', entryPath:'index.html', sourceFileId}], run};
+  const pending = files.admit(input);
+  await entered;
+  if (timing === 'during') add();
+  const before = getProjectPreviewComment(db, 'p', 'race-comment');
+  release(); await pending;
+  const publications = createSqlitePublicFilePublicationStore(db);
+  let result: {enqueued: number; skippedInbound: number} | undefined;
+  const record = createPublicFilePublicationRecorder(db, publications, (db, input) => {
+    result = enqueuePublishedFileComments(db, input); return result;
+  });
+  const scope = {sourceFileId, resourceTeamId:'w',ownerMemberId:'creator',projectId:'p',filePath:'a.html'};
+  const publish = () => record(scope, {slug:'recovered',url:null,fileName:'a.html'}, [{sourcePath:'a.html',publishedPath:'index.html'}]);
+  publish();
+  const first = {...result};
+  const after = getProjectPreviewComment(db, 'p', 'race-comment');
+  const outbox = createCommentRelayOutboxStore(db);
+  const queueCount = outbox.count();
+  await files.admit(input); publish();
+  expect(outbox.count()).toBe(1);
+  expect(after?.note).toBe(before?.note);
+  expect(after?.authorMemberId).toBe(before?.authorMemberId);
+  expect(first.enqueued, 'the original local comment must enter the publication queue once').toBe(1);
+  expect(after?.sourceFileId).toBe(B);
+  expect(queueCount).toBe(1);
+});
+
+it('OPEND-4083 repairs a previously adopted identity without migrating unrelated lifetimes', async () => {
+  const db = setup();
+  const files = createLocalCommentFiles(db);
+  const localId = files.identity('p', 'a.html');
+  const sourceFileId = '11111111-1111-4111-8111-111111111111';
+  const remote: CommentFileState = { schemaVersion: 1, revision: 3, files: [{ sourceFileId,
+    sourceFilePath: 'a.html', entryPath: 'index.html', resourceId: 'selected', versionId: 'old', retired: false }] };
+  upsertPreviewComment(db, 'p', 'c', { id: 'missed', sourceFileId: localId, authorMemberId: 'creator', note: 'missed earlier',
+    target: { filePath: 'a.html', elementId: 'hero', selector: '#hero', label: 'Hero', position: { x: 0, y: 0, width: 1, height: 1 } } });
+  updateProject(db, 'p', { metadata: { _commentFiles: remote } });
+  await files.admit({ projectId: 'p', workspaceId: 'w', creatorMemberId: 'creator', resourceId: 'selected', versionId: 'fresh',
+    paths: [{ sourceFilePath: 'a.html', entryPath: 'index.html', sourceFileId }], run: catalog(remote).run });
+  expect(getProjectPreviewComment(db, 'p', 'missed')?.sourceFileId).toBe(sourceFileId);
+  createPublicFilePublicationRecorder(db, createSqlitePublicFilePublicationStore(db), enqueuePublishedFileComments)(
+    { sourceFileId, resourceTeamId: 'w', ownerMemberId: 'creator', projectId: 'p', filePath: 'a.html' },
+    { slug: 'recovered', url: null, fileName: 'a.html' }, [{ sourcePath: 'a.html', publishedPath: 'index.html' }]);
+  expect(createCommentRelayOutboxStore(db).listDue(Date.now())[0]?.comment).toMatchObject({ id: 'missed', sourceFileId, note: 'missed earlier' });
+});
+
+it.each(['owner', 'workspace', 'replacement'] as const)('OPEND-4083 rejects concurrent %s changes without rebinding comments', async change => {
+  const db = setup();
+  const files = createLocalCommentFiles(db);
+  const localId = files.identity('p', 'a.html');
+  const sourceFileId = '11111111-1111-4111-8111-111111111111';
+  const remote: CommentFileState = { schemaVersion: 1, revision: 3, files: [{ sourceFileId,
+    sourceFilePath: 'a.html', entryPath: 'index.html', resourceId: 'selected', versionId: 'old', retired: false }] };
+  upsertPreviewComment(db, 'p', 'c', { id: 'pending-change', sourceFileId: localId, authorMemberId: 'creator', note: 'preserve',
+    target: { filePath: 'a.html', elementId: 'hero', selector: '#hero', label: 'Hero', position: { x: 0, y: 0, width: 1, height: 1 } } });
+  const cloud = catalog(remote);
+  await expect(files.admit({ projectId: 'p', workspaceId: 'w', creatorMemberId: 'creator', resourceId: 'selected', versionId: 'fresh',
+    paths: [{ sourceFilePath: 'a.html', entryPath: 'index.html', sourceFileId }], run: async args => {
+      const response = await cloud.run(args);
+      if (args[1] === 'upsert') {
+        if (change === 'owner') db.prepare("UPDATE workspace_projects SET created_by_workspace_member_id = 'other' WHERE project_id = 'p'").run();
+        if (change === 'workspace') db.prepare("UPDATE workspace_projects SET workspace_id = 'other' WHERE project_id = 'p'").run();
+        if (change === 'replacement') {
+          db.prepare('UPDATE workspace_artifacts SET current_path = NULL, deleted_at = 1 WHERE id = ?').run(localId);
+          files.identity('p', 'a.html');
+        }
+      }
+      return response;
+    } })).rejects.toThrow(change === 'replacement' ? 'COMMENT_FILE_LIFETIME_CONFLICT' : 'COMMENT_FILE_AUTHORITY_UNAVAILABLE');
+  expect(getProjectPreviewComment(db, 'p', 'pending-change')?.sourceFileId).toBe(localId);
+  expect(getProject(db, 'p')?.metadata?._commentFiles).toBeUndefined();
+});
+
+it('requests catalog identity recovery only when no local lifetime exists, including retired lifetimes', () => {
+  const db = setup();
+  const files = createLocalCommentFiles(db);
+  expect(files.needsCatalogIdentity('p', 'a.html')).toBe(true);
+  const fact = { sourceFileId: '11111111-1111-4111-8111-111111111111', sourceFilePath: 'a.html',
+    entryPath: 'a.html', resourceId: 'root', versionId: 'old', retired: false };
+  for (const retired of [false, true]) {
+    updateProject(db, 'p', { metadata: { _commentFiles: { schemaVersion: 1, revision: 1, files: [{ ...fact, retired }] } } });
+    expect(files.needsCatalogIdentity('p', 'a.html')).toBe(false);
+  }
+});

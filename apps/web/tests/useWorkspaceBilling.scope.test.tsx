@@ -213,6 +213,46 @@ describe('workspaceBillingSummaryForContext — plan is partitioned like money',
     expect(projected?.membershipTier).toBe('plus');
   });
 
+  // RUN-013 actual Free Owner shape: directory context is conservatively
+  // active/null and the account summary has no tier; only the scoped snapshot
+  // proves Free. Keep account money separate from that workspace plan.
+  it.each(['free', 'max'])('uses the validated personal %s snapshot before an empty account tier', (tier) => {
+    const context = { ...teamContext('personal-a'), workspaceType: 'personal',
+      role: 'owner', billingState: 'active', planId: null } as WorkspaceCollabContext;
+    const summary = { ...personalPlusAccount, membershipTier: '', subscriptionStatus: '' };
+    const response = { summary, workspaceBalance: null,
+      workspaceSnapshot: snapshotFor('personal-a', {
+        billingState: tier === 'free' ? 'free' : 'active', planId: tier,
+      }) } as WorkspaceBillingResponse;
+    const projected = workspaceBillingSummaryForContext(response, context);
+    expect(projected).toEqual({ ...summary, membershipTier: tier,
+      subscriptionStatus: tier === 'free' ? 'free' : 'active' });
+    expect(response.summary).toBe(summary);
+  });
+
+  it('keeps a proven personal Free plan when the account summary is unavailable', () => {
+    const context = { ...teamContext('personal-a'), workspaceType: 'personal' } as WorkspaceCollabContext;
+    const response = { summary: null, workspaceBalance: null,
+      workspaceSnapshot: snapshotFor('personal-a', { billingState: 'free', planId: 'free' }) } as WorkspaceBillingResponse;
+    expect(workspaceBillingSummaryForContext(response, context)?.membershipTier).toBe('free');
+  });
+
+  it.each(['missing', 'workspace', 'member', 'scope-version', 'unknown'] as const)(
+    'keeps the personal account fallback for %s plan proof', (kind) => {
+      const context = { ...teamContext('personal-a'), workspaceType: 'personal' } as WorkspaceCollabContext;
+      const snapshot = snapshotFor('personal-a', { billingState: 'free', planId: 'free' });
+      expect(snapshot).toBeTruthy();
+      const response = { summary: personalPlusAccount, workspaceBalance: null,
+        workspaceSnapshot: snapshot } as WorkspaceBillingResponse;
+      if (kind === 'missing') response.workspaceSnapshot = null;
+      if (kind === 'workspace' && response.workspaceSnapshot) response.workspaceSnapshot.workspaceId = 'other';
+      if (kind === 'member' && response.workspaceSnapshot) response.workspaceSnapshot.workspaceMemberId = 'other';
+      if (kind === 'scope-version' && response.workspaceSnapshot) Object.assign(response.workspaceSnapshot, { billingScopeVersion: 1 });
+      if (kind === 'unknown' && response.workspaceSnapshot) response.workspaceSnapshot.billing = { billingState: 'active', planId: null };
+      expect(workspaceBillingSummaryForContext(response, context)).toBe(personalPlusAccount);
+    },
+  );
+
   it('requires exact v2 Workspace proof for personal money too', () => {
     const personalContext = {
       workspaceId: 'personal-a',
@@ -302,6 +342,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
         if (url === '/api/workspace/directory') {
@@ -401,6 +443,7 @@ describe('useWorkspaceBilling explicit scope', () => {
     let runtimeManaged = false;
     let quotaRealtimeHealthy = false;
     const billingCalls: string[] = [];
+    const preflightCalls: string[] = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const interest = billingInterestResponse(input, init);
@@ -408,10 +451,19 @@ describe('useWorkspaceBilling explicit scope', () => {
       if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
       if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
       if (url.startsWith('/api/workspace/billing?')) {
-        billingCalls.push(url);
+        if (!url.includes('includePreflight=1')) billingCalls.push(url);
+        else preflightCalls.push(url);
         if (fail) return new Response('', { status: 503 });
         return new Response(JSON.stringify({
           ...billingResponse('personal-a', '0'),
+          workspaceSnapshot: {
+            schemaVersion: 1, workspaceId: context.workspaceId, workspaceMemberId: member,
+            billingScopeVersion: 2, billing: { planId: 'go', billingState: 'active' },
+            wallet: { balanceUsd: '0', expiresAt: null, updatedAt: null },
+            revisions: { billing: spent, wallet: spent },
+            designPlanWindows: [{ kind: '7d', remainingCredits: String(1_000 - Number(spent)),
+              limitCredits: '1000', windowStart: null, resetsAt: resetAt }],
+          },
           ...(runtimeManaged ? { workspaceRuntime: {
             workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
             status: 'fresh', revision: '1', observedAt: new Date().toISOString(),
@@ -430,7 +482,7 @@ describe('useWorkspaceBilling explicit scope', () => {
       return new Response('{}');
     });
     vi.stubGlobal('fetch', fetcher);
-    return { context, billingCalls,
+    return { context, billingCalls, preflightCalls,
       spend: (value: string) => { spent = value; },
       fail: () => { fail = true; },
       member: (value: string) => { member = value; },
@@ -439,6 +491,50 @@ describe('useWorkspaceBilling explicit scope', () => {
       runtime: (healthy: boolean) => { runtimeManaged = true; quotaRealtimeHealthy = healthy; },
     };
   }
+
+  it('bounds a shared wallet/quota event burst to one leading and one trailing read per five seconds', async () => {
+    vi.useFakeTimers();
+    const fixture = personalQuotaFixture();
+    fixture.runtime(true);
+    const first = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    const second = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await act(async () => {});
+    expect(fixture.billingCalls).toHaveLength(1);
+    const source = MockWorkspaceEventSource.instances[0]!;
+    const emit = (id: number) => source.dispatch(
+      id % 2 ? 'wallet-balance-changed' : 'coding-plan-usage-changed',
+      { type: id % 2 ? 'wallet-balance-changed' : 'coding-plan-usage-changed',
+        workspaceId: fixture.context.workspaceId, workspaceMemberId: fixture.context.workspaceMemberId,
+        revision: `wallet-${id}`, eventId: `quota-${id}` },
+    );
+    fixture.spend('300');
+    await act(async () => { emit(1); });
+    expect(fixture.billingCalls).toHaveLength(2);
+    expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('700');
+    for (let id = 2; id <= 5; id += 1) {
+      fixture.spend(String(id * 100));
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); emit(id); });
+      expect(fixture.billingCalls).toHaveLength(2);
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(fixture.billingCalls).toHaveLength(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(fixture.billingCalls).toHaveLength(3);
+    expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('500');
+    expect(second.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('500');
+    // Continuous events must not keep pushing back the trailing boundary.
+    for (let id = 6; id <= 9; id += 1) {
+      fixture.spend(String(id * 100));
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000); emit(id); });
+      expect(fixture.billingCalls).toHaveLength(3);
+    }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(fixture.billingCalls).toHaveLength(4);
+    expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('100');
+    expect(second.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('100');
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(fixture.billingCalls).toHaveLength(4);
+  });
 
   it('refreshes personal quota without wallet changes when the daemon only manages wallet freshness', async () => {
     vi.useFakeTimers();
@@ -450,6 +546,395 @@ describe('useWorkspaceBilling explicit scope', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
     expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('0');
+  });
+
+  it('shows a fast snapshot before a deferred preflight and never lets that late preflight replace newer money or windows', async () => {
+    vi.useFakeTimers();
+    const context = teamContext('split-a');
+    const snapshotCalls: string[] = [];
+    const preflightCalls: string[] = [];
+    const pending: Array<() => void> = [];
+    let balance = '10';
+    const body = () => ({
+      ...billingResponse(context.workspaceId, balance),
+      workspaceSnapshot: {
+        schemaVersion: 1, workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+        billingScopeVersion: 2, billing: { planId: 'team_plus', billingState: 'active' },
+        wallet: { balanceUsd: balance, expiresAt: null, updatedAt: null },
+        revisions: { billing: balance, wallet: balance },
+        designPlanWindows: [{ kind: '7d', remainingCredits: balance, limitCredits: '100',
+          windowStart: null, resetsAt: null }],
+      },
+      preflight: { schemaVersion: 1, workspaceId: context.workspaceId,
+        workspaceMemberId: context.workspaceMemberId, generatedAt: new Date().toISOString(),
+        billingMode: 'shared', codingPlan: { eligible: true, tier: 'plus', windows: [] } },
+      quotaRealtime: { healthy: true },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
+      const url = String(input);
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
+      if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
+      if (url.startsWith('/api/workspace/billing?')) {
+        if (url.includes('includePreflight=1')) {
+          preflightCalls.push(url);
+          const captured = body();
+          return new Promise<Response>((resolve) => pending.push(() => resolve(new Response(JSON.stringify(captured)))));
+        }
+        snapshotCalls.push(url);
+        return new Response(JSON.stringify(body()));
+      }
+      return new Response('{}');
+    }));
+    const first = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    await act(async () => {});
+    // A later component joins the already-running advisory read, not just a
+    // same-render mount burst, and receives its result without another query.
+    const second = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    await act(async () => {});
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('10');
+    expect(first.result.current?.preflight).toBeUndefined();
+    expect(snapshotCalls).toHaveLength(1);
+    expect(preflightCalls).toHaveLength(1);
+    balance = '20';
+    await act(async () => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('wallet-balance-changed', {
+        type: 'wallet-balance-changed', workspaceId: context.workspaceId,
+        workspaceMemberId: context.workspaceMemberId, revision: 'wallet-new',
+      });
+    });
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    await act(async () => { pending.shift()!(); });
+    expect(first.result.current?.preflight).toMatchObject({ billingMode: 'shared' });
+    expect(second.result.current?.preflight).toMatchObject({ billingMode: 'shared' });
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('20');
+    expect(second.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    await act(async () => { await vi.advanceTimersByTimeAsync(29_999); });
+    expect(preflightCalls).toHaveLength(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(preflightCalls).toHaveLength(2);
+  });
+
+  it.each(['snapshot', 'preflight'] as const)('shares %s 403 revocation and rejects the other channel completing late', async (revokedChannel) => {
+    vi.useFakeTimers();
+    const context = teamContext('revoked-split');
+    let resolvePreflight!: (response: Response) => void;
+    let resolveSnapshot!: (response: Response) => void;
+    const pendingPreflight = new Promise<Response>((resolve) => { resolvePreflight = resolve; });
+    const pendingSnapshot = new Promise<Response>((resolve) => { resolveSnapshot = resolve; });
+    let snapshotCalls = 0;
+    let preflightCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
+      const url = String(input);
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
+      if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
+      if (url.includes('includePreflight=1')) {
+        preflightCalls += 1;
+        return preflightCalls === 1 ? pendingPreflight
+          : new Response(JSON.stringify({ error: 'workspace_member_revoked' }), { status: 403 });
+      }
+      if (url.startsWith('/api/workspace/billing?')) {
+        snapshotCalls += 1;
+        if (snapshotCalls === 1) return new Response(JSON.stringify(billingResponse(context.workspaceId, '10')));
+        if (snapshotCalls === 2 && revokedChannel === 'preflight') return pendingSnapshot;
+        return new Response(JSON.stringify({ error: 'workspace_member_revoked' }), { status: 403 });
+      }
+      return new Response('{}');
+    }));
+    const first = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    const second = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    await act(async () => {});
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('10');
+    expect(snapshotCalls).toBe(1);
+    expect(preflightCalls).toBe(1);
+    await act(async () => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('wallet-balance-changed', {
+        type: 'wallet-balance-changed', workspaceId: context.workspaceId,
+        workspaceMemberId: context.workspaceMemberId, revision: 'revoked-read',
+      });
+    });
+    await act(async () => resolvePreflight(revokedChannel === 'preflight'
+      ? new Response(JSON.stringify({ error: 'workspace_member_revoked' }), { status: 403 })
+      : new Response(JSON.stringify({ ...billingResponse(context.workspaceId, '999'), preflight: {
+        schemaVersion: 1, workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+        generatedAt: new Date().toISOString(), billingMode: 'shared', codingPlan: { windows: [] },
+      } }))));
+    if (revokedChannel === 'preflight') {
+      await act(async () => resolveSnapshot(new Response(JSON.stringify(billingResponse(context.workspaceId, '999')))));
+    }
+    expect(first.result.current).toBeNull();
+    expect(second.result.current).toBeNull();
+    // A late successful read cannot be replayed out of the GET coalescer after
+    // revocation: the next explicit read must use the new shared read epoch.
+    await act(async () => { notifyWorkspaceBillingRefresh(); });
+    expect(snapshotCalls).toBe(3);
+    expect(first.result.current).toBeNull();
+    expect(second.result.current).toBeNull();
+    expect(preflightCalls).toBe(2);
+  });
+
+  it('shares a genuine post-payment probe and rejects a pre-payment shared probe completing late', async () => {
+    vi.useFakeTimers();
+    const context = teamContext('payment-probe');
+    let finishOld!: (response: Response) => void;
+    const oldProbe = new Promise<Response>((resolve) => { finishOld = resolve; });
+    let snapshots = 0;
+    let probes = 0;
+    let balance = '10';
+    const evidence = (billingMode: string) => ({ ...billingResponse(context.workspaceId, '999'),
+      preflight: { schemaVersion: 1, workspaceId: context.workspaceId, workspaceMemberId: context.workspaceMemberId,
+        generatedAt: new Date().toISOString(), billingMode, codingPlan: { windows: [] } } });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
+      const url = String(input);
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
+      if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
+      if (url.startsWith('/api/workspace/billing?')) {
+        expect(new URL(url, 'http://open-design.test').searchParams.get('workspaceId')).toBe(context.workspaceId);
+        expect(new Headers(init?.headers).get('x-od-workspace-runtime-client-id')).toBeTruthy();
+        if (url.includes('includePreflight=1')) {
+          probes += 1;
+          return probes === 1 ? oldProbe : new Response(JSON.stringify(evidence('legacy_team')));
+        }
+        snapshots += 1;
+        return new Response(JSON.stringify(billingResponse(context.workspaceId, balance)));
+      }
+      return new Response('{}');
+    }));
+    const first = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    const second = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    await act(async () => {});
+    expect(snapshots).toBe(1);
+    expect(probes).toBe(1);
+    balance = '20';
+    await act(async () => { await vi.advanceTimersByTimeAsync(251); notifyWorkspaceBillingRefresh(); });
+    expect(snapshots).toBe(2);
+    expect(probes).toBe(2);
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    expect(second.result.current?.preflight).toMatchObject({ billingMode: 'legacy_team' });
+    await act(async () => finishOld(new Response(JSON.stringify(evidence('shared')))));
+    expect(first.result.current?.preflight).toMatchObject({ billingMode: 'legacy_team' });
+    expect(second.result.current?.preflight).toMatchObject({ billingMode: 'legacy_team' });
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    await act(async () => {
+      // This is a later distinct subscription action, outside the existing
+      // 250ms explicit-refresh burst shared by payment surfaces.
+      await vi.advanceTimersByTimeAsync(251);
+      for (const type of ['billing-subscription-changed', 'billing-changed']) {
+        MockWorkspaceEventSource.instances[0]!.dispatch(type, { type,
+          workspaceId: context.workspaceId, revision: 'one-purchase' });
+      }
+    });
+    expect(snapshots).toBe(3);
+    expect(probes).toBe(3);
+  });
+
+  it('retires pending consumption and deferred preflight when the exact scope changes', async () => {
+    vi.useFakeTimers();
+    const contextA = teamContext('split-scope-a');
+    const contextB = teamContext('split-scope-b');
+    const snapshots: string[] = [];
+    let resolveOld!: (response: Response) => void;
+    const oldPreflight = new Promise<Response>((resolve) => { resolveOld = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
+      const url = String(input);
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(contextA);
+      if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context: contextA }));
+      if (url.startsWith('/api/workspace/billing?')) {
+        const selected = new URL(url, 'http://open-design.test').searchParams.get('workspaceId');
+        const context = selected === contextA.workspaceId ? contextA : contextB;
+        if (url.includes('includePreflight=1')) {
+          if (context === contextA) return oldPreflight;
+          return new Response(JSON.stringify({ preflight: { schemaVersion: 1,
+            workspaceId: contextB.workspaceId, workspaceMemberId: contextB.workspaceMemberId,
+            generatedAt: new Date().toISOString(), billingMode: 'legacy_team', codingPlan: { windows: [] } } }));
+        }
+        snapshots.push(context.workspaceId);
+        return new Response(JSON.stringify(billingResponse(context.workspaceId, context === contextA ? '10' : '20')));
+      }
+      return new Response('{}');
+    }));
+    const hook = renderHook(({ context, revision }) => useWorkspaceBillingResponse({ context, revision }), {
+      initialProps: { context: contextA, revision: 0 },
+    });
+    await act(async () => {});
+    const oldSource = MockWorkspaceEventSource.instances[0]!;
+    const emitOld = (revision: string) => oldSource.dispatch('wallet-balance-changed', {
+      type: 'wallet-balance-changed', workspaceId: contextA.workspaceId,
+      workspaceMemberId: contextA.workspaceMemberId, revision,
+    });
+    await act(async () => { emitOld('1'); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); emitOld('2'); });
+    hook.rerender({ context: contextB, revision: 1 });
+    await act(async () => {});
+    expect(hook.result.current?.workspaceBalance?.workspaceId).toBe(contextB.workspaceId);
+    await act(async () => {
+      resolveOld(new Response(JSON.stringify({ preflight: { schemaVersion: 1,
+        workspaceId: contextA.workspaceId, workspaceMemberId: contextA.workspaceMemberId,
+        generatedAt: new Date().toISOString(), billingMode: 'shared', codingPlan: { windows: [] } } })));
+      emitOld('late');
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(snapshots.filter((id) => id === contextA.workspaceId)).toHaveLength(2);
+    expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    expect(hook.result.current?.preflight).toMatchObject({ workspaceId: contextB.workspaceId, billingMode: 'legacy_team' });
+  });
+
+  it('clears account-owned billing during identity confirmation and reads the new account without the consumption delay', async () => {
+    vi.useFakeTimers();
+    const contextA = teamContext('account-switch-a');
+    const contextB = teamContext('account-switch-b');
+    let switched = false;
+    let resolveDirectory!: (response: Response) => void;
+    const pendingDirectory = new Promise<Response>((resolve) => { resolveDirectory = resolve; });
+    let resolveOldPreflight!: (response: Response) => void;
+    const pendingOldPreflight = new Promise<Response>((resolve) => { resolveOldPreflight = resolve; });
+    const snapshots: { workspaceId: string; at: number }[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
+      const url = String(input);
+      if (url === '/api/workspace/directory') {
+        return switched ? pendingDirectory : workspaceDirectoryResponse(contextA);
+      }
+      if (url.startsWith('/api/workspace/context')) {
+        return new Response(JSON.stringify({ context: switched ? contextB : contextA }));
+      }
+      if (url.startsWith('/api/workspace/billing?')) {
+        const id = new URL(url, 'http://open-design.test').searchParams.get('workspaceId')!;
+        if (url.includes('includePreflight=1')) {
+          return id === contextA.workspaceId ? pendingOldPreflight : new Response('{}');
+        }
+        snapshots.push({ workspaceId: id, at: Date.now() });
+        return new Response(JSON.stringify(billingResponse(id, id === contextA.workspaceId ? '13.10' : '8.50')));
+      }
+      return new Response('{}');
+    }));
+    const hook = renderHook(() => useWorkspaceBillingResponse());
+    await vi.waitFor(() => expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('13.10'));
+    const previousReads = snapshots.filter((read) => read.workspaceId === contextA.workspaceId).length;
+    const switchedAt = Date.now();
+    await act(async () => {
+      switched = true;
+      notifyWorkspaceContextRefresh();
+      notifyWorkspaceBillingRefresh();
+    });
+    // The navigation shell may retain A's name, but its account-owned money
+    // cannot remain visible or launch a new old-scope read under B's login.
+    expect(hook.result.current).toBeNull();
+    expect(snapshots.filter((read) => read.workspaceId === contextA.workspaceId)).toHaveLength(previousReads);
+    await act(async () => resolveDirectory(workspaceDirectoryResponse(contextB)));
+    await vi.waitFor(() => expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('8.50'));
+    expect(snapshots.find((read) => read.workspaceId === contextB.workspaceId)!.at - switchedAt).toBeLessThan(5_000);
+    await act(async () => resolveOldPreflight(new Response(JSON.stringify({
+      ...billingResponse(contextA.workspaceId, '999'),
+      preflight: { schemaVersion: 1, workspaceId: contextA.workspaceId,
+        workspaceMemberId: contextA.workspaceMemberId, generatedAt: new Date().toISOString(),
+        billingMode: 'shared', codingPlan: { windows: [] } },
+    }))));
+    expect(hook.result.current?.workspaceBalance?.workspaceId).toBe(contextB.workspaceId);
+    expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('8.50');
+  });
+
+  it('keeps idle advisory evidence fresh with one shared visible 30s poll and stops it while hidden or unmounted', async () => {
+    vi.useFakeTimers();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    try {
+      const fixture = personalQuotaFixture();
+      fixture.runtime(true);
+      const first = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+      const second = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+      await act(async () => { MockWorkspaceEventSource.instances[0]!.onopen?.(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(70_000); });
+      expect(fixture.billingCalls).toHaveLength(1);
+      expect(fixture.preflightCalls).toHaveLength(3);
+      expect(Date.now() - Date.parse(first.result.current!.preflight!.generatedAt)).toBe(10_000);
+      expect(second.result.current?.preflight?.generatedAt).toBe(first.result.current?.preflight?.generatedAt);
+      visibility.mockReturnValue('hidden');
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(70_000); });
+      expect(fixture.preflightCalls).toHaveLength(3);
+      expect(first.result.current?.preflight).toBeUndefined();
+      visibility.mockReturnValue('visible');
+      await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+      expect(fixture.preflightCalls).toHaveLength(4);
+      expect(first.result.current?.preflight?.generatedAt).toBe(new Date().toISOString());
+      first.unmount();
+      second.unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(70_000); });
+      expect(fixture.preflightCalls).toHaveLength(4);
+    } finally {
+      visibility.mockRestore();
+    }
+  });
+
+  it('joins an in-flight consumption read when another component mounts after the force burst', async () => {
+    vi.useFakeTimers();
+    const context = teamContext('late-consumer');
+    let resolveDisplay!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => { resolveDisplay = resolve; });
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const interest = billingInterestResponse(input, init);
+      if (interest) return interest;
+      const url = String(input);
+      if (url === '/api/workspace/directory') return workspaceDirectoryResponse(context);
+      if (url.startsWith('/api/workspace/context')) return new Response(JSON.stringify({ context }));
+      if (url.includes('includePreflight=1')) return new Response('{}');
+      if (url.startsWith('/api/workspace/billing?')) {
+        reads += 1;
+        return reads === 1 ? new Response(JSON.stringify(billingResponse(context.workspaceId, '10'))) : pending;
+      }
+      return new Response('{}');
+    }));
+    const first = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    await act(async () => {});
+    await act(async () => {
+      MockWorkspaceEventSource.instances[0]!.dispatch('wallet-balance-changed', {
+        type: 'wallet-balance-changed', workspaceId: context.workspaceId,
+        workspaceMemberId: context.workspaceMemberId, revision: 'late-display',
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    const second = renderHook(() => useWorkspaceBillingResponse({ context, revision: 0 }));
+    await act(async () => {});
+    expect(reads).toBe(2);
+    await act(async () => resolveDisplay(new Response(JSON.stringify(billingResponse(context.workspaceId, '20')))));
+    expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    expect(second.result.current?.workspaceBalance?.balanceUsd).toBe('20');
+    expect(reads).toBe(2);
+  });
+
+  it('keeps explicit purchase and subscription refreshes immediate while runtime nudges share the consumption limit', async () => {
+    vi.useFakeTimers();
+    const fixture = personalQuotaFixture();
+    renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
+    await act(async () => {});
+    const source = MockWorkspaceEventSource.instances[0]!;
+    const emit = (type: string, revision: string) => source.dispatch(type, {
+      type, workspaceId: fixture.context.workspaceId,
+      workspaceMemberId: fixture.context.workspaceMemberId, revision,
+    });
+    await act(async () => emit('wallet-balance-changed', 'spend-1'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); emit('wallet-balance-changed', 'spend-2'); });
+    expect(fixture.billingCalls).toHaveLength(2);
+    await act(async () => { notifyWorkspaceBillingRefresh(); });
+    expect(fixture.billingCalls).toHaveLength(3);
+    await act(async () => emit('billing-subscription-changed', 'purchase-1'));
+    expect(fixture.billingCalls).toHaveLength(4);
+    await act(async () => emit('billing-changed', 'runtime:7'));
+    expect(fixture.billingCalls).toHaveLength(4);
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_499); });
+    expect(fixture.billingCalls).toHaveLength(4);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(fixture.billingCalls).toHaveLength(5);
   });
 
   it('uses member-scoped quota events while healthy and restores the safety floor after disconnect', async () => {
@@ -479,7 +964,7 @@ describe('useWorkspaceBilling explicit scope', () => {
   it('shares personal quota with the existing cache and refreshes on scoped SSE without clearing it', async () => {
     const fixture = personalQuotaFixture();
     const first = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
-    await waitFor(() => expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('250'));
+    await waitFor(() => expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('750'));
     expect(fixture.billingCalls).toHaveLength(1);
     const cached = first.result.current;
     const second = renderHook(() => useWorkspaceBillingResponse({ context: fixture.context, revision: 0 }));
@@ -498,11 +983,11 @@ describe('useWorkspaceBilling explicit scope', () => {
         type: 'wallet-balance-changed', workspaceId: fixture.context.workspaceId,
         workspaceMemberId: fixture.context.workspaceMemberId, revision: 'quota-new',
       });
-      expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('250');
+      expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('750');
     });
-    await waitFor(() => expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500'));
+    await waitFor(() => expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('500'));
     expect(fixture.billingCalls).toHaveLength(2);
-    expect(second.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
+    expect(second.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('500');
     fixture.fail();
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('billing-changed', {
@@ -510,7 +995,7 @@ describe('useWorkspaceBilling explicit scope', () => {
       });
     });
     await act(async () => {});
-    expect(first.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('500');
+    expect(first.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('500');
   });
 
   it.each(['member', 'stale', 'future'])('rejects an invalid personal quota snapshot: %s', async (reason) => {
@@ -534,7 +1019,7 @@ describe('useWorkspaceBilling explicit scope', () => {
     expect(fixture.billingCalls).toHaveLength(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(fixture.billingCalls).toHaveLength(2);
-    expect(hook.result.current?.preflight?.codingPlan.windows[0]?.usedCredits).toBe('0');
+    expect(hook.result.current?.workspaceSnapshot?.designPlanWindows?.[0]?.remainingCredits).toBe('1000');
   });
 
   it('does not request billing before an exact Workspace identity exists', async () => {
@@ -543,6 +1028,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return new Response(JSON.stringify(workspaceDirectoryFixture([])), {
             status: 200,
@@ -636,6 +1123,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -717,6 +1206,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
         if (url === '/api/workspace/directory') {
@@ -806,6 +1297,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url.startsWith('/api/workspace/billing/interests/')) {
           if (init?.method === 'DELETE') {
             traffic.push({
@@ -960,6 +1453,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(currentContext);
         }
@@ -1045,6 +1540,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1101,6 +1598,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1187,6 +1686,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1247,6 +1748,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1324,6 +1827,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1377,6 +1882,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1434,6 +1941,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
         if (url === '/api/workspace/directory') {
@@ -1516,6 +2025,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         const interestResponse = billingInterestResponse(input, init);
         if (interestResponse) return interestResponse;
         if (url === '/api/workspace/directory') {
@@ -1566,6 +2077,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1613,6 +2126,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1673,6 +2188,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-b'));
         }
@@ -1742,6 +2259,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-b'));
         }
@@ -1814,6 +2333,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-b'));
         }
@@ -1891,6 +2412,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-a'));
         }
@@ -1927,6 +2450,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-b'));
         }
@@ -1996,6 +2521,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse(teamContext('workspace-b'));
         }
@@ -2059,6 +2586,8 @@ describe('useWorkspaceBilling explicit scope', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
+        // This display fixture does not claim any shared-mode preflight evidence.
+        if (url.includes('includePreflight=1')) return new Response('{}');
         if (url === '/api/workspace/directory') {
           return workspaceDirectoryResponse({
             ...teamContext('personal-a'),
@@ -2106,7 +2635,7 @@ describe('useWorkspaceBilling explicit scope', () => {
     await waitFor(() => expect(hook.result.current).not.toBeNull());
 
     expect(billingCalls).toEqual([
-      '/api/workspace/billing?scope=workspace&workspaceId=personal-a&includePreflight=1',
+      '/api/workspace/billing?scope=workspace&workspaceId=personal-a',
     ]);
   });
 });

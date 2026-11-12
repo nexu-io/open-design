@@ -494,3 +494,11 @@ Run `pnpm install` after changing package manifests, workspace layout, command e
 ## Can I use Node 22 instead of Node 24?
 
 No. `package.json#engines` specifies `node: "~24"`, which is the only supported runtime. The current lockfile pins `better-sqlite3@11.10.0`; on Windows it has no prebuilt binary for Node 24 and is built from source via node-gyp (see the Windows native section). Older Node versions are not tested and may hit lockfile or dependency incompatibilities.
+
+## Environment-consistent product links and localization
+
+User confirmed 2026-10-30: client links to the AMR console, including subscription, reset-card, invitation and billing actions, must follow the current authenticated runtime environment. Use the runtime profile and its associated console origin; do not hard-code production or rely on a stale origin. Preserve the existing production-origin safety boundary. Test local, test/feature-test and production routing, including profile or account changes.
+
+For user-facing features, check all supported UI languages across the entry, module, dialog, states, actions and errors. Translate missing copy, preserve interpolation placeholders and check wrapping and right-to-left layout. Tests must cover language selection and relevant states; do not treat English fallback as localization.
+
+Before restarting the persistent local acceptance services, preserve their effective profile, API and console origins, account/data directory, namespace and ports. A web restart may restart the daemon: inspect the actual lifecycle behavior, restore the same settings, and verify them afterward.

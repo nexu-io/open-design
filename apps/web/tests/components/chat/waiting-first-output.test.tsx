@@ -250,7 +250,7 @@ describe('等首个 token:壳里那一行读「思考中」(文案撤回,判据�
     await idle(67_000);
 
     // 壳头照旧报总耗时 —— 这一条同时证明「等了多久」本来就在屏幕上
-    expect(screen.getByText('1m 7s'), '壳头的总耗时不许被这次改动带走').toBeTruthy();
+    expect(screen.getByText('1 分 7 秒'), '壳头的总耗时不许被这次改动带走').toBeTruthy();
     // 那一行自己不带数,连空槽都不留(拿不到数和被压住在 DOM 上分得开)
     expect(waitingRowElapsed(), '把秒表补到这一行 = 2026-09-04 那条裁决的复读').toBeNull();
   });

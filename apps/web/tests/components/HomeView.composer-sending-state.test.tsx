@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { pickHomeTemplate } from '../helpers/home-template-picker';
+import type { ComponentProps } from 'react';
 
 // Home composer send must show an in-flight state (#4082).
 //
@@ -74,7 +75,8 @@ const WEB_PROTOTYPE_PLUGIN = {
   },
 };
 
-function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void) {
+function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void,
+  onSubmitWithDraftGuard?: ComponentProps<typeof HomeView>['onSubmitWithDraftGuard']) {
   // Keep the first-run guide quiet so sheen classes never race the
   // sending-state classes asserted below.
   writeHomeGuideStage('done');
@@ -84,6 +86,7 @@ function renderHome(onSubmit: (payload: unknown) => Promise<boolean> | void) {
       <HomeView
         projects={[]}
         onSubmit={onSubmit}
+        onSubmitWithDraftGuard={onSubmitWithDraftGuard}
         onOpenProject={() => undefined}
       />
     </I18nProvider>,
@@ -107,7 +110,7 @@ describe('home composer sending state', () => {
     }));
   });
 
-  it('keeps the send arrow stable and swallows repeat clicks while creation is in flight', async () => {
+  it('shows the existing sending spinner and swallows repeat clicks while creation is in flight', async () => {
     let resolveSubmit: (accepted: boolean) => void = () => undefined;
     const onSubmit = vi.fn(
       () => new Promise<boolean>((resolve) => { resolveSubmit = resolve; }),
@@ -123,14 +126,10 @@ describe('home composer sending state', () => {
     await waitFor(() => {
       expect(submit.disabled).toBe(true);
     });
-    // #5517 made the submit button icon-only (spinner while sending); the
-    // Navigation owns the progress handoff. Home must never flash a spinner,
-    // loading label, or busy state in the frame before it unmounts; the send
-    // mark stays the 36px arrow throughout.
-    expect(submit.getAttribute('aria-label')).toBe('Run');
-    expect(submit.getAttribute('aria-busy')).toBe('false');
-    expect(submit.className).not.toContain('is-sending');
-    expect(submit.querySelector('svg')?.getAttribute('width')).toBe('36');
+    expect(submit.getAttribute('aria-label')).toBe('Sending…');
+    expect(submit.getAttribute('aria-busy')).toBe('true');
+    expect(submit.querySelector('svg')).toHaveClass('icon-spin');
+    expect(submit.querySelector('svg')?.getAttribute('width')).toBe('17');
 
     // A second click during the in-flight window must not start a second run.
     fireEvent.click(submit);
@@ -140,6 +139,9 @@ describe('home composer sending state', () => {
     resolveSubmit(true);
     await waitFor(() => {
       expect(submit.disabled).toBe(false);
+      expect(submit.getAttribute('aria-busy')).toBe('false');
+      expect(submit.querySelector('svg')).not.toHaveClass('icon-spin');
+      expect(submit.querySelector('svg')?.getAttribute('width')).toBe('36');
     });
   });
 
@@ -166,12 +168,36 @@ describe('home composer sending state', () => {
     // Icon-only button (#5517): the idle accessible name replaces the old
     // visible Send label.
     expect(submit.getAttribute('aria-label')).toBe('Run');
-    expect(submit.className).not.toContain('is-sending');
+    expect(submit.getAttribute('aria-busy')).toBe('false');
+    expect(submit.querySelector('svg')).not.toHaveClass('icon-spin');
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Build a landing page');
     expect((await screen.findByRole('alert')).textContent).toMatch(/try again/i);
 
     // The failure path must leave the composer retryable.
     fireEvent.click(submit);
     expect(onSubmit).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the sending feedback through guarded preflight and releases a handled block without losing the draft', async () => {
+    let settle: (value: 'blocked') => void = () => undefined;
+    const fallback = vi.fn();
+    const guardedSubmit = vi.fn(() => new Promise<'blocked'>((resolve) => { settle = resolve; }));
+    renderHome(fallback, guardedSubmit);
+    await screen.findByTestId('home-hero-input');
+    setHomeHeroPrompt('Keep the preflight draft');
+    const submit = await screen.findByTestId('home-hero-submit');
+    fireEvent.click(submit);
+    await waitFor(() => expect(submit).toHaveAttribute('aria-busy', 'true'));
+    expect(submit).toBeDisabled();
+    expect(submit.querySelector('svg')).toHaveClass('icon-spin');
+    fireEvent.click(submit);
+    expect(guardedSubmit).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
+    settle('blocked');
+    await waitFor(() => expect(submit).toBeEnabled());
+    expect(submit).toHaveAttribute('aria-busy', 'false');
+    expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Keep the preflight draft');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('shows the daemon recovery message only for a transport failure and preserves the draft', async () => {

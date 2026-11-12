@@ -4,6 +4,7 @@ import type {
   OpenDesignHostBridge,
   OpenDesignHostActionResult,
   OpenDesignHostDownloadResult,
+  OpenDesignHostDisplayRefresh,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -347,8 +348,23 @@ ipcRenderer.on(APP_CONFIG_CHANGED_IPC_CHANNEL, () => {
   window.dispatchEvent(new CustomEvent(APP_CONFIG_CHANGED_EVENT));
 });
 
+const inputShutdownListeners = new Set<() => Promise<void>>();
+if (process.argv.includes('--od-input-telemetry')) {
+  ipcRenderer.on('od:input-telemetry:flush', async (_event: unknown, nonce: unknown) => {
+    if (typeof nonce !== 'string') return;
+    await Promise.allSettled([...inputShutdownListeners].map(listener => Promise.resolve().then(listener)));
+    ipcRenderer.send('od:input-telemetry:flushed', nonce);
+  });
+}
+
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
+  ...(process.argv.includes('--od-input-telemetry') ? { inputTelemetry: {
+    subscribeShutdown: (listener: () => Promise<void>): (() => void) => {
+      inputShutdownListeners.add(listener);
+      return () => { inputShutdownListeners.delete(listener); };
+    },
+  } } : {}),
   startup: {
     context: () => ipcRenderer.invoke('od:startup:context'),
     signal: (value: Parameters<NonNullable<OpenDesignHostBridge['startup']>['signal']>[0]) =>
@@ -360,6 +376,11 @@ const hostBridge = {
     ...(osLocale !== undefined ? { osLocale } : {}),
   },
   appearance: {
+    subscribeDisplayRefresh: (listener: (refresh: OpenDesignHostDisplayRefresh) => void): (() => void) => {
+      const handler = (_event: unknown, refresh: OpenDesignHostDisplayRefresh): void => listener(refresh);
+      ipcRenderer.on('od:appearance:display-refreshed', handler);
+      return () => { ipcRenderer.removeListener('od:appearance:display-refreshed', handler); };
+    },
     // Pin the native window appearance (macOS vibrancy glass material) to the
     // app theme. Fire-and-forget: the main process validates the value.
     setTheme: (theme: 'light' | 'dark' | 'system'): void =>
@@ -394,6 +415,9 @@ const hostBridge = {
   pet: {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
+  },
+  window: {
+    show: (): void => ipcRenderer.send('od:window:show'),
   },
   updater,
 } satisfies OpenDesignHostBridge;

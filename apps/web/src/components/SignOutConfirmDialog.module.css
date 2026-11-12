@@ -1,0 +1,19 @@
+.dialog { width: min(440px, calc(100vw - 32px)); padding: 24px; border-radius: 16px; background: #fafafa; color: #494949; }
+.account { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; padding: 12px; border: 1px solid #ddd; border-radius: 12px; color: #202020; font-weight: 600; overflow-wrap: anywhere; }
+.avatar { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #88e04c, #125800); color: white; font-weight: 600; }
+.actions.actions { display: flex; justify-content: flex-end; gap: 8px; }
+.actions button { min-height: 44px; min-width: 104px; border-radius: 10px; font-size: 14px; font-weight: 600; }
+/* Pin every interactive state: the shared Button's `:hover:not(:disabled)`
+   outranks a plain class and would turn the dark confirm white-on-white. */
+.actions .cancel,
+.actions .cancel:hover:not(:disabled),
+.actions .cancel:active:not(:disabled) { border: 1px solid #ddd; color: #202020; }
+.actions .cancel { background: #eee; }
+.actions .cancel:hover:not(:disabled) { background: #e5e5e5; }
+.actions .cancel:active:not(:disabled) { background: #ddd; }
+.actions .confirm,
+.actions .confirm:hover:not(:disabled),
+.actions .confirm:active:not(:disabled) { border: 1px solid transparent; color: white; }
+.actions .confirm { background: #202020; }
+.actions .confirm:hover:not(:disabled) { background: #353535; }
+.actions .confirm:active:not(:disabled) { background: #000; }

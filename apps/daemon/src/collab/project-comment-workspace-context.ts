@@ -1,4 +1,3 @@
-import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { ProjectCommentWorkspaceContextResolution } from '../routes/project/comments.js';
 
 export interface LocalProjectCommentWorkspaceBinding {
@@ -9,16 +8,15 @@ export interface LocalProjectCommentWorkspaceBinding {
 }
 
 /**
- * Resolves the persisted project binding against request authority without
- * consulting a member directory. The caller supplies the local authority and
- * fallback-context constructors, keeping this policy deterministic and
- * importable by production wiring and relay tests alike.
+ * Attribute workspace-bound comments to the request's local member identity.
+ * Project creation is an ownership witness, never a substitute caller. Local
+ * comments remain available without a directory round trip; relay publication
+ * must still use its own fresh cloud authority. Unbound projects stay local.
  */
 export function resolveLocalProjectCommentWorkspaceContext(input: {
   binding: LocalProjectCommentWorkspaceBinding | undefined;
   revoked: boolean;
   local: ProjectCommentWorkspaceContextResolution;
-  fallbackContext: () => WorkspaceCollabContext;
 }): ProjectCommentWorkspaceContextResolution {
   const { binding, revoked, local } = input;
   if (revoked || binding?.resourceState === 'deleted') {
@@ -31,30 +29,31 @@ export function resolveLocalProjectCommentWorkspaceContext(input: {
   }
   if (!binding?.workspaceId) return { ok: true, context: null };
   if (!local.ok) return local;
-  if (local.context) {
-    if (
-      local.context.workspaceId !== binding.workspaceId
-      || (
-        binding.visibility !== 'team'
-        && binding.createdByWorkspaceMemberId
-        && local.context.workspaceMemberId !== binding.createdByWorkspaceMemberId
-      )
-    ) {
-      return {
-        ok: false,
-        status: 403,
-        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
-        message: 'workspace project access is not allowed',
-      };
-    }
+  if (!local.context) {
     return {
-      ok: true,
-      context: {
-        ...local.context,
-        workspaceType: binding.visibility === 'team' ? 'team' : 'personal',
-        ...(binding.visibility === 'team' ? { teamId: binding.workspaceId } : {}),
-      },
+      ok: false,
+      status: 400,
+      code: 'WORKSPACE_CONTEXT_REQUIRED',
+      message: 'workspace context is required',
     };
   }
-  return { ok: true, context: input.fallbackContext() };
+  if (
+    local.context.workspaceId !== binding.workspaceId
+    || (
+      binding.visibility !== 'team'
+      && binding.createdByWorkspaceMemberId
+      && local.context.workspaceMemberId !== binding.createdByWorkspaceMemberId
+    )
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace project access is not allowed',
+    };
+  }
+  return {
+    ok: true,
+    context: local.context,
+  };
 }
