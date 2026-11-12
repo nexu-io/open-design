@@ -58,7 +58,7 @@ import {
   attachDesktopHostLifecycleRecorder,
   reportPriorDesktopUncleanExits,
 } from "./observability.js";
-import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
+import { attachDesktopProcessErrorFilter, markDesktopShutdownInProgress } from "./uncaught-exception.js";
 import {
   DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
   deriveDesktopUpdateMenuItem,
@@ -950,6 +950,9 @@ async function runDesktopMainWithTiming(
       const startedAt = Date.now();
       let shutdownFailed = false;
       console.info("[open-design desktop] shutdown started");
+      // Closing the window below cancels in-flight requests; their aborts
+      // are expected from here on, in both this filter and the packaged one.
+      markDesktopShutdownInProgress();
       options.onShutdownStarted?.();
       updateScheduler?.stop("shutdown");
       await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });

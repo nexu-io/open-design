@@ -66,6 +66,16 @@ describe("desktop updater host boundary", () => {
     expect(main.slice(handlersStart, lifecycleStart)).toContain("SIDECAR_MESSAGES.RENDER_FRAMES");
   });
 
+  it("arms the shutdown-abort tolerance before the window closes", () => {
+    const main = source("src/main/index.ts");
+    const started = main.indexOf('console.info("[open-design desktop] shutdown started");');
+    const armed = main.indexOf("markDesktopShutdownInProgress();", started);
+    const windowClosed = main.indexOf("await desktop?.close()", started);
+    expect(started).toBeGreaterThanOrEqual(0);
+    expect(armed).toBeGreaterThan(started);
+    expect(windowClosed).toBeGreaterThan(armed);
+  });
+
   it("keeps direct sidecar discovery and auth registration soft-failing", () => {
     const main = source("src/main/index.ts");
     const wiringStart = main.indexOf("discoverDaemonUrl: async () => {");
