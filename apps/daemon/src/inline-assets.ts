@@ -136,6 +136,7 @@ export async function inlineRelativeAssets(
     start: number;
     end: number;
     resolved: string;
+    rawHref: string;
     build: (content: string) => string;
   }
 
@@ -145,15 +146,19 @@ export async function inlineRelativeAssets(
     const tag = match[0];
     const start = match.index!;
     const rel = readHtmlAttr(tag, 'rel');
-    const href = readHtmlAttr(tag, 'href');
-    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
+    // Decode href for filesystem resolution (fixes #8891), but keep original
+    // encoded form for the <style data-od-inline-asset=""> attribute output.
+    const hrefRaw = readHtmlAttr(tag, 'href');
+    const href = hrefRaw != null ? decodeHtmlEntity(hrefRaw) : null;
+    if (!rel || !/\bstylesheet\b/i.test(rel) || !href || !hrefRaw) continue;
     const resolved = resolveProjectRelativePath(ownerFileName, href);
     if (!resolved) continue;
     pending.push({
       start,
       end: start + tag.length,
       resolved,
-      build: (css) => buildInlineStyleBlock(tag, href, css),
+      rawHref: hrefRaw,
+      build: (css) => buildInlineStyleBlock(tag, hrefRaw, css),
     });
   }
 
@@ -163,13 +168,17 @@ export async function inlineRelativeAssets(
     const tag = match[0];
     const start = match.index!;
     const src = readHtmlAttr(tag, 'src');
-    if (!src) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, src);
+    // Decode src for filesystem resolution (fixes #8891); keep original for consistency.
+    const rawSrcEncoded = src;
+    const rawSrc = src != null ? decodeHtmlEntity(src) : null;
+    if (!rawSrc) continue;
+    const resolved = resolveProjectRelativePath(ownerFileName, rawSrc);
     if (!resolved) continue;
     pending.push({
       start,
       end: start + tag.length,
       resolved,
+      rawHref: rawSrcEncoded ?? '',
       build: (js) => buildInlineScriptBlock(tag, js),
     });
   }
@@ -337,15 +346,17 @@ const STYLE_PRESERVED_BOOLEAN_ATTRS = ['disabled'] as const;
 function buildInlineStyleBlock(tag: string, href: string, css: string): string {
   const carried: string[] = [];
   for (const name of STYLE_PRESERVED_LINK_ATTRS) {
-    const value = readHtmlAttr(tag, name);
-    if (value != null) carried.push(`${name}="${escapeHtmlAttr(value)}"`);
+    // Read the raw HTML entity-encoded value, then decode→escape so a pre-encoded
+    // entity like &amp; ends up as &amp; (not &amp;amp;) in the output.
+    const rawValue = readHtmlAttr(tag, name);
+    if (rawValue != null) carried.push(`${name}="${escapeHtmlAttr(decodeHtmlEntity(rawValue))}"`);
   }
   for (const name of STYLE_PRESERVED_BOOLEAN_ATTRS) {
     if (hasBooleanHtmlAttr(tag, name)) carried.push(name);
   }
   const attrString = carried.length === 0 ? '' : ` ${carried.join(' ')}`;
   return (
-    `<style data-od-inline-asset="${escapeHtmlAttr(href)}"${attrString}>\n` +
+    `<style data-od-inline-asset="${escapeHtmlAttr(decodeHtmlEntity(href))}"${attrString}>\n` +
     `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`
   );
 }
@@ -379,6 +390,16 @@ export function resolveProjectRelativePath(
 }
 
 export function readHtmlAttr(tag: string, name: string): string | null {
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
+  return match?.[2] ?? null;
+}
+
+/**
+ * Like `readHtmlAttr` but decodes HTML character references in the captured
+ * value. Used exclusively for asset-path lookups where the raw encoded form
+ * (e.g. `theme&#38;dark.css`) would otherwise miss the on-disk file.
+ */
+export function readHtmlAttrDecoded(tag: string, name: string): string | null {
   const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
   return match?.[2] != null ? decodeHtmlEntity(match[2]) : null;
 }

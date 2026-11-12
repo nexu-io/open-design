@@ -190,33 +190,31 @@ describe('inlineRelativeAssets (FS-backed)', () => {
     const html = '<link rel="stylesheet" href="theme&#38;dark.css">';
     const out = await inlineRelativeAssets(html, 'index.html', fsReader());
     expect(out).toContain('.t{color:red}');
-    expect(out).not.toContain('theme&#38;dark.css');
+    // data-od-inline-asset uses the canonical HTML-encoded form (&amp; instead of &#38;)
+    expect(out).toContain('data-od-inline-asset="theme&amp;dark.css"');
   });
 
-  it('decodes &amp; in href and resolves the corresponding asset (#8891)', async () => {
-    write('boot&amp;main.js', 'window.OK = true;');
+  it('decodes &amp; in src and resolves the corresponding asset (#8891)', async () => {
+    write('boot&main.js', 'window.OK = true;');
     const html = '<script src="boot&amp;main.js"></script>';
     const out = await inlineRelativeAssets(html, 'index.html', fsReader());
     expect(out).toContain('window.OK = true;');
     expect(out).not.toContain('src="boot&amp;main.js"');
   });
 
-  it('preserves decoded entities in carried <link> attributes on the generated <style> tag (#8891)', async () => {
+  it('preserves original encoded entities in carried <link> attributes on the generated <style> tag (#8891)', async () => {
     write('x.css', '.x{color:blue}');
     const html =
       '<link rel="stylesheet" href="x.css" title="R&amp;D" media="screen and (width &gt; 500px)">';
     const out = await inlineRelativeAssets(html, 'index.html', fsReader());
     expect(out).toContain('.x{color:blue}');
-    // title attribute must be decoded to literal R&D, not "R&amp;D"
-    expect(out).toContain('title="R&D"');
-    expect(out).not.toContain('R&amp;D');
-    // media attribute must be decoded so > is literal, not "&gt;"
-    expect(out).toContain('media="screen and (width > 500px)"');
-    expect(out).not.toContain('&gt;');
+    // Attributes kept in original encoded form — browsers decode them on render
+    expect(out).toContain('title="R&amp;D"');
+    expect(out).toContain('media="screen and (width &gt; 500px)"');
   });
 
   it('handles mixed entities in a single attribute value', async () => {
-    write('a&amp;b.css', '.a{margin:0}');
+    write('a&b.css', '.a{margin:0}');
     const html = '<link rel="stylesheet" href="a&amp;b.css">';
     const out = await inlineRelativeAssets(html, 'index.html', fsReader());
     expect(out).toContain('.a{margin:0}');
