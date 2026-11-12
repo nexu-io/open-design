@@ -65,6 +65,7 @@ import {
 import {
   attachPackagedDesktopProcessLogging,
   createPackagedDesktopLogger,
+  markPackagedShutdownInProgress,
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
@@ -476,6 +477,9 @@ const electronReadyAtMs = performance.now();
       }
     },
     quiesceRendererTransport() {
+      // Arm the shutdown flag first: quiesce() aborts in-flight od:// fetches,
+      // and their AbortError rejections must be tolerated, not treated as fatal.
+      markPackagedShutdownInProgress();
       odProtocol.quiesce();
     },
     async discoverWebUrl() {
