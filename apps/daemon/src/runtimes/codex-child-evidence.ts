@@ -13,6 +13,7 @@ import {
 import path from 'node:path';
 
 import { findIndexedCodexArchivedRolloutPath } from '../codex-archived-rollout-index.js';
+import { findIndexedCodexChildSessions } from './codex-child-session-index.js';
 
 import {
   normalizeAgentObservationV1,
@@ -108,6 +109,13 @@ interface UsageValues extends Record<string, number | undefined> {
 
 interface ChildActivity {
   sessionId: string;
+  taskName?: string;
+  kind: string;
+  atMs?: number;
+}
+
+interface ChildTaskActivity {
+  taskName: string;
   kind: string;
   atMs?: number;
 }
@@ -123,10 +131,12 @@ interface ParsedTurn {
   promptIdentities: PromptIdentity[];
   modelCalls: UsageValues[];
   childActivities: ChildActivity[];
+  childTaskActivities: ChildTaskActivity[];
 }
 
 interface ParsedRollout {
   sessionId: string;
+  agentPath?: string;
   parentSessionId?: string;
   parentDeclarationConflict: boolean;
   malformedLineCount: number;
@@ -226,11 +236,17 @@ function safeSessionId(value: unknown): string | undefined {
   return SESSION_ID_PATTERN.test(trimmed) ? trimmed : undefined;
 }
 
-function spawnResultSessionId(output: unknown): string | undefined {
+function spawnResult(output: unknown): { sessionId?: string; taskName?: string } | undefined {
   if (typeof output !== 'string') return undefined;
   try {
     const result: unknown = JSON.parse(output);
-    return isRecord(result) ? safeSessionId(result.agent_id) : undefined;
+    if (!isRecord(result)) return undefined;
+    const sessionId = safeSessionId(result.agent_id);
+    if (sessionId) return { sessionId };
+    const taskName = result.task_name;
+    return typeof taskName === 'string' && taskName.length > 0 && taskName.length <= 1_024
+      ? { taskName }
+      : undefined;
   } catch {
     return undefined;
   }
@@ -309,6 +325,13 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
   const parentSessionId = parentDeclarationConflict
     ? undefined
     : validParentDeclarations[0]?.value;
+  const agentPaths = new Set(metadata.flatMap(payload => {
+    const source = isRecord(payload.source) ? payload.source : undefined;
+    const subagent = source && isRecord(source.subagent) ? source.subagent : undefined;
+    const spawn = subagent && isRecord(subagent.thread_spawn) ? subagent.thread_spawn : undefined;
+    return [payload.agent_path, spawn?.agent_path].filter((value): value is string => typeof value === 'string');
+  }));
+  const agentPath = agentPaths.size === 1 ? [...agentPaths][0] : undefined;
 
   const turns = new Map<string, ParsedTurn>();
   let activeTurnId: string | undefined;
@@ -338,6 +361,7 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
           promptIdentities: [],
           modelCalls: [],
           childActivities: [],
+          childTaskActivities: [],
         });
       }
       continue;
@@ -346,7 +370,7 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
     const turn = turns.get(activeTurnId);
     if (!turn) continue;
     if (record.type === 'response_item') {
-      // Codex 0.167.0 records the child ID in the native tool result. Pair
+      // Codex 0.167.0 records the child ID or task name in the native result. Pair
       // it with the call on this turn so copied history and unrelated tool
       // outputs cannot nominate a child.
       const callId = payload.call_id;
@@ -354,16 +378,23 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
       if (typeof callId !== 'string' || !callId || !isRecord(attribution)
         || attribution.turn_id !== activeTurnId) continue;
       if (payload.type === 'function_call') {
-        if (payload.namespace === 'multi_agent_v1' && payload.name === 'spawn_agent') {
+        if ((payload.namespace === 'multi_agent_v1' || payload.namespace === 'collaboration')
+          && payload.name === 'spawn_agent') {
           pendingSpawnCalls.add(callId);
         } else {
           pendingSpawnCalls.delete(callId);
         }
       } else if (payload.type === 'function_call_output' && pendingSpawnCalls.delete(callId)) {
-        const sessionId = spawnResultSessionId(payload.output);
-        if (sessionId) {
+        const result = spawnResult(payload.output);
+        if (result?.sessionId) {
           turn.childActivities.push({
-            sessionId,
+            sessionId: result.sessionId,
+            kind: 'started',
+            ...(recordAtMs !== undefined ? { atMs: recordAtMs } : {}),
+          });
+        } else if (result?.taskName) {
+          turn.childTaskActivities.push({
+            taskName: result.taskName,
             kind: 'started',
             ...(recordAtMs !== undefined ? { atMs: recordAtMs } : {}),
           });
@@ -455,6 +486,7 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
 
   return {
     sessionId: expectedSessionId,
+    ...(agentPath ? { agentPath } : {}),
     ...(parentSessionId ? { parentSessionId } : {}),
     parentDeclarationConflict,
     malformedLineCount,
@@ -826,8 +858,9 @@ function selectParentTurn(input: {
 
 /**
  * Collect Codex child facts beside the main JSON event parser. It only opens
- * the explicitly declared parent session plus child session ids referenced by
- * that parent's selected turn, and it never returns rollout paths or prompt
+ * the explicitly declared parent session plus children referenced by that
+ * parent's selected turn (IDs or names resolved through native spawn edges).
+ * It never returns rollout paths, task names, or prompt
  * text. Failure is data: callers receive unavailable/partial facts and the
  * normal Run lifecycle remains untouched.
  */
@@ -954,6 +987,19 @@ export async function collectCodexChildEvidence(
     observationSequence += 1;
   };
 
+  const childIndexes = new Map<string, ReturnType<typeof findIndexedCodexChildSessions>>();
+  const loadChild = (sessionId: string): Promise<ReadRolloutResult> | null => {
+    if (!attemptedChildSessions.has(sessionId)) {
+      if (attemptedChildSessions.size >= maxChildSessions) {
+        limitations.add('codex_child_session_limit_exceeded');
+        recordDiagnostic('child_session_limit_exceeded');
+        return null;
+      }
+      attemptedChildSessions.add(sessionId);
+    }
+    return load(sessionId);
+  };
+
   const collectChildren = async (args: {
     parentSessionId: string;
     parentTurn: ParsedTurn;
@@ -962,16 +1008,57 @@ export async function collectCodexChildEvidence(
     ancestorTurnIds: Set<string>;
     depth: number;
   }): Promise<void> => {
-    const activitiesBySession = new Map<string, ChildActivity[]>();
-    for (const activity of args.parentTurn.childActivities) {
-      const sequence = activitiesBySession.get(activity.sessionId) ?? [];
-      sequence.push(activity);
-      activitiesBySession.set(activity.sessionId, sequence);
-    }
-    if (args.depth >= maxRecursionDepth && activitiesBySession.size > 0) {
+    if (args.depth >= maxRecursionDepth && (
+      args.parentTurn.childActivities.length > 0 || args.parentTurn.childTaskActivities.length > 0
+    )) {
       limitations.add('codex_child_recursion_depth_exceeded');
       recordDiagnostic('child_recursion_depth_exceeded');
       return;
+    }
+    const namedActivities: ChildActivity[] = [];
+    if (args.parentTurn.childTaskActivities.length > 0) {
+      let pendingIndex = childIndexes.get(args.parentSessionId);
+      if (!pendingIndex) {
+        pendingIndex = findIndexedCodexChildSessions(input.codexHome!.trim(), args.parentSessionId, maxChildSessions);
+        childIndexes.set(args.parentSessionId, pendingIndex);
+      }
+      const index = await pendingIndex;
+      if (!index.ok) {
+        limitations.add('codex_child_task_unresolved');
+        recordDiagnostic(index.reason);
+      } else {
+        for (const activity of args.parentTurn.childTaskActivities) {
+          const matchingIds: string[] = [];
+          for (const candidate of index.children.filter(child => child.agentPath === activity.taskName)) {
+            if (args.ancestry.has(candidate.sessionId)) continue;
+            const child = await loadChild(candidate.sessionId);
+            if (!child) continue;
+            if (!child.ok) {
+              recordDiagnostic(child.reason);
+              continue;
+            }
+            // A task name is reusable across sessions and turns. The index
+            // alone is never attribution or terminal evidence.
+            if (!child.parsed.parentDeclarationConflict
+              && child.parsed.parentSessionId === args.parentSessionId
+              && child.parsed.agentPath === activity.taskName
+              && child.parsed.turns.some(turn => turn.parentTurnId === args.parentTurn.turnId
+                && !args.ancestorTurnIds.has(turn.turnId))) matchingIds.push(candidate.sessionId);
+          }
+          if (matchingIds.length !== 1) {
+            limitations.add('codex_child_task_unresolved');
+            recordDiagnostic(matchingIds.length > 1 ? 'child_task_ambiguous' : 'child_task_not_resolved');
+            continue;
+          }
+          namedActivities.push({ ...activity, sessionId: matchingIds[0]! });
+        }
+      }
+    }
+    const activitiesBySession = new Map<string, ChildActivity[]>();
+    for (const activity of [...args.parentTurn.childActivities, ...namedActivities]) {
+      const sequence = activitiesBySession.get(activity.sessionId) ?? [];
+      sequence.push(activity);
+      activitiesBySession.set(activity.sessionId, sequence);
     }
     for (const [childSessionId, activities] of activitiesBySession) {
       if (args.ancestry.has(childSessionId)) {
@@ -979,15 +1066,8 @@ export async function collectCodexChildEvidence(
         recordDiagnostic('child_cycle_rejected');
         continue;
       }
-      if (!attemptedChildSessions.has(childSessionId)) {
-        if (attemptedChildSessions.size >= maxChildSessions) {
-          limitations.add('codex_child_session_limit_exceeded');
-          recordDiagnostic('child_session_limit_exceeded');
-          continue;
-        }
-        attemptedChildSessions.add(childSessionId);
-      }
-      const child = await load(childSessionId);
+      const child = await loadChild(childSessionId);
+      if (!child) continue;
       if (!child.ok) {
         limitations.add('codex_child_rollout_unavailable');
         recordDiagnostic(child.reason);
@@ -1016,7 +1096,8 @@ export async function collectCodexChildEvidence(
           limitations.add('codex_inherited_turn_excluded');
           return false;
         }
-        if (turn.parentTurnId && turn.parentTurnId !== args.parentTurn.turnId) return false;
+        if ((turn.parentTurnId || activities.some(activity => activity.taskName))
+          && turn.parentTurnId !== args.parentTurn.turnId) return false;
         if (turn.startedAtMs === undefined) return false;
         return turn.startedAtMs >= rootStart - 2_000 && turn.startedAtMs <= rootEnd + 2_000;
       });
@@ -1194,7 +1275,7 @@ export async function collectCodexChildEvidence(
     depth: 0,
   });
 
-  if (pending.length === 0 && parentTurn.childActivities.length > 0) {
+  if (pending.length === 0 && (parentTurn.childActivities.length > 0 || parentTurn.childTaskActivities.length > 0)) {
     limitations.add('codex_child_activity_unresolved');
   }
   const observations = pending

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
-import { chmod, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +42,34 @@ const nativeSpawnSeed = JSON.parse(readFileSync(new URL(
 };
 
 const temporaryRoots: string[] = [];
+const collaborationSeed = JSON.parse(readFileSync(new URL(
+  '../fixtures/od-next-runtime-capabilities/codex-0.167.0.collaboration.sanitized-real-seed.json',
+  import.meta.url,
+), 'utf8')) as Omit<typeof nativeSpawnSeed, 'cases'> & {
+  cases: Array<typeof nativeSpawnSeed.cases[number] & { taskName: string }>;
+};
+
+async function writeCollaborationReplay(
+  replay: typeof collaborationSeed.cases[number],
+): Promise<{ home: string; input: ReturnType<typeof collectInput>; parent: string; child: string }> {
+  const home = await codexHome();
+  const parent = await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+  const child = await writeRollout(home, replay.childSessionId, replay.childRollout);
+  const db = new Database(path.join(home, 'state_5.sqlite'));
+  try {
+    db.exec(`CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, archived INTEGER, agent_path TEXT);
+      CREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT PRIMARY KEY, status TEXT);
+      CREATE INDEX idx_thread_spawn_edges_parent_status ON thread_spawn_edges(parent_thread_id, status);`);
+    db.prepare('INSERT INTO threads VALUES (?, ?, 0, NULL)').run(replay.parentSessionId, parent);
+    db.prepare('INSERT INTO threads VALUES (?, ?, 0, ?)').run(replay.childSessionId, child, replay.taskName);
+    db.prepare("INSERT INTO thread_spawn_edges VALUES (?, ?, 'open')").run(replay.parentSessionId, replay.childSessionId);
+  } finally { db.close(); }
+  return { home, parent, child, input: collectInput(home, {
+    parentSessionId: replay.parentSessionId,
+    parentTurnId: replay.parentTurnId,
+    agentCliVersion: collaborationSeed.cliVersion,
+  }) };
+}
 const nativePlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 
 function simulateWindows(): void {
@@ -198,6 +226,36 @@ afterEach(async () => {
 });
 
 describe('collectCodexChildEvidence', () => {
+  it.each(collaborationSeed.cases.flatMap(replay => (
+    ['native', 'win32'].map(platform => ({ ...replay, platform }))
+  )))('collects native task_name-only children active and archived ($transport, $platform)', async (replay) => {
+    const { home, parent, child, input } = await writeCollaborationReplay(replay);
+    if (replay.platform === 'win32') {
+      await chmod(path.join(home, 'state_5.sqlite'), 0o666);
+      simulateWindows();
+    }
+    const active = await collectCodexChildEvidence(input);
+    expect(active.knownChildCount).toBe(1);
+    expect(active.diagnostics).toEqual([]);
+    expect(active.observations.filter(o => o.kind === 'child_agent' && o.status === 'completed')).toMatchObject([{
+      identity: { runtimeSessionId: replay.childSessionId, parentObservationId: 'root' },
+      attributes: { terminalEvidence: 'child_task_complete' },
+    }]);
+    const archive = path.join(home, 'archived_sessions');
+    await mkdir(archive);
+    const db = new Database(path.join(home, 'state_5.sqlite'));
+    try {
+      for (const file of [parent, child]) {
+        const archived = path.join(archive, path.basename(file));
+        await rename(file, archived);
+        db.prepare('UPDATE threads SET archived = 1, rollout_path = ? WHERE rollout_path = ?').run(archived, file);
+      }
+    } finally { db.close(); }
+    // Known session IDs must still use the native archive index in a large archive.
+    await writeFile(path.join(archive, 'unrelated'), '');
+    expect(await collectCodexChildEvidence({ ...input, maxDirectoryEntries: 2 })).toEqual(active);
+  });
+
   it.each(nativeSpawnSeed.cases)(
     'collects completed Codex 0.167.0 children before and after archiving ($transport)',
     async (replay) => {
@@ -227,6 +285,102 @@ describe('collectCodexChildEvidence', () => {
       expect(await collectCodexChildEvidence(input)).toEqual(active);
     },
   );
+
+  it.each(['parent', 'task name', 'conflicting task name', 'turn', 'missing turn'] as const)(
+    'rejects named children with mismatched %s despite a matching native index', async (scenario) => {
+      const replay = structuredClone(collaborationSeed.cases[0]!);
+      const meta = replay.childRollout.find(r => r.type === 'session_meta' && r.payload.id === replay.childSessionId)!.payload;
+      const spawn = ((meta.source as { subagent: { thread_spawn: Record<string, unknown> } }).subagent.thread_spawn);
+      const started = replay.childRollout.find(r => r.payload.type === 'task_started'
+        && r.payload.turn_id !== replay.parentTurnId)!.payload;
+      if (scenario === 'parent') { meta.parent_thread_id = SIBLING; spawn.parent_thread_id = SIBLING; }
+      if (scenario === 'task name') { meta.agent_path = '/root/another'; spawn.agent_path = '/root/another'; }
+      if (scenario === 'conflicting task name') meta.agent_path = '/root/another';
+      if (scenario === 'turn' || scenario === 'missing turn') {
+        started.turn_attribution = { turn_id: started.turn_id,
+          ...(scenario === 'turn' ? { parent_turn_id: 'other-turn' } : {}) };
+      }
+      const { input } = await writeCollaborationReplay(replay);
+      expect(await collectCodexChildEvidence(input)).toMatchObject({
+        availability: 'partial', knownChildCount: 0, observations: [],
+        diagnostics: [{ code: 'child_task_not_resolved', count: 1 }],
+      });
+    },
+  );
+
+  it.each(['missing', 'incompatible', 'symlink', 'denied'] as const)(
+    'reports partial evidence when the native child index is %s', async (scenario) => {
+      const { home, input } = await writeCollaborationReplay(collaborationSeed.cases[0]!);
+      const index = path.join(home, 'state_5.sqlite');
+      if (scenario === 'missing') await rm(index);
+      if (scenario === 'incompatible') {
+        const db = new Database(index);
+        try { db.exec('DROP INDEX idx_thread_spawn_edges_parent_status'); } finally { db.close(); }
+      }
+      if (scenario === 'symlink') {
+        const outside = await codexHome();
+        await rename(index, path.join(outside, 'state_5.sqlite'));
+        await symlink(path.join(outside, 'state_5.sqlite'), index);
+      }
+      if (scenario === 'denied') {
+        simulateWindows();
+        // Deny the index itself, not the root rollout lookup.
+        const { lstat: actualLstat } = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+        vi.mocked(lstat).mockImplementation((...args) => {
+          if (args[0] === index) return Promise.reject(Object.assign(new Error('Access denied'), { code: 'EACCES' }));
+          return actualLstat(...args);
+        });
+      }
+      expect(await collectCodexChildEvidence(input)).toMatchObject({
+        availability: 'partial', knownChildCount: 0, observations: [],
+        diagnostics: [{ code: 'child_index_unavailable', count: 1 }],
+      });
+    },
+  );
+
+  it.each(['unrelated parent', 'earlier turn', 'ambiguous', 'limit'] as const)(
+    'handles same-name indexed children: %s', async (scenario) => {
+      const replay = collaborationSeed.cases[0]!;
+      const { home, input } = await writeCollaborationReplay(replay);
+      let sibling = JSON.parse(JSON.stringify(replay.childRollout).replaceAll(replay.childSessionId, SIBLING)) as typeof replay.childRollout;
+      if (scenario === 'unrelated parent') {
+        sibling = JSON.parse(JSON.stringify(sibling).replaceAll(replay.parentSessionId, PARENT));
+      }
+      if (scenario === 'earlier turn') {
+        sibling = JSON.parse(JSON.stringify(sibling).replaceAll(replay.parentTurnId, 'earlier-parent-turn'));
+      }
+      const file = await writeRollout(home, SIBLING, sibling);
+      const db = new Database(path.join(home, 'state_5.sqlite'));
+      try {
+        db.prepare('INSERT INTO threads VALUES (?, ?, 0, ?)').run(SIBLING, file, replay.taskName);
+        db.prepare("INSERT INTO thread_spawn_edges VALUES (?, ?, 'open')").run(
+          scenario === 'unrelated parent' ? PARENT : replay.parentSessionId, SIBLING,
+        );
+      } finally { db.close(); }
+      const { open } = await import('node:fs/promises');
+      vi.mocked(open).mockClear();
+      const result = await collectCodexChildEvidence({ ...input, ...(scenario === 'limit' ? { maxChildSessions: 1 } : {}) });
+      if (scenario === 'ambiguous' || scenario === 'limit') {
+        expect(result).toMatchObject({ availability: 'partial', knownChildCount: 0, observations: [] });
+        expect(result.diagnostics).toContainEqual({
+          code: scenario === 'ambiguous' ? 'child_task_ambiguous' : 'child_session_limit_exceeded', count: 1,
+        });
+      } else {
+        expect(result.knownChildCount).toBe(1);
+        expect(result.observations.every(o => o.identity.runtimeSessionId === replay.childSessionId)).toBe(true);
+        if (scenario === 'unrelated parent') expect(vi.mocked(open).mock.calls.some(args => args[0] === file)).toBe(false);
+      }
+    },
+  );
+
+  it('does not infer completion from a named spawn or native spawn-edge status', async () => {
+    const replay = structuredClone(collaborationSeed.cases[0]!);
+    replay.childRollout = replay.childRollout.filter(r => r.payload.type !== 'task_complete');
+    const { input } = await writeCollaborationReplay(replay);
+    const result = await collectCodexChildEvidence(input);
+    expect(result).toMatchObject({ availability: 'partial', knownChildCount: 1 });
+    expect(result.observations.filter(o => o.kind === 'child_agent').map(o => o.status)).toEqual(['running']);
+  });
 
   it.each(['different call', 'different namespace', 'different turn'] as const)(
     'ignores a Codex spawn result associated with a %s',
