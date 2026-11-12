@@ -114,6 +114,7 @@ interface ChildActivity {
 
 interface ParsedTurn {
   turnId: string;
+  parentTurnId?: string;
   startedAtMs?: number;
   endedAtMs?: number;
   abortedStatus?: ChildTerminalStatus;
@@ -225,6 +226,16 @@ function safeSessionId(value: unknown): string | undefined {
   return SESSION_ID_PATTERN.test(trimmed) ? trimmed : undefined;
 }
 
+function spawnResultSessionId(output: unknown): string | undefined {
+  if (typeof output !== 'string') return undefined;
+  try {
+    const result: unknown = JSON.parse(output);
+    return isRecord(result) ? safeSessionId(result.agent_id) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function declaredParentSessionId(payload: Record<string, unknown>): {
   value?: string;
   conflict: boolean;
@@ -302,6 +313,7 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
   const turns = new Map<string, ParsedTurn>();
   let activeTurnId: string | undefined;
   const seenTokenTotals = new Map<string, Set<string>>();
+  const pendingSpawnCalls = new Set<string>();
   for (const record of records) {
     const payload = isRecord(record.payload) ? record.payload : undefined;
     if (!payload) continue;
@@ -311,10 +323,17 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
         ? payload.turn_id.trim()
         : undefined;
       if (!turnId) continue;
+      if (activeTurnId !== turnId) pendingSpawnCalls.clear();
       activeTurnId = turnId;
       if (!turns.has(turnId)) {
+        const attribution = payload.turn_attribution;
+        const parentTurnId = isRecord(attribution) && attribution.turn_id === turnId
+          && typeof attribution.parent_turn_id === 'string' && attribution.parent_turn_id
+          ? attribution.parent_turn_id
+          : undefined;
         turns.set(turnId, {
           turnId,
+          ...(parentTurnId ? { parentTurnId } : {}),
           ...(recordAtMs !== undefined ? { startedAtMs: recordAtMs } : {}),
           promptIdentities: [],
           modelCalls: [],
@@ -325,7 +344,34 @@ function parseRolloutStructure(source: string, expectedSessionId: string): Parse
     }
     if (!activeTurnId) continue;
     const turn = turns.get(activeTurnId);
-    if (!turn || record.type !== 'event_msg') continue;
+    if (!turn) continue;
+    if (record.type === 'response_item') {
+      // Codex 0.167.0 records the child ID in the native tool result. Pair
+      // it with the call on this turn so copied history and unrelated tool
+      // outputs cannot nominate a child.
+      const callId = payload.call_id;
+      const attribution = payload.internal_chat_message_metadata_passthrough;
+      if (typeof callId !== 'string' || !callId || !isRecord(attribution)
+        || attribution.turn_id !== activeTurnId) continue;
+      if (payload.type === 'function_call') {
+        if (payload.namespace === 'multi_agent_v1' && payload.name === 'spawn_agent') {
+          pendingSpawnCalls.add(callId);
+        } else {
+          pendingSpawnCalls.delete(callId);
+        }
+      } else if (payload.type === 'function_call_output' && pendingSpawnCalls.delete(callId)) {
+        const sessionId = spawnResultSessionId(payload.output);
+        if (sessionId) {
+          turn.childActivities.push({
+            sessionId,
+            kind: 'started',
+            ...(recordAtMs !== undefined ? { atMs: recordAtMs } : {}),
+          });
+        }
+      }
+      continue;
+    }
+    if (record.type !== 'event_msg') continue;
     if (payload.type === 'user_message' && typeof payload.message === 'string') {
       const safe = buildSafeChildPromptTelemetry([payload.message]);
       turn.promptIdentities.push({
@@ -970,6 +1016,7 @@ export async function collectCodexChildEvidence(
           limitations.add('codex_inherited_turn_excluded');
           return false;
         }
+        if (turn.parentTurnId && turn.parentTurnId !== args.parentTurn.turnId) return false;
         if (turn.startedAtMs === undefined) return false;
         return turn.startedAtMs >= rootStart - 2_000 && turn.startedAtMs <= rootEnd + 2_000;
       });

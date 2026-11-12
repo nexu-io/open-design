@@ -26,6 +26,20 @@ const sanitizedRealSeedPath = fileURLToPath(new URL(
   '../fixtures/od-next-runtime-capabilities/codex-0.147.0.sanitized-real-seed.json',
   import.meta.url,
 ));
+const nativeSpawnSeed = JSON.parse(readFileSync(new URL(
+  '../fixtures/od-next-runtime-capabilities/codex-0.167.0.sanitized-real-seed.json',
+  import.meta.url,
+), 'utf8')) as {
+  cliVersion: string;
+  cases: Array<{
+    transport: string;
+    parentSessionId: string;
+    parentTurnId: string;
+    childSessionId: string;
+    parentRollout: Array<{ type: string; payload: Record<string, unknown> }>;
+    childRollout: Array<{ type: string; payload: Record<string, unknown> }>;
+  }>;
+};
 
 const temporaryRoots: string[] = [];
 const nativePlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
@@ -184,6 +198,78 @@ afterEach(async () => {
 });
 
 describe('collectCodexChildEvidence', () => {
+  it.each(nativeSpawnSeed.cases)(
+    'collects completed Codex 0.167.0 children before and after archiving ($transport)',
+    async (replay) => {
+      const home = await codexHome();
+      expect(replay.parentRollout.some(({ payload }) => payload.type === 'sub_agent_activity')).toBe(false);
+      const parent = await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+      const child = await writeRollout(home, replay.childSessionId, replay.childRollout);
+      const input = collectInput(home, {
+        parentSessionId: replay.parentSessionId,
+        parentTurnId: replay.parentTurnId,
+        agentCliVersion: nativeSpawnSeed.cliVersion,
+      });
+      const active = await collectCodexChildEvidence(input);
+      expect(active).toMatchObject({ availability: 'complete', knownChildCount: 1, diagnostics: [] });
+      expect(active.observations.filter((observation) => (
+        observation.kind === 'child_agent' && observation.status === 'completed'
+      ))).toMatchObject([{
+        identity: { runtimeSessionId: replay.childSessionId, parentObservationId: 'root' },
+        attributes: { terminalEvidence: 'child_task_complete' },
+      }]);
+
+      const archive = path.join(home, 'archived_sessions');
+      await mkdir(archive);
+      for (const filePath of [parent, child]) {
+        await rename(filePath, path.join(archive, path.basename(filePath)));
+      }
+      expect(await collectCodexChildEvidence(input)).toEqual(active);
+    },
+  );
+
+  it.each(['different call', 'different namespace', 'different turn'] as const)(
+    'ignores a Codex spawn result associated with a %s',
+    async (scenario) => {
+      const replay = structuredClone(nativeSpawnSeed.cases[0]!);
+      const call = replay.parentRollout.find(({ payload }) => payload.name === 'spawn_agent')!.payload;
+      const output = replay.parentRollout.find(({ payload }) => (
+        payload.type === 'function_call_output' && payload.call_id === call.call_id
+      ))!.payload;
+      if (scenario === 'different call') output.call_id = 'other-call';
+      if (scenario === 'different namespace') call.namespace = 'external_tool';
+      if (scenario === 'different turn') output.internal_chat_message_metadata_passthrough = {
+        turn_id: 'other-turn',
+      };
+      const home = await codexHome();
+      await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+      await writeRollout(home, replay.childSessionId, replay.childRollout);
+      await expect(collectCodexChildEvidence(collectInput(home, {
+        parentSessionId: replay.parentSessionId,
+        parentTurnId: replay.parentTurnId,
+      }))).resolves.toMatchObject({ availability: 'complete', knownChildCount: 0, observations: [] });
+    },
+  );
+
+  it('excludes a child invocation attributed to another parent turn in the same time window', async () => {
+    const replay = structuredClone(nativeSpawnSeed.cases[0]!);
+    const started = replay.childRollout.find(({ payload }) => payload.type === 'task_started')!.payload;
+    started.turn_attribution = { turn_id: started.turn_id, parent_turn_id: 'other-turn' };
+    const home = await codexHome();
+    await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+    await writeRollout(home, replay.childSessionId, replay.childRollout);
+
+    await expect(collectCodexChildEvidence(collectInput(home, {
+      parentSessionId: replay.parentSessionId,
+      parentTurnId: replay.parentTurnId,
+    }))).resolves.toMatchObject({
+      availability: 'partial',
+      knownChildCount: 0,
+      observations: [],
+      diagnostics: [{ code: 'child_turn_not_observed', count: 1 }],
+    });
+  });
+
   it('retains parent and declared child evidence after terminal archiving', async () => {
     const home = await codexHome();
     const parentPath = await writeRollout(home, PARENT, [
