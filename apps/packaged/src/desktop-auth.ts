@@ -1,5 +1,8 @@
 import type { PackagedDesktopLogger } from "./logging.js";
 
+/** Startup handshake runs before the window loads: keep it one short attempt. */
+export const DESKTOP_AUTH_STARTUP_TIMEOUT_MS = 800;
+/** On-demand re-registration (folder picker / import) can afford to wait. */
 export const DESKTOP_AUTH_TIMEOUT_MS = 3000;
 export const DESKTOP_AUTH_RETRY_DELAY_MS = 250;
 const DESKTOP_AUTH_ATTEMPTS = 2;
@@ -7,6 +10,8 @@ const DESKTOP_AUTH_ATTEMPTS = 2;
 export type RegisterDesktopAuthOptions = {
   /** Resolves true when the daemon accepted the secret; rejects on transport failure. */
   attempt: () => Promise<boolean>;
+  /** Total attempts; defaults to 2 (one retry). */
+  attempts?: number;
   logger?: Pick<PackagedDesktopLogger, "warn"> | null;
   retryDelayMs?: number;
   sleep?: (ms: number) => Promise<void>;
@@ -23,18 +28,19 @@ const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 export async function registerDesktopAuthWithRetry(options: RegisterDesktopAuthOptions): Promise<boolean> {
   const sleep = options.sleep ?? defaultSleep;
   const retryDelayMs = options.retryDelayMs ?? DESKTOP_AUTH_RETRY_DELAY_MS;
+  const attempts = Math.max(1, options.attempts ?? DESKTOP_AUTH_ATTEMPTS);
   let lastFailure = "not accepted";
-  for (let attempt = 1; attempt <= DESKTOP_AUTH_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       if (await options.attempt()) return true;
       lastFailure = "not accepted";
     } catch (error) {
       lastFailure = error instanceof Error ? error.message : String(error);
     }
-    if (attempt < DESKTOP_AUTH_ATTEMPTS) await sleep(retryDelayMs);
+    if (attempt < attempts) await sleep(retryDelayMs);
   }
   options.logger?.warn("desktop auth handshake with the daemon failed", {
-    attempts: DESKTOP_AUTH_ATTEMPTS,
+    attempts,
     reason: lastFailure,
   });
   return false;

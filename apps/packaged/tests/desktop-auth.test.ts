@@ -86,4 +86,20 @@ describe('registerDesktopAuthWithRetry (OPEND-5170)', () => {
     const attempt = vi.fn(async () => false);
     await expect(registerDesktopAuthWithRetry({ attempt, logger: null, sleep: noSleep })).resolves.toBe(false);
   });
+  it('makes a single attempt without sleeping when attempts is 1 (startup handshake)', async () => {
+    const attempt = vi.fn(async () => {
+      throw new Error('timed out');
+    });
+    const sleep = vi.fn(noSleep);
+    const logger = stubLogger();
+
+    await expect(registerDesktopAuthWithRetry({ attempt, attempts: 1, logger, sleep })).resolves.toBe(false);
+
+    expect(attempt).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('desktop auth handshake with the daemon failed', {
+      attempts: 1,
+      reason: 'timed out',
+    });
+  });
 });

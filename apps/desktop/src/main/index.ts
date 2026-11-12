@@ -226,7 +226,12 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl: () => Promise<string | null>;
-  registerDesktopAuth: (secret: Buffer) => Promise<boolean>;
+  /**
+   * Register the desktop-auth secret with the daemon. `retry` is set for the
+   * on-demand re-registration (picker/import), which may wait and retry; the
+   * startup call blocks window load and stays a single short attempt.
+   */
+  registerDesktopAuth: (secret: Buffer, options?: { retry?: boolean }) => Promise<boolean>;
   /** Stable installed launcher used for Windows opendesign:// registration. */
   inviteProtocolClientPath?: string | null;
   preloadPath?: string;
@@ -1075,7 +1080,7 @@ async function runDesktopMainWithTiming(
     // (after a daemon restart, or after a missed startup window). The
     // runtime then mints a FRESH token (new nonce + new exp — replay
     // protection still works) and POSTs once more.
-    registerDesktopAuthWithDaemon: () => options.registerDesktopAuth(desktopAuthSecret),
+    registerDesktopAuthWithDaemon: () => options.registerDesktopAuth(desktopAuthSecret, { retry: true }),
     rendererLogPath,
     // Mark "reached running" only when the window is ACTUALLY revealed (web app
     // mounted + shown), not when createDesktopRuntime returns — it starts async

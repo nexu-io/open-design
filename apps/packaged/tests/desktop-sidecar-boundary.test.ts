@@ -28,13 +28,21 @@ describe("packaged desktop sidecar boundary", () => {
   });
 
   it("turns desktop auth transport failures into a false registration result", () => {
+    // Transport failures are caught by registerDesktopAuthWithRetry, which
+    // resolves false (behaviour pinned in tests/desktop-auth.test.ts). Here we
+    // pin that the packaged entry routes the IPC through it, keeping the
+    // startup call to one short attempt and retrying only on demand.
     const main = source("../src/index.ts");
-    const registrationStart = main.indexOf("registerDesktopAuth: async (secret) => {");
+    const registrationStart = main.indexOf("registerDesktopAuth: (secret, { retry = false } = {}) =>");
     const registrationEnd = main.indexOf("windowTitle:", registrationStart);
     expect(registrationStart).toBeGreaterThanOrEqual(0);
     expect(registrationEnd).toBeGreaterThan(registrationStart);
     const registration = main.slice(registrationStart, registrationEnd);
-    expect(registration).toContain("try {");
-    expect(registration).toContain("catch {\n        return false;");
+    expect(registration).toContain("registerDesktopAuthWithRetry({");
+    expect(registration).toContain("attempts: retry ? 2 : 1");
+    expect(registration).toContain("retry ? DESKTOP_AUTH_TIMEOUT_MS : DESKTOP_AUTH_STARTUP_TIMEOUT_MS");
+    const helper = source("../src/desktop-auth.ts");
+    expect(helper).toContain("} catch (error) {");
+    expect(helper).toContain("return false;");
   });
 });
