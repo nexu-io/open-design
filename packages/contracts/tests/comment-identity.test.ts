@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMMENT_ID_ATTRIBUTE, commentElementId, commentIdentitySelector, commentUuidFromElementId, isCommentUuid, uniqueCommentIdentity } from '../src/runtime/comment-identity.js';
+import { COMMENT_IDENTITY_HELPERS, serializedBridgeFunction } from '../src/runtime/comment-identity-helpers.js';
 const uuid = '12345678-1234-4234-8234-123456789abc';
 describe('comment-only exact identity contract', () => {
   it('represents UUID in existing elementId/selector fields without tool identity', () => {
@@ -15,5 +16,15 @@ describe('comment-only exact identity contract', () => {
     expect(uniqueCommentIdentity([], uuid)).toBe(false);
     expect(uniqueCommentIdentity([uuid, uuid], uuid)).toBe(false);
     expect(uniqueCommentIdentity([uuid], uuid)).toBe(true);
+  });
+
+  it('keeps the iframe call name after a minifier renames the serialized function', () => {
+    expect(serializedBridgeFunction('function t0(e){return e}', 'commentSelectorClaimsIdentity'))
+      .toBe('function commentSelectorClaimsIdentity(e){return e}');
+    expect(COMMENT_IDENTITY_HELPERS).toContain('function commentSelectorClaimsIdentity(');
+    const probe = new Function(`${COMMENT_IDENTITY_HELPERS}; return commentSelectorClaimsIdentity;`);
+    const claims = probe() as (selector: unknown) => boolean;
+    expect(claims('[data-od-comment-id="x"]')).toBe(true);
+    expect(claims('body > button:nth-of-type(2)')).toBe(false);
   });
 });

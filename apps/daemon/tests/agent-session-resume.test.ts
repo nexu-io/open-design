@@ -17,6 +17,7 @@ import {
   computeIncludeStable,
   hashStableInstructions,
   isAgentResumeFailure,
+  isAntigravityResumeFailure,
   isAmrOpencodeEventStreamResumeFailure,
   isAmrResumeFailure,
   isClaudeResumeFailure,
@@ -761,6 +762,16 @@ describe('isAgentResumeFailure dispatch', () => {
   it('never reports a failure for empty output', () => {
     expect(isAgentResumeFailure('codex', '')).toBe(false);
     expect(isAgentResumeFailure('claude', '')).toBe(false);
+  });
+
+  it('routes antigravity to the missing-conversation warning on stderr only', () => {
+    const warning = 'warning: conversation "00000000-0000-4000-8000-000000000000" not found';
+    expect(isAntigravityResumeFailure(warning)).toBe(true);
+    expect(isAgentResumeFailure('antigravity', warning, '')).toBe(true);
+    expect(
+      isAgentResumeFailure('antigravity', '', 'The log said conversation "abc" not found.'),
+    ).toBe(false);
+    expect(isAgentResumeFailure('antigravity', 'no rollout found for thread id abc')).toBe(false);
   });
 });
 

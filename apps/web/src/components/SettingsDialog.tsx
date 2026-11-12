@@ -4049,10 +4049,11 @@ export function SettingsDialog({
     );
     const knownModelIds = selected.models?.map((m) => m.id) ?? [];
     // Adapters opt out via `supportsCustomModel: false` on their
-    // RuntimeAgentDef when their CLI has no `--model` flag (Antigravity,
-    // upstream issue #35) or when free-text ids silently fail at spawn
-    // (AMR routes through ACP `session/set_model` and validates against
-    // a live catalog). Undefined === allow, matching today's UX.
+    // RuntimeAgentDef when a free-typed id is not a safe model slug
+    // (Antigravity takes `--model` only from `agy models`) or when
+    // free-text ids silently fail at spawn (AMR routes through ACP
+    // `session/set_model` and validates against a live catalog).
+    // Undefined === allow, matching today's UX.
     const allowCustomModel = selected.supportsCustomModel !== false;
     const explicitCustomMode = agentCustomModelIds.has(selected.id);
     const configuredModel =

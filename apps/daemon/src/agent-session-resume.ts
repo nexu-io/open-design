@@ -491,6 +491,7 @@ export function isAgentResumeFailure(
   }
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
+  if (agentId === 'antigravity') return isAntigravityResumeFailure(stderr);
   if (agentId === 'amr') {
     return (
       isAmrResumeFailure(stdout) ||
@@ -525,4 +526,18 @@ export function isAmrResumeFailure(stdout: string): boolean {
 export function isAmrOpencodeEventStreamResumeFailure(text: string): boolean {
   if (!text) return false;
   return AMR_OPENCODE_EVENT_STREAM_RESUME_FAILURE_PATTERNS.some((re) => re.test(text));
+}
+
+// agy 1.5.6 prints this to stderr and still exits 0, opening a brand-new
+// conversation, when `--conversation <id>` does not exist:
+//   warning: conversation "<id>" not found
+// The turn would otherwise look successful while the model has none of the
+// prior context. Match stderr only, so a reply that merely mentions the
+// phrase cannot clear the stored handle.
+const ANTIGRAVITY_RESUME_FAILURE_PATTERN = /conversation "[^"]+" not found/i;
+
+/** True when agy reports that the resumed conversation id is gone. */
+export function isAntigravityResumeFailure(stderr: string): boolean {
+  if (!stderr) return false;
+  return ANTIGRAVITY_RESUME_FAILURE_PATTERN.test(stderr);
 }

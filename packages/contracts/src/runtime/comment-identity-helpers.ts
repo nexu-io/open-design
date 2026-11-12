@@ -1,11 +1,22 @@
 import { commentSelectorClaimsIdentity } from './comment-identity-selector.js';
 
+/** Keep the bridge-visible name after a bundler renames the function.
+ * `Function#toString` follows the minified binding (`function t0`), while the
+ * iframe scripts still call `commentSelectorClaimsIdentity`.
+ */
+export function serializedBridgeFunction(source: string, name: string): string {
+  return source.replace(
+    /^(async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(/,
+    `$1function ${name}(`,
+  );
+}
+
 /** Comment-only helpers; serialized as a complete closure into both preview bridges.
  * Inspect/tool annotations are deliberately independent. Count the whole document,
  * including hidden nodes, before exposing any persisted identity.
  */
 export const COMMENT_IDENTITY_HELPERS = String.raw`
-${commentSelectorClaimsIdentity.toString()}
+${serializedBridgeFunction(commentSelectorClaimsIdentity.toString(), 'commentSelectorClaimsIdentity')}
   function commentUuid(value){ return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value); }
   function commentSelector(uuid){ return '[data-od-comment-id="' + uuid + '"]'; }
   function uniqueCommentNode(uuid){
