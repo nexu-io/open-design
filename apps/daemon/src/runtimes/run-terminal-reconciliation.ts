@@ -33,6 +33,7 @@ import {
 } from './run-restart-recovery.js';
 import {
   beginRunTelemetryDelivery,
+  dropExhaustedRunTelemetryDelivery,
   finalizeRunTelemetryDelivery,
   isRunTelemetryDeliveryCrashWindow,
   recordRunTelemetryDeliveryAttempt,
@@ -539,17 +540,27 @@ export async function reconcileDurableRunTerminals(
     ) {
       const preservedKey = state.telemetryDelivery.idempotencyKey;
       const preservedAttempts = state.telemetryDelivery.attemptCount;
+      const preservedFailures = state.telemetryDelivery.failureCount;
       delete state.langfuseCompletedAt;
       state.telemetryDelivery = {
         version: 1,
         idempotencyKey: preservedKey,
         status: 'failed',
         attemptCount: preservedAttempts,
+        ...(preservedFailures !== undefined ? { failureCount: preservedFailures } : {}),
         crashWindow: false,
         startedAt: state.telemetryDelivery.startedAt,
         dropReason: 'v1_task_hierarchy_completion_repaired',
       };
       writeState(entry.filePath, state);
+    }
+    if (TERMINAL_STATUSES.has(state.status) && state.telemetryDelivery) {
+      const delivery = dropExhaustedRunTelemetryDelivery(state.telemetryDelivery, now);
+      if (delivery !== state.telemetryDelivery && typeof delivery.finalizedAt === 'number') {
+        state.telemetryDelivery = delivery;
+        state.langfuseCompletedAt = delivery.finalizedAt;
+        writeState(entry.filePath, state);
+      }
     }
     const needsAnalytics = Boolean(
       state.analyticsRecovery && !state.analyticsRecovery.completedAt,
