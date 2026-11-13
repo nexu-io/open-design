@@ -470,6 +470,27 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps LLMTR as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const llmtr = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://llmtr.com/v1',
+      model: 'qwen/qwen3.8-27b-free',
+      apiProviderBaseUrl: 'https://llmtr.com/v1',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(llmtr).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://llmtr.com/v1',
+      model: 'qwen/qwen3.8-27b-free',
+      apiProviderBaseUrl: 'https://llmtr.com/v1',
+    });
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',
