@@ -83,7 +83,7 @@ test('opencode args pass model-supported variants without changing the default a
   const baseArgs = opencode.buildArgs(prompt, [], [], {});
   assert.equal(opencode.promptViaStdin, true);
   assert.equal(opencode.reasoningOptions, undefined);
-  assert.deepEqual(opencode.listModels?.args, ['models', '--verbose']);
+  assert.equal(typeof opencode.fetchModels, 'function');
   assert.equal(opencode.fallbackModels.find(
     (model) => model.id === 'openai/gpt-5.6-sol',
   )?.reasoningOptions, undefined);
