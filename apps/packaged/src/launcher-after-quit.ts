@@ -363,3 +363,59 @@ export async function inspectExistingDesktopForLauncher(
     return { action: "exit", reason: "existing-focus-failed" };
   }
 }
+
+/**
+ * Forward a duplicate AppImage launch to the generation that already owns the
+ * launch lock.
+ *
+ * AppRun keeps startup serialization with a non-blocking flock. When that lock
+ * is already held it marks the launch with `OD_APPIMAGE_LOCK_HELD` and still
+ * starts the packaged launcher so this path can run. Unlike the normal launch
+ * gate, a duplicate must never restart or bootstrap a runtime: the owner keeps
+ * the lock, so the only correct outcomes are focus/deeplink forwarding or a
+ * clean exit.
+ */
+export async function handOffDuplicatePackagedLaunch(
+  stamp: SidecarStamp,
+  options: {
+    deeplinkUrl?: string | null;
+    getStatus?: typeof getSidecarStatus;
+    invoke?: typeof invokeSidecar;
+    logger?: LauncherAfterQuitLogger;
+    modes?: readonly SidecarStamp["mode"][];
+    paths: PackagedNamespacePaths;
+    sources?: readonly SidecarStamp["source"][];
+  },
+): Promise<LauncherExistingDesktopGateResult> {
+  const logger = options.logger ?? console;
+  const getStatus = options.getStatus ?? getSidecarStatus;
+  const invoke = options.invoke ?? invokeSidecar;
+  const modes = options.modes ?? [SIDECAR_MODES.RUNTIME, HEADLESS_SIDECAR_MODE];
+  const sources = options.sources ?? packagedSidecarSourcesFor(stamp);
+  const owner = await findExistingPackagedDesktopOwner(stamp, { getStatus, modes, sources });
+  if (owner == null) {
+    await writeLauncherAfterQuitLog(
+      options.paths,
+      `duplicate-handoff namespace=${stamp.namespace} focus=no-owner`,
+    );
+    return { action: "exit", reason: "existing-focus-failed" };
+  }
+  try {
+    await invoke(
+      owner.stamp,
+      SIDECAR_MESSAGES.SHOW,
+      options.deeplinkUrl == null ? {} : { deeplinkUrl: options.deeplinkUrl },
+      { timeoutMs: 800 },
+    );
+    await writeLauncherAfterQuitLog(
+      options.paths,
+      `duplicate-handoff namespace=${stamp.namespace} focus=accepted`,
+    );
+    return { action: "exit", reason: "existing-focused" };
+  } catch (error) {
+    const message = `duplicate-handoff namespace=${stamp.namespace} focus=failed error=${error instanceof Error ? error.message : String(error)}`;
+    await writeLauncherAfterQuitLog(options.paths, message);
+    logger.warn(`[open-design launcher] ${message}`);
+    return { action: "exit", reason: "existing-focus-failed" };
+  }
+}
