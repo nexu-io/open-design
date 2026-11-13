@@ -836,6 +836,87 @@ describe('durable run terminal reconciliation', () => {
       .not.toHaveProperty('finalizedAt');
   });
 
+  it.each([
+    { dropReason: 'network_error', requestsPerDelivery: 2 },
+    { dropReason: 'payload_too_large', requestsPerDelivery: 0 },
+  ])('stops replaying a $dropReason Langfuse delivery once its failures are exhausted', async ({
+    dropReason,
+    requestsPerDelivery,
+  }) => {
+    const runId = `run-langfuse-${dropReason}`;
+    const runDir = path.join(tmpDir, runId);
+    const eventsPath = path.join(runDir, 'events.jsonl');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'claude',
+      status: 'succeeded',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      terminalAt: 2_000,
+      telemetryDelivery: {
+        version: 1,
+        idempotencyKey: `od-run-telemetry-v1-${dropReason}`,
+        status: 'failed',
+        attemptCount: requestsPerDelivery,
+        crashWindow: false,
+        startedAt: 2_000,
+        dropReason,
+      },
+    }));
+    fs.writeFileSync(eventsPath, `${JSON.stringify({
+      id: 1,
+      event: 'agent',
+      data: { type: 'text_delta', delta: 'x' },
+      timestamp: 1_500,
+    })}\n`);
+    const reportLangfuse = vi.fn(async (args: Record<string, unknown>) => {
+      for (let request = 0; request < requestsPerDelivery; request += 1) {
+        (args.onDeliveryAttempt as (() => void) | undefined)?.();
+      }
+      return {
+        langfuse_expected: true,
+        langfuse_delivery_status: 'failed' as const,
+        langfuse_drop_reason: dropReason,
+        langfuse_attempt_count: requestsPerDelivery,
+      };
+    });
+    const options = {
+      analytics: { capture: vi.fn() },
+      appVersion: '0.27.1',
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    };
+    const boots = 8;
+
+    for (let boot = 0; boot < boots - 1; boot += 1) {
+      await reconcileDurableRunTerminals(options);
+    }
+    const deliveriesBeforeLastBoot = reportLangfuse.mock.calls.length;
+    const readFile = vi.spyOn(fs, 'readFileSync');
+    const lastBoot = await reconcileDurableRunTerminals(options);
+
+    expect(deliveriesBeforeLastBoot).toBeGreaterThan(0);
+    expect(deliveriesBeforeLastBoot).toBeLessThan(boots - 1);
+    expect(reportLangfuse).toHaveBeenCalledTimes(deliveriesBeforeLastBoot);
+    expect(lastBoot.langfuseReplayed).toBe(0);
+    expect(readFile).not.toHaveBeenCalledWith(eventsPath, 'utf8');
+    const state = JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8'));
+    expect(state.telemetryDelivery).toMatchObject({
+      idempotencyKey: `od-run-telemetry-v1-${dropReason}`,
+      status: 'dropped',
+      crashWindow: false,
+      dropReason,
+    });
+    expect(state.telemetryDelivery.finalizedAt).toEqual(expect.any(Number));
+    expect(state.langfuseCompletedAt).toBe(state.telemetryDelivery.finalizedAt);
+  });
+
   it('terminalizes mapped send-mode single-run recovery without a legacy network replay', async () => {
     const runId = 'run-task-rollout-upgrade';
     const runDir = path.join(tmpDir, runId);
