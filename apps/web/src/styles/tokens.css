@@ -224,8 +224,8 @@
    OS-level prefers-color-scheme media query (system mode = no data-theme attr). */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #202020;
-  --bg-app: #202020;
+  --bg: #121212;
+  --bg-app: #121212;
   --bg-panel: #353535;
   --bg-subtle: #494949;
   --bg-muted: #5c5c5c;
@@ -287,8 +287,8 @@
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) {
     color-scheme: dark;
-    --bg: #202020;
-    --bg-app: #202020;
+    --bg: #121212;
+    --bg-app: #121212;
     --bg-panel: #353535;
     --bg-subtle: #494949;
     --bg-muted: #5c5c5c;

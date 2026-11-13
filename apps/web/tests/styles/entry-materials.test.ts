@@ -144,10 +144,13 @@ describe('entry layout materials (styles/home/entry-layout.css)', () => {
     expect(declarations(entryLayoutCss, '.entry-nav-rail__menu-backdrop')).toMatch(/position:\s*fixed/);
   });
 
-  it('makes the content column the one base card: 85% white frost, 16px corner, inset ring, 12px inset', () => {
+  it('makes the content column the one base card: 85% ground frost, 16px corner, inset ring, 12px inset', () => {
     const card = declarations(entryLayoutCss, '.entry-main--scroll');
     expect(card).toMatch(/margin:\s*0 12px 12px 0/);
-    expect(card).toMatch(/--entry-content-surface:\s*rgba\(255, 255, 255, 0\.85\)/);
+    // Driven by --bg so the frost follows the theme (N0 ground in dark) instead
+    // of staying a white wash — in light this still resolves to
+    // rgba(255, 255, 255, 0.85).
+    expect(card).toMatch(/--entry-content-surface:\s*color-mix\(in srgb, var\(--bg\) 85%, transparent\)/);
     expect(card).toMatch(/--entry-content-ring:\s*var\(--glass-refract-ring-edge\)/);
     expect(card).toMatch(/background:\s*var\(--entry-content-surface\)/);
     expect(card).toMatch(/backdrop-filter:\s*var\(--material-thin-backdrop\)/);
