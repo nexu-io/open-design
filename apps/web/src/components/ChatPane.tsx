@@ -4336,6 +4336,7 @@ export function ChatPane({
                     onSelectConversation(c.id);
                     setShowConvList(false);
                   }}
+                  onDelete={() => onDeleteConversation(c.id)}
                   t={t}
                 />
               ))
@@ -6669,11 +6670,13 @@ function ConversationRow({
   conversation,
   active,
   onSelect,
+  onDelete,
   t,
 }: {
   conversation: Conversation;
   active: boolean;
   onSelect: () => void;
+  onDelete: () => void;
   t: TranslateFn;
 }) {
   const displayTitle =
@@ -6699,6 +6702,22 @@ function ConversationRow({
       >
         {conversationMetaLabel(conversation, t)}
       </span>
+      <button
+        type="button"
+        className="chat-conv-item-del"
+        data-testid={`conversation-delete-${conversation.id}`}
+        title={t('chat.deleteConversation')}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (
+            confirm(t('chat.deleteConversationConfirm', { title: displayTitle }))
+          ) {
+            onDelete();
+          }
+        }}
+      >
+        <Icon name="close" size={12} />
+      </button>
     </div>
   );
 }
