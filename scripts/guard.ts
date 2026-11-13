@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import * as ts from "@typescript/native/unstable/ast";
 import { parseSource, withNativeSourceParser, forEachNativeSource } from "./lib/typescript/source.ts";
@@ -40,8 +42,8 @@ const allowedE2eScripts = new Set([
   "e2e/scripts/vela-contract.ts",
 ]);
 
-function toRepositoryPath(filePath: string): string {
-  return path.relative(repoRoot, filePath).split(path.sep).join("/");
+function toRepositoryPath(filePath: string, root: string = repoRoot): string {
+  return path.relative(root, filePath).split(path.sep).join("/");
 }
 
 const residualExtensions = new Set([".js", ".mjs", ".cjs"]);
@@ -578,7 +580,7 @@ async function collectTestLayoutViolations(directory: string): Promise<string[]>
 }
 
 async function checkScriptsTestFree(): Promise<boolean> {
-  const scriptsFiles = await collectRepositoryFiles(path.join(repoRoot, "scripts"), testLayoutSkippedDirectories);
+  const scriptsFiles = await collectTrackedRepositoryFiles(path.join(repoRoot, "scripts"), testLayoutSkippedDirectories);
   const violations = scriptsFiles.filter(isScriptTestFile);
 
   if (violations.length > 0) {
@@ -651,6 +653,59 @@ async function collectRepositoryFiles(directory: string, skippedDirectoryNames =
   }
 
   return files;
+}
+
+const execFileAsync = promisify(execFile);
+
+const trackedRepositoryFiles = new Map<string, Promise<Set<string> | null>>();
+
+/**
+ * The files git tracks under `root`, read from the index rather than from
+ * history so this stays correct in the shallow checkouts CI uses.
+ *
+ * `null` when git cannot answer — outside a checkout, or git missing from
+ * PATH. Callers then accept every walked file, which is the pre-existing
+ * behaviour.
+ *
+ * Memoised per root: the index does not change while the guard runs.
+ */
+export async function getTrackedRepositoryFiles(root: string = repoRoot): Promise<Set<string> | null> {
+  let tracked = trackedRepositoryFiles.get(root);
+  if (tracked == null) {
+    tracked = execFileAsync("git", ["ls-files", "-z"], { cwd: root, maxBuffer: 64 * 1024 * 1024 })
+      .then(({ stdout }) => new Set(stdout.split("\0").filter(Boolean)))
+      .catch(() => null);
+    trackedRepositoryFiles.set(root, tracked);
+  }
+  return tracked;
+}
+
+/**
+ * The files the repository owns under `directory`.
+ *
+ * Layout checks run over the filesystem, so without this they also see what
+ * `.gitignore` deliberately excludes. A `.DS_Store` that Finder leaves in
+ * `e2e/` fails `pnpm guard` as "e2e source files must live in specs/, tests/,
+ * ..." — a message that reads like a real layout violation and sends the
+ * reader looking for a mistake they did not make. Generated artifacts such as
+ * the ignored `apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js` read the
+ * same way to any check whose directory they fall under.
+ *
+ * Ignored *directories* are a separate cost — a local agent worktree is a full
+ * second copy of the tree, and walking one overflows the stack (#8391). This
+ * filter is applied to the walk's result and does not depend on how the walk
+ * reaches it.
+ */
+export async function collectTrackedRepositoryFiles(
+  directory: string,
+  skippedDirectoryNames = new Set<string>(),
+  tracked?: Set<string> | null,
+): Promise<string[]> {
+  const [walked, trackedFiles] = await Promise.all([
+    collectRepositoryFiles(directory, skippedDirectoryNames),
+    tracked === undefined ? getTrackedRepositoryFiles() : tracked,
+  ]);
+  return trackedFiles == null ? walked : walked.filter((file) => trackedFiles.has(file));
 }
 
 const productNeutralitySkippedDirectories = new Set([
@@ -747,7 +802,7 @@ export function collectProductNeutralityViolationsFromSource(
 async function checkProductNeutrality(): Promise<boolean> {
   const violations: ProductNeutralityViolation[] = [];
 
-  for (const repositoryPath of await collectRepositoryFiles(repoRoot, productNeutralitySkippedDirectories)) {
+  for (const repositoryPath of await collectTrackedRepositoryFiles(repoRoot, productNeutralitySkippedDirectories)) {
     if (!isProductNeutralityCheckedPath(repositoryPath) || !isProductNeutralityTextFile(repositoryPath)) {
       continue;
     }
@@ -780,7 +835,7 @@ async function checkE2eLayout(): Promise<boolean> {
   }
 
   const e2eRoot = path.join(repoRoot, "e2e");
-  for (const repositoryPath of await collectRepositoryFiles(e2eRoot, e2eSkippedDirectories)) {
+  for (const repositoryPath of await collectTrackedRepositoryFiles(e2eRoot, e2eSkippedDirectories)) {
     if (
       repositoryPath === "e2e/package.json" ||
       repositoryPath === "e2e/tsconfig.json" ||
@@ -855,7 +910,7 @@ async function checkWebTestLayout(): Promise<boolean> {
   const violations: string[] = [];
   const webTestsRoot = path.join(repoRoot, "apps", "web", "tests");
 
-  for (const repositoryPath of await collectRepositoryFiles(webTestsRoot, webTestSkippedDirectories)) {
+  for (const repositoryPath of await collectTrackedRepositoryFiles(webTestsRoot, webTestSkippedDirectories)) {
     if (repositoryPath.startsWith("apps/web/tests/vitest/") || repositoryPath.startsWith("apps/web/tests/playwright/")) {
       violations.push(`${repositoryPath} -> web tests should stay lightweight under apps/web/tests/ without vitest/playwright nesting`);
       continue;
@@ -1023,7 +1078,7 @@ async function checkWebImportIsolation(): Promise<boolean> {
     const repositoryDirectory = repositoryPrefix.replace(/\/$/, "");
     if (!(await repositoryDirectoryExists(repositoryDirectory))) continue;
 
-    for (const repositoryPath of await collectRepositoryFiles(
+    for (const repositoryPath of await collectTrackedRepositoryFiles(
       path.join(repoRoot, repositoryDirectory),
       webImportIsolationSkippedDirectories,
     )) {
@@ -1059,13 +1114,28 @@ const toolsRootAllowlist = new Map<string, "directory" | "file">([
   ["serve", "directory"],
 ]);
 
-async function checkToolsLayout(): Promise<boolean> {
-  const toolsRoot = path.join(repoRoot, "tools");
+/**
+ * `root` and `tracked` are parameters so the allowlist can be exercised
+ * against a temporary directory without a git repository.
+ */
+export async function checkToolsLayout(
+  root: string = repoRoot,
+  tracked?: Set<string> | null,
+): Promise<boolean> {
+  const toolsRoot = path.join(root, "tools");
   const entries = await readdir(toolsRoot, { withFileTypes: true });
+  const trackedFiles = tracked === undefined ? await getTrackedRepositoryFiles(root) : tracked;
   const seen = new Set<string>();
   const violations: string[] = [];
 
   for (const entry of entries) {
+    // An untracked stray such as a Finder `.DS_Store` is not an allowlist
+    // breach. Directories are still checked: `tools/` has no ignored ones, and
+    // an untracked directory holding tracked files would otherwise be skipped.
+    if (entry.isFile() && trackedFiles != null && !trackedFiles.has(toRepositoryPath(path.join(toolsRoot, entry.name), root))) {
+      continue;
+    }
+
     const expected = toolsRootAllowlist.get(entry.name);
     const repositoryPath = `tools/${entry.name}${entry.isDirectory() ? "/" : ""}`;
 
@@ -1424,7 +1494,7 @@ const htmlBoundaryLocatorImport = "runtime/html-injection-points";
 const htmlBoundaryAnchoredPattern = /\/\^|\$\s*\/[gimsuy]*/;
 
 async function checkHtmlBoundaryLookups(): Promise<boolean> {
-  const files = await collectRepositoryFiles(repoRoot, htmlBoundarySkippedDirectories);
+  const files = await collectTrackedRepositoryFiles(repoRoot, htmlBoundarySkippedDirectories);
   const violations: { filePath: string; lineNumber: number; line: string }[] = [];
 
   for (const filePath of files) {
@@ -1491,7 +1561,7 @@ async function checkRunStartChokePoint(): Promise<boolean> {
   const daemonSource = path.join(repoRoot, "apps", "daemon", "src");
   if (!(await repositoryDirectoryExists("apps/daemon/src"))) return true;
 
-  for (const repositoryPath of await collectRepositoryFiles(daemonSource)) {
+  for (const repositoryPath of await collectTrackedRepositoryFiles(daemonSource)) {
     if (!repositoryPath.endsWith(".ts")) continue;
     if (RUN_START_BYPASS_ALLOWLIST.has(repositoryPath)) continue;
     const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
@@ -1528,7 +1598,7 @@ const checks: GuardCheck[] = [
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },
   { name: "run start choke point", run: checkRunStartChokePoint },
-  { name: "tools layout", run: checkToolsLayout },
+  { name: "tools layout", run: ({ repoRoot: root }) => checkToolsLayout(root) },
   { name: "style policy", run: checkStylePolicy },
   { name: "craft references", run: checkCraftReferences },
   { name: "what's new document", run: ({ repoRoot: root }) => checkWhatsNewDocument(root) },
