@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -36,11 +36,11 @@ export function encodeAntigravityStdinPrompt(prompt: string): string {
   return `${JSON.stringify({ event: 'user', message: { content: prompt } })}\n`;
 }
 
-// `agy` v1.0.3 still has no `--model` flag (upstream issue #35), but the
-// TUI's Switch-Model picker writes the choice to its settings.json, and
+// `agy` has no `--model` flag (upstream issue #35), but the TUI's
+// Switch-Model picker writes the choice to its settings.json, and
 // every headless `agy` invocation re-reads that file on startup — verified by
 // capturing the `--log-file` line `Propagating selected model override to
-// backend: label="<model>"`. So we can route OD's model picker through
+// backend: label="<model>"`. So we route OD's model picker through
 // settings.json: when the user picks a concrete model in Settings, the
 // daemon writes the label into agy's settings.json right before spawn,
 // and the resulting headless run uses that model.
@@ -51,18 +51,43 @@ export function encodeAntigravityStdinPrompt(prompt: string): string {
 //                         (Respects user choice when they switch models
 //                         from `agy` directly.)
 //   - any other id      : the literal display label agy expects (e.g.
-//                         "Gemini 3.1 Pro (High)", "Claude Sonnet 4.6
-//                         (Thinking)"). We persist it before spawn.
+//                         "Gemini 4 Argon (High)", "Claude Sonnet 5.5
+//                         (High)"). We persist it before spawn.
+//
+// `agy` >= 1.0.5 exposes `agy models`, which prints `<slug>\t<Label>` rows on
+// stdout (spinner diagnostics ride stderr). Note that `settings.json` and
+// `waitForAgyToReadModel` both key on the human-readable `<Label>` (writing a
+// slug like `gemini-4-argon-high` into `settings.json` causes `agy` to resolve
+// the base alias to `Gemini 4 Argon (Medium)`, dropping the effort tier and
+// failing the log-file label match). So `parseAntigravityModels` uses the
+// display label as both `id` and `label`.
 //
 // `supportsCustomModel: false` because the label set is a server-side
 // enum — a typed id agy doesn't recognise resolves to a silent
 // `availableModels` cache miss + empty headless output, which surfaces
 // to the user as a generic "empty response" error.
 //
-// The 8 model labels mirror what `Switch Model` in agy's TUI lists for
-// consumer-tier accounts as of 2026-05-28. The set is small and stable
-// enough to ship statically until upstream adds a programmatic
-// `agy models` subcommand (also tracked under issue #35).
+// `fallbackModels` mirrors the `agy` v1.5.1 catalog so offline / unauthenticated
+// runs or older `agy` binaries without `agy models` still expose current
+// models.
+const AGY_MODEL_LINE_RE = /^([A-Za-z0-9][A-Za-z0-9._-]*)\t+(.+)$/;
+
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const seen = new Set<string>([DEFAULT_MODEL_OPTION.id]);
+  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  for (const rawLine of String(stdout || '').split(/\r?\n/)) {
+    const match = rawLine.trim().match(AGY_MODEL_LINE_RE);
+    if (!match) continue;
+    const label = match[2]?.trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ id: label, label });
+  }
+  return out.length > 1 ? out : null;
+}
+
 const ANTIGRAVITY_SETTINGS_PATH = join(
   homedir(),
   '.gemini',
@@ -200,18 +225,25 @@ export const antigravityAgentDef = {
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
   },
+  listModels: {
+    args: ['models'],
+    parse: parseAntigravityModels,
+    timeoutMs: 15_000,
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
-    { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
-    { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
-    {
-      id: 'Claude Sonnet 4.6 (Thinking)',
-      label: 'Claude Sonnet 4.6 (Thinking)',
-    },
-    { id: 'Claude Opus 4.6 (Thinking)', label: 'Claude Opus 4.6 (Thinking)' },
+    { id: 'Gemini 4 Argon (Medium)', label: 'Gemini 4 Argon (Medium)' },
+    { id: 'Gemini 4 Argon (High)', label: 'Gemini 4 Argon (High)' },
+    { id: 'Gemini 4 Argon (Low)', label: 'Gemini 4 Argon (Low)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Claude Opus 5.5 (Low)', label: 'Claude Opus 5.5 (Low)' },
+    { id: 'Claude Opus 5.5 (Medium)', label: 'Claude Opus 5.5 (Medium)' },
+    { id: 'Claude Opus 5.5 (High)', label: 'Claude Opus 5.5 (High)' },
+    { id: 'Claude Sonnet 5.5 (Low)', label: 'Claude Sonnet 5.5 (Low)' },
+    { id: 'Claude Sonnet 5.5 (Medium)', label: 'Claude Sonnet 5.5 (Medium)' },
+    { id: 'Claude Sonnet 5.5 (High)', label: 'Claude Sonnet 5.5 (High)' },
     { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
   ],
   supportsCustomModel: false,
