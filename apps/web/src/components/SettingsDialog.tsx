@@ -109,7 +109,7 @@ export {
   providerModelsCacheKey,
 } from './providerModelsCache';
 import {
-  MAX_MAX_TOKENS,
+  maxTokensUpperBound,
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../state/maxTokens';
@@ -2355,7 +2355,7 @@ export function SettingsDialog({
     const nextMaxTokens =
       Number.isInteger(value) &&
       value >= MIN_MAX_TOKENS &&
-      value <= MAX_MAX_TOKENS
+      value <= maxTokensUpperBound(cfg.model)
         ? value
         : undefined;
     setCfg((c) => ({ ...c, maxTokens: nextMaxTokens }));
@@ -5703,7 +5703,7 @@ export function SettingsDialog({
                 <input
                   type="number"
                   min={MIN_MAX_TOKENS}
-                  max={MAX_MAX_TOKENS}
+                  max={maxTokensUpperBound(cfg.model)}
                   step={1}
                   placeholder={String(modelMaxTokensDefault(cfg.model))}
                   value={maxTokensInput}
