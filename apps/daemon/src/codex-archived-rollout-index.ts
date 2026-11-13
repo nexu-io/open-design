@@ -3,9 +3,11 @@ import type { Stats } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
-function isOwnedAndPrivate(stat: Stats): boolean {
-  return !stat.isSymbolicLink()
-    && (stat.mode & 0o022) === 0
+function isSafeArchiveEntry(stat: Stats): boolean {
+  if (stat.isSymbolicLink()) return false;
+  // Windows enforces access through ACLs when opening the index and rollout.
+  if (process.platform === 'win32') return true;
+  return (stat.mode & 0o022) === 0
     && (typeof process.getuid !== 'function' || stat.uid === process.getuid());
 }
 
@@ -27,8 +29,8 @@ export async function findIndexedCodexArchivedRolloutPath(
     lstat(archiveRoot).catch(() => null),
     lstat(dbPath).catch(() => null),
   ]);
-  if (!rootStat?.isDirectory() || !isOwnedAndPrivate(rootStat)
-    || !dbStat?.isFile() || !isOwnedAndPrivate(dbStat)) return null;
+  if (!rootStat?.isDirectory() || !isSafeArchiveEntry(rootStat)
+    || !dbStat?.isFile() || !isSafeArchiveEntry(dbStat)) return null;
   let db: Database.Database | undefined;
   try {
     db = new Database(dbPath, { readonly: true, fileMustExist: true, timeout: 25 });
@@ -44,7 +46,7 @@ export async function findIndexedCodexArchivedRolloutPath(
     const archiveRealPath = await realpath(archiveRoot);
     if (await realpath(path.dirname(filePath)) !== archiveRealPath) return null;
     const fileStat = await lstat(filePath);
-    if (!fileStat.isFile() || !isOwnedAndPrivate(fileStat)) return null;
+    if (!fileStat.isFile() || !isSafeArchiveEntry(fileStat)) return null;
     if (path.dirname(await realpath(filePath)) !== archiveRealPath) return null;
     return path.join(archiveRoot, name);
   } catch {

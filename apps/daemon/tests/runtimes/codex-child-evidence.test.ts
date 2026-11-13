@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
-import { chmod, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,9 +11,11 @@ import {
   normalizeAgentObservationV1,
   type NormalizedAgentObservationV1,
 } from '@open-design/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { collectCodexChildEvidence } from '../../src/runtimes/codex-child-evidence.js';
+
+vi.mock('node:fs/promises', { spy: true });
 
 const PARENT = '10000000-0000-4000-8000-000000000001';
 const CHILD = '20000000-0000-4000-8000-000000000002';
@@ -24,8 +26,55 @@ const sanitizedRealSeedPath = fileURLToPath(new URL(
   '../fixtures/od-next-runtime-capabilities/codex-0.147.0.sanitized-real-seed.json',
   import.meta.url,
 ));
+const nativeSpawnSeed = JSON.parse(readFileSync(new URL(
+  '../fixtures/od-next-runtime-capabilities/codex-0.167.0.sanitized-real-seed.json',
+  import.meta.url,
+), 'utf8')) as {
+  cliVersion: string;
+  cases: Array<{
+    transport: string;
+    parentSessionId: string;
+    parentTurnId: string;
+    childSessionId: string;
+    parentRollout: Array<{ type: string; payload: Record<string, unknown> }>;
+    childRollout: Array<{ type: string; payload: Record<string, unknown> }>;
+  }>;
+};
 
 const temporaryRoots: string[] = [];
+const collaborationSeed = JSON.parse(readFileSync(new URL(
+  '../fixtures/od-next-runtime-capabilities/codex-0.167.0.collaboration.sanitized-real-seed.json',
+  import.meta.url,
+), 'utf8')) as Omit<typeof nativeSpawnSeed, 'cases'> & {
+  cases: Array<typeof nativeSpawnSeed.cases[number] & { taskName: string }>;
+};
+
+async function writeCollaborationReplay(
+  replay: typeof collaborationSeed.cases[number],
+): Promise<{ home: string; input: ReturnType<typeof collectInput>; parent: string; child: string }> {
+  const home = await codexHome();
+  const parent = await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+  const child = await writeRollout(home, replay.childSessionId, replay.childRollout);
+  const db = new Database(path.join(home, 'state_5.sqlite'));
+  try {
+    db.exec(`CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, archived INTEGER, agent_path TEXT);
+      CREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT PRIMARY KEY, status TEXT);
+      CREATE INDEX idx_thread_spawn_edges_parent_status ON thread_spawn_edges(parent_thread_id, status);`);
+    db.prepare('INSERT INTO threads VALUES (?, ?, 0, NULL)').run(replay.parentSessionId, parent);
+    db.prepare('INSERT INTO threads VALUES (?, ?, 0, ?)').run(replay.childSessionId, child, replay.taskName);
+    db.prepare("INSERT INTO thread_spawn_edges VALUES (?, ?, 'open')").run(replay.parentSessionId, replay.childSessionId);
+  } finally { db.close(); }
+  return { home, parent, child, input: collectInput(home, {
+    parentSessionId: replay.parentSessionId,
+    parentTurnId: replay.parentTurnId,
+    agentCliVersion: collaborationSeed.cliVersion,
+  }) };
+}
+const nativePlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+
+function simulateWindows(): void {
+  Object.defineProperty(process, 'platform', { ...nativePlatform, value: 'win32' });
+}
 
 function timestamp(offsetMs: number): string {
   return new Date(BASE_TIME + offsetMs).toISOString();
@@ -169,12 +218,212 @@ function root(
 }
 
 afterEach(async () => {
+  Object.defineProperty(process, 'platform', nativePlatform);
+  vi.resetAllMocks();
   await Promise.all(temporaryRoots.splice(0).map((rootPath) => (
     rm(rootPath, { recursive: true, force: true })
   )));
 });
 
 describe('collectCodexChildEvidence', () => {
+  it.each(collaborationSeed.cases.flatMap(replay => (
+    ['native', 'win32'].map(platform => ({ ...replay, platform }))
+  )))('collects native task_name-only children active and archived ($transport, $platform)', async (replay) => {
+    const { home, parent, child, input } = await writeCollaborationReplay(replay);
+    if (replay.platform === 'win32') {
+      await chmod(path.join(home, 'state_5.sqlite'), 0o666);
+      simulateWindows();
+    }
+    const active = await collectCodexChildEvidence(input);
+    expect(active.knownChildCount).toBe(1);
+    expect(active.diagnostics).toEqual([]);
+    expect(active.observations.filter(o => o.kind === 'child_agent' && o.status === 'completed')).toMatchObject([{
+      identity: { runtimeSessionId: replay.childSessionId, parentObservationId: 'root' },
+      attributes: { terminalEvidence: 'child_task_complete' },
+    }]);
+    const archive = path.join(home, 'archived_sessions');
+    await mkdir(archive);
+    const db = new Database(path.join(home, 'state_5.sqlite'));
+    try {
+      for (const file of [parent, child]) {
+        const archived = path.join(archive, path.basename(file));
+        await rename(file, archived);
+        db.prepare('UPDATE threads SET archived = 1, rollout_path = ? WHERE rollout_path = ?').run(archived, file);
+      }
+    } finally { db.close(); }
+    // Known session IDs must still use the native archive index in a large archive.
+    await writeFile(path.join(archive, 'unrelated'), '');
+    expect(await collectCodexChildEvidence({ ...input, maxDirectoryEntries: 2 })).toEqual(active);
+  });
+
+  it.each(nativeSpawnSeed.cases)(
+    'collects completed Codex 0.167.0 children before and after archiving ($transport)',
+    async (replay) => {
+      const home = await codexHome();
+      expect(replay.parentRollout.some(({ payload }) => payload.type === 'sub_agent_activity')).toBe(false);
+      const parent = await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+      const child = await writeRollout(home, replay.childSessionId, replay.childRollout);
+      const input = collectInput(home, {
+        parentSessionId: replay.parentSessionId,
+        parentTurnId: replay.parentTurnId,
+        agentCliVersion: nativeSpawnSeed.cliVersion,
+      });
+      const active = await collectCodexChildEvidence(input);
+      expect(active).toMatchObject({ availability: 'complete', knownChildCount: 1, diagnostics: [] });
+      expect(active.observations.filter((observation) => (
+        observation.kind === 'child_agent' && observation.status === 'completed'
+      ))).toMatchObject([{
+        identity: { runtimeSessionId: replay.childSessionId, parentObservationId: 'root' },
+        attributes: { terminalEvidence: 'child_task_complete' },
+      }]);
+
+      const archive = path.join(home, 'archived_sessions');
+      await mkdir(archive);
+      for (const filePath of [parent, child]) {
+        await rename(filePath, path.join(archive, path.basename(filePath)));
+      }
+      expect(await collectCodexChildEvidence(input)).toEqual(active);
+    },
+  );
+
+  it.each(['parent', 'task name', 'conflicting task name', 'turn', 'missing turn'] as const)(
+    'rejects named children with mismatched %s despite a matching native index', async (scenario) => {
+      const replay = structuredClone(collaborationSeed.cases[0]!);
+      const meta = replay.childRollout.find(r => r.type === 'session_meta' && r.payload.id === replay.childSessionId)!.payload;
+      const spawn = ((meta.source as { subagent: { thread_spawn: Record<string, unknown> } }).subagent.thread_spawn);
+      const started = replay.childRollout.find(r => r.payload.type === 'task_started'
+        && r.payload.turn_id !== replay.parentTurnId)!.payload;
+      if (scenario === 'parent') { meta.parent_thread_id = SIBLING; spawn.parent_thread_id = SIBLING; }
+      if (scenario === 'task name') { meta.agent_path = '/root/another'; spawn.agent_path = '/root/another'; }
+      if (scenario === 'conflicting task name') meta.agent_path = '/root/another';
+      if (scenario === 'turn' || scenario === 'missing turn') {
+        started.turn_attribution = { turn_id: started.turn_id,
+          ...(scenario === 'turn' ? { parent_turn_id: 'other-turn' } : {}) };
+      }
+      const { input } = await writeCollaborationReplay(replay);
+      expect(await collectCodexChildEvidence(input)).toMatchObject({
+        availability: 'partial', knownChildCount: 0, observations: [],
+        diagnostics: [{ code: 'child_task_not_resolved', count: 1 }],
+      });
+    },
+  );
+
+  it.each(['missing', 'incompatible', 'symlink', 'denied'] as const)(
+    'reports partial evidence when the native child index is %s', async (scenario) => {
+      const { home, input } = await writeCollaborationReplay(collaborationSeed.cases[0]!);
+      const index = path.join(home, 'state_5.sqlite');
+      if (scenario === 'missing') await rm(index);
+      if (scenario === 'incompatible') {
+        const db = new Database(index);
+        try { db.exec('DROP INDEX idx_thread_spawn_edges_parent_status'); } finally { db.close(); }
+      }
+      if (scenario === 'symlink') {
+        const outside = await codexHome();
+        await rename(index, path.join(outside, 'state_5.sqlite'));
+        await symlink(path.join(outside, 'state_5.sqlite'), index);
+      }
+      if (scenario === 'denied') {
+        simulateWindows();
+        // Deny the index itself, not the root rollout lookup.
+        const { lstat: actualLstat } = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+        vi.mocked(lstat).mockImplementation((...args) => {
+          if (args[0] === index) return Promise.reject(Object.assign(new Error('Access denied'), { code: 'EACCES' }));
+          return actualLstat(...args);
+        });
+      }
+      expect(await collectCodexChildEvidence(input)).toMatchObject({
+        availability: 'partial', knownChildCount: 0, observations: [],
+        diagnostics: [{ code: 'child_index_unavailable', count: 1 }],
+      });
+    },
+  );
+
+  it.each(['unrelated parent', 'earlier turn', 'ambiguous', 'limit'] as const)(
+    'handles same-name indexed children: %s', async (scenario) => {
+      const replay = collaborationSeed.cases[0]!;
+      const { home, input } = await writeCollaborationReplay(replay);
+      let sibling = JSON.parse(JSON.stringify(replay.childRollout).replaceAll(replay.childSessionId, SIBLING)) as typeof replay.childRollout;
+      if (scenario === 'unrelated parent') {
+        sibling = JSON.parse(JSON.stringify(sibling).replaceAll(replay.parentSessionId, PARENT));
+      }
+      if (scenario === 'earlier turn') {
+        sibling = JSON.parse(JSON.stringify(sibling).replaceAll(replay.parentTurnId, 'earlier-parent-turn'));
+      }
+      const file = await writeRollout(home, SIBLING, sibling);
+      const db = new Database(path.join(home, 'state_5.sqlite'));
+      try {
+        db.prepare('INSERT INTO threads VALUES (?, ?, 0, ?)').run(SIBLING, file, replay.taskName);
+        db.prepare("INSERT INTO thread_spawn_edges VALUES (?, ?, 'open')").run(
+          scenario === 'unrelated parent' ? PARENT : replay.parentSessionId, SIBLING,
+        );
+      } finally { db.close(); }
+      const { open } = await import('node:fs/promises');
+      vi.mocked(open).mockClear();
+      const result = await collectCodexChildEvidence({ ...input, ...(scenario === 'limit' ? { maxChildSessions: 1 } : {}) });
+      if (scenario === 'ambiguous' || scenario === 'limit') {
+        expect(result).toMatchObject({ availability: 'partial', knownChildCount: 0, observations: [] });
+        expect(result.diagnostics).toContainEqual({
+          code: scenario === 'ambiguous' ? 'child_task_ambiguous' : 'child_session_limit_exceeded', count: 1,
+        });
+      } else {
+        expect(result.knownChildCount).toBe(1);
+        expect(result.observations.every(o => o.identity.runtimeSessionId === replay.childSessionId)).toBe(true);
+        if (scenario === 'unrelated parent') expect(vi.mocked(open).mock.calls.some(args => args[0] === file)).toBe(false);
+      }
+    },
+  );
+
+  it('does not infer completion from a named spawn or native spawn-edge status', async () => {
+    const replay = structuredClone(collaborationSeed.cases[0]!);
+    replay.childRollout = replay.childRollout.filter(r => r.payload.type !== 'task_complete');
+    const { input } = await writeCollaborationReplay(replay);
+    const result = await collectCodexChildEvidence(input);
+    expect(result).toMatchObject({ availability: 'partial', knownChildCount: 1 });
+    expect(result.observations.filter(o => o.kind === 'child_agent').map(o => o.status)).toEqual(['running']);
+  });
+
+  it.each(['different call', 'different namespace', 'different turn'] as const)(
+    'ignores a Codex spawn result associated with a %s',
+    async (scenario) => {
+      const replay = structuredClone(nativeSpawnSeed.cases[0]!);
+      const call = replay.parentRollout.find(({ payload }) => payload.name === 'spawn_agent')!.payload;
+      const output = replay.parentRollout.find(({ payload }) => (
+        payload.type === 'function_call_output' && payload.call_id === call.call_id
+      ))!.payload;
+      if (scenario === 'different call') output.call_id = 'other-call';
+      if (scenario === 'different namespace') call.namespace = 'external_tool';
+      if (scenario === 'different turn') output.internal_chat_message_metadata_passthrough = {
+        turn_id: 'other-turn',
+      };
+      const home = await codexHome();
+      await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+      await writeRollout(home, replay.childSessionId, replay.childRollout);
+      await expect(collectCodexChildEvidence(collectInput(home, {
+        parentSessionId: replay.parentSessionId,
+        parentTurnId: replay.parentTurnId,
+      }))).resolves.toMatchObject({ availability: 'complete', knownChildCount: 0, observations: [] });
+    },
+  );
+
+  it('excludes a child invocation attributed to another parent turn in the same time window', async () => {
+    const replay = structuredClone(nativeSpawnSeed.cases[0]!);
+    const started = replay.childRollout.find(({ payload }) => payload.type === 'task_started')!.payload;
+    started.turn_attribution = { turn_id: started.turn_id, parent_turn_id: 'other-turn' };
+    const home = await codexHome();
+    await writeRollout(home, replay.parentSessionId, replay.parentRollout);
+    await writeRollout(home, replay.childSessionId, replay.childRollout);
+
+    await expect(collectCodexChildEvidence(collectInput(home, {
+      parentSessionId: replay.parentSessionId,
+      parentTurnId: replay.parentTurnId,
+    }))).resolves.toMatchObject({
+      availability: 'partial',
+      knownChildCount: 0,
+      observations: [],
+      diagnostics: [{ code: 'child_turn_not_observed', count: 1 }],
+    });
+  });
+
   it('retains parent and declared child evidence after terminal archiving', async () => {
     const home = await codexHome();
     const parentPath = await writeRollout(home, PARENT, [
@@ -203,7 +452,7 @@ describe('collectCodexChildEvidence', () => {
     expect(after.observations).toEqual(before.observations);
   });
 
-  it('retains indexed parent and child evidence in an archive larger than the scan limit', async () => {
+  it.each(['native', 'win32'] as const)('collects active and indexed archived evidence on %s', async (platform) => {
     const home = await codexHome();
     const parentPath = await writeRollout(home, PARENT, [
       metadata(PARENT),
@@ -215,11 +464,22 @@ describe('collectCodexChildEvidence', () => {
       metadata(CHILD, PARENT),
       ...turn({ id: 'child-turn', startedAtMs: 300, prompt: 'Retain this child' }),
     ]);
-    const before = await collectCodexChildEvidence(collectInput(home));
+    if (platform === 'win32') {
+      // Node on Windows can report group/other write bits for readable entries.
+      await chmod(path.join(home, 'sessions'), 0o777);
+      await chmod(path.dirname(parentPath), 0o777);
+      await chmod(parentPath, 0o666);
+      await chmod(childPath, 0o666);
+      simulateWindows();
+    }
+    const input = collectInput(home, { maxDirectoryEntries: 2 });
+    const before = await collectCodexChildEvidence(input);
     expect(before.availability).toBe('complete');
+    expect(before.observations.filter(o => o.kind === 'child_agent' && o.status === 'completed')).toHaveLength(1);
     const archive = path.join(home, 'archived_sessions');
     await mkdir(archive);
-    const db = new Database(path.join(home, 'state_5.sqlite'));
+    const dbPath = path.join(home, 'state_5.sqlite');
+    const db = new Database(dbPath);
     try {
       db.exec('CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL, archived INTEGER NOT NULL)');
       for (const [id, filePath] of [[PARENT, parentPath], [CHILD, childPath]] as const) {
@@ -228,10 +488,55 @@ describe('collectCodexChildEvidence', () => {
         db.prepare('INSERT INTO threads VALUES (?, ?, 1)').run(id, archivedPath);
       }
     } finally { db.close(); }
-    for (let i = 0; i < 4_097; i += 1) writeFileSync(path.join(archive, `unrelated-${i}`), '');
-    const after = await collectCodexChildEvidence(collectInput(home));
+    if (platform === 'win32') {
+      await chmod(archive, 0o777);
+      await chmod(dbPath, 0o666);
+    }
+    await writeFile(path.join(archive, 'unrelated'), '');
+    const after = await collectCodexChildEvidence(input);
     expect(after.availability).toBe(before.availability);
     expect(after.observations).toEqual(before.observations);
+  });
+
+  it('distinguishes missing, empty, and inaccessible Windows sessions directories', async () => {
+    const home = await codexHome();
+    simulateWindows();
+    const sessions = path.join(home, 'sessions');
+    const input = collectInput(home);
+    const unavailable = {
+      availability: 'unavailable',
+      observations: [],
+      diagnostics: [{ code: 'sessions_root_unavailable', count: 1 }],
+    };
+
+    await expect(collectCodexChildEvidence(input)).resolves.toMatchObject(unavailable);
+    await mkdir(sessions);
+    await expect(collectCodexChildEvidence(input)).resolves.toMatchObject({
+      availability: 'unavailable',
+      observations: [],
+      diagnostics: [{ code: 'rollout_not_found', count: 1 }],
+    });
+
+    vi.mocked(readdir).mockClear().mockRejectedValueOnce(
+      Object.assign(new Error('Access denied'), { code: 'EACCES' }),
+    );
+    await expect(collectCodexChildEvidence(input)).resolves.toMatchObject(unavailable);
+    expect(readdir).toHaveBeenCalledWith(sessions, { withFileTypes: true });
+  });
+
+  it('rejects a Windows sessions root linked outside CODEX_HOME', async () => {
+    const home = await codexHome();
+    const outsideHome = await codexHome();
+    await writeRollout(outsideHome, PARENT, [metadata(PARENT), ...turn({
+      id: 'parent-turn', startedAtMs: 100,
+    })]);
+    await symlink(path.join(outsideHome, 'sessions'), path.join(home, 'sessions'), 'junction');
+    simulateWindows();
+    await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
+      availability: 'unavailable',
+      observations: [],
+      diagnostics: [{ code: 'sessions_root_unavailable', count: 1 }],
+    });
   });
 
   it('rejects ambiguous active/archive copies and ignores unrelated archived threads', async () => {
@@ -650,12 +955,21 @@ describe('collectCodexChildEvidence', () => {
         diagnostics: [{ code: 'codex_home_not_declared', count: 1 }],
       });
 
-    await chmod(parentPath, 0o666);
-    await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
-      availability: 'unavailable',
-      diagnostics: [{ code: 'unsafe_rollout_file', count: 1 }],
-    });
-    await chmod(parentPath, 0o600);
+    if (process.platform !== 'win32') {
+      await chmod(path.join(home, 'sessions'), 0o777);
+      await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
+        availability: 'unavailable',
+        diagnostics: [{ code: 'sessions_root_unavailable', count: 1 }],
+      });
+      await chmod(path.join(home, 'sessions'), 0o700);
+
+      await chmod(parentPath, 0o666);
+      await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
+        availability: 'unavailable',
+        diagnostics: [{ code: 'unsafe_rollout_file', count: 1 }],
+      });
+      await chmod(parentPath, 0o600);
+    }
 
     await writeRollout(home, PARENT, parentRecords, '2026/08/13');
     await expect(collectCodexChildEvidence(collectInput(home))).resolves.toMatchObject({
@@ -688,16 +1002,19 @@ describe('collectCodexChildEvidence', () => {
         childActivities: [{ sessionId: CHILD, kind: 'started', atMs: 1_000 }],
       }),
     ]);
-    const outside = path.join(home, 'outside.jsonl');
-    await writeFile(outside, `${JSON.stringify(metadata(CHILD, PARENT))}\n`, { mode: 0o600 });
-    const day = path.join(home, 'sessions', '2026', '08', '14');
-    await symlink(outside, path.join(day, `rollout-symlink-${CHILD}.jsonl`));
+    if (process.platform !== 'win32') {
+      const outside = path.join(home, 'outside.jsonl');
+      await writeFile(outside, `${JSON.stringify(metadata(CHILD, PARENT))}\n`, { mode: 0o600 });
+      const day = path.join(home, 'sessions', '2026', '08', '14');
+      const link = path.join(day, `rollout-symlink-${CHILD}.jsonl`);
+      await symlink(outside, link);
 
-    const symlinkResult = await collectCodexChildEvidence(collectInput(home));
-    expect(symlinkResult.observations).toEqual([]);
-    expect(symlinkResult.diagnostics).toContainEqual({ code: 'rollout_not_found', count: 1 });
+      const symlinkResult = await collectCodexChildEvidence(collectInput(home));
+      expect(symlinkResult.observations).toEqual([]);
+      expect(symlinkResult.diagnostics).toContainEqual({ code: 'rollout_not_found', count: 1 });
 
-    await rm(path.join(day, `rollout-symlink-${CHILD}.jsonl`));
+      await rm(link);
+    }
     await writeRollout(home, CHILD, [
       metadata(CHILD, PARENT),
       metadata(CHILD, GRANDCHILD),

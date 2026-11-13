@@ -184,8 +184,10 @@ function anyValue(value: string | number | boolean | readonly string[]): OtlpAny
 function attributes(
   entries: ReadonlyArray<readonly [string, string | number | boolean | readonly string[] | null | undefined]>,
 ): OtlpAttribute[] {
-  return entries
-    .filter((entry): entry is readonly [string, string | number | boolean | readonly string[]] => (
+  // OTLP keys must be unique. Later task fields override physical-run
+  // projections, including null/undefined overrides that omit a field.
+  return [...new Map(entries)]
+    .filter((entry): entry is [string, string | number | boolean | readonly string[]] => (
       entry[1] !== null && entry[1] !== undefined
     ))
     .map(([key, value]) => ({ key, value: anyValue(value) }));
@@ -695,6 +697,9 @@ export function legacyAndOtlpTaskMappingsMatch(
     return false;
   }
   const spans = otlpSpans(otlpPayload);
+  if (spans.some(span => new Set(span.attributes.map(attribute => attribute.key)).size !== span.attributes.length)) {
+    return false;
+  }
   const root = spans.find((span) => (
     attributeValue(span, 'langfuse.observation.metadata.observation_id') === aggregate.root.observationId
   ));
