@@ -1,0 +1,32 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-skill-event-poster",
+  "title": "Bright Event Poster",
+  "version": "0.1.0",
+  "description": "A high-energy event poster with exact information hierarchy, oversized typography, and tactile print character.",
+  "license": "Apache-2.0",
+  "author": {"name": "OpenDesign", "url": "https://github.com/nexu-io/open-design"},
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/image-templates/image-event-poster",
+  "tags": ["image-skill", "first-party", "image", "event", "poster", "typography", "print", "bright"],
+  "compat": {"agentSkills": [{"path": "./SKILL.md"}]},
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {"type": "image", "poster": "./example.webp"},
+    "useCase": {
+      "query": "Create a flat 4:5 nightlife event poster using only these exact text strings: 'AFTER DARK', '23 AUG', 'SHANGHAI', and 'DOORS 22:00'. Build the composition on luminous butter-yellow uncoated paper. Make AFTER DARK enormous, condensed, saturated electric-cobalt typography that nearly touches the edges. Drive one vivid coral-pink diagonal burst through the title and place one dynamic adult dancer as a bright cyan halftone cutout crossing the burst. Set 23 AUG and SHANGHAI as the clear second-level information; set DOORS 22:00 as a compact third-level label. Add a few acid-lime and orange registration marks. Make it feel physically screen-printed: visible paper fibers, uneven ink density, a fold line, one staple or tape trace, and slight color misregistration. Preserve generous light areas so the result feels bright, not nocturnal or muddy. Keep all text exact, large, and readable. No extra words, logos, sponsors, QR codes, mockup, frame, glossy 3D type, dark dominant field, generic gradient, neon glow, illegible microtext, or decorative clutter. Output only the finished poster.",
+      "exampleOutputs": [{"path": "./example.webp", "title": "Bright Event Poster"}]
+    },
+    "inputs": [
+      {"name": "model", "label": "Model", "type": "select", "options": ["vela/gpt-image-2"], "default": "vela/gpt-image-2"},
+      {"name": "aspect", "label": "Aspect ratio", "type": "select", "options": ["1:1", "16:9", "9:16", "4:5", "3:2"], "default": "4:5"}
+    ],
+    "context": {"skills": [{"path": "./SKILL.md"}], "assets": ["./template.json", "./example.webp"]},
+    "pipeline": {"stages": [{"id": "generate", "atoms": ["media-image"]}]},
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
