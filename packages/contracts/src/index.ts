@@ -85,6 +85,7 @@ export * from './runtime/deck-protocol.js';
 export * from './runtime/preview-observability.js';
 export * from './runtime/preview-runtime-state.js';
 export * from './runtime/model-window-limit.js';
+export * from './runtime/tool-permission-rejection.js';
 export * from './runtime/membership-concurrency-limit.js';
 export * from './observability/runtime-evidence-graph-v1.js';
 export * from './touchpoint-component-v2.js';
