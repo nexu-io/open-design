@@ -2478,6 +2478,71 @@ describe('POST /api/test/connection provider mode', () => {
 });
 
 describe('POST /api/test/connection agent mode', () => {
+  const acpProbeAdapters = ['amr', 'kilo', 'kimi', 'kiro', 'hermes', 'vibe', 'trae-cli', 'devin', 'reasonix'] as const;
+
+  it.each(acpProbeAdapters)('deletes disposable %s ACP probe sessions only when advertised', async (agentId) => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-acp-probe-residue-'));
+    const residuePath = path.join(markerDir, 'session.json');
+    const logPath = path.join(markerDir, 'requests.jsonl');
+    const def = getAgentDef(agentId);
+    if (!def) throw new Error(`Missing adapter ${agentId}`);
+    try {
+      for (const supported of [true, false]) {
+        await fsp.writeFile(logPath, '');
+        await withFakeAgent(def.bin, `
+const fs = require('node:fs');
+const readline = require('node:readline');
+const residuePath = ${JSON.stringify(residuePath)};
+const logPath = ${JSON.stringify(logPath)};
+const reply = (id, result) => console.log(JSON.stringify({ jsonrpc: '2.0', id, result }));
+if (!process.argv.includes('acp') && !process.argv.includes('run') && ${JSON.stringify(agentId)} !== 'vibe') {
+  console.log('{}');
+  process.exit(0);
+}
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const request = JSON.parse(line);
+  fs.appendFileSync(logPath, JSON.stringify(request) + '\\n');
+  if (request.method === 'initialize') {
+    reply(request.id, { protocolVersion: 1, agentCapabilities: {
+      sessionCapabilities: ${supported ? '{ delete: {} }' : '{ list: {} }'}
+    } });
+  } else if (request.method === 'session/new') {
+    fs.writeFileSync(residuePath, 'probe-session');
+    reply(request.id, { sessionId: 'probe-session' });
+  } else if (request.method === 'session/prompt') {
+    console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: {
+      sessionId: 'probe-session', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'ok' } }
+    } }));
+    reply(request.id, { stopReason: 'end_turn' });
+  } else if (request.method === 'session/delete') {
+    if (request.params.sessionId === 'probe-session') fs.unlinkSync(residuePath);
+    reply(request.id, {});
+  } else {
+    reply(request.id, {});
+  }
+});
+process.stdin.on('end', () => process.exit(0));
+`, async () => {
+          const result = await testAgentConnection({ agentId, model: 'probe-model' });
+          expect(result).toMatchObject({ ok: true, kind: 'success', sample: 'ok' });
+        });
+        const requests = (await fsp.readFile(logPath, 'utf8')).trim().split('\n')
+          .filter(Boolean).map((line) => JSON.parse(line) as { method: string; params?: unknown });
+        const deletes = requests.filter((request) => request.method === 'session/delete');
+        expect(deletes).toEqual(supported
+          ? [expect.objectContaining({ params: { sessionId: 'probe-session' } })]
+          : []);
+        if (supported) {
+          await expect(fsp.stat(residuePath)).rejects.toMatchObject({ code: 'ENOENT' });
+        } else {
+          expect(await fsp.readFile(residuePath, 'utf8')).toBe('probe-session');
+        }
+      }
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
   it('uses the AMR profile-scoped remembered model during connection tests when no explicit model is selected', async () => {
     rememberLiveModels('amr', [{ id: 'local-scoped-model', label: 'local-scoped-model' }], 'local');
 
@@ -4497,6 +4562,57 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
         });
       },
     );
+  });
+
+  it('preserves ACP probe success when its deadline expires during deletion', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-cleanup-deadline-'));
+    const deleteFile = path.join(markerDir, 'delete');
+    const originalTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+    const realSetTimeout = globalThis.setTimeout;
+    let expireProbe: (() => void) | undefined;
+    process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '12345';
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((callback: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+      const scheduled = realSetTimeout(() => callback(...args), ms);
+      if (ms === 12345) expireProbe = () => { clearTimeout(scheduled); callback(...args); };
+      return scheduled;
+    }) as typeof setTimeout);
+    try {
+      await withFakeAgent('kilo', `
+const fs = require('node:fs');
+const readline = require('node:readline');
+const reply = (id, result) => console.log(JSON.stringify({ jsonrpc: '2.0', id, result }));
+if (!process.argv.includes('acp')) { console.log('{}'); process.exit(0); }
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const frame = JSON.parse(line);
+  if (frame.method === 'initialize') reply(frame.id, { agentCapabilities: { sessionCapabilities: { delete: {} } } });
+  else if (frame.method === 'session/new') reply(frame.id, { sessionId: 'deadline-probe' });
+  else if (frame.method === 'session/prompt') {
+    console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: {
+      sessionId: 'deadline-probe', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'ok' } }
+    } }));
+    reply(frame.id, { stopReason: 'end_turn' });
+  }
+  // Deliberately leave deletion unanswered until its bounded cleanup deadline.
+  else if (frame.method === 'session/delete') fs.writeFileSync(${JSON.stringify(deleteFile)}, 'pending');
+  else reply(frame.id, {});
+});
+process.stdin.on('end', () => process.exit(0));
+`, async () => {
+        const pending = testAgentConnection({ agentId: 'kilo', model: 'probe-model' });
+        await Promise.race([
+          waitForFile(deleteFile),
+          pending.then((result) => { throw new Error(`Probe ended before deletion: ${JSON.stringify(result)}`); }),
+        ]);
+        expect(expireProbe).toBeTypeOf('function');
+        expireProbe!();
+        await expect(pending).resolves.toMatchObject({ ok: true, kind: 'success', sample: 'ok' });
+      });
+    } finally {
+      timeoutSpy.mockRestore();
+      if (originalTimeout === undefined) delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+      else process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = originalTimeout;
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
   });
 
   it('hard-cancels aborted agent probes before cleaning up', async () => {
