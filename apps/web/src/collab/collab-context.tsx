@@ -13,6 +13,16 @@ export interface CollabContextValue extends ProjectCollab {
   /** Exact persisted scope of the project being rendered. Never shell navigation state. */
   workspaceContext: WorkspaceCollabContext | null;
   workspaceContextLoading: boolean;
+  /**
+   * Whether the project's workspace scope read has SETTLED as `unbound`
+   * (`projectWorkspaceScopeSettledUnbound`): the daemon's authoritative
+   * verdict that this project is bound to no workspace. The only reading in
+   * which a null `workspaceContext` may be treated as "no share surface in
+   * scope" by destructive flows (the delete confirmations); loading, failed,
+   * and `unavailable` scope reads must fail closed. Optional only for
+   * standalone consumers; ProjectView always supplies it.
+   */
+  workspaceScopeSettledUnbound?: boolean;
   /** Whether project-owned resources may use local or exact Workspace reads.
    * Optional only for standalone consumers; ProjectView always supplies it. */
   projectResourceAuthority?: ProjectResourceAuthority;
@@ -26,6 +36,7 @@ export interface CollabContextValue extends ProjectCollab {
 const DISABLED: CollabContextValue = {
   workspaceContext: null,
   workspaceContextLoading: false,
+  workspaceScopeSettledUnbound: false,
   projectResourceAuthority: 'local',
   enabled: false,
   member: null,

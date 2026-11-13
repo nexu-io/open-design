@@ -342,6 +342,7 @@ import {
   projectWorkspaceContext,
   projectWorkspaceScopeAuthorizesAmr,
   projectWorkspaceScopeReady,
+  projectWorkspaceScopeSettledUnbound,
   projectWorkspaceVisibility,
   runWorkspaceIdentity,
   runWorkspacePersonalAdoptionWitness,
@@ -2705,11 +2706,13 @@ export function ProjectView({
     },
     [project.id, activeConversationId, projectRunWorkspaceContext],
   );
+  const workspaceScopeSettledUnbound = projectWorkspaceScopeSettledUnbound(projectWorkspaceScopeState);
   const collabValue = useMemo<CollabContextValue>(
     () => ({
       ...projectCollab,
       workspaceContext: projectRunWorkspaceContext,
       workspaceContextLoading: projectWorkspaceScopeState.loading,
+      workspaceScopeSettledUnbound,
       projectResourceAuthority,
       projectVisibility: sharedProjectScope ? 'team' : 'personal',
       onLostAnchors: handleLostAnchors,
@@ -2718,6 +2721,7 @@ export function ProjectView({
       projectCollab,
       projectRunWorkspaceContext,
       projectWorkspaceScopeState.loading,
+      workspaceScopeSettledUnbound,
       projectResourceAuthority,
       sharedProjectScope,
       handleLostAnchors,
