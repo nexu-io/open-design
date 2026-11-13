@@ -13,6 +13,19 @@ import { resolveDaemonUrl as resolveDaemonUrlDefault } from "./daemon-url.js";
 const DEFAULT_BOOTSTRAP_TIMEOUT_MS = 60_000;
 const DEFAULT_BOOTSTRAP_POLL_MS = 250;
 
+// A registration that cannot launch the app still has to tolerate a slow
+// sidecar or health answer on a busy host. Retry discovery with growing
+// timeouts, but keep the total short: the stdio server does not answer
+// `initialize` until discovery settles, and MCP clients only wait a bounded
+// time for a server to start.
+const UNMANAGED_DISCOVERY_BUDGET_MS = 6_000;
+const UNMANAGED_DISCOVERY_FIRST_TIMEOUT_MS = 800;
+const UNMANAGED_DISCOVERY_MAX_TIMEOUT_MS = 3_000;
+const UNMANAGED_DISCOVERY_FIRST_RETRY_DELAY_MS = 250;
+const UNMANAGED_DISCOVERY_MAX_RETRY_DELAY_MS = 1_000;
+// Below this, another attempt cannot answer in time, so it is not started.
+const UNMANAGED_DISCOVERY_MIN_ATTEMPT_MS = 200;
+
 export type McpDaemonBootstrapPlan =
   | {
       action: "none";
@@ -73,7 +86,15 @@ interface EnsureMcpDaemonUrlOptions {
   ) => Promise<string | null>;
   env?: NodeJS.ProcessEnv;
   flagUrl?: string | null;
-  probeDaemon?: (url: string) => Promise<boolean>;
+  /**
+   * How long an unmanaged registration keeps retrying discovery before it
+   * reports the runtime unavailable. Startup uses the default; the per-call
+   * refresh passes 0 because it already falls back to the startup URL.
+   */
+  discoveryRetryBudgetMs?: number;
+  /** Clock for the discovery retry budget; injected for tests. */
+  now?: () => number;
+  probeDaemon?: (url: string, timeoutMs?: number) => Promise<boolean>;
   resolveDaemonUrl?: (options: {
     allowLegacyDefault?: boolean;
     env: NodeJS.ProcessEnv;
@@ -156,33 +177,70 @@ export async function ensureMcpDaemonUrl(
     throw new Error("The Open Design MCP registration is missing its runtime connection. Open the app and refresh the MCP registration, then restart this MCP session.");
   }
 
-  let daemonUrl: string | null = registeredBootstrapTarget
-    ? await discoverTargetDaemonUrl(env, 800)
-    : await resolveDaemonUrl({
-        allowLegacyDefault: false,
-        env,
-        flagUrl,
-        timeoutMs: 800,
-      });
-  const daemonReachable =
-    daemonUrl != null && await probeDaemon(daemonUrl);
-  const plan = planMcpDaemonBootstrap({
-    daemonReachable,
-    env,
-    explicitDaemonUrl,
-  });
-  if (plan.action === "none") {
+  const now = options.now ?? Date.now;
+  const discoverUnmanagedDaemon = async (attemptTimeoutMs: number): Promise<string | null> =>
+    registeredBootstrapTarget
+      ? await discoverTargetDaemonUrl(env, attemptTimeoutMs)
+      : await resolveDaemonUrl({
+          allowLegacyDefault: false,
+          env,
+          flagUrl,
+          timeoutMs: attemptTimeoutMs,
+        });
+
+  // The first attempt keeps the original 800 ms limits. Every later blocking
+  // call (discovery, health probe, retry delay) is capped to the budget that
+  // is left when it starts, so startup never runs past the deadline.
+  const discoveryDeadline = now() + (options.discoveryRetryBudgetMs ?? UNMANAGED_DISCOVERY_BUDGET_MS);
+  let attemptTimeoutMs = UNMANAGED_DISCOVERY_FIRST_TIMEOUT_MS;
+  let retryDelayMs = UNMANAGED_DISCOVERY_FIRST_RETRY_DELAY_MS;
+  let firstAttempt = true;
+  const callTimeout = (): number =>
+    firstAttempt ? attemptTimeoutMs : Math.min(attemptTimeoutMs, discoveryDeadline - now());
+  let plan: McpDaemonBootstrapPlan;
+  for (;;) {
+    let daemonUrl: string | null = null;
+    let discoveryError: unknown = null;
+    try {
+      daemonUrl = await discoverUnmanagedDaemon(callTimeout());
+    } catch (err) {
+      discoveryError = err;
+    }
+    let daemonReachable = false;
+    if (daemonUrl != null) {
+      const probeTimeoutMs = callTimeout();
+      daemonReachable = probeTimeoutMs > 0 && await probeDaemon(daemonUrl, probeTimeoutMs);
+    }
+    plan = planMcpDaemonBootstrap({
+      daemonReachable,
+      env,
+      explicitDaemonUrl,
+    });
+    if (plan.action === "spawn") break;
     if (daemonUrl != null && (daemonReachable || explicitDaemonUrl)) return daemonUrl;
-    throw new Error(
-      `The registered OpenDesign runtime is unavailable and cannot be launched (${plan.reason}).`,
-    );
+    // Only a missing launcher is worth waiting out. A malformed registration
+    // will not repair itself, so it still fails on the first attempt.
+    const remainingMs = discoveryDeadline - now();
+    if (
+      plan.reason !== "bootstrap-unavailable"
+      || remainingMs < retryDelayMs + UNMANAGED_DISCOVERY_MIN_ATTEMPT_MS
+    ) {
+      if (discoveryError != null) throw discoveryError;
+      throw new Error(
+        `The registered OpenDesign runtime is unavailable and cannot be launched (${plan.reason}).`,
+      );
+    }
+    await sleep(retryDelayMs);
+    firstAttempt = false;
+    attemptTimeoutMs = Math.min(attemptTimeoutMs * 2, UNMANAGED_DISCOVERY_MAX_TIMEOUT_MS);
+    retryDelayMs = Math.min(retryDelayMs * 2, UNMANAGED_DISCOVERY_MAX_RETRY_DELAY_MS);
   }
 
   await spawnBootstrap(plan);
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(DEFAULT_BOOTSTRAP_POLL_MS);
-    daemonUrl = registeredBootstrapTarget
+    const daemonUrl = registeredBootstrapTarget
       ? await discoverTargetDaemonUrl(env, 300)
       : await resolveDaemonUrl({
           allowLegacyDefault: false,
@@ -296,10 +354,10 @@ function parseBootstrapArgs(raw: string | undefined): string[] | null {
   }
 }
 
-async function probeDaemonHealth(url: string): Promise<boolean> {
+async function probeDaemonHealth(url: string, timeoutMs = 800): Promise<boolean> {
   try {
     const response = await fetch(`${url.replace(/\/$/u, "")}/api/health`, {
-      signal: AbortSignal.timeout(800),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     return response.ok;
   } catch {
