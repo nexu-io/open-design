@@ -16,11 +16,12 @@ it('retains every user stop with factual timing and one identity through its ter
   expect(diagnosticFaultFromLifecycle(baseRun, 'user_cancel', 1500).sourceId).toBe(early.sourceId);
   expect(diagnosticFaultFromLifecycle({ ...baseRun, manualResumeAttemptCount: 1 }, 'user_cancel', 2000).sourceId).not.toBe(early.sourceId);
 });
-it('does not infer a system failure from cleanup or healthy success; catches invalid delivery after success', () => {
+it('does not infer a system failure from cleanup, healthy success, or a turn that wrote no deliverable', () => {
   const end = { id: 1, event: 'end', timestamp: 1000, data: { status: 'canceled' } };
   expect(diagnosticFaultFromRun({ ...baseRun, cancelOrigin: 'project_cleanup', deliverableValid: false }, end)).toBeNull();
   expect(diagnosticFaultFromRun(baseRun, { ...end, data: { status: 'succeeded' } })).toBeNull();
-  expect(diagnosticFaultFromRun({ ...baseRun, deliverableValid: false }, { ...end, data: { status: 'succeeded' } })?.kind).toBe('delivery_validation_failure');
+  // The run is shown as completed; question/answer, git and review turns never write a deliverable.
+  expect(diagnosticFaultFromRun({ ...baseRun, deliverableValid: false }, { ...end, data: { status: 'succeeded' } })).toBeNull();
 });
 it.each([
   ['/api/chat', 'admission_failure'], ['/api/runs/:id/cancel', 'run_api_failure'],

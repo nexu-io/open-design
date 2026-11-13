@@ -46,13 +46,21 @@ async function deliver(payload: ClientExperienceDiagnostic, attempt: number): Pr
   pending.add(timer);
 }
 
+// Settings input the user is still correcting; the form shows the reason inline.
+const USER_INPUT_OPERATION_CODES = new Set(['invalid_base_url', 'auth_failed', 'api_key_wrong_protocol',
+  'not_found_model', 'rate_limited', 'login_stopped']);
+// Only resources the app ships; external media and user artifacts fail on their own.
+const APP_RESOURCE_CATEGORIES = new Set(['next_chunk', 'product_asset']);
+
 export function reportExperienceEvent(event: string, props: Record<string, unknown>): void {
   const isCard = event === 'surface_view' && ['run_failed_toast', 'run_start_blocked'].includes(String(props.element));
   const isPreview = event === 'surface_view' && props.element === 'run_status_bar' && props.status === 'failed';
   const isResult = event.endsWith('_result') && (props.result === 'failed' || props.result === 'error' || props.status === 'failed');
-  const runtime = ['client_white_screen', 'client_preview_white_screen', 'client_preview_resource_error',
-    'client_preview_runtime_error', 'client_resource_error', 'client_run_stuck', 'client_exception'].includes(event);
+  // Preview runtime/resource errors come from agent-authored pages, not the app.
+  const runtime = ['client_white_screen', 'client_preview_white_screen', 'client_run_stuck', 'client_exception'].includes(event)
+    || (event === 'client_resource_error' && APP_RESOURCE_CATEGORIES.has(String(props.category)));
   if (!isCard && !isPreview && !isResult && !runtime) return;
+  if (isResult && USER_INPUT_OPERATION_CODES.has(String(props.error_code))) return;
   const runId = token(props.run_id) ?? token(props.origin_run_id);
   const projectId = token(props.project_id);
   const conversationId = token(props.conversation_id);
@@ -69,7 +77,8 @@ export function reportExperienceEvent(event: string, props: Record<string, unkno
 
 export function reportProjectFailure(project: { id: string; status?: { value: string; runId?: string; updatedAt?: number } }, surface: string): void {
   const status = project.status;
-  if (!status || !['failed', 'incomplete'].includes(status.value)) return;
+  // `incomplete` is a successful run with unfinished todos, not a failure.
+  if (!status || status.value !== 'failed') return;
   const projectId = token(project.id); const runId = token(status.runId);
   if (!projectId) return;
   reportExperienceFailure({ category: 'project_failure', surface, errorCode: status.value,
