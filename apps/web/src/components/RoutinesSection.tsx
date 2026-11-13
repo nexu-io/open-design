@@ -605,7 +605,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
         ? routines.find((routine) => routine.id === editingId) ?? null
         : null;
       if (isEdit && !existingRoutine) {
-        throw new Error('The automation is no longer available.');
+        throw new Error(t('routines.errorAutomationMissing'));
       }
       const requestScope = isEdit
         ? routineWorkspaceScope(existingRoutine!)

@@ -1912,6 +1912,7 @@ export const zhTW: Dict = {
   "routines.confirmDelete": "刪除此自動化？過往執行記錄及其專案將予以保留。",
   "routines.errorPickProject":
     "請選擇要重複使用的專案，或切換為「每次執行建立新專案」。",
+  "routines.errorAutomationMissing": "此自動化已無法使用。",
   "routines.errorAgentEmptyOutput":
     "代理已完成執行但未產生任何輸出。模型或提供商可能返回了空回應，請檢查代理日誌中的上游錯誤。",
   "entry.githubStarLabel": "星標",
@@ -4858,6 +4859,8 @@ export const zhTW: Dict = {
   "automations.templatesEmptyTitle": "此分類下還沒有範本。",
   "automations.templatesEmptyBody": "換一個篩選條件，或從空白自動化開始。",
   "automations.useTemplate": "使用範本",
+  "automations.errorTitleRequired": "請為這個自動化新增標題。",
+  "automations.errorPromptRequired": "請為排程對話新增提示詞。",
   "automations.promptPlaceholder": "輸入此自動化要執行的任務說明。",
   "automations.runHistoryLoading": "正在載入執行歷史…",
   "automations.runHistoryEmpty": "還沒有執行記錄。",
