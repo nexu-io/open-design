@@ -202,3 +202,14 @@ describe('resolveModelForAgent', () => {
     ).toBe('gpt-5.4-fast');
   });
 });
+
+describe('resolveRequestedModelId', () => {
+  it('maps a saved Antigravity display label to its slug', async () => {
+    const { resolveRequestedModelId } = await import('../../src/runtimes/models.js');
+    const { antigravityAgentDef } = await import('../../src/runtimes/defs/antigravity.js');
+    expect(resolveRequestedModelId(antigravityAgentDef, 'Gemini 3.8 Flash (High)')).toBe('gemini-3.8-flash-high');
+    expect(resolveRequestedModelId(antigravityAgentDef, 'gemini-3.8-flash-high')).toBe('gemini-3.8-flash-high');
+    // A label that no longer exists is not a valid slug either.
+    expect(resolveRequestedModelId(antigravityAgentDef, 'Gemini 3.1 Pro (High)')).toBeNull();
+  });
+});

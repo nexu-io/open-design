@@ -4085,12 +4085,25 @@ export function SettingsDialog({
         };
       });
     };
+    // A saved value that is not a known id may be a display label stored by an
+    // older picker (Antigravity saved labels before agy exposed slugs). Show
+    // the model it names; the daemon resolves the same label to the same slug
+    // at spawn. An unknown value on an adapter without custom ids is shown as
+    // the default rather than as a selection the run will not honor.
+    const resolvedSavedModel =
+      configuredModel && knownModelIds.length > 0 && !knownModelIds.includes(configuredModel)
+        ? selected.models?.find(
+            (m) =>
+              m.id !== 'default' &&
+              m.label.trim().toLowerCase() === configuredModel.trim().toLowerCase(),
+          )?.id ?? null
+        : configuredModel;
     const fallbackModelValue =
-      selected.id === 'amr' &&
       configuredModel &&
-      !knownModelIds.includes(configuredModel)
+      !resolvedSavedModel &&
+      (selected.id === 'amr' || !allowCustomModel)
         ? defaultAgentModelId(selected) ?? ''
-        : configuredModel ?? defaultAgentModelId(selected) ?? '';
+        : resolvedSavedModel ?? configuredModel ?? defaultAgentModelId(selected) ?? '';
     const modelValue = customModelDraft ?? fallbackModelValue;
     const reasoningValue =
       activeReasoningOptions?.some((option) => option.id === effectiveChoice.reasoning)

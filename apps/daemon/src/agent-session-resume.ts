@@ -155,6 +155,13 @@ export function resolveAgentResumeFailurePolicy(input: {
   stdout?: string;
   isResuming: boolean;
   resumeSessionId: string | null | undefined;
+  /**
+   * Latched by the live stderr watcher (`detectEarlyAgentResumeFailure`) when
+   * the failure signal was seen mid-attempt. The close-time stderr tail is
+   * capped, so later diagnostics can evict the original warning; the latch
+   * keeps the verdict from depending on what happens to still be in the tail.
+   */
+  resumeFailureObserved?: boolean;
 }): AgentResumeFailurePolicy {
   const attemptedResume =
     input.isResuming === true
@@ -162,7 +169,8 @@ export function resolveAgentResumeFailurePolicy(input: {
     && input.resumeSessionId.length > 0;
   const resumeFailed =
     attemptedResume &&
-    isAgentResumeFailure(input.agentId, input.stderr, input.stdout ?? '');
+    (input.resumeFailureObserved === true
+      || isAgentResumeFailure(input.agentId, input.stderr, input.stdout ?? ''));
   return {
     resumeFailed,
     clearStaleSession: resumeFailed,
@@ -540,4 +548,74 @@ const ANTIGRAVITY_RESUME_FAILURE_PATTERN = /conversation "[^"]+" not found/i;
 export function isAntigravityResumeFailure(stderr: string): boolean {
   if (!stderr) return false;
   return ANTIGRAVITY_RESUME_FAILURE_PATTERN.test(stderr);
+}
+
+/**
+ * Live stderr check for adapters whose CLI keeps working after it fails to
+ * load the resumed session. agy warns `conversation "<id>" not found` and then
+ * runs the submitted prompt in a brand-new conversation, so waiting for the
+ * process to close lets it answer (and edit files) before the daemon reseeds
+ * and runs the same turn again. Callers stop the child as soon as this returns
+ * true; adapters that exit on their own after a failed resume return false.
+ */
+export function detectEarlyAgentResumeFailure(agentId: string, stderrWindow: string): boolean {
+  if (agentId === 'antigravity') return isAntigravityResumeFailure(stderrWindow);
+  return false;
+}
+
+/**
+ * Whether a failed-resume attempt can be replayed transparently. Replaying is
+ * only safe when the first attempt left nothing behind: no visible output, no
+ * tool call, no file or live-artifact write. Otherwise the reseed would show a
+ * second answer and could repeat an edit, so the caller surfaces a retryable
+ * error instead.
+ */
+export function canAutoReseedAfterResumeFailure(sideEffects: {
+  toolCallSeen?: boolean;
+  artifactWriteSeen?: boolean;
+  liveArtifactSeen?: boolean;
+  userVisibleOutputSeen?: boolean;
+}): boolean {
+  return !sideEffects.toolCallSeen
+    && !sideEffects.artifactWriteSeen
+    && !sideEffects.liveArtifactSeen
+    && !sideEffects.userVisibleOutputSeen;
+}
+
+type ReseedTranscriptMessage = {
+  id?: string | null;
+  role?: string | null;
+  content?: string | null;
+};
+
+const TRANSCRIPT_ROLE_HEADING_RE = /^## (user|assistant)\b/gim;
+
+/**
+ * Full transcript for a reseed whose caller sent only the latest message.
+ * Browser callers ship their own transcript as `message` alongside a
+ * `currentPrompt`; headless callers (`od run start --conversation`) send just
+ * the new turn, so after a dropped session the fresh one would start with no
+ * history. Rebuilds the `## user` / `## assistant` shape the web client sends
+ * from persisted messages, skipping the current run's placeholder and the
+ * persisted copy of the current message. Returns null when there is no prior
+ * turn to restore.
+ */
+export function renderHeadlessReseedTranscript(input: {
+  messages: readonly ReseedTranscriptMessage[];
+  currentMessage: string;
+  currentAssistantMessageId?: string | null;
+}): string | null {
+  const current = input.currentMessage.trim();
+  const prior = input.messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .filter((m) => !input.currentAssistantMessageId || m.id !== input.currentAssistantMessageId)
+    .map((m) => ({ role: m.role as string, content: String(m.content ?? '').trim() }))
+    .filter((m) => m.content.length > 0);
+  const last = prior[prior.length - 1];
+  if (last && last.role === 'user' && last.content === current) prior.pop();
+  if (prior.length === 0) return null;
+  const escape = (text: string) => text.replace(TRANSCRIPT_ROLE_HEADING_RE, '\\$&');
+  return [...prior, { role: 'user', content: current }]
+    .map((m) => `## ${m.role}\n${escape(m.content)}`)
+    .join('\n\n');
 }
