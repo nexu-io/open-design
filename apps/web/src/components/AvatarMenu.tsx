@@ -812,8 +812,8 @@ export function AvatarMenu({
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          title={model.label}
-                          className={`avatar-model-option${active ? ' is-active' : ''}`}
+                          data-tooltip={model.id}
+                          className={`avatar-model-option od-tooltip${active ? ' is-active' : ''}`}
                           data-testid={`avatar-model-option-${model.id}`}
                           onClick={() => {
                             onApiModelChange?.(model.id);
