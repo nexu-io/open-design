@@ -675,15 +675,30 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
     ...AGY_STREAM_JSON_ARGS,
   ]);
 
+  // Extra allowed dirs and the run cwd become `--add-dir` entries; blank
+  // entries are dropped.
+  const argsWithDirs = antigravity.buildArgs('write hello world', [], ['/path/a', '', '  ', '/path/b'], {}, {
+    cwd: '/project',
+  });
+  assert.deepEqual(argsWithDirs, [
+    '--add-dir',
+    '/path/a',
+    '--add-dir',
+    '/path/b',
+    '--add-dir',
+    '/project',
+    ...AGY_STREAM_JSON_ARGS,
+  ]);
+
   assert.equal(typeof antigravity.encodeStdinPrompt, 'function');
   assert.deepEqual(decodeAgyStdinFrame(antigravity.encodeStdinPrompt!('write hello world')), {
     event: 'user',
     message: { content: 'write hello world' },
   });
 
-  // The model is chosen through agy's settings.json (see below), never
-  // through argv. Pass a temp antigravitySettingsPath so buildArgs does not
-  // touch the real ~/.gemini/antigravity-cli/settings.json in a unit test.
+  // The model rides agy's `--model` flag. Pass a temp
+  // antigravitySettingsPath anyway so a regression back to settings.json
+  // writes cannot touch the real ~/.gemini/antigravity-cli/settings.json.
   const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-argv-'));
   try {
     const withModel = antigravity.buildArgs('hi', [], [], {
@@ -692,8 +707,10 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
       agentLogFilePath: '/tmp/od-agy-test.log',
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
     });
-    assert.equal(withModel.includes('--model'), false);
+    assert.equal(withModel.includes('--model'), true);
     assert.deepEqual(withModel, [
+      '--model',
+      'Gemini 3.1 Pro (High)',
       '--log-file',
       '/tmp/od-agy-test.log',
       ...AGY_STREAM_JSON_ARGS,
@@ -720,31 +737,30 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
   // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Fallback models provide sane defaults when agy models is offline.
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Gemini 3.7 Flash (High)',
+      'Gemini 3.7 Flash (Medium)',
+      'Gemini 3.7 Flash (Low)',
+      'Gemini 3.6 Flash (High)',
+      'Gemini 3.6 Flash (Medium)',
+      'Gemini 3.6 Flash (Low)',
       'Gemini 3.1 Pro (High)',
       'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
       'Claude Sonnet 4.6 (Thinking)',
       'Claude Opus 4.6 (Thinking)',
       'GPT-OSS 120B (Medium)',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
-  assert.equal(antigravity.supportsCustomModel, false);
+  // Modern `agy` accepts arbitrary models via `--model` flag.
+  assert.equal(antigravity.supportsCustomModel, true);
 });
 
 // OPEND-3495: on Windows the composed OD prompt (system prompt + skills +

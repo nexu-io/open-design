@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -191,6 +191,36 @@ export async function waitForAgyToReadModel(
   return false;
 }
 
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const lines = String(stdout || '').split(/\r?\n/);
+  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>();
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('Fetching')) continue;
+    const parts = line.split('\t');
+    let id = '';
+    let label = '';
+    if (parts.length >= 2) {
+      id = parts[0]!.trim();
+      label = parts[1]!.trim();
+    } else {
+      const match = line.match(/^(\S+)\s+(.+)$/);
+      if (match) {
+        id = match[1]!.trim();
+        label = match[2]!.trim();
+      }
+    }
+    if (id && label && !seen.has(id)) {
+      seen.add(id);
+      out.push({ id, label });
+    }
+  }
+  return out.length > 1 ? out : null;
+}
+
 export const antigravityAgentDef = {
   id: 'antigravity',
   name: 'Antigravity',
@@ -200,13 +230,24 @@ export const antigravityAgentDef = {
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
   },
+  listModels: {
+    args: ['models'],
+    parse: parseAntigravityModels,
+    timeoutMs: 5000,
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Gemini 3.7 Flash (Medium)', label: 'Gemini 3.7 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (Low)', label: 'Gemini 3.7 Flash (Low)' },
+    { id: 'Gemini 3.6 Flash (High)', label: 'Gemini 3.6 Flash (High)' },
+    { id: 'Gemini 3.6 Flash (Medium)', label: 'Gemini 3.6 Flash (Medium)' },
+    { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
     { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',
@@ -214,7 +255,7 @@ export const antigravityAgentDef = {
     { id: 'Claude Opus 4.6 (Thinking)', label: 'Claude Opus 4.6 (Thinking)' },
     { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
   ],
-  supportsCustomModel: false,
+  supportsCustomModel: true,
   // We deliberately do NOT opt into `resumesSessionViaCli` / agy's `-c`
   // resume flag on follow-up turns. Tested both shapes; `-c` activates
   // agy's internal agentic loop (multi-step model retries, tool calls,
@@ -232,21 +273,26 @@ export const antigravityAgentDef = {
   buildArgs: (
     _prompt,
     _imagePaths,
-    _extra = [],
+    extraAllowedDirs = [],
     options = {},
     runtimeContext = {},
   ) => {
-    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
-      writeAntigravityModelSelection(
-        options.model,
-        runtimeContext.antigravitySettingsPath,
-      );
-    }
     const args: string[] = [];
+    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
+      args.push('--model', options.model);
+    }
+    const dirs = (extraAllowedDirs || []).filter(
+      (dir) => typeof dir === 'string' && dir.trim(),
+    );
+    if (typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.trim()) {
+      dirs.push(runtimeContext.cwd.trim());
+    }
+    for (const dir of dirs) {
+      args.push('--add-dir', dir);
+    }
     // Always opt into `--log-file` when the daemon supplied a path: the
-    // model lock in server.ts waits for agy to log the settings.json model
-    // override there, and the connection test folds its tail into auth /
-    // quota classification.
+    // server.ts silent-exit guard and the connection test fold its tail
+    // into auth / quota classification.
     //
     // Flag order is load-bearing on agy: put `--log-file` first so
     // diagnostics (model override / auth / quota) land in the log.
@@ -256,6 +302,10 @@ export const antigravityAgentDef = {
     // Daemon-managed headless runs have no interactive approval channel.
     if (agentCapabilities.get('antigravity')?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
+    }
+    const printTimeout = process.env.OD_AGY_PRINT_TIMEOUT;
+    if (printTimeout) {
+      args.push('--print-timeout', printTimeout);
     }
     args.push(...ANTIGRAVITY_STREAM_JSON_ARGS);
     return args;
