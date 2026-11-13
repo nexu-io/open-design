@@ -1170,6 +1170,59 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  // `brew install node@22` is keg-only: node stays under <prefix>/opt/node@22/bin,
+  // while its npm still installs global CLI shims (e.g. `dsh`) into <prefix>/bin.
+  it("includes keg-only Homebrew node@<major> bin dirs, newest major first, after the linked bins (issue #9226)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-brew-keg-home-"));
+    const prefix = mkdtempSync(join(tmpdir(), "wkutb-brew-keg-prefix-"));
+    try {
+      const node22Bin = join(prefix, "opt", "node@22", "bin");
+      const node20Bin = join(prefix, "opt", "node@20", "bin");
+      mkdirSync(node22Bin, { recursive: true });
+      mkdirSync(node20Bin, { recursive: true });
+      mkdirSync(join(prefix, "opt", "node@18"), { recursive: true });
+      mkdirSync(join(prefix, "opt", "python@3.13", "bin"), { recursive: true });
+
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: {},
+        includeSystemBins: true,
+        homebrewPrefixes: [prefix],
+      });
+
+      expect(dirs).toContain(node22Bin);
+      expect(dirs).toContain(node20Bin);
+      expect(dirs.indexOf(node20Bin)).toBeGreaterThan(dirs.indexOf(node22Bin));
+      expect(dirs.indexOf(node22Bin)).toBeGreaterThan(dirs.indexOf("/opt/homebrew/bin"));
+      expect(dirs).not.toContain(join(prefix, "opt", "node@18", "bin"));
+      expect(dirs).not.toContain(join(prefix, "opt", "python@3.13", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(prefix, { recursive: true, force: true });
+    }
+  });
+
+  it("omits keg-only Homebrew Node bin dirs when includeSystemBins is false", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-brew-keg-nosys-home-"));
+    const prefix = mkdtempSync(join(tmpdir(), "wkutb-brew-keg-nosys-prefix-"));
+    try {
+      const node22Bin = join(prefix, "opt", "node@22", "bin");
+      mkdirSync(node22Bin, { recursive: true });
+
+      const dirs = wellKnownUserToolchainBins({
+        home,
+        env: {},
+        includeSystemBins: false,
+        homebrewPrefixes: [prefix],
+      });
+
+      expect(dirs).not.toContain(node22Bin);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(prefix, { recursive: true, force: true });
+    }
+  });
+
   it("surfaces GUI-safe PATH additions and sorts versioned Node bins by highest semver first", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-versioned-"));
     try {
