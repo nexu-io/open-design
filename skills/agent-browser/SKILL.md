@@ -122,6 +122,12 @@ misinterpreted as daemon startup and open an internal `127.0.0.1:<port>` service
 in the system browser. Use the external `agent-browser` CLI attached to CDP
 instead.
 
+Every Chrome launch in this skill, including any ad-hoc fallback, must pass
+`--use-mock-keychain`. The smoke path below overrides `HOME`, and on macOS a
+Chrome started under a home directory without a login keychain shows a blocking
+"Keychain Not Found" dialog on every launch. The temporary profile needs no
+saved passwords, so the mock keychain loses nothing.
+
 Use this sequence:
 
 ```bash
@@ -129,6 +135,7 @@ if ! curl -fsS http://127.0.0.1:9223/json/version | rg -q webSocketDebuggerUrl; 
   open -na "Google Chrome" --args \
     --remote-debugging-port=9223 \
     --user-data-dir=/tmp/od-agent-browser-chrome \
+    --use-mock-keychain \
     --no-first-run \
     --no-default-browser-check
 
@@ -151,6 +158,7 @@ Chrome manually from Terminal:
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --remote-debugging-port=9223 \
   --user-data-dir=/tmp/od-agent-browser-chrome \
+  --use-mock-keychain \
   --no-first-run \
   --no-default-browser-check
 ```
@@ -189,6 +197,7 @@ if ! curl -fsS http://127.0.0.1:9223/json/version | rg -q webSocketDebuggerUrl; 
   open -na "Google Chrome" --args \
     --remote-debugging-port=9223 \
     --user-data-dir="$CHROME_USER_DATA_DIR" \
+    --use-mock-keychain \
     --no-first-run \
     --no-default-browser-check
 
