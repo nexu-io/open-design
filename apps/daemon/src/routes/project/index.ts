@@ -5775,7 +5775,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       req.params.id,
       'writeFiles',
     )) return;
-    const { tabs = [], active = null, browserTabs = [] } = req.body || {};
+    const { tabs = [], active = null, browserTabs = [], updatedAt } = req.body || {};
     if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
       return res.status(400).json({ error: 'tabs must be string[]' });
     }
@@ -5789,6 +5789,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         tabs,
         active: typeof active === 'string' ? active : null,
         browserTabs,
+        // The client's change time orders this copy against its local cache;
+        // setTabs validates it and falls back to the arrival time.
+        updatedAt,
       },
     );
     res.json(result);
