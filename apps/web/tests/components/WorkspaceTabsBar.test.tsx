@@ -437,6 +437,16 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     }
   });
 
+  it('shows no rail toggle or search on the onboarding route — EntryShell mounts no rail or palette there', async () => {
+    // EntryShell renders only the onboarding modal on this route, so the
+    // bridge events these two buttons dispatch flip state nothing draws.
+    render(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'onboarding' }} projects={[project]} />,
+    );
+    expect(screen.queryByTestId('entry-rail-collapse')).toBeNull();
+    expect(screen.queryByTestId('entry-nav-search')).toBeNull();
+  });
+
   it('collapses every entry section into the single leftmost tab (no new tab per section)', async () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
