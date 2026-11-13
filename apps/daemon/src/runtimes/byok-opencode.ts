@@ -1,4 +1,8 @@
-import type { ByokChatProviderConfig } from '@open-design/contracts';
+import {
+  DEFAULT_BYOK_BASE_URL_BY_PROTOCOL as DEFAULT_BASE_URL_BY_PROTOCOL,
+  isCustomByokBaseUrl,
+  type ByokChatProviderConfig,
+} from '@open-design/contracts';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
@@ -7,16 +11,6 @@ export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
-
-const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
-  anthropic: 'https://api.anthropic.com/v1',
-  openai: 'https://api.openai.com/v1',
-  azure: '',
-  google: 'https://generativelanguage.googleapis.com/v1beta',
-  ollama: 'https://ollama.com',
-  senseaudio: 'https://api.senseaudio.cn',
-  aihubmix: 'https://aihubmix.com/v1',
-};
 
 type ProviderPackage =
   | '@ai-sdk/anthropic'
@@ -32,9 +26,18 @@ export interface OpenCodeByokProviderConfig {
   config: Record<string, unknown>;
 }
 
-export function opencodeByokModelId(model: string | null | undefined): string | null {
+export function opencodeByokModelId(
+  model: string | null | undefined,
+  options: { allowDefaultModel?: boolean } = {},
+): string | null {
   const trimmed = typeof model === 'string' ? model.trim() : '';
-  if (!trimmed || trimmed.toLowerCase() === 'default') return null;
+  if (!trimmed) return null;
+  // `default` is the id of the picker's "Default (CLI config)" sentinel, so
+  // an unset selection must not leak out as a literal model name -- for the
+  // built-in endpoints. A connection pinned to a custom base URL names its
+  // models explicitly (gateway routers such as LiteLLM route behind a stable
+  // `default` alias), so there the literal is intentional.
+  if (trimmed.toLowerCase() === 'default' && !options.allowDefaultModel) return null;
   if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
   return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
 }
@@ -59,10 +62,12 @@ export function buildOpenCodeByokProviderConfig(
   );
   const needsApiKey = requiresApiKey(provider, baseUrl);
   if (needsApiKey && !apiKey) return null;
-  if (!rawModel || rawModel.toLowerCase() === 'default') return null;
+  if (!rawModel) return null;
   if (!baseUrl) return null;
 
-  const modelId = opencodeByokModelId(rawModel);
+  const modelId = opencodeByokModelId(rawModel, {
+    allowDefaultModel: isCustomByokBaseUrl(protocol, baseUrl),
+  });
   if (!modelId) return null;
 
   const providerEntry = buildProviderEntry(
