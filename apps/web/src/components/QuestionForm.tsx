@@ -396,6 +396,12 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       <div
         className="qf-chip qf-chip-other qf-chip-on qf-chip-open"
         data-chat-scroll-anchor={`question-own:${q.id}`}
+        data-chat-preserve-scroll-anchor={`question-own:${q.id}`}
+        onClick={(event) => {
+          if (locked) return;
+          if (event.target instanceof Element && event.target.closest('button, textarea')) return;
+          toggleOther(q);
+        }}
       >
         <button
           type="button"
@@ -413,6 +419,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
           <textarea
             rows={1}
             className="qf-own-input qf-input"
+            data-chat-preserve-scroll-anchor=""
             data-testid="qf-input"
             value={value}
             placeholder={q.customPlaceholder ?? t('qf.customPlaceholder')}
