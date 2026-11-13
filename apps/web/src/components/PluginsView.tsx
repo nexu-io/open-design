@@ -85,7 +85,7 @@ import { buildCategoryCatalog, extractCategories } from './plugins-home/facets';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
-import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import { localizePluginDescription, localizePluginTitle, localizedText } from './plugins-home/localization';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { AnimatePresence } from 'motion/react';
@@ -1899,8 +1899,8 @@ export function ExtensionsMarketplace({
       if (scope === 'official') {
         return availablePlugins.map((plugin) => {
           const installed = plugin.installedRecord ?? null;
-          const title = installed ? localizePluginTitle(locale, installed) : availablePluginTitle(plugin.entry, locale);
-          const description = installed ? localizePluginDescription(locale, installed) : availablePluginDescription(plugin.entry, locale) || '';
+          const title = marketplacePluginTitle(plugin.entry, installed, locale);
+          const description = marketplacePluginDescription(plugin.entry, installed, locale) || '';
           return {
             id: plugin.key,
             title,
@@ -3128,8 +3128,8 @@ function AvailablePluginsPanel({
         <div className="plugins-view__available-list">
           {filteredPlugins.map((plugin) => {
             const installedRecord = plugin.installedRecord ?? null;
-            const title = installedRecord ? localizePluginTitle(locale, installedRecord) : availablePluginTitle(plugin.entry, locale);
-            const description = installedRecord ? localizePluginDescription(locale, installedRecord) : availablePluginDescription(plugin.entry, locale);
+            const title = marketplacePluginTitle(plugin.entry, installedRecord, locale);
+            const description = marketplacePluginDescription(plugin.entry, installedRecord, locale);
             return (
               <article key={plugin.key} className="plugins-view__available-card">
                 <div className="plugins-view__available-main">
@@ -3205,7 +3205,7 @@ function AvailablePluginDetailsModal({
   const [copiedInstall, setCopiedInstall] = useState(false);
   const selectedVersionInfo =
     versions.find((version) => version.version === selectedVersion) ?? versions[0] ?? null;
-  const title = installedRecord ? localizePluginTitle(locale, installedRecord) : availablePluginTitle(plugin.entry, locale);
+  const title = marketplacePluginTitle(plugin.entry, installedRecord, locale);
   const sourceName = plugin.marketplace.manifest.name ?? plugin.marketplace.url;
   const publisher = plugin.entry.publisher;
   const publisherLabel =
@@ -3307,7 +3307,7 @@ function AvailablePluginDetailsModal({
               <h3 className="plugin-details-modal__section-title">About</h3>
             </div>
             <p className="plugin-details-modal__description">
-              {installedRecord ? localizePluginDescription(locale, installedRecord) : availablePluginDescription(plugin.entry, locale) ?? 'No description provided.'}
+              {installedRecord ? marketplacePluginDescription(plugin.entry, installedRecord, locale) : availablePluginDescription(plugin.entry, locale) ?? 'No description provided.'}
             </p>
           </section>
 
@@ -4027,6 +4027,50 @@ function availablePluginDescription(entry: PluginMarketplaceEntry, locale?: stri
     entry.description ||
     null
   );
+}
+
+/**
+ * Resolve the localized title for a marketplace entry that also has an
+ * installed record.
+ *
+ * The installed manifest wins when it actually carries localized copy — that
+ * is the whole point of reading manifest i18n for installed plugins. But the
+ * installed manifest frequently has no `title_i18n` at all, and blindly
+ * preferring it would drop the catalog's translations (the installed record
+ * only knows its English `title`). So resolve the manifest's localized field
+ * first and fall back to the catalog resolver, which still owns catalog-side
+ * translations.
+ */
+function marketplacePluginTitle(
+  entry: PluginMarketplaceEntry,
+  installed: InstalledPluginRecord | null,
+  locale?: string,
+): string {
+  if (installed) {
+    const manifestTitle = resolveLocalizedText(localizedText(installed.manifest?.title_i18n), locale);
+    if (manifestTitle) return manifestTitle;
+  }
+  return availablePluginTitle(entry, locale);
+}
+
+/**
+ * Description counterpart of {@link marketplacePluginTitle}: the installed
+ * manifest's localized description wins, then the catalog's localized
+ * description, then the installed manifest's plain description.
+ */
+function marketplacePluginDescription(
+  entry: PluginMarketplaceEntry,
+  installed: InstalledPluginRecord | null,
+  locale?: string,
+): string | null {
+  if (installed) {
+    const manifestDescription = resolveLocalizedText(
+      localizedText(installed.manifest?.description_i18n),
+      locale,
+    );
+    if (manifestDescription) return manifestDescription;
+  }
+  return availablePluginDescription(entry, locale) || installed?.manifest?.description || null;
 }
 
 function availablePluginVersions(entry: PluginMarketplaceEntry): AvailablePluginVersion[] {
