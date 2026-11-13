@@ -166,8 +166,12 @@ it('H04 retains over two offline hours of both areas and periods instead of hitt
   const delivered = await store.read() as { pending: unknown[]; rawPending: unknown[] };
   expect(delivered.pending).toHaveLength(0); expect(delivered.rawPending).toHaveLength(0);
 });
+// Filling the 1024-entry outbox re-serializes the whole queue on every
+// checkpoint, so this case is quadratic by construction (~2.5s on a fast
+// laptop, 6.4s observed on a shared CI runner). Give it its own budget
+// instead of the 5s suite default so runner speed alone cannot fail it.
 it('H05 bounds a prolonged offline raw outbox without deleting already committed facts', async () => {
   const { a, send } = setup(); send.mockResolvedValue(false);
   for (let i = 0; i < 1025; i++) await a.observe(raw({ event_id: `raw-${i}` }));
   expect(a.stopped).toBe('queue_limit');
-});
+}, 30_000);
