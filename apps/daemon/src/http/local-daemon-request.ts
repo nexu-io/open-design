@@ -1,5 +1,6 @@
 import net from 'node:net';
 import type { NextFunction, Request, Response } from 'express';
+import { configuredAllowedOrigins } from '../origin-validation.js';
 import { sendApiError } from './api-errors.js';
 
 interface LocalAuthority {
@@ -67,8 +68,30 @@ export function localOriginFromHeader(value: unknown): string | null {
   }
 }
 
-export function validateLocalDaemonRequest(req: Request): LocalDaemonValidation | LocalDaemonValidationError {
-  if (!isLoopbackPeerAddress(req.socket?.remoteAddress)) {
+/**
+ * Whether a non-loopback peer may pass the peer gate: only when the request
+ * carries an Origin that exactly matches an operator-declared
+ * OD_ALLOWED_ORIGINS entry, the escape hatch the sibling origin guard already
+ * honors (#1902). Published-port deployments (containers, sandboxes, tunnels)
+ * dial the daemon from a non-loopback address while the browser still sends a
+ * loopback Host and Origin (#8382). This exempts the peer gate only; the
+ * loopback Host and Origin checks still apply. An absent, unlisted or
+ * unparseable allowlist grants nothing.
+ */
+function isOperatorAllowedOrigin(originHeader: string | undefined, env: NodeJS.ProcessEnv): boolean {
+  if (originHeader === undefined) return false;
+  try {
+    return configuredAllowedOrigins(env).includes(originHeader);
+  } catch {
+    return false;
+  }
+}
+
+export function validateLocalDaemonRequest(
+  req: Request,
+  env: NodeJS.ProcessEnv = process.env,
+): LocalDaemonValidation | LocalDaemonValidationError {
+  if (!isLoopbackPeerAddress(req.socket?.remoteAddress) && !isOperatorAllowedOrigin(req.get('origin'), env)) {
     return {
       ok: false,
       message: 'request peer must be a loopback address',

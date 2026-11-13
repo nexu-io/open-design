@@ -49,7 +49,10 @@ function fallbackFilename(): string {
 }
 
 async function exportViaHttp(): Promise<{ filename: string }> {
-  const res = await fetch(DIAGNOSTICS_EXPORT_PATH, { credentials: 'same-origin' });
+  // POST, not GET: browsers attach `Origin` to same-origin POSTs only, and the
+  // daemon's local-request guard needs it to admit an operator-allowlisted
+  // published-port deployment (#8382). The daemon serves the same bundle on both.
+  const res = await fetch(DIAGNOSTICS_EXPORT_PATH, { method: 'POST', credentials: 'same-origin' });
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
     try {

@@ -86,6 +86,35 @@ describe('Export logs pushes the chat-scroll scene before it asks for the bundle
     expect(body.live.forensics.dom.outerHTML).toContain('a stuck transcript');
   });
 
+  it('requests the bundle with POST, after the capture, so the browser sends Origin (#8382)', async () => {
+    mountChatLog();
+    const seen: Array<[string, string | undefined]> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        seen.push([url, init?.method]);
+        if (url === CHAT_SCROLL_FORENSICS_PATH) {
+          return { ok: true, json: async () => ({ ok: true }) } as unknown as Response;
+        }
+        return {
+          ok: true,
+          headers: { get: () => null },
+          blob: async () => new Blob(['zip']),
+        } as unknown as Response;
+      }),
+    );
+
+    render(<ExportDiagnosticsRow />);
+    screen.getByRole('button').click();
+
+    await waitFor(() => expect(seen.map(([url]) => url)).toContain(EXPORT_PATH));
+    expect(seen).toEqual([
+      [CHAT_SCROLL_FORENSICS_PATH, 'POST'],
+      [EXPORT_PATH, 'POST'],
+    ]);
+  });
+
   it('still exports when the capture upload fails', async () => {
     mountChatLog();
     const seen: string[] = [];
