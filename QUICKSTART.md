@@ -136,7 +136,7 @@ Edit `deploy/.env` to set your own token and adjust other values as needed:
 OPEN_DESIGN_PORT=7456
 
 # Container memory limit
-OPEN_DESIGN_MEM_LIMIT=384m
+OPEN_DESIGN_MEM_LIMIT=768m
 
 # Allowed CORS origins
 OPEN_DESIGN_ALLOWED_ORIGINS=https://yourdomain.com

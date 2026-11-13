@@ -45,7 +45,7 @@ Running the installer without flags launches an interactive wizard:
 Docker image [ghcr.io/nexu-io/od:latest]:
 Port [7456]:
 Allowed origins (CORS, comma-separated, or empty) []:
-Memory limit [384m]:
+Memory limit [768m]:
 
 [open-design] Pulling image: ghcr.io/nexu-io/od:latest
 [open-design] Starting OpenDesign...
@@ -60,7 +60,7 @@ Memory limit [384m]:
 | **Docker image** | `ghcr.io/nexu-io/od:latest` | Use `:latest` for the newest stable image, `:<version>` for a pinned release, or `@sha256:<digest>` for reproducibility |
 | **Port** | `7456` | The port the daemon listens on. Must not be in use. |
 | **Allowed origins** | _(empty)_ | CORS origins for reverse-proxy setups. See [`deploy/README.md`](../deploy/README.md). Leave empty for localhost-only use. |
-| **Memory limit** | `384m` | Container memory cap. Raise for large concurrent agent runs. |
+| **Memory limit** | `768m` | Container memory cap. Raise for large concurrent agent runs. |
 
 After you confirm, the installer:
 
@@ -176,7 +176,7 @@ All settings live in `deploy/.env`. Edit it directly or re-run the installer to 
 | `OPEN_DESIGN_IMAGE` | `ghcr.io/nexu-io/od:latest` | Full image reference |
 | `OPEN_DESIGN_PORT` | `7456` | Host-side port (bound to `127.0.0.1`) |
 | `OPEN_DESIGN_ALLOWED_ORIGINS` | _(empty)_ | CORS origins for reverse-proxy setups |
-| `OPEN_DESIGN_MEM_LIMIT` | `384m` | Container memory cap |
+| `OPEN_DESIGN_MEM_LIMIT` | `768m` | Container memory cap |
 | `NODE_OPTIONS` | `--max-old-space-size=192` | Node.js heap cap inside the container |
 
 The container always binds `127.0.0.1:<port>:7456` — the daemon is never directly exposed to the network. To allow remote access, put an authenticated reverse proxy in front. See [`deploy/README.md`](../deploy/README.md) for the authentication and allowed-origin contract.
