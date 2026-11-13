@@ -647,6 +647,83 @@ describe('POST /api/provider/models', () => {
     }
   });
 
+  it('lists local Ollama models from /api/tags', async () => {
+    // Loopback is opted in so the request reaches upstream regardless of the
+    // daemon's internal-host policy.
+    vi.stubEnv('OD_ALLOWED_INTERNAL_HOSTS', '127.0.0.1');
+    const fetchMock = passThroughOrUpstream((url) => {
+      expect(url).toBe('http://127.0.0.1:11434/api/tags');
+      return jsonResponse({
+        models: [
+          { name: 'llama3.3:70b', model: 'llama3.3:70b' },
+          { name: 'qwen3-coder:480b' },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'ollama',
+          baseUrl: 'http://127.0.0.1:11434',
+          apiKey: '',
+        }),
+      });
+      const body = (await res.json()) as {
+        ok: boolean;
+        kind: string;
+        models?: Array<Record<string, unknown>>;
+      };
+      expect(body).toMatchObject({
+        ok: true,
+        kind: 'success',
+        models: [
+          { id: 'llama3.3:70b', label: 'llama3.3:70b' },
+          { id: 'qwen3-coder:480b', label: 'qwen3-coder:480b' },
+        ],
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('rejects Ollama Cloud model discovery without calling upstream fetch', async () => {
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async (hostname: string) => {
+        if (hostname === 'ollama.com') {
+          return [{ address: '104.18.0.1', family: 4 }];
+        }
+        const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+        err.code = 'ENOTFOUND';
+        throw err;
+      }) as unknown as typeof dnsPromises.lookup);
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({ models: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'ollama',
+          baseUrl: 'https://ollama.com',
+          apiKey: 'ollama-key',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ ok: false, kind: 'unsupported_protocol' });
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => !String(input).startsWith(baseUrl),
+        ),
+      ).toBe(false);
+    } finally {
+      dnsSpy.mockRestore();
+    }
+  });
+
   it('reports timeout when model listing is aborted by the probe timer', async () => {
     // The DNS-aware validator runs before the probe timer is installed; stub
     // the resolver so the test doesn't race against real DNS while fake

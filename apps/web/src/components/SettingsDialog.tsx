@@ -143,7 +143,7 @@ import {
 import { MEDIA_PROVIDERS } from '../media/models';
 import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelOptions } from '../media/aihubmix-image-models';
 import { isVisualStabilityMode } from '../utils/visualStability';
-import { byokProviderRequiresApiKey } from '../utils/byokProvider';
+import { byokProviderRequiresApiKey, isLocalOllamaBaseUrl } from '../utils/byokProvider';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -711,11 +711,11 @@ export function canFetchProviderModels(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
   protocol: ApiProtocol,
 ): boolean {
+  const isLocalOllama = protocol === 'ollama' && isLocalOllamaBaseUrl(config.baseUrl);
   return (
     !isProviderModelDiscoveryUnsupported(protocol, config.baseUrl) &&
     protocol !== 'azure' &&
-    protocol !== 'ollama' &&
-    (protocol === 'bedrock' || Boolean(config.apiKey.trim())) &&
+    (protocol === 'bedrock' || isLocalOllama || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isValidApiBaseUrl(config.baseUrl)
   );
@@ -725,7 +725,10 @@ export function isProviderModelDiscoveryUnsupported(
   protocol: ApiProtocol,
   baseUrl: string,
 ): boolean {
-  if (protocol === 'azure' || protocol === 'ollama') return true;
+  if (protocol === 'azure') return true;
+  // Ollama model discovery (GET /api/tags) is a local-only capability; Ollama
+  // Cloud (ollama.com) does not expose it.
+  if (protocol === 'ollama') return !isLocalOllamaBaseUrl(baseUrl);
   try {
     const host = new URL(baseUrl).hostname.toLowerCase();
     return host === 'token-plan-cn.xiaomimimo.com';
@@ -1875,7 +1878,7 @@ export function SettingsDialog({
       if (
         initial.mode !== 'api' ||
         protocol === 'azure' ||
-        protocol === 'ollama' ||
+        (protocol === 'ollama' && !isLocalOllamaBaseUrl(initial.baseUrl)) ||
         missingByokModelFetchFields(initial, protocol).length > 0 ||
         !isValidApiBaseUrl(initial.baseUrl)
       ) {
@@ -2805,7 +2808,7 @@ export function SettingsDialog({
       }
       return;
     }
-    if (apiProtocol === 'ollama') {
+    if (apiProtocol === 'ollama' && !isLocalOllamaBaseUrl(cfg.baseUrl)) {
       trackModelsFetchResult({
         result: 'failed',
         error_code: 'unsupported_ollama',
@@ -3624,11 +3627,9 @@ export function SettingsDialog({
   );
   const providerModelDiscoveryUnavailable =
     apiProtocol !== 'azure' &&
-    apiProtocol !== 'ollama' &&
     isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
   const providerModelDiscoverySupported =
     apiProtocol !== 'azure' &&
-    apiProtocol !== 'ollama' &&
     !providerModelDiscoveryUnavailable;
   const fetchedApiModelOptions =
     providerModelDiscoveryUnavailable
