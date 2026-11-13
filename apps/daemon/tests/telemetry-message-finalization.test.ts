@@ -444,6 +444,67 @@ describe('Langfuse message finalization gate', () => {
     ]));
   });
 
+  it('reports a dropped delivery as a failed duplicate without sending it again', () => {
+    const run = {
+      id: 'run-dropped',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      status: 'succeeded',
+      createdAt: 1,
+      updatedAt: 2,
+      events: [],
+      telemetryDelivery: {
+        version: 1,
+        idempotencyKey: 'od-run-telemetry-v1-dropped',
+        status: 'dropped',
+        attemptCount: 7,
+        failureCount: 4,
+        crashWindow: false,
+        startedAt: 2,
+        dropReason: 'relay_5xx',
+        finalizedAt: 3,
+      },
+    };
+    const capture = vi.fn<(event: { properties?: Record<string, unknown> }) => void>();
+    const report = vi.fn();
+    const reporter = createFinalizedMessageTelemetryReporter({
+      design: {
+        analytics: { capture },
+        getAppVersion: () => '0.7.0',
+        runs: { get: vi.fn(() => run) },
+      },
+      db: 'db',
+      dataDir: '/tmp/od-data',
+      reportedRuns: new Set<string>(),
+      report,
+    });
+
+    reporter(
+      { ...terminalMessage, runId: run.id },
+      { telemetryFinalized: true },
+      {
+        analyticsContext: {
+          deviceId: 'device-1',
+          sessionId: 'session-1',
+          clientType: 'desktop',
+          locale: 'zh-CN',
+          requestId: 'request-1',
+        },
+      },
+    );
+
+    expect(report).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(capture.mock.calls[0]![0].properties).toMatchObject({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed',
+      langfuse_drop_reason: 'relay_5xx',
+      langfuse_report_result: 'skipped',
+      langfuse_report_skip_reason: 'duplicate_run',
+    });
+  });
+
   it('captures Langfuse report acceptance after final message reporting resolves', async () => {
     const run = {
       id: 'run-accepted',

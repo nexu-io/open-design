@@ -6,6 +6,7 @@ import Database from 'better-sqlite3';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { MAX_RUN_TELEMETRY_DELIVERY_FAILURES } from '../../src/observability/delivery-state.js';
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
 import { createChatRunService } from '../../src/runtimes/runs.js';
 import { createRunAnalyticsLifecycle } from '../../src/services/run-analytics-lifecycle.js';
@@ -901,8 +902,8 @@ describe('durable run terminal reconciliation', () => {
     const readFile = vi.spyOn(fs, 'readFileSync');
     const lastBoot = await reconcileDurableRunTerminals(options);
 
-    expect(deliveriesBeforeLastBoot).toBeGreaterThan(0);
-    expect(deliveriesBeforeLastBoot).toBeLessThan(boots - 1);
+    // The seeded legacy `failed` state counts as the first failed pass.
+    expect(deliveriesBeforeLastBoot).toBe(MAX_RUN_TELEMETRY_DELIVERY_FAILURES - 1);
     expect(reportLangfuse).toHaveBeenCalledTimes(deliveriesBeforeLastBoot);
     expect(lastBoot.langfuseReplayed).toBe(0);
     expect(readFile).not.toHaveBeenCalledWith(eventsPath, 'utf8');
@@ -914,6 +915,56 @@ describe('durable run terminal reconciliation', () => {
       dropReason,
     });
     expect(state.telemetryDelivery.finalizedAt).toEqual(expect.any(Number));
+    expect(state.langfuseCompletedAt).toBe(state.telemetryDelivery.finalizedAt);
+  });
+
+  it('drops a delivery whose passes kept dying before they finished', async () => {
+    const runId = 'run-langfuse-crash-window';
+    const runDir = path.join(tmpDir, runId);
+    const eventsPath = path.join(runDir, 'events.jsonl');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'claude',
+      status: 'succeeded',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      terminalAt: 2_000,
+      telemetryDelivery: {
+        version: 1,
+        idempotencyKey: 'od-run-telemetry-v1-crash-window',
+        status: 'in_flight',
+        attemptCount: 6,
+        failureCount: MAX_RUN_TELEMETRY_DELIVERY_FAILURES - 1,
+        crashWindow: true,
+        startedAt: 2_000,
+      },
+    }));
+    fs.writeFileSync(eventsPath, '');
+    const readFile = vi.spyOn(fs, 'readFileSync');
+    const reportLangfuse = vi.fn();
+
+    const result = await reconcileDurableRunTerminals({
+      analytics: { capture: vi.fn() },
+      appVersion: '0.27.1',
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    });
+
+    expect(result.langfuseReplayed).toBe(0);
+    expect(reportLangfuse).not.toHaveBeenCalled();
+    expect(readFile).not.toHaveBeenCalledWith(eventsPath, 'utf8');
+    const state = JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8'));
+    expect(state.telemetryDelivery).toMatchObject({
+      status: 'dropped',
+      failureCount: MAX_RUN_TELEMETRY_DELIVERY_FAILURES,
+      crashWindow: false,
+    });
     expect(state.langfuseCompletedAt).toBe(state.telemetryDelivery.finalizedAt);
   });
 
