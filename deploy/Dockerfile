@@ -90,6 +90,18 @@ RUN apk add --no-cache tini poppler-utils bash git && \
     addgroup -S -g 1001 open-design && \
     adduser -S -D -H -u 1001 -G open-design open-design
 
+# Install a pinned OpenCode CLI so BYOK `opencode`/`byok-opencode` agents
+# work headless without requiring a Vela Cloud login (see #8227). Point the
+# standalone agent's OPENCODE_BIN at the installed binary. Do not set
+# VELA_OPENCODE_BIN here: that is AMR's private-server override and would
+# shadow the OpenCode companion bundled with the selected Vela release.
+# `npm` ships with the node:24-alpine runtime image.
+ARG OPENCODE_VERSION=1.18.30
+RUN npm install --global --omit=dev "opencode-ai@${OPENCODE_VERSION}" && \
+    test -x /usr/local/bin/opencode && \
+    /usr/local/bin/opencode --version
+ENV OPENCODE_BIN=/usr/local/bin/opencode
+
 WORKDIR /app
 COPY --from=build --chown=open-design:open-design /app/deploy/daemon ./apps/daemon
 COPY --from=build --chown=open-design:open-design /app/apps/web/out ./apps/web/out
@@ -100,11 +112,6 @@ COPY --from=build --chown=open-design:open-design /app/prompt-templates ./prompt
 COPY --from=build --chown=open-design:open-design /app/data ./data
 COPY --from=build --chown=open-design:open-design /app/assets/frames ./assets/frames
 COPY --from=build --chown=open-design:open-design /app/assets/community-pets ./assets/community-pets
-# Plan §3.J4 / spec §23.3.5 — bundled atom plugins registered on
-# daemon boot. The directory contains `plugins/_official/atoms/<atom>/`
-# pairs (SKILL.md + open-design.json); registerBundledPlugins() walks
-# it on startup so the container ships with first-party atoms reachable
-# via the same registry path third-party plugins use.
 COPY --from=build --chown=open-design:open-design /app/plugins/_official ./plugins/_official
 
 RUN mkdir -p /app/.od && \
