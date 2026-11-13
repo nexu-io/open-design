@@ -397,15 +397,14 @@
   left: 0;
 }
 
-/* Standalone updater slot (top-right cluster): the rocket rides right after
-   the account capsule, hugging the viewport's right edge, so the side-flyout
-   base rule would push the panel off-screen (and `bottom: 0` would grow it
-   past the top). Open DOWNWARD instead, right-aligned to the host. */
+/* The standalone updater follows the chrome's inline-end edge. Open downward
+   and align to that edge in both directions so the panel grows into the
+   viewport, including when RTL puts the rocket at the left edge. */
 .entry-top-right-cluster > .entry-nav-rail__account-updater .entry-updater-menu .updater-popup {
   top: calc(100% + 10px);
   bottom: auto;
-  right: 0;
-  left: auto;
+  inset-inline-end: 0;
+  inset-inline-start: auto;
 }
 
 .updater-popup__body {
