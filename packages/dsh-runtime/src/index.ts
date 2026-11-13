@@ -251,6 +251,40 @@ function emitSessionEvent(
   }
 }
 
+// Newer Harness versions persist streamed chunks inside assistant/message rather
+// than publishing assistant/chunk events. Reconcile each message independently
+// so multiple assistant messages around tool calls do not suppress one another.
+function createSessionEventForwarder(output: Output, request: ExecuteCommand, provider: string, model: string) {
+  let messageText = '';
+  let assistantOutput = '';
+  return {
+    accept(event: SessionEvent) {
+      if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
+        messageText += event.data.chunk.text;
+        assistantOutput += event.data.chunk.text;
+      }
+      if (event.type === 'assistant/message') {
+        const fullText = event.data.message.content
+          .filter((block) => block.type === 'text')
+          .map((block) => block.text)
+          .join('');
+        // Only append a proven suffix; an inconsistent stream must not duplicate
+        // already displayed content or invent an ordering.
+        if (fullText.startsWith(messageText)) {
+          const missing = fullText.slice(messageText.length);
+          if (missing) {
+            writeFrame(output, { v: 1, type: 'text', request_id: request.request_id, content: missing });
+            assistantOutput += missing;
+          }
+        }
+        messageText = '';
+      }
+      emitSessionEvent(output, request, provider, model, event);
+    },
+    getOutput: () => assistantOutput,
+  };
+}
+
 async function execute(
   ctx: Context,
   request: ExecuteCommand,
@@ -269,7 +303,7 @@ async function execute(
   let handle: AgentHandle | undefined;
   let firstSeq = Number.POSITIVE_INFINITY;
   let turnEnd: SessionEvent<'turn/end'> | undefined;
-  let assistantOutput = '';
+  const forwarder = createSessionEventForwarder(output, request, selection.provider, selection.model);
   const setup = (agentCtx: Context) => {
     const selected: ModelSelectionRef = { current: selection, assembled: undefined };
     installModelSelection(agentCtx, selected);
@@ -277,10 +311,7 @@ async function execute(
   let disposeEvent = () => {};
   const onSessionEvent = (session: { id: unknown }, event: SessionEvent) => {
     if (String(session.id) !== String(sessionId) || event.seq < firstSeq) return;
-    emitSessionEvent(output, request, selection.provider, selection.model, event);
-    if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
-      assistantOutput += event.data.chunk.text;
-    }
+    forwarder.accept(event);
     if (event.type === 'turn/end') turnEnd = event;
   };
 
@@ -350,7 +381,7 @@ async function execute(
       request_id: request.request_id,
       status,
       session_id: String(sessionId),
-      ...terminalOutput(assistantOutput),
+      ...terminalOutput(forwarder.getOutput()),
       stop_reason: reason?.kind ?? 'unknown',
       resume_rejected: false,
       ...(failed === undefined ? {} : { error: failed }),
@@ -472,6 +503,7 @@ export function apply(ctx: Context): void {
 
 export const internals = {
   contentText,
+  createSessionEventForwarder,
   createCancellationLatch,
   errorFacts,
   emitSessionEvent,
