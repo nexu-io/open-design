@@ -88,6 +88,18 @@ const recordingsAvailable =
   existsSync(RECORDINGS_DIR) &&
   CASES.every(c => existsSync(join(RECORDINGS_DIR, `${c.trace}.jsonl`)));
 
+if (!recordingsAvailable) {
+  // mocks/README.md promises "no silent failure" for missing recordings —
+  // mock binary spawns point at the fetch script instead of failing quietly.
+  // This suite is the one spot that still skipped silently, and it is the
+  // parser regression signal: a green run here must not read as "covered".
+  console.warn(
+    '[mocks-golden] recordings not fetched — mocks-golden suite SKIPPED ' +
+      '(no daemon parser regression coverage this run). ' +
+      'Fetch with: bash mocks/scripts/fetch-recordings.sh',
+  );
+}
+
 describe.skipIf(!recordingsAvailable)(
   'mocks goldens — daemon event shape regression',
   () => {
