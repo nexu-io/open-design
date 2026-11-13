@@ -276,6 +276,10 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
         type: 'usage',
         usage,
         costUsd: typeof part.cost === 'number' ? part.cost : undefined,
+        // The step's finish reason (`stop`, `tool-calls`, `length`, ...). A
+        // `length` step was cut off by the output-token limit, which the run's
+        // completeness check reads from this field (#9363).
+        ...(typeof part.reason === 'string' && part.reason ? { stopReason: part.reason } : {}),
       });
     }
     return true;

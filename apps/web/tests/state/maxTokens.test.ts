@@ -5,6 +5,7 @@ import {
   effectiveMaxTokens,
   FALLBACK_MAX_TOKENS,
   MAX_MAX_TOKENS,
+  maxTokensOverride,
   MIN_MAX_TOKENS,
   modelMaxTokensDefault,
 } from '../../src/state/maxTokens';
@@ -57,6 +58,16 @@ describe('effectiveMaxTokens', () => {
 
   it('falls back to FALLBACK_MAX_TOKENS for unknown models with no override', () => {
     expect(effectiveMaxTokens({ model: 'unknown-model' })).toBe(FALLBACK_MAX_TOKENS);
+  });
+});
+
+describe('maxTokensOverride', () => {
+  it('returns only a valid user override, never the model default', () => {
+    expect(maxTokensOverride({ maxTokens: 131072 })).toBe(131072);
+    expect(maxTokensOverride({})).toBeUndefined();
+    expect(maxTokensOverride({ maxTokens: MIN_MAX_TOKENS - 1 })).toBeUndefined();
+    expect(maxTokensOverride({ maxTokens: MAX_MAX_TOKENS + 1 })).toBeUndefined();
+    expect(maxTokensOverride({ maxTokens: 4096.5 })).toBeUndefined();
   });
 });
 

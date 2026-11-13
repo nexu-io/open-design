@@ -38,6 +38,30 @@ test('opencode json stream emits text and usage events', () => {
   ]);
 });
 
+test('opencode step_finish carries the finish reason so an output-limit cut-off is visible (#9363)', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  handler.feed(
+    '{"type":"step_finish","sessionID":"ses-1","part":{"type":"step-finish","reason":"tool-calls","tokens":{"input":40,"output":12,"reasoning":0},"cost":0}}\n' +
+    '{"type":"step_finish","sessionID":"ses-1","part":{"type":"step-finish","reason":"length","tokens":{"input":52,"output":0,"reasoning":16384},"cost":0}}\n',
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'usage',
+      usage: { input_tokens: 40, output_tokens: 12, thought_tokens: 0 },
+      costUsd: 0,
+      stopReason: 'tool-calls',
+    },
+    {
+      type: 'usage',
+      usage: { input_tokens: 52, output_tokens: 0, thought_tokens: 16384 },
+      costUsd: 0,
+      stopReason: 'length',
+    },
+  ]);
+});
+
 test('opencode step_start surfaces the session id as the status sessionId (capture-style resume handle)', () => {
   const { events, handler } = collectEvents('opencode');
   handler.feed('{"type":"step_start","sessionID":"ses_4af9c2","part":{"type":"step-start"}}\n');

@@ -494,6 +494,67 @@ process.exit(0);
     );
   });
 
+  // #9363: the same tool-only shape, except the last step was cut off by the
+  // output-token limit (`reason: "length"`, reasoning only, zero output). The
+  // model never finished answering, so the run must not end `succeeded`.
+  it('fails OpenCode runs whose reply was cut off by the output limit before any text', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-length-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-length-session',
+  part: {
+    tool: 'Read',
+    callID: 'call-read-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ file: 'src/app.ts' }),
+      output: 'file contents',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'step_finish', part: { reason: 'tool-calls', tokens: { input: 1, output: 3 } } }));
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-length-session' }));
+console.log(JSON.stringify({ type: 'step_finish', part: { reason: 'length', tokens: { input: 2, output: 0, reasoning: 16384 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: 'read the file and build the dashboard',
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('"type":"tool_use"');
+        expect(body).toContain('event: error');
+        expect(body).toContain('output token limit');
+        expect(body).not.toContain('empty_reply_ended_normally');
+        expect(body).toContain('"status":"failed"');
+        expect(body).not.toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ conversationId: string | null; status: string }>;
+        };
+
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({ conversationId, status: 'failed' });
+      },
+    );
+  });
+
   /*
    * 「问完就交棒」的一整条链路,从假 CLI 的字节一路到 run 的终态。
    *
@@ -943,6 +1004,79 @@ process.stdin.on('end', () => {
           },
         });
         expect(JSON.stringify(parsed)).not.toContain('sk-test-byok');
+      },
+    );
+  });
+
+  // #9363: Settings "Max tokens" reaches the generated OpenCode model config
+  // instead of every run being capped at the 16,384 default.
+  it('passes the requested BYOK Max tokens to OpenCode as the output limit', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const markerDir = await fsp.mkdtemp(join(tmpdir(), 'od-byok-opencode-max-tokens-'));
+    tempDirs.push(markerDir);
+    const envFile = join(markerDir, 'opencode-env.json');
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK OpenCode Max tokens fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+const fs = require('node:fs');
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+    config: process.env.OPENCODE_CONFIG_CONTENT || '',
+    outputTokenMax: process.env.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX ?? null,
+  }));
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'byok-opencode-max-tokens-ok' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { reason: 'stop', tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'byok-opencode',
+            projectId,
+            message: 'hello',
+            model: 'deepseek-v4.1-flash',
+            byokProvider: {
+              protocol: 'openai',
+              apiKey: 'sk-test-byok',
+              baseUrl: 'https://models.example/v1',
+              model: 'deepseek-v4.1-flash',
+              maxTokens: 48_000,
+            },
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('byok-opencode-max-tokens-ok');
+
+        const captured = JSON.parse(await fsp.readFile(envFile, 'utf8')) as {
+          config: string;
+          outputTokenMax: string | null;
+        };
+        const parsed = JSON.parse(captured.config) as {
+          provider?: Record<string, { models?: Record<string, { limit?: unknown }> }>;
+        };
+        expect(parsed.provider?.['open-design-byok']?.models?.['deepseek-v4.1-flash']?.limit).toEqual({
+          context: 128_000,
+          output: 48_000,
+        });
+        expect(captured.outputTokenMax).toBe('48000');
       },
     );
   });

@@ -104,6 +104,12 @@ export interface ByokChatProviderConfig {
    * because some presets (e.g. Ollama) infer the model from baseUrl/protocol.
    */
   model?: string;
+  /**
+   * Run-scoped output-token ceiling the user asked for (Settings "Max tokens",
+   * or `od run start --byok-max-tokens`). The daemon validates and bounds it
+   * before handing it to the runtime; omit it to keep the runtime default.
+   */
+  maxTokens?: number;
 }
 
 export interface ByokMediaDefaults {

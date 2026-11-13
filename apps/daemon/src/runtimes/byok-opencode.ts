@@ -7,6 +7,14 @@ export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
 const DEFAULT_OUTPUT_TOKEN_LIMIT = 16_384;
+// OpenCode reserves the output limit out of the context window: 1.x compacts
+// once a turn's tokens reach `context - output`, so an output limit near the
+// declared window would compact on every turn. Keep half the window for input.
+const MAX_OUTPUT_TOKEN_LIMIT = DEFAULT_CONTEXT_TOKEN_LIMIT / 2;
+// OpenCode 1.x also caps each reply at this env value (32,000 when unset), on
+// top of `limit.output`; 2.x reads only `limit.output`.
+const OPENCODE_OUTPUT_TOKEN_MAX_ENV = 'OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX';
+const OPENCODE_1X_DEFAULT_OUTPUT_TOKEN_MAX = 32_000;
 
 const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], string> = {
   anthropic: 'https://api.anthropic.com/v1',
@@ -37,6 +45,18 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
   if (!trimmed || trimmed.toLowerCase() === 'default') return null;
   if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
   return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
+}
+
+/**
+ * The output-token limit a BYOK OpenCode run is configured with: the Max tokens
+ * the user asked for when it is a positive integer, bounded so the reply never
+ * claims more than half of the declared context window; otherwise the default.
+ */
+export function opencodeByokOutputTokenLimit(requested: unknown): number {
+  if (typeof requested !== 'number' || !Number.isInteger(requested) || requested <= 0) {
+    return DEFAULT_OUTPUT_TOKEN_LIMIT;
+  }
+  return Math.min(requested, MAX_OUTPUT_TOKEN_LIMIT);
 }
 
 export function buildOpenCodeByokProviderConfig(
@@ -71,6 +91,7 @@ export function buildOpenCodeByokProviderConfig(
     provider.apiVersion,
     needsApiKey,
   );
+  const outputTokenLimit = opencodeByokOutputTokenLimit(provider.maxTokens);
   const config = {
     provider: {
       [BYOK_OPENCODE_PROVIDER_ID]: {
@@ -86,7 +107,7 @@ export function buildOpenCodeByokProviderConfig(
             modalities: { input: ['text', 'image'], output: ['text'] },
             limit: {
               context: DEFAULT_CONTEXT_TOKEN_LIMIT,
-              output: DEFAULT_OUTPUT_TOKEN_LIMIT,
+              output: outputTokenLimit,
             },
           },
         },
@@ -97,7 +118,12 @@ export function buildOpenCodeByokProviderConfig(
   return {
     providerId: BYOK_OPENCODE_PROVIDER_ID,
     modelId,
-    env: needsApiKey ? { [BYOK_OPENCODE_API_KEY_ENV]: apiKey } : {},
+    env: {
+      ...(needsApiKey ? { [BYOK_OPENCODE_API_KEY_ENV]: apiKey } : {}),
+      ...(outputTokenLimit > OPENCODE_1X_DEFAULT_OUTPUT_TOKEN_MAX
+        ? { [OPENCODE_OUTPUT_TOKEN_MAX_ENV]: String(outputTokenLimit) }
+        : {}),
+    },
     config,
   };
 }
