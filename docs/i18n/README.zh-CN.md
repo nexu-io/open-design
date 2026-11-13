@@ -88,6 +88,18 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 
 ---
 
+<!-- motion-template-library:start -->
+## 用 OpenMotion 制作产品视频
+
+围绕产品发布、功能演示、品牌故事或阶段成果，找到适合这次传播的动效参考。浏览精选动效参考与制作说明，直接复制指令交给 Agent，再换成自己的文案、品牌与素材。
+
+从参考到自己的成片，继续编辑生成的工程，让它成为下一次产品更新与传播的起点。
+
+[浏览动效参考，开始创作 →](../motion-templates/README.zh-CN.md)
+<!-- motion-template-library:end -->
+
+---
+
 ## 平台兼容性
 
 > OpenDesign 通过两种方式连接主流编码 Agent：可由 Agent 调用的**技能、CLI 和 MCP**，以及由 OD 直接启动 Agent 的**原生运行时适配器**。DeepSeek Harness 通过官方 `dsh` CLI 作为一等原生运行时，支持结构化流式输出、模型发现、取消与会话恢复。
