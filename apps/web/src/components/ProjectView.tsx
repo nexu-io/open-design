@@ -2676,6 +2676,7 @@ export function ProjectView({
   }, [analytics.track, project.id]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const conversationsRef = useRef<Conversation[]>([]);
+  const manualConversationTitlesRef = useRef(new Map<string, { title: string | null }>());
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
@@ -9796,23 +9797,34 @@ export function ProjectView({
         ? t('designFiles.createDesignSystemFromProject')
         : summarizeProjectNameFromPrompt(prompt) || prompt.slice(0, 60).trim();
       const fallbackProjectName = summarizeProjectNameFromPrompt(prompt);
+      const hadTitleBeforeFirstTurn = Boolean(
+        conversationsRef.current.find((c) => c.id === runConversationId)?.title?.trim(),
+      );
+      const patchAutoConversationTitle = async (title: string) => {
+        const manualAtStart = manualConversationTitlesRef.current.get(runConversationId);
+        await patchConversation(project.id, runConversationId, { title }, projectRunWorkspaceContext);
+        let latest = manualConversationTitlesRef.current.get(runConversationId);
+        while (latest && latest !== manualAtStart) {
+          const restored = latest;
+          await patchConversation(
+            project.id, runConversationId, { title: restored.title }, projectRunWorkspaceContext,
+          );
+          latest = manualConversationTitlesRef.current.get(runConversationId);
+          if (latest === restored) break;
+        }
+      };
       // If this is the first turn, derive a working title from the prompt
       // so the conversation is identifiable in the dropdown without a
       // round-trip through the agent.
       if (isFirstTurn) {
         const title = fallbackFirstTurnTitle;
-        if (title) {
+        if (title && !hadTitleBeforeFirstTurn) {
           setConversations((curr) =>
             curr.map((c) =>
               c.id === runConversationId ? { ...c, title } : c,
             ),
           );
-          void patchConversation(
-            project.id,
-            runConversationId,
-            { title },
-            projectRunWorkspaceContext,
-          );
+          void patchAutoConversationTitle(title);
         }
         const projectName = fallbackProjectName;
         if (
@@ -9837,6 +9849,9 @@ export function ProjectView({
         }
       }
       const canReplaceConversationTitle = (title: string | null | undefined) => {
+        if (hadTitleBeforeFirstTurn || manualConversationTitlesRef.current.has(runConversationId)) {
+          return false;
+        }
         const trimmed = (title ?? '').trim();
         return (
           !trimmed ||
@@ -9860,12 +9875,7 @@ export function ProjectView({
           }),
         );
         if (shouldPatchConversation) {
-          void patchConversation(
-            project.id,
-            runConversationId,
-            { title: agentTitle },
-            projectRunWorkspaceContext,
-          );
+          void patchAutoConversationTitle(agentTitle);
         }
         if (
           agentTitle !== project.name &&
@@ -12860,6 +12870,10 @@ export function ProjectView({
     async (id: string, title: string) => {
       if (projectMutationReadOnly) return;
       const trimmed = title.trim() || null;
+      manualConversationTitlesRef.current.set(id, { title: trimmed });
+      conversationsRef.current = conversationsRef.current.map((c) =>
+        c.id === id ? { ...c, title: trimmed } : c,
+      );
       setConversations((curr) =>
         curr.map((c) => (c.id === id ? { ...c, title: trimmed } : c)),
       );
@@ -14994,6 +15008,9 @@ export function ProjectView({
               messagesConversationId={messagesConversationId}
               onSelectConversation={handleSelectConversation}
               onDeleteConversation={handleDeleteConversation}
+              onRenameConversation={
+                projectMutationReadOnly ? undefined : handleRenameConversation
+              }
               config={config}
               onOpenSettings={onOpenSettings}
               amrBalanceCardUsd={amrBalanceCardUsd}
@@ -15252,7 +15269,9 @@ export function ProjectView({
           activeConversationId={activeConversationId}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
+          onRenameConversation={
+            projectMutationReadOnly ? undefined : handleRenameConversation
+          }
           onConversationSessionModeChange={handleConversationSessionModeChange}
           onNewConversation={handleNewConversation}
           activeConversationChat={activeConversationChatState}

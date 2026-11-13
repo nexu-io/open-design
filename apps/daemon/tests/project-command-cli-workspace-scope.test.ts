@@ -124,6 +124,17 @@ function successResponse(request: RequestRecord, res: http.ServerResponse): void
     sendJson(res, 200, { conversations: [] });
     return;
   }
+  if (/\/conversations\/[^/]+$/.test(request.url) && request.method === 'PATCH') {
+    const body = parseJsonBody(request);
+    sendJson(res, 200, {
+      conversation: {
+        id: decodeURIComponent(request.url.split('/').pop() ?? ''),
+        projectId: projectIdForRequest(request),
+        title: body.title ?? null,
+      },
+    });
+    return;
+  }
   if (/\/applied-plugins$/.test(request.url)) {
     sendJson(res, 200, { snapshots: [] });
     return;
@@ -262,6 +273,19 @@ const commandFixtures: CommandFixture[] = [
     label: 'conversation list',
     args: (projectId) => ['conversation', 'list', projectId, '--json'],
     requests: (projectId) => [`GET /api/projects/${projectId}/conversations`],
+  },
+  {
+    label: 'conversation rename',
+    args: (projectId) => [
+      'conversation',
+      'rename',
+      projectId,
+      'conversation-1',
+      '--title',
+      'Checkout flow',
+      '--json',
+    ],
+    requests: (projectId) => [`PATCH /api/projects/${projectId}/conversations/conversation-1`],
   },
   {
     label: 'chat new',
