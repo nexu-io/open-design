@@ -355,6 +355,7 @@ interface PendingProjectCreation {
   files: readonly File[];
 }
 
+const PREPARE_AMR_PROFILE_SWITCH_EVENT = 'open-design:prepare-amr-profile-switch';
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const AMR_AGENT_ID = 'amr';
 const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
@@ -3394,6 +3395,29 @@ function AppInner() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [agentsLoading, daemonLive, refreshAgents]);
+
+  useEffect(() => {
+    const prepareProfileSwitch = (event: Event) => {
+      const complete = (event as CustomEvent<unknown>).detail;
+      if (typeof complete !== 'function') return;
+      event.preventDefault();
+      const currentRoute = routeRef.current;
+      if (currentRoute.kind === 'home' && (
+        currentRoute.view === 'home' || currentRoute.view === 'onboarding'
+      )) {
+        complete(true);
+        return;
+      }
+      // Settle edits while the daemon is still using the outgoing environment.
+      navigate({ kind: 'home', view: 'home' }, {
+        replace: true,
+        onCommit: () => complete(true),
+        onCancel: (reason) => complete(reason === 'same_route'),
+      });
+    };
+    window.addEventListener(PREPARE_AMR_PROFILE_SWITCH_EVENT, prepareProfileSwitch);
+    return () => window.removeEventListener(PREPARE_AMR_PROFILE_SWITCH_EVENT, prepareProfileSwitch);
+  }, []);
 
   useEffect(() => {
     const handleAppConfigChanged = () => {

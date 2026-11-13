@@ -407,13 +407,33 @@ async function writeAppConfigToDaemon(
   return payload.config;
 }
 
+// Run in the renderer's main world so the App can settle its navigation
+// guards before the daemon changes environments. A loading window without
+// an App listener has no edits to settle.
+const PREPARE_AMR_PROFILE_SWITCH = `new Promise((resolve) => {
+  const timer = setTimeout(() => resolve(false), 15000);
+  const complete = (allowed) => {
+    clearTimeout(timer);
+    resolve(allowed === true);
+  };
+  const unhandled = window.dispatchEvent(new CustomEvent('open-design:prepare-amr-profile-switch', {
+    cancelable: true,
+    detail: complete,
+  }));
+  if (unhandled) complete(true);
+})`;
+
 export async function writeAmrEnvironmentProfile(
   options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding">,
   profile: AmrEnvironmentProfile,
+  prepareSwitch?: () => Promise<boolean>,
 ): Promise<AmrEnvironmentProfile> {
   if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
   const baseUrl = await resolveDaemonBaseUrl(options)();
   const config = await readAppConfigFromDaemon(baseUrl);
+  const currentProfile = normalizeAmrEnvironmentProfile(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
+  if (profile === currentProfile) return currentProfile;
+  if (prepareSwitch && !(await prepareSwitch())) return currentProfile;
   const writtenConfig = await writeAppConfigToDaemon(baseUrl, mergeAmrEnvironmentProfileConfig(config, profile));
   return normalizeAmrEnvironmentProfile(writtenConfig.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
 }
@@ -450,18 +470,37 @@ function installDesktopMenu(
     return normalizeAmrEnvironmentProfile(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
   };
 
+  let amrProfileSwitchInFlight = false;
   const selectAmrProfile = (profile: AmrEnvironmentProfile): void => {
-    if (options.amrEndpointBinding) return;
-    void writeAmrEnvironmentProfile(options, profile)
+    if (options.amrEndpointBinding || amrProfileSwitchInFlight) return;
+    amrProfileSwitchInFlight = true;
+    let blocked = false;
+    void writeAmrEnvironmentProfile(options, profile, async () => {
+      const results = await Promise.allSettled(BrowserWindow.getAllWindows()
+        .filter((window) => !window.isDestroyed())
+        .map((window) => window.webContents.executeJavaScript(PREPARE_AMR_PROFILE_SWITCH)));
+      blocked = results.some((result) => result.status !== "fulfilled" || result.value !== true);
+      return !blocked;
+    })
       .then((writtenProfile) => {
         lastKnownAmrProfile = writtenProfile;
+        if (blocked) {
+          dialog.showErrorBox(
+            "AMR Environment Profile switch cancelled",
+            "The current environment was kept. Finish any pending edits and try again.",
+          );
+          return;
+        }
         for (const window of BrowserWindow.getAllWindows()) {
           window.webContents.send(APP_CONFIG_CHANGED_IPC_CHANNEL);
         }
-        rebuild();
       })
       .catch((error: unknown) => {
         showDevelopMenuError("AMR Environment Profile switch failed", error);
+      })
+      .finally(() => {
+        amrProfileSwitchInFlight = false;
+        rebuild();
       });
   };
 

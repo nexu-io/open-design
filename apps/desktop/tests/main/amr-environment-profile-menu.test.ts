@@ -214,6 +214,30 @@ describe("AMR Environment Profile desktop menu helpers", () => {
     expect(discoverWebUrl).not.toHaveBeenCalled();
   });
 
+  it("does not write the new environment when the renderer cannot leave the project", async () => {
+    const current = { agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: "prod" } } };
+    const updated = { agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: "test" } } };
+    const fetchConfig = vi.fn<typeof fetch>()
+      .mockImplementation(async (_url, init) => Response.json({
+        config: init?.method === "PUT" ? updated : current,
+      }));
+    vi.stubGlobal("fetch", fetchConfig);
+    try {
+      const options = { discoverDaemonUrl: async () => "http://127.0.0.1:17456", discoverWebUrl: async () => null };
+      const prepareSwitch = vi.fn<() => Promise<boolean>>()
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+
+      await expect(writeAmrEnvironmentProfile(options, "test", prepareSwitch)).resolves.toBe("prod");
+      expect(fetchConfig).toHaveBeenCalledTimes(1);
+
+      await expect(writeAmrEnvironmentProfile(options, "test", prepareSwitch)).resolves.toBe("test");
+      expect(fetchConfig).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ method: "PUT" }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("uses the active packaged runtime version for the native About panel", () => {
     expect(resolveAboutPanelVersion({ update: { currentVersion: "0.10.0-beta.24" } })).toBe("0.10.0-beta.24");
     expect(resolveAboutPanelVersion({ update: { currentVersion: " 0.10.0-beta.24 " } })).toBe("0.10.0-beta.24");
