@@ -26,11 +26,16 @@ function ruleValue(block: string, property: string): string {
 }
 
 describe('mention popover styles', () => {
-  it('keeps the panel height stable while tabs swap between long and short results', () => {
+  it('keeps the picker height content-derived so a tab switch resizes the observed box', () => {
+    // PR #8138 review: CaretFloatingLayer re-anchors through a ResizeObserver
+    // that only delivers when the observed box changes size. Pinning the
+    // panel height kept it visually stable across tab swaps but made the box
+    // resize-proof, so the observer never fired and the picker kept its
+    // stale anchor. The cap stays; the height must stay content-derived.
     const popover = cssBlock('.mention-popover');
     const results = cssBlock('.mention-results');
 
-    expect(ruleValue(popover, 'height')).toBe('var(--cfl-max-h, 460px)');
+    expect(popover).not.toMatch(/(?:^|[;\n])\s*height\s*:/);
     expect(ruleValue(popover, 'max-height')).toBe('var(--cfl-max-h, 460px)');
     expect(ruleValue(results, 'flex')).toBe('1 1 auto');
     expect(ruleValue(results, 'overflow-y')).toBe('auto');
