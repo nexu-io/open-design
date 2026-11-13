@@ -83,6 +83,26 @@ describe('mediaFailureNextStep', () => {
         mediaFailureNextStep({ message: 'senseaudio tts 401: unauthorized', model: 'senseaudio-tts' }),
       ).toBe('open-settings');
     });
+
+    it('sends signed-out Vela CLI profile failures to sign-in', () => {
+      expect(
+        mediaFailureNextStep({
+          message:
+            'Command failed: ...\\vela.exe media models --json\nError: profile "prod" is not logged in; run `vela login`\n',
+          model: 'vela/gpt-image-2',
+        }),
+      ).toBe('sign-in');
+      expect(
+        mediaFailureNextStep({
+          message: 'Error: profile "prod" is not logged in; run `vela login`',
+        }),
+      ).toBe('sign-in');
+      expect(
+        mediaFailureNextStep({
+          message: 'profile "default" is not logged in; run vela login',
+        }),
+      ).toBe('sign-in');
+    });
   });
 
   describe('nothing to fix — it may just work next time', () => {
