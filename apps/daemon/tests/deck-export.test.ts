@@ -218,6 +218,29 @@ describe('buildScreenshotPptx', () => {
   it('throws when there are no slides', async () => {
     await expect(buildScreenshotPptx([])).rejects.toThrow(/no slides/i);
   });
+
+  // #7526: the deck's speaker notes must survive into PowerPoint's notes pane.
+  async function pptxNotesText(buf: Buffer): Promise<string[]> {
+    const zip = await JSZip.loadAsync(buf);
+    const slideCount = Object.keys(zip.files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f)).length;
+    const texts: string[] = [];
+    for (let i = 1; i <= slideCount; i += 1) {
+      const xml = (await zip.file(`ppt/notesSlides/notesSlide${i}.xml`)?.async('string')) ?? '';
+      texts.push([...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]).join(''));
+    }
+    return texts;
+  }
+
+  it('writes each slide speaker note into its notes page', async () => {
+    const out = await buildScreenshotPptx(decodeSlideDataUrls([PNG_DATA_URL, PNG_DATA_URL, PNG_DATA_URL]), {
+      notes: ['Open with the Q3 number', '', 'Ask for budget & headcount'],
+    });
+    const notes = await pptxNotesText(out);
+    expect(notes[0]).toContain('Open with the Q3 number');
+    // A notes page always carries its slide-number field; an empty note adds no text.
+    expect(notes[1]).not.toMatch(/Q3|budget/);
+    expect(notes[2]).toContain('Ask for budget &amp; headcount');
+  });
 });
 
 describe('buildScreenshotPdf', () => {
