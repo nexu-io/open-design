@@ -247,6 +247,24 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
+    label: 'Opper',
+    protocol: 'openai',
+    baseUrl: 'https://api.opper.ai/v3/compat',
+    preferredModels: [
+      'claude-sonnet-4-6',
+      'claude-opus-5',
+      'gpt-5.5',
+      'gpt-5.4-mini',
+      'gemini-3.8-flash',
+      'deepseek-v4-pro',
+      'kimi-k3',
+    ],
+    apiKeyConsoleLink: {
+      host: 'platform.opper.ai',
+      url: 'https://platform.opper.ai/?utm_source=open_design&utm_medium=provider_preset&utm_campaign=opper_byok',
+    },
+  },
+  {
     label: 'SiliconFlow (CN)',
     protocol: 'openai',
     baseUrl: 'https://api.siliconflow.cn/v1',
@@ -541,6 +559,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
+  { id: 'opper', title: 'Opper', providerLabel: 'Opper' },
   { id: 'openrouter', title: 'OpenRouter', providerLabel: 'OpenRouter' },
   { id: 'mistral', title: 'Mistral AI', providerLabel: 'Mistral AI' },
   { id: 'xai', title: 'xAI', providerLabel: 'xAI' },

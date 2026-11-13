@@ -449,6 +449,27 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps Opper as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const opper = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.opper.ai/v3/compat',
+      model: 'claude-sonnet-4-6',
+      apiProviderBaseUrl: 'https://api.opper.ai/v3/compat',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(opper).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.opper.ai/v3/compat',
+      model: 'claude-sonnet-4-6',
+      apiProviderBaseUrl: 'https://api.opper.ai/v3/compat',
+    });
+  });
+
   it('keeps Atlas Cloud as an OpenAI-compatible known provider without changing the OpenAI default', () => {
     const openai = switchApiProtocolConfig(baseConfig, 'openai');
     const atlas = updateCurrentApiProtocolConfig(openai, {
