@@ -957,7 +957,9 @@ describe('POST /api/runs headless fallbacks', () => {
     });
   });
 
-  it('falls back past a stale saved agent to the first detected available runtime', async () => {
+  // A configured agent whose binary is missing must stay selected so the run
+  // reports its real setup failure, instead of switching to another runtime (#8094).
+  it('keeps a configured agent whose runtime is unavailable instead of switching runtimes', async () => {
     started = await startTestServer();
     const binDir = await mkdtemp(path.join(os.tmpdir(), 'od-headless-run-bin-'));
     const emptyAgentHome = await mkdtemp(path.join(os.tmpdir(), 'od-headless-run-home-'));
@@ -996,7 +998,7 @@ describe('POST /api/runs headless fallbacks', () => {
       );
       expect(statusResponse.status).toBe(200);
       const statusBody = await statusResponse.json() as { agentId: string | null };
-      expect(statusBody.agentId).toBe('opencode');
+      expect(statusBody.agentId).toBe('claude');
     } finally {
       await restoreAppConfig(started.url, priorConfig);
       await rm(binDir, { recursive: true, force: true });

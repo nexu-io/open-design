@@ -251,6 +251,28 @@ type SeededCommentAttachment = ReturnType<typeof normalizeCommentAttachments>[nu
 };
 
 /**
+ * Resolve the agent for a run whose request omitted `agentId`.
+ *
+ * A configured agent is user intent, not a hint that detection may silently
+ * replace. Preserve it even when its probe reports unavailable so the selected
+ * runtime can surface the real setup failure instead of launching an unrelated
+ * available agent (#8094). Detection chooses a default only when no agent was
+ * configured.
+ */
+export function resolveOmittedRunAgentId(
+  configuredAgentId: unknown,
+  detectedAgents: readonly Pick<DetectedAgent, 'id' | 'available'>[],
+): string | null {
+  const configuredAgent =
+    typeof configuredAgentId === 'string' && configuredAgentId
+      ? configuredAgentId
+      : null;
+  return configuredAgent
+    ?? detectedAgents.find((agent) => agent.available)?.id
+    ?? null;
+}
+
+/**
  * Deck annotations carry a zero-based `slideIndex` so reload/retry can flip the
  * preview via `queuedSlideNavTarget`. The prompt normalizer intentionally omits
  * it; re-attach from the raw request when seeding persisted messages.
@@ -1522,18 +1544,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (!effectiveAgentId) {
       try {
         const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
         const agents = await detectAgents(
           toJsonRecord(appCfg.agentCliEnv),
         ).catch((): DetectedAgent[] => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        effectiveAgentId = cfgAgent && cfgAgentAvailable
-          ? cfgAgent
-          : agents.find((agent) => agent.available)?.id ?? null;
+        effectiveAgentId = resolveOmittedRunAgentId(appCfg.agentId, agents);
       } catch (err) {
         console.warn('[runs] agent id fallback failed', err);
       }
@@ -1968,21 +1982,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (typeof meta.agentId !== 'string' || !meta.agentId) {
       try {
         const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
-        const cfgAgent = typeof appCfg.agentId === 'string' && appCfg.agentId
-          ? appCfg.agentId
-          : null;
         const agents = await detectAgents(
           toJsonRecord(appCfg.agentCliEnv),
         ).catch((): DetectedAgent[] => []);
-        const cfgAgentAvailable = cfgAgent
-          ? agents.some((agent) => agent.id === cfgAgent && agent.available)
-          : false;
-        if (cfgAgent && cfgAgentAvailable) {
-          meta.agentId = cfgAgent;
-        } else {
-          const firstAvailable = agents.find((agent) => agent.available)?.id ?? null;
-          if (firstAvailable) meta.agentId = firstAvailable;
-        }
+        const fallbackAgentId = resolveOmittedRunAgentId(appCfg.agentId, agents);
+        if (fallbackAgentId) meta.agentId = fallbackAgentId;
       } catch (err) {
         console.warn('[runs] agent id fallback failed', err);
       }
