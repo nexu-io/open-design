@@ -9,6 +9,7 @@
 // The popup and the on-page toolbar both message this worker rather than
 // talking to the daemon directly, so all daemon traffic lives in one place.
 
+if (typeof importScripts === 'function') importScripts('inline.js');
 try {
   if (typeof importScripts === 'function') importScripts('i18n.js');
 } catch {
@@ -266,11 +267,8 @@ async function buildResourceMap(urls, includeImages) {
   return { map, skipped };
 }
 
-function inlineHtml(html, map) {
-  let out = html;
-  for (const [url, data] of map) out = out.split(url).join(data);
-  return out;
-}
+// inlineHtml(html, map) comes from inline.js (importScripts at the top) —
+// extracted there so the replacement logic runs under the test runner too.
 
 function inlineFigmaIr(ir, map) {
   const walk = (node) => {
