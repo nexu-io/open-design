@@ -2552,6 +2552,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           commentCount: Array.isArray(requestBody.commentAttachments)
             ? requestBody.commentAttachments.length
             : 0,
+          commentAttachments: Array.isArray(requestBody.commentAttachments)
+            ? requestBody.commentAttachments as Parameters<typeof createOdNextTaskInputSnapshot>[0]['commentAttachments']
+            : [],
           linkedDirectoryCount: Array.isArray(runProject?.metadata?.linkedDirs)
             ? runProject.metadata.linkedDirs.length
             : 0,

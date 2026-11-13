@@ -51,7 +51,15 @@ export interface OdNextRequestInputFactsV1 {
     access: 'out_of_band';
   };
   attachments: OdNextAttachmentFactV1[];
-  comments: { count: number };
+  comments: {
+    count: number;
+    /**
+     * Frozen current-turn preview comment targets, resolved like any other
+     * `task-input:` reference. Bodies and paths never enter the inline Bundle.
+     */
+    reference?: string;
+    role?: 'current_user_preview_feedback';
+  };
   workspace: {
     project: { reference: 'workspace:project'; access: 'out_of_band' } | null;
     linkedDirectories: Array<{
