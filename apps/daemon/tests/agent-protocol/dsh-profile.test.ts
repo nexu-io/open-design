@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
-import { describe, test } from 'vitest';
+import { describe, test, vi } from 'vitest';
 import {
   attachDshProfileSession,
   createDshProfileJsonlStream,
@@ -67,6 +67,7 @@ describe('DeepSeek Harness profile frame validation', () => {
     [{ ...readyFrame, protocol_version: 2 }, 'protocol_version must equal 1'],
     [{ ...readyFrame, capabilities: { ...requiredCapabilities, session_resume: false } }, 'capabilities'],
     [{ v: 1, type: 'unknown' }, 'type is not supported'],
+    [{ v: 1, type: 'tool_call_progress', request_id: 'r' }, 'call_id'],
     [{ v: 1, type: 'result', request_id: 'r', status: 'failed', session_id: 's', resume_rejected: true }, 'failed result'],
   ] as const)('rejects incompatible runtime frames', (frame, message) => {
     assert.throws(() => parseDshProfileRuntimeFrame(frame), new RegExp(message));
@@ -403,6 +404,73 @@ describe('DeepSeek Harness profile session controller', () => {
         total_tokens: 12,
       },
     });
+  });
+
+  test('keeps a long tool argument stream active and settles one final call', () => {
+    vi.useFakeTimers();
+    try {
+      const child = new FakeDshChild();
+      const events: Array<{ event: string; payload: Record<string, unknown> }> = [];
+      let timedOut = false;
+      let completed = 0;
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      const armWatchdog = () => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => { timedOut = true; }, 600_000);
+      };
+      const controller = attachDshProfileSession({
+        child: child as never,
+        requestId: 'run-long-call',
+        prompt: 'write a large file',
+        cwd: '/project',
+        send: (event, payload) => events.push({ event, payload: payload as Record<string, unknown> }),
+        onActivity: armWatchdog,
+        onComplete: () => { completed += 1; clearTimeout(watchdog); },
+      });
+
+      child.emitFrame(readyFrame);
+      child.emitFrame({ v: 1, type: 'session', request_id: 'run-long-call', session_id: 'session-1', resumed: false });
+      armWatchdog();
+      for (let index = 0; index < 3; index += 1) {
+        vi.advanceTimersByTime(590_000);
+        child.emitFrame({
+          v: 1,
+          type: 'tool_call_progress',
+          request_id: 'run-long-call',
+          call_id: 'call-1',
+        });
+        assert.equal(timedOut, false);
+        assert.equal(events.some(({ payload }) => payload.type === 'tool_use'), false);
+      }
+      child.emitFrame({
+        v: 1,
+        type: 'tool_call',
+        request_id: 'run-long-call',
+        call_id: 'call-1',
+        name: 'write',
+        arguments: '{"file_path":"index.html"}',
+      });
+      child.emitFrame({
+        v: 1,
+        type: 'result',
+        request_id: 'run-long-call',
+        status: 'completed',
+        session_id: 'session-1',
+        resume_rejected: false,
+      });
+
+      assert.equal(controller.completedSuccessfully(), true);
+      assert.equal(completed, 1);
+      assert.equal(timedOut, false);
+      assert.deepEqual(events.filter(({ payload }) => payload.type === 'tool_use').map(({ payload }) => payload), [{
+        type: 'tool_use',
+        id: 'call-1',
+        name: 'write',
+        input: { file_path: 'index.html' },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('ignores other requests and rejects a changed resumed session id', () => {
