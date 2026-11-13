@@ -11,7 +11,7 @@
  * viewport-height/width frame. Brand identity is shared across slides.
  */
 
-import type { MixedText, BrandBlock, ImageryConfig } from '../open-design-landing/schema';
+import type { MixedText, BrandBlock, ImageryConfig } from '../open-design-landing/schema.js';
 
 export type { MixedText, BrandBlock, ImageryConfig };
 
