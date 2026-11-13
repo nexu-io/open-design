@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * newsletter — a restrained multi-story digest, built to email.md.
  *

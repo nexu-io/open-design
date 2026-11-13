@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Palette engine — a faithful, dependency-free port of the @ant-design/colors
  * `generate()` HSV algorithm.
@@ -112,10 +111,16 @@ function hsvToRgb({ h, s, v }: HSV): RGB {
   const p = v * (1 - s);
   const q = v * (1 - f * s);
   const t = v * (1 - (1 - f) * s);
-  const mod = i % 6;
-  const r = [v, q, p, p, t, v][mod];
-  const g = [t, v, v, q, p, p][mod];
-  const b = [p, p, t, v, v, q][mod];
+  // One (r, g, b) triple per 60° sector of the hue wheel.
+  const sectors = [
+    [v, t, p],
+    [q, v, p],
+    [p, v, t],
+    [p, q, v],
+    [t, p, v],
+    [v, p, q],
+  ] as const;
+  const [r, g, b] = sectors[i % 6] ?? sectors[0];
   return { r: r * 255, g: g * 255, b: b * 255 };
 }
 
@@ -225,9 +230,13 @@ export function generate(
   // dark theme patterns: blend each light pattern onto the dark background
   if (opts.theme === "dark") {
     const bg = parseHex(opts.backgroundColor || "#141414");
-    return darkColorMap.map(({ index, opacity }) =>
-      rgbToHex(mix(bg, parseHex(patterns[index - 1]), opacity)),
-    );
+    return darkColorMap.map(({ index, opacity }) => {
+      const light = patterns[index - 1];
+      if (light === undefined) {
+        throw new Error(`palette: darkColorMap index ${index} is outside the generated ladder`);
+      }
+      return rgbToHex(mix(bg, parseHex(light), opacity));
+    });
   }
 
   return patterns;

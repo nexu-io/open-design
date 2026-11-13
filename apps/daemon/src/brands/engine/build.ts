@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * build.ts — the integration seam that turns one input (a Brand kit or a raw
  * URL) into a complete, writable BrandSystem.
@@ -53,13 +52,16 @@ function normalizeBrandForAssembly(brand: Brand): Brand {
   const voice = brand.voice ?? {};
   const imagery = brand.imagery ?? {};
   const layout = brand.layout ?? {};
+  // Typed as Partial so the defaults below are a real fallback for untyped
+  // JSON input rather than fields the spread is guaranteed to overwrite.
+  const logo: Partial<Brand["logo"]> = brand.logo ?? {};
   return {
     ...brand,
     logo: {
       primary: null,
       alternates: [],
       notes: "",
-      ...(brand.logo ?? {}),
+      ...logo,
     },
     colors: Array.isArray(brand.colors) ? brand.colors : [],
     typography: brand.typography ?? {},
@@ -294,7 +296,7 @@ function buildIndexPage(
   const esc = (v: string) =>
     v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-  const links = [
+  const linkEntries: Array<[href: string, label: string]> = [
     ["kit.html", "Component kit (light)"],
     ["kit.dark.html", "Component kit (dark)"],
     ["artifacts/landing.html", "Landing page"],
@@ -307,7 +309,8 @@ function buildIndexPage(
     ["theme.json", "theme.json (antd)"],
     ["seed.json", "seed.json"],
     ["BRAND-SYSTEM.md", "BRAND-SYSTEM.md"],
-  ]
+  ];
+  const links = linkEntries
     .map(
       ([href, label]) =>
         `<li><a href="${esc(href)}" style="color:var(--brand-color-link);text-decoration:none;">${esc(
@@ -354,7 +357,8 @@ export function buildBrandSystem(
   const normalizedBrand = normalizeBrandForAssembly(brand);
   const slug = opts?.slug ? slugify(opts.slug) : slugify(normalizedBrand.name);
   const seed = seedFromBrand(normalizedBrand);
-  return assemble({ slug, brand: normalizedBrand, seed, fontFiles: opts?.fontFiles });
+  const fontFiles = opts?.fontFiles;
+  return assemble({ slug, brand: normalizedBrand, seed, ...(fontFiles ? { fontFiles } : {}) });
 }
 
 // ─────────────────────────── public: from a URL ─────────────────────────────
