@@ -77,7 +77,8 @@ This chart adheres to strict security defaults:
 ### Auth Proxy Parameters
 
 | Name                                   | Description                                       | Value                                            |
-| -------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
+| --------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
+| `authProxy.enabled`                    | Enable the bundled nginx auth-proxy sidecar. When `false`, the sidecar is removed, the app binds `0.0.0.0`, and `OD_DISABLE_API_AUTH=1` is set (use behind an external auth proxy). | `true` |
 | `authProxy.image`                      | NGINX proxy image                                 | `nginxinc/nginx-unprivileged:1.25-alpine-slim`   |
 | `authProxy.port`                       | Proxy server port inside the container            | `8080`                                           |
 | `authProxy.securityContext`            | Security context for the proxy container          | `{...}`                                          |

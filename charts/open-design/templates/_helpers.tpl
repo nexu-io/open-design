@@ -50,3 +50,18 @@ Selector labels used by Services and HPAs.
 app.kubernetes.io/name: {{ include "open-design.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Resolve the host the app binds to / is probed on.
+When authProxy is enabled, honor an explicit config.bindHost override
+(default stays "127.0.0.1"). When disabled, the sidecar is gone and
+kube-proxy talks to the pod directly, so always bind 0.0.0.0 regardless
+of config.bindHost.
+*/}}
+{{- define "open-design.bindHost" -}}
+{{- if .Values.authProxy.enabled -}}
+{{ .Values.config.bindHost }}
+{{- else -}}
+0.0.0.0
+{{- end -}}
+{{- end }}
