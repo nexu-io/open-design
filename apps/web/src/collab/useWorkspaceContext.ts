@@ -653,8 +653,45 @@ export function lastResolvedTeamProjects(
   return identity ? cachedTeamProjects.get(identity) ?? null : null;
 }
 
+/**
+ * Hook-internal state: the public shape plus the account generation a
+ * `reauth-required` answer was read under.
+ */
+type WorkspaceContextHookState = WorkspaceContextState & {
+  reauthRequiredAccountGeneration?: number;
+};
+
+/**
+ * A `reauth-required` answer describes the account it was read under, and is
+ * never reported once the account has changed.
+ *
+ * Switching account leaves the previous credentials rejected. EntryShell sends
+ * any reauth-required state back to the sign-in gate, whose passive reauth then
+ * signs the new account in and returns Home — so if the old rejection were
+ * still on screen at that moment, the two would bounce forever and every bounce
+ * would retire the new account's read before it could land (OPEND-4754).
+ *
+ * `notifyWorkspaceContextRefresh` advances the account generation
+ * synchronously, so this holds on the very next render, including the
+ * synchronous route render that returns Home, without waiting for this hook's
+ * own state update to commit. If the new account is rejected too, its read
+ * records a fresh reauth-required under the new generation.
+ */
+function failureForCurrentAccount(
+  state: WorkspaceContextHookState,
+  accountGeneration: number,
+): WorkspaceContextState['failure'] {
+  if (
+    state.failure === 'reauth-required'
+    && state.reauthRequiredAccountGeneration !== accountGeneration
+  ) {
+    return undefined;
+  }
+  return state.failure;
+}
+
 export function useWorkspaceContext(): WorkspaceContextState {
-  const [state, setState] = useState<WorkspaceContextState>(() => ({
+  const [state, setState] = useState<WorkspaceContextHookState>(() => ({
     context: cachedWorkspaceContext,
     resourceReadIdentity:
       cachedWorkspaceContext && !workspaceContextIdentityChangePending
@@ -896,6 +933,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
           : reauthRequired
             ? 'reauth-required'
             : 'unavailable',
+        reauthRequiredAccountGeneration: reauthRequired
+          ? currentWorkspaceAccountGeneration()
+          : undefined,
       });
       // An `unsupported` daemon has no workspace endpoint — retrying is
       // pointless. A transient `unavailable` outage arms the shared jittered
@@ -1040,10 +1080,14 @@ export function useWorkspaceContext(): WorkspaceContextState {
   }, [loadContext, sseConnected]);
 
   const accountGeneration = currentWorkspaceAccountGeneration();
-  return useMemo(
-    () => ({ ...state, accountGeneration }),
-    [accountGeneration, state],
-  );
+  return useMemo(() => {
+    const { reauthRequiredAccountGeneration: _readUnder, ...publicState } = state;
+    return {
+      ...publicState,
+      failure: failureForCurrentAccount(state, accountGeneration),
+      accountGeneration,
+    };
+  }, [accountGeneration, state]);
 }
 
 const WORKSPACE_CONTEXT_POLL_MS = 30_000;
