@@ -2467,3 +2467,28 @@ test('antigravity stream still parses Gemini-CLI-shaped JSONL from agy-compatibl
     { type: 'text_delta', delta: 'Hello from Antigravity.' },
   ]);
 });
+
+// OPEND-3527: a provider's explicit verdict (context overflow, rate limit,
+// insufficient funds) arrived as the bare "Provider returned error" and was
+// classified as a retryable network error. The error event carries the status,
+// the provider's own words and its retryability.
+test('opencode provider errors carry the status, the provider reason and retryability', async () => {
+  const frames = await import('../fixtures/opencode-provider-error-frames.js');
+  const cases = [
+    { frame: frames.OPENCODE_CONTEXT_OVERFLOW_FRAME, status: 'HTTP 400', reason: "The input (268498 tokens) is longer than the model's context length (262144 tokens)", retryable: false },
+    { frame: frames.OPENCODE_RATE_LIMIT_FRAME, status: 'HTTP 429', reason: 'is temporarily rate-limited upstream', retryable: true },
+    { frame: frames.OPENCODE_INSUFFICIENT_FUNDS_FRAME, status: 'HTTP 402', reason: 'Insufficient account funds', retryable: false },
+  ];
+  for (const { frame, status, reason, retryable } of cases) {
+    const { events, handler } = collectEvents('opencode');
+    const line = JSON.stringify(frame);
+    handler.feed(line + '\n');
+    assert.equal(events.length, 1);
+    const event = (events as Array<{ type: string; message: string; raw: string; retryable?: boolean }>)[0]!;
+    assert.equal(event.type, 'error');
+    assert.ok(event.message.includes(status), `${event.message} should name ${status}`);
+    assert.ok(event.message.includes(reason), `${event.message} should carry the provider reason`);
+    assert.equal(event.retryable, retryable);
+    assert.equal(event.raw, line);
+  }
+});
