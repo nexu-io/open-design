@@ -13,7 +13,10 @@ import {
   upsertMessage,
 } from '../src/db.js';
 import {
+  canAutoReseedAfterResumeFailure,
   createPhysicalAgentSessionUsageTracker,
+  detectEarlyAgentResumeFailure,
+  renderHeadlessReseedTranscript,
   computeIncludeStable,
   hashStableInstructions,
   isAgentResumeFailure,
@@ -841,5 +844,70 @@ describe('resolveAgentResumeFailurePolicy', () => {
         resumeSessionId: null,
       }).resumeFailed,
     ).toBe(false);
+  });
+});
+
+describe('antigravity resume-failure recovery', () => {
+  it('stops agy as soon as it warns the conversation is gone', () => {
+    expect(detectEarlyAgentResumeFailure('antigravity', 'warning: conversation "abc" not found\n')).toBe(true);
+    expect(detectEarlyAgentResumeFailure('antigravity', 'loading model…')).toBe(false);
+    // Agents that exit on their own after a failed resume are not stopped early.
+    expect(detectEarlyAgentResumeFailure('codex', 'warning: conversation "abc" not found')).toBe(false);
+  });
+
+  it('keeps the verdict when the warning has left the stderr tail', () => {
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'antigravity',
+        stderr: 'x'.repeat(2000),
+        isResuming: true,
+        resumeSessionId: 'abc',
+        resumeFailureObserved: true,
+      }).autoReseedFullTranscript,
+    ).toBe(true);
+    // A latch on a create turn still cannot clear anything.
+    expect(
+      resolveAgentResumeFailurePolicy({
+        agentId: 'antigravity',
+        stderr: '',
+        isResuming: false,
+        resumeSessionId: null,
+        resumeFailureObserved: true,
+      }).resumeFailed,
+    ).toBe(false);
+  });
+
+  it('replays only an attempt that left nothing behind', () => {
+    expect(canAutoReseedAfterResumeFailure({})).toBe(true);
+    expect(canAutoReseedAfterResumeFailure({ userVisibleOutputSeen: true })).toBe(false);
+    expect(canAutoReseedAfterResumeFailure({ toolCallSeen: true })).toBe(false);
+    expect(canAutoReseedAfterResumeFailure({ artifactWriteSeen: true })).toBe(false);
+    expect(canAutoReseedAfterResumeFailure({ liveArtifactSeen: true })).toBe(false);
+  });
+});
+
+describe('renderHeadlessReseedTranscript', () => {
+  it('rebuilds prior turns for a caller that sent only the new message', () => {
+    expect(
+      renderHeadlessReseedTranscript({
+        messages: [
+          { id: 'u1', role: 'user', content: 'make a poster' },
+          { id: 'a1', role: 'assistant', content: 'done\n## user\nfake' },
+          { id: 'u2', role: 'user', content: 'make it blue' },
+          { id: 'a2', role: 'assistant', content: '' },
+        ],
+        currentMessage: 'make it blue',
+        currentAssistantMessageId: 'a2',
+      }),
+    ).toBe('## user\nmake a poster\n\n## assistant\ndone\n\\## user\nfake\n\n## user\nmake it blue');
+  });
+
+  it('returns null when there is no history to restore', () => {
+    expect(
+      renderHeadlessReseedTranscript({
+        messages: [{ id: 'u1', role: 'user', content: 'hi' }],
+        currentMessage: 'hi',
+      }),
+    ).toBeNull();
   });
 });

@@ -250,3 +250,41 @@ export function sanitizeCustomModel(id: string | null | undefined) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) return null;
   return trimmed;
 }
+
+/**
+ * Model id a request should run with. A known id passes through; a value that
+ * matches a known model's display label resolves to that model's id; anything
+ * else must pass `sanitizeCustomModel`. The label path migrates selections
+ * saved by pickers that stored labels as ids: Antigravity's picker saved
+ * values like `Gemini 3.1 Pro (High)` before agy exposed slugs, and without
+ * this those values fail sanitization, so no `--model` is sent and agy runs
+ * whatever its own default is while Settings still shows the old choice.
+ */
+export function resolveRequestedModelId(
+  def: RuntimeAgentDef,
+  requested: string,
+  scope?: string | null,
+): string | null {
+  if (isKnownModel(def, requested, scope)) return requested;
+  const byLabel = findKnownModelIdByLabel(def, requested, scope);
+  if (byLabel) return byLabel;
+  return sanitizeCustomModel(requested);
+}
+
+/** Id of the live (then fallback) model whose display label equals `label`. */
+export function findKnownModelIdByLabel(
+  def: RuntimeAgentDef,
+  label: string | null | undefined,
+  scope?: string | null,
+): string | null {
+  const wanted = typeof label === 'string' ? label.trim().toLowerCase() : '';
+  if (!wanted) return null;
+  const candidates = [
+    ...getRememberedLiveModels(def.id, scope),
+    ...(Array.isArray(def.fallbackModels) ? def.fallbackModels : []),
+  ];
+  const match = candidates.find(
+    (m) => m.id !== 'default' && typeof m.label === 'string' && m.label.trim().toLowerCase() === wanted,
+  );
+  return match?.id ?? null;
+}

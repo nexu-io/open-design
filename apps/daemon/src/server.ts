@@ -257,6 +257,7 @@ import {
   resolveDefaultModelFromOptions,
   resolveModelForAgent,
   resolveModelForServiceTier,
+  resolveRequestedModelId,
 } from './runtimes/models.js';
 import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
 import { withAcpHandshakeFailureGuidance } from './runtimes/acp-handshake-failure.js';
@@ -844,13 +845,16 @@ import {
   userRequestBeforeAssistantMessage,
 } from './db.js';
 import {
+  canAutoReseedAfterResumeFailure,
   createPhysicalAgentSessionUsageTracker,
   computeIncludeStable,
+  detectEarlyAgentResumeFailure,
   hashStableInstructions,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
   resolveAgentResumeFailurePolicy,
   resolveAgentResumePromptPolicy,
+  renderHeadlessReseedTranscript,
   resolveResumeContinuationSeed,
 } from './agent-session-resume.js';
 import {
@@ -12713,9 +12717,7 @@ export async function startServer({
     let safeModel = resolveModelForAgent(
       def,
       typeof requestedRuntimeModel === 'string'
-        ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
-          ? requestedRuntimeModel
-          : sanitizeCustomModel(requestedRuntimeModel)
+        ? resolveRequestedModelId(def, requestedRuntimeModel, requestedLiveModelScope)
         : configuredModel,
       process.env,
       requestedLiveModelScope,
@@ -12931,6 +12933,22 @@ export async function startServer({
             resumeContinuationSeed.anchorAssistantMessageId,
           )
         : null;
+    // A reseed after a dropped native session must restore the history the
+    // session held. Browser callers already ship it in `message` (with a
+    // separate `currentPrompt`); headless callers send only the new turn, so
+    // rebuild it from persisted messages.
+    const headlessReseedTranscript =
+      run.resumeAutoReseeded
+      && !agentResumePromptPolicy.skipTranscript
+      && !hasExplicitCurrentPrompt
+      && run.conversationId
+      && typeof message === 'string'
+        ? renderHeadlessReseedTranscript({
+            messages: listMessages(db, run.conversationId),
+            currentMessage: message,
+            currentAssistantMessageId: run.assistantMessageId ?? null,
+          })
+        : null;
     const userRequestPrompt = isOdNextInitialRun
       ? resolveOdNextRequestUserPrompt({
           message,
@@ -12938,7 +12956,7 @@ export async function startServer({
           hasCurrentPrompt: hasExplicitCurrentPrompt,
         })
       : composeChatUserRequestForAgent(
-          message,
+          headlessReseedTranscript ?? message,
           currentPrompt,
           // Only trim to the latest turn when we are actually resuming an
           // existing session. A create turn still sends the full transcript so
@@ -15184,6 +15202,11 @@ export async function startServer({
     let jsonEventStreamHandler: ReturnType<typeof createJsonEventStreamHandler> | null = null;
     let agentStdoutTail = '';
     let agentStderrTail = '';
+    // Raw stderr window + latch for `detectEarlyAgentResumeFailure`. The window
+    // only bridges a warning split across chunks; the latch is what the
+    // close-time policy reads, so a later flood of diagnostics cannot evict it.
+    let agentResumeFailureWindow = '';
+    let agentResumeFailureObserved = false;
     const agentStderrFilter = createAgentStderrVisibilityFilter(agentId);
     const emitVisibleAgentStderr = (chunk: unknown) => {
       const visibleChunk = agentStderrFilter.write(chunk);
@@ -16257,6 +16280,7 @@ export async function startServer({
             resolveAgentResumeFailurePolicy({
               agentId: def.id,
               stderr: agentStderrTail,
+              resumeFailureObserved: agentResumeFailureObserved,
               stdout: agentStdoutTail,
               isResuming: agentResumePromptPolicy.skipTranscript,
               resumeSessionId: agentResumePromptPolicy.resumeSessionId,
@@ -16618,6 +16642,7 @@ export async function startServer({
             resolveAgentResumeFailurePolicy({
               agentId: def.id,
               stderr: agentStderrTail,
+              resumeFailureObserved: agentResumeFailureObserved,
               stdout: agentStdoutTail,
               isResuming: agentResumePromptPolicy.skipTranscript,
               resumeSessionId: agentResumePromptPolicy.resumeSessionId,
@@ -16856,6 +16881,25 @@ export async function startServer({
     run.acpSession = acpSession;
     child.stderr.on('data', (chunk) => {
       noteAgentActivity();
+      if (
+        !agentResumeFailureObserved
+        && agentResumePromptPolicy.skipTranscript
+        && agentResumePromptPolicy.resumeSessionId
+      ) {
+        agentResumeFailureWindow = `${agentResumeFailureWindow}${String(chunk)}`.slice(-512);
+        if (detectEarlyAgentResumeFailure(def.id, agentResumeFailureWindow)) {
+          // The CLI would otherwise run this turn in an empty conversation and
+          // possibly edit files; stop it before it delivers anything so the
+          // close handler can reseed the full transcript exactly once.
+          agentResumeFailureObserved = true;
+          design.runs.emit(run, 'diagnostic', {
+            type: 'agent_resume_failed_early_stop',
+            agent_id: def.id,
+            previous_session_id: agentResumePromptPolicy.resumeSessionId ?? null,
+          });
+          if (child && !child.killed) design.runs.signalChild(run, 'SIGTERM');
+        }
+      }
       emitVisibleAgentStderr(chunk);
     });
 
@@ -17042,6 +17086,7 @@ export async function startServer({
         resolveAgentResumeFailurePolicy({
           agentId: def.id,
           stderr: agentStderrTail,
+          resumeFailureObserved: agentResumeFailureObserved,
           stdout: agentStdoutTail,
           isResuming: agentResumePromptPolicy.skipTranscript,
           resumeSessionId: agentResumePromptPolicy.resumeSessionId,
@@ -17072,6 +17117,23 @@ export async function startServer({
         // (fresh session, full transcript), so it CANNOT resume-fail again — the
         // `resumeAutoReseeded` guard is belt-and-suspenders against any loop.
         clearAgentSession(db, run.conversationId, def.id);
+        if (!run.resumeAutoReseeded && !canAutoReseedAfterResumeFailure(resumeSideEffects)) {
+          // The first attempt already answered or touched the project; a
+          // transparent replay would duplicate that. Hand the turn back.
+          design.runs.emit(run, 'diagnostic', {
+            type: 'agent_resume_auto_reseed_skipped',
+            agent_id: def.id,
+            reason: 'side_effects_observed',
+            previous_session_id: agentResumePromptPolicy.resumeSessionId ?? null,
+            stale_session_cleared: true,
+          });
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'The previous session could not be resumed (it may have expired) and this attempt already produced output. Check the result, then resend your message to continue with a fresh session.',
+            { retryable: true },
+          ));
+          return finishStrategyAwarePhysicalRun('failed', code ?? 1, signal ?? null);
+        }
         if (!run.resumeAutoReseeded) {
           run.resumeAutoReseeded = true;
           run.resumeAutoReseededFrom = agentResumePromptPolicy.resumeSessionId ?? null;
