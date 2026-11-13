@@ -1,4 +1,5 @@
 import type { ChatInteractionLatencyProps } from '@open-design/contracts/analytics';
+import { randomUUID } from '../utils/uuid';
 import { chatCorrelation } from './chat-context';
 import { checkpointInputResponsiveness, registerInputCollectorFlush } from '../analytics/error-tracking';
 import {
@@ -51,7 +52,7 @@ export function installChatInteractionObserver(): () => void {
   const state = (area: InputArea): InputWindow => {
     let value = inputs.get(area);
     if (!value) {
-      value = { id: crypto.randomUUID(), start: inputSince, lastWindowMs: 1, attempts: 0, samples: 0, slow: 0, max: null, queue: null };
+      value = { id: randomUUID(), start: inputSince, lastWindowMs: 1, attempts: 0, samples: 0, slow: 0, max: null, queue: null };
       inputs.set(area, value);
     }
     return value;

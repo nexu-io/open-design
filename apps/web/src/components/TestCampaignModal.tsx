@@ -9,6 +9,7 @@ import type {
 	TestRuntimeContextMismatch,
 } from "@open-design/contracts/api/touchpointTestRuntime";
 import { getOpenDesignHost, OPEN_DESIGN_HOST_VERSION } from "@open-design/host";
+import { randomUUID } from '../../utils/uuid';
 import { mountTouchpoint } from "./touchpoint-lifecycle";
 import {
 	navigateCampaignTarget,
@@ -989,7 +990,7 @@ export function TestCampaignModal({
 		let context: TestContext | null = null;
 		let negotiatedMode: TestContextMode | null = inherited ? testContextMode(inherited.context) : null;
 		let round = 0;
-		const correlation = crypto.randomUUID();
+		const correlation = randomUUID();
 		const ownsSelection = () => selectionAuthority.current.compatible &&
 			selectionAuthority.current.owner === owner && selectionAuthority.current.locale === locale &&
 			!!selectedRef.current && sameTestDeployment(selectedRef.current, selected);

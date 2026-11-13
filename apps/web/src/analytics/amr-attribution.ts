@@ -10,6 +10,7 @@ import {
   type OnboardingProfile,
 } from '../state/onboarding-profile';
 import { trackAmrEntryClick } from './events';
+import { randomUUID } from '../utils/uuid';
 
 type Track = (
   event: string,
@@ -399,7 +400,7 @@ function isValidAmrAttribution(value: Partial<AmrEntryAttribution>): value is Am
 
 function randomId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
+    return randomUUID();
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
