@@ -17,6 +17,8 @@ const AGENT_LABELS: Record<string, string> = {
   'deepseek-harness': 'DeepSeek Harness',
   deepseek: 'DeepSeek',
   antigravity: 'Antigravity',
+  grok: 'Grok Build',
+  'grok-build': 'Grok Build',
   'anthropic-api': 'Anthropic API via OpenCode',
   'openai-api': 'OpenAI API via OpenCode',
   'azure-openai-api': 'Azure OpenAI via OpenCode',
@@ -46,6 +48,9 @@ const AGENT_ALIASES: Record<string, string> = {
   'aider cli': 'aider',
   'aider chat': 'aider',
   agy: 'antigravity',
+  'grok build': 'grok-build',
+  'grok cli': 'grok',
+  'grok-cli': 'grok',
 };
 
 export function agentDisplayName(
