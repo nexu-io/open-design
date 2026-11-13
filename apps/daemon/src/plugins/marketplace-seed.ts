@@ -121,22 +121,72 @@ function mergeMarketplaceEntries(
   entries: readonly MarketplaceSeedEntry[],
 ): string {
   try {
-    const parsed = JSON.parse(manifestText) as { metadata?: unknown; plugins?: unknown };
+    const parsed = JSON.parse(manifestText) as {
+      metadata?: unknown;
+      plugins?: unknown;
+    };
+
     const plugins = Array.isArray(parsed.plugins) ? parsed.plugins : [];
-    const seen = new Set(plugins.map((entry) => String(asRecord(entry)?.name ?? '').toLowerCase()));
+
+    const bundledByName = new Map(
+      entries.map((entry) => [entry.name.toLowerCase(), entry]),
+    );
+
+    const seen = new Set(
+      plugins.map((entry) =>
+        String(asRecord(entry)?.name ?? '').toLowerCase(),
+      ),
+    );
+
+    // Add bundled translations to existing marketplace entries, merging
+    // locale by locale: catalog translations win where present, and the
+    // catalog's English display text is always preserved.
+    const mergedPlugins = plugins.map((plugin) => {
+      const existing = asRecord(plugin);
+      if (!existing) return plugin;
+
+      const name = String(existing.name ?? '').toLowerCase();
+      const bundled = bundledByName.get(name);
+
+      if (!bundled) return plugin;
+
+      const titleI18n = mergeI18n(
+        existing.title_i18n,
+        bundled.title_i18n,
+        existing.title,
+      );
+      const descriptionI18n = mergeI18n(
+        existing.description_i18n,
+        bundled.description_i18n,
+        existing.description,
+      );
+
+      return {
+        ...existing,
+        ...(titleI18n !== undefined ? { title_i18n: titleI18n } : {}),
+        ...(descriptionI18n !== undefined
+          ? { description_i18n: descriptionI18n }
+          : {}),
+      };
+    });
+
+    // Keep adding bundled plugins that are not already registered.
     const generated = entries.filter((entry) => {
       const key = String(entry.name ?? '').toLowerCase();
+
       if (!key || seen.has(key)) return false;
+
       seen.add(key);
       return true;
     });
+
     return JSON.stringify({
       ...parsed,
       metadata: {
         ...(isRecord(parsed.metadata) ? parsed.metadata : {}),
         bundledPreinstallCount: entries.length,
       },
-      plugins: [...plugins, ...generated],
+      plugins: [...mergedPlugins, ...generated],
     });
   } catch {
     return manifestText;
@@ -149,4 +199,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return isRecord(value) ? value : null;
+}
+
+function asNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+// Merge a bundled translation map into a catalog entry's map, one locale at
+// a time. Existing catalog translations win where present; bundled values
+// only fill locales the catalog lacks. The catalog's English display text
+// is authoritative: the merged 'en' is the catalog map's 'en' when present,
+// else the catalog's plain title/description, and only falls back to the
+// bundled 'en' when the catalog has no English text at all. Anchoring 'en'
+// matters because resolveLocalizedText falls back to the first map value
+// when 'en' is absent, which would show e.g. Chinese text in the English UI.
+function mergeI18n(
+  existing: unknown,
+  bundled: unknown,
+  englishText: unknown,
+): Record<string, string> | undefined {
+  const existingMap = asRecord(existing);
+  const bundledMap = asRecord(bundled);
+  if (!existingMap && !bundledMap) return undefined;
+
+  const merged: Record<string, string> = {};
+  for (const [locale, value] of Object.entries(bundledMap ?? {})) {
+    const text = asNonEmptyString(value);
+    if (text !== undefined) merged[locale] = text;
+  }
+  for (const [locale, value] of Object.entries(existingMap ?? {})) {
+    const text = asNonEmptyString(value);
+    if (text !== undefined) merged[locale] = text;
+  }
+
+  const catalogEnglish =
+    asNonEmptyString(existingMap?.en) ?? asNonEmptyString(englishText);
+  if (catalogEnglish !== undefined) merged.en = catalogEnglish;
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
