@@ -5,6 +5,7 @@ import { useAnalytics } from './provider';
 import { trackWorkspaceSurfaceView } from './events';
 import { workspaceAnalyticsDimensions } from './workspace';
 import { observeAnalytics } from './observe';
+import { randomUUID } from '../utils/uuid';
 
 /** An authorized workspace actually rendered in a visible client window.
  * This is an exposure, never a claim that a new membership was created. */
@@ -36,7 +37,7 @@ export function useWorkspaceContentView({ context, pageName, active, ready }: {
         ...workspaceAnalyticsDimensions(latest.current.context),
         page_name: latest.current.pageName,
         area: 'workspace_content',
-        surface_instance_id: crypto.randomUUID(),
+        surface_instance_id: randomUUID(),
       }));
     };
     expose();
