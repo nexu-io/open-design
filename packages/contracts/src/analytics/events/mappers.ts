@@ -279,6 +279,8 @@ export function feedbackAgentProviderIdToTracking(
       return byokProtocolToTracking('ollama') ?? 'other';
     case 'senseaudio-api':
       return byokProtocolToTracking('senseaudio') ?? 'other';
+    case 'aimlapi-api':
+      return byokProtocolToTracking('aimlapi') ?? 'other';
     default:
       return agentIdToTracking(agentId);
   }
@@ -307,6 +309,8 @@ export function byokProtocolToTracking(
       return 'senseaudio';
     case 'aihubmix':
       return 'aihubmix';
+    case 'aimlapi':
+      return 'aimlapi';
     case 'bedrock':
       return null;
     default:
