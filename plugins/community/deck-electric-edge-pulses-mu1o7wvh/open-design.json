@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "deck-electric-edge-pulses-mu1o7wvh",
+  "title": "Deck Electric Edge Pulses",
+  "version": "0.1.0",
+  "description": "--- name: deck-electric-edge-pulses description: \"Trigger: animated SVG edges, electric pulses, pulsing connectors, animated slide diagrams. Add directional multicolor pulses to SVG edges.\" license: Apache-2.0 metadata: ",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
