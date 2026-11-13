@@ -4226,6 +4226,12 @@ export interface Dict {
   'manualEdit.referenceValuesLoading': string;
   'manualEdit.lineHeight': string;
   'manualEdit.letterSpacing': string;
+  'manualEdit.textTransform': string;
+  'manualEdit.textTransformCapitalize': string;
+  'manualEdit.textTransformLowercase': string;
+  'manualEdit.textTransformUppercase': string;
+  'manualEdit.textTransformNone': string;
+  'manualEdit.wordSpacing': string;
   'manualEdit.borderStyle': string;
   'manualEdit.borderStyleSolid': string;
   'manualEdit.borderStyleDashed': string;
