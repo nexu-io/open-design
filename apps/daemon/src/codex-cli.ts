@@ -51,6 +51,9 @@ const defaultCodexRunner: CodexRunner = {
       const child = spawn(invocation.command, invocation.args, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
+        // The resolved `codex` is a `.cmd` shim on Windows, so this goes through
+        // cmd.exe; without this the settings-driven CLI call opens a console.
+        windowsHide: true,
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       let stdout = '';

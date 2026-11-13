@@ -23,6 +23,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://github.com/openai/codex',
     docsUrl: 'https://developers.openai.com/codex',
   },
+  'command-code': {
+    installUrl: 'https://commandcode.ai/docs/quickstart',
+    docsUrl: 'https://commandcode.ai/docs',
+  },
   devin: {
     installUrl: 'https://cli.devin.ai/docs',
     docsUrl: 'https://docs.devin.ai',
