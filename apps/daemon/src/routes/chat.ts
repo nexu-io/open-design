@@ -38,6 +38,7 @@ import { isKnownReasoningEffort, resolveModelForServiceTier } from '../runtimes/
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
+import { isOpenCodeGoBaseUrl, openCodeSessionHeaders } from '../integrations/opencode-go.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
@@ -210,13 +211,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const protocol = body.protocol;
     if (
       typeof protocol !== 'string' ||
-      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
+      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock', 'opencode-go'].includes(protocol)
     ) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
+        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock|opencode-go',
       );
     }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
@@ -288,13 +289,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock', 'opencode-go'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
+            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock|opencode-go',
           );
         }
         const apiKeyRequired = protocol !== 'bedrock';
@@ -1107,6 +1108,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'HTTP-Referer': 'https://opendesign.dev',
             'X-Title': 'OpenDesign',
           } : {}),
+          // OpenCode Go answers 400 MissingSessionID without a routing session
+          // id, so any request that lands on its origin carries one.
+          ...(isOpenCodeGoBaseUrl(baseUrl) ? openCodeSessionHeaders() : {}),
         },
         redirect: 'error' as const,
       };
