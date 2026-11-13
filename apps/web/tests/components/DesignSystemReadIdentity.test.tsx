@@ -173,7 +173,7 @@ describe('design-system resource read identity', () => {
       expect(registryMocks.fetchDesignSystem.mock.calls.length).toBeGreaterThan(generationADetailCount);
       expect(registryMocks.fetchProjectFileText.mock.calls.length).toBeGreaterThan(generationAAssetCount);
     });
-    await screen.findByText('B detail won');
+    await screen.findAllByText('B detail won');
 
     await act(async () => {
       for (const pending of generationADetails) {
