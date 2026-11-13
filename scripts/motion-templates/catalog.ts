@@ -68,10 +68,9 @@ export function agentPrompt(item: MotionReference, locale: Locale, format: 'full
   const title = item.title[locale].replace(/\s+/g, ' ').replaceAll('```', "'''");
   const install = 'https://releases.open-design.ai/open-motion/install.md';
   if (format === 'card') {
-    const reference = item.id.replace(/^motion-/, '');
     return locale === 'zh-CN'
-      ? `复刻 ${reference}`
-      : `Remix ${reference}`;
+      ? `OpenMotion 复刻 ${item.id}`
+      : `OpenMotion remix ${item.id}`;
   }
   if (locale === 'zh-CN') return `请使用 OpenMotion 插件；如未安装，请先读取 ${install}。\n指定模板：${title}（${item.code}）\n模板 ID：${item.id}\n参考与制作说明：${item.guideUrl[locale]}\n结合我的要求和附件创作，保留主要动效与风格，交付可编辑工程及 HTML、MP4。\n我的要求：`;
   return `Use OpenMotion. If it is not installed, read ${install} first.\nSelected reference: ${title} (${item.code})\nTemplate ID: ${item.id}\nReference and adaptation guide: ${item.guideUrl[locale]}\nAdapt the motion and style to my brief and attachments. Deliver an editable project, HTML and MP4.\nMy brief:`;
