@@ -1,4 +1,3 @@
-// @ts-nocheck
 // In-memory ring buffer of recent memory-extraction attempts.
 //
 // Both extractors write here:
@@ -23,43 +22,77 @@
 // event name (`extraction`) so the regular `change` listeners don't
 // trigger an entries re-fetch on every phase update.
 
-import type { MemoryExtractionOrigin } from '@open-design/contracts';
+import type {
+  MemoryExtractionKind,
+  MemoryExtractionOrigin,
+  MemoryExtractionRecord,
+  MemoryExtractionSkipReason,
+} from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 import { memoryEvents } from './memory.js';
+
+/** Provider details resolved at attempt time, as stored on the record. */
+type ExtractionProvider = NonNullable<MemoryExtractionRecord['provider']>;
+
+interface ExtractionAttemptInput {
+  userMessage: string;
+  /** Defaults to `'llm'`, the only writer before the heuristic pack was surfaced. */
+  kind?: MemoryExtractionKind;
+  /** Caller-owned object; copied through `captureExtractionOrigin` before use. */
+  extractionOrigin?: unknown;
+}
+
+interface WrittenSummary {
+  writtenCount: number;
+  writtenIds?: string[];
+}
 
 const MAX_RECORDS = 20;
 const PREVIEW_CAP = 120;
 const ERROR_CAP = 240;
 
-const records = []; // newest first
+const records: MemoryExtractionRecord[] = []; // newest first
 
 // Copy before asynchronous work: caller-owned option objects are not durable
 // evidence of which chat initiated an extraction.
 export function captureExtractionOrigin(value: unknown): MemoryExtractionOrigin | undefined {
-  if (!value || typeof value !== 'object'
-    || typeof value.projectId !== 'string' || !value.projectId.trim()
-    || typeof value.conversationId !== 'string' || !value.conversationId.trim()) return undefined;
+  if (!value || typeof value !== 'object') return undefined;
+  const projectId = 'projectId' in value && typeof value.projectId === 'string' && value.projectId.trim()
+    ? value.projectId
+    : undefined;
+  const conversationId = 'conversationId' in value && typeof value.conversationId === 'string' && value.conversationId.trim()
+    ? value.conversationId
+    : undefined;
+  if (!projectId || !conversationId) return undefined;
+  const runId = 'runId' in value && typeof value.runId === 'string' && value.runId.trim()
+    ? value.runId
+    : undefined;
+  const assistantMessageId = 'assistantMessageId' in value
+    && typeof value.assistantMessageId === 'string'
+    && value.assistantMessageId.trim()
+    ? value.assistantMessageId
+    : undefined;
   return {
-    projectId: value.projectId,
-    conversationId: value.conversationId,
-    ...(typeof value.runId === 'string' && value.runId.trim() ? { runId: value.runId } : {}),
-    ...(typeof value.assistantMessageId === 'string' && value.assistantMessageId.trim() ? { assistantMessageId: value.assistantMessageId } : {}),
+    projectId,
+    conversationId,
+    ...(runId ? { runId } : {}),
+    ...(assistantMessageId ? { assistantMessageId } : {}),
   };
 }
 
-function trimPreview(s) {
+function trimPreview(s: unknown): string {
   const text = String(s ?? '').replace(/\s+/g, ' ').trim();
   if (text.length <= PREVIEW_CAP) return text;
   return `${text.slice(0, PREVIEW_CAP - 1).trim()}…`;
 }
 
-function trimError(s) {
+function trimError(s: unknown): string {
   const text = String(s ?? '').replace(/\r?\n/g, ' ').trim();
   if (text.length <= ERROR_CAP) return text;
   return `${text.slice(0, ERROR_CAP - 1).trim()}…`;
 }
 
-function emit(record) {
+function emit(record: MemoryExtractionRecord): void {
   // Defer the emit so the caller can append a synchronous follow-up
   // update without firing two events back-to-back in the same tick.
   // Cheaper than debouncing and good enough — the SSE path on the
@@ -73,12 +106,12 @@ function emit(record) {
   });
 }
 
-function clone(record) {
+function clone(record: MemoryExtractionRecord): MemoryExtractionRecord {
   return JSON.parse(JSON.stringify(record));
 }
 
 // Push a fresh record to the front and evict overflow off the back.
-function pushNewest(record) {
+function pushNewest(record: MemoryExtractionRecord): void {
   records.unshift(record);
   if (records.length > MAX_RECORDS) records.length = MAX_RECORDS;
 }
@@ -89,25 +122,26 @@ function pushNewest(record) {
 // caller can't accidentally mutate buffer state in place. `kind`
 // defaults to 'llm' for backwards compat with the original single-
 // writer call sites in memory-llm.ts.
-export function startExtraction({ userMessage, kind = 'llm', extractionOrigin = undefined }) {
-  const record = {
+export function startExtraction({ userMessage, kind = 'llm', extractionOrigin }: ExtractionAttemptInput): string {
+  const origin = captureExtractionOrigin(extractionOrigin);
+  const record: MemoryExtractionRecord = {
     id: randomUUID(),
     kind,
     startedAt: Date.now(),
     phase: 'running',
     userMessagePreview: trimPreview(userMessage),
-    ...(extractionOrigin ? { extractionOrigin: captureExtractionOrigin(extractionOrigin) } : {}),
+    ...(origin ? { extractionOrigin: origin } : {}),
   };
   pushNewest(record);
   emit(record);
   return record.id;
 }
 
-function findById(id) {
+function findById(id: string): MemoryExtractionRecord | null {
   return records.find((r) => r.id === id) ?? null;
 }
 
-export function markProvider(id, provider) {
+export function markProvider(id: string, provider: ExtractionProvider): void {
   const rec = findById(id);
   if (!rec) return;
   rec.provider = {
@@ -118,7 +152,7 @@ export function markProvider(id, provider) {
   emit(rec);
 }
 
-export function markSkipped(id, reason) {
+export function markSkipped(id: string, reason: MemoryExtractionSkipReason): void {
   const rec = findById(id);
   if (!rec) return;
   rec.phase = 'skipped';
@@ -131,8 +165,14 @@ export function markSkipped(id, reason) {
 // through the running phase (e.g. memory disabled, empty user message,
 // no provider configured). Returns the record's id so the caller can
 // pass it to listExtractions consumers if needed.
-export function recordSkip({ userMessage, reason, kind = 'llm', extractionOrigin = undefined }) {
-  const record = {
+export function recordSkip({
+  userMessage,
+  reason,
+  kind = 'llm',
+  extractionOrigin,
+}: ExtractionAttemptInput & { reason: MemoryExtractionSkipReason }): string {
+  const origin = captureExtractionOrigin(extractionOrigin);
+  const record: MemoryExtractionRecord = {
     id: randomUUID(),
     kind,
     startedAt: Date.now(),
@@ -140,7 +180,7 @@ export function recordSkip({ userMessage, reason, kind = 'llm', extractionOrigin
     phase: 'skipped',
     reason,
     userMessagePreview: trimPreview(userMessage),
-    ...(extractionOrigin ? { extractionOrigin: captureExtractionOrigin(extractionOrigin) } : {}),
+    ...(origin ? { extractionOrigin: origin } : {}),
   };
   pushNewest(record);
   emit(record);
@@ -155,20 +195,26 @@ export function recordSkip({ userMessage, reason, kind = 'llm', extractionOrigin
 // 'skipped' with reason 'no-match' so the UI can colour it like the
 // other skip rows ("regex looked, found nothing") instead of pretending
 // the regex never ran.
-export function recordHeuristic({ userMessage, writtenCount, writtenIds, extractionOrigin = undefined }) {
+export function recordHeuristic({
+  userMessage,
+  writtenCount,
+  writtenIds,
+  extractionOrigin,
+}: Omit<ExtractionAttemptInput, 'kind'> & WrittenSummary): string {
   const written = Number.isFinite(writtenCount)
     ? Math.max(0, Math.floor(writtenCount))
     : 0;
   const ids = Array.isArray(writtenIds) ? writtenIds.slice(0, 12) : [];
   const now = Date.now();
-  const record = {
+  const origin = captureExtractionOrigin(extractionOrigin);
+  const record: MemoryExtractionRecord = {
     id: randomUUID(),
     kind: 'heuristic',
     startedAt: now,
     finishedAt: now,
     phase: written > 0 ? 'success' : 'skipped',
     userMessagePreview: trimPreview(userMessage),
-    ...(extractionOrigin ? { extractionOrigin: captureExtractionOrigin(extractionOrigin) } : {}),
+    ...(origin ? { extractionOrigin: origin } : {}),
     writtenCount: written,
     writtenIds: ids,
     ...(written === 0 ? { reason: 'no-match' } : {}),
@@ -178,14 +224,14 @@ export function recordHeuristic({ userMessage, writtenCount, writtenIds, extract
   return record.id;
 }
 
-export function markProposed(id, proposedCount) {
+export function markProposed(id: string, proposedCount: number): void {
   const rec = findById(id);
   if (!rec) return;
   rec.proposedCount = proposedCount;
   emit(rec);
 }
 
-export function markSuccess(id, { writtenCount, writtenIds }) {
+export function markSuccess(id: string, { writtenCount, writtenIds }: WrittenSummary): void {
   const rec = findById(id);
   if (!rec) return;
   rec.phase = 'success';
@@ -195,18 +241,30 @@ export function markSuccess(id, { writtenCount, writtenIds }) {
   emit(rec);
 }
 
-export function markFailed(id, error) {
+/** The text a thrown value contributes to the record: an Error's message,
+ *  otherwise the value itself, otherwise a fixed placeholder. */
+function failureText(error: unknown): unknown {
+  if (error !== null
+    && (typeof error === 'object' || typeof error === 'function')
+    && 'message' in error) {
+    const message = error.message;
+    if (message !== undefined && message !== null) return message;
+  }
+  return error ?? 'unknown error';
+}
+
+export function markFailed(id: string, error: unknown): void {
   const rec = findById(id);
   if (!rec) return;
   rec.phase = 'failed';
-  rec.error = trimError(error?.message ?? error ?? 'unknown error');
+  rec.error = trimError(failureText(error));
   rec.finishedAt = Date.now();
   emit(rec);
 }
 
 // Public — newest-first snapshot. Cloned so callers can't mutate the
 // buffer through the returned reference.
-export function listExtractions() {
+export function listExtractions(): MemoryExtractionRecord[] {
   return records.map(clone);
 }
 
@@ -215,7 +273,7 @@ export function listExtractions() {
 // HTTP endpoint so a dangling double-click isn't surfaced as an error).
 // Emits a synthetic `extraction` event with `phase: 'deleted'` so any
 // open settings panel can drop the row immediately without a refetch.
-export function removeExtraction(id) {
+export function removeExtraction(id: string): number {
   const idx = records.findIndex((r) => r.id === id);
   if (idx < 0) return 0;
   const [removed] = records.splice(idx, 1);
@@ -232,7 +290,7 @@ export function removeExtraction(id) {
 // Public — wipe the whole buffer. Returns the count removed. Emits a
 // single `extractions-cleared` event so the UI can drop everything in
 // one render rather than firing N row-level deletes.
-export function clearExtractions() {
+export function clearExtractions(): number {
   const removed = records.length;
   records.length = 0;
   if (removed > 0) {
@@ -254,6 +312,6 @@ export function clearExtractions() {
 
 // Test-only — wipe the buffer. Not exported for production paths but
 // the tests need a deterministic starting state.
-export function __resetExtractionsForTests() {
+export function __resetExtractionsForTests(): void {
   records.length = 0;
 }
