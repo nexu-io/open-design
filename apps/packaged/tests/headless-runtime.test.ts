@@ -75,6 +75,29 @@ describe("resolvePackagedMcpBootstrapLaunch", () => {
       args: ["--headless"],
     });
   });
+
+  it.each([false, undefined])('enables Windows discovery for managed=%s launchers', (managed) => {
+    expect(resolvePackagedMcpBootstrapLaunch({
+      currentExecutablePath: 'C:\\payload\\Open Design.exe',
+      installedLaunchPath: 'C:\\Program Files\\Open Design\\Open Design.exe',
+      platform: 'win32',
+      managed,
+    })).toEqual({
+      command: 'C:\\Program Files\\Open Design\\Open Design.exe',
+      args: ['--headless', MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG],
+    });
+  });
+
+  it('keeps Windows headless discovery when no installed launcher path is available', () => {
+    expect(resolvePackagedMcpBootstrapLaunch({
+      currentExecutablePath: 'C:\\Open Design\\Open Design.exe',
+      installedLaunchPath: null,
+      platform: 'win32',
+    })).toEqual({
+      command: 'C:\\Open Design\\Open Design.exe',
+      args: ['--headless', MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG],
+    });
+  });
 });
 
 describe("runPackagedMcpActionAgainstExistingDaemon", () => {
