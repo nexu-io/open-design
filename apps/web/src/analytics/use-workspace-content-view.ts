@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { randomUUID } from '../utils/uuid';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { TrackingWorkspacePage } from '@open-design/contracts/analytics';
 import { useAnalytics } from './provider';
@@ -36,7 +37,7 @@ export function useWorkspaceContentView({ context, pageName, active, ready }: {
         ...workspaceAnalyticsDimensions(latest.current.context),
         page_name: latest.current.pageName,
         area: 'workspace_content',
-        surface_instance_id: crypto.randomUUID(),
+        surface_instance_id: randomUUID(),
       }));
     };
     expose();

@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { randomUUID } from '../../utils/uuid';
 import { useAnalytics } from '../analytics/provider';
 import { trackSettingsPrivacyClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -12,7 +13,7 @@ interface Props {
 
 function generateInstallationId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+    return randomUUID();
   }
   // Older webviews / test runners that lack crypto.randomUUID. The output
   // is opaque and non-PII; we only need uniqueness across installs.
