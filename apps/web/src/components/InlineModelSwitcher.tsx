@@ -1197,10 +1197,11 @@ export function InlineModelSwitcher({
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
-        // No hover bubble: the chip already prints the model it would name,
-        // and the popover it opens spells out the agent — a tooltip repeating
-        // both only covered the composer text under it. The accessible name
-        // stays, so the icon-only treatment is still announced.
+        title={
+          compact
+            ? `${chipAgentLabel} · ${chipModel}`
+            : `${chipMode} · ${chipPrimary} · ${chipModel}`
+        }
         aria-label={
           compact
             ? `${chipAgentLabel} · ${chipModel}`
@@ -1476,7 +1477,7 @@ export function InlineModelSwitcher({
                           /* A long catalog ellipsises these rows and many
                              share a prefix, so the full model name must stay
                              readable on hover. A locked row keeps its reason. */
-                          title={lockedHint ?? m.label}
+                          title={lockedHint ? `${m.label} — ${lockedHint}` : m.label}
                           className={
                             'inline-switcher__agent' +
                             (active ? ' is-active' : '') +
