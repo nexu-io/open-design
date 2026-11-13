@@ -4122,6 +4122,53 @@ console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: {
     }
   });
 
+  // A Reasonix connection test must not persist a session into the user's real
+  // state home: those `sessions/*.jsonl` files migrate into the Reasonix desktop
+  // default workspace as stray conversations. The probe therefore runs with
+  // REASONIX_STATE_HOME pointed at the throwaway od-conn-test dir, while
+  // REASONIX_HOME keeps config.toml and the `.env` provider credentials so auth
+  // still resolves.
+  it('scopes Reasonix connection-test state to the throwaway temp dir', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-reasonix-state-'));
+    const envFile = path.join(markerDir, 'env.json');
+    try {
+      await withFakeAgent(
+        'reasonix',
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  stateHome: process.env.REASONIX_STATE_HOME || null,
+  home: process.env.REASONIX_HOME || null,
+  cwd: process.cwd(),
+}));
+console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: { update: { sessionUpdate: 'agent_message_chunk', content: { text: 'ok' } } } }));
+process.exit(0);
+`,
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'reasonix',
+            model: 'deepseek-v4-pro',
+          });
+          expect(result.ok).toBe(true);
+
+          const seen = JSON.parse(await fsp.readFile(envFile, 'utf8')) as {
+            stateHome: string | null;
+            home: string | null;
+            cwd: string;
+          };
+          // State (sessions) is redirected into the disposable temp dir...
+          expect(seen.stateHome).toBe(seen.cwd);
+          expect(seen.stateHome).toContain('od-conn-test-');
+          // ...but credentials stay under the real home, so auth is unaffected.
+          expect(seen.home).not.toBeNull();
+          expect(seen.home).not.toContain('od-conn-test-');
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
   // Regression for #4281: agy print mode is silent on stdout/stderr for
   // BOTH missing-auth and quota-exhausted failures — it exits 0 without
   // echoing the upstream error, so the only place the failure shape
