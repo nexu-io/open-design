@@ -1,4 +1,5 @@
 import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from './comment-identity.js';
+import { subagentTurnDirectiveFor } from './subagent-turn.js';
 import { OD_NEXT_PLAN_OUTPUT_INSTRUCTIONS } from './od-next-production-marker.js';
 import {
   OD_NEXT_PROMPT_RECIPE_ID,
@@ -546,6 +547,7 @@ export function composeOdNextStrategyStableRequestContextV2(
   // contain post-Build semantics should stop the run rather than ship.
   instructionText('runtime-plan-tool', context.planToolNote ?? undefined);
   instructionText('comment-identity-edit', COMMENT_IDENTITY_EDIT_DIRECTIVE);
+  instructionText('subagent-turn', subagentTurnDirectiveFor(context.agentId) ?? undefined);
   const deckFrameworkMode = context.deckFrameworkMode
     ?? (context.deckIntent ? 'canonical' : undefined);
   if (deckFrameworkMode) {

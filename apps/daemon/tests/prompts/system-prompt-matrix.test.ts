@@ -72,6 +72,7 @@ const SECTION_MARKERS = [
   ['skill-write-boundary', '## Editing skills'],
   ['clarifying-questions', '## Structured clarification on any turn'],
   ['comment-identity-edit', 'Only when editing HTML that already contains data-od-comment-id'],
+  ['subagent-turn', 'Open Design treats the end of your turn as the end of this run'],
   ['role-marker-guard', ROLE_MARKER_GUARD_SENTINEL],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
 

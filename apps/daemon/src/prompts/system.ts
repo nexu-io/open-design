@@ -54,6 +54,7 @@ import {
   PROMPT_LOCALE_EXEMPT_TERMS_SENTENCE,
   promptLanguageName,
   SETTINGS_MEDIA_PROVIDERS_PATH,
+  subagentTurnDirectiveFor,
   type ByokMediaDefaults,
   type ChatSessionMode,
   type DeckFrameworkMode,
@@ -1526,6 +1527,8 @@ export function composeSystemPrompt({
   );
 
   parts.push(`\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`);
+  const subagentTurnDirective = subagentTurnDirectiveFor(agentId);
+  if (subagentTurnDirective) parts.push(`\n\n---\n\n${subagentTurnDirective}`);
 
   // Pinned LAST so recency bias reinforces the role-marker prohibition.
   // Slim uses the SP v2.0 translation; classic retains its existing wording.

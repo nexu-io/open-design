@@ -1,4 +1,5 @@
 import { COMMENT_IDENTITY_EDIT_DIRECTIVE } from './comment-identity.js';
+import { SUBAGENT_TURN_DIRECTIVE } from './subagent-turn.js';
 /**
  * Prompt composer. The base is the OD-adapted "expert designer" system
  * prompt (see ./official-system.ts) — a full identity, workflow, and
@@ -588,6 +589,7 @@ export function composeSystemPrompt({
   }
 
   parts.push(`\n\n---\n\n${COMMENT_IDENTITY_EDIT_DIRECTIVE}`);
+  parts.push(`\n\n---\n\n${SUBAGENT_TURN_DIRECTIVE}`);
   return parts.join('');
 }
 
