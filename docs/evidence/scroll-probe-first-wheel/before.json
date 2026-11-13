@@ -1,0 +1,15 @@
+[
+  {
+    "phase": "BEFORE · main 9041ca60b",
+    "trusted": true,
+    "nativeEventNumber": 1,
+    "inputDeltaY": 240,
+    "probePendingCount": 2,
+    "probePendingPixels": 480,
+    "initiallyAttached": false,
+    "initialDiscoveryArmed": true,
+    "attached": true,
+    "source": "existing window.__chatScrollFreeze.snapshot()",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+  }
+]
