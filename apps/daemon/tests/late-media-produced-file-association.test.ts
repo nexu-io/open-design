@@ -194,7 +194,10 @@ describe('a media file that lands after the run terminal still reaches its messa
    * 返回前会**当场证明顺序** —— run 已经 terminal、文件还没落盘。这一步不是断言
    * 风格,是这条测试的全部前提:文件既然那时不存在,这一轮的 diff 里就不可能有它。
    */
-  async function dispatchTurnThatFinishesBeforeItsMedia(outputName: string): Promise<{
+  async function dispatchTurnThatFinishesBeforeItsMedia(
+    outputName: string,
+    options: { projectLocationId?: string } = {},
+  ): Promise<{
     projectId: string;
     conversationId: string;
     messageId: string;
@@ -206,7 +209,11 @@ describe('a media file that lands after the run terminal still reaches its messa
     const created = await fetch(`${baseUrl}/api/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: projectId, name: `late media fixture ${outputName}` }),
+      body: JSON.stringify({
+        id: projectId,
+        name: `late media fixture ${outputName}`,
+        ...(options.projectLocationId ? { projectLocationId: options.projectLocationId } : {}),
+      }),
     });
     expect(created.ok).toBe(true);
 
@@ -280,7 +287,12 @@ describe('a media file that lands after the run terminal still reaches its messa
     );
     expect(terminal?.runStatus).toBe('succeeded');
 
-    const outputPath = join(dataDir, 'projects', projectId, outputName);
+    // The folder the project keeps its files in: under the daemon data root, or
+    // its own folder when it was created under a project location (#8016).
+    const project = await fetch(`${baseUrl}/api/projects/${projectId}`);
+    expect(project.ok).toBe(true);
+    const { resolvedDir } = (await project.json()) as { resolvedDir: string };
+    const outputPath = join(resolvedDir, outputName);
     expect(
       existsSync(outputPath),
       'the media file already existed at the run terminal — the ordering premise of this test does not hold',
@@ -333,6 +345,54 @@ describe('a media file that lands after the run terminal still reaches its messa
     expect(card.kind).toBe('image');
     expect(card.mime).toContain('image');
     expect(card.size).toBeGreaterThan(0);
+  }, 90_000);
+
+  /**
+   * #8016: a project created under Settings → Project locations keeps its files
+   * in `metadata.baseDir`, not under the daemon data root. The media task has to
+   * write there and the late association has to look there; otherwise the file
+   * is invisible to the project (no `/files` entry, `/raw` 404) and the message
+   * never gets its card.
+   */
+  it('writes a project-location project\'s media into its own folder and attaches it', async () => {
+    const locationDir = await fsp.mkdtemp(join(tmpdir(), 'od-late-media-location-'));
+    tempDirs.push(locationDir);
+    const locations = await fetch(`${baseUrl}/api/project-locations`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        locations: [{ id: 'late-media-location', name: 'Late media location', path: locationDir }],
+      }),
+    });
+    expect(locations.ok, 'the project location must be accepted').toBe(true);
+
+    const turn = await dispatchTurnThatFinishesBeforeItsMedia('located-poster.png', {
+      projectLocationId: 'late-media-location',
+    });
+    const managedPath = join(dataDir, 'projects', turn.projectId, 'located-poster.png');
+    expect(turn.outputPath, 'the fixture project is not in its project location').not.toBe(managedPath);
+
+    expect(await waitForMediaTask(turn.taskId), 'the media task never completed').toBe('done');
+    expect(existsSync(turn.outputPath), 'the media file is not in the project\'s own folder').toBe(true);
+    expect(existsSync(managedPath), 'the media file landed under the daemon data root').toBe(false);
+
+    const files = await fetch(`${baseUrl}/api/projects/${turn.projectId}/files`);
+    expect(files.ok).toBe(true);
+    const listed = ((await files.json()) as { files: Array<{ name: string }> }).files.map((f) => f.name);
+    expect(listed).toContain('located-poster.png');
+    const raw = await fetch(`${baseUrl}/api/projects/${turn.projectId}/raw/located-poster.png`);
+    expect(raw.status).toBe(200);
+
+    const message = await waitFor(
+      async () =>
+        (await readMessages(turn.projectId, turn.conversationId)).find((m) => m.id === turn.messageId),
+      (m) => (m?.producedFiles ?? []).some((f) => f.name === 'located-poster.png'),
+      10_000,
+    );
+    expect(
+      (message?.producedFiles ?? []).map((f) => f.name),
+      'the late media output of a project-location project never reached its message',
+    ).toContain('located-poster.png');
   }, 90_000);
 
   /**
