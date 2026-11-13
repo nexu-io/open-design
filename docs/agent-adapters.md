@@ -286,12 +286,34 @@ authentication, and the boundary between REST and MCP.
 ### 5.6 OpenCode
 
 - OpenCode runs as `opencode run --format json` with the prompt on stdin.
-  Newer builds that advertise `--dangerously-skip-permissions` from
-  `opencode run --help` receive that flag; older builds keep the compatible
-  argv without it.
-- The adapter discovers models with `opencode models`, parses structured JSON
-  events, and captures OpenCode's `sessionID`. Follow-up turns continue the
-  native session with `-s <session-id>`.
+  Builds that advertise `--dangerously-skip-permissions` from
+  `opencode run --help` receive that flag; 2.x builds that advertise `--auto`
+  receive `--auto` instead; older builds keep the compatible argv without it.
+- Workspace pinning is version-aware: 1.x receives `--dir <project-cwd>`
+  (it walks up to the enclosing git root otherwise); 2.x removed `--dir`
+  (verified on 2.0.24) and relies on the spawn cwd instead.
+- Model variants are version-aware: 1.x receives `--variant <name>`; 2.x
+  folds it into `-m provider/model#variant`.
+- The CLI line is decided from the `run --help` capability probe (`--auto`
+  present and `--variant` absent means 2.x), not from the wording of a failed
+  probe: OpenCode 2.0.24 answers `models --verbose` by printing help to stdout
+  and exiting 1 with no `Unrecognized flag` text, so an error-text gate either
+  misfires or never fires.
+- Model discovery is version-aware. 1.x reads `opencode models --verbose`,
+  which carries variant metadata inline. 2.x reads the plain `opencode models`
+  list and enriches it from `opencode api GET /api/model` (`providerID`,
+  `modelID`, `variants[].id`), the only 2.x surface that advertises variants.
+  Variant metadata previously surfaced for a model is retained when the new
+  catalog omits it, so an existing choice is not dropped silently.
+- Child evidence reads `opencode session export <id> --sanitize` (2.x) first,
+  then `opencode export <id> --sanitize --pure` (1.x). The bare
+  `opencode export <id> --sanitize` is the last resort and is reached only when
+  the CLI reports that `--pure` itself is unrecognized, so a user-installed
+  plugin never runs inside the evidence path while an isolated shape is
+  available.
+- The adapter parses structured JSON events, and captures OpenCode's
+  `sessionID`. Follow-up turns continue the native session with
+  `-s <session-id>`.
 - External MCP configuration is supplied per invocation through
   `OPENCODE_CONFIG_CONTENT`; selected skills still use the shared §4 path.
 
@@ -540,7 +562,8 @@ external-directory flags can widen a CLI's reach.
   example Amp's `--dangerously-allow-all`).
 - OpenCode receives `--dangerously-skip-permissions` only when its help probe
   advertises that flag, so older compatible builds are not given an unknown
-  option.
+  option. Builds that advertise `--auto` instead (2.x) receive `--auto`, since
+  the hidden flag is no longer listed.
 - Codex defaults to `workspace-write` with network access on supported macOS
   and Linux hosts. Windows, WSL, or an explicit
   `OD_CODEX_SANDBOX=danger-full-access` operator override uses

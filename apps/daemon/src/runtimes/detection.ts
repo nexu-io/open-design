@@ -208,10 +208,11 @@ async function fetchModels(
   def: RuntimeAgentDef,
   resolvedBin: string,
   env: NodeJS.ProcessEnv,
+  capabilities: Promise<RuntimeCapabilityMap | null>,
 ): Promise<FetchedRuntimeModels> {
   if (typeof def.fetchModels === 'function') {
     try {
-      const parsed = await def.fetchModels(resolvedBin, env);
+      const parsed = await def.fetchModels(resolvedBin, env, capabilities);
       if (!parsed || parsed.length === 0) {
         return { models: def.fallbackModels, source: 'fallback' };
       }
@@ -719,11 +720,17 @@ async function probe(
   // so a single agent's detection wall is max(help, models, auth) ≈ 5s rather
   // than the sum ≈ 15s. `--help` capabilities are cached on `agentCapabilities`
   // for buildArgs to consult.
+  //
+  // `fetchModels` receives the *in-flight* help probe rather than the cached
+  // map: a def that must pick between CLI shapes (OpenCode 1.x vs 2.x) awaits
+  // it directly, so it never reads a stale cache entry written by another
+  // detection and still overlaps the help read instead of following it.
+  const helpCapsProbe = probeCapabilities(def, launch.launchPath, probeEnv);
   const [helpCaps, hiddenCaps, modelResult, auth, amrOpenCodeVersion] =
     await Promise.all([
-      probeCapabilities(def, launch.launchPath, probeEnv),
+      helpCapsProbe,
       probeHiddenCapabilityFlags(def, launch.launchPath, probeEnv),
-      fetchModels(def, launch.launchPath, probeEnv),
+      fetchModels(def, launch.launchPath, probeEnv, helpCapsProbe),
       probeAgentAuthStatus(def, launch.launchPath, probeEnv),
       probeAmrOpenCodeVersion(def, probeEnv),
     ]);
