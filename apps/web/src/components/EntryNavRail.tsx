@@ -691,11 +691,12 @@ function UpgradeSparkMark() {
  * (`@media (max-width: 1080px)` in entry-layout.css zeroes the rail track while
  * keeping `entry--rail-open`). The account module lives in that rail, so
  * anything that must stay reachable in a compact window — the update-ready
- * rocket — has to know when the rail is off screen. jsdom has no matchMedia;
- * treat that as a wide window.
+ * rocket — has to know when the rail is off screen. EntryShell uses the same
+ * signal to route the rail toggle to the narrow-window overlay drawer instead
+ * of the docked state. jsdom has no matchMedia; treat that as a wide window.
  */
 const RAIL_AUTO_COLLAPSE_QUERY = '(max-width: 1080px)';
-function useRailAutoCollapsed(): boolean {
+export function useRailAutoCollapsed(): boolean {
   const subscribe = useCallback((onChange: () => void) => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
     const media = window.matchMedia(RAIL_AUTO_COLLAPSE_QUERY);
