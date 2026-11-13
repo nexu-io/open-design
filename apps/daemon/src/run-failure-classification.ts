@@ -425,8 +425,14 @@ function clientRequestFailureDetail(text: string): TrackingRunFailureDetail | nu
   return null;
 }
 
+// Bun's fetch() reports a connection it could not open with one of these hints
+// and no errno, so ENDPOINT_NEVER_REACHED_RE never sees it (OPEND-4704).
+const BUN_CANNOT_CONNECT_RE =
+  /\bCannot connect to API: (?:Unable to connect\. Is the computer able to access the url\?|Was there a typo in the url or port\?)/i;
+
 function isUpstreamDetailText(text: string): boolean {
   return isUpstreamClientErrorText(text) ||
+    BUN_CANNOT_CONNECT_RE.test(text) ||
     /\b(stream disconnected before completion|(?:stream|upstream) idle timeout|no data received within configured window|response\.completed|Transport error: network error|Upstream request failed|websocket closed|socket connection was closed unexpectedly|tls handshake eof|Connection reset by (?:peer|server)|TLS close_notify|Broken pipe|remote host|远程主机强迫关闭|No route to host|Connection refused|ConnectionRefused|error sending request|Provider returned error|high demand|model is at capacity|selected model is at capacity|temporarily unavailable|upstream_error|http2: response body closed|peer closed connection|incomplete chunked read|Client network socket disconnected before secure TLS connection|Connection failed repeatedly|lost its connection to (?:the Anthropic API|the configured custom Anthropic endpoint)|Server error mid-response|empty or malformed response|Unexpected server error|Streaming response failed|Failed to process error response|AMR model catalog is (?:temporarily )?unavailable)\b/i
       .test(text);
 }
