@@ -46,8 +46,27 @@ describe("desktop BrowserWindow chrome options", () => {
     // 12px traffic-light circles start at 22 - 6 = 16. Keep this in step with
     // the CSS: apps/web/tests/styles/top-chrome-height.test.ts pins the 44.
     // The offset lives in MAC_WINDOW_CHROME, spread into the main window.
-    expect(runtimeSource).toContain("trafficLightPosition: { x: 12, y: 16 }");
+    expect(runtimeSource).toContain("const MAC_TRAFFIC_LIGHT_POSITION = { x: 12, y: 16 };");
     expect(mainAppWindowOptions()).toContain("...MAC_WINDOW_CHROME");
+  });
+
+  test("gives the boot splash the main window's traffic lights and a drag strip", () => {
+    // The splash can sit on screen for a whole cold boot, so it must be
+    // movable and closable. Same light position as the main window keeps the
+    // reveal swap still; the reveal adopts the splash bounds so a dragged
+    // splash does not snap back.
+    const splashChrome = runtimeSource.slice(
+      runtimeSource.indexOf("const SPLASH_WINDOW_CHROME ="),
+      runtimeSource.indexOf("const MAC_WINDOW_CHROME_CSS ="),
+    );
+    expect(splashChrome).toContain('titleBarStyle: "hiddenInset"');
+    expect(splashChrome).toContain("trafficLightPosition: MAC_TRAFFIC_LIGHT_POSITION");
+    expect(splashChrome).toContain("fullscreenable: false");
+    expect(runtimeSource).toContain("...SPLASH_WINDOW_CHROME,");
+    expect(runtimeSource).toContain('<div class="splash-drag" aria-hidden="true"></div>');
+    expect(runtimeSource).toContain("-webkit-app-region: drag;\n      }\n${SPLASH_PIXEL_SCAN_STYLE}");
+    expect(runtimeSource).toContain("window.setBounds(splash.getBounds())");
+    expect(runtimeSource).toContain("attachSplashCloseShutdown(splash, {");
   });
 
   test("boots on the inlined pixel-scan wordmark instead of a one-shot clip (OPEND-3202)", () => {
