@@ -1,3 +1,4 @@
+import type { AgentModelPrefs } from './app-config.js';
 import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
 import type { OrchestratorWorkspace } from './workspaces.js';
 import type {
@@ -338,6 +339,21 @@ export interface ProjectMetadata {
   // real hub content lands on disk. See the daemon's
   // collab/shared-project-placeholder.ts for the invariant.
   sharedProjectPlaceholderAt?: number;
+  /** Per-project execution runtime preferences (mode, agent, model). */
+  runtimePrefs?: ProjectRuntimePrefs;
+}
+
+/**
+ * Per-project execution runtime preferences (mode, CLI agent, per-agent model
+ * choice, and BYOK protocol/model). Isolates a project's selected provider and
+ * model from global app-config changes made on Home or in sibling projects.
+ */
+export interface ProjectRuntimePrefs {
+  mode?: 'daemon' | 'api';
+  agentId?: string | null;
+  agentModels?: Record<string, AgentModelPrefs>;
+  apiProtocol?: string;
+  model?: string;
 }
 
 export interface Project {

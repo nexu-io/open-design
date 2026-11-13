@@ -5497,6 +5497,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             exampleBinding: existingMeta.exampleBinding,
           };
         }
+        if (
+          existingMeta?.runtimePrefs &&
+          !Object.prototype.hasOwnProperty.call(patch.metadata, 'runtimePrefs')
+        ) {
+          patch.metadata = {
+            ...patch.metadata,
+            runtimePrefs: existingMeta.runtimePrefs,
+          };
+        }
       }
       if (patch.metadata?.linkedDirs) {
         const existing = getProject(db, req.params.id);
