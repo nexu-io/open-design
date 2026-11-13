@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { createServer, type IncomingHttpHeaders } from 'node:http';
 
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 import {
@@ -42,6 +43,24 @@ import {
   strategyTaskTurnText,
   TEST_PROMPT_BUNDLE,
 } from '../strategies/strategy-task-test-fixtures.js';
+import { collectCodexChildEvidence } from '../../src/runtimes/codex-child-evidence.js';
+import { strategyTaskRunObservationId } from '../../src/observability/task-observation-aggregation.js';
+import {
+  otlpTaskSpanId,
+  type OtlpTraceExportRequestV1,
+} from '../../src/observability/task-observation-otlp-exporter.js';
+
+const nativeCodexSeed = JSON.parse(fs.readFileSync(new URL(
+  '../fixtures/od-next-runtime-capabilities/codex-0.167.0.collaboration.sanitized-real-seed.json', import.meta.url,
+), 'utf8')) as { cases: Array<{
+  transport: string;
+  taskName: string;
+  parentSessionId: string;
+  parentTurnId: string;
+  childSessionId: string;
+  parentRollout: unknown[];
+  childRollout: unknown[];
+}> };
 
 const BASE_ENV = {
   OPEN_DESIGN_VELA_TELEMETRY: 'off',
@@ -2051,6 +2070,99 @@ describe('task observation rollout', () => {
     })).resolves.toMatchObject({ langfuseReplayed: 0 });
     expect(legacySingleRunReport).toHaveBeenCalledOnce();
     expect(taskFetch).not.toHaveBeenCalled();
+  });
+
+  it.each(nativeCodexSeed.cases)('delivers native $transport child evidence over real OTLP HTTP and persists acceptance', async (replay) => {
+    const home = path.join(tempDir, 'codex-fixture');
+    const archive = path.join(home, 'archived_sessions');
+    fs.mkdirSync(archive, { recursive: true });
+    const index = new Database(path.join(home, 'state_5.sqlite'));
+    try {
+      index.exec(`CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, archived INTEGER, agent_path TEXT);
+        CREATE TABLE thread_spawn_edges (parent_thread_id TEXT, child_thread_id TEXT PRIMARY KEY, status TEXT);
+        CREATE INDEX idx_thread_spawn_edges_parent_status ON thread_spawn_edges(parent_thread_id, status);`);
+      for (const [id, records, agentPath] of [
+        [replay.parentSessionId, replay.parentRollout, null],
+        [replay.childSessionId, replay.childRollout, replay.taskName],
+      ] as const) {
+        const file = path.join(archive, `rollout-2026-11-12-${id}.jsonl`);
+        fs.writeFileSync(file, records.map(record => JSON.stringify(record)).join('\n') + '\n', { mode: 0o600 });
+        index.prepare('INSERT INTO threads VALUES (?, ?, 1, ?)').run(id, file, agentPath);
+      }
+      index.prepare("INSERT INTO thread_spawn_edges VALUES (?, ?, 'open')").run(replay.parentSessionId, replay.childSessionId);
+    } finally { index.close(); }
+    const parentObservationId = strategyTaskRunObservationId('task-1', 'run-1');
+    const evidence = await collectCodexChildEvidence({
+      codexHome: home, parentSessionId: replay.parentSessionId, parentTurnId: replay.parentTurnId,
+      taskExecutionId: 'task-1', runId: 'run-1', taskRunIndex: 0, stage: 'request', parentObservationId,
+      agentCliVersion: 'codex-cli 0.167.0',
+    });
+    expect(evidence.knownChildCount).toBe(1);
+    const completed = evidence.observations.find(observation => observation.kind === 'child_agent' && observation.status === 'completed')!;
+    expect(completed).toBeDefined();
+    const packaged = replay.transport === 'exec';
+    const run = {
+      ...syntheticRun(), agentId: 'codex',
+      appVersionInfo: { version: '0.27.2', channel: 'stable', packaged, platform: 'win32', arch: 'x64' },
+    };
+    const events: SyntheticRunLike['events'] = [...run.events, ...evidence.observations.map(observation => ({
+      event: 'agent', timestamp: 1_500,
+      data: { type: 'diagnostic', name: 'normalized_agent_observation_v1', observation },
+    }))];
+    const requests: Array<{ url: string | undefined; method: string | undefined; headers: IncomingHttpHeaders; body: OtlpTraceExportRequestV1 }> = [];
+    const receiver = createServer(async (request, response) => {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        requests.push({ url: request.url, method: request.method, headers: request.headers,
+          body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as OtlpTraceExportRequestV1 });
+        response.writeHead(200, { 'Content-Type': 'application/json' }).end('{}');
+      } catch {
+        response.writeHead(400).end();
+      }
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        receiver.once('error', reject);
+        receiver.listen(0, '127.0.0.1', resolve);
+      });
+      const address = receiver.address();
+      if (!address || typeof address === 'string') throw new Error('missing test receiver address');
+      const options = {
+        mode: 'send' as const, dataDir: tempDir, getRun: () => ({ ...run, events }),
+        env: { LANGFUSE_EXPORTER_MODE: 'otlp', LANGFUSE_BASE_URL: `http://127.0.0.1:${address.port}` },
+      };
+      const rollout = service(options);
+      // No fetch mock: await the real receiver response and durable delivery write.
+      const result = await rollout.finalizeForRun('run-1');
+      expect({ result, row: deliveryRow() }).toMatchObject({ result: { action: 'sent' },
+        row: { status: 'accepted', attemptCount: 1, dropReason: null, crashWindow: 0 } });
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ method: 'POST', url: '/api/public/otel/v1/traces', headers: {
+        authorization: `Basic ${Buffer.from('pk_fixture:sk_fixture').toString('base64')}`,
+        'content-type': 'application/json', 'x-langfuse-ingestion-version': '4',
+        'idempotency-key': deliveryRow().idempotencyKey,
+      } });
+      const spans = requests[0]!.body.resourceSpans.flatMap(resource => resource.scopeSpans.flatMap(scope => scope.spans));
+      const children = spans.filter(span => span.attributes.some(attribute => attribute.key === 'langfuse.observation.metadata.kind'
+        && attribute.value.stringValue === 'child_agent'));
+      expect(children).toHaveLength(1);
+      expect(children[0]).toMatchObject({ spanId: otlpTaskSpanId(completed.identity.observationId),
+        parentSpanId: otlpTaskSpanId(parentObservationId) });
+      expect(children[0]!.attributes).toContainEqual({ key: 'langfuse.observation.metadata.status', value: { stringValue: 'completed' } });
+      for (const span of spans) {
+        expect(new Set(span.attributes.map(attribute => attribute.key)).size).toBe(span.attributes.length);
+        expect(span.attributes).toContainEqual({ key: 'langfuse.trace.metadata.packaged', value: { stringValue: String(packaged) } });
+      }
+      expect(rollout.telemetryForRun('run-1')).toMatchObject({ status: 'accepted', protocol: 'otlp-v4', traceId: children[0]!.traceId });
+      await rollout.finalizeForRun('run-1');
+      await service(options).finalizeForRun('run-1');
+      expect(requests).toHaveLength(1);
+      expect(deliveryRow().attemptCount).toBe(1);
+    } finally {
+      receiver.closeAllConnections();
+      if (receiver.listening) await new Promise<void>(resolve => receiver.close(() => resolve()));
+    }
   });
 
   it.each([
