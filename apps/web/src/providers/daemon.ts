@@ -1687,6 +1687,15 @@ export async function listProjectRunsWithScope(
   }
 }
 
+export class TerminalApiError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "TerminalApiError";
+    this.code = code;
+  }
+}
+
 /**
  * One project's runs plus the awaiting-input flag the run bodies cannot carry.
  *
@@ -1720,7 +1729,21 @@ export async function listRunsForProject(
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    if (!resp.ok) return null;
+    
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => null)) as {
+        error?: { code?: string; message?: string; retryable?: boolean };
+      } | null;
+
+      if (body?.error?.retryable === false) {
+        throw new TerminalApiError(
+          body.error.code ?? `HTTP_${resp.status}`,
+          body.error.message ?? "Project runs are no longer accessible",
+        );
+      }
+      return null;
+    }
+
     const body = (await resp.json()) as ChatRunListResponse;
     return {
       runs: body.runs ?? [],
@@ -1731,7 +1754,8 @@ export async function listRunsForProject(
         ? { awaitingInputConversationIds: body.awaitingInputConversationIds }
         : {}),
     };
-  } catch {
+  } catch (err) {
+    if (err instanceof TerminalApiError) throw err;
     return null;
   }
 }
