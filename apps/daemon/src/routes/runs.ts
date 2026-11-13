@@ -225,7 +225,7 @@ import {
   type RunEventRecord,
   type SseClient,
 } from '../runtimes/chat-run-records.js';
-import { holdsConversation, resolveStrategyHandoff, strategyHandoffTranscript, StrategyHandoffError } from '../strategies/od-next/task-handoff.js';
+import { resolveStrategyHandoff, strategyHandoffTranscript, StrategyHandoffError } from '../strategies/od-next/task-handoff.js';
 
 // Keep in sync with the web uploader's `looksLikeImage` (apps/web registry):
 // omit-pin seeds must classify the same extensions as `image` so reload chips
@@ -1409,6 +1409,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
   }
 
+  // Reuse one terminal waiter per stopping run, even if many callers time out.
+  const stoppingRunWaits = new WeakMap<ChatRun, Promise<ChatRunStatusResponse>>();
+  const waitForStoppingRun = (run: ChatRun) => {
+    const existing = stoppingRunWaits.get(run);
+    if (existing) return existing;
+    const pending = design.runs.wait(run).finally(() => stoppingRunWaits.delete(run));
+    stoppingRunWaits.set(run, pending);
+    return pending;
+  };
+
   const handleRunCreate = async (req: ApiRequest, res: ApiResponse, stream = false) => {
     if (ctx.lifecycle.isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
@@ -2576,6 +2586,29 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         if (!await fallbackAutomaticBeforeStart(error)) return;
       }
     }
+    // A canceled process can still be shutting down when the next send arrives.
+    // Wait for its terminal boundary before the atomic admission check below.
+    if (typeof meta.projectId === 'string' && typeof meta.conversationId === 'string') {
+      const stopping = design.runs.list({ projectId: meta.projectId, conversationId: meta.conversationId, status: 'active' })
+        .filter((run) => run.cancelRequested && !(meta.clientRequestId && run.clientRequestId === meta.clientRequestId));
+      if (stopping.length) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            Promise.all(stopping.map(waitForStoppingRun)),
+            new Promise<void>((resolve) => { timer = setTimeout(resolve, 15_000); }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }
+    }
+    const assertConversationAvailable = (candidate: ChatRun) => {
+      if (!candidate.projectId || !candidate.conversationId) return;
+      const active = design.runs.list({ projectId: candidate.projectId, conversationId: candidate.conversationId, status: 'active' })
+        .find((run) => run.id !== candidate.id);
+      if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
+    };
     let preparedRun;
     try {
       preparedRun = internalRuns.prepare({
@@ -2583,14 +2616,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(((meta.projectId && meta.conversationId) || strategyRolloutDecision?.effectiveMode === 'active')
           ? {
               beforeClaimCommit: (candidate) => {
-                if (previousStrategyTask) {
-                  // Prompt preparation awaits I/O. Recheck at the atomic claim so
-                  // two follow-ups cannot both start from the same idle conversation.
-                  const active = design.runs.list({ projectId: previousStrategyTask.projectId,
-                    conversationId: previousStrategyTask.conversationId }).find(run =>
-                    run.id !== candidate.id && holdsConversation(run));
-                  if (active) throw new StrategyHandoffError(409, 'RUN_IN_PROGRESS', 'a run is still active in this conversation');
-                }
+                // The default conversation is resolved after strategy handoff.
+                // Guard the final binding inside the same synchronous claim.
+                assertConversationAvailable(candidate);
                 if (createdTaskInputSnapshot) {
                   candidate.odNextTaskInputSnapshot = createdTaskInputSnapshot;
                   // `createOrReuse` persisted the optimistic Run before the
@@ -2654,6 +2682,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               },
             }
           : {}),
+        beforeAdmission: assertConversationAvailable,
         resume: {
           requested: requestBody.resume === true,
           canResume: (candidate) =>
@@ -2676,20 +2705,31 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         preparedPromptBundleText = null;
         frozenSkillPackage = undefined;
         if (!await fallbackAutomaticBeforeStart(error.preparationCause)) return;
-        preparedRun = internalRuns.prepare({
-          meta,
-          beforeClaimCommit: (candidate) => seedRunUserMessage(candidate),
-          resume: {
-            requested: requestBody.resume === true,
-            canResume: (candidate) =>
-              candidate.status === 'failed'
-              && candidate.agentId === 'amr'
-              && (
-                candidate.failureAction === 'recharge'
-                || candidate.errorCode === 'AMR_INSUFFICIENT_BALANCE'
-              ),
-          },
-        });
+        try {
+          preparedRun = internalRuns.prepare({
+            meta,
+            beforeClaimCommit: (candidate) => {
+              assertConversationAvailable(candidate);
+              seedRunUserMessage(candidate);
+            },
+            beforeAdmission: assertConversationAvailable,
+            resume: {
+              requested: requestBody.resume === true,
+              canResume: (candidate) =>
+                candidate.status === 'failed'
+                && candidate.agentId === 'amr'
+                && (
+                  candidate.failureAction === 'recharge'
+                  || candidate.errorCode === 'AMR_INSUFFICIENT_BALANCE'
+                ),
+            },
+          });
+        } catch (fallbackError) {
+          if (fallbackError instanceof StrategyHandoffError) {
+            return sendApiError(res, fallbackError.status, fallbackError.code, fallbackError.message);
+          }
+          throw fallbackError;
+        }
       } else {
         if (error instanceof StrategyHandoffError) return sendApiError(res, error.status, error.code, error.message);
         if (error instanceof OdNextTaskInputSnapshotError) {
