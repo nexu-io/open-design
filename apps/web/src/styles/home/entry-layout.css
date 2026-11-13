@@ -1733,6 +1733,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   /* Never a horizontal page scrollbar. Leaving overflow-x unset makes the
      spec coerce it from `visible` to `auto` (because overflow-y is auto), so

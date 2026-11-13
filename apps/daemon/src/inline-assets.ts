@@ -147,7 +147,8 @@ export async function inlineRelativeAssets(
     const rel = readHtmlAttr(tag, 'rel');
     const href = readHtmlAttr(tag, 'href');
     if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, href);
+    const resolved = resolveProjectRelativePath(ownerFileName, decodeHtmlEntity(href ?? ''))
+      ?? resolveProjectRelativePath(ownerFileName, href);
     if (!resolved) continue;
     pending.push({
       start,
@@ -164,7 +165,8 @@ export async function inlineRelativeAssets(
     const start = match.index!;
     const src = readHtmlAttr(tag, 'src');
     if (!src) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, src);
+    const resolved = resolveProjectRelativePath(ownerFileName, decodeHtmlEntity(src))
+      ?? resolveProjectRelativePath(ownerFileName, src);
     if (!resolved) continue;
     pending.push({
       start,
@@ -338,14 +340,14 @@ function buildInlineStyleBlock(tag: string, href: string, css: string): string {
   const carried: string[] = [];
   for (const name of STYLE_PRESERVED_LINK_ATTRS) {
     const value = readHtmlAttr(tag, name);
-    if (value != null) carried.push(`${name}="${escapeHtmlAttr(value)}"`);
+    if (value != null) carried.push(`${name}="${value}"`);
   }
   for (const name of STYLE_PRESERVED_BOOLEAN_ATTRS) {
     if (hasBooleanHtmlAttr(tag, name)) carried.push(name);
   }
   const attrString = carried.length === 0 ? '' : ` ${carried.join(' ')}`;
   return (
-    `<style data-od-inline-asset="${escapeHtmlAttr(href)}"${attrString}>\n` +
+    `<style data-od-inline-asset="${href}"${attrString}>\n` +
     `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`
   );
 }
@@ -381,6 +383,80 @@ export function resolveProjectRelativePath(
 export function readHtmlAttr(tag: string, name: string): string | null {
   const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
   return match?.[2] ?? null;
+}
+
+/**
+ * Decodes HTML character references (named entities, decimal numeric, and
+ * hexadecimal numeric) found in an attribute value returned by a regex match.
+ * This handles cases like &#38;=&gt;&amp;, &amp;amp;, &gt; etc. so that paths
+ * and stylesheet attributes resolve against the decoded value rather than the
+ * raw encoded source text. No DOM parser is required — this is a pure
+ * substring scan over the capture from readHtmlAttr.
+ */
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  // Basic
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00A0',
+  // Latin-1 Supplement
+  iexcl: '\u00A1', cent: '\u00A2', pound: '\u00A3', curren: '\u00A4',
+  yen: '\u00A5', brvbar: '\u00A6', sect: '\u00A7', uml: '\u00A8',
+  copy: '\u00A9', ordf: '\u00AA', laquo: '\u00AB', not: '\u00AC',
+  shy: '\u00AD', reg: '\u00AE', macr: '\u00AF', deg: '\u00B0',
+  plusmn: '\u00B1', sup2: '\u00B2', sup3: '\u00B3', acute: '\u00B4',
+  micro: '\u00B5', para: '\u00B6', middot: '\u00B7', cedil: '\u00B8',
+  sup1: '\u00B9', ordm: '\u00BA', raquo: '\u00BB', frac14: '\u00BC',
+  frac12: '\u00BD', frac34: '\u00BE', iquest: '\u00BF',
+  Agrave: '\u00C0', Aacute: '\u00C1', Acirc: '\u00C2', Atilde: '\u00C3',
+  Auml: '\u00C4', Aring: '\u00C5', AElig: '\u00C6', Ccedil: '\u00C7',
+  Egrave: '\u00C8', Eacute: '\u00C9', Ecirc: '\u00CA', Euml: '\u00CB',
+  Igrave: '\u00CC', Iacute: '\u00CD', Icirc: '\u00CE', Iuml: '\u00CF',
+  ETH: '\u00D0', Ntilde: '\u00D1', Ograve: '\u00D2', Oacute: '\u00D3',
+  Ocirc: '\u00D4', Otilde: '\u00D5', Ouml: '\u00D6', times: '\u00D7',
+  Oslash: '\u00D8', Ugrave: '\u00D9', Uacute: '\u00DA', Ucirc: '\u00DB',
+  Uuml: '\u00DC', Yacute: '\u00DD', THORN: '\u00DE', szlig: '\u00DF',
+  agrave: '\u00E0', aacute: '\u00E1', acirc: '\u00E2', atilde: '\u00E3',
+  auml: '\u00E4', aring: '\u00E5', aelig: '\u00E6', ccedil: '\u00E7',
+  egrave: '\u00E8', eacute: '\u00E9', ecirc: '\u00EA', euml: '\u00EB',
+  igrave: '\u00EC', iacute: '\u00ED', icirc: '\u00EE', iuml: '\u00EF',
+  eth: '\u00F0', ntilde: '\u00F1', ograve: '\u00F2', oacute: '\u00F3',
+  ocirc: '\u00F4', otilde: '\u00F5', ouml: '\u00F6', divide: '\u00F7',
+  oslash: '\u00F8', ugrave: '\u00F9', uacute: '\u00FA', ucirc: '\u00FB',
+  uuml: '\u00FC', yacute: '\u00FD', thorn: '\u00FE', yuml: '\u00FF',
+  // Latin Extended-A / B (common in European languages)
+  fnof: '\u0192', circ: '\u02C6', tilde: '\u02DC', ensp: '\u2002',
+  emsp: '\u2003', thinsp: '\u2009', zwnj: '\u200C', zwj: '\u200D',
+  lrm: '\u200E', rlm: '\u200F', ndash: '\u2013', mdash: '\u2014',
+  lsquo: '\u2018', rsquo: '\u2019', sbquo: '\u201A', ldquo: '\u201C',
+  rdquo: '\u201D', bdquo: '\u201E', dagger: '\u2020', Dagger: '\u2021',
+  permil: '\u2030', lessna: '\u2272', gtna: '\u2273',
+  Euro: '\u20AC', lsnap: '\u0152', rsnap: '\u0153',
+  OElig: '\u0152', oelig: '\u0153',
+  scaron: '\u0161', Scaron: '\u0160',
+  Yuml: '\u0178',
+};
+export function decodeHtmlEntity(s: string): string {
+  // Named entities: &name; — decode iteratively to handle cascading entities
+  // like &amp;eacute; → é (browser-compatible behavior per HTML5 spec)
+  let prev: string;
+  do {
+    prev = s;
+    s = s.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (_, name) => NAMED_HTML_ENTITIES[name] ?? `&${name};`);
+  } while (s !== prev);
+  // Decimal numeric: &#digits; — bounds-checked against Unicode scalar values
+  s = s.replace(/&#(\d+);/g, (_, digits) => {
+    const code = parseInt(digits, 10);
+    if (Number.isNaN(code) || code < 0 || code > 0x10FFFF) return `&#${digits};`;
+    // Skip surrogate range (0xD800–0xDFFF)
+    if (code >= 0xD800 && code <= 0xDFFF) return `&#${digits};`;
+    return String.fromCodePoint(code);
+  });
+  // Hex numeric: &#xHH; — same bounds check
+  s = s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    const code = parseInt(hex, 16);
+    if (Number.isNaN(code) || code < 0 || code > 0x10FFFF) return `&#x${hex};`;
+    if (code >= 0xD800 && code <= 0xDFFF) return `&#x${hex};`;
+    return String.fromCodePoint(code);
+  });
+  return s;
 }
 
 // HTML boolean attribute presence test — matches `<tag … name>` or
