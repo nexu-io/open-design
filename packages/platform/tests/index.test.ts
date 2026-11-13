@@ -703,6 +703,50 @@ describe("wellKnownUserToolchainBins Windows fnm node discovery", () => {
   });
 });
 
+describe("wellKnownUserToolchainBins Windows npm-prefix fallback", () => {
+  const originalPlatform = process.platform;
+  function setPlatform(value: NodeJS.Platform): void {
+    Object.defineProperty(process, "platform", { configurable: true, value });
+  }
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
+  });
+
+  it("probes npm config get prefix as npm.cmd and adds the custom prefix", () => {
+    setPlatform("win32");
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const dirs = wellKnownUserToolchainBins({
+      home: "C:\\Users\\tester",
+      env: {},
+      includeSystemBins: false,
+      runCommand: (command, args) => {
+        calls.push({ command, args });
+        return "D:\\npm-global\r\n";
+      },
+    });
+    // Windows `npm` is `npm.cmd`; requesting the `.cmd` name is what lets the
+    // default runner wrap it in `cmd.exe /d /s /c "..."` instead of ENOENT.
+    expect(calls).toEqual([{ command: "npm.cmd", args: ["config", "get", "prefix"] }]);
+    expect(dirs).toContain(join("D:\\npm-global", "bin"));
+    expect(dirs).toContain("D:\\npm-global");
+  });
+
+  it("falls back to conventional Windows locations when the npm probe fails", () => {
+    setPlatform("win32");
+    const home = "C:\\Users\\tester";
+    const dirs = wellKnownUserToolchainBins({
+      home,
+      env: {},
+      includeSystemBins: false,
+      runCommand: () => {
+        throw new Error("npm missing");
+      },
+    });
+    expect(dirs).not.toContain("D:\\npm-global");
+    expect(dirs).toContain(join(home, "AppData", "Roaming", "npm"));
+  });
+});
+
 describe("createPackageManagerInvocation", () => {
   const originalPlatform = process.platform;
   function setPlatform(value: NodeJS.Platform): void {
