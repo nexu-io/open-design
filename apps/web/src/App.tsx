@@ -81,6 +81,7 @@ import { TooltipLayer } from './components/TooltipLayer';
 import { UpdateDialog } from './components/UpdateDialog';
 import { UpdaterPopup } from './components/UpdaterPopup';
 import {
+  clearSavedWorkspaceTabs,
   openWorkspaceTab,
   removeWorkspaceProjectTabs,
   WorkspaceTabsBar,
@@ -1580,6 +1581,7 @@ function AppInner() {
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
+  const [workspaceTabsReset, setWorkspaceTabsReset] = useState(0);
   useLayoutEffect(() => {
     navigationTiming.observeRoute(route);
   }, [route]);
@@ -3410,7 +3412,23 @@ function AppInner() {
         // context, directory and every account-scoped cache before refreshing
         // the new profile; otherwise prod workspace links remain mounted while
         // status/models/billing already point at feature-test.
-        if (amrProfileChanged) notifyWorkspaceContextRefresh();
+        if (amrProfileChanged) {
+          settingsReturnTargetRef.current = null;
+          clearAmrAuthRetryContinuation();
+          const resetTabs = () => {
+            clearSavedWorkspaceTabs();
+            setWorkspaceTabsReset((current) => current + 1);
+          };
+          const currentRoute = routeRef.current;
+          if (currentRoute.kind === 'home' && (
+            currentRoute.view === 'home' || currentRoute.view === 'onboarding'
+          )) {
+            resetTabs();
+          } else {
+            navigate({ kind: 'home', view: 'home' }, { replace: true, onCommit: resetTabs });
+          }
+          notifyWorkspaceContextRefresh();
+        }
         amrModelsRef.current = null;
         restartAmrPolling();
         void refreshAgents();
@@ -3418,7 +3436,7 @@ function AppInner() {
     };
     window.addEventListener(APP_CONFIG_CHANGED_EVENT, handleAppConfigChanged);
     return () => window.removeEventListener(APP_CONFIG_CHANGED_EVENT, handleAppConfigChanged);
-  }, [refreshAgents, restartAmrPolling]);
+  }, [clearAmrAuthRetryContinuation, refreshAgents, restartAmrPolling]);
 
   /**
    * Undo an optimistic hand-off that will not become a project: drop the
@@ -6212,6 +6230,7 @@ function AppInner() {
         data-host-platform={hostPlatform}
       >
         <WorkspaceTabsBar
+          key={workspaceTabsReset}
           route={route}
           // The ambient list may still be loading (or belong to a different
           // selected Workspace) while a deep-linked project is already open.

@@ -35,8 +35,9 @@ vi.mock('../../src/router', async () => {
   const actual = await vi.importActual<typeof import('../../src/router')>('../../src/router');
   return {
     ...actual,
-    navigate: vi.fn((route: unknown) => {
+    navigate: vi.fn((route: unknown, options?: { onCommit?: () => void }) => {
       useRouteMock.mockReturnValue(route as never);
+      options?.onCommit?.();
       routeListeners.forEach((notify) => notify());
     }),
     useRoute: () =>
@@ -987,7 +988,22 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
   });
 
-  it('refreshes renderer config and clears stale AMR models after a desktop app-config change event', async () => {
+  it('returns an open project to Home and refreshes AMR state after a desktop profile switch', async () => {
+    mockedFetchVelaLoginStatus.mockResolvedValue({
+      loggedIn: false,
+      loginInFlight: false,
+      profile: 'prod',
+      user: null,
+      configPath: '/tmp/amr-config.json',
+    });
+    mockedListProjects.mockResolvedValue([{
+      id: 'previous-environment-project',
+      name: 'Previous environment project',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }]);
     mockedLoadConfig.mockReturnValue({
       ...baseConfig,
       agentModels: { amr: { model: 'old-remote', reasoning: 'default' } },
@@ -1052,6 +1068,20 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-profile').textContent).toBe('prod');
     });
 
+    act(() => {
+      navigate({
+        kind: 'project',
+        projectId: 'previous-environment-project',
+        conversationId: null,
+        fileName: null,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('amr-profile')).toBeNull();
+      expect(window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '')
+        .toContain('previous-environment-project');
+    });
+
     const fetchMock = vi.mocked(globalThis.fetch);
     const workspaceDirectoryReadsBefore = fetchMock.mock.calls.filter(([input]) =>
       input.toString().includes('/api/workspace/directory')).length;
@@ -1081,6 +1111,9 @@ describe('App AMR polling', () => {
       ).toBeGreaterThan(workspaceDirectoryReadsBefore);
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '')
+      .not.toContain('previous-environment-project');
     fireEvent.focus(window);
     const agentScansAfterFocus = mockedFetchAgentsStream.mock.calls.length;
     nowSpy.mockRestore();
