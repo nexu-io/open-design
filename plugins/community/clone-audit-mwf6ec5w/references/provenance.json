@@ -1,0 +1,19 @@
+{
+  "candidateId": "72b49cd2-c532-4932-8608-6374bf64887c",
+  "projectId": "c4214f20-8434-42d8-ab84-9bbcbcbb3555",
+  "runId": "c4bfe3f3-5b15-4e69-a9fd-d6c72ef397d0",
+  "conversationId": "c57ae82c-5a4d-409d-ab45-b61a57a65a7b",
+  "provenance": {
+    "summary": "Detected from CLONE_AUDIT.md after a successful run.",
+    "detectedAt": 1794586228564
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "CLONE_AUDIT.md",
+      "label": "CLONE_AUDIT.md",
+      "size": 3498,
+      "copied": true
+    }
+  ]
+}
