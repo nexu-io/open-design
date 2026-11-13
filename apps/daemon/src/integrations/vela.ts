@@ -904,6 +904,47 @@ export function readVelaApiContext(
   };
 }
 
+// The real AMR control plane the daemon's loopback api-proxy forwards to. This
+// mirrors `AMR_API_UPSTREAM_ORIGIN` in `routes/vela.ts` (the proxy's own
+// upstream); a control-plane re-origination must land on the same host the
+// proxy would have used.
+const VELA_CONTROL_PLANE_UPSTREAM_ORIGIN = 'https://amr-api.open-design.ai';
+
+/**
+ * Resolve the origin a direct control-plane read (workspace directory, active
+ * workspace, collab events) should target for a given profile `apiUrl`.
+ *
+ * On desktop, `vela login` persists the daemon-local IPv4 fallback proxy
+ * (#4210) as the profile `apiUrl`, e.g.
+ * `http://127.0.0.1:<port>/api/integrations/vela/api-proxy`. That proxy serves
+ * only `/api/integrations/vela/api-proxy/*`; a control-plane fetch builds
+ * `new URL('/api/v1/...', apiUrl)`, which discards the proxy prefix and aims the
+ * daemon back at its own root `/api/v1/...` — the daemon requests itself, gets
+ * 404, and `/api/workspace/directory` stays `WORKSPACE_AUTHORITY_UNAVAILABLE`,
+ * so the Settings model picker hangs on "Loading…" forever (#9453).
+ *
+ * When `apiUrl` is that loopback proxy, re-originate it onto the upstream the
+ * proxy itself forwards to. Any other `apiUrl` — a real test/feature-test/local
+ * endpoint — is returned verbatim, so only the self-referential case changes.
+ * Call this only when issuing a control-plane request; never when comparing or
+ * fingerprinting the stored session identity, which must keep the raw `apiUrl`.
+ */
+export function resolveVelaControlPlaneApiUrl(apiUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(apiUrl);
+  } catch {
+    return apiUrl;
+  }
+  const isLoopbackHost = parsed.hostname === '127.0.0.1'
+    || parsed.hostname === 'localhost'
+    || parsed.hostname === '[::1]';
+  const isDaemonApiProxy = parsed.pathname.includes('/api/integrations/vela/api-proxy');
+  return isLoopbackHost && isDaemonApiProxy
+    ? VELA_CONTROL_PLANE_UPSTREAM_ORIGIN
+    : apiUrl;
+}
+
 export function hasPendingVelaRevocations(): boolean {
   const pending = readConfigFile()?.pendingRevocations;
   return Array.isArray(pending) && pending.length > 0;

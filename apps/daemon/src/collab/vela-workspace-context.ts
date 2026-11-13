@@ -19,6 +19,7 @@ import type {
 import {
   markVelaAuthorizationExpired,
   readVelaControlApiContext,
+  resolveVelaControlPlaneApiUrl,
   type VelaControlApiContext,
   type VelaUser,
 } from '../integrations/vela.js';
@@ -363,7 +364,7 @@ export function createVelaWorkspaceContextProvider(
         // This explicit header asks B to authorize this workspace without
         // reading or changing the account's global active selection. Keep the
         // session captured for the original directory read across both calls.
-        const response = await fetchImpl(new URL('/api/v1/workspaces/current', session.apiUrl), {
+        const response = await fetchImpl(new URL('/api/v1/workspaces/current', resolveVelaControlPlaneApiUrl(session.apiUrl)), {
           method: 'GET',
           headers: {
             authorization: `Bearer ${session.controlKey}`,
@@ -526,7 +527,7 @@ function createVelaWorkspaceHubEventsEndpoint(
   const workspaceId = workspaceIdInput.trim();
   if (!workspaceId || !session?.controlKey || !session.apiUrl) return null;
   return {
-    url: new URL('/api/v1/collab/events', session.apiUrl).toString(),
+    url: new URL('/api/v1/collab/events', resolveVelaControlPlaneApiUrl(session.apiUrl)).toString(),
     workspaceId,
     identityKey: velaWorkspaceDirectoryIdentityForSession(session),
     headers: {
@@ -911,7 +912,7 @@ export async function fetchVelaWorkspaceDirectory(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(new URL('/api/v1/workspaces', session.apiUrl), {
+    const response = await fetchImpl(new URL('/api/v1/workspaces', resolveVelaControlPlaneApiUrl(session.apiUrl)), {
       method: 'GET',
       headers: { authorization: `Bearer ${session.controlKey}` },
       signal: controller.signal,
