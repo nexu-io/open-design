@@ -16,6 +16,7 @@ import type { ProjectMetadata } from '@open-design/contracts';
 import { resolveProjectDir, writeProjectFile } from '../projects.js';
 import { fontFaceCss, readFontManifest } from './fonts.js';
 import { brandKitCopy, localizedBrandKitAssetDefs } from './kit-i18n.js';
+import { linkBrandOverridesIntoKitPage } from './overrides.js';
 
 /** Location of the bundled template relative to the daemon's skills root. */
 const BRAND_KIT_TEMPLATE_REL = path.join('brand-extract', 'templates', 'brand-kit.html');
@@ -205,7 +206,7 @@ export async function writeBrandKitPreview(opts: WriteBrandKitOptions): Promise<
   } catch {
     fontFace = '';
   }
-  const html = renderBrandKitHtml(template, payload, fontFace);
+  const html = linkBrandOverridesIntoKitPage(renderBrandKitHtml(template, payload, fontFace), projectDir);
   try {
     await writeProjectFile(
       opts.projectsRoot,
