@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "owner": {
     "name": "OpenDesign Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.10"
+    "version": "0.2.11"
   },
   "plugins": [
     {
@@ -139,6 +139,62 @@
         "design-to-code"
       ],
       "description": "Hand an Open Design project off to OpenCode as an offline-complete bundle: a verbatim project mirror, the design system materialized with real font binaries, and a machine-enforced adherence config."
+    },
+    {
+      "name": "community/proto-handoff",
+      "title": "Export to Figma (proto-handoff)",
+      "version": "0.1.2",
+      "source": "github:juanvelasco1/proto-handoff@v0.1.2/skills/proto-handoff",
+      "publisher": {
+        "id": "juanvelasco1",
+        "github": "juanvelasco1",
+        "url": "https://github.com/juanvelasco1"
+      },
+      "homepage": "https://github.com/juanvelasco1/proto-handoff",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:read",
+        "fs:write",
+        "bash",
+        "subprocess",
+        "network",
+        "mcp"
+      ],
+      "tags": [
+        "community",
+        "export",
+        "downstream",
+        "figma",
+        "design-handoff",
+        "design-system"
+      ],
+      "description": "Rebuild an accepted prototype in Figma as an editable design file: variables with light and dark modes, components with variants and slots, screens made of instances, prototype links, a flow map and a self-audit. Later changes update only what changed."
+    },
+    {
+      "name": "community/proto-handoff-prototype",
+      "title": "Handoff-ready prototype",
+      "version": "0.1.2",
+      "source": "github:juanvelasco1/proto-handoff@v0.1.2/open-design/proto-handoff-prototype",
+      "publisher": {
+        "id": "juanvelasco1",
+        "github": "juanvelasco1",
+        "url": "https://github.com/juanvelasco1"
+      },
+      "homepage": "https://github.com/juanvelasco1/proto-handoff/tree/main/open-design/proto-handoff-prototype",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write"
+      ],
+      "tags": [
+        "community",
+        "create",
+        "prototype",
+        "design-handoff",
+        "figma"
+      ],
+      "description": "Single-file HTML app and web prototypes that declare their tokens, components, screens, states and navigation, so proto-handoff can rebuild them as an editable design file for Figma."
     }
   ]
 }
