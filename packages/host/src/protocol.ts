@@ -387,6 +387,10 @@ export type OpenDesignHostDownloadResult = {
 };
 
 export type OpenDesignHostBridge = {
+  /** Opt-in shutdown barrier for saving the input collector tail. Storage stays daemon-owned. */
+  inputTelemetry?: {
+    subscribeShutdown(listener: () => Promise<void>): () => void;
+  };
   startup?: {
     context(): Promise<{ launch_attempt_id: string; app_session_id: string } | null>;
     signal(value: { launch_attempt_id: string; app_session_id: string;

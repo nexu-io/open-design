@@ -647,6 +647,17 @@
 .recent-projects__card-menu button.danger {
   color: var(--red);
 }
+/* A failed request reads in the error colour wherever it is reported — the
+   rail row menu (`.entry-nav-rail__recent-menu-error`) uses the same one. */
+.recent-projects__card-menu-error {
+  color: var(--red, #f04142);
+}
+.recent-projects__card-menu .recent-projects__card-menu-error {
+  padding: 4px 8px 6px;
+  max-width: 220px;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .recent-projects__select-check {
   position: absolute;
   top: 8px;

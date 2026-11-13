@@ -793,6 +793,35 @@ describe('NewProjectPanel working directory picker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
 
     expect(await screen.findByText(/Couldn't open the folder picker/i)).toBeTruthy();
+    // A host build without the picker can only be fixed by updating.
+    expect(screen.getByText(/Please update OpenDesign and try again\./)).toBeTruthy();
+    expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
+  });
+
+  it('asks the user to retry, not update, when the host pick ran but the handshake failed', async () => {
+    mockedIsHostAvailable.mockReturnValue(true);
+    mockedPickHostWorkingDir.mockResolvedValue({
+      ok: false,
+      reason: 'desktop auth handshake with the daemon failed; please retry',
+    });
+
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Local storage' }));
+
+    expect(await screen.findByText(/Couldn't open the folder picker/i)).toBeTruthy();
+    expect(screen.getByText(/\. Please try again\./)).toBeTruthy();
+    expect(screen.queryByText(/Please update OpenDesign/)).toBeNull();
     expect(mockedOpenFolderDialog).not.toHaveBeenCalled();
   });
 

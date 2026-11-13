@@ -33,6 +33,7 @@ import { workspaceContextFixture } from '../helpers/workspace-context';
 // calls back into useRoute() (like the production useSyncExternalStore router)
 // for the settings surface to render at all.
 const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
+const navigationAllowed = vi.fn(() => true);
 const routeListeners = new Set<() => void>();
 const useRouteMock = vi.fn<() => Route>(() => homeRouteMock);
 
@@ -40,8 +41,13 @@ vi.mock('../../src/router', async () => {
   const actual = await vi.importActual<typeof import('../../src/router')>('../../src/router');
   return {
     ...actual,
-    navigate: vi.fn((route: unknown) => {
+    navigate: vi.fn((route: unknown, options?: { onCommit?: () => void; onCancel?: (reason: 'guard_rejected') => void }) => {
+      if (!navigationAllowed()) {
+        options?.onCancel?.('guard_rejected');
+        return;
+      }
       useRouteMock.mockReturnValue(route as never);
+      options?.onCommit?.();
       routeListeners.forEach((notify) => notify());
     }),
     useRoute: () =>
@@ -266,6 +272,7 @@ async function advanceTestClock(ms: number): Promise<void> {
 describe('App AMR polling', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    navigationAllowed.mockReturnValue(true);
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     useRouteMock.mockReturnValue(homeRouteMock);
@@ -1021,7 +1028,22 @@ describe('App AMR polling', () => {
     daemonConfig.resolve({ zcodeAppPath: '/Custom/ZCode.app' });
   });
 
-  it('refreshes renderer config and clears stale AMR models after a desktop app-config change event', async () => {
+  it('returns an open project to Home and refreshes AMR state after a desktop profile switch', async () => {
+    mockedFetchVelaLoginStatus.mockResolvedValue({
+      loggedIn: false,
+      loginInFlight: false,
+      profile: 'prod',
+      user: null,
+      configPath: '/tmp/amr-config.json',
+    });
+    mockedListProjects.mockResolvedValue([{
+      id: 'previous-environment-project',
+      name: 'Previous environment project',
+      skillId: null,
+      designSystemId: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }]);
     mockedLoadConfig.mockReturnValue({
       ...baseConfig,
       agentModels: { amr: { model: 'old-remote', reasoning: 'default' } },
@@ -1086,6 +1108,41 @@ describe('App AMR polling', () => {
       expect(screen.getByTestId('amr-profile').textContent).toBe('prod');
     });
 
+    act(() => {
+      navigate({
+        kind: 'project',
+        projectId: 'previous-environment-project',
+        conversationId: null,
+        fileName: null,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('amr-profile')).toBeNull();
+      expect(window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '')
+        .toContain('previous-environment-project');
+    });
+
+    const prepareSwitch = async () => {
+      const result = deferred<boolean>();
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent('open-design:prepare-amr-profile-switch', {
+          detail: result.resolve,
+        }));
+        await expect(Promise.race([result.promise, Promise.resolve('unhandled')]))
+          .resolves.toBe(navigationAllowed());
+      });
+    };
+
+    navigationAllowed.mockReturnValue(false);
+    await prepareSwitch();
+    expect(useRouteMock()).toMatchObject({ kind: 'project', projectId: 'previous-environment-project' });
+    expect(window.localStorage.getItem('open-design:workspace-tabs:v1')).toContain('previous-environment-project');
+    expect(mockedFetchDaemonConfig).toHaveBeenCalledTimes(1);
+
+    navigationAllowed.mockReturnValue(true);
+    await prepareSwitch();
+    expect(useRouteMock()).toEqual(homeRouteMock);
+
     const fetchMock = vi.mocked(globalThis.fetch);
     const workspaceDirectoryReadsBefore = fetchMock.mock.calls.filter(([input]) =>
       input.toString().includes('/api/workspace/directory')).length;
@@ -1115,6 +1172,9 @@ describe('App AMR polling', () => {
       ).toBeGreaterThan(workspaceDirectoryReadsBefore);
     });
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(1);
+    expect(window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '')
+      .not.toContain('previous-environment-project');
     fireEvent.focus(window);
     const agentScansAfterFocus = mockedFetchAgentsStream.mock.calls.length;
     nowSpy.mockRestore();

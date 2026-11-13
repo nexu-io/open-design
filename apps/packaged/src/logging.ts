@@ -74,6 +74,40 @@ export function isHarmlessSocketOptionError(value: unknown): boolean {
   return message.includes("EINVAL");
 }
 
+let packagedShutdownInProgress = false;
+
+/**
+ * Mark that the packaged main process has begun quitting. Called at the start
+ * of desktop shutdown, before the window closes and the quiesce step aborts
+ * in-flight `od://` proxy fetches; Electron's
+ * net.fetch streams can reject with an AbortError that nothing awaits, and
+ * that rejection must not surface as a fatal "JavaScript error in main
+ * process" dialog while the app is already tearing down.
+ */
+export function markPackagedShutdownInProgress(): void {
+  packagedShutdownInProgress = true;
+}
+
+/** Test-only: clears the shutdown flag between cases. */
+export function resetPackagedShutdownStateForTests(): void {
+  packagedShutdownInProgress = false;
+}
+
+/**
+ * Recognise abort errors (DOMException or Error with `name === "AbortError"`,
+ * or `code === "ABORT_ERR"`). Used only together with the shutdown flag, so
+ * aborts before shutdown keep the fatal path.
+ */
+export function isShutdownAbortError(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const { code, name } = value as { code?: unknown; name?: unknown };
+  return name === "AbortError" || code === "ABORT_ERR";
+}
+
+function isExpectedShutdownAbort(value: unknown): boolean {
+  return packagedShutdownInProgress && isShutdownAbortError(value);
+}
+
 /**
  * Build the named `uncaughtException` handler used by
  * `attachPackagedDesktopProcessLogging`. Exposed as its own factory
@@ -103,6 +137,10 @@ export function createFatalUncaughtExceptionHandler(
   const handler = (error: unknown): void => {
     if (isHarmlessSocketOptionError(error)) {
       logger.warn("packaged desktop swallowed harmless socket option error", { error });
+      return;
+    }
+    if (isExpectedShutdownAbort(error)) {
+      logger.warn("packaged desktop ignored abort error during shutdown", { error });
       return;
     }
     logger.error("packaged desktop fatal uncaught exception", { error });
@@ -135,6 +173,10 @@ export function createFatalUnhandledRejectionHandler(
   const handler = (reason: unknown): void => {
     if (isHarmlessSocketOptionError(reason)) {
       logger.warn("packaged desktop swallowed harmless socket option rejection", { reason });
+      return;
+    }
+    if (isExpectedShutdownAbort(reason)) {
+      logger.warn("packaged desktop ignored abort rejection during shutdown", { reason });
       return;
     }
     logger.error("packaged desktop unhandled rejection", { reason });

@@ -1888,7 +1888,13 @@ body:has(.artifact-version-panel) .ws-tabs-file-actions-before {
   position: sticky;
   bottom: -6px;
   z-index: 1;
+  flex-shrink: 0;
+  height: auto;
+  min-height: 36px;
   margin-top: 2px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
   /* Soft divider, matching .inline-switcher__more — the material separator
      read as a heavy near-black rule over this popover's glass. */
   border-top: 1px solid var(--border-soft);

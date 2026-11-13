@@ -260,6 +260,8 @@ export interface RegisterCollabSyncRoutesDeps {
   readProjectShareState?: ReadProjectShareState;
   /** Durable local author proof for a not-yet-catalogued project. Never inferred from the requester. */
   resolveLocalPublicShareOwner?: (projectId: string, workspaceId: string) => string | null;
+  /** Explicit-share adoption only; the context must be freshly verified. */
+  adoptLegacyPublicShareProject?: (projectId: string, context: WorkspaceCollabContext) => string | null;
   /** The only presentation rule for a publication's Viewer address: explicit
    * local override, else the address AMR reported (fresh evidence or the
    * persisted copy, re-verified), else unavailable. Unwired means unavailable,
@@ -859,6 +861,29 @@ export function registerCollabSyncRoutes(
     );
   }
 
+  async function localPublicShareOwnerForRequest(
+    req: Request,
+    projectId: string,
+    claimed: WorkspaceCollabContext,
+    verifiedContext?: WorkspaceCollabContext,
+  ): Promise<
+    | { ok: true; owner: string | null }
+    | Exclude<RouteWorkspaceVerification, { ok: true }>
+  > {
+    const owner = deps.resolveLocalPublicShareOwner?.(projectId, claimed.workspaceId) ?? null;
+    if (owner || !deps.adoptLegacyPublicShareProject) return { ok: true, owner };
+    // Existing attributed projects retain their local fast path. Only the
+    // historical no-author case needs fresh Personal ownership before a write.
+    const verification = verifiedContext
+      ? { ok: true as const, context: verifiedContext }
+      : await verifiedWorkspaceContextForRequest(req, projectId);
+    if (!verification.ok) return verification;
+    const context = verification.context;
+    if (!context || context.workspaceId !== claimed.workspaceId
+      || context.workspaceMemberId !== claimed.workspaceMemberId) return { ok: true, owner: null };
+    return { ok: true, owner: deps.adoptLegacyPublicShareProject(projectId, context) };
+  }
+
   async function statusIdentityForRequest(projectId: string, req: {
     get(name: string): string | undefined;
     headers: { authorization?: string | string[] | undefined };
@@ -1321,8 +1346,12 @@ export function registerCollabSyncRoutes(
     if (!await canShareProjectsForRequest(req, context)) return res.status(403).json({ error: 'WORKSPACE_PROJECT_SHARE_DENIED' });
     const resolved = await resolveSharedProjectForPublicFile(resolveSharedProject, projectId, context, principal);
     if (!resolved.ok) return res.status(503).json({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
-    const owner = resolved.project?.ownerMemberId
-      ?? (!resolved.project ? deps.resolveLocalPublicShareOwner?.(projectId, context.workspaceId) : null);
+    let owner = resolved.project?.ownerMemberId ?? null;
+    if (!resolved.project) {
+      const ownership = await localPublicShareOwnerForRequest(req, projectId, context, context);
+      if (!ownership.ok) return sendWorkspaceVerificationFailure(res, ownership);
+      owner = ownership.owner;
+    }
     if (!owner || owner !== principal.memberId || isUnmaterializedSharedPlaceholder(projectStore?.get?.(projectId))) {
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
     }
@@ -1353,7 +1382,17 @@ export function registerCollabSyncRoutes(
     const verifiedContext = verification.context;
     const principal = publicFilePrincipal(verifiedContext);
     if (!verifiedContext || !principal) return res.status(409).json(workspaceIdentityRequiredBody());
-    const owner = deps.resolveLocalPublicShareOwner?.(projectId, verifiedContext.workspaceId);
+    // Validate the existing request shape before an explicit-share adoption.
+    const requestBody: unknown = req.body;
+    if (requestBody != null && (typeof requestBody !== 'object' || Array.isArray(requestBody)
+      || Object.keys(requestBody).some(key => key !== 'mode'))) {
+      return res.status(400).json({ error: 'INVALID_SHARE_PUBLISH_REQUEST' });
+    }
+    const mode = (requestBody as SharePublishRequest | undefined)?.mode;
+    if (mode !== undefined && mode !== 'resume') return res.status(400).json({ error: 'INVALID_SHARE_PUBLISH_REQUEST' });
+    const ownership = await localPublicShareOwnerForRequest(req, projectId, verifiedContext);
+    if (!ownership.ok) return sendWorkspaceVerificationFailure(res, ownership);
+    const owner = ownership.owner;
     if (!owner || owner !== principal.memberId || isUnmaterializedSharedPlaceholder(projectStore?.get?.(projectId)))
       return res.status(403).json({error:'WORKSPACE_PROJECT_PUBLISH_DENIED'});
     let sharedProject: TeamProject | null = null;
@@ -1364,13 +1403,6 @@ export function registerCollabSyncRoutes(
     // A stopped link cannot be reopened by the ordinary publish/update POST:
     // that path advances the alias and transfers fresh bytes. Only an explicit
     // request may reopen the immutable generation previously bound by Vela.
-    const requestBody: unknown = req.body;
-    if (requestBody != null && (typeof requestBody !== 'object' || Array.isArray(requestBody)
-      || Object.keys(requestBody).some(key => key !== 'mode'))) {
-      return res.status(400).json({ error: 'INVALID_SHARE_PUBLISH_REQUEST' });
-    }
-    const mode = (requestBody as SharePublishRequest | undefined)?.mode;
-    if (mode !== undefined && mode !== 'resume') return res.status(400).json({ error: 'INVALID_SHARE_PUBLISH_REQUEST' });
     if (mode === 'resume') {
       const diagnose = (status: number, errorCode: string, stage: PublicShareDiagnosticStage = 'resume_guard') => {
         logPublicShareDiagnostic({ operation: 'resume', stage, status, errorCode, requestId, startedAt });
