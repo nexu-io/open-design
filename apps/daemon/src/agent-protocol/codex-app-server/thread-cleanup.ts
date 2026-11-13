@@ -5,8 +5,10 @@ import type { CodexClosedThreadCleanup } from './session.js';
 
 /** Same measured compatibility floor used by the live session's archive path. */
 export function codexHistoryCapabilities(userAgent: unknown): { paginated: boolean; legacy: boolean } {
+  // Codex permits originators such as "Codex Desktop". Anchor the version to
+  // the first slash; OS/client suffixes must never supply the server version.
   const version = typeof userAgent === 'string'
-    ? /^[^/\s]+\/(\d+)\.(\d+)\.(\d+)(?:\s|$)/u.exec(userAgent) : null;
+    ? /^[^/\s][^/\r\n]*\/(\d+)\.(\d+)\.(\d+)(?:\s|$)/u.exec(userAgent) : null;
   if (!version) return { paginated: false, legacy: false };
   const [, major, minor, patch] = version;
   return {
@@ -233,10 +235,14 @@ export async function cleanupClosedCodexThread(opts: CodexThreadCleanupOptions):
             write({ jsonrpc: '2.0', id: 2, method: 'thread/archive', params: { threadId: receipt.threadId } });
           };
           if (process.platform === 'win32') {
+            // Prove ownership while app-server is still blocked on the archive
+            // request, so it cannot exit before its generation is captured.
+            // The proof only governs which processes may be stopped later: a
+            // failed or timed-out snapshot must not withhold the archive RPC,
+            // or the thread stays in Codex's default list (#8122 Windows QA).
+            // Post-archive cleanup then reports the unproven tree as failed.
             awaiting = 'ownership';
-            void captureOwnedTree().then(archive, error => {
-              finish({ status: 'failed', message: String(error), treeVerified: false });
-            });
+            void captureOwnedTree().then(archive, archive);
           } else archive();
         } else finish({ status: 'archived' });
       }
