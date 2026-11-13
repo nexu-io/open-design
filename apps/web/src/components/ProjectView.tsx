@@ -11278,7 +11278,7 @@ export function ProjectView({
         // Forward the per-call BYOK provider snapshot so "Same as chat"
         // memory extraction uses the same vendor, endpoint, key and model as
         // the run. The daemon consumes it for this request only.
-        const byokChatProvider = byokOpenCodeProvider
+        const chatProvider = byokOpenCodeProvider
           ? {
               provider: byokOpenCodeProvider.protocol,
               apiKey: byokOpenCodeProvider.apiKey,
@@ -11297,7 +11297,7 @@ export function ProjectView({
                 projectId: project.id,
                 conversationId: runConversationId,
                 assistantMessageId: assistantId,
-                byokChatProvider,
+                chatProvider,
               }),
             });
           } catch {

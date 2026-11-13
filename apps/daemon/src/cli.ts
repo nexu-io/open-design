@@ -7417,12 +7417,8 @@ function normalizeChatSessionModeFlag(value) {
 }
 
 function safeReadJsonFile(p) {
-  try {
-    if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
-    return JSON.parse(readFileSync(p, 'utf8'));
-  } catch {
-    return null;
-  }
+  if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
+  return JSON.parse(readFileSync(p, 'utf8'));
 }
 
 function collectCliPositionals(argv, stringFlags = new Set()) {
@@ -7905,8 +7901,13 @@ Common options:
       if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
       if (flags['metadata-json']) {
-        const mj = safeReadJsonFile(flags['metadata-json']);
-        if (mj && typeof mj === 'object') body.metadata = mj;
+        try {
+          const mj = safeReadJsonFile(flags['metadata-json']);
+          if (mj && typeof mj === 'object') body.metadata = mj;
+        } catch (err) {
+          console.error(`--metadata-json must be valid JSON: ${err.message}`);
+          process.exit(2);
+        }
       }
       const prompt = await readPromptFromFlags(flags);
       if (prompt) body.pendingPrompt = prompt;
