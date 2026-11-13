@@ -3,35 +3,46 @@ export interface ResearchSubcommandArgs {
   subArgs: string[];
 }
 
-export function splitResearchSubcommand(args: string[]): ResearchSubcommandArgs {
-  // The 'od research' command only supports one subcommand: 'search'.
-  // We need to find 'search' as the first non-flag argument, skipping
-  // flag values (which may look like non-flag arguments).
-  
-  // First, find the index of 'search'
-  const searchIndex = args.indexOf('search');
-  if (searchIndex === -1) {
-    return { sub: undefined, subArgs: args };
-  }
+/**
+ * String flags whose value is consumed positionally (`--flag value`), so the
+ * value must not be mistaken for the subcommand during discovery.
+ */
+const STRING_FLAGS_WITH_POSITIONAL_VALUE = new Set([
+  'query',
+  'max-sources',
+  'daemon-url',
+]);
 
-  // Check if there's any non-flag argument before 'search' that isn't
-  // a value for a previous flag
-  let lastWasFlag = false;
-  for (let i = 0; i < searchIndex; i++) {
-    const arg = args[i] ?? '';
-    if (arg.startsWith('--')) {
-      lastWasFlag = true;
-    } else if (lastWasFlag) {
-      lastWasFlag = false; // This arg is a value for the previous flag
-    } else {
-      // Found a non-flag argument before 'search' that's not a flag value
+export function splitResearchSubcommand(
+  args: string[],
+  stringFlags: ReadonlySet<string> = STRING_FLAGS_WITH_POSITIONAL_VALUE,
+): ResearchSubcommandArgs {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (!a) continue;
+    if (a === '--') {
+      // Everything after `--` is a positional value, never a subcommand.
       return { sub: undefined, subArgs: args };
     }
+    if (a.startsWith('--')) {
+      const body = a.slice(2);
+      // Equals form (`--flag=value`) consumes no separate value.
+      if (
+        !body.includes('=') &&
+        stringFlags.has(body) &&
+        i + 1 < args.length
+      ) {
+        // The next arg is this flag's value; skip it.
+        i++;
+      }
+      continue;
+    }
+    // Only 'search' is a valid subcommand for 'od research'
+    if (a === 'search') {
+      return { sub: 'search', subArgs: [...args.slice(0, i), ...args.slice(i + 1)] };
+    }
+    // Any other non-flag argument is not a valid subcommand
+    return { sub: undefined, subArgs: args };
   }
-
-  // If we get here, 'search' is the first non-flag argument
-  return {
-    sub: 'search',
-    subArgs: [...args.slice(0, searchIndex), ...args.slice(searchIndex + 1)],
-  };
+  return { sub: undefined, subArgs: args };
 }

@@ -18,15 +18,14 @@ describe('research CLI', () => {
     });
   });
 
-  it('handles string option values before search subcommand (#8890)', () => {
-    // These should NOT be treated as subcommands
+  it('skips --query value and keeps it in subArgs (#8890)', () => {
     expect(
       splitResearchSubcommand([
         '--query',
         'design',
-        'search',
         '--daemon-url',
         'http://127.0.0.1:7456',
+        'search',
       ]),
     ).toEqual({
       sub: 'search',
@@ -34,33 +33,67 @@ describe('research CLI', () => {
     });
   });
 
-  it('handles numeric option values before search subcommand (#8890)', () => {
+  it('skips --max-sources value and keeps it in subArgs (#8890)', () => {
     expect(
-      splitResearchSubcommand([
-        '--max-sources',
-        '3',
-        'search',
-        '--query',
-        'design',
-      ]),
+      splitResearchSubcommand(['--max-sources', '3', 'search']),
     ).toEqual({
       sub: 'search',
-      subArgs: ['--max-sources', '3', '--query', 'design'],
+      subArgs: ['--max-sources', '3'],
     });
   });
 
-  it('handles URL values before search subcommand (#8890)', () => {
+  it('skips --daemon-url value and keeps it in subArgs (#8890)', () => {
     expect(
-      splitResearchSubcommand([
-        '--daemon-url',
-        'http://127.0.0.1:7456',
-        'search',
-        '--query',
-        'design',
-      ]),
+      splitResearchSubcommand(['--daemon-url', 'http://127.0.0.1:7456', 'search']),
     ).toEqual({
       sub: 'search',
-      subArgs: ['--daemon-url', 'http://127.0.0.1:7456', '--query', 'design'],
+      subArgs: ['--daemon-url', 'http://127.0.0.1:7456'],
+    });
+  });
+
+  it('handles no subcommand', () => {
+    expect(splitResearchSubcommand(['--query', 'design'])).toEqual({
+      sub: undefined,
+      subArgs: ['--query', 'design'],
+    });
+  });
+
+  it('handles only flag args', () => {
+    expect(splitResearchSubcommand(['--help'])).toEqual({
+      sub: undefined,
+      subArgs: ['--help'],
+    });
+  });
+
+  it('treats everything after -- as positional values (#8890)', () => {
+    expect(splitResearchSubcommand(['--', 'search'])).toEqual({
+      sub: undefined,
+      subArgs: ['--', 'search'],
+    });
+  });
+
+  it('does not consume a value for the equals form --flag=value (#8890)', () => {
+    expect(splitResearchSubcommand(['--query=design', 'search'])).toEqual({
+      sub: 'search',
+      subArgs: ['--query=design'],
+    });
+  });
+
+  it('does not treat an unknown flag value as a subcommand (#8890)', () => {
+    // `--unknown` is not a known string flag, so `value` is the first
+    // positional token — not a subcommand.
+    expect(splitResearchSubcommand(['--unknown', 'value', 'search'])).toEqual({
+      sub: undefined,
+      subArgs: ['--unknown', 'value', 'search'],
+    });
+  });
+
+  it('keeps a trailing duplicate search token in subArgs (#8890)', () => {
+    expect(
+      splitResearchSubcommand(['search', '--query', 'design', 'search']),
+    ).toEqual({
+      sub: 'search',
+      subArgs: ['--query', 'design', 'search'],
     });
   });
 
@@ -91,4 +124,4 @@ describe('research CLI', () => {
       subArgs: ['--query', 'design', 'search'],
     });
   });
-})
+});
