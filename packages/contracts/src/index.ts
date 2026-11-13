@@ -17,6 +17,7 @@ export * from './api/amr-web-intent.js';
 export * from './api/automations.js';
 export * from './api/artifacts.js';
 export * from './api/artifact-lint.js';
+export * from './api/bedrock.js';
 export * from './api/deliverable-syntax.js';
 export * from './api/brands.js';
 export * from './api/brief.js';

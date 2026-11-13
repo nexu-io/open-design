@@ -103,12 +103,15 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'deepseek-reasoner',
   ],
   bedrock: [
-    'anthropic.claude-3-5-sonnet-20241022-v2:0',
-    'anthropic.claude-3-5-haiku-20241022-v1:0',
-    'anthropic.claude-3-haiku-20240307-v1:0',
+    'global.anthropic.claude-sonnet-5',
+    'global.anthropic.claude-opus-5',
+    'global.anthropic.claude-sonnet-4-6',
+    'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    'global.amazon.nova-2-lite-v1:0',
     'amazon.nova-pro-v1:0',
     'amazon.nova-lite-v1:0',
     'amazon.nova-micro-v1:0',
+    'global.openai.gpt-5.6-sol',
   ],
   ollama: [
     'cogito-2.1:671b',
@@ -188,6 +191,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
   { id: 'aihubmix', title: 'AIHubMix' },
+  { id: 'bedrock', title: 'Amazon Bedrock' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -198,7 +202,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
-  bedrock: 'AWS Bedrock',
+  bedrock: 'Amazon Bedrock',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -209,7 +213,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
   aihubmix: 'sk-...',
-  bedrock: 'AWS credentials',
+  bedrock: 'Bedrock API key (ABSK...)',
 };
 
 // Default base URL the daemon assumes when the user leaves the field

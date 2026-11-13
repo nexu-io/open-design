@@ -14,6 +14,9 @@ export interface ProviderModelsRequest extends ReasoningExecutionRequestFields {
   // Azure only. Kept in the contract so the request shape can stay aligned
   // with provider testing, even though Azure model discovery is not supported.
   apiVersion?: string;
+  // Bedrock only. Named AWS profile for the credential-chain auth mode; the
+  // daemon then lists models through the AWS CLI and `apiKey` may be empty.
+  awsProfile?: string;
 }
 
 export type ProviderModelOption = AgentModelOption;
