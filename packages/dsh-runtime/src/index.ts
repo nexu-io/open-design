@@ -22,6 +22,7 @@ import {
   identityFrame,
   modelsFrame,
   parseHostCommand,
+  resolveCompatibilityGeneration,
   type ExecuteCommand,
   type ModelCatalogEntry,
 } from './protocol.js';
@@ -37,6 +38,20 @@ export const inject = [
 ];
 
 const PLUGIN_VERSION = '0.1.0';
+
+function compatibilityGeneration(ctx: Context): string | null {
+  const loader = ctx.get('loader');
+  const composition = loader
+    ? [...loader.entries()].map((entry) => ({
+        name: entry.options.name,
+        disabled: entry.disabled,
+        inject: entry.options.inject,
+        group: entry.options.group,
+        config: entry.fiber?.config ?? entry.options.config,
+      }))
+    : undefined;
+  return resolveCompatibilityGeneration(process.argv[1], composition);
+}
 
 type Output = { write(chunk: string): unknown };
 type ExitFallbackTimer = { unref(): unknown };
@@ -383,7 +398,7 @@ async function serve(
   input: Readable = process.stdin,
   finishProfile: (exitCallback: (code: number) => void) => void = requestProfileExit,
 ): Promise<void> {
-  writeFrame(output, identityFrame('ready', PLUGIN_VERSION));
+  writeFrame(output, identityFrame('ready', PLUGIN_VERSION, compatibilityGeneration(ctx)));
   const lines = createInterface({ input, crlfDelay: Infinity });
   let requestId: string | null = null;
   let handle: AgentHandle | undefined;
@@ -453,7 +468,7 @@ export function apply(ctx: Context): void {
   const exit = ctx.get('appExit');
   if (!startup || !exit) throw new Error('open-design-runtime requires startup and appExit services');
   if (startup.mode === 'probe') {
-    writeFrame(process.stdout, identityFrame('probe', PLUGIN_VERSION));
+    writeFrame(process.stdout, identityFrame('probe', PLUGIN_VERSION, compatibilityGeneration(ctx)));
     exit(0);
     return;
   }
