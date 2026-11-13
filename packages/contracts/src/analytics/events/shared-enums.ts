@@ -341,6 +341,9 @@ export type TrackingRunFailureDetail =
   | 'network_error'
   | 'provider_high_demand'
   | 'provider_routing_error'
+  // The provider withheld the response under its content policy
+  // (ContentFilterError). Deterministic for the same request.
+  | 'content_filtered'
   | 'inactivity_timeout'
   | 'timeout'
   | 'empty_output'
@@ -454,6 +457,7 @@ export type TrackingRunRepairOwner =
 export type TrackingRunAdmissionPhase = 'before_execution' | 'during_execution' | 'unknown';
 /** `none` means no affirmative policy evidence, not proof that no policy applied. */
 export type TrackingRunPolicyReason =
+  | 'content_filtered'
   | 'model_window_limit'
   | 'membership_concurrency_limit'
   | 'hard_quota'

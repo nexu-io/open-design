@@ -10,7 +10,7 @@ import type {
 import { isAcpHandshakeRpcErrorText } from '../runtimes/acp-handshake-id.js';
 
 const POLICY_REASONS = new Set<TrackingRunPolicyReason>([
-  'model_window_limit', 'membership_concurrency_limit', 'hard_quota',
+  'content_filtered', 'model_window_limit', 'membership_concurrency_limit', 'hard_quota',
   'workspace_credits_exhausted', 'amr_insufficient_balance',
   'amr_tier_upgrade_required', 'entitlement_required',
 ]);
