@@ -2,22 +2,95 @@ import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { agentCapabilities } from './capabilities.js';
 import { execAgentFile } from './invocation.js';
-import type { RuntimeAgentDef } from './types.js';
+import type { RuntimeAgentDef, RuntimeCapabilityMap } from './types.js';
 
 export const OPENCODE_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
+export const OPENCODE_AUTO_APPROVE_FLAG = '--auto';
 export const OPENCODE_WORKSPACE_DIR_FLAG = '--dir';
+export const OPENCODE_PURE_FLAG = '--pure';
+export const OPENCODE_VARIANT_FLAG = '--variant';
+export const OPENCODE_STANDALONE_FLAG = '--standalone';
 
+/**
+ * Every `opencode run` flag this adapter may emit, probed from one `--help`
+ * scan. OpenCode 2 removed `--dir`, `--pure`, `--variant`, and
+ * `--dangerously-skip-permissions`, and added `--auto` and `--standalone`;
+ * the flags this build emits therefore depend on the installed CLI, not on a
+ * version comparison. `probeCapabilities` already scans stdout and stderr and
+ * returns `{}` when the probe fails, so a missing key means "not probed"
+ * rather than "unsupported".
+ */
 export const OPENCODE_PERMISSION_CAPABILITY = {
   helpArgs: ['run', '--help'],
   capabilityFlags: {
     [OPENCODE_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    [OPENCODE_AUTO_APPROVE_FLAG]: 'autoApprove',
+    [OPENCODE_WORKSPACE_DIR_FLAG]: 'workspaceDir',
+    [OPENCODE_PURE_FLAG]: 'pure',
+    [OPENCODE_VARIANT_FLAG]: 'variantFlag',
+    [OPENCODE_STANDALONE_FLAG]: 'standalone',
   },
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
+/**
+ * Whether the probed surface is OpenCode 2's.
+ *
+ * Two independent signals, both required: `--standalone` exists only on the V2
+ * client, and `--pure` exists only on V1's `run`. A build that has one but not
+ * the other is treated as V1 on purpose — that direction appends `--dir`, which
+ * fails loudly on a V2 CLI instead of reverting to the silent workspace bug
+ * described in `appendOpenCodeWorkspaceDir`.
+ */
+export function isOpenCodeV2Surface(
+  capabilities: RuntimeCapabilityMap | undefined,
+): boolean {
+  if (!capabilities) return false;
+  return capabilities.standalone === true && capabilities.pure === false;
+}
+
+export function isOpenCodeV2Agent(agentId: string): boolean {
+  return isOpenCodeV2Surface(agentCapabilities.get(agentId));
+}
+
 export function appendOpenCodePermissionBypass(args: string[], agentId: string): void {
-  if (agentCapabilities.get(agentId)?.skipPermissions) {
+  const capabilities = agentCapabilities.get(agentId);
+  if (capabilities?.skipPermissions) {
     args.push(OPENCODE_SKIP_PERMISSIONS_FLAG);
+    return;
   }
+  // V2 renamed the bypass. It is not merely a rename: V2's `--auto` approves
+  // permissions that were not explicitly denied, which is the closest
+  // equivalent to V1's skip-all flag.
+  if (isOpenCodeV2Surface(capabilities) && capabilities?.autoApprove) {
+    args.push(OPENCODE_AUTO_APPROVE_FLAG);
+  }
+}
+
+/**
+ * `--pure` isolates a probe from user-installed plugins. Only a surface proven
+ * to be V2 skips it: V1 keeps the flag even when its `--help` omits it, because
+ * the workspace/isolation behaviour is a property of the generation rather than
+ * of the help text.
+ */
+export function appendOpenCodePure(args: string[], agentId: string): void {
+  const capabilities = agentCapabilities.get(agentId);
+  if (isOpenCodeV2Surface(capabilities)) return;
+  if (!args.includes(OPENCODE_PURE_FLAG)) args.push(OPENCODE_PURE_FLAG);
+}
+
+/**
+ * Run OpenCode on a private server instead of the user's shared background
+ * service. The shared service is account-wide: without this flag a headless
+ * Run attaches to whatever server the user's interactive TUI happens to own,
+ * mixing runtime state and lifecycle between the two.
+ */
+export function appendOpenCodeStandalone(args: string[], agentId: string): void {
+  const capabilities = agentCapabilities.get(agentId);
+  if (isOpenCodeV2Surface(capabilities)) args.push(OPENCODE_STANDALONE_FLAG);
+}
+
+export function openCodeSupportsVariantFlag(agentId: string): boolean {
+  return !isOpenCodeV2Agent(agentId);
 }
 
 export interface OpenCodeEditBaseResolution {
@@ -105,16 +178,24 @@ async function nearestGitAncestor(from: string): Promise<string | null> {
  * `no_artifact`. `permission.external_directory` cannot catch it either — once
  * the repository is the worktree, writing inside it is an in-project write.
  *
- * Sent unconditionally, matching the BYOK OpenCode definition that already
- * carried this workaround. Gating it on the `--help` capability probe would
- * turn a missing flag back into the silent data-loss bug; an OpenCode build
- * without `--dir` should fail loudly at spawn instead.
+ * Sent unconditionally on V1, matching the BYOK OpenCode definition that
+ * already carried this workaround. Gating it on the `--help` capability probe
+ * would turn a missing flag back into the silent data-loss bug; an OpenCode V1
+ * build without `--dir` should fail loudly at spawn instead.
+ *
+ * OpenCode 2 changes the premise: it resolves its workspace from the process
+ * cwd (`location services booted directory=<cwd>`) and no longer adopts the
+ * enclosing git root, so the flag is gone and spawning with `cwd` is the
+ * contract. `isOpenCodeV2Surface` is the only branch that omits it; every
+ * other state — V1, or a probe that never ran — keeps today's behaviour.
  */
 export function appendOpenCodeWorkspaceDir(
   args: string[],
+  agentId: string,
   cwd: string | null | undefined,
 ): void {
   if (typeof cwd !== 'string' || cwd.length === 0) return;
+  if (isOpenCodeV2Surface(agentCapabilities.get(agentId))) return;
   args.push(OPENCODE_WORKSPACE_DIR_FLAG, cwd);
 }
 

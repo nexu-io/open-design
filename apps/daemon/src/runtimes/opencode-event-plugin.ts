@@ -27,10 +27,28 @@ export const OPEN_CODE_EVENT_PLUGIN_SOURCE = String.raw`export default async fun
 }
 `;
 
-export function supportsOpenCodeEventPlugin(version: string | undefined): boolean {
-  const match = /^1\.(\d+)\.(\d+)$/u.exec(version ?? '');
-  return Boolean(match && (Number(match[1]) > 17 || (Number(match[1]) === 17 && Number(match[2]) >= 18)));
+/**
+ * Parse the version line OpenCode prints. V2 reports `opencode v2.2.6` while
+ * earlier builds reported a bare `1.18.x`, so both shapes have to normalize
+ * before any generation check can be trusted.
+ */
+export function parseOpenCodeVersion(
+  version: string | undefined | null,
+): { major: number; minor: number; patch: number } | null {
+  // Anchored on purpose: `1.18.0-dev` and other unverified builds must not
+  // parse as stable, and V2 prints the name before the version.
+  const match = /^(?:opencode\s+)?v?(\d+)\.(\d+)\.(\d+)$/u.exec(String(version ?? '').trim());
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
 }
+
+export function supportsOpenCodeEventPlugin(version: string | undefined): boolean {
+  const parsed = parseOpenCodeVersion(version);
+  if (!parsed || parsed.major !== 1) return false;
+  return parsed.minor > 17 || (parsed.minor === 17 && parsed.patch >= 18);
+}
+
+let warnedAboutV2PluginSupport = false;
 
 /** OpenCode waits for its own npm setup even for an import-free file plugin. */
 function applyDependencyFetchDefaults(env: NodeJS.ProcessEnv): void {
@@ -48,6 +66,14 @@ export async function applyOpenCodeEventPlugin(
   version: string | undefined,
   inheritedConfigContent?: string,
 ): Promise<boolean> {
+  const parsedVersion = parseOpenCodeVersion(version);
+  if (parsedVersion && parsedVersion.major >= 2 && !warnedAboutV2PluginSupport) {
+    // The injected module uses the V1 plugin contract, which OpenCode 2 does
+    // not run. Say so once instead of letting the tool-row preview quietly
+    // lose file paths; wiring the V2 plugin API is a separate change.
+    warnedAboutV2PluginSupport = true;
+    console.info('[opencode] optional tool previews disabled: the V1 event plugin does not run on OpenCode 2');
+  }
   if (!supportsOpenCodeEventPlugin(version) || /^(1|true)$/iu.test(env.OPENCODE_PURE ?? '')) return false;
   const config: unknown = env.OPENCODE_CONFIG_CONTENT ? JSON.parse(env.OPENCODE_CONFIG_CONTENT) : {};
   if (!config || typeof config !== 'object' || Array.isArray(config)) return false;

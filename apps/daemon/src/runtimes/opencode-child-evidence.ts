@@ -369,18 +369,36 @@ export async function collectOpenCodeChildRuntimeFacts(input: {
 }
 
 /**
- * Read one child session through `opencode export <id> --sanitize`, the only
- * OpenCode surface that emits a child transcript together with the `parentID`
- * the two-sided verification needs, and with transcript and file bytes already
+ * Read one child session through the CLI's sanitized export, the only OpenCode
+ * surface that emits a child transcript together with the `parentID` the
+ * two-sided verification needs, and with transcript and file bytes already
  * redacted by the CLI itself.
  *
- * `--pure` keeps a user-installed OpenCode plugin from executing inside the
- * evidence path, and `execAgentFile` supplies a neutral working directory so
- * the bun-based CLI cannot drop a lockfile into the user's project (see
- * `invocation.ts`). The env must be the one the Run was spawned with: it
- * carries the `XDG_DATA_HOME` / `HOME` that decide which session store the
- * spawned CLI actually wrote to.
+ * The command moved between generations: V1 is
+ * `opencode export <id> --sanitize --pure`, V2 is
+ * `opencode session export <id> --sanitize`. `--pure` kept a user-installed
+ * OpenCode plugin from executing inside the evidence path and no longer exists
+ * on V2. `execAgentFile` supplies a neutral working directory so the bun-based
+ * CLI cannot drop a lockfile into the user's project (see `invocation.ts`). The
+ * env must be the one the Run was spawned with: it carries the `XDG_DATA_HOME`
+ * / `HOME` that decide which session store the spawned CLI actually wrote to.
  */
+/**
+ * The two export invocations this adapter knows. OpenCode 2 moved `export`
+ * under the `session` subcommand and removed `--pure`, so neither generation's
+ * spelling is accepted by the other. The form is discovered from a successful
+ * invocation, not from a version guess: a fork that versions itself oddly still
+ * resolves on the first Run.
+ */
+const OPENCODE_EXPORT_FORMS: Readonly<Record<'v1' | 'v2', (childSessionId: string) => string[]>> = Object.freeze({
+  v1: (childSessionId) => ['export', childSessionId, '--sanitize', '--pure'],
+  v2: (childSessionId) => ['session', 'export', childSessionId, '--sanitize'],
+});
+
+// This build shipped against V1, so try that form first and remember whichever
+// worked. A V2 user pays one failed invocation on the first evidence read.
+let preferredOpenCodeExportForm: 'v1' | 'v2' = 'v1';
+
 export function createOpenCodeSanitizedExportLoader(input: {
   launchPath: string;
   env: NodeJS.ProcessEnv;
@@ -391,15 +409,26 @@ export function createOpenCodeSanitizedExportLoader(input: {
     if (!OPENCODE_CHILD_SESSION_ID.test(childSessionId)) {
       throw new TypeError(`Unsupported OpenCode child session id: ${childSessionId}`);
     }
-    const { stdout } = await execAgentFile(
-      input.launchPath,
-      ['export', childSessionId, '--sanitize', '--pure'],
-      {
-        env: input.env,
-        timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
-        maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
-      },
-    );
+    const forms: Array<'v1' | 'v2'> = preferredOpenCodeExportForm === 'v1'
+      ? ['v1', 'v2']
+      : ['v2', 'v1'];
+    let stdout: string | Buffer | undefined;
+    let lastError: unknown;
+    for (const form of forms) {
+      try {
+        const result = await execAgentFile(input.launchPath, OPENCODE_EXPORT_FORMS[form](childSessionId), {
+          env: input.env,
+          timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
+          maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
+        });
+        stdout = result.stdout;
+        preferredOpenCodeExportForm = form;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (stdout === undefined) throw lastError;
     // `opencode export` writes its progress line to stderr, so stdout is the
     // session document alone.
     return JSON.parse(typeof stdout === 'string' ? stdout : String(stdout));

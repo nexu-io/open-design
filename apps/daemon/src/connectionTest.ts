@@ -99,6 +99,8 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import { appendOpenCodePure } from './runtimes/opencode-permissions.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2582,6 +2584,14 @@ async function testAgentConnectionInternal(
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
+      // Optional flags are gated on the `--help` capability map, and that map is
+      // shared per agent id rather than per executable. Startup detection may
+      // have profiled a different install (a changed PATH, or an agentCliEnv
+      // override), so establish the answer for the binary this probe will
+      // actually spawn before building the argv.
+      if (def.id === 'opencode' || def.id === 'byok-opencode' || def.id === 'mimo') {
+        await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
+      }
       args = def.buildArgs(
         SMOKE_PROMPT,
         [],
@@ -2609,9 +2619,12 @@ async function testAgentConnectionInternal(
       // Connection tests should validate the adapter's core CLI path, not
       // fail on unrelated user-installed OpenCode plugins. `opencode run
       // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
-        args.push('--pure');
+      // the user's full plugin environment. OpenCode 2 removed the flag, and
+      // does not execute V1 plugins at all, so the helper omits it only when
+      // the probed surface proves it is absent; the `--title` flag exists on
+      // both generations.
+      if (input.agentId === 'opencode' || input.agentId === 'mimo') {
+        appendOpenCodePure(args, input.agentId);
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');

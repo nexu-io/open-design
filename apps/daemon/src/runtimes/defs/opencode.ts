@@ -2,7 +2,9 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
+  appendOpenCodeStandalone,
   appendOpenCodeWorkspaceDir,
+  openCodeSupportsVariantFlag,
 } from '../opencode-permissions.js';
 import { getRememberedLiveModels } from '../models.js';
 import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
@@ -120,6 +122,11 @@ export const opencodeAgentDef = {
     // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
     listModels: {
       args: ['models', '--verbose'],
+      // OpenCode 2 rejects `models --verbose` (exit 1), which used to leave
+      // every V2 user on the hardcoded fallback list. The plain form still
+      // prints provider/model per line, so the parser keeps working without
+      // variant metadata.
+      fallbackArgs: ['models'],
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
     },
@@ -141,8 +148,11 @@ export const opencodeAgentDef = {
         '--format',
         'json',
       ];
+      // V2 only: private server, so a headless Run never shares runtime state
+      // with the user's interactive session.
+      appendOpenCodeStandalone(args, 'opencode');
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      appendOpenCodeWorkspaceDir(args, 'opencode', runtimeContext.cwd);
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the
@@ -157,11 +167,18 @@ export const opencodeAgentDef = {
       if (resumeSessionId) {
         args.push('-s', resumeSessionId);
       }
+      const variant = supportsOpenCodeVariant(options.model, options.reasoning)
+        ? options.reasoning
+        : null;
       if (options.model && options.model !== 'default') {
-        args.push('-m', options.model);
+        // V2 removed `--variant` and carries the variant inside the model
+        // reference instead: `provider/model#variant`.
+        args.push('-m', !openCodeSupportsVariantFlag('opencode') && variant
+          ? `${options.model}#${variant}`
+          : options.model);
       }
-      if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+      if (variant && openCodeSupportsVariantFlag('opencode')) {
+        args.push('--variant', variant);
       }
       return args;
     },
