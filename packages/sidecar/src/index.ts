@@ -48,6 +48,7 @@ export type {
 export { handoffCurrentSidecarGeneration, SidecarClient, SidecarFactory } from "./client.js";
 export type { SidecarLifecycleLockOptions } from "./lifecycle-lock.js";
 export { withSidecarLifecycleLock } from "./lifecycle-lock.js";
+export { isJsonIpcTimeoutError, JsonIpcTimeoutError } from "./json-ipc.js";
 export type { SidecarStamp, SidecarStampField } from "./stamp.js";
 export {
   normalizeSidecarStamp,
