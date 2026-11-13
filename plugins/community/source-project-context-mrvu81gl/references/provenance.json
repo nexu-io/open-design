@@ -1,0 +1,47 @@
+{
+  "candidateId": "e5e7de90-ed58-4e30-9838-634faab6d374",
+  "projectId": "168e855b-b115-400a-93e3-9f961c3f6f53",
+  "runId": "b9e06841-04c9-474f-94a1-d4601954cd0e",
+  "conversationId": "9c60f622-fa3a-47a8-a1d3-c2af9890333b",
+  "provenance": {
+    "summary": "Detected from context/source-context.md, README.md, SKILL.md, ui_kits/app/README.md, MERGE_PLAN.md after a successful run.",
+    "detectedAt": 1784475469042
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 1474,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 8896,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 3847,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 4375,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "MERGE_PLAN.md",
+      "label": "MERGE_PLAN.md",
+      "size": 6259,
+      "copied": true
+    }
+  ]
+}
