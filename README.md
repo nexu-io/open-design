@@ -104,6 +104,7 @@ That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 an
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Supported | `od mcp install opencode` |
+| Octop | ✅ Supported (Octop CLI required) | `od mcp install octop` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Supported | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Supported | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Supported | `od mcp install cline` |
@@ -113,6 +114,8 @@ That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 an
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Supported | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |
+
+For Octop, install an Octop CLI with built-in OpenDesign connector support and run `octop config set-user <username>` first. `od mcp install octop` creates or updates that user’s encrypted connector instance; launch credentials travel through stdin. `--uninstall` removes only that connector, and `--print` changes nothing. Keep OpenDesign running for installation; restart an already running Octop server after configuration changes. See `od mcp install --help` for options.
 
 For DeepSeek Harness, install the official `dsh` CLI first, then select it in OpenDesign or run `od agent setup deepseek-harness` to install/repair OD's connection component. For MCP integrations: `od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
 

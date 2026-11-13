@@ -104,6 +104,7 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 支持 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 支持 | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ 支持 | `od mcp install opencode` |
+| Octop | ✅ 支持（需要 Octop CLI） | `od mcp install octop` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 支持 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 支持 | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 支持 | `od mcp install cline` |
@@ -113,6 +114,8 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ 支持 | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
+
+Octop 需要包含内置 OpenDesign 连接器支持的 CLI。先运行 `octop config set-user <用户名>`，再运行 `od mcp install octop`，即可创建或更新该用户的加密连接器实例；启动配置通过 stdin 传递。`--uninstall` 只移除对应连接器，`--print` 不执行安装。安装时保持 OpenDesign 运行；若 Octop 服务已运行，配置变更后需重启刷新。
 
 使用 DeepSeek Harness 时，请先安装官方 `dsh` CLI，再在 OpenDesign 中选择它，或运行 `od agent setup deepseek-harness` 安装/修复 OD 连接组件。MCP 集成可用 `od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
 

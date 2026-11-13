@@ -11,7 +11,7 @@
 //   - 'cli'    : the agent ships its own `<bin> mcp add/remove/get`. We
 //                shell out to it (like codex-cli.ts) so we inherit the
 //                agent's merge/validation rules instead of editing its
-//                config by hand. Used for claude / codex / kimi / reasonix.
+//                config by hand. Used for claude / codex / kimi / reasonix / octop.
 //   - 'json'   : the agent reads a JSON config file with a known schema.
 //                We deep-merge one server entry, never clobbering the
 //                rest of the file. Used for cursor / copilot / cline /
@@ -47,6 +47,7 @@ export const AGENT_SLUGS = [
   'kiro',
   'trae',
   'opencode',
+  'octop',
   'claude-desktop',
 ] as const;
 
@@ -82,6 +83,8 @@ export interface CliInstallPlan {
   removeArgv: string[];
   /** Argv that exits 0 iff the server is already registered. */
   getArgv: string[];
+  /** Optional JSON launch spec sent through stdin, never credential argv. */
+  stdin?: string;
 }
 
 /** Agent reads a JSON config file with a known schema. */
@@ -190,6 +193,16 @@ export function planAgentInstall(
         ],
         removeArgv: ['mcp', 'remove', serverName],
         getArgv: ['mcp', 'get', serverName],
+      };
+    case 'octop':
+      return {
+        kind: 'cli',
+        slug,
+        bin: 'octop',
+        addArgv: ['--json', 'connector', 'install', 'open-design', '--name', serverName, '--config-file', '-'],
+        removeArgv: ['--json', 'connector', 'remove', 'open-design', '--name', serverName],
+        getArgv: ['--json', 'connector', 'get', 'open-design', '--name', serverName],
+        stdin: JSON.stringify(spec),
       };
     case 'kimi':
       return {
