@@ -900,7 +900,7 @@ export function exportReactComponentAsZip(
 export async function exportProjectAsZip(opts: {
   projectId: string;
   filePath: string;
-  fallbackHtml: string;
+  fallbackHtml: string | (() => Promise<string>);
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
@@ -923,7 +923,10 @@ export async function exportProjectAsZip(opts: {
       return exportAsZip(await resp.text(), opts.fallbackTitle);
     } catch (err) {
       console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
-      return exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+      return exportAsZip(
+        typeof opts.fallbackHtml === 'function' ? await opts.fallbackHtml() : opts.fallbackHtml,
+        opts.fallbackTitle,
+      );
     }
   }
   const root = archiveRootFromFilePath(opts.filePath);
@@ -941,7 +944,10 @@ export async function exportProjectAsZip(opts: {
     return saveExportDownload(blob, archiveFilenameFrom(resp, opts.fallbackTitle, root));
   } catch (err) {
     console.warn('[exportProjectAsZip] falling back to single-file ZIP:', err);
-    return exportAsZip(opts.fallbackHtml, opts.fallbackTitle);
+    return exportAsZip(
+      typeof opts.fallbackHtml === 'function' ? await opts.fallbackHtml() : opts.fallbackHtml,
+      opts.fallbackTitle,
+    );
   }
 }
 

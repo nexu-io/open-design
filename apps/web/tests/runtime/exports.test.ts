@@ -1057,6 +1057,33 @@ describe('binary project/design-system downloads', () => {
     expect(capturedFilename).toBe('system.zip');
   });
 
+  it('reads fallback HTML lazily only after the project archive fails', async () => {
+    const fallbackHtml = vi.fn(async () => '<html><body>complete original</body></html>');
+    const request = vi.fn(async () => new Response('archive bytes', { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    const options = { projectId: 'lazy-export', filePath: 'index.html', fallbackHtml, fallbackTitle: 'Lazy' };
+    await exportProjectAsZip(options);
+    expect(await capturedBlob!.text()).toBe('archive bytes');
+    expect(fallbackHtml).not.toHaveBeenCalled();
+
+    request.mockImplementation(async () => new Response('', { status: 503 }));
+    await exportProjectAsZip(options);
+    expect(fallbackHtml).toHaveBeenCalledTimes(1);
+    expect(capturedFilename).toBe('Lazy.zip');
+    // The ZIP builder stores entries uncompressed; check the saved bytes, not
+    // just the resolver call, so an empty or stringified callback cannot pass.
+    expect(await capturedBlob!.text()).toContain('complete original');
+  });
+
+  it('fails ZIP export when the fallback source cannot be read', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
+    await expect(exportProjectAsZip({
+      projectId: 'unreadable-export', filePath: 'index.html', fallbackTitle: 'Unreadable',
+      fallbackHtml: async () => { throw new Error('source unavailable'); },
+    })).rejects.toThrow('source unavailable');
+    expect(capturedBlob).toBeUndefined();
+  });
+
   it('downloads version ZIPs from the daemon inline HTML export endpoint', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>version</p>', {
       status: 200,

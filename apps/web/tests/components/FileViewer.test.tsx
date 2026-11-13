@@ -6196,7 +6196,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('nudges the export button once when an artifact becomes exportable', async () => {
+  it('keeps export available without a nudge when an artifact becomes exportable', async () => {
     const file = baseFile({
       name: 'nudge.html',
       path: 'nudge.html',
@@ -6222,16 +6222,14 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const exportButton = screen.getByRole('button', { name: /export/i });
-    await waitFor(() => {
-      expect(exportButton.classList.contains('export-ready-nudge')).toBe(true);
-    });
+    expect(exportButton.classList.contains('export-ready-nudge')).toBe(false);
 
     fireEvent.click(exportButton);
 
     expect(exportButton.classList.contains('export-ready-nudge')).toBe(false);
   });
 
-  it('nudges each exportable artifact once when the mounted viewer switches files', async () => {
+  it('keeps export available without a nudge when the mounted viewer switches files', async () => {
     const firstFile = baseFile({
       name: 'nudge-first.html',
       path: 'nudge-first.html',
@@ -6271,9 +6269,7 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const firstExportButton = screen.getByRole('button', { name: /export/i });
-    await waitFor(() => {
-      expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(true);
-    });
+    expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(false);
     fireEvent.click(firstExportButton);
     expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(false);
 
@@ -6287,9 +6283,61 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     const secondExportButton = screen.getByRole('button', { name: /export/i });
-    await waitFor(() => {
-      expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(true);
+    expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(false);
+  });
+
+  it.each([1024, 3 * 1024 * 1024])('keeps the export entry mounted before full source is available (%i bytes)', async (size) => {
+    const file = baseFile({ name: 'pending.html', path: 'pending.html', kind: 'html', mime: 'text/html', size });
+    let resolveSource!: (response: Response) => void;
+    const sourceResponse = new Promise<Response>(resolve => { resolveSource = resolve; });
+    const reads: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      reads.push(url);
+      if (url.includes('/text-preview/')) return Response.json({
+        text: '<!doctype html><html><body>routing only', poweredPreview: { required: false, reasons: [] },
+      });
+      if (url.includes('/raw/')) return sourceResponse;
+      return Response.json({}, { status: 404 });
     });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<FileViewer projectId="pending-export" projectKind="prototype" file={file} />);
+    const exportButton = screen.getByRole('button', { name: 'Export' });
+    expect(exportButton).toBeEnabled();
+    await waitFor(() => expect(reads.some(url => url.includes(size > 2 * 1024 * 1024 ? '/text-preview/' : '/raw/'))).toBe(true));
+    fireEvent.click(exportButton);
+    expect(screen.getByRole('menuitem', { name: 'Export as standalone HTML' })).toBeEnabled();
+    // Opening the menu alone must not defeat passive large-file loading.
+    if (size > 2 * 1024 * 1024) expect(reads.some(url => url.includes('/raw/'))).toBe(false);
+    await act(async () => { resolveSource(new Response('<html><body>complete</body></html>')); });
+    expect(screen.getByRole('button', { name: 'Export' })).toBe(exportButton);
+    expect(exportButton).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('classifies a deferred runtime deck from complete source before PDF export', async () => {
+    const file = baseFile({ name: 'lazy.html', path: 'lazy.html', kind: 'html', mime: 'text/html', size: 3 * 1024 * 1024 });
+    const fullHtml = '<html><body><deck-stage><section data-screen-label="First">First</section></deck-stage></body></html>';
+    const fetchMock = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/text-preview/')) return Response.json({ text: '<html>', poweredPreview: { required: false, reasons: [] } });
+      if (url.includes('/raw/')) return new Response(fullHtml);
+      if (url.endsWith('/export/pdf-image')) return new Response('PDF');
+      return Response.json({}, { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const restoreHost = installMockOpenDesignHost();
+    try {
+      render(<FileViewer projectId="lazy-pdf" projectKind="prototype" file={file} />);
+      await openUnifiedExportTab();
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/raw/'))).toBe(false);
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Export as PDF' }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/projects/lazy-pdf/export/pdf-image', expect.objectContaining({
+        method: 'POST', body: JSON.stringify({ fileName: 'lazy.html', title: 'lazy', deck: true }),
+      })));
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/raw/lazy.html'))).toBe(true);
+    } finally {
+      restoreHost();
+    }
   });
 
   it('keeps the explicitly selected deploy provider when another provider already has a deployment', async () => {
