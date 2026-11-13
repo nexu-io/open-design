@@ -78,6 +78,7 @@ describe('sandbox runtime roots', () => {
         HOME: '/real/home',
         CODEX_HOME: '/real/home/.codex',
         CLAUDE_CONFIG_DIR: '/real/home/.claude',
+        HERMES_HOME: '/real/home/.hermes',
         OPENCODE_TEST_HOME: '/real/home/.opencode',
         NPM_CONFIG_USERCONFIG: '/real/home/.npmrc',
         OD_DATA_DIR: dataDir,
@@ -91,6 +92,7 @@ describe('sandbox runtime roots', () => {
     expect(env.OD_AGENT_HOME).toBe(config.roots.agentHomeDir);
     expect(env.CODEX_HOME).toBe(path.join(config.roots.agentHomeDir, '.codex'));
     expect(env.CLAUDE_CONFIG_DIR).toBe(path.join(config.roots.configDir, 'claude'));
+    expect(env.HERMES_HOME).toBe(path.join(config.roots.agentHomeDir, '.hermes'));
     expect(env.OPENCODE_TEST_HOME).toBe(path.join(config.roots.agentHomeDir, '.opencode'));
     expect(env.NPM_CONFIG_USERCONFIG).toBe(path.join(config.roots.toolConfigDir, 'npmrc'));
     expect(env.PATH).toBe('/bin');
