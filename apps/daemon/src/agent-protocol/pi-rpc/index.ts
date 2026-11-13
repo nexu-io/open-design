@@ -4,5 +4,9 @@
  * (session lifecycle), and `parsePiModels` (model list parser).
  */
 export { mapPiRpcEvent } from './events.js';
-export { attachPiRpcSession } from './session.js';
+export {
+  attachPiRpcSession,
+  piSessionsDir,
+  DEFAULT_PI_SESSION_DIR_NAME,
+} from './session.js';
 export { parsePiModels } from './models.js';

@@ -294,6 +294,7 @@ function chatProtocolFromAgentId(agentId) {
     || id === 'kimi'
     || id === 'copilot'
     || id === 'pi'
+    || id === 'omp'
     || id === 'kiro'
     || id === 'kilo'
     || id === 'vibe'

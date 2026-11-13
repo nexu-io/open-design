@@ -72,6 +72,19 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-mono');
   });
 
+  it('renders OMP as the bundled color SVG instead of the fallback initial', () => {
+    const ompSvg = readFileSync(
+      new URL('../../public/agent-icons/omp.svg', import.meta.url),
+      'utf8',
+    );
+    const markup = renderToStaticMarkup(<AgentIcon id="omp" size={24} />);
+
+    expect(ompSvg).toMatch(/^<svg\b/);
+    expect(ompSvg).toContain('linearGradient');
+    expect(markup).toContain('src="/agent-icons/omp.svg"');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
   it('renders AMR as the bundled color SVG instead of the fallback initial', () => {
     const amrSvg = readFileSync(
       new URL('../../public/agent-icons/amr.svg', import.meta.url),
