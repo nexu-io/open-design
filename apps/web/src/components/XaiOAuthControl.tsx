@@ -7,13 +7,13 @@
 // one-shot listener on 127.0.0.1:56121 — a separate process that can't
 // talk to the OD UI directly. Polling /api/xai/auth/status is the only
 // delivery channel for "auth completed".
-//
-// TODO(i18n): the visible strings are hardcoded English for the PoC;
-// migrate to apps/web/src/i18n/types.ts before stable release.
 
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useI18n, useT } from '../i18n';
+
+const DISCONNECT_FAILED_ERROR = 'Disconnect failed. Check daemon logs.';
 
 interface XaiAuthStatus {
   connected: boolean;
@@ -128,6 +128,8 @@ async function completeOAuthManual(
 }
 
 export function XaiOAuthControl() {
+  const { locale } = useI18n();
+  const t = useT();
   const [status, setStatus] = useState<XaiAuthStatus | null>(null);
   const [busy, setBusy] = useState<Busy>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -273,14 +275,14 @@ export function XaiOAuthControl() {
       setPendingAuthUrl(null);
       setStatus({ connected: false });
     } else {
-      setError('Disconnect failed. Check daemon logs.');
+      setError(DISCONNECT_FAILED_ERROR);
     }
   };
 
   const connected = Boolean(status?.connected);
   const expiresLabel =
     status?.expiresAt && status.expiresAt > 0
-      ? new Date(status.expiresAt).toLocaleString()
+      ? new Date(status.expiresAt).toLocaleString(locale)
       : null;
   // "Awaiting" once we've started the dance: the authorize URL is open OR
   // a state is pending OR the daemon is processing a paste-back. Stays
@@ -299,16 +301,14 @@ export function XaiOAuthControl() {
           <>
             <span className="mcp-oauth-dot mcp-oauth-dot-ok" aria-hidden />
             <span>
-              <strong>Signed in with X.</strong>{' '}
+              <strong>{t('settings.xaiOAuth.connected')}</strong>{' '}
               {expiresLabel ? (
                 <span className="hint">
-                  SuperGrok subscription token expires {expiresLabel}. You can
-                  close any open xAI browser tabs now.
+                  {t('settings.xaiOAuth.tokenExpires', { time: expiresLabel })}
                 </span>
               ) : (
                 <span className="hint">
-                  SuperGrok subscription connected. You can close any open xAI
-                  browser tabs now.
+                  {t('settings.xaiOAuth.connectedNoExpire')}
                 </span>
               )}
             </span>
@@ -317,11 +317,9 @@ export function XaiOAuthControl() {
           <>
             <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
             <span>
-              <strong>Waiting for authorization…</strong>{' '}
+              <strong>{t('settings.xaiOAuth.waiting')}</strong>{' '}
               <span className="hint">
-                OpenDesign is listening for the callback in the background.
-                This panel will switch to <em>Signed in</em> within a few
-                seconds of your approving on xAI.
+                {t('settings.xaiOAuth.waitingHint')}
               </span>
             </span>
           </>
@@ -329,11 +327,9 @@ export function XaiOAuthControl() {
           <>
             <span className="mcp-oauth-dot" aria-hidden />
             <span>
-              <strong>Not signed in.</strong>{' '}
+              <strong>{t('settings.xaiOAuth.notConnected')}</strong>{' '}
               <span className="hint">
-                Click Sign in with X to use your SuperGrok subscription for
-                Grok image, video, and TTS in OpenDesign — no API key
-                needed.
+                {t('settings.xaiOAuth.notConnectedHint')}
               </span>
             </span>
           </>
@@ -342,13 +338,9 @@ export function XaiOAuthControl() {
 
       {isAwaiting ? (
         <div className="xai-oauth-warning" role="status">
-          <strong>Heads up:</strong> xAI may show a page that says{' '}
-          <em>"Cannot connect to your application"</em> (or 「无法建立连接」
-          in Chinese). <strong>That is a UX bug on xAI's side</strong> — the
-          authorization is still being delivered to OpenDesign in the
-          background. Stay on this panel; it will switch to{' '}
-          <em>Signed in with X</em> automatically. Do not retry from xAI's
-          page.
+          <strong>{t('settings.xaiOAuth.warningLabel')}</strong>{' '}
+          {t('settings.xaiOAuth.warningQuote')}{' '}
+          {t('settings.xaiOAuth.warningBug')}
         </div>
       ) : null}
 
@@ -360,18 +352,18 @@ export function XaiOAuthControl() {
               className="primary"
               onClick={onConnect}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Re-authenticate (replaces the existing token)"
+              title={t('settings.xaiOAuth.reconnectTitle')}
             >
               {busy === 'starting' || busy === 'awaiting'
-                ? 'Connecting…'
-                : 'Reconnect'}
+                ? t('settings.xaiOAuth.connecting')
+                : t('settings.xaiOAuth.reconnect')}
             </button>
             <button
               type="button"
               onClick={onDisconnect}
               disabled={busy !== 'idle'}
             >
-              {busy === 'disconnecting' ? 'Disconnecting…' : 'Disconnect'}
+              {busy === 'disconnecting' ? t('settings.xaiOAuth.disconnecting') : t('settings.xaiOAuth.disconnect')}
             </button>
           </>
         ) : (
@@ -382,15 +374,15 @@ export function XaiOAuthControl() {
               onClick={onConnect}
               disabled={busy !== 'idle'}
             >
-              {busy === 'starting' ? 'Opening browser…' : 'Sign in with X'}
+              {busy === 'starting' ? t('settings.xaiOAuth.openingBrowser') : t('settings.xaiOAuth.signInWithX')}
             </button>
             {isAwaiting ? (
               <>
                 <button type="button" onClick={onRefreshStatus} disabled={busy === 'refreshing'}>
-                  {busy === 'refreshing' ? 'Checking…' : 'Refresh status'}
+                  {busy === 'refreshing' ? t('settings.xaiOAuth.checking') : t('settings.xaiOAuth.refreshStatus')}
                 </button>
                 <button type="button" onClick={onCancelPending}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </>
             ) : null}
@@ -400,9 +392,9 @@ export function XaiOAuthControl() {
 
       {pendingAuthUrl && !connected ? (
         <div className="mcp-oauth-fallback hint">
-          Browser tab didn't open?{' '}
+          {t('settings.xaiOAuth.browserDidntOpen')}{' '}
           <a href={pendingAuthUrl} target="_blank" rel="noopener noreferrer">
-            Click here to open the authorize URL manually
+            {t('settings.xaiOAuth.clickHereManual')}
           </a>
           .
         </div>
@@ -411,13 +403,13 @@ export function XaiOAuthControl() {
       {isAwaiting && pendingState ? (
         <div className="xai-oauth-paste">
           <p className="hint">
-            xAI may show a code instead of redirecting back. Paste it here:
+            {t('settings.xaiOAuth.pasteCodeHint')}
           </p>
           <div className="xai-oauth-paste-row">
             <input
               type="text"
               value={pasteCode}
-              placeholder="Paste auth code from xAI"
+              placeholder={t('settings.xaiOAuth.pasteCodePlaceholder')}
               onChange={(e) => setPasteCode(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && pasteCode.trim()) {
@@ -425,14 +417,14 @@ export function XaiOAuthControl() {
                 }
               }}
               disabled={busy === 'refreshing'}
-              aria-label="Paste auth code from xAI"
+              aria-label={t('settings.xaiOAuth.pasteCodePlaceholder')}
             />
             <button
               type="button"
               onClick={onPasteSubmit}
               disabled={!pasteCode.trim() || busy === 'refreshing'}
             >
-              {busy === 'refreshing' ? 'Submitting…' : 'Submit code'}
+              {busy === 'refreshing' ? t('settings.xaiOAuth.submitting') : t('settings.xaiOAuth.submitCode')}
             </button>
           </div>
         </div>
@@ -440,13 +432,13 @@ export function XaiOAuthControl() {
 
       {error ? (
         <div className="mcp-oauth-error" role="alert">
-          {error}
+          {error === DISCONNECT_FAILED_ERROR ? t('settings.xaiOAuth.disconnectFailed') : error}
         </div>
       ) : null}
 
       {status?.scope ? (
         <div className="mcp-oauth-scope hint">
-          Granted scopes: <code>{status.scope}</code>
+          {t('settings.xaiOAuth.grantedScopes')} <code>{status.scope}</code>
         </div>
       ) : null}
     </div>
