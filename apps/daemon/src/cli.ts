@@ -1055,10 +1055,16 @@ if (first && SUBCOMMAND_MAP[first]) {
   await SUBCOMMAND_MAP[first](rest);
   // Respect a non-zero exit code a handler set via process.exitCode (e.g. a
   // failed `od resource get`); default to 0 when it left it unset.
-  process.exit(process.exitCode ?? 0);
-}
-
-if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
+  //
+  // Set the code and fall out of module evaluation instead of calling
+  // process.exit(): a subcommand that issued two or more HTTP requests
+  // leaves a reused undici keep-alive socket in the loop, and a forced exit
+  // tears it down mid-close on Windows — libuv asserts in uv_async_send and
+  // the CLI dies with 0xC0000409 after its output was already delivered.
+  // Keep-alive sockets do not hold the event loop, so the natural exit is
+  // still prompt.
+  process.exitCode = process.exitCode ?? 0;
+} else if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
   runLiveArtifactsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
       process.exitCode = exitCode;
