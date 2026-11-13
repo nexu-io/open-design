@@ -25,6 +25,7 @@ import {
 } from "@open-design/sidecar";
 import {
   recordIncomingUpdateLifecycle,
+  registerDesktopAuthWithDaemon,
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
   createSplashWindow,
@@ -65,6 +66,7 @@ import {
 import {
   attachPackagedDesktopProcessLogging,
   createPackagedDesktopLogger,
+  markPackagedShutdownInProgress,
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
@@ -475,6 +477,10 @@ const electronReadyAtMs = performance.now();
         await sidecars.close(record);
       }
     },
+    // Armed at the very start of shutdown: closing the window cancels in-flight
+    // od:// requests and quiesce() aborts the rest; their AbortError
+    // rejections are expected teardown, not fatal main-process errors.
+    onShutdownStarted: markPackagedShutdownInProgress,
     quiesceRendererTransport() {
       odProtocol.quiesce();
     },
@@ -488,19 +494,8 @@ const electronReadyAtMs = performance.now();
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
     },
-    registerDesktopAuth: async (secret) => {
-      try {
-        const result = await client.invoke<{ accepted: true }>(
-          APP_KEYS.DAEMON,
-          "register-desktop-auth",
-          { secret: secret.toString("base64") },
-          { timeoutMs: 800 },
-        );
-        return result.accepted === true;
-      } catch {
-        return false;
-      }
-    },
+    registerDesktopAuth: (secret, authOptions) =>
+      registerDesktopAuthWithDaemon(client, secret, { ...authOptions, logger: packagedLogger }),
     windowTitle: resolvePackagedWindowTitle(activeConfig),
     inviteProtocolClientPath:
       process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
