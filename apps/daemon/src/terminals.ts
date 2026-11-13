@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
+import path from 'node:path';
 import { loadNodePty } from './services/node-pty.js';
 
 export {
@@ -30,15 +31,115 @@ function clampDimension(value: unknown, fallback: number): number {
 }
 
 /**
- * Resolve the shell binary for a new PTY. Honors an explicit request override,
- * then the user's environment (SHELL on posix, ComSpec on win32), and finally
- * falls back to a per-platform default.
+ * Platform-aware allowlist of shell binaries accepted when the client
+ * supplies an explicit `shell` override on `POST /api/projects/:id/terminals`
+ * (issue #5479).
+ *
+ * On posix, the requested path must match one of the known absolute paths
+ * exactly. On win32, only the canonical Microsoft shell locations are
+ * accepted and resolved values are always absolute trusted paths — never a
+ * bare name — because node-pty's Windows spawn searches the daemon's
+ * inherited PATH before launching, where a writable or attacker-influenced
+ * earlier entry could shadow `cmd.exe`/`pwsh.exe` (review feedback on #6071).
+ *
+ * Any value outside the allowlist is silently dropped and the function falls
+ * through to the environment default. This prevents an attacker from using
+ * the terminal route to spawn arbitrary executables (CWE-78).
+ */
+const SHELL_ALLOWLIST_POSIX = new Set([
+  '/bin/bash',
+  '/bin/sh',
+  '/bin/zsh',
+  '/bin/fish',
+  '/bin/dash',
+  '/usr/bin/bash',
+  '/usr/bin/sh',
+  '/usr/bin/zsh',
+  '/usr/bin/fish',
+  '/usr/bin/dash',
+]);
+
+/** Basenames accepted on win32; always resolved via `win32TrustedShellPath()`. */
+const SHELL_ALLOWLIST_WIN32_NAMES = ['cmd.exe', 'powershell.exe', 'pwsh.exe'] as const;
+
+// node:path's win32 namespace so joins/isAbsolute/basename behave identically
+// regardless of the host the daemon (or the test suite) runs on.
+const win32Path = path.win32;
+
+/**
+ * Canonical trusted absolute location for an allowlisted Windows shell name.
+ * Only `SystemRoot`/`ProgramFiles` (with conventional fallbacks) are ever
+ * used as roots — PATH is never consulted.
+ */
+function win32TrustedShellPath(exeName: string): string {
+  const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+  switch (exeName) {
+    case 'cmd.exe':
+      return win32Path.join(systemRoot, 'System32', 'cmd.exe');
+    case 'powershell.exe':
+      return win32Path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    case 'pwsh.exe':
+      return win32Path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PowerShell', '7', 'pwsh.exe');
+    default:
+      return '';
+  }
+}
+
+/**
+ * Validate an absolute Windows shell path (a client override, or ComSpec):
+ * accepted only when its basename is allowlisted AND the full path equals
+ * the trusted canonical location. A hostile value such as
+ * `C:\Users\Public\cmd.exe` fails the equality check and is discarded.
+ */
+function win32ValidatedShellPath(candidate: string): string | null {
+  if (!candidate || !win32Path.isAbsolute(candidate)) return null;
+  const name = win32Path.basename(candidate).toLowerCase();
+  if (!(SHELL_ALLOWLIST_WIN32_NAMES as readonly string[]).includes(name)) return null;
+  const trusted = win32TrustedShellPath(name);
+  return candidate.toLowerCase() === trusted.toLowerCase() ? trusted : null;
+}
+
+function isAllowedShell(candidate: string): boolean {
+  return SHELL_ALLOWLIST_POSIX.has(candidate);
+}
+
+/**
+ * Resolve the shell binary for a new PTY. Honors an explicit request override
+ * **only when it resolves to a platform-allowed trusted binary**, then the
+ * user's environment (SHELL on posix, a *validated* ComSpec on win32), and
+ * finally a per-platform trusted default.
+ *
+ * On win32 the return value is always a canonical absolute path — never a
+ * bare executable name that node-pty could resolve through the inherited
+ * PATH.
+ *
+ * Before the allowlist was added (issue #5479), any non-empty string from the
+ * client was passed directly to the PTY, allowing arbitrary process execution
+ * as the daemon user.
  */
 export function resolveShell(requested?: string | null): string {
   const explicit = typeof requested === 'string' && requested.trim() ? requested.trim() : null;
-  if (explicit) return explicit;
+  if (explicit) {
+    if (process.platform === 'win32') {
+      if (win32Path.isAbsolute(explicit)) {
+        const validated = win32ValidatedShellPath(explicit);
+        if (validated) return validated;
+      } else {
+        const name = explicit.toLowerCase();
+        if ((SHELL_ALLOWLIST_WIN32_NAMES as readonly string[]).includes(name)) {
+          // Bare allowlisted name: hand back the trusted absolute location
+          // instead of letting node-pty locate it via the inherited PATH.
+          return win32TrustedShellPath(name);
+        }
+      }
+    } else if (isAllowedShell(explicit)) {
+      return explicit;
+    }
+  }
   if (process.platform === 'win32') {
-    return process.env.ComSpec || 'powershell.exe';
+    return (
+      win32ValidatedShellPath(process.env.ComSpec || '') ?? win32TrustedShellPath('cmd.exe')
+    );
   }
   return process.env.SHELL || '/bin/bash';
 }
