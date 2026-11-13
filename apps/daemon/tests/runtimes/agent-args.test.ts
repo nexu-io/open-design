@@ -6,6 +6,7 @@ import {
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import { applyOpenCodeWorkspaceEnv } from '../../src/runtimes/opencode-permissions.js';
 import {
   getRememberedLiveModels,
   rememberLiveModels,
@@ -89,6 +90,10 @@ test('opencode args pass model-supported variants without changing the default a
   )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
   assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--auto'], 'autoApprove');
+  assert.deepEqual(opencode.capabilityFlags?.['--dir'], 'workspaceDir');
+  assert.deepEqual(opencode.capabilityFlags?.['--variant'], 'variantFlag');
+  assert.deepEqual(opencode.capabilityFlags?.['--pure'], 'pureMode');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -252,6 +257,83 @@ test('opencode pins its workspace to the project cwd', () => {
 test('opencode omits --dir for a run with no project directory', () => {
   const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
   assert.equal(args.includes('--dir'), false);
+});
+
+test('opencode 2.x omits --dir and relies on PWD + spawn cwd (issue: 2.0.24 Unrecognized flag --dir)', () => {
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.equal(args.includes('--dir'), false);
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x folds variant into -m model#variant (issue: 2.0.24 Unrecognized flag --variant)', () => {
+  const previous = getRememberedLiveModels('opencode');
+  const parsed = parseOpenCodeModels([
+    'openai/gpt-5.6-sol',
+    '{ "variants": { "high": {} } }',
+  ].join('\n'));
+  rememberLiveModels('opencode', parsed ?? []);
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, variantFlag: false });
+  try {
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+      '-m',
+      'openai/gpt-5.6-sol#high',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+    rememberLiveModels('opencode', previous);
+  }
+});
+
+test('opencode 2.x uses --auto for non-interactive runs', () => {
+  agentCapabilities.set('opencode', { autoApprove: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {});
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('applyOpenCodeWorkspaceEnv pins PWD only for OpenCode 2.x and leaves 1.x / unwarmed untouched', () => {
+  const inheritedPwd = '/repo/daemon/root';
+  const projectCwd = '/repo/daemon/root/projects/p1';
+
+  // 1. Unwarmed capabilities: leave PWD alone
+  agentCapabilities.delete('opencode');
+  const envUnwarmed = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(envUnwarmed, projectCwd, 'opencode');
+  assert.equal(envUnwarmed.PWD, inheritedPwd);
+
+  // 2. OpenCode 1.x (workspaceDir allowed): leave PWD alone
+  agentCapabilities.set('opencode', { workspaceDir: true, autoApprove: false });
+  const env1x = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(env1x, projectCwd, 'opencode');
+  assert.equal(env1x.PWD, inheritedPwd);
+
+  // 3. OpenCode 2.x (workspaceDir false or autoApprove true): sets PWD = path.resolve(cwd)
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true });
+  const env2x = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(env2x, projectCwd, 'opencode');
+  assert.equal(env2x.PWD, join('/repo/daemon/root/projects/p1'));
+
+  // 4. Empty cwd: leaves PWD alone
+  const envEmptyCwd = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(envEmptyCwd, '', 'opencode');
+  assert.equal(envEmptyCwd.PWD, inheritedPwd);
+
+  agentCapabilities.delete('opencode');
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
