@@ -3,6 +3,10 @@ import { previewStorageKey, readPreviewStorage, savePreviewStorageMessage } from
 import { commentSelectorsMatch, commentUsesIdentity, ownerCommentNeedsLocation, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
 import { indexCommentTargets } from '../comments/target-index';
 import { useShareSourceGuard } from './share/useShareSourceGuard';
+import {
+  createFirstLoadRevealScheduler,
+  type FirstLoadRevealScheduler,
+} from './url-preview-first-load-reveal';
 import { useExperienceError } from '../observability/use-experience-error';
 import { daemonErrorCodeProp, failureDetailProps } from '../analytics/failure-detail';
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
@@ -8701,7 +8705,8 @@ function HtmlViewer({
   // URL-load mode the iframe then issues its OWN network navigation, which can
   // sit queued behind heavy same-origin traffic (e.g. drafts-grid cover
   // iframes still streaming in) — leaving a bare white pane with no feedback.
-  // Until that first load event lands, keep a loader over the transport stack.
+  // Keep a loader over the transport stack until the artifact's document is
+  // ready (see url-preview-first-load-reveal.ts for exactly when it lifts).
   const urlPreviewLoadedKeysRef = useRef<Set<string>>(new Set());
   const [urlPreviewFirstLoadPending, setUrlPreviewFirstLoadPending] = useState(false);
   const [boardMode, setBoardMode] = useState(false);
@@ -12321,6 +12326,47 @@ function HtmlViewer({
     }
     setUrlPreviewFirstLoadPending(!urlPreviewLoadedKeysRef.current.has(urlPreviewKeepAliveKey));
   }, [useUrlLoadPreview, urlFrameSrc, urlPreviewKeepAliveKey]);
+  // Lift the first-load cover at DOM ready + grace or at `load`, whichever
+  // comes first. The scroll bridge posts its restore request from the
+  // artifact's DOMContentLoaded, so that message doubles as the DOM-ready
+  // signal; `load` stays the fallback for a document that never sends it.
+  const urlPreviewKeepAliveKeyRef = useRef(urlPreviewKeepAliveKey);
+  urlPreviewKeepAliveKeyRef.current = urlPreviewKeepAliveKey;
+  const urlPreviewFirstLoadRevealRef = useRef<FirstLoadRevealScheduler | null>(null);
+  if (urlPreviewFirstLoadRevealRef.current === null) {
+    urlPreviewFirstLoadRevealRef.current = createFirstLoadRevealScheduler({
+      reveal: () => {
+        urlPreviewLoadedKeysRef.current.add(urlPreviewKeepAliveKeyRef.current);
+        setUrlPreviewFirstLoadPending(false);
+      },
+    });
+  }
+  // Listen from mount, in a layout effect, so the listener exists before the
+  // iframe (assigned its src from layout effects below it) can navigate. A
+  // fast document may report DOM ready before the cover is armed; the
+  // scheduler remembers that instead of dropping it.
+  useLayoutEffect(() => {
+    const scheduler = urlPreviewFirstLoadRevealRef.current!;
+    function onArtifactDomReady(ev: MessageEvent) {
+      const frameWindow = urlPreviewIframeRef.current?.contentWindow;
+      if (!frameWindow || ev.source !== frameWindow) return;
+      if ((ev.data as { type?: unknown } | null)?.type !== 'od:preview-scroll-request') return;
+      scheduler.domReady();
+    }
+    window.addEventListener('message', onArtifactDomReady);
+    return () => {
+      window.removeEventListener('message', onArtifactDomReady);
+      scheduler.reset();
+    };
+  }, []);
+  // A new URL or keep-alive key means a new document. Runs in the same commit
+  // that assigns the new src, so nothing the new document posts can precede it.
+  useLayoutEffect(() => {
+    urlPreviewFirstLoadRevealRef.current!.reset();
+  }, [urlFrameSrc, urlPreviewKeepAliveKey]);
+  useEffect(() => {
+    if (urlPreviewFirstLoadPending) urlPreviewFirstLoadRevealRef.current!.arm();
+  }, [urlPreviewFirstLoadPending, urlFrameSrc, urlPreviewKeepAliveKey]);
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     const activationInputs = {
       srcDoc: srcDocActivationContent,
@@ -18173,11 +18219,11 @@ function HtmlViewer({
                                   .searchParams.get('odPreviewEpoch') ?? '';
                             }
                             if (useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
-                            // First real paint of this artifact URL — drop the
-                            // first-load overlay. about:blank parks don't count.
+                            // The artifact URL finished loading — drop the
+                            // first-load overlay now if DOM ready has not
+                            // already. about:blank parks don't count.
                             if ((frame?.getAttribute('src') ?? 'about:blank') !== 'about:blank') {
-                              urlPreviewLoadedKeysRef.current.add(urlPreviewKeepAliveKey);
-                              setUrlPreviewFirstLoadPending(false);
+                              urlPreviewFirstLoadRevealRef.current?.loaded();
                             }
                             setUrlSelectionBridgeReady(false);
                             dcViewportRestoreAtRef.current = Date.now();
@@ -18225,11 +18271,11 @@ function HtmlViewer({
                                   .searchParams.get('odPreviewEpoch') ?? '';
                             }
                             if (useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
-                            // First real paint of this artifact URL — drop the
-                            // first-load overlay. about:blank parks don't count.
+                            // The artifact URL finished loading — drop the
+                            // first-load overlay now if DOM ready has not
+                            // already. about:blank parks don't count.
                             if ((frame?.getAttribute('src') ?? 'about:blank') !== 'about:blank') {
-                              urlPreviewLoadedKeysRef.current.add(urlPreviewKeepAliveKey);
-                              setUrlPreviewFirstLoadPending(false);
+                              urlPreviewFirstLoadRevealRef.current?.loaded();
                             }
                             setUrlSelectionBridgeReady(false);
                             dcViewportRestoreAtRef.current = Date.now();
