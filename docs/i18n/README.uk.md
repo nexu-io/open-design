@@ -287,6 +287,12 @@ docker compose up -d
 
 Шаблон Sealos App Store запускає опублікований Docker-образ OpenDesign із постійним сховищем робочої області та Basic Auth на публічному проксі. Для користувацьких публічних або спільних Docker-розгортань дотримуйтеся рекомендацій щодо зворотного проксі та `OPEN_DESIGN_ALLOWED_ORIGINS` у [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚂 Розгортання на Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Шаблон Railway запускає опублікований Docker-образ OpenDesign з доданими CLI Claude Code, Codex і OpenCode, постійним сховищем для проєктів і входів у CLI та входом за `OD_API_TOKEN` (користувач `open-design`). Щоб використовувати цих агентів, додайте до сервісу ключ моделі, наприклад `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` або `OPENROUTER_API_KEY`.
+
 ### 🧑‍💻 Запуск із вихідного коду
 
 ```bash

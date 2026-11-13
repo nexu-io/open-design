@@ -287,6 +287,12 @@ docker compose up -d
 
 Die Sealos-App-Store-Vorlage führt das veröffentlichte Open-Design-Docker-Image mit persistentem Workspace-Speicher und Basic Auth am öffentlichen Proxy aus. Folgen Sie für eigene öffentliche oder gemeinsam genutzte Docker-Deployments den Reverse-Proxy- und `OPEN_DESIGN_ALLOWED_ORIGINS`-Hinweisen in [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚂 Auf Railway bereitstellen
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Die Railway-Vorlage führt das veröffentlichte OpenDesign-Docker-Image mit zusätzlich installierten CLIs für Claude Code, Codex und OpenCode aus, mit persistentem Speicher für Projekte und CLI-Logins und dem `OD_API_TOKEN`-Login (Benutzer `open-design`) davor. Um diese Agenten zu nutzen, fügen Sie dem Service einen Modellschlüssel wie `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` oder `OPENROUTER_API_KEY` hinzu.
+
 ### 🧑‍💻 Aus dem Quellcode ausführen
 
 ```bash
