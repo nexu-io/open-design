@@ -153,7 +153,14 @@ AMR 系统 E2E 还会校验真实 run start 事件暴露的 token deadline。
 
 本轮确认下列过期 expected failure / `fixme` 已恢复为正向回归：
 
-- Plan 首次生成与 regeneration 自动打开或 refocus HTML
+- Plan 首次生成与 regeneration 自动打开或 refocus HTML（#5352）。这两条的失败一直是
+  **间歇性**的，而不是"首次生成从不自动打开、regeneration 从不 refocus"：在
+  `bd6a624d` 上按原断言重跑，首次生成 4 次通过 3 次、regeneration 8 次通过 2 次；
+  #6755 移除 `test.fail` / `test.fixme` 之后，在 `85d2e489` 上重跑 regeneration
+  仍是 4 次通过 2 次，失败形态是 `index.html` 始终没有成为可见 tab。根因是 turn-end
+  auto-open 与 post-turn 文件列表刷新之间的竞态；改为在文件列表落定后重新评估这次
+  选择（`reevaluateAutoOpenOnFilesSettled`）后，同一条命令 12 次全部通过，断言与
+  timeout 均未放宽。
 - plugin authoring 从 Plugins Add 面板进入，并生成 scaffold、assistant 文件列表和操作卡
 - Connectors / MCP visual capture 从 Home composer 的当前入口进入，不再 skip
 - 已删除与 light-only 产品契约相反的 system-theme 动态切换旧用例；强制 light 的迁移

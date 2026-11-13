@@ -63,6 +63,7 @@ describe('FileWorkspace batched open request', () => {
         openRequest={{
           name: 'image-04.png',
           nonce: 1,
+          source: 'internal',
           openBatch: ['image-01.png', 'image-02.png', 'image-03.png', 'image-04.png'],
         }}
       />,
@@ -93,6 +94,7 @@ describe('FileWorkspace batched open request', () => {
         openRequest={{
           name: 'image-04.png',
           nonce: 1,
+          source: 'internal',
           openBatch: ['image-01.png', 'image-02.png', 'image-03.png', 'image-04.png'],
         }}
       />,
@@ -120,7 +122,7 @@ describe('FileWorkspace batched open request', () => {
         isDeck={false}
         tabsState={{ tabs: [], active: null }}
         onTabsStateChange={onTabsStateChange}
-        openRequest={{ name: 'image-02.png', nonce: 1 }}
+        openRequest={{ name: 'image-02.png', nonce: 1, source: 'internal' }}
       />,
     );
 
