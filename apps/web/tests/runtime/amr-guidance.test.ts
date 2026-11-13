@@ -609,6 +609,18 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
+  it('offers manual retry for a membership RPM rejection without a reset time', () => {
+    const ui = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'membership_rpm_limit',
+      'amr',
+      '[code=tier_limit_exceeded] membership rpm limit exceeded: 3/2',
+    );
+    expect(ui.primaryAction).toBe('retry');
+    expect(ui.messageKey).toBe('chat.runError.membershipRpmLimitMessageNoTime');
+    expect(ui.messageVars?.retryAt).toBeUndefined();
+  });
+
   it('keeps membership concurrency guidance when no reset instant is readable', () => {
     const ui = resolveRunFailureUi(
       'AGENT_EXECUTION_FAILED',
