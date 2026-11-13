@@ -470,6 +470,45 @@ export function isOpencodeResumeFailure(text: string): boolean {
 }
 
 /**
+ * Kilo's ACP resume handshake assigns request id 2 to `session/load`.
+ * Only an explicit SessionNotFoundError may discard a stored handle. Kilo
+ * 7.4.23 also reports ordinary session/message read failures as -32603 with
+ * data.service=session, so that generic payload cannot prove the handle stale.
+ * The caller first proves this run attempted resume, excluding create errors.
+ */
+export function isKiloAcpLoadFailure(stdout: string): boolean {
+  if (!stdout) return false;
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try {
+      const message = JSON.parse(trimmed) as {
+        id?: unknown;
+        error?: unknown;
+      };
+      if (message.id !== 2) continue;
+      if (isKiloMissingSessionRpcError(message.error)) return true;
+    } catch {
+      // Ignore stderr/progress text and incomplete protocol frames.
+    }
+  }
+  return false;
+}
+
+/** Matches Kilo's typed SessionNotFoundError, not its generic service failure. */
+function isKiloMissingSessionRpcError(error: unknown): boolean {
+  if (error === null || typeof error !== 'object') return false;
+  const payload = error as { code?: unknown; data?: unknown; message?: unknown };
+  if (payload.code !== -32602 || typeof payload.message !== 'string') return false;
+  const data = payload.data;
+  if (data === null || typeof data !== 'object') return false;
+  const sessionId = (data as { sessionId?: unknown }).sessionId;
+  if (typeof sessionId !== 'string' || !sessionId.trim()) return false;
+  const missing = /(?:^|:\s*)session not found:\s*(.+)$/i.exec(payload.message);
+  return missing?.[1]?.trim() === sessionId;
+}
+
+/**
  * Per-agent dispatch for "the session/thread I asked to resume is gone".
  * Generalizes resume-fallback classification so every native-resume adapter
  * routes through one decision point in server.ts. Unknown agents return false
@@ -491,6 +530,7 @@ export function isAgentResumeFailure(
   }
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
+  if (agentId === 'kilo') return isKiloAcpLoadFailure(stdout);
   if (agentId === 'amr') {
     return (
       isAmrResumeFailure(stdout) ||

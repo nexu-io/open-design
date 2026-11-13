@@ -159,9 +159,9 @@ async function main() {
     // ACP family — JSON-RPC server over stdio.
     case 'devin':
     case 'hermes':
-    case 'kilo':
     case 'kiro':
     case 'vibe':         await runAcpServer(events, renderOpts);        break;
+    case 'kilo':         await runAcpServer(events, { ...renderOpts, replayHistoryOnLoad: true }); break;
     // AMR (vela CLI) — ACP with vela-specific protocol extensions
     // (agentCapabilities + models block + strict set_model gate).
     case 'vela':         await runVelaAcpServer(events, renderOpts);    break;
