@@ -12,6 +12,12 @@ import {
 } from '../db.js';
 import { workspaceTeamSkillBindingAllowsRead } from '../skills/workspace-team-binding.js';
 import { workspaceTeamDesignSystemBindingAllowsRead } from './workspace-team-binding.js';
+import { applyBundleMirror, planBundleMirror, type BundleFile } from '../brands/preserve.js';
+import { readGeneratedManifest } from './index.js';
+
+// Separate from `.od-generated.json`: a brand project is also the workspace of
+// its design system, and the brand finalize keeps its own record there.
+const PACKAGE_SYNC_MANIFEST_FILENAME = '.od-package-sync.json';
 
 type JsonRecord = Record<string, unknown>;
 type SkillEntry = { id: string; dir?: string } & JsonRecord;
@@ -766,27 +772,44 @@ export function createDesignSystemServerServices({
 
     const files = await designSystems.listUserDesignSystemFiles(sourceRoot, id);
     if (!files) return null;
+    const packageFiles: BundleFile[] = [];
+    // Legacy docs and tiny UI-kit scaffolds are replaced even when edited.
+    const replaceable: Record<string, undefined> = {};
     for (const file of files) {
       if (file.kind === 'folder') continue;
       const detail = await designSystems.readUserDesignSystemFileBytes(sourceRoot, id, file.path);
       if (!detail) continue;
-      if (existing) {
-        try {
-          const existingFile = await projects.readProjectFile(paths.PROJECTS_DIR, projectId, file.path, project.metadata);
-          if (!isReplaceableDesignSystemWorkspaceFile(file.path, existingFile)) continue;
-        } catch (err: unknown) {
-          if (!isNodeErrorCode(err, 'ENOENT')) throw err;
-        }
+      packageFiles.push({ rel: file.path, content: detail.bytes });
+      if (!existing) continue;
+      try {
+        const existingFile = await projects.readProjectFile(paths.PROJECTS_DIR, projectId, file.path, project.metadata);
+        if (isReplaceableDesignSystemWorkspaceFile(file.path, existingFile)) replaceable[file.path] = undefined;
+      } catch (err: unknown) {
+        if (!isNodeErrorCode(err, 'ENOENT')) throw err;
       }
-      await projects.writeProjectFile(
-        paths.PROJECTS_DIR,
-        projectId,
-        file.path,
-        detail.bytes,
-        {},
-        project.metadata,
-      );
     }
+    // The project keeps package copies in sync: an untouched copy follows the
+    // package, an edited one is kept. Projects copied before the manifest
+    // existed only treat files byte-equal to the package as untouched.
+    const projectDir = projects.resolveProjectDir(paths.PROJECTS_DIR, projectId, project.metadata);
+    // The manifest sits in a folder agents write to, so it never decides alone
+    // what may be deleted: only files under a folder the package still ships.
+    const packageDirs = new Set(
+      packageFiles.filter((file) => file.rel.includes('/')).map((file) => file.rel.split('/')[0]),
+    );
+    const recorded = await readGeneratedManifest(projectDir, PACKAGE_SYNC_MANIFEST_FILENAME);
+    const plan = await planBundleMirror({
+      dir: projectDir,
+      files: packageFiles,
+      baseline: {},
+      isManaged: () => true,
+      prunable: Object.keys(recorded).filter((rel) => rel.includes('/') && packageDirs.has(rel.split('/')[0]!)),
+      overrides: replaceable,
+      manifestName: PACKAGE_SYNC_MANIFEST_FILENAME,
+    });
+    await applyBundleMirror(plan, async (file) => {
+      await projects.writeProjectFile(paths.PROJECTS_DIR, projectId, file.rel, file.content, {}, project.metadata);
+    });
     await removeLegacyDesignSystemWorkspaceArtifacts(project);
     await designSystems.linkUserDesignSystemProject(sourceRoot, id, project.id);
     const projectFiles = await projects.listFiles(
