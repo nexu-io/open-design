@@ -66,7 +66,7 @@ export function isSourceMappableManualEditElement(el: Element): boolean {
 export function manualEditElementIsTextLeaf(el: Element): boolean {
   const text = (el.textContent || '').trim();
   if (!text) return false;
-  return el.children.length === 0;
+  return Array.from(el.children).every((child) => child.tagName.toLowerCase() === 'br');
 }
 
 /**
@@ -273,7 +273,10 @@ export function buildManualEditBridge(enabled: boolean): string {
   function isTextLeaf(el){
     var text = (el.textContent || '').trim();
     if (!text) return false;
-    return el.children.length === 0;
+    return hasOnlyTextAndBreakNodes(el);
+  }
+  function hasOnlyTextAndBreakNodes(el){
+    return Array.prototype.every.call(el.children, function(child){ return child.tagName && child.tagName.toLowerCase() === 'br'; });
   }
   function inferKind(el){
     var explicit = el.getAttribute('data-od-edit');
@@ -800,6 +803,37 @@ export function buildManualEditBridge(enabled: boolean): string {
   // another target, clicking empty background, leaving edit mode, or an
   // od-edit-text-finish message from the host.
   var activeTextEdit = null;
+  function plainTextForEdit(el){
+    var value = '';
+    Array.prototype.forEach.call(el.childNodes, function(node){
+      if (node.nodeType === 3) value += node.nodeValue || '';
+      else if (node.nodeType === 1 && node.tagName && node.tagName.toLowerCase() === 'br') value += '\\n';
+      else value += node.textContent || '';
+    });
+    return value;
+  }
+  function renderPlainText(el, value){
+    var parts = String(value == null ? '' : value).split('\\n');
+    el.replaceChildren();
+    for (var i = 0; i < parts.length; i++) {
+      if (i > 0) el.appendChild(document.createElement('br'));
+      if (parts[i]) el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+  function insertSoftLineBreak(el){
+    var selection = window.getSelection && window.getSelection();
+    if (!selection || selection.rangeCount < 1) return false;
+    var range = selection.getRangeAt(0);
+    if (!el.contains(range.commonAncestorContainer) && range.commonAncestorContainer !== el) return false;
+    range.deleteContents();
+    var newline = document.createTextNode('\\n');
+    range.insertNode(newline);
+    range.setStart(newline, 1);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }
   function postTextSession(el, active, extra){
     if (!el) return;
     window.parent.postMessage(Object.assign({
@@ -816,9 +850,11 @@ export function buildManualEditBridge(enabled: boolean): string {
     el.removeAttribute('contenteditable');
     el.removeAttribute('data-od-editing');
     el.removeEventListener('keydown', session.onKey);
+    el.style.whiteSpace = session.originalWhiteSpace;
     if (guard) guard.editingEl = null;
-    var value = (el.textContent || '').trim();
+    var value = plainTextForEdit(el).trim();
     var changed = value !== session.originalText.trim();
+    renderPlainText(el, value);
     if (commit && changed) {
       window.parent.postMessage({
         type: 'od-edit-text-commit',
@@ -826,7 +862,7 @@ export function buildManualEditBridge(enabled: boolean): string {
         value: value
       }, '*');
     } else if (!commit) {
-      el.textContent = session.originalText;
+      el.innerHTML = session.originalHtml;
     }
     postTextSession(el, false, { committed: !!commit, changed: changed });
     return true;
@@ -839,14 +875,24 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (activeTextEdit) finishActiveTextEdit(true);
     if (el.getAttribute('contenteditable') === 'true') return;
-    var originalText = el.textContent || '';
+    var originalHtml = el.innerHTML;
+    var originalText = plainTextForEdit(el);
+    var originalWhiteSpace = el.style.whiteSpace;
     clearSelectedTarget();
+    el.textContent = originalText;
     el.setAttribute('contenteditable', 'plaintext-only');
     el.setAttribute('data-od-editing', 'true');
+    el.style.whiteSpace = 'pre-wrap';
     if (guard) guard.editingEl = el;
     try { el.focus(); } catch (e) {}
     placeCaretFromClick(clickEvent, el);
     function onKey(ev){
+      if (ev.isComposing || ev.keyCode === 229) return;
+      if (ev.key === 'Enter' && ev.shiftKey) {
+        ev.preventDefault();
+        insertSoftLineBreak(el);
+        return;
+      }
       if (ev.key === 'Enter' && !ev.shiftKey) {
         ev.preventDefault();
         finishActiveTextEdit(true);
@@ -856,7 +902,13 @@ export function buildManualEditBridge(enabled: boolean): string {
         finishActiveTextEdit(false);
       }
     }
-    activeTextEdit = { el: el, originalText: originalText, onKey: onKey };
+    activeTextEdit = {
+      el: el,
+      originalHtml: originalHtml,
+      originalText: originalText,
+      originalWhiteSpace: originalWhiteSpace,
+      onKey: onKey
+    };
     el.addEventListener('keydown', onKey);
     postTextSession(el, true);
   }
@@ -990,17 +1042,16 @@ export function buildManualEditBridge(enabled: boolean): string {
     }
     if (ev.data.type === 'od-edit-preview-text') {
       // Live text preview from the host panel's 文本 textarea — the counterpart
-      // to od-edit-preview-style. Setting textContent on the (blurred, the host
-      // textarea holds focus) element mirrors exactly what the set-text patch
-      // will persist, so a newline typed in the panel shows immediately instead
-      // of only after Save. Guarded to text leaves (no element children) so it
-      // can never clobber nested markup — set-text rejects those anyway. When an
-      // inline session is live on the same element, updating its textContent is
-      // safe: the session commits the current textContent on save and restores
-      // its own originalText on cancel, so both paths still reconcile.
+      // to od-edit-preview-style. Rendering the plain-text model on the (blurred,
+      // the host textarea holds focus) element mirrors exactly what the set-text
+      // patch will persist, so a newline typed in the panel shows immediately
+      // instead of only after Save. Guarded to text leaves (text plus soft-break
+      // nodes) so it can never clobber nested markup — set-text rejects those
+      // anyway. When an inline session is live on the same element, its save and
+      // cancel paths still reconcile against the current model and original HTML.
       var ptEl = findById(ev.data.id || '');
-      if (ptEl && ptEl !== document.body && ptEl.children.length === 0) {
-        ptEl.textContent = String(ev.data.value == null ? '' : ev.data.value);
+      if (ptEl && ptEl !== document.body && hasOnlyTextAndBreakNodes(ptEl)) {
+        renderPlainText(ptEl, String(ev.data.value == null ? '' : ev.data.value));
       }
       return;
     }
