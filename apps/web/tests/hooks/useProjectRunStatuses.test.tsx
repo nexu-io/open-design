@@ -186,6 +186,43 @@ describe('useProjectRunStatuses — one feed for every surface', () => {
     expect(runRequests('p1')).toHaveLength(2);
   });
 
+
+  it('stops polling when a terminal (non-retryable) error is returned', async () => {
+    // Override the default stubFetch for this specific test to return a 403 with retryable: false
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/runs?projectId=p1') {
+        return new Response(
+          JSON.stringify({ error: { code: 'WORKSPACE_PROJECT_PERMISSION_DENIED', retryable: false } }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+
+
+    const { result } = renderHook(() => useProjectRunStatuses(['p1']));
+
+    
+    // Wait for the first request to fire
+    await flush();
+
+    
+    // The request went out
+    expect(runRequests('p1')).toHaveLength(1);
+
+    
+    // Advance the timer to trigger the next poll interval (4 seconds)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+
+    
+    // The request count should STILL be 1, because it threw TerminalApiError and was added to terminalProjectIds
+    expect(runRequests('p1')).toHaveLength(1);
+  });
+
   it('stops polling once the last surface lets go', async () => {
     const only = renderHook(() => useProjectRunStatuses(['p1']));
     await flush();

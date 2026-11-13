@@ -28,9 +28,16 @@
  * first render (and revalidates), and the one display mapping —
  * `displayStatusForSummary`, ✓-spending included — applies everywhere.
  */
-import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import type { ProjectDisplayStatus, WorkspaceCollabContext } from '@open-design/contracts';
-import { listRunsForProject, RUNS_CHANGED_EVENT } from '../providers/daemon';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import type {
+  ProjectDisplayStatus,
+  WorkspaceCollabContext,
+} from "@open-design/contracts";
+import {
+  listRunsForProject,
+  TerminalApiError,
+  RUNS_CHANGED_EVENT,
+} from "../providers/daemon";
 import {
   displayStatusForSummary,
   foldRunsToProjectRunSummaries,
@@ -39,7 +46,7 @@ import {
   writeStoredAcknowledgedRuns,
   type AcknowledgedRuns,
   type ProjectRunSummary,
-} from '../state/projectRunStatus';
+} from "../state/projectRunStatus";
 
 /**
  * Backstop only — `RUNS_CHANGED_EVENT` is what makes a change this client
@@ -80,6 +87,7 @@ const listeners = new Set<() => void>();
 let version = 0;
 /** Bumped by a reset so a read started before it cannot land afterwards. */
 let generation = 0;
+const terminalProjectIds = new Set<string>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let listeningForRunsChanged = false;
 
@@ -104,31 +112,50 @@ function getVersion(): number {
   return version;
 }
 
-function sameSummary(a: ProjectRunSummary | null | undefined, b: ProjectRunSummary | null): boolean {
+function sameSummary(
+  a: ProjectRunSummary | null | undefined,
+  b: ProjectRunSummary | null,
+): boolean {
   if (!a || !b) return (a ?? null) === b;
-  return a.status === b.status
-    && a.latestTerminalRunId === b.latestTerminalRunId
-    && a.latestTerminalUpdatedAt === b.latestTerminalUpdatedAt
-    && a.stoppedWhileAway === b.stoppedWhileAway;
+  return (
+    a.status === b.status &&
+    a.latestTerminalRunId === b.latestTerminalRunId &&
+    a.latestTerminalUpdatedAt === b.latestTerminalUpdatedAt &&
+    a.stoppedWhileAway === b.stoppedWhileAway
+  );
 }
 
-async function readProject(projectId: string, context: WorkspaceCollabContext | null): Promise<void> {
+async function readProject(
+  projectId: string,
+  context: WorkspaceCollabContext | null,
+): Promise<void> {
   const startedIn = generation;
-  const result = await listRunsForProject(projectId, context);
-  if (startedIn !== generation) return;
-  // An unreadable project yields null; keeping whatever was known leaves the
-  // row as it was rather than asserting a status nobody verified.
-  if (!result) return;
-  const next = foldRunsToProjectRunSummaries(
-    result.runs,
-    result.awaitingInputProjectIds,
-    result.awaitingInputConversationIds,
-  ).get(projectId) ?? null;
-  const previous = summaries.get(projectId);
-  summaries.set(projectId, next);
-  // Nothing drawn changes between "unknown" and "no runs", so no re-render.
-  if (previous === undefined && next === null) return;
-  if (!sameSummary(previous, next)) emit();
+  try {
+    const result = await listRunsForProject(projectId, context);
+    if (startedIn !== generation) return;
+    // An unreadable project yields null; keeping whatever was known leaves the
+    // row as it was rather than asserting a status nobody verified.
+    if (!result) return;
+    const next =
+      foldRunsToProjectRunSummaries(
+        result.runs,
+        result.awaitingInputProjectIds,
+        result.awaitingInputConversationIds,
+      ).get(projectId) ?? null;
+    const previous = summaries.get(projectId);
+    summaries.set(projectId, next);
+    // Nothing drawn changes between "unknown" and "no runs", so no re-render.
+    if (previous === undefined && next === null) return;
+    if (!sameSummary(previous, next)) emit();
+  } catch (error) {
+    if (startedIn !== generation) return;
+    if (error instanceof TerminalApiError) {
+      terminalProjectIds.add(projectId);
+      emit();
+      return;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -150,8 +177,12 @@ export function releaseProjectRunStatusReads(projectId: string): void {
 }
 
 /** Ask about each id not already being asked about. Answers land as they come. */
-function refresh(ids: Iterable<string>, contextFor: (projectId: string) => WorkspaceCollabContext | null): void {
+function refresh(
+  ids: Iterable<string>,
+  contextFor: (projectId: string) => WorkspaceCollabContext | null,
+): void {
   for (const projectId of ids) {
+    if (terminalProjectIds.has(projectId)) continue;
     if (unpersistedProjectIds.has(projectId)) continue;
     if (inFlight.has(projectId)) continue;
     inFlight.add(projectId);
@@ -161,9 +192,12 @@ function refresh(ids: Iterable<string>, contextFor: (projectId: string) => Works
   }
 }
 
-function contextForSubscribed(projectId: string): WorkspaceCollabContext | null {
+function contextForSubscribed(
+  projectId: string,
+): WorkspaceCollabContext | null {
   for (const subscription of subscriptions) {
-    if (subscription.ids.includes(projectId)) return subscription.contextRef.current;
+    if (subscription.ids.includes(projectId))
+      return subscription.contextRef.current;
   }
   return null;
 }
@@ -178,7 +212,7 @@ function refreshAll(): void {
 }
 
 function startFeed(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   if (pollTimer === null) pollTimer = setInterval(refreshAll, POLL_MS);
   if (!listeningForRunsChanged) {
     window.addEventListener(RUNS_CHANGED_EVENT, refreshAll);
@@ -219,7 +253,8 @@ function removeSubscription(subscription: Subscription): void {
  */
 export function acknowledgeProjectCompletion(projectId: string): void {
   const summary = summaries.get(projectId);
-  if (!summary || !summaryIsNotice(summary) || !summary.latestTerminalRunId) return;
+  if (!summary || !summaryIsNotice(summary) || !summary.latestTerminalRunId)
+    return;
   const runId = summary.latestTerminalRunId;
   const current = acknowledgedRuns();
   if (current[projectId] === runId) return;
@@ -235,6 +270,7 @@ export function acknowledgeProjectCompletion(projectId: string): void {
  */
 export function resetProjectRunStatusStore(): void {
   generation += 1;
+  terminalProjectIds.clear();
   summaries.clear();
   acknowledged = null;
   inFlight.clear();
@@ -260,14 +296,20 @@ export function useProjectRunSummaries(
   const enabled = options?.enabled ?? true;
   // One subscription per id set, so the effect must not re-run just because
   // the caller rebuilt the array. Sorted + joined is the identity that matters.
-  const idsKey = useMemo(() => [...projectIds].sort().join(' '), [projectIds]);
-  const contextRef = useRef<WorkspaceCollabContext | null>(options?.workspaceContext ?? null);
+  const idsKey = useMemo(() => [...projectIds].sort().join(" "), [projectIds]);
+  const contextRef = useRef<WorkspaceCollabContext | null>(
+    options?.workspaceContext ?? null,
+  );
   contextRef.current = options?.workspaceContext ?? null;
-  const storeVersion = useSyncExternalStore(subscribeToStore, getVersion, getVersion);
+  const storeVersion = useSyncExternalStore(
+    subscribeToStore,
+    getVersion,
+    getVersion,
+  );
 
   useEffect(() => {
     if (!enabled || !idsKey) return undefined;
-    const subscription: Subscription = { ids: idsKey.split(' '), contextRef };
+    const subscription: Subscription = { ids: idsKey.split(" "), contextRef };
     addSubscription(subscription);
     return () => removeSubscription(subscription);
   }, [idsKey, enabled]);
@@ -275,7 +317,7 @@ export function useProjectRunSummaries(
   return useMemo(() => {
     if (!enabled || !idsKey) return EMPTY_SUMMARIES;
     const result = new Map<string, ProjectRunSummary>();
-    for (const projectId of idsKey.split(' ')) {
+    for (const projectId of idsKey.split(" ")) {
       const summary = summaries.get(projectId);
       if (summary) result.set(projectId, summary);
     }
