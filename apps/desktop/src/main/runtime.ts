@@ -9,8 +9,10 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { BrowserWindow, app, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, session, shell, webFrameMain } from "electron";
-import type { WebFrameMain } from "electron";
+import { BrowserWindow, Menu, Tray, app, dialog, ipcMain, nativeImage, nativeTheme, powerMonitor, screen, session, shell, webFrameMain } from "electron";
+import type { NativeImage, WebFrameMain } from "electron";
+import { attachWindowsCloseToTray, createBackgroundTray } from "./close-to-tray.js";
+import type { BackgroundTray, BackgroundTraySurface } from "./close-to-tray.js";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -1552,6 +1554,42 @@ function resolveDesktopIconPath(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/public/app-icon.png");
 }
 
+// The tray icon comes from the executable, whose .ico carries 16px and 32px
+// frames; offering both lets Windows pick a sharp one at 100% and 200%
+// scaling instead of resampling a single bitmap.
+async function loadWindowsTrayIcon(): Promise<NativeImage> {
+  try {
+    const [small, normal] = await Promise.all([
+      app.getFileIcon(process.execPath, { size: "small" }),
+      app.getFileIcon(process.execPath, { size: "normal" }),
+    ]);
+    if (!small.isEmpty()) {
+      const icon = nativeImage.createEmpty();
+      icon.addRepresentation({ scaleFactor: 1, buffer: small.toPNG() });
+      if (!normal.isEmpty()) icon.addRepresentation({ scaleFactor: 2, buffer: normal.toPNG() });
+      return icon;
+    }
+  } catch (error) {
+    console.warn("[open-design desktop] tray icon from executable failed", error);
+  }
+  return nativeImage.createFromPath(resolveDesktopIconPath()).resize({ width: 16, height: 16 });
+}
+
+function createElectronBackgroundTray(icon: NativeImage): BackgroundTraySurface {
+  const tray = new Tray(icon);
+  return {
+    setToolTip: (text) => tray.setToolTip(text),
+    setContextMenu: (items) =>
+      tray.setContextMenu(Menu.buildFromTemplate(items.map((item) => ({ label: item.label, click: item.click })))),
+    onClick: (listener) => {
+      tray.on("click", listener);
+    },
+    displayBalloon: ({ title, content }) => tray.displayBalloon({ title, content, icon }),
+    destroy: () => tray.destroy(),
+    isDestroyed: () => tray.isDestroyed(),
+  };
+}
+
 function applyDockIcon(): void {
   if (process.platform !== "darwin" || !app.dock) return;
   const icon = nativeImage.createFromPath(resolveDesktopIconPath());
@@ -1786,20 +1824,84 @@ export type WindowFullscreenSurface = {
 };
 
 export type MainWindowCloseSurface = {
-  on: (event: 'closed', listener: () => void) => unknown;
+  on: {
+    (event: 'closed', listener: () => void): unknown;
+    (event: 'close', listener: (event: { preventDefault: () => void }) => void): unknown;
+  };
+  close: () => void;
+  isDestroyed: () => boolean;
 };
 
+/**
+ * On Windows and Linux closing the main window quits the app, which used to
+ * interrupt running tasks without a word (OPEND-4390: 101 of 121 interrupted
+ * runs with a diagnostic bundle on 10/23-10/26 were Windows, typically ~20
+ * minutes into the task). `confirmCloseWithActiveRuns` resolves true to let
+ * the close go ahead: when nothing is running, when the count is unknown, or
+ * when the user chooses to quit anyway. Windows does not use the prompt on
+ * close: the window hides to the tray instead (see `close-to-tray.ts`), and
+ * only the tray's Quit asks.
+ */
 export function attachNonDarwinMainWindowCloseShutdown(
   window: MainWindowCloseSurface,
   options: {
     isStopped: () => boolean;
     requestQuit?: () => void;
+    confirmCloseWithActiveRuns?: () => Promise<boolean>;
   },
 ): void {
+  let closeConfirmed = false;
+  let confirming = false;
+  const confirm = options.confirmCloseWithActiveRuns;
+  if (confirm) {
+    window.on("close", (event) => {
+      if (options.isStopped()) return;
+      if (closeConfirmed) {
+        // Only bypass the check for this retry; beforeunload may veto it.
+        closeConfirmed = false;
+        return;
+      }
+      event.preventDefault();
+      if (confirming) return;
+      confirming = true;
+      void confirm()
+        .catch(() => true)
+        .then((proceed) => {
+          confirming = false;
+          if (!proceed || options.isStopped() || window.isDestroyed()) return;
+          closeConfirmed = true;
+          window.close();
+        });
+    });
+  }
   window.on("closed", () => {
     if (options.isStopped()) return;
     options.requestQuit?.();
   });
+}
+
+export interface CloseWithActiveRunsPrompt {
+  message: string;
+  detail: string;
+  /** [keep running, quit anyway]; index 0 is the default and the cancel action. */
+  buttons: [string, string];
+}
+
+// The main process has no i18n layer; like the mailto notice, the OS locale
+// picks Chinese or English.
+export function closeWithActiveRunsPrompt(activeRunCount: number, locale: string): CloseWithActiveRunsPrompt {
+  if (locale.trim().toLowerCase().startsWith("zh")) {
+    return {
+      message: `还有 ${activeRunCount} 个任务正在运行`,
+      detail: "关闭 Open Design 会中断这些任务，已生成的进度可能丢失。",
+      buttons: ["继续运行", "仍然退出"],
+    };
+  }
+  return {
+    message: `${activeRunCount} task${activeRunCount === 1 ? " is" : "s are"} still running`,
+    detail: "Closing Open Design will interrupt them, and work in progress may be lost.",
+    buttons: ["Keep running", "Quit anyway"],
+  };
 }
 
 /**
@@ -2727,6 +2829,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     void shell.openExternal(url);
   });
 
+  // Windows only: the notification-area icon that closing the window hides
+  // to (OPEND-4390). Null elsewhere.
+  let backgroundTray: BackgroundTray | null = null;
+  const productName = windowTitle;
   if (process.platform === "darwin") {
     // Track the in-flight fullscreen-enter window so the close handler can
     // tell mid-transition apart from "definitely not fullscreen". HTML
@@ -2767,10 +2873,63 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       });
     });
   } else {
-    attachNonDarwinMainWindowCloseShutdown(window, {
-      isStopped: () => stopped,
-      requestQuit: options.requestQuit,
-    });
+    const askBeforeInterruptingRuns = async (activeRunCount: number, parent: BrowserWindow | null): Promise<boolean> => {
+      const prompt = closeWithActiveRunsPrompt(activeRunCount, app.getLocale());
+      const box: Electron.MessageBoxOptions = {
+        type: "warning",
+        title: productName,
+        message: prompt.message,
+        detail: prompt.detail,
+        buttons: prompt.buttons,
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      // A hidden parent would hide the dialog with it (tray Quit).
+      const { response } = parent != null && !parent.isDestroyed() && parent.isVisible()
+        ? await dialog.showMessageBox(parent, box)
+        : await dialog.showMessageBox(box);
+      return response === 1;
+    };
+    if (process.platform === "win32") {
+      let trayIcon: NativeImage | null = null;
+      void loadWindowsTrayIcon().then((icon) => {
+        trayIcon = icon;
+      });
+      const requestQuit = options.requestQuit ?? (() => app.quit());
+      backgroundTray = createBackgroundTray({
+        createTray: () => createElectronBackgroundTray(trayIcon ?? nativeImage.createFromPath(resolveDesktopIconPath()).resize({ width: 16, height: 16 })),
+        window: { hide: () => window.hide(), show: () => ensureWindowVisible(window) },
+        productName,
+        locale: () => app.getLocale(),
+        confirmQuit: async () => {
+          const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+          if (stopped) return false;
+          if (safety.state !== "blocked") return true;
+          return await askBeforeInterruptingRuns(safety.activeRunCount, window);
+        },
+        requestQuit,
+      });
+      const tray = backgroundTray;
+      attachWindowsCloseToTray(window, { isStopped: () => stopped, hideToTray: () => tray.hideToTray() });
+      // Only the shutdown path (stopped) really closes the window; it still
+      // has to end the app the way it did before.
+      attachNonDarwinMainWindowCloseShutdown(window, {
+        isStopped: () => stopped,
+        requestQuit: options.requestQuit,
+      });
+    } else {
+      attachNonDarwinMainWindowCloseShutdown(window, {
+        isStopped: () => stopped,
+        requestQuit: options.requestQuit,
+        confirmCloseWithActiveRuns: async () => {
+          const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+          if (stopped || window.isDestroyed()) return false;
+          if (safety.state !== "blocked") return true;
+          return await askBeforeInterruptingRuns(safety.activeRunCount, window);
+        },
+      });
+    }
   }
 
   const rendererLogPath = options.rendererLogPath ?? null;
@@ -2866,6 +3025,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
     revealed = true;
+    // Windows: the tray icon is the way back to a closed window and the way
+    // to quit, so it appears together with the window.
+    backgroundTray?.install();
     showWindowButtons(window);
     window.show();
     window.focus();
@@ -3077,6 +3239,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     async close() {
       stopDisplayRefresh();
       stopped = true;
+      backgroundTray?.dispose();
       if (timer != null) {
         clearTimeout(timer);
         timer = null;
