@@ -1008,6 +1008,7 @@ export const ko: Dict = {
   'entry.teamSlotNote': 'This space is provided by the team service. Integration is in progress.',
   "entry.cloudCalloutTitle": "OpenDesign Cloud",
   'entry.cloudRecovering': 'Account connection interrupted. Recovering automatically…',
+  'entry.createDeviceProject': '이 기기에만 저장할 프로젝트 만들기',
   'entry.authExpiredBody': 'Open Design에 로그인되지 않음\n프로젝트를 확인하고 대화를 이어가려면 먼저 로그인하세요.',
   'home.createFailed': 'Failed to start the run. Try again.',
   'home.daemonRecovering': '로컬 연결이 끊어졌습니다\n이 컴퓨터의 Open Design 서비스에 일시적으로 연결할 수 없습니다. 클라이언트를 다시 시작해 주세요.',

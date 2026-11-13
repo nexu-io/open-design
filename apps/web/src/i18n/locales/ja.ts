@@ -1008,6 +1008,7 @@ export const ja: Dict = {
   'entry.teamSlotNote': 'This space is provided by the team service. Integration is in progress.',
   "entry.cloudCalloutTitle": "OpenDesign Cloud",
   'entry.cloudRecovering': 'Account connection interrupted. Recovering automatically…',
+  'entry.createDeviceProject': 'このデバイスにのみ保存するプロジェクトを作成',
   'entry.authExpiredBody': 'Open Design にサインインしていません\nプロジェクトを表示して会話を続けるには、ログインしてください。',
   'home.createFailed': 'Failed to start the run. Try again.',
   'home.daemonRecovering': 'ローカル接続が切断されました\nこのコンピューター上の Open Design サービスに一時的に接続できません。クライアントを再起動してください。',
