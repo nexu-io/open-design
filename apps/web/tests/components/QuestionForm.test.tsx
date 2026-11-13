@@ -499,6 +499,28 @@ describe('QuestionFormView', () => {
     });
   });
 
+  it('keeps spaces typed into a checkbox custom answer', () => {
+    const onSubmit = vi.fn();
+    render(<QuestionFormView form={checkboxObjectForm} interactive onSubmit={onSubmit} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write your own' }));
+
+    // Type one character at a time, the way a person does. The field is
+    // controlled, so each keystroke re-renders from what the form kept: a
+    // draft that is trimmed on the way in loses the space before the next
+    // character arrives, and `hello world` comes back as `helloworld`.
+    const input = () => screen.getByTestId('qf-input') as HTMLTextAreaElement;
+    for (const char of 'hello world') {
+      fireEvent.change(input(), { target: { value: input().value + char } });
+    }
+
+    expect(input().value).toBe('hello world');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({ tone: ['hello world'] });
+  });
+
   it('counts the visible own-answer row once while it opens, clears, and closes', () => {
     render(
       <QuestionFormView form={checkboxObjectForm} interactive onSubmit={vi.fn()} />,
