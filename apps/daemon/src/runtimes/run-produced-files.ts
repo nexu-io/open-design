@@ -1,6 +1,6 @@
 // Run-terminal produced-file association.
 //
-// THE INVARIANT: a run that succeeded and touched artifacts leaves that
+// THE INVARIANT: a terminal run that touched artifacts leaves that
 // association on its assistant message, whether or not a browser was watching.
 //
 // `produced_files_json` has only ever had one writer — the web client, from a
@@ -16,8 +16,9 @@
 // `DESIGN_DELIVERY_RECONCILIATION_WINDOW_MS`. The card is then unreachable
 // forever. (Plane OPEND-2598, OPEND-2608.)
 //
-// This closes the hole at the same terminal chokepoint that already freezes the
-// turn's artifact bytes, where the run's own filesystem diff is in hand.
+// Success capture freezes the turn's artifact bytes. Every terminal path also
+// attaches the run's verified filesystem diff, independently of that capture
+// and of the execution verdict.
 //
 // A FLOOR, NOT A VERDICT. The client sees the pre-turn snapshot and the daemon
 // does not, so the client's list stays authoritative: this only ever fills a
@@ -105,13 +106,23 @@ async function describeTouchedFile(
     return null;
   }
   if (!stat.isFile()) return null;
+  return describeSnapshotFile(projectRoot, absolutePath, stat);
+}
+
+function describeSnapshotFile(
+  projectRoot: string,
+  absolutePath: string,
+  fingerprint: { size: number; mtimeMs: number },
+): RunProducedFile | null {
+  const rel = projectRelativeKey(projectRoot, absolutePath);
+  if (!rel) return null;
   return {
     name: rel,
     path: rel,
     localPath: path.resolve(absolutePath),
     type: 'file',
-    size: stat.size,
-    mtime: stat.mtimeMs,
+    size: fingerprint.size,
+    mtime: fingerprint.mtimeMs,
     kind: kindForArtifactPath(rel),
     mime: mimeForArtifactPath(rel) ?? 'application/octet-stream',
   };
@@ -134,6 +145,35 @@ export async function associateRunProducedFiles(
       .slice(0, input.maxFiles ?? DEFAULT_MAX_FILES)
       .map((absolutePath) => describeTouchedFile(input.projectRoot, absolutePath)),
   );
+  return persistProducedFiles(db, input.messageId, described);
+}
+
+/**
+ * The synchronous terminal hook cannot await file stats. Reuse the verified
+ * filesystem snapshot it already took, so failed and canceled runs publish
+ * their message association before `end` without another filesystem scan.
+ * The caller must supply a run-owned, uncontended snapshot of regular files.
+ */
+export function associateRunProducedFilesFromSnapshot(
+  db: Database.Database,
+  input: AssociateRunProducedFilesInput,
+  snapshot: ReadonlyMap<string, { size: number; mtimeMs: number }>,
+): AssociateRunProducedFilesOutcome {
+  if (input.touchedPaths.length === 0) return { written: false, reason: 'no-paths' };
+  const described = input.touchedPaths
+    .slice(0, input.maxFiles ?? DEFAULT_MAX_FILES)
+    .map((absolutePath) => {
+      const fingerprint = snapshot.get(absolutePath);
+      return fingerprint ? describeSnapshotFile(input.projectRoot, absolutePath, fingerprint) : null;
+    });
+  return persistProducedFiles(db, input.messageId, described);
+}
+
+function persistProducedFiles(
+  db: Database.Database,
+  messageId: string,
+  described: Array<RunProducedFile | null>,
+): AssociateRunProducedFilesOutcome {
   const files = described
     .filter((file): file is RunProducedFile => file !== null)
     // Newest first, matching the order `listFiles` gives the web so the card
@@ -147,7 +187,7 @@ export async function associateRunProducedFiles(
           SET produced_files_json = ?
         WHERE id = ? AND produced_files_json IS NULL`,
     )
-    .run(JSON.stringify(files), input.messageId);
+    .run(JSON.stringify(files), messageId);
   if (result.changes === 0) return { written: false, reason: 'client-owned' };
   return { written: true, files };
 }

@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ptBR: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Arquivos gerados; resumo ausente",
+  'chat.runError.artifactsWithoutSummaryMessage': "Arquivos disponíveis: {files}. A IA não forneceu um resumo final. Você pode abrir ou baixar os arquivos acima.",
+  'chat.runError.availableArtifacts': "Arquivos disponíveis: {files}. Você pode abri-los ou baixá-los acima.",
+  'chat.artifact.missingSummary': "Os arquivos foram gerados, mas a IA não forneceu um resumo final.",
   "referral.notice.label": "Aviso de cartão de redefinição",
   "referral.notice.registered": "Receba um cartão de redefinição com sua primeira assinatura em até 48 horas",
   "referral.notice.pending": "Sua primeira assinatura foi concluída. O cartão aguarda emissão.",

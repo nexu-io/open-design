@@ -905,7 +905,10 @@ import {
   captureRunChatArtifactSnapshots,
   type CaptureRunChatArtifactsReport,
 } from './chat-artifacts/run-capture.js';
-import { associateRunProducedFiles } from './runtimes/run-produced-files.js';
+import {
+  associateRunProducedFiles,
+  associateRunProducedFilesFromSnapshot,
+} from './runtimes/run-produced-files.js';
 import { chatArtifactCaptureResultProps } from './chat-artifacts/telemetry.js';
 import { freezeAndRenderChatArtifactCovers } from './chat-artifacts/cover.js';
 import { setMessageArtifactHtmlVersionIds } from './chat-artifacts/store.js';
@@ -12387,6 +12390,7 @@ export async function startServer({
             : null;
       return requestPrompt ? { prompt: requestPrompt, promptSource: 'message' as const } : { prompt: null };
     };
+    let terminalArtifactSnapshot: ReturnType<typeof snapshotProjectArtifacts> | null = null;
     const resolveRunArtifactOutcomeBeforeFinish = (afterSnapshot?: ReturnType<typeof snapshotProjectArtifacts>) => {
       if (!run?.id) return null;
       if (run.artifactOutcome) return run.artifactOutcome;
@@ -12405,10 +12409,8 @@ export async function startServer({
         outcome = fallbackOutcome();
       } else {
         try {
-          const diff = diffRunArtifacts(
-            artifactBaseline.before,
-            afterSnapshot ?? snapshotProjectArtifacts(artifactBaseline.cwd),
-          );
+          terminalArtifactSnapshot = afterSnapshot ?? snapshotProjectArtifacts(artifactBaseline.cwd);
+          const diff = diffRunArtifacts(artifactBaseline.before, terminalArtifactSnapshot);
           outcome = {
             artifactCount: diff.touched,
             artifactsCreated: diff.created,
@@ -12450,6 +12452,19 @@ export async function startServer({
       // below then observes run.artifactOutcome and discards this late result.
       const afterSnapshot = await snapshotProjectArtifactsAsync(artifactBaseline.cwd);
       return resolveRunArtifactOutcomeBeforeFinish(afterSnapshot);
+    };
+    // Absence of prose is only empty output when this run also produced no
+    // verified artifact. Peek rather than consume the baseline: a retry or
+    // continuation still needs its own final diff. Tool activity and old files
+    // alone are not delivery, and concurrent writers cannot prove ownership.
+    const hasRunProducedFilesystemArtifacts = async () => {
+      const baseline = runArtifactBaselines.peek(run.id);
+      if (!baseline || baseline.contended) return false;
+      const after = await snapshotProjectArtifactsAsync(baseline.cwd);
+      if (baseline.contended || runArtifactBaselines.peek(run.id) !== baseline) return false;
+      return diffRunArtifacts(baseline.before, after).touchedPaths.some(
+        (filePath) => (after.get(filePath)?.size ?? 0) > 0,
+      );
     };
     // Design §10.3. The properties object is the builder's return value
     // VERBATIM — nothing is spread in or added here, so what the builder's own
@@ -12622,7 +12637,24 @@ export async function startServer({
       try {
         previousOnFinalize?.();
       } finally {
-        resolveRunArtifactOutcomeBeforeFinish();
+        const outcome = resolveRunArtifactOutcomeBeforeFinish();
+        if (
+          design.runs.isTerminal(run.status)
+          && run.assistantMessageId && outcome?.projectRoot
+          && outcome.diff && terminalArtifactSnapshot
+        ) {
+          // Association is independent of success. Direct cancellation and
+          // failure paths cannot await the success-only snapshot capture.
+          try {
+            associateRunProducedFilesFromSnapshot(db, {
+              messageId: run.assistantMessageId,
+              projectRoot: outcome.projectRoot,
+              touchedPaths: outcome.diff.touchedPaths,
+            }, terminalArtifactSnapshot);
+          } catch (err) {
+            console.warn('[chat-artifacts] terminal produced-file association failed', err);
+          }
+        }
       }
     };
     const isOpenCodeContent = def.externalMcpInjection === 'opencode-env-content';
@@ -17212,14 +17244,16 @@ export async function startServer({
           return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
         }
       }
-      // Empty-output guard: a clean `code === 0` exit with no visible
-      // output means the run silently finished without producing anything.
+      // Empty-output guard: a clean exit must produce visible output or a
+      // verified filesystem artifact. Media tools need not emit assistant text.
       // Surface an explicit failure so the chat shows a clear reason.
       if (
         code === 0 &&
         !run.cancelRequested &&
         trackingSubstantiveOutput &&
-        !agentProducedOutput
+        !agentProducedOutput &&
+        !(await hasRunProducedFilesystemArtifacts()) &&
+        !run.cancelRequested && !design.runs.isTerminal(run.status)
       ) {
         markRpcCloseReason('empty_output');
         return finishWithRetryDecision('failed', code, signal, {
@@ -17282,25 +17316,33 @@ export async function startServer({
         !trackingSubstantiveOutput &&
         !childStdoutSeen
       ) {
-        markRpcCloseReason('empty_output');
         const combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
         const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        if (authFailure) {
-          // A login problem is a real failure, not an empty reply.
-          send('error', createSseErrorPayload(
-            'AGENT_AUTH_REQUIRED',
-            authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`,
-            { retryable: true },
-          ));
-          return finishWithRetryDecision('failed', 0, signal);
+        // A run that produced files is not empty: the deliverable is the
+        // result, and failing it here would strand those artifacts (#8596).
+        // Peek, do not consume, the artifact baseline.
+        const producedArtifacts = !authFailure
+          && await hasRunProducedFilesystemArtifacts();
+        if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+        if (!producedArtifacts) {
+          markRpcCloseReason('empty_output');
+          if (authFailure) {
+            // A login problem is a real failure, not an empty reply.
+            send('error', createSseErrorPayload(
+              'AGENT_AUTH_REQUIRED',
+              authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`,
+              { retryable: true },
+            ));
+            return finishWithRetryDecision('failed', 0, signal);
+          }
+          return finishWithRetryDecision('failed', 0, signal, {
+            emptyReplyError: createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`,
+              { retryable: true },
+            ),
+          });
         }
-        return finishWithRetryDecision('failed', 0, signal, {
-          emptyReplyError: createSseErrorPayload(
-            'AGENT_EXECUTION_FAILED',
-            `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`,
-            { retryable: true },
-          ),
-        });
       }
       // Native agents that don't shut down on stdin.end() (e.g. Devin or Pi)
       // are forced to exit via SIGTERM after

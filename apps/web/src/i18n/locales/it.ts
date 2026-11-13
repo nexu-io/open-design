@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const it: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "File generati; riepilogo mancante",
+  'chat.runError.artifactsWithoutSummaryMessage': "File disponibili: {files}. L’IA non ha fornito un riepilogo finale. Puoi aprire o scaricare i file qui sopra.",
+  'chat.runError.availableArtifacts': "File disponibili: {files}. Puoi aprirli o scaricarli qui sopra.",
+  'chat.artifact.missingSummary': "I file sono stati generati, ma l’IA non ha fornito un riepilogo finale.",
   "referral.notice.label": "Avviso carta di ripristino",
   "referral.notice.registered": "Ricevi una carta di ripristino con il primo abbonamento entro 48 ore",
   "referral.notice.pending": "Il primo abbonamento è completato. La carta è in attesa di emissione.",

@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const en: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Files generated; summary missing",
+  'chat.runError.artifactsWithoutSummaryMessage': "Available files: {files}. The AI did not provide a final summary. You can open or download the files above.",
+  'chat.runError.availableArtifacts': "Available files: {files}. You can open or download them above.",
+  'chat.artifact.missingSummary': "Files were generated, but the AI did not provide a final summary.",
   "referral.notice.label": "Reset card invitation notice",
   "referral.notice.registered": "Get a reset card with your first subscription within 48 hours",
   "referral.notice.pending": "Your first subscription is complete. Your reset card is awaiting issuance.",

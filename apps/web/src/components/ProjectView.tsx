@@ -6971,7 +6971,7 @@ export function ProjectView({
   );
 
   // Maximum number of times we will retry fetching a null status for a
-  // spuriouslyFailedPending run before treating the absence as authoritative
+  // terminalArtifactsPending run before treating the absence as authoritative
   // completion.  Transient null-status retries are bounded; after
   // MAX_TRANSIENT_RETRIES we add to completedReattachRunsRef to avoid spinning.
   const MAX_TRANSIENT_RETRIES = 2;
@@ -7038,21 +7038,12 @@ export function ProjectView({
         if (cancelled) return;
         if (message.role !== 'assistant') continue;
 
-        // A message whose run_status was spuriously written as 'failed' before
-        // the page reloaded (e.g. the SSE reconnect fallback fired while the
-        // daemon run was still in flight) must still be reattached when the
-        // actual daemon run succeeded.  Detect this by checking for a 'failed'
-        // message that has a runId but no content and no produced files — the
-        // daemon's authoritative status is fetched below and the message is
-        // updated to reflect it.
-        //
-        // NOTE: `spuriouslyFailedPending` is kept separate from the other two
-        // branches because the recovery action is gated on the fetched daemon
-        // status; genuine failures (onError of a live stream) must not enter
-        // the reattach path and must never have their persisted failure context
-        // cleared or their resumable flag overwritten.
-        const spuriouslyFailedPending =
-          message.runStatus === 'failed' &&
+        // Probe empty failed/canceled messages for missing artifact associations
+        // and premature local terminal verdicts. The daemon's authoritative
+        // status gates recovery below; confirmed failures/cancellations keep
+        // their persisted context rather than replaying the stream.
+        const terminalArtifactsPending =
+          (message.runStatus === 'failed' || message.runStatus === 'canceled') &&
           !!message.runId &&
           !message.content &&
           !(message.producedFiles?.length);
@@ -7061,11 +7052,11 @@ export function ProjectView({
           !!message.runId &&
           hasGenericDisconnectFailureEvent(message);
         const replayingTerminalRun =
-          shouldReplayTerminalRunMessage(message) || spuriouslyFailedPending;
+          shouldReplayTerminalRunMessage(message) || terminalArtifactsPending;
         const needsReplayForMessage =
           isActiveRunStatus(message.runStatus) ||
           replayingTerminalRun ||
-          spuriouslyFailedPending ||
+          terminalArtifactsPending ||
           recoverableGenericDisconnectFailed;
         // A predecessor can be persisted as physically succeeded immediately
         // before the logical task advances. Probe daemon task truth even when
@@ -7131,7 +7122,7 @@ export function ProjectView({
           // run's receipts for the existing manual reconnect action.
           // `fetchChatRunStatus` returns null on ANY non-OK response or fetch
           // exception (providers/daemon.ts:686), not only when the daemon has
-          // permanently forgotten the run.  For a spuriously-failed pending
+          // permanently forgotten the run. For an empty failed/canceled
           // message we must keep this path retryable: a transient network or
           // daemon hiccup during reload must not permanently suppress the
           // reattach attempt for the rest of the session.
@@ -7143,7 +7134,7 @@ export function ProjectView({
           // For other message states (phantom running rows with no runId),
           // fall through to the original mark-failed behaviour and seal the
           // runId so we don't loop indefinitely.
-          if (spuriouslyFailedPending) {
+          if (terminalArtifactsPending) {
             const attempts = transientFailedRetriesRef.current.get(runId) ?? 0;
             if (attempts >= MAX_TRANSIENT_RETRIES) {
               // Cap reached — treat as authoritative completion so we stop retrying.
@@ -7279,9 +7270,33 @@ export function ProjectView({
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
+        // Older daemons persisted terminal artifact paths without attaching
+        // them to failed/canceled messages. Recover only authoritative paths:
+        // a historical file-list diff would also claim files from later turns.
+        // The failure, error events and retry context remain the run's verdict.
+        if (
+          terminalArtifactsPending
+          && (status.status === 'failed' || status.status === 'canceled')
+          && status.artifactPaths?.length
+        ) {
+          const nextFiles = await refreshProjectFiles({ fresh: true });
+          if (cancelled || activeConversationIdRef.current !== reattachConversationId
+            || projectRunAuthorityKeyRef.current !== projectRunAuthorityKey) return;
+          const produced = computeProducedFiles(
+            undefined, nextFiles, status.artifactPaths, project.id, projectDetail.resolvedDir,
+          ) ?? [];
+          if (produced.length > 0) {
+            updateMessageById(message.id, (prev) =>
+              prev.runId === runId && !prev.producedFiles?.length
+                ? { ...prev, producedFiles: produced }
+                : prev,
+            true, { telemetryFinalized: true });
+          }
+        }
         if (status.strategyTask?.taskExecutionId) {
-          // A blocked verdict is stamped alongside the task handle so the
-          // turn's question form stays terminated after a reload.
+          // Keep message mutations after the recovery read: an update before
+          // its await would cancel this effect and restart the same probe.
+          // A blocked verdict also keeps this turn's question form terminated.
           const settledFields = strategySettledMessageFields(status.strategyTask);
           updateMessageById(
             message.id,
@@ -7293,13 +7308,13 @@ export function ProjectView({
             true,
           );
         }
-        // When the daemon authoritative status is 'failed', the run ended in a
-        // genuine failure.  For spuriously-failed pending messages this means
-        // the client-side heuristic was wrong — the daemon did not succeed.
+        // A failed daemon verdict or a stored cancellation keeps its terminal
+        // context. Never reattach a stopped run while its cancellation request
+        // is still reaching the daemon, even if that daemon reports it running.
         // Leave the message alone so its persisted error content/events/producedFiles
         // survive, but still apply the daemon's authoritative `resumable` flag so
         // ChatPane's Continue affordance reflects the daemon's view after a reload.
-        if (spuriouslyFailedPending && status.status === 'failed') {
+        if (terminalArtifactsPending && status.status === 'failed') {
           // The record confirms the failure, so the disconnect marker (if any)
           // no longer stands for "outcome unknown" (N15 / Q7).
           updateMessageById(
@@ -7318,7 +7333,26 @@ export function ProjectView({
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
-        if (spuriouslyFailedPending && status.status === 'canceled') {
+        // A stored cancellation keeps its terminal context even while the
+        // daemon still reports the run in flight: never reattach a stopped run
+        // while its cancellation request is still reaching the daemon.
+        if (terminalArtifactsPending && message.runStatus === 'canceled') {
+          if (typeof status.resumable !== 'undefined') {
+            updateMessageById(
+              message.id,
+              (prev) => ({ ...prev, resumable: status.resumable }),
+              true,
+            );
+          }
+          // Clear stale retry count — this run is authoritatively done.
+          transientFailedRetriesRef.current.delete(runId);
+          genericDisconnectRetriesRef.current.delete(runId);
+          genericDisconnectBackoffUntilRef.current.delete(runId);
+          completedReattachRunsRef.current.add(runId);
+          findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
+          continue;
+        }
+        if (terminalArtifactsPending && status.status === 'canceled') {
           setError(null);
           // Route through the shared invariant helper: `status` is already
           // terminal here, so this resolves to `status.updatedAt` directly.
@@ -7344,13 +7378,13 @@ export function ProjectView({
           findDetachedManualFileWrites(reattachConversationId, runId)?.dispose();
           continue;
         }
-        if (spuriouslyFailedPending && status.status === 'succeeded') {
+        if (terminalArtifactsPending && status.status === 'succeeded') {
           setError(null);
           transientFailedRetriesRef.current.delete(runId);
           genericDisconnectRetriesRef.current.delete(runId);
           genericDisconnectBackoffUntilRef.current.delete(runId);
         }
-        if (!(spuriouslyFailedPending && status.status === 'succeeded')) {
+        if (!(terminalArtifactsPending && status.status === 'succeeded')) {
           updateMessageById(
             message.id,
             (prev) => ({
@@ -7638,7 +7672,7 @@ export function ProjectView({
         if (needsFullReplay && daemonStatusIsRecoverable) {
           updateMessageById(
             message.id,
-            // Clear endedAt only for spuriously-failed pending messages so the
+            // Clear endedAt only for premature terminal messages so the
             // replay finalizers stamp Date.now() on real completion instead of
             // preserving the SSE-disconnect timestamp that onError set when the
             // browser-side reconnect loop gave up.  Already-succeeded rows
@@ -7651,11 +7685,11 @@ export function ProjectView({
               content: preservedTaskPrefixContent,
               events: preservedTaskPrefixEvents,
               producedFiles: undefined,
-              ...(spuriouslyFailedPending ? { endedAt: undefined } : {}),
+              ...(terminalArtifactsPending ? { endedAt: undefined } : {}),
             }),
             true,
           );
-          // When the failed-message recovery moves back to running/succeeded,
+          // When terminal-message recovery moves back to running/succeeded,
           // clear any stale "daemon stream disconnected" error banner that the
           // original onError path may have set, so the chat does not show a
           // stale error after the reattach succeeds.
@@ -7756,7 +7790,7 @@ export function ProjectView({
         const shouldPublishRunFinishedEvent =
           isActiveRunStatus(message.runStatus)
           || isActiveRunStatus(status.status)
-          || spuriouslyFailedPending
+          || terminalArtifactsPending
           || recoverableGenericDisconnectFailed;
         // 组件 22 · 重连 · S29:重挂即将开始 ——「次数用尽、交回给人」这句话此刻
         // 已经不成立了,先把那一行撤掉。这次重挂的读数从 0 起,断不了就永远不会
@@ -7903,7 +7937,7 @@ export function ProjectView({
               // Clear any stale error banner set by the original onError path
               // (e.g. "daemon stream disconnected") so the chat does not show it
               // after the spuriously-failed message reattaches and succeeds.
-              if (runMayFinalize && spuriouslyFailedPending) setError(null);
+              if (runMayFinalize && terminalArtifactsPending) setError(null);
               if (!runMayFinalize) return;
               for (const ev of parser.flush()) {
                 if (ev.type === 'artifact:end') {
@@ -10789,7 +10823,7 @@ export function ProjectView({
           }
           // Mark the run as completed in the reattach registry so that
           // attachRecoverableRuns does not race it after streaming ends.
-          // Without this guard, the spuriouslyFailedPending heuristic would
+          // Without this guard, the terminalArtifactsPending heuristic would
           // match a freshly-failed live run (no content, no producedFiles) and
           // attempt a daemon status fetch on a run the client already knows
           // failed — overwriting the assistant message's resumable flag with

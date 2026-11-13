@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ru: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Файлы созданы; итоговое описание отсутствует",
+  'chat.runError.artifactsWithoutSummaryMessage': "Доступные файлы: {files}. ИИ не предоставил итоговое описание. Вы можете открыть или скачать файлы выше.",
+  'chat.runError.availableArtifacts': "Доступные файлы: {files}. Вы можете открыть или скачать их выше.",
+  'chat.artifact.missingSummary': "Файлы созданы, но ИИ не предоставил итоговое описание.",
   "referral.notice.label": "Уведомление о карте сброса",
   "referral.notice.registered": "Получите карту сброса при первой подписке в течение 48 часов",
   "referral.notice.pending": "Первая подписка оформлена. Карта ожидает выдачи.",

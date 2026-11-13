@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const uk: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Файли створено; підсумкового опису немає",
+  'chat.runError.artifactsWithoutSummaryMessage': "Доступні файли: {files}. ШІ не надав підсумкового опису. Ви можете відкрити або завантажити файли вище.",
+  'chat.runError.availableArtifacts': "Доступні файли: {files}. Ви можете відкрити або завантажити їх вище.",
+  'chat.artifact.missingSummary': "Файли створено, але ШІ не надав підсумкового опису.",
   "referral.notice.label": "Сповіщення про картку скидання",
   "referral.notice.registered": "Отримайте картку скидання з першою підпискою протягом 48 годин",
   "referral.notice.pending": "Першу підписку оформлено. Картка очікує на видачу.",

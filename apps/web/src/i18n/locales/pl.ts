@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const pl: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Pliki utworzone; brak podsumowania",
+  'chat.runError.artifactsWithoutSummaryMessage': "Dostępne pliki: {files}. AI nie dostarczyła końcowego podsumowania. Możesz otworzyć lub pobrać pliki powyżej.",
+  'chat.runError.availableArtifacts': "Dostępne pliki: {files}. Możesz je otworzyć lub pobrać powyżej.",
+  'chat.artifact.missingSummary': "Pliki zostały utworzone, ale AI nie dostarczyła końcowego podsumowania.",
   "referral.notice.label": "Powiadomienie o karcie resetu",
   "referral.notice.registered": "Otrzymaj kartę resetu przy pierwszej subskrypcji w ciągu 48 godzin",
   "referral.notice.pending": "Pierwsza subskrypcja jest aktywna. Karta oczekuje na wydanie.",

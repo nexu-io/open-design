@@ -3049,6 +3049,7 @@ export interface Dict {
   'chat.runError.title.quotaExhausted': string;
   'chat.runError.title.timedOut': string;
   'chat.runError.title.emptyOutput': string;
+  'chat.runError.title.artifactsWithoutSummary': string;
   'chat.runError.title.sessionExpired': string;
   'chat.runError.title.gitBashMissing': string;
   'chat.runError.title.cpuUnsupported': string;
@@ -3102,6 +3103,8 @@ export interface Dict {
   'chat.runError.timedOutMessage': string;
   'chat.runError.inactivityTimeoutMessage': string;
   'chat.runError.emptyOutputMessage': string;
+  'chat.runError.artifactsWithoutSummaryMessage': string;
+  'chat.runError.availableArtifacts': string;
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
   'chat.runError.cpuUnsupportedMessage': string;
@@ -4784,6 +4787,7 @@ export interface Dict {
   'chat.input.expandFull': string;
   'chat.input.viewAll': string;
   'chat.artifact.export': string;
+  'chat.artifact.missingSummary': string;
   'chat.artifact.pending': string;
   'chat.artifact.publish': string;
   'chat.artifact.published': string;
