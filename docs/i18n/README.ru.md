@@ -296,6 +296,12 @@ docker compose up -d
 
 Шаблон Sealos App Store запускает опубликованный Docker-образ OpenDesign с постоянным хранилищем рабочей области и Basic Auth на публичном прокси. Для пользовательских публичных или совместных Docker-развертываний следуйте рекомендациям по обратному прокси и `OPEN_DESIGN_ALLOWED_ORIGINS` в [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚀 Развертывание на Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+Шаблон Pethost запускает опубликованный образ `ghcr.io/nexu-io/od` с данными в томе и токеном API в роли Basic Auth: имя пользователя — `open-design`, пароль — тот, что указан при развертывании.
+
 ### 🧑‍💻 Запуск из исходников
 
 ```bash

@@ -287,6 +287,12 @@ docker compose up -d
 
 La plantilla de Sealos App Store ejecuta la imagen Docker publicada de OpenDesign con almacenamiento persistente para el espacio de trabajo y Basic Auth en el proxy público. Para despliegues Docker públicos o compartidos personalizados, sigue la guía de proxy inverso y `OPEN_DESIGN_ALLOWED_ORIGINS` en [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚀 Despliega en Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+La plantilla de Pethost ejecuta la imagen publicada `ghcr.io/nexu-io/od` con sus datos en un volumen y el token de la API como Basic Auth: el usuario es `open-design` y la contraseña, la que indicas al desplegar.
+
 ### 🧑‍💻 Ejecútalo desde el código fuente
 
 ```bash

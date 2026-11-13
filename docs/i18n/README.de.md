@@ -287,6 +287,12 @@ docker compose up -d
 
 Die Sealos-App-Store-Vorlage führt das veröffentlichte Open-Design-Docker-Image mit persistentem Workspace-Speicher und Basic Auth am öffentlichen Proxy aus. Folgen Sie für eigene öffentliche oder gemeinsam genutzte Docker-Deployments den Reverse-Proxy- und `OPEN_DESIGN_ALLOWED_ORIGINS`-Hinweisen in [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚀 Auf Pethost bereitstellen
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+Die Pethost-Vorlage führt das veröffentlichte Image `ghcr.io/nexu-io/od` mit seinen Daten in einem Volume aus, das API-Token dient als Basic Auth: Benutzername `open-design`, Passwort das beim Deployment angegebene.
+
 ### 🧑‍💻 Aus dem Quellcode ausführen
 
 ```bash
