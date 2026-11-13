@@ -269,6 +269,68 @@ describe('owner content overwrite authority', () => {
     } finally { f.close(); }
   });
 
+  it.each(['success', 'failure', 'no-result'] as const)('defers an early publication echo until its %s receipt is known', async outcome => {
+    const f = setup();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let started!: () => void;
+    const uploading = new Promise<void>(resolve => { started = resolve; });
+    const seen: string[] = [];
+    f.deps.onChange = () => { seen.push(f.controller.read(scope).state); };
+    const publication = f.controller.withPublication(scope.projectId, null, async () => {
+      started();
+      await gate;
+      if (outcome === 'failure') throw new Error('upload failed');
+      return outcome === 'success' ? { version: 4 } : null;
+    });
+    // Observe rejection immediately so the controlled failure never escapes the test.
+    const settled = publication.then(() => null, error => error);
+    try {
+      await uploading;
+      expect(await f.controller.request(scope, { action: 'check' }, 4)).toMatchObject({ state: 'busy', latestVersion: 4, localVersion: null });
+      expect(f.controller.read(scope).state).toBe('busy');
+      expect(seen).not.toContain('confirmation_required');
+      expect(f.apply).not.toHaveBeenCalled();
+      release();
+      const error = await settled;
+      expect(error instanceof Error).toBe(outcome === 'failure');
+      expect(f.controller.read(scope)).toMatchObject({
+        state: outcome === 'success' ? 'up_to_date' : 'confirmation_required',
+        latestVersion: 4, localVersion: outcome === 'success' ? 4 : null,
+      });
+      expect(f.apply).not.toHaveBeenCalled();
+    } finally { release(); await settled; f.close(); }
+  });
+
+  it('keeps a newer external version pending until overlapping publications finish out of order', async () => {
+    const f = setup();
+    function deferred() {
+      let resolve!: () => void;
+      const promise = new Promise<void>(done => { resolve = done; });
+      return { promise, resolve };
+    }
+    const gates = [deferred(), deferred()];
+    const starts = [deferred(), deferred()];
+    const publications = gates.map((gate, index) => f.controller.withPublication(scope.projectId, null, async () => {
+      starts[index]!.resolve();
+      await gate.promise;
+      return { version: index + 4 };
+    }));
+    try {
+      await Promise.all(starts.map(start => start.promise));
+      expect(await f.controller.request(scope, { action: 'check' }, 6)).toMatchObject({ state: 'busy', latestVersion: 6 });
+      gates[1]!.resolve();
+      await publications[1];
+      expect(f.controller.read(scope)).toMatchObject({ state: 'busy', localVersion: 5, latestVersion: 6 });
+      gates[0]!.resolve();
+      await publications[0];
+      expect(f.controller.read(scope)).toMatchObject({ state: 'confirmation_required', localVersion: 5, latestVersion: 6 });
+      expect(f.apply).not.toHaveBeenCalled();
+      expect(await f.controller.request(scope, { action: 'accept', version: 6 })).toMatchObject({ state: 'up_to_date', localVersion: 6 });
+      expect(f.apply).toHaveBeenCalledTimes(1);
+    } finally { gates.forEach(gate => gate.resolve()); await Promise.all(publications); f.close(); }
+  });
+
   it('does not clear a newer edit made while the upload was in progress', async () => {
     const f = setup();
     try {
