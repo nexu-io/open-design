@@ -123,7 +123,7 @@ export function createBrowserSessionService() {
       '--disable-sync',
       '--metrics-recording-only',
       'about:blank',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 
     let output = '';
     const websocketUrl = await new Promise<string>((resolve, reject) => {

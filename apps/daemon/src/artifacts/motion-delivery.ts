@@ -75,7 +75,7 @@ export async function assertMotionExport(videoFile: string, spec: MotionExportSp
   await new Promise<void>((resolve, reject) => {
     execFile(process.env.HYPERFRAMES_FFMPEG_PATH?.trim() || ffmpegInstaller.path,
       ['-v', 'error', '-i', videoFile, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-'],
-      { timeout: 30_000, maxBuffer: 128 * 1024 }, error => {
+      { timeout: 30_000, maxBuffer: 128 * 1024, windowsHide: true }, error => {
         if (error) reject(new Error('Motion MP4 has no decodable video frame.'));
         else resolve();
       });
@@ -89,7 +89,7 @@ function hasAudibleTrack(file: string): Promise<boolean> {
   return new Promise(resolve => {
     execFile(process.env.HYPERFRAMES_FFMPEG_PATH?.trim() || ffmpegInstaller.path,
       ['-hide_banner', '-i', file, '-map', '0:a:0', '-af', 'volumedetect', '-f', 'null', '-'],
-      { timeout: 30_000, maxBuffer: 128 * 1024 }, (error, _stdout, stderr) => {
+      { timeout: 30_000, maxBuffer: 128 * 1024, windowsHide: true }, (error, _stdout, stderr) => {
         const peak = /max_volume:\s*(-?[\d.]+) dB/.exec(stderr);
         resolve(!error && !!peak && Number(peak[1]) > -80);
       });

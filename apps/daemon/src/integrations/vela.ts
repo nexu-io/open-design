@@ -1477,6 +1477,7 @@ async function spawnVelaLoginAttempt(
       stdio: ['pipe', 'pipe', 'pipe'],
       env,
       detached: false,
+      windowsHide: process.platform === 'win32',
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
   } catch (error) {

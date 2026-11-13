@@ -51,6 +51,7 @@ const defaultCodexRunner: CodexRunner = {
       const child = spawn(invocation.command, invocation.args, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: process.platform === 'win32',
         windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
       let stdout = '';

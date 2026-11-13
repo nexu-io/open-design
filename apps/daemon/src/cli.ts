@@ -3621,6 +3621,7 @@ async function execFileBuffered(command, args, opts = {}) {
     execFile(command, args, {
       timeout: 30_000,
       maxBuffer: 1024 * 1024,
+      windowsHide: true,
       ...opts,
     }, (error, stdout, stderr) => {
       resolve({
