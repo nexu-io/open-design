@@ -183,7 +183,7 @@ test('[P1] known OpenAI provider is selected and can switch to Anthropic default
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.anthropic.com');
-  await expect(modelSelect).toContainText(/claude-sonnet-4-5/i);
+  await expect(modelSelect).toContainText(/claude-sonnet-4-6/i);
 });
 
 test('[P1] custom OpenAI provider is selected and can switch to Anthropic defaults', async ({ page }) => {
@@ -220,7 +220,7 @@ test('[P1] custom OpenAI provider is selected and can switch to Anthropic defaul
   await expect(anthropicTab).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.getByRole('heading', { name: 'Anthropic API' })).toBeVisible();
   await expect(baseUrlInput).toHaveValue('https://api.anthropic.com');
-  await expect(modelCombobox(dialog)).toContainText(/claude-sonnet-4-5/i);
+  await expect(modelCombobox(dialog)).toContainText(/claude-sonnet-4-6/i);
 });
 
 test('[P0] @critical BYOK quick fill provider updates fields and saved settings persist after closing and reopening', async ({ page }) => {

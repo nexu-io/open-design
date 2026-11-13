@@ -4631,7 +4631,7 @@ function OnboardingByokSetupPanel({
         {modelOptions.length > 0 && !useDeploymentInput ? (
           <OnboardingDropdown
             label={t('settings.model')}
-            placeholder={defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-5'}
+            placeholder={defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-6'}
             value={model}
             options={modelOptions}
             onChange={onModelChange}
@@ -4653,7 +4653,7 @@ function OnboardingByokSetupPanel({
               placeholder={
                 useDeploymentInput
                   ? t('settings.azureDeploymentModel')
-                  : defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-5'
+                  : defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-6'
               }
               onChange={(event) => onModelChange(event.target.value.trim())}
             />
