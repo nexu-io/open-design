@@ -11,7 +11,11 @@ import {
   type ProcessSnapshot,
   waitForProcessExit,
 } from "../src/index.js";
-import { parseWindowsProcessSnapshots, selectStampedProcessesAtInvocation } from "../src/process.js";
+import {
+  parseWindowsProcessSnapshots,
+  selectStampedProcessesAtInvocation,
+  windowsStampedRootFilter,
+} from "../src/process.js";
 
 function snapshot(pid: number, ppid: number, command = `pid-${pid}`): ProcessSnapshot {
   return { command, pid, ppid };
@@ -31,6 +35,31 @@ const stampContract: ProcessStampContract<TestStamp> = {
   },
   stampFields: ["namespace"],
   stampFlags: { namespace: "--test-namespace" },
+};
+
+type RuntimeStamp = {
+  app: string;
+  channel: string;
+  mode: string;
+  namespace: string;
+  source: string;
+};
+
+const runtimeStampContract: ProcessStampContract<RuntimeStamp> = {
+  normalizeStamp(input) {
+    return input as RuntimeStamp;
+  },
+  normalizeStampCriteria(input = {}) {
+    return input as Partial<RuntimeStamp>;
+  },
+  stampFields: ["channel", "namespace", "source", "mode", "app"],
+  stampFlags: {
+    app: "--test-app",
+    channel: "--test-channel",
+    mode: "--test-mode",
+    namespace: "--test-namespace",
+    source: "--test-source",
+  },
 };
 
 describe("collectProcessTreePids", () => {
@@ -124,6 +153,25 @@ describe("parseWindowsProcessSnapshots", () => {
       ProcessId: 20,
       StartedAtMs: null,
     }))).toEqual([{ command: "node fixture.js", pid: 20, ppid: 10 }]);
+  });
+});
+
+describe("windowsStampedRootFilter", () => {
+  it("uses shared identity fields once for a multi-resource runtime query", () => {
+    expect(windowsStampedRootFilter([
+      { app: "desktop", channel: "prerelease", mode: "runtime", namespace: "release-prerelease-win", source: "tools-pack" },
+      { app: "web", channel: "prerelease", mode: "runtime", namespace: "release-prerelease-win", source: "tools-pack" },
+      { app: "daemon", channel: "prerelease", mode: "headless", namespace: "release-prerelease-win", source: "packaged" },
+    ], runtimeStampContract)).toBe(
+      "CommandLine LIKE '%--test-channel=prerelease%' AND CommandLine LIKE '%--test-namespace=release-prerelease-win%'",
+    );
+  });
+
+  it("falls back to a complete process query when no selector is shared", () => {
+    expect(windowsStampedRootFilter([
+      { namespace: "one" },
+      { namespace: "two" },
+    ], stampContract)).toBe("CommandLine IS NOT NULL");
   });
 });
 

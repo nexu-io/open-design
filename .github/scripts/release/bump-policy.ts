@@ -45,23 +45,49 @@ function blob(entry: Entry | undefined): string {
   return git('cat-file', 'blob', entry.oid);
 }
 
-/** Compare whole Git trees and exact npm output, never execute anything from the PR. */
+function baseVersions(entries: Map<string, Entry>, stable: string): { root: string; packaged: string } {
+  const root: unknown = JSON.parse(blob(entries.get('package.json'))).version;
+  const packaged: unknown = JSON.parse(blob(entries.get('apps/packaged/package.json'))).version;
+  for (const value of [root, packaged]) {
+    if (typeof value !== 'string') throw new Error('Missing base version');
+    nextPatch(value); // Require a stable x.y.z before comparing numeric components.
+    const parts = value.split('.').map(BigInt);
+    const limit = stable.split('.').map(BigInt);
+    const differing = parts.findIndex((part, index) => part !== limit[index]);
+    if (differing !== -1 && parts[differing]! > limit[differing]!) {
+      throw new Error('Main has already advanced beyond the published stable');
+    }
+  }
+  return { root: root as string, packaged: packaged as string };
+}
+
+/** npm pkg set sorts dependency maps; allow only that normalization or preserved ordering. */
+function versionOnlyOutputs(source: Record<string, unknown>, next: string): string[] {
+  const bumped: Record<string, unknown> = { ...source, version: next };
+  const preserved = `${JSON.stringify(bumped, null, 2)}\n`;
+  for (const key of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'] as const) {
+    const dependencies = bumped[key];
+    if (dependencies && typeof dependencies === 'object' && !Array.isArray(dependencies)) {
+      const record = dependencies as Record<string, unknown>;
+      bumped[key] = Object.fromEntries(Object.keys(record).sort().map(name => [name, record[name]]));
+    }
+  }
+  return [preserved, `${JSON.stringify(bumped, null, 2)}\n`];
+}
+
+/** Compare whole Git trees and exact version-only outputs, never execute PR code. */
 export function validateBumpTree(base: string, head: string, version: string): number {
+  const next = nextPatch(version);
   const before = tree(sha(base));
   const after = tree(sha(head));
-  if (JSON.parse(blob(before.get('package.json'))).version !== version
-    || JSON.parse(blob(before.get('apps/packaged/package.json'))).version !== version) {
-    throw new Error('Base versions do not match the published stable');
-  }
-  const next = nextPatch(version);
+  const versions = baseVersions(before, version);
   const expected = new Set<string>();
   for (const [path, entry] of before) {
     if (!manifestPath.test(path)) continue;
     const source = JSON.parse(blob(entry)) as Record<string, unknown>;
-    if (source.version !== version) continue;
+    if (source.version !== versions.root && path !== 'apps/packaged/package.json') continue;
     expected.add(path);
-    source.version = next;
-    if (blob(after.get(path)) !== `${JSON.stringify(source, null, 2)}\n`) {
+    if (!versionOnlyOutputs(source, next).includes(blob(after.get(path)))) {
       throw new Error(`Not an exact version-only bump: ${path}`);
     }
   }
@@ -128,8 +154,11 @@ export function followBump(apply: boolean): void {
   const count = validateBumpTree(base, pr.head.sha, version);
   // A different release may already have advanced main since the PR was opened.
   const current = tree(pr.base.sha);
+  const original = tree(base);
   for (const path of ['package.json', 'apps/packaged/package.json']) {
-    if (JSON.parse(blob(current.get(path))).version !== version) throw new Error('Main has already advanced; human reconciliation required');
+    if (JSON.parse(blob(current.get(path))).version !== JSON.parse(blob(original.get(path))).version) {
+      throw new Error('Main has already advanced; human reconciliation required');
+    }
   }
   const blocker = validationBlocker(state);
   console.log(JSON.stringify({ pr: pr.number, head: pr.head.sha, manifests: count, pureVersionBump: true, blocker, apply }));

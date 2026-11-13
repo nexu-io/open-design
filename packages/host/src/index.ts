@@ -95,6 +95,8 @@ export {
   pickAndImportHostProject,
   pickAndReplaceHostProjectWorkingDir,
   pickHostWorkingDir,
+  HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON,
+  isHostPickWorkingDirUnsupported,
   printHostPdf,
   subscribeHostDownloads,
   setHostPetVisible,

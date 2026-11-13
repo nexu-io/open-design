@@ -292,12 +292,10 @@ describe('DeepSeek Harness upstream drift', () => {
     expect(interpretFeishuResponse({ status: 400, text: '{"code":19001}' }).retryable).toBe(false);
   });
 
-  // A watch that only runs on a green PR would never fire, since an upstream
-  // release does not touch this repo.
-  it('runs on a schedule and stays outside the merge gate', async () => {
+  it('runs only on manual request and stays outside the merge gate', async () => {
     const workflow = await readFile(WORKFLOW, 'utf8');
 
-    expect(workflow).toMatch(/^on:\n\s+schedule:/mu);
+    expect(workflow).not.toMatch(/^\s+schedule:/mu);
     expect(workflow).toContain('workflow_dispatch');
     expect(workflow).toContain('dsh-upstream-drift.ts self-check');
     expect(workflow).not.toContain('pull_request');
