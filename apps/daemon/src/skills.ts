@@ -929,6 +929,37 @@ export interface SkillImportResult {
   dir: string;
 }
 
+// Creates USER_SKILLS_DIR/<slug> for a fresh import, refusing to overwrite
+// an existing folder. Shared by every import shape (composed SKILL.md,
+// materialized folder); the caller can DELETE first when intentionally
+// replacing a skill.
+async function prepareNewUserSkillDir(
+  userSkillsRoot: string,
+  slug: string,
+): Promise<string> {
+  await mkdir(userSkillsRoot, { recursive: true });
+  const dir = path.join(userSkillsRoot, slug);
+  try {
+    const existing = await stat(dir);
+    if (existing) {
+      throw new SkillImportError(
+        "CONFLICT",
+        `a user skill with slug "${slug}" already exists`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof SkillImportError) throw err;
+    if (isErrnoException(err) && err.code !== "ENOENT") {
+      throw new SkillImportError(
+        "INTERNAL_ERROR",
+        `could not check skill dir: ${err.message ?? err}`,
+      );
+    }
+  }
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
 function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
   return Boolean(err) && typeof err === "object" && "code" in (err as object);
 }
@@ -959,30 +990,122 @@ export async function importUserSkill(
     .map((t) => (typeof t === "string" ? t.trim() : ""))
     .filter(Boolean);
 
-  await mkdir(userSkillsRoot, { recursive: true });
-  const dir = path.join(userSkillsRoot, slug);
-  // Refuse to overwrite an existing folder. The caller can DELETE first
-  // when intentionally replacing a skill.
-  try {
-    const existing = await stat(dir);
-    if (existing) {
-      throw new SkillImportError(
-        "CONFLICT",
-        `a user skill with slug "${slug}" already exists`,
-      );
-    }
-  } catch (err) {
-    if (err instanceof SkillImportError) throw err;
-    if (isErrnoException(err) && err.code !== "ENOENT") {
-      throw new SkillImportError(
-        "INTERNAL_ERROR",
-        `could not check skill dir: ${err.message ?? err}`,
-      );
-    }
-  }
-  await mkdir(dir, { recursive: true });
+  const dir = await prepareNewUserSkillDir(userSkillsRoot, slug);
   const md = buildSkillMarkdown({ name, description, body, triggers });
   await writeFile(path.join(dir, "SKILL.md"), md, "utf8");
+  return { id: name, slug, dir };
+}
+
+export interface SkillFolderImportInput {
+  skillMd?: unknown;
+  fallbackName?: unknown;
+  files?: unknown;
+}
+
+// Derives the skill id for a folder import the same way listSkills() does:
+// frontmatter `name` when present, else the slugified folder name — with no
+// frontmatter name, listSkills() falls back to the directory basename, which
+// is slugifySkillName(folderName). Needed before the import so the route can
+// run the workspace-identity conflict check; the id must match what a later
+// listSkills() reports for the same folder.
+export function resolveSkillFolderImportName(input: SkillFolderImportInput): string {
+  const skillMd = typeof input?.skillMd === "string" ? input.skillMd : "";
+  if (!skillMd.trim()) {
+    throw new SkillImportError("BAD_REQUEST", "skill SKILL.md required");
+  }
+  const { data } = parseFrontmatter(skillMd);
+  const name = asSkillFrontmatter(data).name;
+  if (typeof name === "string" && name) return name;
+  const fallbackName =
+    typeof input?.fallbackName === "string" ? input.fallbackName.trim() : "";
+  const slug = slugifySkillName(fallbackName);
+  if (!slug) {
+    throw new SkillImportError(
+      "BAD_REQUEST",
+      "skill name must produce a valid slug (a-z, 0-9, dash)",
+    );
+  }
+  return slug;
+}
+
+// Validates one companion-file path and records it in `seen`. Companion
+// paths are relative to the skill folder: forward slashes only, no dotfiles
+// (clients are told to skip them, matching the read-side convention), no
+// traversal, and within the same entry/depth budget the skill file listing
+// uses so a pathological payload cannot stall the daemon.
+function validateSkillImportFilePath(relPath: string, seen: Set<string>): void {
+  const fail = (reason: string) => {
+    throw new SkillImportError("BAD_REQUEST", `side file "${relPath}": ${reason}`);
+  };
+  if (!relPath) fail("path required");
+  if (relPath.includes("\\") || relPath.startsWith("/")) fail("must be a relative slash-separated path");
+  const segments = relPath.split("/");
+  if (segments.length > SKILL_FILES_MAX_DEPTH) fail(`exceeds the depth limit of ${SKILL_FILES_MAX_DEPTH}`);
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") fail("must not traverse directories");
+    if (segment.startsWith(".")) fail("dotfiles are not allowed");
+  }
+  if (relPath.toUpperCase() === "SKILL.MD") fail("travels in skillMd, not files");
+  if (seen.has(relPath)) fail("duplicate path");
+  seen.add(relPath);
+}
+
+// Materializes a skill folder from an original SKILL.md plus companion
+// files. Unlike importUserSkill (which composes a new SKILL.md from parsed
+// fields), the SKILL.md is written back VERBATIM and side files are copied
+// byte-for-byte, so a parent-folder import keeps references/, scripts/,
+// assets/ and the exact frontmatter it started with (mrcfps PR #8754
+// review). Callers are responsible for sending symlink- and dotfile-free
+// file lists; this function re-validates at the trust boundary and fails
+// the item instead of silently dropping anything.
+export async function importUserSkillFolder(
+  userSkillsRoot: string,
+  input: SkillFolderImportInput,
+): Promise<SkillImportResult> {
+  const name = resolveSkillFolderImportName(input);
+  const slug = slugifySkillName(name);
+  if (!slug) {
+    throw new SkillImportError(
+      "BAD_REQUEST",
+      "skill name must produce a valid slug (a-z, 0-9, dash)",
+    );
+  }
+  const filesRaw = Array.isArray(input?.files) ? input.files : [];
+  if (filesRaw.length > SKILL_FILES_MAX_ENTRIES) {
+    throw new SkillImportError(
+      "BAD_REQUEST",
+      `skill exceeds the side-file limit of ${SKILL_FILES_MAX_ENTRIES}`,
+    );
+  }
+  const seen = new Set<string>();
+  const decoded: Array<{ rel: string; data: Buffer }> = [];
+  for (const entry of filesRaw) {
+    const file = entry as { path?: unknown; contentBase64?: unknown };
+    const relPath = typeof file?.path === "string" ? file.path : "";
+    validateSkillImportFilePath(relPath, seen);
+    const contentBase64 = typeof file?.contentBase64 === "string" ? file.contentBase64 : "";
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(contentBase64)) {
+      throw new SkillImportError("BAD_REQUEST", `side file "${relPath}": invalid base64 content`);
+    }
+    decoded.push({ rel: relPath, data: Buffer.from(contentBase64, "base64") });
+  }
+
+  const dir = await prepareNewUserSkillDir(userSkillsRoot, slug);
+  try {
+    await writeFile(path.join(dir, "SKILL.md"), input.skillMd as string, "utf8");
+    for (const file of decoded) {
+      const target = path.join(dir, ...file.rel.split("/"));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, file.data);
+    }
+  } catch (err) {
+    // Never leave a half-materialized folder behind claiming success.
+    await rm(dir, { recursive: true, force: true });
+    throw new SkillImportError(
+      "INTERNAL_ERROR",
+      `could not materialize skill folder: ${err instanceof Error ? err.message : err}`,
+    );
+  }
   return { id: name, slug, dir };
 }
 
