@@ -110,6 +110,23 @@ describe('enforceVerify', () => {
     expect(r.uncoveredRules).toEqual([RULE_CONTRAST.name]);
     expect(r.rulesCovered).toBe(1);
   });
+
+  // #8379: a close marker quoted in a row note is payload data, so the scorecard
+  // must still be found instead of reading as missing.
+  it('finds a scorecard whose row note quotes the close marker', () => {
+    const output = scorecard([
+      { rule: 'CTA copy is action-first', status: 'pass', note: 'Kept literal </od-card> text' },
+      { rule: 'Text contrast meets WCAG AA', status: 'pass' },
+    ]);
+    const r = enforceVerify({
+      assistantOutput: output,
+      activeRules: [RULE_CTA, RULE_CONTRAST],
+      hadArtifact: true,
+      verifyEnabled: true,
+    });
+    expect(r.status).toBe('pass');
+    expect(r.rulesCovered).toBe(2);
+  });
 });
 
 describe('verification ring buffer', () => {
