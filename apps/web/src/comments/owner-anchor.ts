@@ -1,6 +1,6 @@
 import { commentSelectorClaimsIdentity } from '@open-design/contracts';
 import type { PreviewComment } from '../types';
-import { resolveCommentAnchor, type PreviewCommentSnapshot } from './anchor';
+import { commentLocalElementId, resolveCommentAnchor, type PreviewCommentSnapshot } from './anchor';
 
 /** DOM bridges emit explicit first-of-type paths; old comments may omit them. */
 export function commentSelectorsMatch(left: string, right: string): boolean {
@@ -15,7 +15,7 @@ export function commentSelectorsMatch(left: string, right: string): boolean {
 
 /** New comment identities require current-DOM resolution even without team collaboration. */
 export function commentUsesIdentity(comment: Pick<PreviewComment, 'elementId' | 'selector'>): boolean {
-  return comment.elementId.startsWith('cmt:') || commentSelectorClaimsIdentity(comment.selector);
+  return Boolean(commentLocalElementId(comment)?.startsWith('cmt:')) || commentSelectorClaimsIdentity(comment.selector);
 }
 
 export function ownerCommentNeedsLocation(comment: PreviewComment, collabEnabled: boolean): boolean {
