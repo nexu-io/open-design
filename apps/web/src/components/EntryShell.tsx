@@ -2701,6 +2701,7 @@ function OnboardingView({
   const agentAutoTestKeyRef = useRef<string | null>(null);
   const agentTestRunRef = useRef<OnboardingInlineTestRun | null>(null);
   const providerTestRunRef = useRef<OnboardingInlineTestRun | null>(null);
+  const runtimeTestStatusRef = useRef<HTMLParagraphElement | null>(null);
   const providerModelAutoSelectRef = useRef({
     model: config.model,
     providerModelsInputKey: '',
@@ -2831,6 +2832,18 @@ function OnboardingView({
         : connectGateReason === 'no_runtime'
           ? t('settings.onboardingGateTooltipNoRuntime')
           : null;
+  const hasRuntimeTestError =
+    runtime === 'local'
+      ? visibleAgentTestState.status === 'done' && !visibleAgentTestState.result.ok
+      : runtime === 'byok'
+        ? visibleProviderTestState.status === 'done' && !visibleProviderTestState.result.ok
+        : false;
+  const activeTestStatusId =
+    runtime === 'local'
+      ? 'onboarding-agent-test-status'
+      : runtime === 'byok'
+        ? 'onboarding-provider-test-status'
+        : undefined;
 
   const hasRestorableModelSourceConfig =
     config.mode === 'api'
@@ -3366,14 +3379,87 @@ function OnboardingView({
     }
   }
 
+  function focusRuntimeTestFeedback() {
+    const applyFocus = () => {
+      const alertEl =
+        runtimeTestStatusRef.current
+        ?? document.querySelector<HTMLElement>(
+          '.onboarding-view__setup-panel [role="alert"], .onboarding-view__action-status[role="alert"], .onboarding-view__test-status.is-error, .onboarding-view__test-status.is-warn',
+        );
+      if (alertEl) {
+        if (!alertEl.hasAttribute('tabindex')) {
+          alertEl.setAttribute('tabindex', '-1');
+        }
+        alertEl.focus();
+        alertEl.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        return true;
+      }
+      if (runtime === 'byok') {
+        const missingFieldSelector =
+          !config.apiKey.trim()
+            ? '[data-onboarding-field="apiKey"]'
+            : !config.baseUrl.trim()
+              ? '[data-onboarding-field="baseUrl"]'
+              : !config.model.trim()
+                ? '[data-onboarding-field="model"]'
+                : null;
+
+        if (missingFieldSelector) {
+          const fieldEl = document.querySelector<HTMLElement>(missingFieldSelector);
+          if (fieldEl) {
+            fieldEl.focus();
+            fieldEl.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+            return true;
+          }
+        }
+      }
+
+      if (runtime === 'local') {
+        const agentEl = document.querySelector<HTMLElement>(
+          '.onboarding-view__agent-strip button.is-selected, .onboarding-view__agent-strip button:not([disabled])',
+        );
+        if (agentEl) {
+          agentEl.focus();
+          agentEl.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+          return true;
+        }
+      }
+
+      const fallbackInput = document.querySelector<HTMLElement>(
+        '.onboarding-view__setup-panel input:not([disabled]):not([type="button"]):not([type="submit"]), .onboarding-view__setup-panel select:not([disabled])',
+      );
+      if (fallbackInput) {
+        fallbackInput.focus();
+        fallbackInput.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        return true;
+      }
+      return false;
+    };
+
+    if (!applyFocus()) {
+      queueMicrotask(() => {
+        if (!applyFocus()) {
+          setTimeout(applyFocus, 0);
+        }
+      });
+    }
+  }
+
   async function handlePrimaryAction() {
-    if (connectStepBlocked || continuePending) return;
+    if (connectStepBlocked) {
+      focusRuntimeTestFeedback();
+      return;
+    }
+    if (continuePending) return;
     if (runtime === 'local' && selectedAgent) {
       const startedInputKey = agentTestInputKey;
       const testResult =
         settledRuntimeValidation(visibleAgentTestState)
         ?? (await awaitRuntimeValidation(testAgentInline));
-      if (!testResult?.ok) return;
+      if (!testResult?.ok) {
+        focusRuntimeTestFeedback();
+        return;
+      }
       if (!continueAttemptStillCurrent('local', startedInputKey)) return;
       await onConfigPersist({
         ...config,
@@ -3389,7 +3475,10 @@ function OnboardingView({
       const testResult =
         settledRuntimeValidation(visibleProviderTestState)
         ?? (await awaitRuntimeValidation(testProviderInline));
-      if (!testResult?.ok) return;
+      if (!testResult?.ok) {
+        focusRuntimeTestFeedback();
+        return;
+      }
       if (!continueAttemptStillCurrent('byok', startedInputKey)) return;
       await onConfigPersist({ ...config, mode: 'api' });
       emitOnboardingClick('continue', 'continue', { runtime_type: 'byok' });
@@ -4278,6 +4367,7 @@ function OnboardingView({
                   testState={visibleAgentTestState}
                   canTest={canTestAgent}
                   onTest={() => void testAgentInline()}
+                  statusRef={runtimeTestStatusRef}
                 />
               ) : null}
               {runtime === 'byok' ? (
@@ -4319,6 +4409,7 @@ function OnboardingView({
                   modelsState={visibleProviderModelsState}
                   canFetchModels={canFetchProviderModels}
                   onFetchModels={() => void fetchProviderModelsInline()}
+                  statusRef={runtimeTestStatusRef}
                 />
               ) : null}
             </div>
@@ -4336,6 +4427,7 @@ function OnboardingView({
               disabled={amrLoginPending || amrLoginCancelPending || continuePending}
               aria-disabled={connectStepBlocked || undefined}
               aria-busy={continuePending || undefined}
+              aria-describedby={hasRuntimeTestError ? activeTestStatusId : undefined}
               data-tooltip={connectGateTooltip ?? undefined}
               data-tooltip-placement="top"
             >
@@ -4373,6 +4465,7 @@ function OnboardingCliSetupPanel({
   testState,
   canTest,
   onTest,
+  statusRef,
 }: {
   agents: AgentInfo[];
   daemonLive: boolean;
@@ -4387,6 +4480,7 @@ function OnboardingCliSetupPanel({
   testState: OnboardingRuntimeTestState;
   canTest: boolean;
   onTest: () => void;
+  statusRef?: React.Ref<HTMLParagraphElement>;
 }) {
   const t = useT();
   const scanning = scanStatus === 'scanning';
@@ -4473,11 +4567,15 @@ function OnboardingCliSetupPanel({
         />
       ) : null}
       {testState.status === 'running' ? (
-        <p className="onboarding-view__test-status is-running" role="status">
+        <p className="onboarding-view__test-status is-running" role="status" aria-live="polite">
           {t('settings.testRunning')}
         </p>
       ) : testState.status === 'done' ? (
         <p
+          ref={statusRef}
+          id="onboarding-agent-test-status"
+          tabIndex={testState.result.ok ? undefined : -1}
+          aria-live={testState.result.ok ? 'polite' : 'assertive'}
           className={`onboarding-view__test-status is-${onboardingTestVariant(
             testState.result,
           )}`}
@@ -4515,6 +4613,7 @@ function OnboardingByokSetupPanel({
   modelsState,
   canFetchModels,
   onFetchModels,
+  statusRef,
 }: {
   apiProtocol: ApiProtocol;
   apiKey: string;
@@ -4542,6 +4641,7 @@ function OnboardingByokSetupPanel({
     | { status: 'done'; inputKey: string; result: ProviderModelsResponse };
   canFetchModels: boolean;
   onFetchModels: () => void;
+  statusRef?: React.Ref<HTMLParagraphElement>;
 }) {
   const t = useT();
   const running = testState.status === 'running';
@@ -4608,6 +4708,7 @@ function OnboardingByokSetupPanel({
         <span className="onboarding-view__field-row">
           <input
             type={apiKeyVisible ? 'text' : 'password'}
+            data-onboarding-field="apiKey"
             placeholder={API_KEY_PLACEHOLDERS[apiProtocol]}
             value={apiKey}
             onChange={(event) => onApiKeyChange(event.target.value)}
@@ -4623,6 +4724,7 @@ function OnboardingByokSetupPanel({
           <input
             type="url"
             inputMode="url"
+            data-onboarding-field="baseUrl"
             value={baseUrl}
             placeholder={selectedProvider?.baseUrl ?? 'https://api.anthropic.com'}
             onChange={(event) => onBaseUrlChange(event.target.value)}
@@ -4631,6 +4733,7 @@ function OnboardingByokSetupPanel({
         {modelOptions.length > 0 && !useDeploymentInput ? (
           <OnboardingDropdown
             label={t('settings.model')}
+            triggerDataField="model"
             placeholder={defaultKnownProviderModel(selectedProvider) || 'claude-sonnet-4-5'}
             value={model}
             options={modelOptions}
@@ -4649,6 +4752,7 @@ function OnboardingByokSetupPanel({
             </span>
             <input
               type="text"
+              data-onboarding-field="model"
               value={model}
               placeholder={
                 useDeploymentInput
@@ -4661,11 +4765,14 @@ function OnboardingByokSetupPanel({
         )}
       </div>
       {modelsState.status === 'running' ? (
-        <p className="onboarding-view__test-status is-running" role="status">
+        <p className="onboarding-view__test-status is-running" role="status" aria-live="polite">
           {t('settings.fetchModelsRunning')}
         </p>
       ) : modelsState.status === 'done' ? (
         <p
+          id="onboarding-provider-models-status"
+          tabIndex={modelsState.result.ok ? undefined : -1}
+          aria-live={modelsState.result.ok ? 'polite' : 'assertive'}
           className={`onboarding-view__test-status is-${onboardingProviderModelsVariant(
             modelsState.result,
           )}`}
@@ -4675,11 +4782,15 @@ function OnboardingByokSetupPanel({
         </p>
       ) : null}
       {testState.status === 'running' ? (
-        <p className="onboarding-view__test-status is-running" role="status">
+        <p className="onboarding-view__test-status is-running" role="status" aria-live="polite">
           {t('settings.testRunning')}
         </p>
       ) : testState.status === 'done' ? (
         <p
+          ref={statusRef}
+          id="onboarding-provider-test-status"
+          tabIndex={testState.result.ok ? undefined : -1}
+          aria-live={testState.result.ok ? 'polite' : 'assertive'}
           className={`onboarding-view__test-status is-${onboardingTestVariant(
             testState.result,
           )}`}
@@ -4881,6 +4992,7 @@ type OnboardingDropdownBaseProps = {
    * installed Ollama model).
    */
   allowCustomValue?: boolean;
+  triggerDataField?: string;
 };
 
 type OnboardingDropdownProps =
@@ -4909,6 +5021,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     sourceTone,
     allowEmptyValue = false,
     allowCustomValue = false,
+    triggerDataField,
   } = props;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -5057,6 +5170,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
       </span>
       <button
         type="button"
+        data-onboarding-field={triggerDataField}
         className={`onboarding-view__select-trigger${open ? ' is-open' : ''}${
           hasValue ? ' has-value' : ''
         }`}
