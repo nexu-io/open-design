@@ -7,6 +7,7 @@
  * acp/rpc, and acp/session-params.
  */
 import { spawn } from 'node:child_process';
+import { createCommandInvocation } from '@open-design/platform';
 import { createJsonLineStream } from '../core/index.js';
 import type { JsonRpcId, JsonObject, TimerHandle } from './types.js';
 import { ACP_PROTOCOL_VERSION, DEFAULT_TIMEOUT_MS, MODEL_CONFIG_OPTION_IDS } from './constants.js';
@@ -223,11 +224,15 @@ export async function detectAcpModels({
   defaultModelOption = { id: 'default', label: 'Default (CLI config)' },
 }: DetectAcpModelsOptions): Promise<ModelOption[]> {
   const effectiveTimeoutMs = resolveAcpTimeoutMs(env, timeoutMs);
+  // An npm-installed CLI resolves to a `.cmd` shim on Windows, which Node
+  // refuses to spawn directly (EINVAL). Wrap it the way the chat-run path does.
+  const invocation = createCommandInvocation({ command: bin, args, env });
   return await new Promise<ModelOption[]>((resolve, reject) => {
-    const child = spawn(bin, args, {
+    const child = spawn(invocation.command, invocation.args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...env },
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
