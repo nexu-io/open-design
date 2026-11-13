@@ -56,6 +56,7 @@ import {
   type ShareStatus,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { isMotionVideoComposition } from '@open-design/contracts/runtime/motion-source-player';
 import { PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE } from '@open-design/contracts/runtime/preview-observability';
 import { PREVIEW_URL_GUARD_MAX_HTML_BYTES } from '@open-design/contracts/runtime/preview-guards';
 import {
@@ -10828,9 +10829,8 @@ function HtmlViewer({
       : null;
   useEffect(() => {
     if (!workspaceActive) return;
-    const frame = urlPreviewIframeRef.current;
     function onMessage(ev: MessageEvent) {
-      if (ev.source !== frame?.contentWindow) return;
+      if (ev.source !== urlPreviewIframeRef.current?.contentWindow) return;
       const data = ev.data as {
         type?: unknown;
         href?: unknown;
@@ -10858,12 +10858,13 @@ function HtmlViewer({
       setUrlLoadedPreviewBase(next);
     }
     window.addEventListener('message', onMessage);
-    frame?.contentWindow?.postMessage({ type: 'od:preview-base-scope-probe' }, '*');
+    urlPreviewIframeRef.current?.contentWindow?.postMessage({ type: 'od:preview-base-scope-probe' }, '*');
     return () => window.removeEventListener('message', onMessage);
   }, [projectId, urlPreviewBaseIdentity, workspaceActive]);
-  const postPreviewBaseUpdate = useCallback((href: string) => {
+  const [motionScopeRecoveryIdentity, setMotionScopeRecoveryIdentity] = useState<string | null>(null);
+  const postPreviewBaseUpdate = useCallback((scope: ProjectPreviewBaseScope) => {
     const requestId = `preview-base-${Date.now()}`;
-    const message = { type: 'od:preview-base-update', requestId, href };
+    const message = { type: 'od:preview-base-update', requestId, ...scope };
     const frames = viewerRootRef.current?.querySelectorAll('iframe') ?? [];
     for (const frame of frames) frame.contentWindow?.postMessage(message, '*');
     const presenter = presenterWindowRef.current;
@@ -10916,7 +10917,7 @@ function HtmlViewer({
       }
 
       // A daemon restart or a suspended browser can invalidate the in-memory
-      // capability. Replace only the live <base>; do not navigate the iframe.
+      // capability. Ordinary documents keep their live state via <base>.
       const replacement = await fetchProjectPreviewBaseHref(projectId, file.name);
       if (cancelled) return;
       if (!replacement) {
@@ -10929,7 +10930,11 @@ function HtmlViewer({
         activeSrcDocPreviewBaseRef.current = { identity, scope: replacement };
         setAuxiliarySrcDocPreviewBase({ identity, href: replacement.href });
       }
-      postPreviewBaseUpdate(replacement.href);
+      postPreviewBaseUpdate(replacement);
+      // A new base cannot retry scripts/media that already failed to load.
+      if (routingHtmlSource && isMotionVideoComposition(routingHtmlSource)) {
+        setMotionScopeRecoveryIdentity(srcDocPreviewBaseIdentity);
+      }
       schedule(replacement);
     };
 
@@ -10948,6 +10953,7 @@ function HtmlViewer({
     file.name,
     mode,
     postPreviewBaseUpdate,
+    routingHtmlSource,
     projectId,
     projectResourceReadBlocked,
     srcDocPreviewBaseIdentity,
@@ -10970,6 +10976,25 @@ function HtmlViewer({
   // mode entry via a ref and released on exit, so the deferred reload lands
   // exactly once when the user is done.
   const interactivePreviewModeActive = annotationFreezeActive || manualEditMode;
+  useEffect(() => {
+    // Wait for editing/annotation to finish before replacing the document.
+    if (
+      !motionScopeRecoveryIdentity
+      || interactivePreviewModeActive
+      || !workspaceActive
+      || mode !== 'preview'
+    ) return;
+    setMotionScopeRecoveryIdentity(null);
+    if (motionScopeRecoveryIdentity === srcDocPreviewBaseIdentity) {
+      setReloadKey((value) => value + 1);
+    }
+  }, [
+    interactivePreviewModeActive,
+    mode,
+    motionScopeRecoveryIdentity,
+    srcDocPreviewBaseIdentity,
+    workspaceActive,
+  ]);
   const frozenPreviewMeasurementDocumentEpochRef = useRef(
     previewContentMeasurementDocumentEpoch,
   );

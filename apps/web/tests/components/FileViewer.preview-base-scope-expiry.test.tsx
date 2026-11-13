@@ -93,6 +93,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, '', '/');
 });
 
 function deckFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
@@ -291,6 +292,43 @@ describe('FileViewer srcDoc preview base expiry', () => {
     expect(frame.getAttribute('src')).toBe(initialSrc);
   });
 
+  it.each([false, true])('recovers a Motion URL document only when renewal fails (%s)', async (failRenewal) => {
+    const html = '<html><head><meta name="od-motion-output" content="video"></head>'
+      + '<body><main data-composition-id="main"></main></body></html>';
+    const fetchState = stubFetch(() => html);
+    renderTeamViewer(
+      <FileViewer projectId="project-1" projectKind="video" file={htmlFile()} />,
+    );
+    const frame = await waitFor(() => {
+      const current = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      expect(current.getAttribute('data-od-render-mode')).toBe('url-load');
+      return current;
+    });
+    const initialSrc = frame.getAttribute('src');
+    fireEvent.load(frame);
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od:preview-base-scope',
+          href: '/api/projects/project-1/preview/scope-0999/',
+          expiresAt: Date.now() + PREVIEW_SCOPE_TTL_MS,
+        },
+      }));
+    });
+    fetchState.failRenewal = failRenewal;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PREVIEW_SCOPE_TTL_MS - PREVIEW_SCOPE_RENEW_MARGIN_MS);
+    });
+    expect(fetchState.renewCount).toBe(1);
+    expect(fetchState.mintCount).toBe(failRenewal ? 1 : 0);
+    await waitFor(() => {
+      const current = screen.getByTestId('artifact-preview-frame');
+      if (failRenewal) expect(current.getAttribute('src')).not.toBe(initialSrc);
+      else expect(current.getAttribute('src')).toBe(initialSrc);
+    });
+  });
+
   it('replaces a lost URL-load scope by messaging the live document', async () => {
     const fetchState = stubFetch(() => '<html><body><main>URL loaded</main></body></html>');
 
@@ -340,12 +378,17 @@ describe('FileViewer srcDoc preview base expiry', () => {
     })).toBe(true);
   });
 
-  it('replaces a lost daemon scope in place and uses it on the next natural rebuild', async () => {
-    let body = deckHtml('version-one');
+  it.each([false, true])('replaces a lost srcDoc scope and reloads only Motion (%s)', async (motion) => {
+    const html = (label: string) => motion
+      ? `<html><head><meta name="od-motion-output" content="video"></head><body><main data-composition-id="main">${label}</main></body></html>`
+      : deckHtml(label);
+    if (motion) window.history.replaceState(null, '', '/?forceInline=1');
+    let body = html('version-one');
     const fetchState = stubFetch(() => body);
 
     renderTeamViewer(
-      <FileViewer projectId="project-1" projectKind="prototype" file={deckFile()} isDeck />,
+      <FileViewer projectId="project-1" projectKind={motion ? 'video' : 'prototype'}
+        file={motion ? htmlFile() : deckFile()} isDeck={!motion} />,
     );
 
     await waitFor(() => {
@@ -365,14 +408,18 @@ describe('FileViewer srcDoc preview base expiry', () => {
     expect(fetchState.renewCount).toBe(1);
     expect(fetchState.mintCount).toBe(2);
     expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
-    expect(frame.getAttribute('srcDoc')).toBe(initialSrcDoc);
+    if (motion) {
+      await waitFor(() => expect(srcDocBaseHref()).toBe('http://localhost:3000/api/projects/project-1/preview/scope-0002/'));
+    } else {
+      expect(frame.getAttribute('srcDoc')).toBe(initialSrcDoc);
+    }
     expect(postMessage.mock.calls.some(([message]) => {
       const data = message as { type?: unknown; href?: unknown };
       return data.type === 'od:preview-base-update'
         && data.href === 'http://localhost:3000/api/projects/project-1/preview/scope-0002/';
     })).toBe(true);
 
-    body = deckHtml('version-two');
+    body = html('version-two');
     fireEvent.click(screen.getByRole('button', { name: /reload preview/i }));
     await waitFor(() => {
       expect(srcDocBaseHref()).toBe('http://localhost:3000/api/projects/project-1/preview/scope-0002/');
