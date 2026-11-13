@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" role="img" aria-label="ZCode">
+  <defs>
+    <linearGradient id="zcode-bg" x1="18" x2="18" y1="0" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#000"/>
+      <stop offset="1" stop-color="#151718"/>
+    </linearGradient>
+  </defs>
+  <rect width="36" height="36" rx="8" fill="url(#zcode-bg)"/>
+  <rect x=".5" y=".5" width="35" height="35" rx="7.5" fill="none" stroke="#fff" stroke-opacity=".2"/>
+  <g fill="#fff" transform="translate(7 8.63) scale(.0859375)">
+    <path d="M134.4.13 116.48 25.602c-2.815 3.968-7.426 6.4-12.416 6.4H6.4V0c0 .13 128 .13 128 .13Z"/>
+    <path d="M256 .13 102.401 217.732H0L153.599.13H256Z"/>
+    <path d="m121.601 217.732 18.049-25.598c2.815-3.968 7.426-6.4 12.417-6.4h97.537v32.002H121.601v-.004Z"/>
+  </g>
+</svg>
