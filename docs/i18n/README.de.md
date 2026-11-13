@@ -102,6 +102,7 @@ Dieser Ablauf ist offen und erweiterbar. OpenDesign steht unter der Apache-2.0-L
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Unterstützt | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Unterstützt | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Unterstützt | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Unterstützt | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Unterstützt | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Unterstützt | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Unterstützt | `od mcp install cline` |

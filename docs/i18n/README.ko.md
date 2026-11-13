@@ -102,6 +102,7 @@ OpenDesign은 **최초의 협업형 AI 디자인 에이전트 워크스페이스
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 지원됨 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 지원됨 | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ 지원됨 | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ 지원됨 | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 지원됨 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 지원됨 | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 지원됨 | `od mcp install cline` |

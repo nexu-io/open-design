@@ -28,7 +28,7 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(17);
+    expect(AGENT_SLUGS).toHaveLength(18);
     expect(isAgentSlug('kiro')).toBe(true);
     expect(isAgentSlug('reasonix')).toBe(true);
     expect(isAgentSlug('raven')).toBe(true);
@@ -105,6 +105,38 @@ describe('JSON-config agents', () => {
     if (plan.kind !== 'json') throw new Error('expected json');
     expect(plan.keyPath).toEqual(['mcp', 'servers']);
     expect(plan.entry).toEqual({ command: SPEC.command, args: SPEC.args });
+  });
+
+  it('zcode merges a bare {command,args,env} entry into ~/.zcode/cli/config.json under mcp.servers', () => {
+    const plan = planAgentInstall('zcode', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe('/home/u/.zcode/cli/config.json');
+    expect(plan.keyPath).toEqual(['mcp', 'servers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      env: SPEC.env,
+    });
+  });
+
+  it('zcode install and removal preserve existing config and sibling servers', () => {
+    const plan = planAgentInstall('zcode', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    const existing = JSON.stringify({
+      plugins: { enabledPlugins: { 'some-plugin': true } },
+      mcp: { servers: { vmpal: { command: '/usr/bin/vmpal', args: ['--serve'] } } },
+    });
+    const merged = JSON.parse(applyJsonInstall(existing, plan));
+    expect(merged.plugins).toEqual({ enabledPlugins: { 'some-plugin': true } });
+    expect(merged.mcp.servers.vmpal).toEqual({ command: '/usr/bin/vmpal', args: ['--serve'] });
+    expect(merged.mcp.servers['open-design']).toEqual(plan.entry);
+
+    const removed = removeJsonInstall(JSON.stringify(merged), plan);
+    expect(removed).not.toBeNull();
+    const after = JSON.parse(removed as string);
+    expect(after.mcp.servers.vmpal).toEqual({ command: '/usr/bin/vmpal', args: ['--serve'] });
+    expect(after.mcp.servers['open-design']).toBeUndefined();
   });
 
   it('kiro merges a stdio entry into the user MCP settings file', () => {

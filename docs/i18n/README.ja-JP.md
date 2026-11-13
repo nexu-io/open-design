@@ -102,6 +102,7 @@ OpenDesign は**初の共同作業型AIデザインエージェントワーク�
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 対応済み | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 対応済み | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ 対応済み | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ 対応済み | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 対応済み | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 対応済み | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 対応済み | `od mcp install cline` |

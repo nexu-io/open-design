@@ -104,6 +104,7 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 支持 | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ 支持 | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ 支持 | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ 支持 | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ 支持 | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ 支持 | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ 支持 | `od mcp install cline` |

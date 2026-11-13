@@ -104,6 +104,7 @@ That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 an
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Supported | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Supported | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Supported | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Supported | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Supported | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Supported | `od mcp install cline` |
