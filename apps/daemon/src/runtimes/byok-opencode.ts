@@ -36,7 +36,12 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
   const trimmed = typeof model === 'string' ? model.trim() : '';
   if (!trimmed || trimmed.toLowerCase() === 'default') return null;
   if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
-  return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
+  // Strip known provider prefixes so the wire model name matches the
+  // provider's canonical slug (e.g. openrouter/cohere/north-mini-code → cohere/north-mini-code).
+  const stripped = trimmed
+    .replace(/^openrouter\//, '')
+    .replace(/^aihubmix-/, '');
+  return `${BYOK_OPENCODE_PROVIDER_ID}/${stripped}`;
 }
 
 export function buildOpenCodeByokProviderConfig(
