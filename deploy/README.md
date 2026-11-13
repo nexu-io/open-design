@@ -165,6 +165,12 @@ configuration needed. For another CLI installed in a non-standard path, mount
 its complete install prefix read-only and prepend its binary directory to
 `PATH` in `docker-compose.linux.yml`, then restart. When a launcher is a symlink,
 mounting only the directory that contains the symlink may omit its target.
+A CLI can also be visible on `PATH` yet still show as unavailable if it is a
+wrapper script whose interpreter or install prefix exists only on the host
+(a likely cause when a mounted launcher is listed but not usable). Verify inside
+the container, for example
+`docker compose exec open-design sh -lc 'which <cli> && <cli> --version'`, and
+mount every path the wrapper references at the same absolute path.
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d --no-build
@@ -204,6 +210,28 @@ ignored. Use this only for trusted, single-user deployments. It lets Codex run
 without the workspace-write sandbox, which is useful when the container host
 blocks unprivileged user namespaces, but it gives the Codex process broader
 filesystem access inside the container.
+
+### Which agent does the work
+
+`start_run` (including through an MCP client) does not use the calling client's
+model. The daemon spawns its own agent: the `agent` argument if given, otherwise
+the agent configured in Settings. In Docker that CLI must exist inside the
+container (see above); `list_agents` shows what the daemon can launch.
+
+### Reaching the daemon from other containers
+
+With `docker-compose.linux.yml` the daemon uses `network_mode: host` and binds
+`127.0.0.1` by default (`OD_BIND_HOST`). A container on a user-defined bridge
+network likely cannot reach it by name, and a loopback-only listener is not
+reachable from the bridge gateway even if the host firewall allows it. If you
+need that, you would likely have to bind an address the bridge can reach, add an
+`extra_hosts` entry to the client container, and allow the bridge subnet to the
+daemon port in the host firewall (as one example, a RHEL-style host with
+nftables ends its input chain with `reject with icmp host-prohibited`; other
+hosts differ). Binding beyond loopback exposes the API to that network, so keep
+`OD_API_TOKEN` set and restrict the firewall rule to the bridge subnet. For MCP
+clients that only need the MCP server, running `od mcp` on the client side with
+`--daemon-url` is simpler.
 
 ## Manual image publish override
 
