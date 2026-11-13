@@ -676,8 +676,10 @@ process.stdin.on('end', () => {
           permission?: {
             external_directory?: Record<string, string>;
           };
+          experimental?: { continue_loop_on_deny?: boolean };
         };
 
+        expect(parsed.experimental?.continue_loop_on_deny).toBe(true);
         const externalDirectory = parsed.permission?.external_directory ?? {};
         const cwdAliases = new Set([effectiveCwd]);
         if (effectiveCwd.startsWith('/private/var/')) {

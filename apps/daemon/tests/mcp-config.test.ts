@@ -547,6 +547,28 @@ describe('buildOpenCodeMcpConfigContent', () => {
     });
   });
 
+  it('keeps the headless OpenCode loop alive after an auto-rejected permission', () => {
+    // `opencode run` auto-rejects any `ask`; without this flag the rejection
+    // ends the whole session with exit 0 and unfinished todos (#7624, #9049).
+    const raw = buildOpenCodeMcpConfigContent(
+      [],
+      {},
+      {
+        allowedDirectories: ['/tmp/od-project'],
+        continueLoopOnDeny: true,
+        extraConfig: { experimental: { batch_tool: true } },
+      },
+    );
+
+    const parsed = JSON.parse(raw as string) as { experimental?: Record<string, unknown> };
+    expect(parsed.experimental).toEqual({ batch_tool: true, continue_loop_on_deny: true });
+    expect(buildOpenCodeMcpConfigContent([], {}, { continueLoopOnDeny: true })).not.toBeNull();
+    expect(
+      JSON.parse(buildOpenCodeMcpConfigContent([], {}, { allowedDirectories: ['/tmp/od-project'] }) as string)
+        .experimental,
+    ).toBeUndefined();
+  });
+
   it('merges run-scoped OpenCode provider config with MCP and permissions', () => {
     const raw = buildOpenCodeMcpConfigContent(
       [
