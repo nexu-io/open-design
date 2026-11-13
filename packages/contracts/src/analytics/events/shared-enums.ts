@@ -213,6 +213,7 @@ export type TrackingCliProviderId =
   | 'byok_opencode'
   | 'hermes'
   | 'kimi_cli'
+  | 'kimchi'
   | 'cursor_agent'
   | 'qwen_code'
   | 'qoder_cli'
