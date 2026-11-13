@@ -453,7 +453,9 @@ export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): Product
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
     };
   }
-  return { command: "npm", args: ["install", "--omit=dev", "--no-package-lock"] };
+  // Let electron-builder identify the npm tree from its lockfile instead of
+  // inheriting the workspace's pnpm environment and invoking a global pnpm.
+  return { command: "npm", args: ["install", "--omit=dev", "--package-lock"] };
 }
 
 async function runProductionInstall(appRoot: string): Promise<void> {
@@ -972,12 +974,10 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
       runtimeRoot: join(config.roots.runtime.namespaceRoot, "runtime"),
     },
     stamp,
-  }, { ownerStamps: launchStamps, timeoutMs: 60_000 });
+  }, { ownerStamps: launchStamps, timeoutMs: 600_000 });
 
-  // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
-  // first launch before exec'ing the inner electron, which adds substantial
-  // overhead vs mac's direct .app launch.
-  //
+  // Cold extraction of the bundled resources can take several minutes before
+  // the launcher can report a ready sidecar. Convergence covers that wait.
   const active = await waitForLinuxStatus<DesktopStatusSnapshot>(launchStamps, 60_000);
   if (active == null) {
     await stopSidecars(launchStamps.map((candidate) => ({ stamp: candidate }))).catch(() => undefined);

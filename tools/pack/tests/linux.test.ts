@@ -1,10 +1,11 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { access, chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { posix } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { findSidecarProcesses, getSidecarStatus, invokeSidecar, stopSidecar } from "@open-design/sidecar";
 import {
@@ -24,6 +25,7 @@ const stopSidecarMock = vi.hoisted(() => vi.fn(async (_stamp?: unknown, _options
   remainingPids: [],
   stoppedPids: [],
 })));
+const convergeSidecarLaunchMock = vi.hoisted(() => vi.fn());
 const stopSidecarsMock = vi.hoisted(() => vi.fn(async (requests: Array<{ options?: unknown; stamp: unknown }>) => {
   const results = await Promise.all(requests.map(async ({ options, stamp }) => ({
     result: await stopSidecarMock(stamp, options),
@@ -45,6 +47,7 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@open-design/sidecar")>();
   return {
     ...actual,
+    convergeSidecarLaunch: convergeSidecarLaunchMock,
     findSidecarProcesses: vi.fn(async () => []),
     getSidecarStatus: vi.fn(async () => { throw new Error("status unavailable"); }),
     invokeSidecar: vi.fn(async () => { throw new Error("invoke unavailable"); }),
@@ -70,6 +73,7 @@ import {
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
+  startPackedLinuxApp,
 } from "@/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -532,18 +536,45 @@ describe("stopPackedLinuxApp", () => {
 });
 
 describe("resolveProductionInstallCommand", () => {
-  it("defaults to npm install --omit=dev --no-package-lock when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
+  it("keeps npm's lockfile when OD_TOOLS_PACK_PNPM_BIN is unset", () => {
     expect(resolveProductionInstallCommand({})).toEqual({
       command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
+      args: ["install", "--omit=dev", "--package-lock"],
     });
   });
 
   it("treats an empty OD_TOOLS_PACK_PNPM_BIN as unset and keeps the npm host default", () => {
     expect(resolveProductionInstallCommand({ OD_TOOLS_PACK_PNPM_BIN: "" })).toEqual({
       command: "npm",
-      args: ["install", "--omit=dev", "--no-package-lock"],
+      args: ["install", "--omit=dev", "--package-lock"],
     });
+  });
+
+  linuxOnlyIt("materializes a package-lock so electron-builder can identify the assembled npm tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-install-"));
+    try {
+      await writeFile(join(root, "package.json"), JSON.stringify({
+        name: "open-design-linux-install-fixture",
+        version: "1.0.0",
+        private: true,
+      }));
+      const { command, args } = resolveProductionInstallCommand({});
+      await promisify(execFile)(command, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          npm_config_audit: "false",
+          npm_config_fund: "false",
+          npm_config_offline: "true",
+          npm_config_package_lock: "false",
+        },
+      });
+      const lock = JSON.parse(await readFile(join(root, "package-lock.json"), "utf8"));
+      expect(lock.name).toBe("open-design-linux-install-fixture");
+      expect(lock.packages[""].name).toBe("open-design-linux-install-fixture");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("uses OD_TOOLS_PACK_PNPM_BIN with hoisted-layout pnpm flags when set", () => {
@@ -754,6 +785,35 @@ describe("createLinuxDesktopLaunchEnv", () => {
     expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
     expect(env.KEEP_ME).toBe("yes");
     expect(env.OD_SIDECAR_BASE).toBeUndefined();
+  });
+});
+
+describe("startPackedLinuxApp", () => {
+  it("allows a cold AppImage extraction to take longer than one minute", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-cold-start-"));
+    try {
+      const config = makeConfig();
+      config.namespace = basename(root);
+      config.roots.output.appBuilderRoot = join(root, "builder");
+      config.roots.runtime.namespaceRoot = join(root, "runtime");
+      await mkdir(config.roots.output.appBuilderRoot, { recursive: true });
+      await writeFile(join(config.roots.output.appBuilderRoot, "test.AppImage"), "");
+      convergeSidecarLaunchMock.mockImplementationOnce(async (_launch, options) => {
+        if (options.timeoutMs < 90_000) throw new Error("cold extraction exceeded launch budget");
+        return { description: { resources: { pid: 42 } } };
+      });
+      vi.mocked(getSidecarStatus).mockResolvedValue({ state: "running", url: "od://app/" });
+
+      const result = await startPackedLinuxApp(config);
+
+      expect(result.source).toBe("built");
+      expect(result.pid).toBe(42);
+      expect(result.status).toEqual({ state: "running", url: "od://app/" });
+    } finally {
+      convergeSidecarLaunchMock.mockReset();
+      vi.mocked(getSidecarStatus).mockReset().mockRejectedValue(new Error("status unavailable"));
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 
