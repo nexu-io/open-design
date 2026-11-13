@@ -263,7 +263,7 @@ location /api/ {
 | Modus | Picker-Wert | Ablauf einer Anfrage |
 |---|---|---|
 | **Local CLI** (Standard, wenn der daemon einen Agent erkennt) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → strukturierte Tool-/Datei-Events über SSE → Projektdateien → Vorschau. Plain-Stream-CLIs nutzen stattdessen den Text-Artifact-Pfad. |
-| **API-Modus** (Fallback / keine CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → Provider-SSE als `delta/end/error` normalisiert → `<artifact>`-Parser → Vorschau |
+| **API-Modus** (Fallback / keine CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → Provider-SSE als `delta/end/error` normalisiert → `<artifact>`-Parser → Vorschau |
 
 Beide Modi enden im selben Dateiarbeitsbereich und derselben sandboxed Vorschau, haben aber unterschiedliche Übergabeverträge. Dateisystemfähige Runtimes schreiben die kanonischen Dateien und dürfen deren Quelltext nicht als `<artifact>` wiederholen. Plain-/Text-only- und BYOK-Läufe haben keine Dateitools; ihre kanonische Ausgabe ist vollständiges HTML in `<artifact>`. Das Ausführungsprofil folgt dem Runtime-Transport.
 
