@@ -434,12 +434,13 @@ const NAMED_HTML_ENTITIES: Record<string, string> = {
   Yuml: '\u0178',
 };
 export function decodeHtmlEntity(s: string): string {
-  // Named entities: &name; — loop until stable (handles cascading decode like &amp;eacute; → é)
-  let prev = '';
-  while (s !== prev) {
+  // Named entities: &name; — decode iteratively to handle cascading entities
+  // like &amp;eacute; → é (browser-compatible behavior per HTML5 spec)
+  let prev: string;
+  do {
     prev = s;
     s = s.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (_, name) => NAMED_HTML_ENTITIES[name] ?? `&${name};`);
-  }
+  } while (s !== prev);
   // Decimal numeric: &#digits; — bounds-checked against Unicode scalar values
   s = s.replace(/&#(\d+);/g, (_, digits) => {
     const code = parseInt(digits, 10);
