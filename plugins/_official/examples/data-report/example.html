@@ -10,11 +10,17 @@
   body { background:#fafaf7; font-family:'Inter','Noto Sans SC',sans-serif; color:#15140f; -webkit-font-smoothing:antialiased; }
   .num { font-family:'Inter',sans-serif; font-feature-settings:'tnum' on; letter-spacing:-0.02em; }
   .section h2 { font-size:11px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:#5a564e; margin:0 0 16px; }
-  table { border-collapse:collapse; width:100%; font-size:13px; }
-  thead th { background:#f4f1ec; text-align:left; padding:10px 14px; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#5a564e; position:sticky; top:0; }
-  tbody td { padding:10px 14px; border-bottom:1px solid #e7e5e0; }
-  tbody tr:nth-child(even) { background:#fbfaf7; }
-  tbody tr:hover { background:#f4f1ec; }
+  /* 宽表契约: 横向滚动容器 + sticky 固定首列 + z-index 阶梯 + td 级不透明背景。
+     这些承重属性必须写在这里 (或内联 style), 不能只用 Tailwind 工具类——CDN 失效时契约仍需成立。 */
+  .table-scroll { overflow-x:auto; }
+  table { border-collapse:separate; border-spacing:0; width:100%; min-width:1280px; font-size:13px; }
+  thead th { background:#f4f1ec; text-align:left; padding:10px 14px; font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#5a564e; position:sticky; top:0; z-index:2; white-space:nowrap; }
+  tbody td { padding:10px 14px; border-bottom:1px solid #e7e5e0; background:#ffffff; white-space:nowrap; }
+  tbody tr:nth-child(even) td { background:#fbfaf7; }
+  tbody tr:hover td { background:#f4f1ec; }
+  th:first-child, td:first-child { position:sticky; left:0; box-shadow:2px 0 4px rgba(0,0,0,0.06); }
+  tbody td:first-child { z-index:1; }
+  thead th:first-child { z-index:3; }
   .delta-up { color:#1f7a3a; font-weight:600; }
   .delta-down { color:#9c2a25; font-weight:600; }
 </style>
@@ -84,10 +90,25 @@
   <section class="section mb-10">
     <h2>明细 · Raw data</h2>
     <div class="rounded-2xl border border-[#e7e5e0] overflow-hidden bg-white">
-      <table>
-        <thead><tr><th>月份</th><th class="text-right">MAU</th><th class="text-right">新增</th><th class="text-right">付费</th><th class="text-right">流失率</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
+      <div class="table-scroll">
+        <!-- 内联 border-collapse: Tailwind CDN 的 preflight 带 table { border-collapse:collapse },
+             注入顺序不可控; collapse 模式下 sticky 单元格的边框滚动时会丢失, 内联保证 separate 恒生效。 -->
+        <table style="border-collapse:separate;border-spacing:0">
+          <thead><tr>
+            <th>月份</th>
+            <th class="text-right">MAU</th>
+            <th class="text-right">MAU 环比</th>
+            <th class="text-right">净增 MAU</th>
+            <th class="text-right">新增</th>
+            <th class="text-right">新增环比</th>
+            <th class="text-right">付费</th>
+            <th class="text-right">付费环比</th>
+            <th class="text-right">付费率</th>
+            <th class="text-right">流失率</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -136,15 +157,28 @@ const data = [
   {month:'2025-05', mau:23950, signups:4250, paying:2418, churn:0.018},
 ];
 
-document.getElementById('rows').innerHTML = data.map(d => `
+// 派生列全部由 data 纯计算得出 (环比 = 与上一行比较, 首行无上月记 "—")
+const growthPct = (cur, prev) => prev == null ? null : (cur - prev) / prev * 100;
+const fmtGrowth = (v) => v == null
+  ? '<span class="text-[#5a564e]">—</span>'
+  : `<span class="${v >= 0 ? 'delta-up' : 'delta-down'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
+
+document.getElementById('rows').innerHTML = data.map((d, i) => {
+  const prev = i > 0 ? data[i - 1] : null;
+  return `
   <tr>
     <td class="font-mono text-xs">${d.month}</td>
     <td class="text-right num">${d.mau.toLocaleString()}</td>
+    <td class="text-right num">${fmtGrowth(growthPct(d.mau, prev?.mau))}</td>
+    <td class="text-right num">${prev ? '+' + (d.mau - prev.mau).toLocaleString() : '<span class="text-[#5a564e]">—</span>'}</td>
     <td class="text-right num">${d.signups.toLocaleString()}</td>
+    <td class="text-right num">${fmtGrowth(growthPct(d.signups, prev?.signups))}</td>
     <td class="text-right num">${d.paying.toLocaleString()}</td>
+    <td class="text-right num">${fmtGrowth(growthPct(d.paying, prev?.paying))}</td>
+    <td class="text-right num">${(d.paying / d.mau * 100).toFixed(1)}%</td>
     <td class="text-right num">${(d.churn*100).toFixed(1)}%</td>
-  </tr>
-`).join('');
+  </tr>`;
+}).join('');
 
 const sparkOpts = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false}}, scales:{x:{display:false},y:{display:false}}, elements:{point:{radius:0},line:{tension:0.4,borderWidth:2}} };
 new Chart(document.getElementById('kpi1'), { type:'line', data:{labels:data.map(d=>d.month), datasets:[{data:data.map(d=>d.mau), borderColor:'#c96442', fill:false}]}, options:sparkOpts });
