@@ -43,6 +43,7 @@ export type DesignSystemArtifactMode = 'generated' | 'agent-managed';
 
 export type DesignSystemSummary = {
   id: string;
+  dir?: string;
   title: string;
   category: string;
   summary: string;
@@ -362,6 +363,7 @@ export async function listDesignSystems(
       const swatches = pickFinalSwatchRow(frontmatterSwatchRow, markdownSwatches);
       out.push({
         id: `${options.idPrefix ?? ''}${entry.name}`,
+        dir: brandRoot,
         title,
         category,
         summary:
