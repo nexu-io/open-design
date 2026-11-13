@@ -362,9 +362,9 @@ interface BrandKitOptions {
 export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const { projectId } = opts;
   const ready = opts.ready !== false;
-  const hasAssetSource = Boolean(projectId || (opts.publishedAssets && opts.designSystemId));
+  const hasAssetSource = Boolean(projectId || opts.designSystemId);
   const showSystem = ready && hasAssetSource;
-  const assetUrl = (rel: string): string => opts.publishedAssets && opts.designSystemId
+  const assetUrl = (rel: string): string => (opts.publishedAssets || !projectId) && opts.designSystemId
     ? designSystemStaticUrl(opts.designSystemId, rel, opts.workspaceContext)
     : projectRawUrl(projectId ?? '', rel, opts.workspaceContext);
   const asset = (rel: string): string | null => hasAssetSource
@@ -685,9 +685,9 @@ function mergeLegacyBrandLogo(
     workspaceContext?: WorkspaceCollabContext | null;
   },
 ): DesignKit {
-  if (!logo || (!options.projectId && !(options.publishedAssets && options.designSystemId))) return kit;
+  if (!logo || (!options.projectId && !options.designSystemId)) return kit;
   const asset = (filePath: string) => withCacheBust(
-    options.publishedAssets && options.designSystemId
+    (options.publishedAssets || !options.projectId) && options.designSystemId
       ? designSystemStaticUrl(options.designSystemId, filePath, options.workspaceContext)
       : projectRawUrl(options.projectId!, filePath, options.workspaceContext),
     options.reloadKey,
@@ -743,7 +743,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         workspaceContext,
       });
 
-    if (!projectId && !publishedAssets) {
+    if (!projectId && !publishedAssets && !designSystemId) {
       setKit(fromDesignMd(body));
       setLoading(false);
       return () => {
@@ -755,7 +755,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
     void (async () => {
       // Fetch brand.json (richest) and DESIGN.md (fallback) together so the kit
       // resolves in a single async hop — brand.json wins when it is a valid kit.
-      const read = (filePath: string) => publishedAssets
+      const read = (filePath: string) => (publishedAssets || !projectId) && designSystemId
         ? fetchDesignSystemStaticText(designSystemId, filePath, workspaceContext)
         : fetchProjectFileText(projectId!, filePath, { cache: 'no-store', cacheBustKey: reloadKey, workspaceContext });
       const [rawBrand, rawDesignMd] = await Promise.all([
