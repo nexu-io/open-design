@@ -235,6 +235,31 @@ const MEDIA_MODEL_ALIASES: Readonly<Record<string, string>> = {
   'codex-gpt-image-2': 'vela/gpt-image-2',
 };
 
+/**
+ * fal.ai partner endpoints that live outside the `fal-ai/*` namespace but
+ * render through the integrated `fal` provider without a catalog entry.
+ *
+ * Deliberately an exact-match allowlist, not a prefix: each entry has its
+ * own request schema in `renderFalImage`, so an unlisted partner path
+ * (e.g. `blackforestlabs/flux-3/edit-image`) must fail as an unknown model
+ * instead of being sent the wrong payload.
+ */
+export const FAL_FLUX3_TEXT_TO_IMAGE = 'blackforestlabs/flux-3/text-to-image';
+
+const FAL_PARTNER_ENDPOINTS: ReadonlySet<string> = new Set([
+  FAL_FLUX3_TEXT_TO_IMAGE,
+]);
+
+/**
+ * True when `model` is an uncatalogued fal.ai endpoint path the daemon
+ * forwards verbatim to the fal queue: any `fal-ai/*` path, or one of the
+ * validated partner endpoints above. Single source of truth for both
+ * provider resolution (routes) and synthetic model definitions (media).
+ */
+export function isFalCustomModelPath(model: string): boolean {
+  return model.startsWith('fal-ai/') || FAL_PARTNER_ENDPOINTS.has(model);
+}
+
 export function canonicalMediaModelId(id: string): string {
   return MEDIA_MODEL_ALIASES[id] ?? id;
 }
