@@ -938,6 +938,35 @@ function smokeFailureDetail(sample: string): string {
     : 'Provider returned a 2xx response without assistant text';
 }
 
+// An Anthropic `/v1/messages` turn is only a real completion when its
+// `content` array carries at least one block with renderable payload — a
+// non-empty `text` or `thinking` string, or a structured tool block. An
+// empty array, or blocks whose text/thinking is blank, is the contentless
+// turn described in issue #9470: the upstream returns `stop_reason: end_turn`
+// and bills `output_tokens` while handing the agent nothing, which then
+// stalls or aborts mid-task. We detect that shape so the connection test can
+// report it as an upstream failure instead of a false "valid completion".
+function hasRenderableAnthropicBlock(content: readonly unknown[]): boolean {
+  return content.some((block) => {
+    if (!block || typeof block !== 'object') return false;
+    const b = block as { type?: unknown; text?: unknown; thinking?: unknown };
+    if (b.type === 'text') {
+      return typeof b.text === 'string' && b.text.trim().length > 0;
+    }
+    if (b.type === 'thinking') {
+      return typeof b.thinking === 'string' && b.thinking.trim().length > 0;
+    }
+    // tool_use / server_tool_use / tool_result blocks are genuine output
+    // even without assistant text — their presence means the turn was not
+    // the empty, billed turn #9470 is about.
+    return (
+      b.type === 'tool_use'
+      || b.type === 'server_tool_use'
+      || b.type === 'tool_result'
+    );
+  });
+}
+
 function inspectProviderCompletion(
   protocol: ConnectionTestProtocol,
   data: unknown,
@@ -978,9 +1007,23 @@ function inspectProviderCompletion(
   }
 
   if (protocol === 'anthropic') {
+    const content = (obj as { content?: unknown }).content;
+    // A 200 whose content array holds no renderable block is the silent
+    // empty-turn defect from issue #9470 — the upstream billed a turn it
+    // never produced. Capacity/upstream faults should surface as 5xx, so we
+    // treat this signature as an upstream failure rather than reporting a
+    // false green here.
+    if (Array.isArray(content) && !hasRenderableAnthropicBlock(content)) {
+      return {
+        valid: false,
+        kind: 'upstream_unavailable',
+        detail:
+          'Provider returned HTTP 200 with an empty content array (no text) — the upstream produced a contentless turn while billing output tokens. Treating as an upstream failure; retry or switch models.',
+      };
+    }
     return {
       valid:
-        Array.isArray((obj as { content?: unknown }).content) ||
+        Array.isArray(content) ||
         typeof (obj as { stop_reason?: unknown }).stop_reason === 'string',
       sample: 'valid completion',
     };
