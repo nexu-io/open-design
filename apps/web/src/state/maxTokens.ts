@@ -17,7 +17,12 @@ export const FALLBACK_MAX_TOKENS = 8192;
 // `effectiveMaxTokens`, so a stale or hand-edited localStorage value
 // can't sneak past the UI's promise.
 export const MIN_MAX_TOKENS = 1024;
-export const MAX_MAX_TOKENS = 200000;
+// The upper bound the Settings field accepts. `modelMaxTokensDefault` clamps
+// to it, so every default we display as the field's placeholder can be
+// re-entered in that same field (#8048) — including when the vendored
+// LiteLLM slice carries a context window rather than an output cap (e.g.
+// vertex_ai/meta/llama-4-scout-*-maas lists 10M).
+export const MAX_MAX_TOKENS = 400000;
 
 const LITELLM_MODELS = litellmData.models as Record<string, number>;
 
@@ -81,7 +86,10 @@ const OVERRIDES: Record<string, number> = {
 };
 
 export function modelMaxTokensDefault(model: string): number {
-  return OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
+  const cap = OVERRIDES[model] ?? LITELLM_MODELS[model] ?? FALLBACK_MAX_TOKENS;
+  // Clamp instead of raising MAX_MAX_TOKENS to the catalog max: some rows are
+  // context windows, and a 10M output cap is never sendable upstream.
+  return Math.min(cap, MAX_MAX_TOKENS);
 }
 
 function isValidOverride(value: number | undefined): value is number {
