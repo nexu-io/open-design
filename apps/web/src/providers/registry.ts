@@ -3435,6 +3435,11 @@ export function designSystemStaticUrl(
   );
 }
 
+function designSystemResponseUrl(response: Response): string {
+  const location = response.headers.get('content-location');
+  return location ? new URL(location, response.url).href : response.url;
+}
+
 export async function fetchDesignSystemStaticText(
   designSystemId: string,
   filePath: string,
@@ -3692,7 +3697,7 @@ export async function fetchDesignSystemShowcase(
       { headers: { ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}), 'x-od-design-system-preview': '1' } },
     );
     if (!resp.ok) return null;
-    return { html: await resp.text(), baseHref: resp.url };
+    return { html: await resp.text(), baseHref: designSystemResponseUrl(resp) };
   } catch {
     return null;
   }

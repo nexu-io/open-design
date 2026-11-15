@@ -2609,6 +2609,16 @@ describe('OPEND-3894 comment reads distinguish errors from empty success', () =>
 describe('design-system showcase document base', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('uses canonical response metadata when the packaged protocol hides redirect URLs', async () => {
+    const html = '<link rel="stylesheet" href="../tokens.css">';
+    const location = '/api/design-systems/user%3Ademo/static/previews/opaque-scope/files/system/kit.html';
+    const response = new Response(html, { headers: { 'Content-Location': location } });
+    Object.defineProperty(response, 'url', { value: 'od://app/api/design-systems/user%3Ademo/showcase' });
+    vi.stubGlobal('fetch', vi.fn(async () => response));
+    expect(await fetchDesignSystemShowcase('user:demo')).toEqual({ html, baseHref: `od://app${location}` });
+  });
+
+
   it('retains the final scoped package URL for srcdoc consumers', async () => {
     const html = '<link rel="stylesheet" href="../tokens.css">';
     const baseHref = 'http://localhost/api/design-systems/user%3Ademo/static/previews/opaque-scope/files/system/kit.html';

@@ -888,6 +888,7 @@ export function registerDesignSystemRoutes(
         ));
         return;
       }
+      res.setHeader('Content-Location', designSystemStaticFileUrl(id, requestedPath, String(req.params.scope), req));
       const content = file.contentType.startsWith('text/html')
         ? injectDesignSystemPreviewShim(file.bytes.toString('utf8'))
         : file.bytes;
