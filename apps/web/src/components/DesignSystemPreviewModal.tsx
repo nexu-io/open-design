@@ -12,6 +12,7 @@ import {
   fetchDesignSystem,
   fetchDesignSystemPreview,
   fetchDesignSystemShowcase,
+  type DesignSystemShowcaseDocument,
 } from '../providers/registry';
 import type { DesignSystemDetail, DesignSystemSummary } from '../types';
 import { DesignSpecView } from './DesignSpecView';
@@ -74,12 +75,23 @@ export function DesignSystemPreviewModal({
     });
   }, [analytics.track, system.id, system.source]);
 
-  const [showcaseHtml, setShowcaseHtml] = useState<string | null | undefined>(undefined);
+  const [showcase, setShowcase] = useState<DesignSystemShowcaseDocument | null | undefined>(undefined);
   const [tokensHtml, setTokensHtml] = useState<string | null | undefined>(undefined);
   const [specBody, setSpecBody] = useState<string | null | undefined>(undefined);
   const [detail, setDetail] = useState<DesignSystemDetail | null | undefined>(
     () => (isDesignSystemDetail(system) ? system : undefined),
   );
+  const scopeKey = JSON.stringify([system.id, resourceReadIdentityKey]);
+  const [readScope, setReadScope] = useState(() => ({ key: scopeKey }));
+  const readScopeRef = useRef(readScope);
+  readScopeRef.current = readScope;
+  if (readScope.key !== scopeKey) {
+    setReadScope({ key: scopeKey });
+    setShowcase(undefined);
+    setTokensHtml(undefined);
+    setSpecBody(undefined);
+    setDetail(isDesignSystemDetail(system) ? system : undefined);
+  }
   const detailBody = detail?.body ?? (isDesignSystemDetail(system) ? system.body : undefined);
 
   useEffect(() => {
@@ -112,22 +124,26 @@ export function DesignSystemPreviewModal({
           });
         }
       }
-      if (viewId === 'showcase' && showcaseHtml === undefined) {
+      if (viewId === 'showcase' && showcase === undefined) {
         const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
-        setShowcaseHtml(null);
+        setShowcase(null);
         void fetchDesignSystemShowcase(system.id, read.context).then((html) => {
-          if (read.isStillCurrent(resourceReadIdentityRef.current)) setShowcaseHtml(html);
+          if (readScopeRef.current === readScope && read.isStillCurrent(resourceReadIdentityRef.current)) {
+            setShowcase(html);
+          }
         });
       }
       if (viewId === 'tokens' && tokensHtml === undefined) {
         const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
         setTokensHtml(null);
         void fetchDesignSystemPreview(system.id, read.context).then((html) => {
-          if (read.isStillCurrent(resourceReadIdentityRef.current)) setTokensHtml(html);
+          if (readScopeRef.current === readScope && read.isStillCurrent(resourceReadIdentityRef.current)) {
+            setTokensHtml(html);
+          }
         });
       }
     },
-    [analytics.track, system.id, system.source, showcaseHtml, tokensHtml, resourceReadIdentityKey],
+    [analytics.track, system.id, system.source, showcase, tokensHtml, resourceReadIdentityKey, readScope],
   );
 
   const handleSidebarToggle = useCallback(
@@ -140,19 +156,13 @@ export function DesignSystemPreviewModal({
       const read = beginWorkspaceResourceScopedRead(resourceReadIdentityRef.current);
       setSpecBody(null);
       void fetchDesignSystem(system.id, read.context).then((nextDetail) => {
-        if (read.isStillCurrent(resourceReadIdentityRef.current)) {
+        if (readScopeRef.current === readScope && read.isStillCurrent(resourceReadIdentityRef.current)) {
           setSpecBody(nextDetail?.body ?? null);
         }
       });
     },
-    [detailBody, system.id, specBody, resourceReadIdentityKey],
+    [detailBody, system.id, specBody, resourceReadIdentityKey, readScope],
   );
-
-  useEffect(() => {
-    setShowcaseHtml(undefined);
-    setTokensHtml(undefined);
-    setSpecBody(undefined);
-  }, [system.id, resourceReadIdentityKey]);
 
   const modal = (
     <PreviewModal
@@ -173,7 +183,7 @@ export function DesignSystemPreviewModal({
             />
           ),
         },
-        { id: 'showcase', label: t('ds.showcase'), html: showcaseHtml },
+        { id: 'showcase', label: t('ds.showcase'), html: showcase?.html, baseHref: showcase?.baseHref },
         { id: 'tokens', label: t('ds.tokens'), html: tokensHtml },
       ]}
       initialViewId={initialViewId}

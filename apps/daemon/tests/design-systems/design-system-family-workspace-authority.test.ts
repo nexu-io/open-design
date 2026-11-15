@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   closeDatabase,
   ensureWorkspaceResource,
+  updateWorkspaceResource,
   getWorkspaceResource,
   getWorkspaceResourceByResourceId,
   openDatabase,
@@ -369,9 +370,9 @@ describe('Design System route family exact Workspace authority', () => {
 
     expect(showcase.status).toBe(200);
     expect(staticFile.status).toBe(200);
-    expect(await showcase.text()).toContain(
-      `path=assets%2Flogo.png&workspaceId=${WORKSPACE_ID}&workspaceMemberId=${MEMBER_ID}`,
-    );
+    expect(await showcase.text()).toContain('../assets/logo.png');
+    const logo = await fetch(new URL('../assets/logo.png', showcase.url));
+    expect(logo.status).toBe(200);
     expect(calls.static).toHaveBeenCalledWith(
       DESIGN_SYSTEM_ID,
       'system/kit.html',
@@ -383,6 +384,64 @@ describe('Design System route family exact Workspace authority', () => {
       { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, exactTeam: false },
     );
     expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+  });
+
+  it('retains exact workspace identity for relative static requests after header-only entry', async () => {
+    const { baseUrl, calls } = await startAuthorityServer({ visibility: 'personal' });
+    const page = await fetch(
+      `${baseUrl}/api/design-systems/${encodeURIComponent(DESIGN_SYSTEM_ID)}/static?path=system%2Fkit.html`,
+      { headers: exactHeaders() },
+    );
+    expect(page.status).toBe(200);
+    const assetUrl = new URL('../assets/logo.png', page.url);
+    const asset = await fetch(assetUrl, { headers: { Origin: 'null' } });
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('access-control-allow-origin')).toBe('*');
+    expect(calls.static).toHaveBeenLastCalledWith(
+      DESIGN_SYSTEM_ID,
+      'assets/logo.png',
+      { workspaceId: WORKSPACE_ID, workspaceMemberId: MEMBER_ID, exactTeam: false },
+    );
+    const mismatchedHeader = await fetch(assetUrl, { headers: otherMemberHeaders() });
+    expect(mismatchedHeader.status).toBe(400);
+    const mismatchedQuery = new URL(assetUrl);
+    mismatchedQuery.searchParams.set('workspaceId', WORKSPACE_ID);
+    mismatchedQuery.searchParams.set('workspaceMemberId', 'member-b');
+    expect((await fetch(mismatchedQuery)).status).toBe(400);
+    const otherMember = new URL(assetUrl);
+    otherMember.searchParams.set('workspaceId', WORKSPACE_ID);
+    otherMember.searchParams.set('workspaceMemberId', 'member-b');
+    const denied = await fetch(otherMember, { headers: { Origin: 'null' } });
+    expect(denied.status).toBe(400);
+    expect(denied.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('rejects an issued preview scope after its package binding is deleted', async () => {
+    const { baseUrl, db, calls } = await startAuthorityServer({ visibility: 'personal' });
+    const entry = await fetch(
+      `${baseUrl}/api/design-systems/${encodeURIComponent(DESIGN_SYSTEM_ID)}/static?path=tokens.css`,
+      { headers: exactHeaders() },
+    );
+    expect(entry.status).toBe(200);
+    calls.static.mockClear();
+    updateWorkspaceResource(db, 'design_system', WORKSPACE_ID, DESIGN_SYSTEM_ID, { resourceState: 'deleted' });
+    const response = await fetch(entry.url, { headers: { Origin: 'null' } });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(calls.static).not.toHaveBeenCalled();
+    updateWorkspaceResource(db, 'design_system', WORKSPACE_ID, DESIGN_SYSTEM_ID, { resourceState: 'active' });
+    expect((await fetch(entry.url, { headers: { Origin: 'null' } })).status).toBe(403);
+  });
+
+  it('invalidates issued preview scopes when deleting a package through its route', async () => {
+    const { baseUrl } = await startAuthorityServer({ visibility: 'personal' });
+    const url = `${baseUrl}/api/design-systems/${encodeURIComponent(DESIGN_SYSTEM_ID)}`;
+    const entry = await fetch(`${url}/static?path=tokens.css`, { headers: exactHeaders() });
+    expect(entry.status).toBe(200);
+    expect((await fetch(url, { method: 'DELETE', headers: exactHeaders() })).status).toBe(204);
+    const response = await fetch(entry.url, { headers: { Origin: 'null' } });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'DESIGN_SYSTEM_PREVIEW_SCOPE_INVALID' });
   });
 
   it('rejects bound mutations before their first side effect', async () => {

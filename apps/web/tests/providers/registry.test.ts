@@ -23,6 +23,7 @@ import {
   fetchSkills,
   fetchDesignTemplates,
   fetchDesignSystems,
+  fetchDesignSystemShowcase,
   fetchPromptTemplates,
   fetchPreviewComments,
   fetchCloudflarePagesZones,
@@ -2601,5 +2602,22 @@ describe('OPEND-3894 comment reads distinguish errors from empty success', () =>
   it('accepts an explicitly empty successful response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({comments:[]})));
     await expect(fetchPreviewComments('p','c')).resolves.toEqual([]);
+  });
+});
+
+
+describe('design-system showcase document base', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('retains the final scoped package URL for srcdoc consumers', async () => {
+    const html = '<link rel="stylesheet" href="../tokens.css">';
+    const baseHref = 'http://localhost/api/design-systems/user%3Ademo/static/previews/opaque-scope/files/system/kit.html';
+    const response = new Response(html);
+    Object.defineProperty(response, 'url', { value: baseHref });
+    vi.stubGlobal('fetch', vi.fn(async () => response));
+    expect(await fetchDesignSystemShowcase('user:demo')).toEqual({ html, baseHref });
+    expect(fetch).toHaveBeenCalledWith('/api/design-systems/user%3Ademo/showcase', {
+      headers: { 'x-od-design-system-preview': '1' },
+    });
   });
 });

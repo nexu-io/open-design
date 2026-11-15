@@ -586,6 +586,23 @@ describe('design systems registry', () => {
     await expect(readFile(path.join(dir, 'SKILL.md'), 'utf8')).resolves.toContain('Legacy Renamed');
   });
 
+  it.each(['js', 'mjs'])('serves declared %s assets with a JavaScript MIME type', async (extension) => {
+    const dir = path.join(root, 'module-kit');
+    await mkdir(path.join(dir, 'assets'), { recursive: true });
+    await writeFile(path.join(dir, 'manifest.json'), JSON.stringify({
+      schemaVersion: 'od-design-system-project/v1',
+      category: 'Custom',
+      id: 'module-kit',
+      name: 'Module Kit',
+      version: '1.0.0',
+      files: { design: 'DESIGN.md', tokens: 'tokens.css', components: 'components.html' },
+      assetsDir: 'assets',
+    }));
+    await writeFile(path.join(dir, 'assets', `runtime.${extension}`), 'export const ready = true;');
+    const file = await readDesignSystemStaticFile(root, 'module-kit', `assets/runtime.${extension}`);
+    expect(file?.contentType).toMatch(/^(?:text|application)\/javascript(?:;|$)/);
+  });
+
   it('does not expose the generated-fingerprint manifest through file surfaces', async () => {
     const created = await createUserDesignSystem(root, {
       title: 'Manifest Privacy Kit',
