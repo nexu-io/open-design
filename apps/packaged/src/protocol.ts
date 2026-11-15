@@ -1,4 +1,5 @@
 import { net, protocol } from "electron";
+import { isIP } from "node:net";
 
 const OD_SCHEME = "od";
 const OD_ENTRY_URL = `${OD_SCHEME}://app/`;
@@ -181,6 +182,38 @@ function sanitizeProxyResponseHeaders(headers: Headers): Headers {
   return out;
 }
 
+/**
+ * The renderer's app Origin describes the od:// hop, not the internal HTTP
+ * hop. Electron turns it into a CORS initiator, so even same-app font/image
+ * reads fail when the sidecar does not return CORS headers for od://app.
+ * Strip only our own Origin on replay-safe reads to literal loopback HTTP
+ * destinations. Hostnames (including localhost) are not proof of loopback:
+ * preserving their Origin avoids relying on DNS or local host-file mappings.
+ * Writes, HTTPS/remote destinations and foreign/opaque origins retain their
+ * headers for the server's origin validation.
+ */
+function proxyRequestHeaders(request: Request, target: string): Headers {
+  const headers = new Headers(request.headers);
+  if (!OD_PROXY_RETRYABLE_METHODS.has(request.method) || headers.get("origin") !== "od://app") {
+    return headers;
+  }
+  // Parse before classifying: URL normalizes IPv4 shorthand and IPv6 spelling,
+  // and separates actual hostnames from userinfo and deceptive DNS suffixes.
+  let destination: URL;
+  try {
+    destination = new URL(target);
+  } catch {
+    return headers;
+  }
+  const hostname = destination.hostname;
+  const isLoopback = hostname === "[::1]" ||
+    (isIP(hostname) === 4 && hostname.split(".")[0] === "127");
+  if (destination.protocol === "http:" && isLoopback) {
+    headers.delete("origin");
+  }
+  return headers;
+}
+
 async function fetchOdTargetOnce(
   request: Request,
   target: string,
@@ -203,7 +236,7 @@ async function fetchOdTargetOnce(
     upstream = await fetchImpl(
       new Request(target, {
         method: request.method,
-        headers: request.headers,
+        headers: proxyRequestHeaders(request, target),
         body: request.body,
         // @ts-expect-error -- duplex is required by undici/net.fetch for
         // streaming request bodies and absent from the lib.dom Request typings.
@@ -467,21 +500,15 @@ export function packagedEntryUrl(): string {
 }
 
 /**
- * Route the od:// proxy through Electron's `net.fetch` (Chromium's network
- * stack, ~6 pooled connections per origin like a browser tab) instead of Node's
- * global `fetch` (undici), which caps a single origin far lower. Proxying every
- * renderer request through undici serialized them: a project-open request burst
- * that a browser tab runs in parallel dribbled out over minutes in the packaged
- * app. `net.fetch` gives the packaged client the same concurrency as the
- * browser.
+ * Keep the od:// proxy on Electron's `net.fetch` (Chromium's network stack),
+ * with Node's global fetch (undici) as a per-request GET/HEAD fallback.
  *
- * Electron can nevertheless reject particular renderer-owned subresource
- * requests with a generic `net::ERR_FAILED` even while the same URL succeeds
- * through ordinary fetch and the sidecar returns 200. CSS mask images are one
- * concrete case: packaged agent icons disappeared while their SVG files were
- * present and directly readable. For GET/HEAD only, fall back to undici after
- * that transport-level rejection. Those methods are safe to replay; write
- * requests deliberately stay on a single transport.
+ * proxyRequestHeaders prevents the app's Origin from triggering CORS on the
+ * internal GET/HEAD hop. Other Electron transport failures still fall back to
+ * undici for GET/HEAD only. Those methods are safe to replay; write requests
+ * deliberately stay on a single transport. Repeated failures with the same
+ * method/upstream origin/error code/message log once per registration without
+ * changing transport choice for subsequent requests.
  *
  * Set OD_OD_PROXY_FETCH=undici to force the old path for all requests if
  * `net.fetch` regresses a broader streaming edge on a specific Electron/OS
@@ -490,6 +517,7 @@ export function packagedEntryUrl(): string {
 function resolveOdProxyFetch(isQuiesced: () => boolean = () => false): OdProtocolFetch {
   if (process.env.OD_OD_PROXY_FETCH === "undici") return fetch;
   const undiciFetch = fetch;
+  const reportedFallbacks = new Set<string>();
   return async (request) => {
     try {
       return await net.fetch(request);
@@ -504,11 +532,18 @@ function resolveOdProxyFetch(isQuiesced: () => boolean = () => false): OdProtoco
       // machine, so replaying there only doubles the failing load. Rethrow and
       // let the handler answer 502 at once. See isLocalResourceExhaustionError.
       if (isLocalResourceExhaustionError(error)) throw error;
-      console.warn("[open-design packaged] net.fetch failed; falling back to undici", {
-        message: error instanceof Error ? error.message : String(error),
-        method: request.method,
-        target: request.url,
-      });
+      const message = error instanceof Error ? error.message : String(error);
+      const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+      const signature = JSON.stringify([request.method, new URL(request.url).origin, code, message]);
+      if (!reportedFallbacks.has(signature)) {
+        reportedFallbacks.add(signature);
+        console.warn("[open-design packaged] net.fetch failed; falling back to undici", {
+          message,
+          ...(code == null ? {} : { code }),
+          method: request.method,
+          target: request.url,
+        });
+      }
       return await undiciFetch(request);
     }
   };
