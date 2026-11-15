@@ -144,8 +144,9 @@ function mockKnowledgeDetailRequests(markdown = HOSTILE_HUMANIZE_SKILL_MARKDOWN)
 }
 
 beforeEach(() => {
-  globalThis.fetch = vi.fn(async () =>
-    new Response(JSON.stringify(PLUGIN), {
+  globalThis.fetch = vi.fn(async (input) => String(input).endsWith('/preview')
+    ? new Response('<p>Research preview</p>', { headers: { 'Content-Type': 'text/html' } })
+    : new Response(JSON.stringify(PLUGIN), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     }),
@@ -192,8 +193,9 @@ describe('PluginDetailView curated installed-extension layout', () => {
     expect(within(advanced).getByText('MIT')).toBeTruthy();
     expect(within(advanced).getByText('od plugin install open-design/research-suite')).toBeTruthy();
 
-    expect(screen.getByTestId('plugin-detail-preview-iframe').getAttribute('src'))
-      .toBe('/api/plugins/research-suite/preview');
+    expect(screen.getByTestId('plugin-detail-preview-iframe').getAttribute('src')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('plugin-detail-preview-iframe').getAttribute('srcdoc')).toContain('Research preview'));
+    expect(screen.getByTestId('plugin-detail-preview-iframe').getAttribute('sandbox')).toBe('allow-scripts');
     expect(screen.getByTestId('plugin-detail-example-research').getAttribute('href'))
       .toBe('/api/plugins/research-suite/example/research');
     expect(screen.getByTestId('plugin-detail-use')).toBeTruthy();

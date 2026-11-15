@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { expect, test } from 'vitest';
+import { electronDisplayCommand } from '@/vitest/electron-display';
 import { createSmokeSuite, e2eWorkspaceRoot } from '@/vitest/suite';
 
 const execute = promisify(execFile);
@@ -56,7 +57,8 @@ test('real Electron protocol preserves opaque preview asset authority through th
     const redirectUrl = `http://127.0.0.1:${address.port}`;
     let execution;
     try {
-      execution = await execute(packagedRequire('electron'), [output, webUrl, join(suite.scratchDir, 'electron-data'), resultPath, `${redirectUrl}/od`, `${redirectUrl}/http`], { timeout: 120000, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
+      const invocation = electronDisplayCommand(packagedRequire('electron'), [output, webUrl, join(suite.scratchDir, 'electron-data'), resultPath, `${redirectUrl}/od`, `${redirectUrl}/http`]);
+      execution = await execute(invocation.command, invocation.args, { timeout: 120000, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
     } finally { await new Promise<void>(resolve => redirects.close(() => resolve())); }
     await suite.report.json('electron-process.json', execution);
     const result = JSON.parse(await readFile(resultPath, 'utf8'));

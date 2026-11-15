@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 
 import { PluginPreviewHero } from '../../src/components/plugin-details/PluginPreviewHero';
 import { notifyWorkspaceContextRefresh } from '../../src/collab/useWorkspaceContext';
@@ -9,10 +9,13 @@ import { workspaceContextFixture } from '../helpers/workspace-context';
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   window.sessionStorage.clear();
 });
 
-it('pins iframe and popout navigation to the project Workspace after the shell switches', () => {
+it('pins iframe and popout navigation to the project Workspace after the shell switches', async () => {
+  const fetcher = vi.fn().mockResolvedValue(new Response('<p>Project A preview</p>', { headers: { 'content-type': 'text/html' } }));
+  vi.stubGlobal('fetch', fetcher);
   const projectA = workspaceContextFixture({
     workspaceId: 'workspace-a',
     workspaceMemberId: 'member-a',
@@ -32,7 +35,9 @@ it('pins iframe and popout navigation to the project Workspace after the shell s
     + '?workspaceId=workspace-a&workspaceMemberId=member-a';
   const iframe = screen.getByTestId('plugin-details-hero-iframe');
   const popout = screen.getByTestId('plugin-details-hero-popout');
-  expect(iframe.getAttribute('src')).toBe(expected);
+  expect(iframe.getAttribute('src')).toBeNull();
+  await waitFor(() => expect(iframe.getAttribute('srcdoc')).toContain('Project A preview'));
+  expect(fetcher).toHaveBeenCalledWith(expected, expect.any(Object));
   expect(popout.getAttribute('href')).toBe(expected);
 
   // The navigation rail now selects B, but this mounted project surface still
@@ -42,6 +47,8 @@ it('pins iframe and popout navigation to the project Workspace after the shell s
     JSON.stringify({ workspaceId: 'workspace-b', workspaceMemberId: 'member-b' }),
   );
   notifyWorkspaceContextRefresh();
-  expect(iframe.getAttribute('src')).toBe(expected);
+  expect(iframe.getAttribute('src')).toBeNull();
+  await waitFor(() => expect(iframe.getAttribute('srcdoc')).toContain('Project A preview'));
+  expect(fetcher).toHaveBeenCalledWith(expected, expect.any(Object));
   expect(popout.getAttribute('href')).toBe(expected);
 });

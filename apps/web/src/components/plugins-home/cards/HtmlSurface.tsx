@@ -22,6 +22,7 @@
 // when the URL is unreachable. Results are cached per-URL so
 // scrolling doesn't re-probe the same plugin.
 
+import { useHostResolvedPreview } from '../../../hooks/useHostResolvedPreview';
 import { useEffect, useState } from 'react';
 import { isVisualStabilityMode } from '../../../utils/visualStability';
 import type { HtmlPreviewSpec } from '../preview';
@@ -139,6 +140,8 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
     return () => window.clearTimeout(id);
   }, [inView, probeState, eager]);
 
+  const previewDocument = useHostResolvedPreview(armed && probeState === 'ok' ? preview.src : null);
+
   if (probeState === 'unreachable') {
     return (
       <UnreachableFallback
@@ -163,7 +166,7 @@ export function HtmlSurface({ preview, pluginId, pluginTitle, inView, eager = fa
         {armed ? (
           <iframe
             title={`${pluginTitle} preview`}
-            src={preview.src}
+            srcDoc={previewDocument ?? ''}
             sandbox="allow-scripts"
             loading="lazy"
             tabIndex={-1}
