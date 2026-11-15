@@ -3,7 +3,7 @@ import {
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import {
-  runVelaCommand,
+  runVelaCommand as runVelaCommandRaw,
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
 import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
@@ -14,6 +14,24 @@ import {
   sharedProjectPullProfileEnabled,
 } from './pull-profile.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
+import { assertNoEmptyFiles } from './share-alias-recovery.js';
+
+// `vela resource push` answers a 0-byte file with an opaque 501
+// blob_upload_failed, so scan the pushed directory first and name the
+// offending paths before shelling out.
+async function runVelaCommand(
+  ...args: Parameters<typeof runVelaCommandRaw>
+): ReturnType<typeof runVelaCommandRaw> {
+  const [commandArgs] = args;
+  if (Array.isArray(commandArgs)) {
+    const pushIndex = commandArgs.indexOf('push');
+    if (pushIndex > 0 && commandArgs[pushIndex - 1] === 'resource') {
+      const sourceDir = commandArgs[pushIndex + 1];
+      if (typeof sourceDir === 'string') await assertNoEmptyFiles(sourceDir);
+    }
+  }
+  return runVelaCommandRaw(...args);
+}
 
 // The `vela resource` transport for the publish/pull machinery (T7c). Instead of
 // the daemon holding an internal token and driving the hub over HTTP itself, it
