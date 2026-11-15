@@ -50,6 +50,14 @@ describe('parseFrontmatter scalar coercion', () => {
     expect(data("a: 'world'").a).toBe('world');
   });
 
+  // The SKILL.md writers escape `\` and `"` inside double-quoted scalars, so
+  // the reader has to undo those escapes for names/triggers to round-trip.
+  it('unescapes backslash and quote escapes in double-quoted scalars', () => {
+    expect(data('a: "My \\"Pro\\" deck"').a).toBe('My "Pro" deck');
+    expect(data('a: "C:\\\\brand kit"').a).toBe('C:\\brand kit');
+    expect(data('a: "\\\\\\""').a).toBe('\\"');
+  });
+
   // A value that is a single quote character is not a quoted string; slicing
   // 1..-1 of a one-char string wrongly yields ''.
   it('does not treat a lone quote character as an empty quoted string', () => {

@@ -643,6 +643,37 @@ describe('importUserSkill / deleteUserSkill', () => {
       }
     }
   });
+  it('round-trips names and triggers containing quotes or backslashes', async () => {
+    const cases = ['My "Pro" deck', 'C:\\brand kit', 'ends with \\'];
+    for (const name of cases) {
+      const root = fresh();
+      try {
+        const triggers = ['say "hi"', 'path\\to', 'trailing \\'];
+        const result = await importUserSkill(root, {
+          name,
+          body: '# body',
+          triggers,
+        });
+        expect(result.id).toBe(name);
+        let skills = await listSkills(root);
+        expect(skills).toHaveLength(1);
+        expect(skills[0]?.id).toBe(name);
+        expect(skills[0]?.triggers).toEqual(triggers);
+
+        // Saving the listed values back must not grow the escapes.
+        await updateUserSkill(root, {
+          name: skills[0]!.id,
+          body: '# body v2',
+          triggers: skills[0]!.triggers as string[],
+        });
+        skills = await listSkills(root);
+        expect(skills[0]?.id).toBe(name);
+        expect(skills[0]?.triggers).toEqual(triggers);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
 });
 
 describe('updateUserSkill', () => {

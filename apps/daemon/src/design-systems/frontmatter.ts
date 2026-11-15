@@ -198,10 +198,12 @@ function coerce(raw: string | undefined): FrontmatterValue {
   let v = raw.trim();
   // Require at least two characters so a lone quote (`"`), whose first and
   // last char are the same, isn't mistaken for an empty quoted string.
-  if (
-    v.length >= 2 &&
-    ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
-  ) {
+  if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+    // Undo the `\\` and `\"` escapes our SKILL.md writers emit; other
+    // escape sequences are left as written.
+    return v.slice(1, -1).replace(/\\(["\\])/g, '$1');
+  }
+  if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) {
     return v.slice(1, -1);
   }
   if (v === 'true') return true;
