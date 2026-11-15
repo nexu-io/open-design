@@ -369,7 +369,9 @@ describe('Design System route family exact Workspace authority', () => {
     );
 
     expect(showcase.status).toBe(200);
+    expect(showcase.headers.get('content-location')).toBe(new URL(showcase.url).pathname);
     expect(staticFile.status).toBe(200);
+    expect(staticFile.headers.get('content-location')).toBe(new URL(staticFile.url).pathname);
     expect(await showcase.text()).toContain('../assets/logo.png');
     const logo = await fetch(new URL('../assets/logo.png', showcase.url));
     expect(logo.status).toBe(200);

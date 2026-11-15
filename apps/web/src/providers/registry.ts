@@ -3435,16 +3435,43 @@ export function designSystemStaticUrl(
   );
 }
 
+function designSystemResponseUrl(response: Response): string {
+  const location = response.headers.get('content-location');
+  return location ? new URL(location, response.url).href : response.url;
+}
+
+async function fetchDesignSystemStaticResponse(
+  designSystemId: string,
+  filePath: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<Response> {
+  return fetch(designSystemStaticUrl(designSystemId, filePath, workspaceContext), {
+    cache: 'no-store',
+    headers: { ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}), 'x-od-design-system-preview': '1' },
+  });
+}
+
+export async function fetchDesignSystemStaticUrl(
+  designSystemId: string,
+  filePath: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<string | null> {
+  try {
+    const response = await fetchDesignSystemStaticResponse(designSystemId, filePath, workspaceContext);
+    await response.body?.cancel();
+    return response.ok ? designSystemResponseUrl(response) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDesignSystemStaticText(
   designSystemId: string,
   filePath: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   try {
-    const response = await fetch(designSystemStaticUrl(designSystemId, filePath, workspaceContext), {
-      cache: 'no-store',
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-    });
+    const response = await fetchDesignSystemStaticResponse(designSystemId, filePath, workspaceContext);
     return response.ok ? await response.text() : null;
   } catch {
     return null;
@@ -3692,7 +3719,7 @@ export async function fetchDesignSystemShowcase(
       { headers: { ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}), 'x-od-design-system-preview': '1' } },
     );
     if (!resp.ok) return null;
-    return { html: await resp.text(), baseHref: resp.url };
+    return { html: await resp.text(), baseHref: designSystemResponseUrl(resp) };
   } catch {
     return null;
   }

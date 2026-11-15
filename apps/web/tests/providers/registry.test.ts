@@ -24,6 +24,8 @@ import {
   fetchDesignTemplates,
   fetchDesignSystems,
   fetchDesignSystemShowcase,
+  fetchDesignSystemStaticUrl,
+  fetchDesignSystemStaticText,
   fetchPromptTemplates,
   fetchPreviewComments,
   fetchCloudflarePagesZones,
@@ -2609,6 +2611,15 @@ describe('OPEND-3894 comment reads distinguish errors from empty success', () =>
 describe('design-system showcase document base', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('uses canonical response metadata when the packaged protocol hides redirect URLs', async () => {
+    const html = '<link rel="stylesheet" href="../tokens.css">';
+    const location = '/api/design-systems/user%3Ademo/static/previews/opaque-scope/files/system/kit.html';
+    const response = new Response(html, { headers: { 'Content-Location': location } });
+    Object.defineProperty(response, 'url', { value: 'od://app/api/design-systems/user%3Ademo/showcase' });
+    vi.stubGlobal('fetch', vi.fn(async () => response));
+    expect(await fetchDesignSystemShowcase('user:demo')).toEqual({ html, baseHref: `od://app${location}` });
+  });
+
   it('retains the final scoped package URL for srcdoc consumers', async () => {
     const html = '<link rel="stylesheet" href="../tokens.css">';
     const baseHref = 'http://localhost/api/design-systems/user%3Ademo/static/previews/opaque-scope/files/system/kit.html';
@@ -2619,5 +2630,38 @@ describe('design-system showcase document base', () => {
     expect(fetch).toHaveBeenCalledWith('/api/design-systems/user%3Ademo/showcase', {
       headers: { 'x-od-design-system-preview': '1' },
     });
+  });
+});
+
+
+describe('design-system static host reads', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('resolves an authorized canonical URL before a direct packaged navigation', async () => {
+    const location = '/api/design-systems/user%3Ademo/static/previews/scope/files/pages/preview.html';
+    const response = new Response('<h1>Preview</h1>', { headers: { 'Content-Location': location } });
+    Object.defineProperty(response, 'url', { value: 'od://app/api/design-systems/user%3Ademo/static?path=pages%2Fpreview.html' });
+    vi.stubGlobal('fetch', vi.fn(async () => response));
+    expect(await fetchDesignSystemStaticUrl('user:demo', 'pages/preview.html')).toBe(`od://app${location}`);
+    expect(fetch).toHaveBeenCalledWith('/api/design-systems/user%3Ademo/static?path=pages%2Fpreview.html', {
+      cache: 'no-store', headers: { 'x-od-design-system-preview': '1' },
+    });
+    expect(response.bodyUsed).toBe(true);
+  });
+
+  it('marks static text reads as host reads while preserving workspace headers', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('body')));
+    expect(await fetchDesignSystemStaticText('user:demo', 'DESIGN.md', personalWorkspaceContext())).toBe('body');
+    expect(fetch).toHaveBeenCalledWith(expect.any(String), {
+      cache: 'no-store', headers: expect.objectContaining({
+        'x-od-design-system-preview': '1',
+        'x-od-workspace-id': personalWorkspaceContext().workspaceId,
+      }),
+    });
+  });
+
+  it.each([403, 404, 500])('does not expose a navigation URL after HTTP %i', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status })));
+    expect(await fetchDesignSystemStaticUrl('user:demo', 'preview.html')).toBeNull();
   });
 });
