@@ -248,6 +248,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'reasonix';
     case 'mimo':
       return 'mimo';
+    case 'minimax':
+      return 'minimax';
     case 'atomcode':
       return 'atomcode';
     case 'byok-opencode':

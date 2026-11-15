@@ -6,6 +6,7 @@ const AGENT_LABELS: Record<string, string> = {
   devin: 'Devin',
   gemini: 'Gemini',
   kimi: 'Kimi CLI',
+  minimax: 'MiniMax Code',
   kiro: 'Kiro',
   opencode: 'OpenCode',
   amr: 'OpenDesign',

@@ -41,6 +41,25 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-mono');
   });
 
+  it('renders MiniMax Code with the same brand mark as the MiniMax model icon', () => {
+    // The `minimax` runtime runs the `mcode` CLI. Its agent icon reuses the
+    // MiniMax mark already shipped for model rows so both surfaces match.
+    const agentSvg = readFileSync(
+      new URL('../../public/agent-icons/minimax.svg', import.meta.url),
+      'utf8',
+    );
+    const modelSvg = readFileSync(
+      new URL('../../public/model-icons/minimax.svg', import.meta.url),
+      'utf8',
+    );
+    expect(agentSvg).toMatch(/^<svg\b/);
+    expect(agentSvg).toBe(modelSvg);
+
+    const markup = renderToStaticMarkup(<AgentIcon id="minimax" size={24} />);
+    expect(markup).toContain('src="/agent-icons/minimax.svg"');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
   it('renders Devin as a PNG (Cognition does not publish an SVG mark)', () => {
     const markup = renderToStaticMarkup(<AgentIcon id="devin" size={24} />);
 

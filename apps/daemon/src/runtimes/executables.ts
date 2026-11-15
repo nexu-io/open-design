@@ -29,6 +29,7 @@ const AGENT_BIN_ENV_KEYS = new Map<string, string>([
   ['kiro', 'KIRO_BIN'],
   ['kilo', 'KILO_BIN'],
   ['mimo', 'MIMO_BIN'],
+  ['minimax', 'MINIMAX_BIN'],
   ['opencode', 'OPENCODE_BIN'],
   ['byok-opencode', 'OPENCODE_BIN'],
   ['pi', 'PI_BIN'],

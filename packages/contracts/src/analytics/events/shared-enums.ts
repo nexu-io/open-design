@@ -229,6 +229,7 @@ export type TrackingCliProviderId =
   | 'codebuddy'
   | 'reasonix'
   | 'mimo'
+  | 'minimax'
   | 'atomcode'
   | 'deepseek'
   | 'deepseek_harness'

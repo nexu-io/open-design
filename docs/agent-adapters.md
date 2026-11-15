@@ -142,7 +142,7 @@ definitions currently group by transport as follows:
 | `json-event-stream` | `codex`, `cursor-agent`, `opencode`, `mimo`, `byok-opencode` |
 | `copilot-stream-json` | `copilot` |
 | `qoder-stream-json` | `qoder` |
-| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `reasonix`, `trae-cli`, `vibe` |
+| `acp-json-rpc` | `amr` (Vela), `devin`, `hermes`, `kimi`, `kiro`, `kilo`, `minimax`, `reasonix`, `trae-cli`, `vibe` |
 | `pi-rpc` | `pi` |
 | `dsh-profile-jsonl` | `deepseek-harness` |
 | `plain` | `aider`, `antigravity`, `atomcode`, `deepseek`, `grok-build`, `qwen` |
@@ -436,7 +436,16 @@ authentication, and the boundary between REST and MCP.
   may expose its own reasoning-effort choices; OD validates and forwards only
   one of the choices advertised for that selected model.
 
-### 5.13 Plain stream artifact handoff
+### 5.13 MiniMax Code
+
+- Invocation: `mcode acp`, the ACP server entrypoint of the MiniMax Code CLI (`@minimax-ai/code`). The composed prompt travels over the daemon's shared ACP JSON-RPC transport, never through argv. The runtime id is `minimax`; the binary is `mcode`, overridable with `MINIMAX_BIN`.
+- Streaming: `acp-json-rpc`, through the same ACP event path as Kimi and the other ACP-backed adapters.
+- Models: dynamic. `session/new` returns the model list as a `configOptions` entry with category `model`, with ids such as `m:minimax:MiniMax-M3:v:thinking`. If discovery fails, the picker falls back to the CLI's default model.
+- MCP: `mcode acp` accepts stdio, http and sse MCP servers in `session/new`, so external MCP servers use the existing `acp-merge` path.
+- **Gotcha:** `mcode acp` boots its agent before it answers `session/new`. A cold start takes about 10 to 20 s, so model discovery uses a 45 s timeout instead of the 15 s ACP default. The Settings connection test has its own 45 s budget (`OD_CONNECTION_TEST_AGENT_TIMEOUT_MS`).
+- Login, account scope and model entitlement belong to the CLI (`mcode login`); the daemon does not run login flows or edit MiniMax Code configuration.
+
+### 5.14 Plain stream artifact handoff
 
 Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
 

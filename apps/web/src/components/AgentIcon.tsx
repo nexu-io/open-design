@@ -24,6 +24,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   deepseek: 'svg',
   reasonix: 'svg',
   mimo: 'svg',
+  minimax: 'svg',
   hermes: 'svg',
   'grok-build': 'svg',
   kimi: 'svg',

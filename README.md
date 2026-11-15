@@ -109,6 +109,7 @@ That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 an
 | [Cline](https://github.com/cline/cline) | ✅ Supported | `od mcp install cline` |
 | [Trae](https://www.trae.ai/) | ✅ Supported | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Supported | `od mcp install kimi` |
+| [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) | ✅ Native runtime | select **MiniMax Code** in Settings |
 | [Kiro](https://kiro.dev) | ✅ Supported | `od mcp install kiro` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Supported | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |

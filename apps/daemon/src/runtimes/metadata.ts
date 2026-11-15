@@ -75,6 +75,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://mimo.ai',
     docsUrl: 'https://mimo.ai/docs',
   },
+  minimax: {
+    installUrl: 'https://github.com/MiniMax-AI/minimax-code',
+    docsUrl: 'https://agent.minimax.io/docs/cli/quick-start',
+  },
   vibe: {
     installUrl: 'https://docs.mistral.ai',
     docsUrl: 'https://github.com/mistralai/vibe-acp',
