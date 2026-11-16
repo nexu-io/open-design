@@ -2457,6 +2457,20 @@ describe('saved project tabs cache', () => {
       .resolves.toEqual({ ...selection, updatedAt: 2, hasSavedState: true });
   });
 
+  it('restores a closed Design Files tab from the daemon tabs state', async () => {
+    vi.stubGlobal('window', { localStorage: { getItem: () => null } });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      tabs: [],
+      active: '__design_files__',
+      designFilesTabHidden: true,
+      hasSavedState: true,
+      updatedAt: 2,
+    })));
+
+    await expect(loadTabs('closed-design-files', null, { reconcileNewerCacheToDaemon: false }))
+      .resolves.toMatchObject({ designFilesTabHidden: true });
+  });
+
   it('marks an immediate local selection as saved before the debounced daemon write', () => {
     const store = new Map<string, string>();
     vi.stubGlobal('window', {

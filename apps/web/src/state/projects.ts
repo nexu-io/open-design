@@ -1747,6 +1747,7 @@ function normalizeTabsState(value: unknown): OpenTabsState | null {
     active: typeof record.active === 'string' ? record.active : null,
   };
   if (browserTabs && browserTabs.length > 0) state.browserTabs = browserTabs;
+  if (record.designFilesTabHidden === true) state.designFilesTabHidden = true;
   if (record.hasSavedState === true) state.hasSavedState = true;
   if (typeof record.updatedAt === 'number' && Number.isFinite(record.updatedAt)) {
     state.updatedAt = record.updatedAt;

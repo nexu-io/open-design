@@ -5935,6 +5935,7 @@ function normalizeProjectTabsState(value: unknown): ProjectTabsState | null {
     active: typeof record.active === 'string' ? record.active : null,
   };
   if (browserTabs.length > 0) state.browserTabs = browserTabs;
+  if (record.designFilesTabHidden === true) state.designFilesTabHidden = true;
   return state;
 }
 
