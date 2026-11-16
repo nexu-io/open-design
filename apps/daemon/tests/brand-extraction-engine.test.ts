@@ -459,6 +459,40 @@ describe('agent-driven brand extraction engine', () => {
     expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#2ab27b');
   });
 
+  it.each([
+    {
+      name: 'only framework styles',
+      blueSources: ['css-var:--bs-primary', 'css-var:--bs-link-color'],
+      additionalColors: [],
+    },
+    {
+      name: 'an unrelated colorful ornament',
+      blueSources: ['css-var:--bs-primary', 'css-var:--bs-link-color'],
+      additionalColors: [{ hex: '#7a3cff', count: 4, sources: ['prop:fill selector:.status-dot'] }],
+    },
+    {
+      name: 'an explicit brand token using the framework blue',
+      blueSources: ['css-var:--bs-primary', 'css-var:--brand'],
+      additionalColors: [{ hex: '#7a3cff', count: 4, sources: ['css-var:--accent'] }],
+    },
+  ])('keeps Bootstrap blue as the primary with $name', ({ blueSources, additionalColors, name }) => {
+    const url = 'https://bootstrap-defaults.test/';
+    const brand = brandFromMaterial({
+      ...programmaticPrefetchResult(url),
+      colors: [
+        { hex: '#0d6efd', count: 39, sources: blueSources },
+        { hex: '#212529', count: 20, sources: ['css-var:--bs-gray-900'] },
+        { hex: '#0a58ca', count: 3, sources: ['css-var:--bs-link-hover-color', 'prop:background-color selector:.btn-primary:hover'] },
+        ...additionalColors,
+      ],
+    }, url);
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#0d6efd');
+    if (name === 'only framework styles') {
+      expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#0a58ca');
+    }
+  });
+
   it('startBrandExtraction reserves the brand and seeds a live brand.html tab', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
 

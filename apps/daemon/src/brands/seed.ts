@@ -218,17 +218,36 @@ function chooseSecondary(candidates: SeedCandidate[], primaryHex: string): strin
   return best > -Infinity ? linkHex : '';
 }
 
+function hasSiteBrandSource(candidate: SeedCandidate): boolean {
+  return candidate.sources.some((source) =>
+    /^css-var:--(?:color-)?(?:brand|accent)(?:-(?:color|primary|accent))?(?:\s|$)/i.test(source) ||
+    /(?:^|\s)selector:\.(?:site-)?brand(?:-(?:color|primary|accent))?(?:[\s,.#>[+~]|$)/i.test(source) ||
+    /^prop:background(?:-color)? selector:\.site-header(?:[\s,]|$)/i.test(source),
+  );
+}
+
 /**
- * The candidates a brand color may be chosen from: stock framework colors are
- * set aside whenever the page measured any other chromatic color, so a site's
- * own color wins over the framework palette it never restyled. A page whose
- * only chromatic colors are framework defaults keeps them — they are still the
- * closest measured evidence, and the seed never invents a color.
+ * Keep the ordinary palette unless a stock primary has no site branding
+ * behind it and a measured color has its own brand token or selector.
  */
-function brandColorCandidates(candidates: SeedCandidate[]): SeedCandidate[] {
-  const own = candidates.filter((c) => !isFrameworkDefaultColor(c.hex));
-  const ownChromatic = own.some((c) => Number.isFinite(chromaticScore(c)));
-  return ownChromatic ? own : candidates;
+function chooseBrandAccents(candidates: SeedCandidate[]): Pick<BrandSeed, 'colorPrimary' | 'colorLink'> {
+  const primary =
+    explicitSemanticPrimary(candidates) ??
+    dominantDarkPrimary(candidates) ??
+    fallbackChromaticPrimary(candidates);
+
+  if (isFrameworkDefaultColor(primary)) {
+    const siteColors = candidates.filter((candidate) =>
+      Number.isFinite(chromaticScore(candidate)) && hasSiteBrandSource(candidate),
+    );
+    // A site can explicitly brand itself with the same hex as a framework.
+    if (siteColors.length > 0 && !siteColors.some((candidate) => candidate.hex === primary)) {
+      const colorPrimary = explicitSemanticPrimary(siteColors) ?? fallbackChromaticPrimary(siteColors);
+      return { colorPrimary, colorLink: chooseSecondary(siteColors, colorPrimary) };
+    }
+  }
+
+  return { colorPrimary: primary, colorLink: chooseSecondary(candidates, primary) };
 }
 
 /**
@@ -239,20 +258,7 @@ export function seedFromMaterial(material: PrefetchResult): BrandSeed {
   const candidates = (material.colors ?? [])
     .map((c) => ({ hex: normalizeHex(c.hex), count: c.count, sources: c.sources ?? [] }))
     .filter((c): c is SeedCandidate => c.hex !== null);
-  const brandCandidates = brandColorCandidates(candidates);
-
-  // ── primary: prefer explicit human-readable brand evidence. If a site is
-  // mostly monochrome and only has generic generated chromatic effects, allow
-  // a dominant near-black to be the brand primary. Otherwise fall back to the
-  // old chromatic heuristic.
-  const primaryHex =
-    explicitSemanticPrimary(brandCandidates) ??
-    dominantDarkPrimary(brandCandidates) ??
-    fallbackChromaticPrimary(brandCandidates);
-
-  // ── link/secondary: strongest remaining chromatic evidence, with logo and
-  // semantic sources preferred over generic generated decoration.
-  const linkHex = chooseSecondary(brandCandidates, primaryHex);
+  const accents = chooseBrandAccents(candidates);
 
   // ── light vs dark cast: count-weighted mean luminance over the measured
   // colors. Extremes are kept here on purpose — they reveal whether the canvas
@@ -272,8 +278,7 @@ export function seedFromMaterial(material: PrefetchResult): BrandSeed {
     material.fonts?.[0]?.family ?? material.fontFaceFamilies?.[0] ?? '';
 
   return {
-    colorPrimary: primaryHex,
-    colorLink: linkHex,
+    ...accents,
     colorTextBase: dark ? '#ffffff' : '#000000',
     colorBgBase: dark ? '#000000' : '#ffffff',
     primaryFontFamily,
