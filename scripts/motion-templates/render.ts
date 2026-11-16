@@ -7,7 +7,8 @@ const catalog = await loadCatalog();
 const items = orderedTemplates(catalog);
 const directory = path.join(repoRoot, 'docs/motion-templates');
 const html = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replace(/\s+/g, ' ').trim();
-const visibleCount = 21;
+const visibleCount = 20;
+const columns = 2;
 
 function excerpt(value: string, maxUnits: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
@@ -24,7 +25,7 @@ function excerpt(value: string, maxUnits: number): string {
 function cardContent(item: MotionReference, locale: Locale): string {
   const metadata = [item.brand, item.code].filter(Boolean).join(' · ');
   return [
-    '<td width="33%" valign="top">',
+    '<td width="50%" valign="top">',
     `<a href="${item.previewUrl}"><img src="${item.coverUrl}" alt="${html(item.title[locale])}" width="100%" loading="lazy"></a><br>`,
     `<b><a href="${item.pageUrl[locale]}" title="${html(item.title[locale])}">${html(excerpt(item.title[locale], 50))}</a></b><br>`,
     `<sub>${html(metadata)}</sub><br>`,
@@ -36,7 +37,7 @@ function cardContent(item: MotionReference, locale: Locale): string {
 function cardActions(item: MotionReference, locale: Locale): string {
   const zh = locale === 'zh-CN';
   return [
-    '<td width="33%" valign="top">',
+    '<td width="50%" valign="top">',
     '<sub>',
     '',
     '```markdown',
@@ -51,14 +52,14 @@ function cardActions(item: MotionReference, locale: Locale): string {
 
 function grid(entries: MotionReference[], locale: Locale): string {
   const rows: string[] = [];
-  for (let offset = 0; offset < entries.length; offset += 3) {
+  for (let offset = 0; offset < entries.length; offset += columns) {
     if (offset > 0) rows.push('');
     rows.push('<table>');
-    const row = entries.slice(offset, offset + 3);
+    const row = entries.slice(offset, offset + columns);
     for (const renderCell of [cardContent, cardActions]) {
       // Single-row groups keep GitHub's striped table background distinct from code blocks.
       rows.push('<tbody>', '<tr>', ...row.map(item => renderCell(item, locale)));
-      for (let index = row.length; index < 3; index += 1) rows.push('<td width="33%" valign="top"></td>');
+      for (let index = row.length; index < columns; index += 1) rows.push('<td width="50%" valign="top"></td>');
       rows.push('</tr>', '</tbody>');
     }
     rows.push('</table>');
