@@ -2058,6 +2058,9 @@ async function migrateLegacyDesignSystemPackage(
   const title = normalizeTitle(metadata.title ?? firstHeading(body) ?? id);
   const summary = summarize(body) || 'A reusable OpenDesign design system.';
   const palette = normalizeSwatches(body);
+  // Agent-managed packages own their files: legacy renames still apply, but no
+  // placeholder catalogs or UI-kit components are written into them.
+  const writeScaffold = metadata.artifactMode !== 'agent-managed';
   const copyIfMissing = async (from: string, to: string): Promise<boolean> => {
     const fromPath = path.join(dir, ...from.split('/'));
     const toPath = path.join(dir, ...to.split('/'));
@@ -2107,11 +2110,11 @@ async function migrateLegacyDesignSystemPackage(
   const hasLegacyArtifacts = await hasAnyLegacyDesignSystemArtifact(dir);
   if (!hasLegacyArtifacts && !migratedArtifacts.some(Boolean)) {
     await rewriteLegacyPackageDocumentationReferences(dir);
-    if (appKitExists) await writeDefaultUiKitComponentsIfMissing(dir, title);
+    if (appKitExists && writeScaffold) await writeDefaultUiKitComponentsIfMissing(dir, title);
     return;
   }
 
-  await Promise.all([
+  if (writeScaffold) await Promise.all([
     writeIfMissing(
       'preview/components-buttons.html',
       renderComponentCatalogHtml('Buttons', title, summary, palette),
