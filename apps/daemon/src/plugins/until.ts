@@ -1,6 +1,6 @@
 // `until` expression evaluator (spec §10.1 / §10.2). Closed vocabulary;
-// not arbitrary JS. The grammar is a comma-/`||`-separated disjunction of
-// AND-joined comparisons over four known signal variables:
+// not arbitrary JS. The grammar is an `||`-separated disjunction of
+// `&&`-joined comparisons over known signal variables, for example:
 //
 //   critique.score         number  — last critique-theater dim score (0..5)
 //   iterations             number  — completed devloop iterations on this stage
@@ -9,6 +9,8 @@
 //
 // Comparison operators: == != >= <= > < (booleans support ==/!= only).
 // Boolean literals: true / false. Number literals: any JSON number.
+// A bare boolean signal reads as `== true`, and parentheses group terms;
+// groups are flattened into the same disjunction of conjunctions.
 //
 // The evaluator is intentionally tiny so `od plugin doctor` can syntax-check
 // at install time without booting an interpreter, and the daemon refuses
@@ -59,28 +61,44 @@ export class UntilSyntaxError extends Error {
   }
 }
 
+// Flattening `(a || b) && (c || d) && …` multiplies the alternatives, so a
+// third-party manifest could otherwise make `od plugin doctor` expand an
+// exponential product at install time.
+const MAX_ALTERNATIVES = 64;
+
 export function parseUntil(source: string): UntilExpression {
   const trimmed = source.trim();
   if (trimmed.length === 0) {
     throw new UntilSyntaxError('empty until expression');
   }
-  const ors = splitTopLevel(trimmed, '||');
-  const any: UntilComparison[][] = [];
-  for (const orTerm of ors) {
-    const ands = splitTopLevel(orTerm, '&&');
-    const inner: UntilComparison[] = [];
-    for (const andTerm of ands) {
-      inner.push(parseComparison(andTerm.trim()));
-    }
-    if (inner.length === 0) {
-      throw new UntilSyntaxError(`empty conjunction in "${source}"`);
-    }
-    any.push(inner);
-  }
+  return { any: parseDisjunction(trimmed, source) };
+}
+
+function parseDisjunction(input: string, source: string): UntilComparison[][] {
+  const any = splitTopLevel(input, '||').flatMap((orTerm) => parseConjunction(orTerm, source));
   if (any.length === 0) {
     throw new UntilSyntaxError(`no terms in "${source}"`);
   }
-  return { any };
+  return any;
+}
+
+// A conjunction of groups distributes into one conjunction per combination:
+// `(a || b) && c` becomes `(a && c) || (b && c)`.
+function parseConjunction(input: string, source: string): UntilComparison[][] {
+  let product: UntilComparison[][] = [[]];
+  for (const andTerm of splitTopLevel(input, '&&')) {
+    const group = stripOuterParens(andTerm);
+    const alternatives = group === andTerm
+      ? [[parseComparison(andTerm)]]
+      : parseDisjunction(group, source);
+    if (product.length * alternatives.length > MAX_ALTERNATIVES) {
+      throw new UntilSyntaxError(
+        `"${source}" expands to more than ${MAX_ALTERNATIVES} alternatives`,
+      );
+    }
+    product = product.flatMap((left) => alternatives.map((right) => [...left, ...right]));
+  }
+  return product;
 }
 
 function splitTopLevel(input: string, sep: '||' | '&&'): string[] {
@@ -101,11 +119,13 @@ function splitTopLevel(input: string, sep: '||' | '&&'): string[] {
   return parts.map((p) => p.trim()).filter((p) => p.length > 0);
 }
 
-function parseComparison(raw: string): UntilComparison {
-  const expression = stripOuterParens(raw).trim();
+function parseComparison(expression: string): UntilComparison {
   const opMatch = expression.match(/(==|!=|>=|<=|>|<)/);
   if (!opMatch || opMatch.index === undefined) {
-    throw new UntilSyntaxError(`expected comparison operator in "${raw}"`);
+    if (SIGNAL_KINDS[expression as keyof UntilSignals] === 'boolean') {
+      return { signal: expression as keyof UntilSignals, op: '==', value: true };
+    }
+    throw new UntilSyntaxError(`expected comparison operator in "${expression}"`);
   }
   const op = opMatch[0] as UntilOp;
   const lhs = expression.slice(0, opMatch.index).trim();
