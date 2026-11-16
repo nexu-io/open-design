@@ -1,3 +1,5 @@
+import { readdir, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { ShareAliasIdentityMismatchError, type createShareAliasReservations } from './share-alias-reservation.js';
 import { currentFileSharePublication, type ProjectShareState } from './vela-project-share-state.js';
 import type { PublicFilePublicationScope, PublicFilePublicationStore } from './public-file-publication-store.js';
@@ -9,6 +11,32 @@ export async function assertNoEmptyFiles(root: string): Promise<void> {
   const empty = await findEmptyFiles(root);
   if (empty.length > 0) {
     throw new Error(`cannot share tree: zero-byte file(s) not supported: ${empty.join(", ")}`);
+  }
+}
+
+/** Recursively lists every 0-byte regular file under `root`. */
+export async function findEmptyFiles(root: string): Promise<string[]> {
+  const empty: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile() && (await stat(full)).size === 0) {
+        empty.push(full);
+      }
+    }
+  }
+  await walk(root);
+  return empty;
+}
+
+/** Rejects a resource push when `root` contains any 0-byte file, naming each path. */
+export async function assertNoEmptyFiles(root: string): Promise<void> {
+  const empty = await findEmptyFiles(root);
+  if (empty.length > 0) {
+    throw new Error(`Cannot push resource: ${empty.length} empty file(s) found: ${empty.join(', ')}`);
   }
 }
 
