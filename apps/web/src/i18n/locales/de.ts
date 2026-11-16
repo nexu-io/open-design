@@ -3013,6 +3013,8 @@ export const de: Dict = {
   'designFiles.empty': 'Kreationen erscheinen hier',
   'designFiles.buildingPreview': 'Vollbildvorschau',
   'designFiles.syncing': 'Dateien werden vom Team synchronisiert…',
+  'designFiles.loadFailed': 'Die Dateien dieses Projekts konnten nicht geladen werden.',
+  'designFiles.retry': 'Erneut versuchen',
   'designFiles.refresh': 'Aktualisieren',
   'designFiles.delete': 'Löschen',
   'designFiles.searchPlaceholder': 'Dateien suchen…',

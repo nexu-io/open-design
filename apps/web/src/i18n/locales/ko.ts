@@ -3002,6 +3002,8 @@ export const ko: Dict = {
   'designFiles.empty': '여기에 작업물이 표시됩니다',
   'designFiles.buildingPreview': '전체 화면 미리보기',
   'designFiles.syncing': '팀에서 공유한 파일을 동기화하는 중…',
+  'designFiles.loadFailed': '이 프로젝트의 파일을 불러오지 못했습니다.',
+  'designFiles.retry': '다시 시도',
   'designFiles.refresh': '새로고침',
   'designFiles.delete': '삭제',
   'designFiles.searchPlaceholder': '파일 검색…',

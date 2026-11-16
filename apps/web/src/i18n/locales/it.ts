@@ -3002,6 +3002,8 @@ export const it: Dict = {
   'designFiles.empty': 'Le creazioni appariranno qui',
   'designFiles.buildingPreview': 'Anteprima intera',
   'designFiles.syncing': 'Sincronizzazione dei file condivisi dal team…',
+  'designFiles.loadFailed': 'Impossibile caricare i file di questo progetto.',
+  'designFiles.retry': 'Riprova',
   'designFiles.refresh': 'Aggiorna',
   'designFiles.delete': 'Elimina',
   'designFiles.searchPlaceholder': 'Cerca file…',

@@ -3013,6 +3013,8 @@ export const ar: Dict = {
   'designFiles.empty': 'ستظهر الإبداعات هنا',
   'designFiles.buildingPreview': 'معاينة بملء الشاشة',
   'designFiles.syncing': 'جارٍ مزامنة الملفات المشتركة مع الفريق…',
+  'designFiles.loadFailed': 'تعذّر تحميل ملفات هذا المشروع.',
+  'designFiles.retry': 'إعادة المحاولة',
   'designFiles.refresh': 'تحديث',
   'designFiles.delete': 'حذف',
   'designFiles.searchPlaceholder': 'بحث في الملفات...',

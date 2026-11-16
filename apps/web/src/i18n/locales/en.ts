@@ -3024,6 +3024,8 @@ export const en: Dict = {
   'designFiles.empty': 'Creations will appear here',
   'designFiles.buildingPreview': 'Full preview',
   'designFiles.syncing': 'Syncing files from the team…',
+  'designFiles.loadFailed': 'Couldn\'t load this project\'s files.',
+  'designFiles.retry': 'Retry',
   'designFiles.refresh': 'Refresh',
   'designFiles.delete': 'Delete',
   'designFiles.searchPlaceholder': 'Search files…',

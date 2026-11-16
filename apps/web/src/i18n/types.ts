@@ -3908,6 +3908,8 @@ export interface Dict {
   'designFiles.empty': string;
   'designFiles.buildingPreview': string;
   'designFiles.syncing': string;
+  'designFiles.loadFailed': string;
+  'designFiles.retry': string;
   'designFiles.refresh': string;
   'designFiles.delete': string;
   'designFiles.searchPlaceholder': string;

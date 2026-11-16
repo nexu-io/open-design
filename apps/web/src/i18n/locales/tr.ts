@@ -3002,6 +3002,8 @@ export const tr: Dict = {
   'designFiles.empty': 'Eserler burada görünecek',
   'designFiles.buildingPreview': 'Tam ekran önizleme',
   'designFiles.syncing': 'Ekibin paylaştığı dosyalar senkronize ediliyor…',
+  'designFiles.loadFailed': 'Bu projenin dosyaları yüklenemedi.',
+  'designFiles.retry': 'Yeniden dene',
   'designFiles.refresh': 'Yenile',
   'designFiles.delete': 'Sil',
   'designFiles.searchPlaceholder': 'Dosyaları ara…',
