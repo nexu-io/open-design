@@ -459,28 +459,34 @@ describe('agent-driven brand extraction engine', () => {
     expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#2ab27b');
   });
 
-  it.each(['--primary', '--color-primary', '--primary-color'])(
-    'prefers a site-defined %s over Bootstrap 5 defaults',
-    (token) => {
+  it.each([
+    ['--primary', '#e4572e'],
+    ['--color-primary', '#e4572e'],
+    ['--primary-color', '#e4572e'],
+    ['--primary', '#dc3545'],
+    ['--color-primary', '#007bff'],
+  ])(
+    'prefers a site-defined %s of %s over Bootstrap 5 defaults',
+    (token, hex) => {
       const url = 'https://bootstrap-site.test/';
       const brand = brandFromMaterial({
         ...programmaticPrefetchResult(url),
         colors: [
           { hex: '#0d6efd', count: 39, sources: ['css-var:--bs-primary', 'css-var:--bs-link-color'] },
-          { hex: '#e4572e', count: 3, sources: [`css-var:${token}`] },
+          { hex, count: 3, sources: [`css-var:${token}`] },
         ],
       }, url);
 
-      expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#e4572e');
+      expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe(hex);
     },
   );
 
-  it('allows an explicit brand token to replace the stock Bootstrap 4 --primary', () => {
+  it.each(['#007bff', '#3490dc'])('allows a brand token to replace stock --primary %s', (hex) => {
     const url = 'https://bootstrap4-site.test/';
     const brand = brandFromMaterial({
       ...programmaticPrefetchResult(url),
       colors: [
-        { hex: '#007bff', count: 39, sources: ['css-var:--primary', 'prop:background-color selector:.btn-primary'] },
+        { hex, count: 39, sources: ['css-var:--primary', 'prop:background-color selector:.btn-primary'] },
         { hex: '#e4572e', count: 3, sources: ['css-var:--brand'] },
       ],
     }, url);

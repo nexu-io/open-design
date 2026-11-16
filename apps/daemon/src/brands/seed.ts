@@ -219,12 +219,12 @@ function chooseSecondary(candidates: SeedCandidate[], primaryHex: string): strin
 }
 
 function hasSiteBrandSource(candidate: SeedCandidate): boolean {
-  // Bootstrap 4 also declares an unprefixed --primary. A generic primary
-  // token alone cannot establish ownership of a known framework color.
-  const isStockColor = isFrameworkDefaultColor(candidate.hex);
+  // Bootstrap 4 and its stock Laravel theme ship these exact --primary values.
+  const isBootstrap4Primary = candidate.hex === '#007bff' || candidate.hex === '#3490dc';
   return candidate.sources.some((source) =>
     /^css-var:--(?:color-)?(?:brand|accent)(?:-(?:color|primary|accent))?(?:\s|$)/i.test(source) ||
-    (!isStockColor && /^css-var:--(?:color-primary|primary(?:-color)?)(?:\s|$)/i.test(source)) ||
+    /^css-var:--(?:color-primary|primary-color)(?:\s|$)/i.test(source) ||
+    (!isBootstrap4Primary && /^css-var:--primary(?:\s|$)/i.test(source)) ||
     /(?:^|\s)selector:\.(?:site-)?brand(?:-(?:color|primary|accent))?(?:[\s,.#>[+~]|$)/i.test(source) ||
     /^prop:background(?:-color)? selector:\.site-header(?:[\s,]|$)/i.test(source),
   );
