@@ -2846,6 +2846,10 @@ export function ProjectView({
   const committedFilesRefreshKeyRef = useRef(committedFilesRefreshKey);
   committedFilesRefreshKeyRef.current = committedFilesRefreshKey;
   const projectFilesRef = useRef<ProjectFile[]>([]);
+  // Whether the newest file-list read failed (transport error, non-2xx,
+  // malformed body). Tracked apart from the snapshot so a read that could not
+  // be completed is never mistaken for an authoritative empty project (#9489).
+  const [filesListFailed, setFilesListFailed] = useState(false);
   // A workspace manual save is explicit caller evidence, not a property of
   // every browser POST (chat artifact persistence uses that API too).
   const manualFileWritesByRunRef = useRef(new Map<AbortController, {
@@ -4903,9 +4907,11 @@ export function ProjectView({
       // A transport/HTTP failure is not an authoritative empty directory.
       // Keep the last accepted snapshot and generation, while preserving the
       // refresh helper's historical resolved-list contract for its callers.
+      if (requestSeq === projectFilesRequestSeqRef.current) setFilesListFailed(true);
       return projectFilesRef.current;
     }
     if (requestSeq === projectFilesRequestSeqRef.current) {
+      setFilesListFailed(false);
       const acceptedGeneration = projectFilesGenerationRef.current + 1;
       projectFilesGenerationRef.current = acceptedGeneration;
       projectFilesRef.current = next;
@@ -15146,6 +15152,7 @@ export function ProjectView({
           viewerOnly={projectMutationReadOnly}
           materializationPending={projectCollab.materializationPending}
           filesAuthoritative={committedFilesGeneration > 0}
+          filesListFailed={filesListFailed}
           emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
           projectReadsHeld={projectReadsHeld}
           readonlyNotice={

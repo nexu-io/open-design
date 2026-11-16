@@ -398,6 +398,8 @@ interface Props {
   materializationPending?: boolean;
   /** See DesignFilesPanel's `filesAuthoritative`. */
   filesAuthoritative?: boolean;
+  /** See DesignFilesPanel's `filesListFailed`. */
+  filesListFailed?: boolean;
   /**
    * The project row does not exist on the daemon yet (a Home send whose create
    * has not answered, OPEND-3334): this workspace reads nothing of its own
@@ -1430,6 +1432,7 @@ export function FileWorkspace({
   viewerOnly = false,
   materializationPending = false,
   filesAuthoritative = true,
+  filesListFailed = false,
   emptyLookBeforeFirstListing = false,
   projectReadsHeld = false,
   readonlyNotice,
@@ -1437,6 +1440,11 @@ export function FileWorkspace({
 }: Props) {
   const refreshFilesWithoutResult = useCallback(async () => {
     await onRefreshFiles();
+  }, [onRefreshFiles]);
+  // A retry after a failed listing must reach the daemon again, not rejoin a
+  // shared read that is still inside its coalescing window.
+  const retryFilesListing = useCallback(async () => {
+    await onRefreshFiles({ fresh: true });
   }, [onRefreshFiles]);
   const { locale, t } = useI18n();
   const { workspaceContext } = useProjectCollabContext();
@@ -4476,6 +4484,8 @@ export function FileWorkspace({
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             filesAuthoritative={filesAuthoritative}
+            filesListFailed={filesListFailed}
+            onRetryFilesListing={retryFilesListing}
             emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
             rootDirName={rootDirName}
             reloading={reloading}
