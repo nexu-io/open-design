@@ -10,6 +10,7 @@
 //
 // No SeedToken / Ant-Design coupling — just plain hex strings + a family name.
 
+import { siteBrandColorSourceRank } from './color-sources.js';
 import { isFrameworkDefaultColor } from './framework-colors.js';
 import type { PrefetchResult } from './prefetch.js';
 
@@ -218,16 +219,17 @@ function chooseSecondary(candidates: SeedCandidate[], primaryHex: string): strin
   return best > -Infinity ? linkHex : '';
 }
 
-function hasSiteBrandSource(candidate: SeedCandidate): boolean {
-  // Bootstrap 4 and its stock Laravel theme ship these exact --primary values.
-  const isBootstrap4Primary = candidate.hex === '#007bff' || candidate.hex === '#3490dc';
-  return candidate.sources.some((source) =>
-    /^css-var:--(?:color-)?(?:brand|accent)(?:-(?:color|primary|accent))?(?:\s|$)/i.test(source) ||
-    /^css-var:--(?:color-primary|primary-color)(?:\s|$)/i.test(source) ||
-    (!isBootstrap4Primary && /^css-var:--primary(?:\s|$)/i.test(source)) ||
-    /(?:^|\s)selector:\.(?:site-)?brand(?:-(?:color|primary|accent))?(?:[\s,.#>[+~]|$)/i.test(source) ||
-    /^prop:background(?:-color)? selector:\.site-header(?:[\s,]|$)/i.test(source),
+function siteBrandRank(candidate: SeedCandidate, hasBootstrap5Primary: boolean): number {
+  // A bare --primary matching a Bootstrap 4 or Laravel default is ambiguous.
+  // Bootstrap 5 uses --bs-primary, while the older palette also ships --blue.
+  const isLegacyBlue = candidate.hex === '#007bff' || candidate.hex === '#3490dc';
+  const isLegacyPrimary = isLegacyBlue && (
+    !hasBootstrap5Primary || candidate.sources.some((source) => /^css-var:--blue(?:\s|$)/i.test(source))
   );
+  return candidate.sources.reduce((best, source) => {
+    if (isLegacyPrimary && /^css-var:--primary(?:\s|$)/i.test(source)) return best;
+    return Math.max(best, siteBrandColorSourceRank(source));
+  }, 0);
 }
 
 /**
@@ -241,13 +243,21 @@ function chooseBrandAccents(candidates: SeedCandidate[]): Pick<BrandSeed, 'color
     fallbackChromaticPrimary(candidates);
 
   if (isFrameworkDefaultColor(primary)) {
-    const siteColors = candidates.filter((candidate) =>
-      Number.isFinite(chromaticScore(candidate)) && hasSiteBrandSource(candidate),
+    const hasBootstrap5Primary = candidates.some((candidate) =>
+      candidate.sources.some((source) => /^css-var:--bs-primary(?:\s|$)/i.test(source)),
     );
+    const siteColors = candidates
+      .filter((candidate) => Number.isFinite(chromaticScore(candidate)))
+      .map((candidate) => ({ candidate, rank: siteBrandRank(candidate, hasBootstrap5Primary) }))
+      .filter(({ rank }) => rank > 0)
+      .sort((a, b) => b.rank - a.rank);
+    const primaryColors = siteColors
+      .filter(({ rank }) => rank === siteColors[0]?.rank)
+      .map(({ candidate }) => candidate);
     // A site can explicitly brand itself with the same hex as a framework.
-    if (siteColors.length > 0 && !siteColors.some((candidate) => candidate.hex === primary)) {
-      const colorPrimary = explicitSemanticPrimary(siteColors) ?? fallbackChromaticPrimary(siteColors);
-      return { colorPrimary, colorLink: chooseSecondary(siteColors, colorPrimary) };
+    if (primaryColors.length > 0 && !primaryColors.some((candidate) => candidate.hex === primary)) {
+      const colorPrimary = explicitSemanticPrimary(primaryColors) ?? fallbackChromaticPrimary(primaryColors);
+      return { colorPrimary, colorLink: chooseSecondary(siteColors.map(({ candidate }) => candidate), colorPrimary) };
     }
   }
 

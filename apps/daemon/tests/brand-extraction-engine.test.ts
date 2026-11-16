@@ -44,7 +44,7 @@ import {
   imageSize,
   type ImagerySlot,
 } from '../src/brands/imagery-fallback.js';
-import { isChallengePage, type PrefetchResult } from '../src/brands/prefetch.js';
+import { extractColors, isChallengePage, type PrefetchResult } from '../src/brands/prefetch.js';
 
 // Real repo skills root so the bundled brand-kit template resolves.
 const SKILLS_ROOT = path.resolve(
@@ -492,6 +492,24 @@ describe('agent-driven brand extraction engine', () => {
     }, url);
 
     expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#e4572e');
+  });
+
+  it.each([
+    ['#dc3545', ''],
+    ['#007bff', ''],
+    ['#e4572e', '--accent:#0d6efd;'],
+  ])('extracts site primary %s from CSS with many framework colors', (hex, extraCss) => {
+    const url = 'https://bootstrap-site.test/';
+    const frameworkCss = [
+      ':root{--bs-primary:#0d6efd;--bs-link-color:#0d6efd;--bs-danger:#dc3545}',
+      ...Array.from({length: 15}, (_, i) =>
+        `.palette-${i}{--bs-accent:#${(0x18489f + i).toString(16)};color:#dc3545}`,
+      ),
+    ].join('\n');
+    const colors = extractColors(`${frameworkCss}\n:root{${extraCss}--primary:${hex}}`);
+    const brand = brandFromMaterial({ ...programmaticPrefetchResult(url), colors }, url);
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe(hex);
   });
 
   it.each([

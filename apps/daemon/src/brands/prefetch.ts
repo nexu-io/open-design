@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { harvestFonts, type FontFile } from "./fonts.js";
 import { fetchExternalBrandAsset } from "./safe-fetch.js";
+import { siteBrandColorSourceRank } from "./color-sources.js";
 import { findRealElementRange, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
 /**
@@ -412,7 +413,9 @@ function sortColorCandidates(
     .map(([hex, value]): ColorCandidate => {
       const isHex = hex.startsWith("#") && hex.length === 7;
       const extreme = value.extreme ?? (isHex ? luma(hex) > 0.96 || luma(hex) < 0.04 : false);
-      const sources = [...value.sources].slice(0, 12);
+      const sources = [...value.sources]
+        .sort((a, b) => siteBrandColorSourceRank(b) - siteBrandColorSourceRank(a))
+        .slice(0, 12);
       return {
         hex,
         count: value.count,
@@ -424,7 +427,11 @@ function sortColorCandidates(
   // Keep high-signal brand evidence even when its literal appears only once or
   // twice. Then add the frequency-ranked chromatic set and a few extremes so
   // the agent still sees the site's actual black/white.
-  const highSignal = all.filter((c) => !c.extreme && hasHighSignalColorSource(c)).slice(0, 8);
+  const sourceRank = (c: ColorCandidate) => siteBrandColorSourceRank(c.sources?.[0] ?? "");
+  const highSignal = all
+    .filter((c) => !c.extreme && (sourceRank(c) > 0 || hasHighSignalColorSource(c)))
+    .sort((a, b) => sourceRank(b) - sourceRank(a))
+    .slice(0, 8);
   const chromatic = all.filter((c) => !c.extreme).slice(0, 15);
   const extremes = all.filter((c) => c.extreme).slice(0, 4);
   const out: ColorCandidate[] = [];
