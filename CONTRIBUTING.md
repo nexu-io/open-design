@@ -37,7 +37,7 @@ pnpm typecheck            # tsc -b --noEmit
 pnpm --filter @open-design/web build  # web package build when needed
 ```
 
-Node `~24` and pnpm `10.33.x` are required. `nvm` / `fnm` are optional; use `nvm install 24 && nvm use 24` or `fnm install 24 && fnm use 24` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for the common setup gotchas.
+Node `^24 || ^26` (LTS) and pnpm `10.33.x` are required (`.node-version` pins `24` for packaged/Docker builds). `nvm` / `fnm` are optional; use `nvm install 26 && nvm use 26` (or `24`) or `fnm install 26 && fnm use 26` if you prefer managing Node that way. macOS, Linux, and WSL2 are the primary paths. Windows native is supported; see [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) for the common setup gotchas.
 
 ## Docker Setup
 

@@ -19,5 +19,5 @@
     "@types/node": "24.12.2",
     "vitest": "4.1.6"
   },
-  "engines": {"node": "~24"}
+  "engines": {"node": "^24 || ^26"}
 }
