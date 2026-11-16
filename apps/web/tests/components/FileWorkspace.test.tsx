@@ -4912,6 +4912,80 @@ describe('FileWorkspace empty-project generation contract', () => {
     expect(screen.getByTestId('design-files-empty')).toBeTruthy();
   });
 
+  // #9489. A file list that could not be read is not an empty project: the
+  // read failed (aborted, timed out, non-2xx, malformed), so saying "no files"
+  // or spinning on "Loading…" forever are both wrong. Say the read failed and
+  // offer a retry that re-runs the authoritative listing.
+  it('shows a load error with a retry, and no empty-project CTAs, when the file list read failed', () => {
+    const onRefreshFiles = vi.fn();
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={onRefreshFiles}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+        filesListFailed
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-load-error')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-loading')).toBeNull();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+    expect(screen.queryByTestId('design-files-empty-new-sketch')).toBeNull();
+
+    onRefreshFiles.mockClear();
+    fireEvent.click(screen.getByTestId('design-files-load-error-retry'));
+    expect(onRefreshFiles).toHaveBeenCalledWith({ fresh: true });
+  });
+
+  it('replaces the inert empty look of a Home-created project with the load error when the first read failed', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+        emptyLookBeforeFirstListing
+        filesListFailed
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-load-error')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-empty-unconfirmed')).toBeNull();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  it('keeps the empty-project CTAs, and no load error, for a successfully returned empty list', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative
+        filesListFailed={false}
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    expect(screen.getByTestId('design-files-empty-new-sketch')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-load-error')).toBeNull();
+  });
+
   // OPEND-2283. Read-only is fail-closed while ownership is still unproven, and
   // that is correct — but the banner states a FACT ("this is a shared project"),
   // and during that window the fact is unknown. Entering your own personal
