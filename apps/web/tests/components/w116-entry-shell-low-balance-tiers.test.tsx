@@ -282,7 +282,7 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
   // 空钱包但硬拦让了位(T55)。项目页会给它一张 $0 的卡,首页没有流水可挂,
   // 所以这一档在首页同样是「什么都不显示、直接放行」——**不许**顺手拿硬拦
   // 那张弹窗去顶替,让位的意思就是不拦。
-  it('空钱包但 Design Plan 可用:首页同样静默放行', async () => {
+  it('空钱包但 Coding Plan 可用:首页同样静默放行', async () => {
     fundingBalance = '0';
     mockedCheckAmrBalanceGate.mockResolvedValue({
       kind: 'empty_not_blocked',

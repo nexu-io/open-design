@@ -65,7 +65,7 @@ it('quota help clamps to the viewport and closes on Escape, scroll and pointer e
 describe.each(['zh-CN', 'en'] as const)('K6 C-01 reset rows (U001/UI-002) — %s', locale => {
   function renderQuota(value: WorkspaceQuotaView) {
     render(<I18nProvider initial={locale}><WorkspaceQuotaPopover context={context} view={value} profile="local" /></I18nProvider>);
-    return within(screen.getByRole('region', { name: locale === 'en' ? 'Design Plan allowance' : 'Design Plan 额度' }));
+    return within(screen.getByRole('region', { name: locale === 'en' ? 'Coding Plan allowance' : 'Coding Plan 额度' }));
   }
   function expectQuotaWithoutReset(value: WorkspaceQuotaView, percent: number, count: number) {
     const plan = renderQuota(value);
@@ -141,7 +141,7 @@ describe('C-01 state and role matrix (VIEW-001/002/021)', () => {
   for (const [id, tier, balance, percent] of cases) {
     it.each(['owner', 'admin', 'member'] as const)(`${id} ${tier}: %s sees the shared amount and its role action`, role => {
       render(panel(view(tier, balance, percent), role));
-      expect(screen.getByRole('region', { name: 'Design Plan 额度' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Coding Plan 额度' })).toBeTruthy();
       expect(screen.getByRole('region', { name: '按量额度' })).toBeTruthy();
       expect(screen.getByText(`$${Number(balance).toFixed(2)}`)).toBeTruthy();
       expect(screen.queryAllByRole('progressbar').length).toBe(tier === 'go' ? 2 : 1);
@@ -195,7 +195,7 @@ it('E03 missing breakdown/modelRestriction/windows stays unavailable, never fake
   render(panel({ ...view('go'), windows: null, balanceUsd: null }));
   expect(within(screen.getByRole('region', { name: '按量额度' })).getByText('—')).toBeTruthy();
   expect(screen.queryByText('明细暂不可用')).toBeNull();
-  expect(within(screen.getByRole('region', { name: 'Design Plan 额度' })).getAllByText('暂未获取用量')).toHaveLength(2);
+  expect(within(screen.getByRole('region', { name: 'Coding Plan 额度' })).getAllByText('暂未获取用量')).toHaveLength(2);
   expect(screen.getByRole('button', { name: /性价比模型/ })).toBeTruthy();
   expect(screen.getByRole('button', { name: /顶级模型/ })).toBeTruthy();
   expect(screen.queryByText('5 小时')).toBeNull();
