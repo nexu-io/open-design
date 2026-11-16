@@ -64,25 +64,28 @@ export function parseUntil(source: string): UntilExpression {
   if (trimmed.length === 0) {
     throw new UntilSyntaxError('empty until expression');
   }
-  const ors = splitTopLevel(trimmed, '||');
   const any: UntilComparison[][] = [];
-  for (const orTerm of ors) {
-    const ands = splitTopLevel(orTerm, '&&');
+  for (const orTerm of splitTopLevel(trimmed, '||')) {
     const inner: UntilComparison[] = [];
-    for (const andTerm of ands) {
-      inner.push(parseComparison(andTerm.trim()));
-    }
-    if (inner.length === 0) {
-      throw new UntilSyntaxError(`empty conjunction in "${source}"`);
+    for (const andTerm of splitTopLevel(orTerm, '&&')) {
+      if (andTerm.length === 0) {
+        throw new UntilSyntaxError(
+          `missing operand in "${source}" — a logical operator needs a condition on both sides`,
+        );
+      }
+      inner.push(parseComparison(andTerm));
     }
     any.push(inner);
-  }
-  if (any.length === 0) {
-    throw new UntilSyntaxError(`no terms in "${source}"`);
   }
   return { any };
 }
 
+// Every operand is preserved, including empty ones. A leading, trailing, or
+// repeated `||` / `&&` leaves an operand missing, and filtering that empty
+// string away would let `iterations >= 3 ||` parse as the narrower
+// `iterations >= 3` — a malformed manifest passing validation and then
+// terminating its stage early. `parseUntil` turns the empty operand into a
+// syntax error instead, so this function always returns at least one term.
 function splitTopLevel(input: string, sep: '||' | '&&'): string[] {
   const parts: string[] = [];
   let cursor = 0;
@@ -98,7 +101,7 @@ function splitTopLevel(input: string, sep: '||' | '&&'): string[] {
     }
   }
   parts.push(input.slice(cursor));
-  return parts.map((p) => p.trim()).filter((p) => p.length > 0);
+  return parts.map((part) => part.trim());
 }
 
 function parseComparison(raw: string): UntilComparison {
