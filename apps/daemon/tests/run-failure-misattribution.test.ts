@@ -67,6 +67,37 @@ describe('AMR model catalog failure followed by the daemon tearing vela down', (
     expect(failure?.retryable).toBe(true);
   });
 
+  it('ignores an unrelated content-filter diagnostic on stderr', () => {
+    const message = 'AMR model catalog is temporarily unavailable. Please retry.';
+    const failure = classify({
+      error: message,
+      errorCode: 'UPSTREAM_UNAVAILABLE',
+      agentId: 'amr',
+      signal: 'SIGKILL',
+      events: [
+        { event: 'stderr', data: { chunk: 'Debug: diagnostic handlers registered: ContentFilterError, ConnectionError' } },
+        {
+          event: 'error',
+          data: {
+            message,
+            error: {
+              code: 'UPSTREAM_UNAVAILABLE',
+              message,
+              retryable: true,
+              details: { kind: 'model_catalog_unavailable', phase: 'session_load', retryable: true },
+            },
+          },
+        },
+        fatalClose,
+      ],
+    });
+    expect(failure).toMatchObject({
+      failure_detail: 'provider_routing_error',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
   it('still reports a bare forced kill as signal_killed', () => {
     const failure = classify({
       error: 'Agent process exited unexpectedly.',
@@ -83,12 +114,22 @@ describe('AMR model catalog failure followed by the daemon tearing vela down', (
 describe('provider content filter', () => {
   // 24 runs / 6 users on Claude Opus and Sonnet, 10/23-10/26, reported as fatal_rpc_error.
   it('is a non-retryable content_filtered policy rejection', () => {
+    const message =
+      'json-rpc id 4: opencode event stream: {"id":"evt_1","properties":{"error":{"data":{"message":"The response was blocked by the provider\'s content filter"},"name":"ContentFilterError"},"sessionID":"ses_1"},"type":"session.error"} (event=session.error, session=ses_1)';
     const failure = classify({
-      error:
-        'json-rpc id 4: opencode event stream: {"id":"evt_1","properties":{"error":{"data":{"message":"The response was blocked by the provider\'s content filter"},"name":"ContentFilterError"},"sessionID":"ses_1"},"type":"session.error"} (event=session.error, session=ses_1)',
+      error: 'Agent request failed.',
       errorCode: 'AGENT_EXECUTION_FAILED',
       agentId: 'amr',
-      events: [fatalClose],
+      events: [
+        {
+          event: 'error',
+          data: {
+            message,
+            error: { name: 'ContentFilterError', message },
+          },
+        },
+        fatalClose,
+      ],
     });
     expect(failure).toMatchObject({
       failure_detail: 'content_filtered',

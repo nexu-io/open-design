@@ -213,6 +213,24 @@ function collectFailureText(input: RunFailureClassificationInput): string {
   return parts.join('\n');
 }
 
+// Provider policy verdicts must come from the terminal status or an agent/error
+// event. Stderr is a diagnostic side channel and may contain an unrelated
+// warning from an earlier handler, so it cannot override a structured provider
+// failure from the same attempt.
+function collectProviderFailureText(input: RunFailureClassificationInput): string {
+  const parts: string[] = [];
+  const statusError = readString(input.status.error);
+  if (statusError) parts.push(statusError);
+  const events = input.events ?? [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const rec = events[i]!;
+    if (rec.event === 'error' || rec.event === 'agent') {
+      parts.push(...eventErrorText(rec.data));
+    }
+  }
+  return parts.join('\n');
+}
+
 function isHardQuotaText(text: string): boolean {
   // Standalone `\bquota\b` is intentionally absent: advisory phrases such as
   // "checking quota" in the daemon's own empty-output fallback message would
@@ -1153,8 +1171,10 @@ function classifyRunFailureBase(
   }
 
   // The provider refused to return the response because of its content policy.
-  // Retrying the same request is refused again.
-  if (isContentFilterText(text)) {
+  // Retrying the same request is refused again. Ignore stderr here: it is a
+  // diagnostic side channel and can mention a content-filter handler while a
+  // structured provider event reports a different terminal failure.
+  if (isContentFilterText(collectProviderFailureText({ ...input, events }))) {
     return classification(
       'upstream_unavailable',
       'content_filtered',
