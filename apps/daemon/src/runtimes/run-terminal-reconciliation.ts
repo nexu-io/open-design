@@ -33,6 +33,7 @@ import {
 } from './run-restart-recovery.js';
 import {
   beginRunTelemetryDelivery,
+  canRetryRunTelemetryDelivery,
   finalizeRunTelemetryDelivery,
   isRunTelemetryDeliveryCrashWindow,
   recordRunTelemetryDeliveryAttempt,
@@ -557,6 +558,7 @@ export async function reconcileDurableRunTerminals(
     const needsLangfuse = TERMINAL_STATUSES.has(state.status)
       && !state.langfuseCompletedAt
       && typeof state.telemetryDelivery?.finalizedAt !== 'number'
+      && canRetryRunTelemetryDelivery(state.telemetryDelivery)
       && (
         state.telemetryDelivery === undefined
         || state.telemetryDelivery.status === 'failed'

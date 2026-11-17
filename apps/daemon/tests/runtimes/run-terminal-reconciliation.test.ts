@@ -836,6 +836,74 @@ describe('durable run terminal reconciliation', () => {
       .not.toHaveProperty('finalizedAt');
   });
 
+  // Issue #9411: a delivery that keeps failing was re-sent on every boot,
+  // forever, re-reading the run's whole events.jsonl each time.
+  const writeFailedDelivery = (runId: string, delivery: Record<string, unknown>) => {
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1, id: runId, projectId: 'p1', conversationId: 'c1', assistantMessageId: 'm1',
+      agentId: 'codex', status: 'succeeded', createdAt: 1_000, updatedAt: 2_000,
+      telemetryDelivery: {
+        version: 1, idempotencyKey: `od-run-telemetry-v1-${runId}`, status: 'failed',
+        crashWindow: false, startedAt: 1_900, dropReason: 'network_error', ...delivery,
+      },
+    }));
+    fs.writeFileSync(path.join(runDir, 'events.jsonl'), '');
+    return runDir;
+  };
+  const failingReport = () => vi.fn(async (args: Record<string, unknown>) => {
+    // One try plus DEFAULT_FETCH_RETRIES = 1, as the real transport does.
+    (args.onDeliveryAttempt as (() => void) | undefined)?.();
+    (args.onDeliveryAttempt as (() => void) | undefined)?.();
+    return {
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed' as const,
+      langfuse_drop_reason: 'network_error' as const,
+      langfuse_attempt_count: 2,
+    };
+  });
+
+  it('stops retrying a failed delivery at boot once its attempt budget is spent', async () => {
+    const runDir = writeFailedDelivery('run-langfuse-exhausting', { attemptCount: 2 });
+    const reportLangfuse = failingReport();
+    const options = { analytics: { capture: vi.fn() }, appVersion: '0.15.1', db, reportLangfuse, runsLogDir: tmpDir };
+
+    for (let boot = 0; boot < 6; boot += 1) await reconcileDurableRunTerminals(options);
+
+    // 2 prior attempts + 3 boots x 2 = 8, then no further boot retries it.
+    expect(reportLangfuse).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).telemetryDelivery)
+      .toMatchObject({ status: 'failed', attemptCount: 8 });
+  });
+
+  it.each([
+    ['an exhausted attempt budget', { attemptCount: 8 }],
+    ['a permanent rejection', { attemptCount: 1, dropReason: 'relay_413' }],
+  ])('does not re-read events for a failed delivery with %s', async (_label, delivery) => {
+    const runDir = writeFailedDelivery('run-langfuse-settled', delivery);
+    const readFile = vi.spyOn(fs, 'readFileSync');
+    const reportLangfuse = failingReport();
+
+    await expect(reconcileDurableRunTerminals({
+      analytics: { capture: vi.fn() }, appVersion: '0.15.1', db, reportLangfuse, runsLogDir: tmpDir,
+    })).resolves.toMatchObject({ langfuseReplayed: 0 });
+
+    expect(reportLangfuse).not.toHaveBeenCalled();
+    expect(readFile).not.toHaveBeenCalledWith(path.join(runDir, 'events.jsonl'), 'utf8');
+  });
+
+  it('still retries a transient failure that has attempts left', async () => {
+    writeFailedDelivery('run-langfuse-transient', { attemptCount: 6, dropReason: 'relay_5xx' });
+    const reportLangfuse = failingReport();
+
+    await reconcileDurableRunTerminals({
+      analytics: { capture: vi.fn() }, appVersion: '0.15.1', db, reportLangfuse, runsLogDir: tmpDir,
+    });
+
+    expect(reportLangfuse).toHaveBeenCalledTimes(1);
+  });
+
   it('terminalizes mapped send-mode single-run recovery without a legacy network replay', async () => {
     const runId = 'run-task-rollout-upgrade';
     const runDir = path.join(tmpDir, runId);

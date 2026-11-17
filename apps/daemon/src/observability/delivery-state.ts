@@ -125,6 +125,49 @@ export function finalizeRunTelemetryDelivery(
   };
 }
 
+/**
+ * Drop reasons where the sink rejected the payload itself. Sending the same
+ * payload again cannot succeed, so these are never retried. Shared with the
+ * evidence outbox so both delivery paths agree on what is permanent.
+ */
+export const PERMANENT_TELEMETRY_DROP_REASONS: ReadonlySet<string> = new Set([
+  'payload_too_large',
+  'payload_build_error',
+  'langfuse_4xx',
+  'vela_400',
+  'vela_403',
+  'vela_413',
+  'relay_413',
+]);
+
+/**
+ * Startup replays stop once a run's telemetry has spent this many transport
+ * requests, counting the live delivery and every earlier replay. The check runs
+ * before a replay, so the final replay may overshoot by its own in-call retry.
+ * Matches the evidence outbox's default attempt cap.
+ */
+export const MAX_RUN_TELEMETRY_DELIVERY_ATTEMPTS = 8;
+
+/**
+ * Invariant: a delivery that has not finalized is retried at startup only
+ * while a retry can still succeed and its attempt budget is not spent.
+ *
+ * Without this, a run whose telemetry can never be delivered (offline,
+ * blocked relay, permanent rejection) was replayed on every boot for as long
+ * as it stayed in `data/runs`, and each replay re-read its whole event log
+ * (issue #9411). A never-attempted delivery stays eligible.
+ */
+export function canRetryRunTelemetryDelivery(
+  state: RunTelemetryDeliveryStateV1 | null | undefined,
+): boolean {
+  if (!state) return true;
+  if (typeof state.finalizedAt === 'number') return false;
+  if (typeof state.dropReason === 'string' && PERMANENT_TELEMETRY_DROP_REASONS.has(state.dropReason)) {
+    return false;
+  }
+  return previousAttemptCount(state) < MAX_RUN_TELEMETRY_DELIVERY_ATTEMPTS;
+}
+
 export function isRunTelemetryDeliveryCrashWindow(
   state: RunTelemetryDeliveryStateV1 | null | undefined,
 ): boolean {
