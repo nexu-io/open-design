@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -59,10 +59,33 @@ export function encodeAntigravityStdinPrompt(prompt: string): string {
 // `availableModels` cache miss + empty headless output, which surfaces
 // to the user as a generic "empty response" error.
 //
-// The 8 model labels mirror what `Switch Model` in agy's TUI lists for
-// consumer-tier accounts as of 2026-05-28. The set is small and stable
-// enough to ship statically until upstream adds a programmatic
-// `agy models` subcommand (also tracked under issue #35).
+// `agy models` prints `<slug>\t<Display Label>` per line when piped
+// (or space-aligned columns on a TTY). `parseAntigravityModels`
+// extracts the display label column that `settings.json` and
+// `Propagating selected model override to backend: label="<model>"`
+// expect, while `fallbackModels` provides a static baseline when
+// `agy models` is unavailable or unauthenticated.
+const AGY_ANSI_ESCAPE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+const AGY_MODEL_LINE = /^[a-z0-9][a-z0-9._-]*(?:\t+|\s{2,})(.+?)\s*$/i;
+
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const lines = String(stdout || '').split(/[\r\n]+/);
+  const models: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>(['default']);
+  for (const rawLine of lines) {
+    const clean = rawLine.replace(AGY_ANSI_ESCAPE, '').trim();
+    const match = AGY_MODEL_LINE.exec(clean);
+    if (!match) continue;
+    const label = match[1]!.trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    models.push({ id: label, label });
+  }
+  return models.length > 1 ? models : null;
+}
+
 const ANTIGRAVITY_SETTINGS_PATH = join(
   homedir(),
   '.gemini',
@@ -200,18 +223,30 @@ export const antigravityAgentDef = {
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
   },
+  listModels: {
+    args: ['models'],
+    timeoutMs: 15_000,
+    parse: parseAntigravityModels,
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
-    { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
-    { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
-    {
-      id: 'Claude Sonnet 4.6 (Thinking)',
-      label: 'Claude Sonnet 4.6 (Thinking)',
-    },
-    { id: 'Claude Opus 4.6 (Thinking)', label: 'Claude Opus 4.6 (Thinking)' },
+    { id: 'Gemini 4 Argon (High)', label: 'Gemini 4 Argon (High)' },
+    { id: 'Gemini 4 Argon (Medium)', label: 'Gemini 4 Argon (Medium)' },
+    { id: 'Gemini 4 Argon (Low)', label: 'Gemini 4 Argon (Low)' },
+    { id: 'Gemini 4 Hydrogen (XHigh)', label: 'Gemini 4 Hydrogen (XHigh)' },
+    { id: 'Gemini 4 Hydrogen (High)', label: 'Gemini 4 Hydrogen (High)' },
+    { id: 'Gemini 4 Hydrogen (Medium)', label: 'Gemini 4 Hydrogen (Medium)' },
+    { id: 'Gemini 4 Hydrogen (Low)', label: 'Gemini 4 Hydrogen (Low)' },
+    { id: 'Orchestrator (Argon)', label: 'Orchestrator (Argon)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Claude Opus 5.5 (High)', label: 'Claude Opus 5.5 (High)' },
+    { id: 'Claude Opus 5.5 (Medium)', label: 'Claude Opus 5.5 (Medium)' },
+    { id: 'Claude Opus 5.5 (Low)', label: 'Claude Opus 5.5 (Low)' },
+    { id: 'Claude Sonnet 5.5 (High)', label: 'Claude Sonnet 5.5 (High)' },
+    { id: 'Claude Sonnet 5.5 (Medium)', label: 'Claude Sonnet 5.5 (Medium)' },
+    { id: 'Claude Sonnet 5.5 (Low)', label: 'Claude Sonnet 5.5 (Low)' },
     { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
   ],
   supportsCustomModel: false,
