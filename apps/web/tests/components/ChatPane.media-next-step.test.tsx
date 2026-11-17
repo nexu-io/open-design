@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import { I18nProvider } from '../../src/i18n';
 import type { AppConfig, ChatMessage } from '../../src/types';
+import { typeAndSettle } from '../helpers/lexical-composer';
 
 afterEach(() => {
   cleanup();
@@ -131,4 +132,62 @@ test('does not offer image actions for an empty output file', () => {
   message.producedFiles![0]!.size = 0;
   renderChat(message);
   expect(screen.queryByTestId('next-step-suggestions')).toBeNull();
+});
+
+// Review findings on the multi-select toggle (#9518), end to end through the real
+// ChatPane + composer.
+test('image fallback suggestion: select, deselect and reselect leave one clean copy', async () => {
+  renderChat(deliveredImage());
+  const actions = screen.getByTestId('next-step-suggestions');
+  const row = within(actions).getByRole('button', { name: '继续优化' });
+  const draft = () => screen.getByRole('combobox').textContent ?? '';
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+  expect(draft()).toContain('继续优化');
+  expect(draft()).toContain('casual-fashion-grid.png');
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+  expect(draft()).not.toContain('继续优化');
+  expect(draft()).not.toContain('casual-fashion-grid.png');
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+  expect(draft().match(/casual-fashion-grid\.png/g)).toHaveLength(1);
+});
+
+test('a pressed suggestion un-presses when the draft is cleared by hand and re-selects in one click', async () => {
+  const message = deliveredImage();
+  const suggestion = '保留姿势并改成蓝色背景';
+  message.events?.push({ kind: 'next_steps', suggestions: [suggestion, '换成横向四宫格'] });
+  renderChat(message);
+  const row = screen.getByRole('button', { name: suggestion });
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+
+  await typeAndSettle('');
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+
+  fireEvent.click(row);
+  await waitFor(() => expect(screen.getByRole('combobox').textContent).toContain(suggestion));
+  expect(row.getAttribute('aria-pressed')).toBe('true');
+});
+
+test('deselecting removes only the suggestion line, not the same words in the user\'s own sentence', async () => {
+  const message = deliveredImage();
+  const suggestion = '换成横向四宫格';
+  message.events?.push({ kind: 'next_steps', suggestions: [suggestion, '保留服装并调整光线'] });
+  renderChat(message);
+  const row = screen.getByRole('button', { name: suggestion });
+  const typed = `先不要${suggestion}了`;
+  await typeAndSettle(typed);
+  expect(row.getAttribute('aria-pressed')).toBe('false');
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+  expect(screen.getByRole('combobox').textContent).toContain(typed);
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChatSessionMode } from '@open-design/contracts';
 import { MAX_NEXT_STEP_SUGGESTIONS } from '@open-design/contracts';
@@ -19,6 +19,7 @@ import {
   type DesignToolboxActionId,
 } from '../runtime/design-toolbox';
 import type { SkillSummary } from '../types';
+import { isSuggestionInDraft, type SuggestionDraftStore } from '../runtime/chat/suggestion-draft';
 import styles from './NextStepActions.module.css';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -241,8 +242,23 @@ interface Props {
    * another menu.
    */
   onSuggestion?: (text: string, selected: boolean) => void;
+  /**
+   * What `onSuggestion` puts in the composer for a row (e.g. the label plus image
+   * paths). Rows match this against the draft to know whether they are selected.
+   * Defaults to the row's own text.
+   */
+  suggestionPayload?: (text: string) => string;
+  /**
+   * Live view of the composer draft. When given, a row is selected exactly when its
+   * payload is in the draft as whole lines, so clearing or editing the draft by hand
+   * un-selects it. Without it the rows track their own toggles.
+   */
+  draftStore?: SuggestionDraftStore;
   variant?: NextStepActionsVariant;
 }
+
+const NO_SUBSCRIBE = () => () => undefined;
+const EMPTY_SNAPSHOT = () => '';
 
 const FLYOUT_GAP = 8;
 const VIEWPORT_MARGIN = 8;
@@ -354,6 +370,8 @@ export function NextStepActions({
   shareToOpenDesignBusy = false,
   suggestions,
   onSuggestion,
+  suggestionPayload,
+  draftStore,
   variant = 'default',
 }: Props) {
   const { t, locale } = useI18n();
@@ -494,23 +512,36 @@ export function NextStepActions({
    */
   // Suggestions are multi-select toggles: each click adds (or removes) that
   // suggestion in the composer draft, so several can be combined into one prompt.
-  const [selectedSuggestions, setSelectedSuggestions] = useState<ReadonlySet<string>>(
-    () => new Set(),
+  // Selected state is derived from the draft when a draft view is available.
+  const draftText = useSyncExternalStore(
+    draftStore?.subscribe ?? NO_SUBSCRIBE,
+    draftStore?.getSnapshot ?? EMPTY_SNAPSHOT,
+    EMPTY_SNAPSHOT,
+  );
+  const [localSelected, setLocalSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const isSuggestionSelected = useCallback(
+    (text: string): boolean =>
+      draftStore
+        ? isSuggestionInDraft(draftText, suggestionPayload ? suggestionPayload(text) : text)
+        : localSelected.has(text),
+    [draftStore, draftText, localSelected, suggestionPayload],
   );
   const handleSuggestion = useCallback(
     (text: string, index: number) => {
       if (!onSuggestion) return;
-      const selected = !selectedSuggestions.has(text);
-      setSelectedSuggestions((prev) => {
-        const next = new Set(prev);
-        if (selected) next.add(text);
-        else next.delete(text);
-        return next;
-      });
+      const selected = !isSuggestionSelected(text);
+      if (!draftStore) {
+        setLocalSelected((prev) => {
+          const next = new Set(prev);
+          if (selected) next.add(text);
+          else next.delete(text);
+          return next;
+        });
+      }
       if (selected) track('suggestion', String(index));
       onSuggestion(text, selected);
     },
-    [onSuggestion, selectedSuggestions, track],
+    [draftStore, isSuggestionSelected, onSuggestion, track],
   );
 
   const handleShare = useCallback(() => {
@@ -747,8 +778,8 @@ export function NextStepActions({
               // 而下标做 key 会让新一轮的三条复用上一轮的 DOM,过渡跟着串味。
               key={text}
               type="button"
-              className={`${styles.suggestionRow} ${selectedSuggestions.has(text) ? styles.suggestionRowSelected : ''}`}
-              aria-pressed={selectedSuggestions.has(text)}
+              className={`${styles.suggestionRow} ${isSuggestionSelected(text) ? styles.suggestionRowSelected : ''}`}
+              aria-pressed={isSuggestionSelected(text)}
               data-testid={`next-step-suggestion-${index}`}
               onClick={() => handleSuggestion(text, index)}
             >

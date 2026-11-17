@@ -3,6 +3,7 @@ import { useCharReveal } from "./chat/useCharReveal";
 import { ExecutionShell } from "./chat/ExecutionShell";
 import { TaskExecutionRecord } from "./chat/TaskExecutionRecord";
 import { automaticTaskProse, taskDisplayWithDeliveryState, type TaskPresentation, type TaskRecordContext } from "../runtime/chat/task-presentation";
+import type { SuggestionDraftStore } from "../runtime/chat/suggestion-draft";
 import { effectiveTurnRunStatus } from "../runtime/chat/turn-status";
 import { buildTurnBlocks } from "../runtime/chat/build-turn-blocks";
 import { copyableTurnText } from "../runtime/chat/copyable-turn";
@@ -273,6 +274,8 @@ interface Props {
    * menu — which is why the rows carry no trailing chevron.
    */
   onNextStepSuggestion?: (text: string, selected: boolean) => void;
+  /** Composer draft view; suggestion rows derive their selected state from it. */
+  suggestionDraftStore?: SuggestionDraftStore;
   /**
    * 导出这份产物 —— 打开文件并展开预览区**本来那块**导出菜单。
    *
@@ -460,6 +463,7 @@ function AssistantMessageImpl({
   nextStepCreateDesignSystemBusy,
   onPickSkill,
   onNextStepSuggestion,
+  suggestionDraftStore,
   onArtifactDownload,
   nextStepSkills,
   nextStepVariant = 'default',
@@ -1056,11 +1060,15 @@ function AssistantMessageImpl({
   const nextStepSuggestions = useImageNextStepFallback
     ? [t('nextStep.imageContinue'), t('nextStep.imageVariants'), t('nextStep.imageStyle')]
     : agentNextStepSuggestions;
+  // What a suggestion puts in the composer. Image-fallback suggestions carry the
+  // delivered image paths along. Rows match this against the draft to know
+  // whether they are selected.
+  const suggestionPayload = useCallback((text: string) => (useImageNextStepFallback
+    ? `${text}\n\n${fallbackImagePaths.join('\n')}`
+    : text), [fallbackImagePaths, useImageNextStepFallback]);
   const handleNextStepSuggestion = useCallback((text: string, selected: boolean) => {
-    onNextStepSuggestion?.(useImageNextStepFallback
-      ? `${text}\n\n${fallbackImagePaths.join('\n')}`
-      : text, selected);
-  }, [fallbackImagePaths, onNextStepSuggestion, useImageNextStepFallback]);
+    onNextStepSuggestion?.(suggestionPayload(text), selected);
+  }, [onNextStepSuggestion, suggestionPayload]);
   const hasNextStepPrimary =
     effectiveNextStepVariant === 'brand-extraction'
       ? !!onNextStepAiOptimize || !!onNextStepCreateDesign || !!onNextStepContinueExtraction
@@ -1532,6 +1540,8 @@ function AssistantMessageImpl({
             onPickSkill={ownsTrailingNextStep ? onPickSkill : undefined}
             suggestions={ownsTrailingNextStep ? nextStepSuggestions : undefined}
             onSuggestion={ownsTrailingNextStep && onNextStepSuggestion ? handleNextStepSuggestion : undefined}
+            suggestionPayload={suggestionPayload}
+            draftStore={suggestionDraftStore}
             onDownload={
               ownsTrailingNextStep && nextStepFileName ? onArtifactDownload : undefined
             }

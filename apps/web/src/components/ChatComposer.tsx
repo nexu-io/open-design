@@ -112,6 +112,7 @@ import {
   middleTruncateFileName,
   splitFileName,
 } from '../runtime/chat/attachment';
+import { toggleSuggestionInDraft } from '../runtime/chat/suggestion-draft';
 import {
   attachmentNavDelta,
   attachmentNavState,
@@ -480,14 +481,18 @@ export interface ChatComposerHandle {
   setDraft: (text: string, options?: ChatComposerDraftOptions) => void;
   /**
    * Multi-select for next-step suggestions: `selected` appends `text` as its own
-   * line in the current draft (keeping anything the user already typed);
-   * deselecting removes that line again. Never sends.
+   * line(s) in the current draft (keeping anything the user already typed);
+   * deselecting removes exactly that whole-line block again. Never sends.
    */
   toggleDraftSuggestion: (
     text: string,
     selected: boolean,
     options?: ChatComposerDraftOptions,
   ) => void;
+  /** Current draft text, as the editor stores it. */
+  getDraftText: () => string;
+  /** Subscribe to draft changes (typing, programmatic seeding, send/clear). */
+  subscribeDraft: (listener: () => void) => () => void;
   restoreDraft: (draft: {
     /** Late server rejection must never overwrite a newer unsent draft. */
     onlyIfEmpty?: boolean;
@@ -1475,6 +1480,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
+    // Suggestion rows derive their selected state from the draft; tell them when it
+    // changes (typing, seeding, send/clear).
+    const draftListenersRef = useRef(new Set<() => void>());
+    useEffect(() => {
+      draftListenersRef.current.forEach((listener) => listener());
+    }, [draft]);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -1488,22 +1500,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         },
         toggleDraftSuggestion: (text, selected, options) => {
           const current = editorRef.current?.getText() ?? draftRef.current ?? "";
-          let next: string;
-          if (selected) {
-            next = current.includes(text)
-              ? current
-              : current.trim().length === 0
-                ? text
-                : `${current.replace(/\s+$/, "")}\n${text}`;
-          } else {
-            next = current.split(text).join("").replace(/\n{2,}/g, "\n").trim();
-          }
+          const next = toggleSuggestionInDraft(current, text, selected);
           pendingEntryFromRef.current = options?.entryFrom ?? null;
           pendingSessionModeRef.current = options?.sessionMode ?? null;
           setDraft(next);
           editorRef.current?.setText(next);
           editorRef.current?.focus();
           seededRef.current = true;
+        },
+        getDraftText: () => editorRef.current?.getText() ?? draftRef.current ?? "",
+        subscribeDraft: (listener) => {
+          draftListenersRef.current.add(listener);
+          return () => {
+            draftListenersRef.current.delete(listener);
+          };
         },
         restoreDraft: ({ text, attachments = [], commentAttachments = [], quotes: restoredQuotes = [], meta, onlyIfEmpty }) => {
           const current = latestComposerContentRef.current;

@@ -1,5 +1,6 @@
 import { openExternalUrl } from "../providers/registry";
 import { withTaskPresentation, newerTaskDisplay, type PresentedChatMessage } from '../runtime/chat/task-presentation';
+import type { SuggestionDraftStore } from '../runtime/chat/suggestion-draft';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
@@ -1847,6 +1848,16 @@ export function ChatPane({
       if (!prompt) return;
       composerRef.current?.toggleDraftSuggestion(prompt, selected, { entryFrom: 'next_step' });
     },
+    [],
+  );
+
+  // Read-only view of the composer draft for the suggestion rows, which derive
+  // their selected state from it. Stable, so message rows stay memoized.
+  const suggestionDraftStore = useMemo<SuggestionDraftStore>(
+    () => ({
+      subscribe: (listener) => composerRef.current?.subscribeDraft?.(listener) ?? (() => undefined),
+      getSnapshot: () => composerRef.current?.getDraftText?.() ?? '',
+    }),
     [],
   );
 
@@ -4565,6 +4576,7 @@ export function ChatPane({
                   nextStepCreateDesignSystemBusy={createDesignSystemFromProjectBusy}
                   onPickSkill={handlePickSkill}
                   onNextStepSuggestion={handleNextStepSuggestion}
+                  suggestionDraftStore={suggestionDraftStore}
                   onArtifactDownload={onArtifactDownload}
                   nextStepSkills={skills}
                   nextStepVariant={nextStepVariant}
@@ -5329,6 +5341,7 @@ function ChatRows({
   nextStepCreateDesignSystemBusy,
   onPickSkill,
   onNextStepSuggestion,
+  suggestionDraftStore,
   onArtifactDownload,
   nextStepSkills,
   nextStepVariant,
@@ -5419,6 +5432,7 @@ function ChatRows({
   onPickSkill?: (skillId: string) => void;
   /** 把一条「下一步引导」填入 Composer,等用户确认后发送 */
   onNextStepSuggestion?: (text: string, selected: boolean) => void;
+  suggestionDraftStore?: SuggestionDraftStore;
   /** `anchorId` 同上。 */
   onArtifactDownload?: (fileName: string, anchorId?: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -5611,6 +5625,7 @@ function ChatRows({
         nextStepCreateDesignSystemBusy={nextStepCreateDesignSystemBusy}
         onPickSkill={onPickSkill}
         onNextStepSuggestion={onNextStepSuggestion}
+        suggestionDraftStore={suggestionDraftStore}
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
         nextStepVariant={nextStepVariant}

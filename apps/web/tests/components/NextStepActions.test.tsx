@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -12,6 +13,7 @@ import { I18nProvider } from '../../src/i18n';
 import { en } from '../../src/i18n/locales/en';
 import type { Locale } from '../../src/i18n/types';
 import type { SkillSummary } from '../../src/types';
+import type { SuggestionDraftStore } from '../../src/runtime/chat/suggestion-draft';
 
 afterEach(() => {
   cleanup();
@@ -548,6 +550,74 @@ describe('NextStepActions · 三条行为引导', () => {
     expect(second.getAttribute('aria-pressed')).toBe('true');
     expect(onSuggestion).toHaveBeenCalledTimes(3);
     expect(onSuggestion).toHaveBeenLastCalledWith(THREE[0], false);
+  });
+
+  describe('selection derived from the composer draft', () => {
+    function fakeDraftStore(initial = '') {
+      let draft = initial;
+      const listeners = new Set<() => void>();
+      const store: SuggestionDraftStore = {
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        getSnapshot: () => draft,
+      };
+      return {
+        store,
+        setDraft: (next: string) => {
+          draft = next;
+          act(() => listeners.forEach((listener) => listener()));
+        },
+      };
+    }
+
+    it('a row is pressed exactly while its text is in the draft as a whole line', () => {
+      const { store, setDraft } = fakeDraftStore();
+      renderSuggestions(THREE, { draftStore: store });
+      const row = screen.getByTestId('next-step-suggestion-0');
+      expect(row.getAttribute('aria-pressed')).toBe('false');
+
+      setDraft(`${THREE[0]}\n${THREE[2]}`);
+      expect(screen.getByTestId('next-step-suggestion-0').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTestId('next-step-suggestion-1').getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByTestId('next-step-suggestion-2').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('un-presses when the draft is cleared by hand, so one click selects it again', () => {
+      const { store, setDraft } = fakeDraftStore(THREE[0]);
+      const { onSuggestion } = renderSuggestions(THREE, { draftStore: store });
+      expect(screen.getByTestId('next-step-suggestion-0').getAttribute('aria-pressed')).toBe('true');
+
+      setDraft('');
+      expect(screen.getByTestId('next-step-suggestion-0').getAttribute('aria-pressed')).toBe('false');
+
+      fireEvent.click(screen.getByTestId('next-step-suggestion-0'));
+      expect(onSuggestion).toHaveBeenCalledTimes(1);
+      expect(onSuggestion).toHaveBeenCalledWith(THREE[0], true);
+    });
+
+    it('clicking a pressed row asks to deselect it', () => {
+      const { store } = fakeDraftStore(THREE[1]);
+      const { onSuggestion } = renderSuggestions(THREE, { draftStore: store });
+      fireEvent.click(screen.getByTestId('next-step-suggestion-1'));
+      expect(onSuggestion).toHaveBeenCalledWith(THREE[1], false);
+    });
+
+    it('does not treat a suggestion\'s words inside a typed sentence as selected', () => {
+      const { store } = fakeDraftStore(`先别${THREE[2]}了`);
+      renderSuggestions(THREE, { draftStore: store });
+      expect(screen.getByTestId('next-step-suggestion-2').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('matches image-fallback payloads the way the editor stores them', () => {
+      const payload = (text: string) => `${text}\n\nimages/a.png`;
+      // the editor collapses the blank line between label and path
+      const { store } = fakeDraftStore(`${THREE[0]}\nimages/a.png`);
+      renderSuggestions(THREE, { draftStore: store, suggestionPayload: payload });
+      expect(screen.getByTestId('next-step-suggestion-0').getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTestId('next-step-suggestion-1').getAttribute('aria-pressed')).toBe('false');
+    });
   });
 
   it('旧会话(没有建议)整块不出 —— 不退回工具箱、不出空壳', () => {
