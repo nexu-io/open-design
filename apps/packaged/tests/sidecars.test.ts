@@ -15,6 +15,7 @@
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
+import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -314,6 +315,28 @@ describe('packaged stale sidecar retirement', () => {
       const log = readFileSync(logPath, 'utf8');
       expect(log).toContain('no prior web generation found; skipping retire');
       expect(log).not.toContain('retiring prior web generation');
+    });
+  });
+
+  it('preserves the retirement decision when the child writes to its inherited log', async () => {
+    await withLog(async (logPath) => {
+      const handle = await openLog(logPath);
+      try {
+        await retireExistingSidecar(testStamp(APP_KEYS.WEB), logPath, {
+          stop: vi.fn(),
+          ...noPriorGenerationProbes(),
+        });
+        const child = spawnSync(process.execPath, [
+          '-e', 'process.stdout.write("child stdout\\n"); process.stderr.write("child stderr\\n");',
+        ], { stdio: ['ignore', handle.fd, handle.fd] });
+        expect(child.error).toBeUndefined();
+        expect(child.status).toBe(0);
+        expect(readFileSync(logPath, 'utf8')).toBe(
+          '[open-design packaged] no prior web generation found; skipping retire\nchild stdout\nchild stderr\n',
+        );
+      } finally {
+        await handle.close();
+      }
     });
   });
 
@@ -1335,17 +1358,8 @@ describe('createWebSidecarSupervisor', () => {
   });
 });
 
-/**
- * Every packaged launch opens each sidecar's latest.log with mode "w",
- * which used to DESTROY the prior session's log. That is exactly the log
- * that matters after an incident-triggered relaunch: the support bundle
- * contained only the ~70 lines written since the restart while the
- * incident-time daemon log was gone. openLog must rotate the prior file
- * aside as previous.log (exactly one prior session, no unbounded growth)
- * before truncating.
- */
 describe('packaged sidecar log rotation', () => {
-  it('rotates the prior latest.log aside as previous.log before truncating', async () => {
+  it('rotates the prior latest.log aside as previous.log before starting a fresh log', async () => {
     const root = mkdtempSync(join(tmpdir(), 'od-log-rotate-'));
     const logDir = join(root, 'logs', 'daemon');
     const logPath = join(logDir, 'latest.log');
