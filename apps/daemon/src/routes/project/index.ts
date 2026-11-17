@@ -5775,12 +5775,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       req.params.id,
       'writeFiles',
     )) return;
-    const { tabs = [], active = null, browserTabs = [] } = req.body || {};
+    const { tabs = [], active = null, browserTabs = [], designFilesTabHidden } = req.body || {};
     if (!Array.isArray(tabs) || !tabs.every((t) => typeof t === 'string')) {
       return res.status(400).json({ error: 'tabs must be string[]' });
     }
     if (!Array.isArray(browserTabs)) {
       return res.status(400).json({ error: 'browserTabs must be an array' });
+    }
+    if (designFilesTabHidden !== undefined && typeof designFilesTabHidden !== 'boolean') {
+      return res.status(400).json({ error: 'designFilesTabHidden must be a boolean' });
     }
     const result = setTabs(
       db,
@@ -5789,6 +5792,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         tabs,
         active: typeof active === 'string' ? active : null,
         browserTabs,
+        ...(typeof designFilesTabHidden === 'boolean' ? { designFilesTabHidden } : {}),
       },
     );
     res.json(result);
