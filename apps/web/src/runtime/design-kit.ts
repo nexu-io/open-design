@@ -114,6 +114,8 @@ export interface DesignKit {
   logoSrc?: string | null;
   logoAlternates: string[];
   logoNotes?: string;
+  /** Optional kit-declared mono type specimen line (frontmatter `mono_specimen:`). */
+  monoSpecimen?: string;
   colors: KitColor[];
   typography: { display?: KitFont; body?: KitFont; mono?: KitFont };
   fonts: KitFont[];
@@ -581,6 +583,7 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     canUpload: opts.editable && Boolean(opts.projectId),
     logoSrc: null,
     logoAlternates: [],
+    monoSpecimen: parsed.monoSpecimen?.trim() || undefined,
     colors,
     typography,
     fonts: fontList(typography),

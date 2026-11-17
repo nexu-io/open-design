@@ -1332,7 +1332,7 @@ function DesignKitViewInner({
                         </span>
                       </div>
                       <span className={styles.fontSpecimen} style={{ fontFamily: fontStack(font) }}>
-                        {label === 'Mono' ? 'const brand = await extract(url);' : kit.name}
+                        {label === 'Mono' ? kit.monoSpecimen || 'const brand = await extract(url);' : kit.name}
                       </span>
                     </div>
                   ))}

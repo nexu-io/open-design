@@ -256,6 +256,39 @@ describe('importLocalDesignSystemProject', () => {
     ]);
   });
 
+  it('carries a source DESIGN.md mono_specimen through to the synthesized DESIGN.md', async () => {
+    fs.writeFileSync(
+      path.join(sourceRoot, 'DESIGN.md'),
+      [
+        '---',
+        'name: "Kami App"',
+        'mono_specimen: "deploy --prod && smoke-live green"',
+        '---',
+        '',
+        '# Kami App',
+        '',
+        'Calm review surface.',
+        '',
+      ].join('\n'),
+    );
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+    const design = fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8');
+    expect(design.startsWith('---\n')).toBe(true);
+    expect(design).toContain('mono_specimen: "deploy --prod && smoke-live green"');
+  });
+
+  it('omits the frontmatter block when the source package declares no mono_specimen', async () => {
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+    const design = fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8');
+    expect(design.startsWith('---\n')).toBe(false);
+    expect(design).not.toContain('mono_specimen:');
+  });
+
   it('atomically reserves distinct ids for concurrent imports with the same name', async () => {
     const [first, second] = await Promise.all([
       importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot),
