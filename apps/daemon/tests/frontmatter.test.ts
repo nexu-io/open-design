@@ -97,6 +97,24 @@ describe('parseFrontmatter block sequences and arrays', () => {
     expect(data('a: [x, y, z]').a).toEqual(['x', 'y', 'z']);
   });
 
+  // A quoted block-sequence item is a scalar even when it contains a colon;
+  // only a colon after the closing quote makes it a single-line mapping.
+  it('keeps quoted block-sequence items containing a colon as strings', () => {
+    expect(data('triggers:\n  - "1:1 notes"\n  - \'1:1 figma\'\n  - "Q3: review deck"').triggers).toEqual([
+      '1:1 notes',
+      '1:1 figma',
+      'Q3: review deck',
+    ]);
+    expect(data('links:\n  - "https://example.com/brief"').links).toEqual(['https://example.com/brief']);
+    expect(data("t:\n  - 'it''s 1:1'").t).toEqual(["it''s 1:1"]);
+  });
+
+  it('still parses quoted-key and plain single-line mappings in a sequence', () => {
+    const [quoted] = data('items:\n  - "name": foo').items as Array<Record<string, unknown>>;
+    expect(Object.values(quoted ?? {})).toEqual(['foo']);
+    expect(data("items:\n  - k: v\n  - don't: x").items).toEqual([{ k: 'v' }, { "don't": 'x' }]);
+  });
+
   // A block scalar's indentation is derived from its first content line, not a
   // fixed key+2, so content indented deeper is not left with leading spaces
   // while relative indentation deeper than that base is preserved.
