@@ -15,7 +15,6 @@
  * @see apps/daemon/src/legacy-data-migrator.ts
  * @see https://github.com/nexu-io/open-design/issues/710
  */
-import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -319,6 +318,7 @@ describe('packaged stale sidecar retirement', () => {
   });
 
   it('preserves the retirement decision when the child writes to its inherited log', async () => {
+    const { spawnSync } = await import('node:child_process');
     await withLog(async (logPath) => {
       const handle = await openLog(logPath);
       try {
