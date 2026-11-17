@@ -1842,10 +1842,10 @@ export function ChatPane({
    * 显式点击发送才会调用 `onSend`、持久化消息并创建 run。
    */
   const handleNextStepSuggestion = useCallback(
-    (text: string) => {
+    (text: string, selected: boolean) => {
       const prompt = text.trim();
       if (!prompt) return;
-      composerRef.current?.setDraft(prompt, { entryFrom: 'next_step' });
+      composerRef.current?.toggleDraftSuggestion(prompt, selected, { entryFrom: 'next_step' });
     },
     [],
   );
@@ -5418,7 +5418,7 @@ function ChatRows({
   nextStepCreateDesignSystemBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   /** 把一条「下一步引导」填入 Composer,等用户确认后发送 */
-  onNextStepSuggestion?: (text: string) => void;
+  onNextStepSuggestion?: (text: string, selected: boolean) => void;
   /** `anchorId` 同上。 */
   onArtifactDownload?: (fileName: string, anchorId?: string) => void;
   nextStepSkills?: SkillSummary[];

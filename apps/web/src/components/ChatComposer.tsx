@@ -478,6 +478,16 @@ export interface RejectedComposerSend {
 
 export interface ChatComposerHandle {
   setDraft: (text: string, options?: ChatComposerDraftOptions) => void;
+  /**
+   * Multi-select for next-step suggestions: `selected` appends `text` as its own
+   * line in the current draft (keeping anything the user already typed);
+   * deselecting removes that line again. Never sends.
+   */
+  toggleDraftSuggestion: (
+    text: string,
+    selected: boolean,
+    options?: ChatComposerDraftOptions,
+  ) => void;
   restoreDraft: (draft: {
     /** Late server rejection must never overwrite a newer unsent draft. */
     onlyIfEmpty?: boolean;
@@ -1473,6 +1483,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           pendingSessionModeRef.current = options?.sessionMode ?? null;
           setDraft(text);
           editorRef.current?.setText(text);
+          editorRef.current?.focus();
+          seededRef.current = true;
+        },
+        toggleDraftSuggestion: (text, selected, options) => {
+          const current = editorRef.current?.getText() ?? draftRef.current ?? "";
+          let next: string;
+          if (selected) {
+            next = current.includes(text)
+              ? current
+              : current.trim().length === 0
+                ? text
+                : `${current.replace(/\s+$/, "")}\n${text}`;
+          } else {
+            next = current.split(text).join("").replace(/\n{2,}/g, "\n").trim();
+          }
+          pendingEntryFromRef.current = options?.entryFrom ?? null;
+          pendingSessionModeRef.current = options?.sessionMode ?? null;
+          setDraft(next);
+          editorRef.current?.setText(next);
           editorRef.current?.focus();
           seededRef.current = true;
         },

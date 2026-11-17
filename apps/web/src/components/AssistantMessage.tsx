@@ -272,7 +272,7 @@ interface Props {
    * next message. The suggestion text IS the message — no composer draft, no
    * menu — which is why the rows carry no trailing chevron.
    */
-  onNextStepSuggestion?: (text: string) => void;
+  onNextStepSuggestion?: (text: string, selected: boolean) => void;
   /**
    * 导出这份产物 —— 打开文件并展开预览区**本来那块**导出菜单。
    *
@@ -1056,10 +1056,10 @@ function AssistantMessageImpl({
   const nextStepSuggestions = useImageNextStepFallback
     ? [t('nextStep.imageContinue'), t('nextStep.imageVariants'), t('nextStep.imageStyle')]
     : agentNextStepSuggestions;
-  const handleNextStepSuggestion = useCallback((text: string) => {
+  const handleNextStepSuggestion = useCallback((text: string, selected: boolean) => {
     onNextStepSuggestion?.(useImageNextStepFallback
       ? `${text}\n\n${fallbackImagePaths.join('\n')}`
-      : text);
+      : text, selected);
   }, [fallbackImagePaths, onNextStepSuggestion, useImageNextStepFallback]);
   const hasNextStepPrimary =
     effectiveNextStepVariant === 'brand-extraction'

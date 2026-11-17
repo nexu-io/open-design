@@ -50,6 +50,13 @@ vi.mock('../../src/components/ChatComposer', () => ({
         setDraftCalls.push({ text, options });
         setDraft(text);
       },
+      toggleDraftSuggestion: (text: string, selected: boolean, options?: unknown) => {
+        setDraftCalls.push({ text, options });
+        setDraft((cur) => {
+          if (!selected) return cur.split(text).join('').trim();
+          return cur ? `${cur}\n${text}` : text;
+        });
+      },
       restoreDraft: ({ text }: { text: string }) => setDraft(text),
       focus: () => undefined,
       applyDesignToolboxAction: () => undefined,

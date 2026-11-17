@@ -240,7 +240,7 @@ interface Props {
    * run by itself. The rows carry no trailing chevron because they do not open
    * another menu.
    */
-  onSuggestion?: (text: string) => void;
+  onSuggestion?: (text: string, selected: boolean) => void;
   variant?: NextStepActionsVariant;
 }
 
@@ -492,13 +492,25 @@ export function NextStepActions({
    * 上报的是**位置**不是文字:建议是模型现写的、关于用户自己项目的话,
    * 不该进埋点载荷。
    */
+  // Suggestions are multi-select toggles: each click adds (or removes) that
+  // suggestion in the composer draft, so several can be combined into one prompt.
+  const [selectedSuggestions, setSelectedSuggestions] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const handleSuggestion = useCallback(
     (text: string, index: number) => {
       if (!onSuggestion) return;
-      track('suggestion', String(index));
-      onSuggestion(text);
+      const selected = !selectedSuggestions.has(text);
+      setSelectedSuggestions((prev) => {
+        const next = new Set(prev);
+        if (selected) next.add(text);
+        else next.delete(text);
+        return next;
+      });
+      if (selected) track('suggestion', String(index));
+      onSuggestion(text, selected);
     },
-    [onSuggestion, track],
+    [onSuggestion, selectedSuggestions, track],
   );
 
   const handleShare = useCallback(() => {
@@ -735,7 +747,8 @@ export function NextStepActions({
               // 而下标做 key 会让新一轮的三条复用上一轮的 DOM,过渡跟着串味。
               key={text}
               type="button"
-              className={styles.suggestionRow}
+              className={`${styles.suggestionRow} ${selectedSuggestions.has(text) ? styles.suggestionRowSelected : ''}`}
+              aria-pressed={selectedSuggestions.has(text)}
               data-testid={`next-step-suggestion-${index}`}
               onClick={() => handleSuggestion(text, index)}
             >

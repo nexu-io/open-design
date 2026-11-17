@@ -5,7 +5,16 @@ import { ChatPane } from '../../src/components/ChatPane';
 import { I18nProvider } from '../../src/i18n';
 import type { AppConfig, ChatMessage } from '../../src/types';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Suggestions append to the composer draft, which is persisted: do not let one
+  // test's draft leak into the next.
+  try {
+    window.localStorage.clear();
+  } catch {
+    // storage unavailable
+  }
+});
 
 // OPEND-2776 body + both screenshots: Codex succeeded, delivered this PNG,
 // emitted artifact_focus, and displayed 图片已生成 without any next_steps.

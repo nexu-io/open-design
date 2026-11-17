@@ -119,7 +119,7 @@ describe('AssistantMessage next-step affordance', () => {
     for (const text of SUGGESTIONS) expect(screen.getByText(text)).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('next-step-suggestion-0'));
-    expect(h.onNextStepSuggestion).toHaveBeenCalledWith('再加一页订单列表');
+    expect(h.onNextStepSuggestion).toHaveBeenCalledWith('再加一页订单列表', true);
   });
 
   /**
@@ -245,7 +245,7 @@ describe('AssistantMessage next-step affordance', () => {
     expect(screen.getByTestId('next-step-suggestions')).toBeTruthy();
     for (const text of SUGGESTIONS) expect(screen.getByText(text)).toBeTruthy();
     fireEvent.click(screen.getByTestId('next-step-suggestion-0'));
-    expect(h.onNextStepSuggestion).toHaveBeenCalledWith('再加一页订单列表');
+    expect(h.onNextStepSuggestion).toHaveBeenCalledWith('再加一页订单列表', true);
   });
 
   /**

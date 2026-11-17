@@ -532,7 +532,22 @@ describe('NextStepActions · 三条行为引导', () => {
     const { onSuggestion } = renderSuggestions(THREE);
     fireEvent.click(screen.getByTestId('next-step-suggestion-1'));
     expect(onSuggestion).toHaveBeenCalledTimes(1);
-    expect(onSuggestion).toHaveBeenCalledWith('把商品卡换成两列布局');
+    expect(onSuggestion).toHaveBeenCalledWith('把商品卡换成两列布局', true);
+  });
+
+  it('可多选:再点一次取消,已选的保持高亮', () => {
+    const { onSuggestion } = renderSuggestions(THREE);
+    const first = screen.getByTestId('next-step-suggestion-0');
+    const second = screen.getByTestId('next-step-suggestion-1');
+    fireEvent.click(first);
+    fireEvent.click(second);
+    expect(first.getAttribute('aria-pressed')).toBe('true');
+    expect(second.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(first);
+    expect(first.getAttribute('aria-pressed')).toBe('false');
+    expect(second.getAttribute('aria-pressed')).toBe('true');
+    expect(onSuggestion).toHaveBeenCalledTimes(3);
+    expect(onSuggestion).toHaveBeenLastCalledWith(THREE[0], false);
   });
 
   it('旧会话(没有建议)整块不出 —— 不退回工具箱、不出空壳', () => {
