@@ -126,8 +126,13 @@ export function ProjectReferenceModal({
   const selectedProjects = useMemo(() => {
     if (!projects) return [];
     const selected = new Set(selectedIds);
-    return projects.filter((project) => selected.has(project.id));
-  }, [projects, selectedIds]);
+    // Only count selections that remain visible under the current search
+    // filter. A search-driven hide of the last-selected item must not let
+    // Confirm silently submit a reference the user cannot see, so we derive
+    // the submission set from visibleProjects rather than the full catalog.
+    const visibleIds = new Set(visibleProjects.map((p) => p.id));
+    return projects.filter((project) => selected.has(project.id) && visibleIds.has(project.id));
+  }, [projects, selectedIds, visibleProjects]);
 
   async function confirm() {
     if (selectedProjects.length === 0 || pending) return;
