@@ -124,6 +124,18 @@ export async function pickAndReplaceHostProjectWorkingDir(
   }
 }
 
+/** Failure reason when the running host predates `project.pickWorkingDir`. */
+export const HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON = "host build does not support pickWorkingDir";
+
+/**
+ * True when a pick failed because the host build lacks the picker capability
+ * (only an app update fixes it), as opposed to a pick that ran and failed
+ * (retrying can succeed).
+ */
+export function isHostPickWorkingDirUnsupported(result: OpenDesignHostPickWorkingDirResult): boolean {
+  return result.ok === false && "reason" in result && result.reason === HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON;
+}
+
 // Picks a folder via the host's native dialog and returns the chosen path
 // plus a single-use token, WITHOUT touching any project. The Home flow uses
 // this to let the user choose a working directory before the project exists;
@@ -134,7 +146,7 @@ export async function pickHostWorkingDir(
   const host = getOpenDesignHost(scope);
   if (host == null) return unavailable("OpenDesign host is not available");
   if (typeof host.project.pickWorkingDir !== "function") {
-    return unavailable("host build does not support pickWorkingDir");
+    return unavailable(HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON);
   }
   try {
     return await host.project.pickWorkingDir();

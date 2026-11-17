@@ -68,12 +68,13 @@ function shutdownHarness(options: {
     updateScheduler: { stop: vi.fn() }, disposeMenu: vi.fn(), removeDiagnosticsIpc: vi.fn(),
     endDesktopSessionCleanly: endSession, recordDesktopHostEvent: recordHostEvent,
     sessionStatePath: "test-session", console: { info: vi.fn(), error: vi.fn() },
+    markDesktopShutdownInProgress: vi.fn(),
   };
   const code = stripTypeScriptTypes(declarations.join("\n"));
   const api = runInNewContext(`${code}\n({ shutdown, shutdownAndExit })`, sandbox) as {
     shutdown(): Promise<void>; shutdownAndExit(): void;
   };
-  return { ...api, memorySampler: sandbox.memorySampler, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
+  return { ...api, markShutdown: sandbox.markDesktopShutdownInProgress, memorySampler: sandbox.memorySampler, beforeShutdown, close, quiesceRendererTransport, quit, exit, endSession, finishCleanup, beforeQuit, recordLifecycle, recordHostEvent };
 }
 
 async function flushPromises() {
@@ -91,6 +92,15 @@ describe("desktop shutdown", () => {
     expect(h.recordHostEvent).toHaveBeenCalledTimes(1);
     expect(h.recordHostEvent).toHaveBeenCalledWith({ stateFilePath: "test-session" }, { kind: "quit-requested" });
     expect(h.beforeShutdown).toHaveBeenCalledTimes(1);
+    h.finishCleanup();
+  });
+
+  it("arms the shutdown-abort tolerance before closing the window", async () => {
+    const h = shutdownHarness();
+    void h.shutdown();
+    await flushPromises();
+    expect(h.markShutdown).toHaveBeenCalledTimes(1);
+    expect(h.markShutdown.mock.invocationCallOrder[0]).toBeLessThan(h.close.mock.invocationCallOrder[0]!);
     h.finishCleanup();
   });
 

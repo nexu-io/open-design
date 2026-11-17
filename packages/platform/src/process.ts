@@ -559,17 +559,7 @@ async function captureWindowsStampedProcessTrees<
   contract: ProcessStampContract<TStamp, TCriteria>,
 ): Promise<ProcessSnapshot[]> {
   if (criteriaSet.length === 0) return [];
-  const clauses = criteriaSet.map((criteria) => {
-    const normalized = contract.normalizeStampCriteria(criteria);
-    const fields = contract.stampFields.flatMap((field) => {
-      const value = normalized[field];
-      if (typeof value !== "string") return [];
-      const needle = `${contract.stampFlags[field]}=${value}`.replaceAll("'", "''");
-      return [`CommandLine LIKE '%${needle}%'`];
-    });
-    return fields.length === 0 ? "CommandLine IS NOT NULL" : `(${fields.join(" AND ")})`;
-  });
-  const rootFilter = [...new Set(clauses)].join(" OR ");
+  const rootFilter = windowsStampedRootFilter(criteriaSet, contract);
   const powershellRootFilter = `'${rootFilter.replaceAll("'", "''")}'`;
   const command = [
     "$ErrorActionPreference = 'Stop'",
@@ -593,6 +583,34 @@ async function captureWindowsStampedProcessTrees<
     });
   });
   return parseWindowsProcessSnapshots(stdout);
+}
+
+/**
+ * Build the broadest safe WQL filter for a set of stamped resources.
+ *
+ * Exact resource identity is still selected from the resulting snapshots by
+ * `selectStampedProcessesAtInvocation`. Querying only fields shared by every
+ * requested resource keeps Windows teardown's CIM command bounded when one
+ * logical runtime owns many resource stamps, while retaining every possible
+ * matching root and its descendants.
+ *
+ * @internal Exported for deterministic Windows command-shape tests.
+ */
+export function windowsStampedRootFilter<
+  TStamp extends ProcessStampShape,
+  TCriteria extends Partial<TStamp>,
+>(
+  criteriaSet: readonly TCriteria[],
+  contract: ProcessStampContract<TStamp, TCriteria>,
+): string {
+  const normalizedCriteria = criteriaSet.map((criteria) => contract.normalizeStampCriteria(criteria));
+  const sharedFields = contract.stampFields.flatMap((field) => {
+    const [first, ...rest] = normalizedCriteria.map((criteria) => criteria[field]);
+    if (typeof first !== "string" || !rest.every((value) => value === first)) return [];
+    const needle = `${contract.stampFlags[field]}=${first}`.replaceAll("'", "''");
+    return [`CommandLine LIKE '%${needle}%'`];
+  });
+  return sharedFields.length === 0 ? "CommandLine IS NOT NULL" : sharedFields.join(" AND ");
 }
 
 /**
