@@ -2293,7 +2293,9 @@ export async function fetchProjectFiles(
       return [];
     }
     if (options?.requireAuthoritative) throw error;
-    return [];
+    // Do not silently swallow transport failures — surface them so callers
+    // can show an error/retry state instead of an empty project panel.
+    throw error;
   }
 }
 
