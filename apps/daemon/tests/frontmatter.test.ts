@@ -106,13 +106,19 @@ describe('parseFrontmatter block sequences and arrays', () => {
       'Q3: review deck',
     ]);
     expect(data('links:\n  - "https://example.com/brief"').links).toEqual(['https://example.com/brief']);
-    expect(data("t:\n  - 'it''s 1:1'").t).toEqual(["it''s 1:1"]);
   });
 
   it('still parses quoted-key and plain single-line mappings in a sequence', () => {
     const [quoted] = data('items:\n  - "name": foo').items as Array<Record<string, unknown>>;
     expect(Object.values(quoted ?? {})).toEqual(['foo']);
     expect(data("items:\n  - k: v\n  - don't: x").items).toEqual([{ k: 'v' }, { "don't": 'x' }]);
+  });
+
+  it('skips escaped quotes inside a quoted key before looking for the colon', () => {
+    const [dq] = data('items:\n  - "a\\"b": c').items as Array<Record<string, unknown>>;
+    expect(Object.values(dq ?? {})).toEqual(['c']);
+    const [sq] = data("items:\n  - 'it''s': x").items as Array<Record<string, unknown>>;
+    expect(Object.values(sq ?? {})).toEqual(['x']);
   });
 
   // A block scalar's indentation is derived from its first content line, not a

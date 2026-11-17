@@ -217,4 +217,11 @@ describe('parseFrontmatter', () => {
     const { data } = parseFrontmatter("---\nitems:\n  - k: v\n  - don't: x\n---\n");
     expect(data.items).toEqual([{ k: 'v' }, { "don't": 'x' }]);
   });
+
+  it('skips escaped quotes inside a quoted key before looking for the colon', () => {
+    const dq = parseFrontmatter('---\nitems:\n  - "a\\"b": c\n---\n').data.items as Array<Record<string, unknown>>;
+    expect(Object.values(dq[0] ?? {})).toEqual(['c']);
+    const sq = parseFrontmatter("---\nitems:\n  - 'it''s': x\n---\n").data.items as Array<Record<string, unknown>>;
+    expect(Object.values(sq[0] ?? {})).toEqual(['x']);
+  });
 });
