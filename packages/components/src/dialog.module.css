@@ -36,7 +36,7 @@
    *
    * 守护:`apps/web/tests/styles/app-scrim-layer.test.ts`。
    */
-  z-index: 1500;
+  z-index: 2000;
   animation: dialog-backdrop-fade-in var(--duration-fast, 150ms) var(--curve-decelerate-mid, ease-out);
 }
 
