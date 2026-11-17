@@ -69,6 +69,17 @@ function classify(name: string): FileOpKind | null {
   return null;
 }
 
+/**
+ * Same as `classify` but restricted to write/edit/delete. Exported so
+ * design-delivery.ts can reuse it for the errored-mutation veto without
+ * duplicating the tool-name lookup.
+ */
+export function classifyToolName(name: string): 'write' | 'edit' | 'delete' | null {
+  const kind = classify(name);
+  if (!kind || kind === 'read') return null;
+  return kind;
+}
+
 function extractPath(input: unknown): string | null {
   if (!input || typeof input !== 'object') return null;
   const obj = input as {
@@ -270,7 +281,13 @@ export function countArtifactFileOps(entries: FileOpEntry[]): ArtifactFileOpCoun
   return { write, edit };
 }
 
-function extractSimpleBashDeletes(input: unknown): string[] {
+/**
+ * Project-file paths a Bash `rm` / `unlink` command would delete.
+ *
+ * Exported so design-delivery.ts's errored-mutation veto can share this
+ * parser instead of keeping a drifting copy.
+ */
+export function extractSimpleBashDeletes(input: unknown): string[] {
   if (!input || typeof input !== 'object') return [];
   const command = (input as { command?: unknown }).command;
   if (typeof command !== 'string' || !command.trim()) return [];
