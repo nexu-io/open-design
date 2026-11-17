@@ -4892,6 +4892,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
   const [query, setQuery] = useState('');
   const [resolvedPlacement, setResolvedPlacement] = useState(placement);
   const [menuMaxHeight, setMenuMaxHeight] = useState(240);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const dropdownIdRef = useRef(`onboarding-dropdown-${Math.random().toString(36).slice(2)}`);
   const selectedValues = Array.isArray(value)
@@ -4976,6 +4977,46 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         setOpen(false);
+        return;
+      }
+      // Arrow key navigation only when dropdown is open
+      if (!open) return;
+      const dir = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+      if (dir !== 0) {
+        event.preventDefault();
+        setActiveIndex((prev) => {
+          const max = visibleOptions.length - 1;
+          const next = prev + dir;
+          return next < 0 ? max : next > max ? 0 : next;
+        });
+        return;
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        setActiveIndex(0);
+        return;
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        setActiveIndex(visibleOptions.length - 1);
+        return;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        const option = visibleOptions[activeIndex];
+        if (option) {
+          if (props.multiple) {
+            const selected = selectedValues.includes(option.value);
+            props.onChange(
+              selected
+                ? selectedValues.filter((v) => v !== option.value)
+                : [...selectedValues, option.value],
+            );
+          } else {
+            props.onChange(option.value);
+          }
+          setOpen(false);
+        }
       }
     }
 
@@ -4990,6 +5031,11 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
   useEffect(() => {
     if (!open) {
       setQuery('');
+      setActiveIndex(-1);
+    } else {
+      // Start at the currently selected option, or first option
+      const initialIndex = visibleOptions.findIndex((o) => selectedValues.includes(o.value));
+      setActiveIndex(initialIndex >= 0 ? initialIndex : 0);
     }
   }, [open]);
 
@@ -5044,6 +5090,12 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
         aria-describedby={selectedTagDescriptionId}
         title={triggerLabel}
         onClick={toggleOpen}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggleOpen();
+          }
+        }}
       >
         <span className="onboarding-view__select-trigger-value">
           <span>{triggerLabel}</span>
@@ -5094,6 +5146,7 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
           >
             {visibleOptions.map((option, index) => {
               const selected = selectedValues.includes(option.value);
+              const active = index === activeIndex;
               const optionId = `${dropdownIdRef.current}-option-${index}`;
               const optionLabelId = `${optionId}-label`;
               const optionMetaId = option.meta ? `${optionId}-meta` : undefined;
@@ -5105,11 +5158,12 @@ export function OnboardingDropdown(props: OnboardingDropdownProps) {
                 <button
                   key={option.value}
                   type="button"
-                  className={`onboarding-view__select-option${selected ? ' is-selected' : ''}`}
+                  className={`onboarding-view__select-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}
                   role="option"
                   aria-selected={selected}
                   aria-labelledby={optionLabelId}
                   aria-describedby={optionDescriptionIds}
+                  onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => {
                     if (props.multiple) {
                       props.onChange(
