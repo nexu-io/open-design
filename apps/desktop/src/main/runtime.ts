@@ -39,6 +39,7 @@ import { renderDeckSlides } from "./deck-capture.js";
 import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
 import { openValidatedDirectory } from "./open-path.js";
+import { SPEECH_EVENT_CHANNEL, createSpeechController } from "./speech-recognition.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import {
@@ -2037,6 +2038,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
   ipcMain.removeHandler("browser:clear-data");
+  ipcMain.removeHandler("od:speech:available");
+  ipcMain.removeHandler("od:speech:start");
+  ipcMain.removeHandler("od:speech:stop");
   for (const channel of UPDATER_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
   }
@@ -2540,6 +2544,30 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     guestWebContents.on("will-redirect", blockDisallowed);
     guestWebContents.setWindowOpenHandler(() => ({ action: "deny" }));
   });
+  // Apple-native speech recognition for voice dictation (macOS). The helper
+  // process is owned here; events go back only to the window that started it.
+  const speech = createSpeechController();
+  ipcMain.handle("od:speech:available", (event): boolean => {
+    requireMainWindowSender(event);
+    return speech.isAvailable();
+  });
+  ipcMain.handle("od:speech:start", (event, rawOptions: unknown): OpenDesignHostActionResult => {
+    requireMainWindowSender(event);
+    const locale = rawOptions != null && typeof rawOptions === "object"
+      ? (rawOptions as { locale?: unknown }).locale
+      : undefined;
+    const sender = event.sender;
+    const result = speech.start(typeof locale === "string" ? locale : "", (speechEvent) => {
+      if (!sender.isDestroyed()) sender.send(SPEECH_EVENT_CHANNEL, speechEvent);
+    });
+    return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+  });
+  ipcMain.handle("od:speech:stop", (event): OpenDesignHostActionResult => {
+    requireMainWindowSender(event);
+    speech.stop();
+    return { ok: true };
+  });
+  app.once("before-quit", () => speech.dispose());
   ipcMain.handle("browser:clear-data", async (event, rawOptions: unknown): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
     const optionsRecord = rawOptions != null && typeof rawOptions === "object"

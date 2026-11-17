@@ -3753,6 +3753,11 @@ export interface Dict {
   'chat.queuedSteerTextOnly': string;
   'chat.queuedFollowUpFallback': string;
   'chat.send': string;
+  'chat.voiceStart': string;
+  'chat.voiceStop': string;
+  'chat.voiceError': string;
+  'chat.voiceTranscribing': string;
+  'chat.voicePermissionDenied': string;
   'chat.stop': string;
   'chat.removeAria': string;
   'chat.example1Title': string;
