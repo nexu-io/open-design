@@ -10,6 +10,7 @@ const TASK_PROFILES = new Set<ProjectScenarioTaskProfile>([
   'ppt',
   'marketing',
   'hyperframes',
+  'motion-design',
 ]);
 
 export function createAutomaticProjectStrategyBinding(input: {

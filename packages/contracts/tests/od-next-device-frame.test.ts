@@ -164,9 +164,10 @@ describe('layout primitives resource', () => {
   ];
 
   it('names the managed files and selects the stylesheet out of the resources', () => {
-    expect(OD_NEXT_MANAGED_RESOURCE_FILES).toEqual(['iphone.html', 'android.html', 'neutral.html', 'layout.css']);
+    expect(OD_NEXT_MANAGED_RESOURCE_FILES).toEqual(['iphone.html', 'android.html', 'neutral.html', 'layout.css', 'deck-framework.md']);
     expect(odNextManagedResourceName('./x/device-frames/android.html')).toBe('android.html');
     expect(odNextManagedResourceName('./x/layout.css')).toBe('layout.css');
+    expect(odNextManagedResourceName('./x/deck-framework.md')).toBe('deck-framework.md');
     expect(odNextManagedResourceName('./x/notes.md')).toBeNull();
     expect(selectOdNextLayoutPrimitivesCss(resources)).toBe(css);
     expect(selectOdNextLayoutPrimitivesCss(resources.slice(0, 1))).toBeNull();

@@ -174,7 +174,7 @@ describe('SkillsSection Workspace identity partition', () => {
     await waitFor(() => expect(fetchSkills).toHaveBeenCalledTimes(1));
   });
 
-  it('loads Personal immediately and ignores the disabled Team lifecycle callback', async () => {
+  it('refreshes Personal from the same exact workspace lifecycle on reconnect', async () => {
     workspace.context = {
       ...context('workspace-personal', 'member-personal'),
       workspaceType: 'personal',
@@ -183,6 +183,7 @@ describe('SkillsSection Workspace identity partition', () => {
 
     renderSection();
     await waitFor(() => expect(fetchSkills).toHaveBeenCalledTimes(1));
+    vi.mocked(fetchSkills).mockClear();
     const onActive = workspaceInvalidationHarness.onActive.at(-1);
     expect(onActive).toBeTypeOf('function');
     act(() => onActive?.());

@@ -31,6 +31,7 @@ Business layer:
 - `ci.yml` is the main low-privilege PR, merge-queue, and manual validation gate (application merge bar only).
 - `ci.yml` should resolve runners, compose scope and convergence decisions in its Linux `plan` job, run validation, and produce typed handoff artifacts.
 - Docker image checks are standalone and outside the merge gate. Do not re-attach `docker-image.yml` to `Validate workspace`.
+- Stable Docker publication is also an independent reconciler: `release-stable.yml` publishes immutable version metadata and dispatches `release-stable-docker.yml`, but never waits for a Docker build. The independent workflow resolves the exact version metadata, calls `docker-image.yml` to converge the immutable version tag, then moves `latest` only when that version is still the authoritative stable release. Keep version retries idempotent and never infer a run's version from `stable/latest`.
 - Business workflows should not perform trusted writes to PR comments or branches when a capability workflow can do it.
 
 Atomic capability layer:
@@ -101,6 +102,14 @@ Use `.github/scripts/handoff.py` for all CI follow-on artifact names and paths. 
 - `handoff/autofix/<id>/metadata.json` plus `patch.diff`
 - `handoff/report/<id>/metadata.json`
 - `handoff/convergence/<id>/metadata.json` plus `candidate.json`
+- `handoff/pack-cache/windows/metadata.json` plus `cache.tar.gz` for optional
+  Windows release cache persistence. `cache-maintenance.yml` consumes only
+  same-repository, same-ref dispatches whose source commit is the current commit
+  or an ancestor. Artifact metadata must match the source run's exact SHA;
+  verify provenance and checksum before restoring. Prefix pruning keeps the
+  newest source commit, not the newest cache write: an ancestor save must not
+  delete a later commit's cache. It is independent of release concurrency and
+  publication; do not add a cache-save job to the prerelease workflow.
 
 Artifact names must come from `handoff.py artifact-name <kind> <id>`, and download patterns must come from `handoff.py artifact-pattern <kind>`.
 

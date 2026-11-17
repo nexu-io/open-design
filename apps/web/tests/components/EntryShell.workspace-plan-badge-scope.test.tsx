@@ -3,7 +3,7 @@
 // Switching workspaces must move the PLAN nameplate, not just the money.
 //
 // Reported shape: a workspace Vela Web shows as 免费 (订阅状态:免费, 升级团队套餐
-// CTA, US$0.00) rendered as 专业版 Plus in the client's account menu — while the
+// CTA, $0.00) rendered as 专业版 Plus in the client's account menu — while the
 // 额度 row in that same card correctly read $0.00. "为啥额度是对的?" is the whole
 // diagnosis: money and plan travel different paths, and only money is partitioned
 // by workspace.
@@ -205,10 +205,10 @@ function accountRowBadgeViewBox(): string | null {
   return badge?.getAttribute('viewBox') ?? null;
 }
 
-/** A: a team workspace that really holds a Team Plus subscription. */
+/** A: a Team Pro workspace under an account with a personal Plus plan. */
 const PAID_TEAM = teamContext('workspace-paid', {
   billingState: 'active',
-  planId: 'team_plus',
+  planId: 'team_pro',
 });
 /**
  * B: the reported workspace — brand new, nothing paid for. B reports an
@@ -254,7 +254,7 @@ async function mountHomeShell(initial: WorkspaceCollabContext): Promise<Harness>
       billingReads.push(workspaceId);
       if (workspaceId === PAID_TEAM.workspaceId) {
         return jsonResponse(
-          billingResponse(workspaceId, { billingState: 'active', planId: 'team_plus' }, '12.34'),
+          billingResponse(workspaceId, { billingState: 'active', planId: 'team_pro' }, '12.34'),
         );
       }
       if (workspaceId === FREE_TEAM.workspaceId) {
@@ -351,47 +351,34 @@ describe('account menu plan nameplate follows the selected workspace', () => {
     vi.restoreAllMocks();
   });
 
-  // The A side of the report: the nameplate answers a WORKSPACE question, so a
-  // personal Plus subscription must not name a team workspace's plan. The label
-  // names the plan FAMILY (团队版) and, per the later product ruling, so does the
-  // badge — a team subscription draws the `team` wordmark at every tier. The
-  // account here pays for a personal PLUS, so the PLUS wordmark is exactly the
-  // regression this asserts against.
+  // The nameplate answers a WORKSPACE question. The team Pro tier must win
+  // over the account's personal Plus tier.
   it('names the workspace subscription, not the account subscription', async () => {
     const home = await mountHomeShell(PAID_TEAM);
 
-    await waitFor(() => expect(home.card().getByText('US$12.34')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
     const card = home.card();
-    expect(card.queryByText('专业版')).toBeNull();
-    expect(card.getByText('团队版')).toBeTruthy();
-    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.team);
+    expect(card.getByRole('img', { name: 'pro' })).toBeTruthy();
+    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.pro);
   });
 
   // The B side: the exact reported sequence. Switching away from a paid
   // workspace must move the nameplate, not only the wallet.
   it('moves both the wallet and the nameplate when the workspace switches', async () => {
     const home = await mountHomeShell(PAID_TEAM);
-    await waitFor(() => expect(home.card().getByText('US$12.34')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('$12.34')).toBeTruthy());
 
     await home.switchTo(FREE_TEAM);
 
     // The money half already follows the switch — that is the half the reporter
     // saw working ("但是额度是对的").
-    await waitFor(() => expect(home.card().getByText('US$0.00')).toBeTruthy());
+    await waitFor(() => expect(home.card().getByText('$0.00')).toBeTruthy());
 
-    // The plan half must follow it too. Before the fix this still read
-    // 专业版 + the PLUS wordmark, because it came from the account summary
-    // that cannot change when the workspace does.
-    //
-    // The LABEL is what carries the switch: it is a subscription question, and
-    // this workspace has no subscription (免费). The badge names the plan FAMILY,
-    // which both workspaces share, so it stays on `team` across the switch —
-    // still a live guard on this bug, since the account's own tier is a personal
-    // PLUS and reverting the projection would put that wordmark back here.
+    // The badge must change with the workspace, instead of retaining the
+    // account's Plus tier.
     const card = home.card();
-    expect(card.queryByText('专业版')).toBeNull();
-    expect(card.queryByText('团队版')).toBeNull();
-    expect(card.getByText('免费版')).toBeTruthy();
-    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.team);
+    expect(card.getByRole('img', { name: 'free' })).toBeTruthy();
+    expect(card.getByText('未订阅')).toBeTruthy();
+    expect(accountRowBadgeViewBox()).toBe(BADGE_VIEWBOX_WIDTH.free);
   });
 });

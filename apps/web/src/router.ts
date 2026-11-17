@@ -4,6 +4,7 @@
 // that in the URL is the simplest way to make it deep-linkable.
 
 import { useSyncExternalStore } from 'react';
+import { navigationTiming, navigationPage, observeNavigation } from './observability/navigation-timing';
 import { LIBRARY_UI_VISIBLE } from './features/libraryUi';
 
 // Entry-shell sub-views. The home/project landing renders one of three
@@ -251,6 +252,7 @@ interface AcceptedHistoryLocation {
 interface ApprovedHistoryTraversal {
   expectedIndex: number;
   sequence: number;
+  timingOrigin: { at: number; iso: string };
 }
 
 const routeSubscribers = new Set<() => void>();
@@ -280,7 +282,7 @@ async function navigationGuardsAllow(): Promise<boolean> {
   return true;
 }
 
-function runGuardedNavigation(action: (sequence: number) => void): void {
+function runGuardedNavigation(action: (sequence: number) => void, onCancel?: (reason: 'guard_rejected' | 'superseded') => void): void {
   // Every newer navigation intent invalidates an older async guard, including
   // the no-guard fast path and a same-path no-op.
   const sequence = ++guardedNavigationSequence;
@@ -291,6 +293,7 @@ function runGuardedNavigation(action: (sequence: number) => void): void {
   }
   void navigationGuardsAllow().then((allowed) => {
     if (allowed && sequence === guardedNavigationSequence) action(sequence);
+    else { try { onCancel?.(sequence === guardedNavigationSequence ? 'guard_rejected' : 'superseded'); } catch { /* Observation only. */ } }
   });
 }
 
@@ -388,14 +391,25 @@ function handlePopstate(): void {
     && approvedTraversal.sequence === guardedNavigationSequence
     && approvedTraversal.expectedIndex === target.index
   ) {
+    const source = parseRoute(acceptedHistoryLocation?.pathname ?? target.pathname);
+    const destination = parseRoute(target.pathname);
+    if (destination.kind !== 'project' && navigationPage(source) !== navigationPage(destination)) {
+      observeNavigation(() => { const id = navigationTiming.beginPage(source, destination, approvedTraversal.timingOrigin); navigationTiming.commit(id); });
+    }
     acceptedHistoryLocation = target;
     notifyRouteSubscribers();
     return;
   }
 
   const previous = acceptedHistoryLocation ?? target;
+  const sourceRoute = parseRoute(previous.pathname);
+  const targetRoute = parseRoute(target.pathname);
+  const timingId = observeNavigation(() => targetRoute.kind !== 'project' && navigationPage(sourceRoute) !== navigationPage(targetRoute)
+    ? navigationTiming.beginPage(sourceRoute, targetRoute) : null);
+  const commitTiming = () => { if (timingId) observeNavigation(() => navigationTiming.commit(timingId)); };
   const sequence = ++guardedNavigationSequence;
   if (navigationGuards.size === 0) {
+    commitTiming();
     acceptedHistoryLocation = target;
     notifyRouteSubscribers();
     return;
@@ -403,14 +417,17 @@ function handlePopstate(): void {
 
   void navigationGuardsAllow().then((allowed) => {
     if (sequence !== guardedNavigationSequence) {
+      if (timingId) observeNavigation(() => navigationTiming.finish(timingId, 'cancelled', 'superseded'));
       repairHistoryTraversal(previous, target);
       return;
     }
     if (allowed) {
+      commitTiming();
       acceptedHistoryLocation = target;
       notifyRouteSubscribers();
       return;
     }
+    if (timingId) observeNavigation(() => navigationTiming.finish(timingId, 'cancelled', 'guard_rejected'));
     repairHistoryTraversal(previous, target);
   });
 }
@@ -418,11 +435,12 @@ function handlePopstate(): void {
 interface NavigationOptions {
   replace?: boolean;
   onCommit?: () => void;
+  onCancel?: (reason: 'guard_rejected' | 'superseded' | 'same_route') => void;
 }
 
 function commitNavigation(route: Route, opts: NavigationOptions = {}): void {
   const target = buildPath(route);
-  if (target === window.location.pathname) return;
+  if (target === window.location.pathname) { observeNavigation(() => opts.onCancel?.('same_route')); return; }
   const index = readHistoryIndex();
   // `replace` keeps the current depth (it swaps the entry in place); a push
   // adds one level so the entry we are leaving becomes the "previous layer".
@@ -445,7 +463,14 @@ function commitNavigation(route: Route, opts: NavigationOptions = {}): void {
 }
 
 export function navigate(route: Route, opts: NavigationOptions = {}): void {
-  runGuardedNavigation(() => commitNavigation(route, opts));
+  const source = getRouteSnapshot();
+  const id = observeNavigation(() => route.kind !== 'project' && navigationPage(source) !== navigationPage(route)
+    ? navigationTiming.beginPage(source, route) : null);
+  const options: NavigationOptions = { ...opts,
+    onCommit: () => { observeNavigation(() => { if (id) navigationTiming.commit(id); else if (route.kind !== 'project') navigationTiming.cancel('route_changed'); }); opts.onCommit?.(); },
+    onCancel: reason => { observeNavigation(() => { if (id) navigationTiming.finish(id, 'cancelled', reason); opts.onCancel?.(reason); }); },
+  };
+  runGuardedNavigation(() => commitNavigation(route, options), options.onCancel);
 }
 
 // Step back to the route the user actually came from. We pop the browser
@@ -455,10 +480,11 @@ export function navigate(route: Route, opts: NavigationOptions = {}): void {
 // (`odIndex` 0: deep link or fresh load), there is nothing in-app to pop, so we
 // navigate to `fallback` instead of letting `history.back()` escape the app.
 export function goBack(fallback: Route): void {
+  const timingOrigin = { at: performance.now(), iso: new Date().toISOString() };
   runGuardedNavigation((sequence) => {
     const index = readHistoryIndex();
     if (index > 0) {
-      approvedHistoryTraversal = { expectedIndex: index - 1, sequence };
+      approvedHistoryTraversal = { expectedIndex: index - 1, sequence, timingOrigin };
       window.history.back();
     } else {
       commitNavigation(fallback, { replace: true });

@@ -375,13 +375,13 @@ describe('ExtensionsMarketplace 团队 scope visibility', () => {
     expect(await screen.findByTestId('plugins-card-remote-skill')).toBeTruthy();
   });
 
-  it('does not offer the Team scope for a personal workspace', async () => {
+  it('offers the Team scope for a Personal workspace', async () => {
     workspaceContext = PERSONAL_CONTEXT;
     const { container } = renderMarketplace();
     await waitFor(() => {
       expect(container.querySelector('.plugin-marketplace__filters')).toBeTruthy();
     });
-    expect(scopeLabels(container)).not.toContain('Team');
+    expect(scopeLabels(container)).toContain('Team');
   });
 
   it('does not offer the Team scope when signed out (no workspace context)', async () => {

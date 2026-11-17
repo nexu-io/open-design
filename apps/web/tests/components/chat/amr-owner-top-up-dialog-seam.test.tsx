@@ -121,8 +121,8 @@ function renderPortalled() {
       </ChatRoot>
     </I18nProvider>,
   );
-  const overlay = screen.getByTestId('amr-balance-owner-dialog');
-  const modal = screen.getByRole('dialog') as HTMLElement;
+  const modal = screen.getByTestId('amr-balance-owner-dialog');
+  const overlay = modal.parentElement!;
   return { overlay, modal };
 }
 
@@ -166,8 +166,9 @@ describe('先证明这把尺子能照出缺陷', () => {
   it('弹窗确实消费 --chat-*,而且确实 portal 出去', () => {
     expect(varsConsumedBy('overlay')).toContain('--chat-text-strong');
     expect(varsConsumedBy('modal').length).toBeGreaterThan(0);
-    const source = readFileSync(resolve(SRC, 'components/chat/AmrOwnerTopUpDialog.tsx'), 'utf8');
-    expect(source).toMatch(/createPortal\(dialog, document\.body\)/);
+    // Native F10 now delegates the portal to the shared Dialog. Observe the DOM.
+    const { overlay } = renderPortalled();
+    expect(overlay.parentElement).toBe(document.body);
   });
 });
 

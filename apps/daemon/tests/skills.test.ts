@@ -296,6 +296,13 @@ describe('listSkills', () => {
     expect(skill.body).toContain('misinterpreted as daemon startup');
     expect(skill.body).toContain('trap cleanup_agent_browser EXIT INT TERM');
     expect(skill.body).toContain('pkill -f -- "--user-data-dir=${CHROME_USER_DATA_DIR}"');
+    // The smoke path overrides HOME, so a Chrome launched without the mock
+    // keychain shows macOS "Keychain Not Found" on every start.
+    const chromeLaunches = skill.body.match(/--remote-debugging-port=9223 \\\n(?:.*\\\n)*.*--no-default-browser-check/g) ?? [];
+    expect(chromeLaunches.length).toBeGreaterThanOrEqual(3);
+    for (const launch of chromeLaunches) {
+      expect(launch).toContain('--use-mock-keychain');
+    }
   });
 
   it('keeps html-ppt PNG export on one managed Chromium screenshot path', async () => {

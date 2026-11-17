@@ -52,6 +52,12 @@ describe('Langfuse message finalization gate', () => {
     expect(shouldReportRunCompletionTelemetryFallbackStatus('running')).toBe(false);
   });
 
+  it('also schedules successful Task-owned runs without a client final-message write', () => {
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('succeeded', true)).toBe(true);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('succeeded', false)).toBe(false);
+    expect(shouldReportRunCompletionTelemetryFallbackStatus('running', true)).toBe(false);
+  });
+
   it('uses the explicit current prompt for telemetry instead of the full transcript', () => {
     expect(
       telemetryPromptFromRunRequest(

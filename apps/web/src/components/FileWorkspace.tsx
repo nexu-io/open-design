@@ -15,6 +15,8 @@ import {
 import { Button } from '@open-design/components';
 import { createPortal } from 'react-dom';
 import type { DesignSystemEditClickProps, TrackingArtifactKind, TrackingProjectKind } from '@open-design/contracts/analytics';
+import { isObservedShareFileSwitch, type ObservedPublicShareLink, type ObservedShareUpdateRequest } from './share/observed-public-share-link';
+import type { ShareLoginReturn } from './share/share-login-return';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackFileManagerClick,
@@ -39,9 +41,7 @@ import {
   projectFileUrl,
   projectRawUrl,
   applyLibraryAsset,
-  createProjectFolder,
   deleteDesignSystemDraft,
-  deleteProjectFolder,
   renameProjectFile,
   startDesignSystemTokenContractRebuildJob,
   updateDesignSystemDraft,
@@ -73,6 +73,7 @@ import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
 import {
   appendResourceQuery,
+  currentWorkspaceAccountGeneration,
   workspaceIdentityCacheKey,
 } from '../collab/workspace-identity';
 import {
@@ -85,7 +86,6 @@ import {
   type AgentEvent,
   type AgentInfo,
   type AppConfig,
-  type ChatAttachment,
   type ChatCommentAttachment,
   type Conversation,
   conversationIdFromSideChatTabId,
@@ -137,6 +137,9 @@ import { Icon, type IconName } from './Icon';
 import { projectIsSharedWithWorkspace } from '../collab/project-shared-status';
 import { FileSyncBadge, type FileSyncBadgeState } from '../collab/FileSyncBadge';
 import { Toast } from './Toast';
+import { activeFileSharesBeforeDelete } from './project-actions/activeFileSharesBeforeDelete';
+import { ProjectDeleteConfirmDialog } from './project-actions/ProjectDeleteConfirmDialog';
+import { useProjectShareHistoryState } from './share/useProjectShareHistory';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
@@ -227,6 +230,12 @@ interface Props {
     options?: { fresh?: boolean },
   ) => Promise<FileRefreshResult | void> | FileRefreshResult | void;
   onManualFileWritten?: (file: ProjectFile) => void;
+  onObservedPublicShareLink?: (share: ObservedPublicShareLink | null) => void;
+  observedPublicShareLink?: ObservedPublicShareLink | null;
+  loginUpdateRequest?: ObservedShareUpdateRequest | null;
+  onLoginUpdateRequestHandled?: (nonce: number) => void;
+  shareLoginReturn?: ShareLoginReturn | null;
+  onShareLoginReturnChange?: (request: ShareLoginReturn | null) => void;
   isDeck: boolean;
   streaming?: boolean;
   /**
@@ -247,6 +256,8 @@ interface Props {
   // tabs in one commit — a finished turn's artifacts (OPEND-2588). `name` is
   // still the one that ends up active, and is opened whether or not the batch
   // names it.
+  /** Exact router file still awaiting the async open request on project mount. */
+  routeFileName?: string | null;
   openRequest?: { name: string; nonce: number; openBatch?: readonly string[] } | null;
   browserOpenRequest?: BrowserOpenRequest | null;
   // Browser tab whose <webview> must stay mounted even while another workspace
@@ -272,6 +283,8 @@ interface Props {
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
   previewComments?: PreviewComment[];
+  previewCommentsState?: 'loading' | 'error' | 'success';
+  onRetryPreviewComments?: () => void;
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
   onReorderPreviewComment?: (commentId: string, sortKey: number) => Promise<void>;
@@ -337,6 +350,7 @@ interface Props {
   // launcher affordance to create new side chats — only persisted `chat:` tabs
   // are restored.
   chatConfig?: AppConfig;
+  onTouchProject?: (sentAt: number) => void;
   chatAgentsById?: Map<string, AgentInfo>;
   handoffAgents?: AgentInfo[];
   handoffArtifactId?: string;
@@ -384,6 +398,14 @@ interface Props {
   materializationPending?: boolean;
   /** See DesignFilesPanel's `filesAuthoritative`. */
   filesAuthoritative?: boolean;
+  /**
+   * The project row does not exist on the daemon yet (a Home send whose create
+   * has not answered, OPEND-3334): this workspace reads nothing of its own
+   * (folders, share status) until it does.
+   */
+  projectReadsHeld?: boolean;
+  /** See DesignFilesPanel's `emptyLookBeforeFirstListing`. */
+  emptyLookBeforeFirstListing?: boolean;
   /** Optional override for the read-only notice text. */
   readonlyNotice?: string;
   /**
@@ -1235,7 +1257,7 @@ interface DesignSystemSectionActivity {
   todoStatus?: TodoItem['status'];
 }
 
-function formatBrowserTabUrl(url: string): string {
+function _formatBrowserTabUrl(url: string): string {
   if (!url) return '';
   try {
     const parsed = new URL(url);
@@ -1325,11 +1347,18 @@ export function FileWorkspace({
   filesGeneration,
   onRefreshFiles,
   onManualFileWritten,
+  onObservedPublicShareLink,
+  observedPublicShareLink,
+  loginUpdateRequest,
+  onLoginUpdateRequestHandled,
+  shareLoginReturn,
+  onShareLoginReturnChange,
   isDeck,
   streaming,
   runInFlight = false,
   commentQueueOnSend = false,
   commentSendDisabled = false,
+  routeFileName,
   openRequest,
   browserOpenRequest,
   pinnedBrowserTabId,
@@ -1341,6 +1370,8 @@ export function FileWorkspace({
   tabsState,
   onTabsStateChange,
   previewComments = NO_PREVIEW_COMMENTS,
+  previewCommentsState = 'success',
+  onRetryPreviewComments,
   onSavePreviewComment,
   onRemovePreviewComment,
   onReorderPreviewComment,
@@ -1374,6 +1405,7 @@ export function FileWorkspace({
   commentPortalId,
   onCommentModeChange,
   chatConfig,
+  onTouchProject,
   chatAgentsById,
   handoffAgents,
   handoffArtifactId,
@@ -1382,7 +1414,6 @@ export function FileWorkspace({
   installationId,
   chatLocale,
   conversations = [],
-  activeConversationId = null,
   onSelectConversation,
   onDeleteConversation,
   onRenameConversation,
@@ -1394,12 +1425,13 @@ export function FileWorkspace({
   onActiveContextChange,
   onWorkspaceContextsChange,
   messages = [],
-  conversationId,
   fileActionsBefore,
   headerActions,
   viewerOnly = false,
   materializationPending = false,
   filesAuthoritative = true,
+  emptyLookBeforeFirstListing = false,
+  projectReadsHeld = false,
   readonlyNotice,
   fileSyncBadge = null,
 }: Props) {
@@ -1510,7 +1542,7 @@ export function FileWorkspace({
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [projectShareMenuOpen, setProjectShareMenuOpen] = useState(false);
   const [projectShareAccess, setProjectShareAccess] = useState<'private' | 'workspace'>('private');
-  const [projectShareAccessMenuOpen, setProjectShareAccessMenuOpen] = useState(false);
+  const [, setProjectShareAccessMenuOpen] = useState(false);
   const [projectShareConfirm, setProjectShareConfirm] = useState<'private' | 'workspace' | null>(null);
   const [projectShareBusy, setProjectShareBusy] = useState(false);
   const [pageCreatorOpen, setPageCreatorOpen] = useState(false);
@@ -1785,6 +1817,7 @@ export function FileWorkspace({
   }, [projectId, workspaceContext]);
 
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     // The synchronous clear happens during render (see projectFoldersProjectIdRef
     // above); here we only fetch the new project's folders.
@@ -1794,7 +1827,7 @@ export function FileWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [projectId, workspaceContext]);
+  }, [projectId, projectReadsHeld, workspaceContext]);
 
   // True when the Design Files tab has nothing to attach: no files, no live
   // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
@@ -2611,74 +2644,101 @@ export function FileWorkspace({
     };
   }, [quickSwitcherOpen]);
 
+  const fileDeletePendingRef = useRef(false);
+  async function confirmFileDelete(filePaths: readonly string[], message: string): Promise<boolean> {
+    const generation = currentWorkspaceAccountGeneration();
+    let activeCount: number | null;
+    try {
+      activeCount = await activeFileSharesBeforeDelete(projectId, filePaths, workspaceContext);
+    } catch {
+      alert(t('ds.actionFailed'));
+      return false;
+    }
+    if (generation !== currentWorkspaceAccountGeneration()) return false;
+    const warning = activeCount !== null && activeCount > 0
+      ? `\n\n${t('designs.deleteActiveShares', { count: activeCount })}`
+      : '';
+    return confirm(`${message}${warning}`) && generation === currentWorkspaceAccountGeneration();
+  }
+
   async function handleDelete(name: string) {
-    if (viewerOnly) return; // read-only viewer of a team-shared project
-    if (!confirm(t('workspace.deleteFileConfirm', { name }))) return;
-    const ok = await deleteProjectFile(projectId, name, workspaceContext);
-    if (ok) {
-      await onRefreshFiles();
-      const nextTabs = persistedTabs.filter((n) => n !== name);
-      if (activeTab === name) {
-        // User is viewing the file being deleted: fall back to another
-        // open tab (or the Design Files panel if none remain).
-        const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-        setActiveTab(nextActive ?? DESIGN_FILES_TAB);
-      } else {
-        // Deletion was triggered from the Design Files panel (or another
-        // tab). We preserve `activeTab` because the user is viewing a
-        // different context (Design Files or another tab) and shouldn't
-        // be navigated away. Only clear the persisted active reference
-        // when it points at the deleted file so we don't leave a dangling
-        // pointer behind.
-        const nextActive = tabsState.active === name ? null : tabsState.active;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
+    if (viewerOnly || fileDeletePendingRef.current) return; // read-only viewer or pending deletion
+    fileDeletePendingRef.current = true;
+    try {
+      if (!await confirmFileDelete([name], t('workspace.deleteFileConfirm', { name }))) return;
+      const ok = await deleteProjectFile(projectId, name, workspaceContext);
+      if (ok) {
+        await onRefreshFiles();
+        const nextTabs = persistedTabs.filter((n) => n !== name);
+        if (activeTab === name) {
+          // User is viewing the file being deleted: fall back to another
+          // open tab (or the Design Files panel if none remain).
+          const nextActive = nextTabs[nextTabs.length - 1] ?? null;
+          onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
+          setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+        } else {
+          // Deletion was triggered from the Design Files panel (or another
+          // tab). We preserve `activeTab` because the user is viewing a
+          // different context (Design Files or another tab) and shouldn't
+          // be navigated away. Only clear the persisted active reference
+          // when it points at the deleted file so we don't leave a dangling
+          // pointer behind.
+          const nextActive = tabsState.active === name ? null : tabsState.active;
+          onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
+        }
+        setSketches((curr) => {
+          const next = { ...curr };
+          clearSketchAutosave(name);
+          delete next[name];
+          return next;
+        });
       }
-      setSketches((curr) => {
-        const next = { ...curr };
-        clearSketchAutosave(name);
-        delete next[name];
-        return next;
-      });
+    } finally {
+      fileDeletePendingRef.current = false;
     }
   }
 
   async function handleDeleteMany(names: string[]) {
-    if (viewerOnly) return; // read-only viewer of a team-shared project
+    if (viewerOnly || fileDeletePendingRef.current) return; // read-only viewer or pending deletion
     if (names.length === 0) return;
-    if (!confirm(t('workspace.deleteSelectedFilesConfirm', { n: names.length }))) return;
-    const deleted: string[] = [];
-    const failed: string[] = [];
-    for (const name of names) {
-      const ok = await deleteProjectFile(projectId, name, workspaceContext);
-      if (ok) deleted.push(name);
-      else failed.push(name);
-    }
-    if (deleted.length > 0) {
-      await onRefreshFiles();
-      const deletedSet = new Set(deleted);
-      const nextTabs = persistedTabs.filter((n) => !deletedSet.has(n));
-      if (activeTab && deletedSet.has(activeTab)) {
-        const nextActive = nextTabs[nextTabs.length - 1] ?? null;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
-        setActiveTab(nextActive ?? DESIGN_FILES_TAB);
-      } else {
-        const nextActive =
-          tabsState.active && deletedSet.has(tabsState.active) ? null : tabsState.active;
-        onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
+    fileDeletePendingRef.current = true;
+    try {
+      if (!await confirmFileDelete(names, t('workspace.deleteSelectedFilesConfirm', { n: names.length }))) return;
+      const deleted: string[] = [];
+      const failed: string[] = [];
+      for (const name of names) {
+        const ok = await deleteProjectFile(projectId, name, workspaceContext);
+        if (ok) deleted.push(name);
+        else failed.push(name);
       }
-      setSketches((curr) => {
-        const next = { ...curr };
-        for (const name of deleted) {
-          clearSketchAutosave(name);
-          sketchSceneRevisionRef.current.delete(name);
-          delete next[name];
+      if (deleted.length > 0) {
+        await onRefreshFiles();
+        const deletedSet = new Set(deleted);
+        const nextTabs = persistedTabs.filter((n) => !deletedSet.has(n));
+        if (activeTab && deletedSet.has(activeTab)) {
+          const nextActive = nextTabs[nextTabs.length - 1] ?? null;
+          onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
+          setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+        } else {
+          const nextActive =
+            tabsState.active && deletedSet.has(tabsState.active) ? null : tabsState.active;
+          onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
         }
-        return next;
-      });
-    }
-    if (failed.length > 0) {
-      alert(t('workspace.deleteSelectedFilesPartial', { n: failed.length }));
+        setSketches((curr) => {
+          const next = { ...curr };
+          for (const name of deleted) {
+            clearSketchAutosave(name);
+            sketchSceneRevisionRef.current.delete(name);
+            delete next[name];
+          }
+          return next;
+        });
+      }
+      if (failed.length > 0) {
+        alert(t('workspace.deleteSelectedFilesPartial', { n: failed.length }));
+      }
+    } finally {
+      fileDeletePendingRef.current = false;
     }
   }
 
@@ -3120,6 +3180,28 @@ export function FileWorkspace({
       ? activeFile
       : null;
   const activeHtmlViewerFile = activeViewerFile?.kind === 'html' ? activeViewerFile : null;
+  const observedActiveFileRef = useRef<string | null>(null);
+  useEffect(() => {
+    const identity = activeViewerFile ? `${projectId}:${activeViewerFile.name}` : null;
+    // A login intent cannot wait on hidden A while B (or Design Files) is
+    // active and later publish A when the person returns to its retained tab.
+    if (loginUpdateRequest && (
+      loginUpdateRequest.link.projectId !== projectId
+      || (activeViewerFile && activeViewerFile.name !== loginUpdateRequest.link.filePath)
+      || (!activeViewerFile && (
+        observedActiveFileRef.current !== null
+        || (filesAuthoritative && !initialMaterializationPending
+          && activeTab !== loginUpdateRequest.link.filePath
+          && routeFileName !== loginUpdateRequest.link.filePath
+          && openRequest?.name !== loginUpdateRequest.link.filePath)
+      ))
+    )) onLoginUpdateRequestHandled?.(loginUpdateRequest.nonce);
+    if (identity === null || observedActiveFileRef.current === identity) return;
+    const switchedFile = isObservedShareFileSwitch(observedActiveFileRef.current, identity);
+    observedActiveFileRef.current = identity;
+    if (switchedFile) onObservedPublicShareLink?.(null);
+  }, [activeViewerFile?.name, projectId, onObservedPublicShareLink, loginUpdateRequest, onLoginUpdateRequestHandled,
+    activeTab, filesAuthoritative, initialMaterializationPending, openRequest?.name, routeFileName]);
   const htmlViewerFileSnapshotsRef = useRef<{
     projectId: string;
     files: Map<string, ProjectFile>;
@@ -3439,9 +3521,12 @@ export function FileWorkspace({
       filesRefreshKey={filesRefreshKey}
       isDeck={isDeck}
       streaming={streaming}
+      motionPreviewMuted={runInFlight}
       commentQueueOnSend={commentQueueOnSend}
       commentSendDisabled={commentSendDisabled}
       previewComments={previewCommentsByFile.get(file.name) ?? NO_PREVIEW_COMMENTS}
+      previewCommentsState={previewCommentsState}
+      onRetryPreviewComments={onRetryPreviewComments}
       onSavePreviewComment={onSavePreviewComment}
       onRemovePreviewComment={onRemovePreviewComment}
       onReorderPreviewComment={onReorderPreviewComment}
@@ -3451,6 +3536,13 @@ export function FileWorkspace({
       }
       onFileSaved={refreshFilesWithoutResult}
       onFileWritten={onManualFileWritten}
+      onObservedPublicShareLink={onObservedPublicShareLink}
+      observedPublicShareLink={observedPublicShareLink}
+      loginUpdateRequest={workspaceActive && loginUpdateRequest?.link.filePath === file.name
+        && loginUpdateRequest.link.projectId === projectId ? loginUpdateRequest : null}
+      onLoginUpdateRequestHandled={onLoginUpdateRequestHandled}
+      shareLoginReturn={workspaceActive ? shareLoginReturn : null}
+      onShareLoginReturnChange={workspaceActive ? onShareLoginReturnChange : undefined}
       onOpenFileReplacing={stableOpenFileReplacing}
       commentPortalId={workspaceActive ? commentPortalId : undefined}
       onCommentModeChange={workspaceActive ? onCommentModeChange : undefined}
@@ -3869,17 +3961,22 @@ export function FileWorkspace({
   }, [projectShareMenuOpen]);
 
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
-    const refreshShareAccess = () => void projectIsSharedWithWorkspace(projectId, workspaceContext).then((shared) => {
-      if (!cancelled) setProjectShareAccess(shared ? 'workspace' : 'private');
-    });
+    let refreshSeq = 0;
+    const refreshShareAccess = (event?: Event) => {
+      const seq = ++refreshSeq;
+      void projectIsSharedWithWorkspace(projectId, workspaceContext, event ? { event } : undefined).then((shared) => {
+        if (!cancelled && seq === refreshSeq) setProjectShareAccess(shared ? 'workspace' : 'private');
+      });
+    };
     refreshShareAccess();
     window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     return () => {
       cancelled = true;
       window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
-  }, [projectId, projectShareMenuOpen, workspaceContext]);
+  }, [projectId, projectReadsHeld, projectShareMenuOpen, workspaceContext]);
 
   useEffect(() => {
     if (!projectShareMenuOpen) setProjectShareAccessMenuOpen(false);
@@ -3927,7 +4024,7 @@ export function FileWorkspace({
   // Crossing the team-space boundary routes through the shared 转入/移出
   // 团队空间 confirmation (same dialog + 不再提示 skip key as the project
   // grid) instead of silently moving the project.
-  function setProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
+  function _setProjectWorkspaceShareAccess(nextAccess: 'private' | 'workspace') {
     setProjectShareAccessMenuOpen(false);
     if (nextAccess === projectShareAccess || projectShareBusy || viewerOnly) return;
     if (moveConfirmSkipped()) {
@@ -4189,6 +4286,9 @@ export function FileWorkspace({
           {!initialMaterializationPending && fileActionsBefore ? (
             <div className="ws-tabs-file-actions-before">{fileActionsBefore}</div>
           ) : null}
+          {!initialMaterializationPending && headerActions ? (
+            <div className="ws-tabs-project-actions">{headerActions}</div>
+          ) : null}
           {/* Pure portal host. Whatever file is open owns these actions and
               portals them in; with no file open there is nothing to act on, so
               the slot stays empty rather than rendering a permanently-disabled
@@ -4200,9 +4300,6 @@ export function FileWorkspace({
             data-app-chrome-file-actions="true"
             hidden={!viewerFileActive}
           />
-          {!initialMaterializationPending && headerActions ? (
-            <div className="ws-tabs-project-actions">{headerActions}</div>
-          ) : null}
         </div>
       </div>
       {!initialMaterializationPending && launcherOpen ? (
@@ -4379,6 +4476,7 @@ export function FileWorkspace({
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             filesAuthoritative={filesAuthoritative}
+            emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
             rootDirName={rootDirName}
             reloading={reloading}
             running={runInFlight}
@@ -4550,6 +4648,7 @@ export function FileWorkspace({
             projectId={projectId}
             conversationId={conversationIdFromSideChatTabId(activeTab)}
             config={chatConfig}
+            onTouchProject={onTouchProject}
             agentsById={chatAgentsById}
             locale={chatLocale ?? 'en'}
             workspaceContext={workspaceContext}
@@ -4811,6 +4910,17 @@ function DesignSystemProjectPanel({
   const [designMdBody, setDesignMdBody] = useState('');
   const [savingDesignMd, setSavingDesignMd] = useState(false);
   const [kitActionBusy, setKitActionBusy] = useState<string | null>(null);
+  const [deleteRequest, setDeleteRequest] = useState<{ projectId: string; generation: number } | null>(null);
+  const [deleteFailed, setDeleteFailed] = useState(false);
+  const deleteInFlight = useRef(false);
+  const { history: deleteShareHistory, status: deleteHistoryStatus } = useProjectShareHistoryState(
+    deleteRequest && workspaceContext ? deleteRequest.projectId : undefined,
+    workspaceContext, 'delete-confirmation',
+  );
+  const deleteShareStatus = deleteRequest && (!workspaceContext || deleteRequest.projectId !== projectId
+    || deleteRequest.generation !== currentWorkspaceAccountGeneration()) ? 'error' : deleteHistoryStatus;
+  const deleteActiveShareCount = deleteShareHistory
+    ? deleteShareHistory.publications.filter(publication => publication.status === 'active').length : null;
   // Transient feedback for kit edits (upload / refresh / reset / delete) so an
   // action that previously fired-and-forgot now reports success or failure.
   const [kitToast, setKitToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);
@@ -4999,11 +5109,12 @@ function DesignSystemProjectPanel({
   // navigates home — so the panel unmounts on success and there's no busy reset
   // to do in the happy path.
   async function deleteDesignSystemProject() {
-    if (kitActionBusy || !onDeleteDesignSystemProject || !editable) return;
-    const ok = window.confirm(
-      t('ds.deleteProjectConfirm', { title: system.title }),
-    );
-    if (!ok) return;
+    if (kitActionBusy || deleteInFlight.current || !onDeleteDesignSystemProject || !editable
+      || !deleteRequest || deleteRequest.projectId !== projectId
+      || deleteRequest.generation !== currentWorkspaceAccountGeneration()
+      || deleteShareStatus !== 'ready' || deleteActiveShareCount === null) return;
+    deleteInFlight.current = true;
+    setDeleteFailed(false);
     setKitActionBusy('delete');
     notifyKitLoading(t('ds.deleteProjectAction', { title: system.title }));
     try {
@@ -5015,14 +5126,16 @@ function DesignSystemProjectPanel({
       // aren't user-editable; that's fine.
       const deleted = await onDeleteDesignSystemProject(projectId);
       if (!deleted) {
-        notifyKit('error', t('ds.actionFailed'));
-        setKitActionBusy(null);
+        setDeleteFailed(true);
         return;
       }
+      setDeleteRequest(null);
       await deleteDesignSystemDraft(system.id, workspaceContext);
       await onDesignSystemsRefresh?.();
     } catch {
-      notifyKit('error', t('ds.actionFailed'));
+      setDeleteFailed(true);
+    } finally {
+      deleteInFlight.current = false;
       setKitActionBusy(null);
     }
   }
@@ -5171,7 +5284,7 @@ function DesignSystemProjectPanel({
     ? sectionReviews.filter((item) => designSystemSectionVisibleDuringGeneration(item))
     : sectionReviews;
   const groupedSectionReviews = designSystemReviewGroups(visibleSectionReviews);
-  const reviewTocGroups = groupedSectionReviews
+  const _reviewTocGroups = groupedSectionReviews
     .map((group) => ({
       title: group.title,
       items: group.items.map((item) => ({
@@ -5270,7 +5383,7 @@ function DesignSystemProjectPanel({
     setFeedbackText('');
   }
 
-  function renderReviewCard(
+  function _renderReviewCard(
     item: DesignSystemProjectSectionReview,
     instanceId: string,
     defaultExpanded: boolean,
@@ -5566,7 +5679,10 @@ function DesignSystemProjectPanel({
             id: 'delete',
             label: t('ds.deleteProjectAction', { title: system.title }),
             icon: 'trash' as IconName,
-            onClick: () => void deleteDesignSystemProject(),
+            onClick: () => {
+              setDeleteFailed(false);
+              setDeleteRequest({ projectId, generation: currentWorkspaceAccountGeneration() });
+            },
             disabled: !editable || Boolean(kitActionBusy) || statusBusy || defaultBusy,
             loading: kitActionBusy === 'delete',
           } satisfies HeaderMenuAction,
@@ -5672,6 +5788,21 @@ function DesignSystemProjectPanel({
 
   return (
     <div className="ds-project-panel ds-project-panel--kit" data-testid="design-system-project-tab-panel">
+      {deleteRequest ? (
+        <ProjectDeleteConfirmDialog
+          projectName={system.title}
+          activeShareCount={deleteActiveShareCount}
+          shareReadStatus={deleteShareStatus}
+          pending={kitActionBusy === 'delete'}
+          failed={deleteFailed}
+          onCancel={() => {
+            if (deleteInFlight.current) return;
+            setDeleteRequest(null);
+            setDeleteFailed(false);
+          }}
+          onConfirm={() => void deleteDesignSystemProject()}
+        />
+      ) : null}
       {kitToast ? (
         <Toast
           message={kitToast.message}
@@ -6206,7 +6337,7 @@ function isDesignSystemGuidanceFile(name: string): boolean {
   return DESIGN_SYSTEM_GUIDANCE_FILES.has(path);
 }
 
-function designSystemGuidanceSort(first: string, second: string): number {
+function _designSystemGuidanceSort(first: string, second: string): number {
   const order = ['design.md', 'readme.md', 'readme-print.md', 'skill.md'];
   const firstRank = order.indexOf(normalizeDesignSystemPath(first));
   const secondRank = order.indexOf(normalizeDesignSystemPath(second));
@@ -6249,7 +6380,7 @@ function isDesignSystemTokenFile(name: string): boolean {
     || /\b(color|colors|palette|typography|spacing|radius|theme|token)s?\b/u.test(path);
 }
 
-function isDesignSystemPreviewFile(name: string): boolean {
+function _isDesignSystemPreviewFile(name: string): boolean {
   const path = normalizeDesignSystemPath(name);
   if (isDesignSystemEvidenceFile(path) || path.startsWith('ui_kits/')) return false;
   const basename = designSystemBasename(path);
@@ -7472,7 +7603,7 @@ function designSystemSectionPhaseLabel(
   return t('ds.reviewNeedsReview');
 }
 
-function designSystemSectionActivityLabel(
+function _designSystemSectionActivityLabel(
   t: TranslateFn,
   section: DesignSystemProjectSection,
   activity: DesignSystemSectionActivity,

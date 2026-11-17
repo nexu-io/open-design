@@ -246,8 +246,11 @@ node --experimental-strip-types scripts/sync-litellm-models.ts
 
 ## Commit 与 PR
 
+- **团队 PR 标题带真实 Plane 工单号。** 例如 `[OPEND-3693] fix(web): 修复首页滚动异常`。修改标题时保留前缀；允许编号周围有空格。连续多个编号都会关联，代码量只计到第一个。正文继续使用仓库原模板，无额外链接或负责人必填字段。
+- **编号校验针对内部账号和 ODCrew，外部贡献者免阻塞。** 集成启用后，`quality/plane` 通过才可合并。紧急放行仅允许 `lefarcen`、`mrcfps` 对当前提交 Approve，评审中写 `quality-bypass: 具体原因`；普通审批不触发放行，推新提交或撤销批准后重新校验。
+
 - **一个 PR 只做一件事。** 加 skill + 重构 parser + 升依赖，是三个 PR。
-- **标题用动词起头 + 范围。** `add dating-web skill`、`fix daemon SSE backpressure when CLI hangs`、`docs: clarify storage contract`。
+- **编号后写改动类型与摘要。** 例如 `[OPEND-3693] fix(web): 修复首页滚动异常`；外部贡献者可直接使用 `fix(web): 修复首页滚动异常`。
 - **使用 PR 模板。** 把 [`.github/pull_request_template.md`](../../.github/pull_request_template.md) 的每一节都填上 —— Why、What users will see、Surface area、Screenshots（如果有 UI 改动）、Bug fix verification（如果是修 bug）、Validation。留空的节会被 reviewer 回 "please fill in"。
 - **正文解释 why。** 「这个 PR 改了什么」从 diff 一般能看出来；「为什么要改」很少能。
 - **如果有 issue，引用它。** 没有、且改动非平凡，请先开 issue 让我们先就「值不值得做」达成一致，再投入时间。

@@ -17,6 +17,7 @@
  *    修复最容易被顺手改死的方式。
  *
  * 所以这里的每一条都成对出现:中断档怎么样,**完成档必须同时被钉住不许跟着变**。
+ * (P0-24 Q6:回合结束后状态词连同记号一起去掉,渲染层的勾 / 点用例已删,只剩 CSS 文本对照。)
  */
 
 import { cleanup, render } from '@testing-library/react';
@@ -152,45 +153,8 @@ describe('回合状态行要撑得满,时间才贴得到右端', () => {
 
 /* ── 记号:勾 vs 点 ──────────────────────────────────────────────────── */
 
-/** 换勾那条规则(`--tick-img`)的选择器 —— 从 CSS 里读,不手抄。 */
-function tickSelector(): string {
-  for (const block of THEATER.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    if (/tick-img/.test(block[2] ?? '')) return (block[1] ?? '').trim().replace(/\s+/g, ' ');
-  }
-  throw new Error('找不到画完成勾那条规则');
-}
-
-const dotOf = (root: HTMLElement) => root.querySelector('.assistant-footer .dot');
-
 describe('回合状态行的记号 · 「过了」画勾,「停了」画点', () => {
-  it('防真空:完成档用的是 `<svg>` —— 这一条是下面「中断档不是勾」的量尺', () => {
-    const { container } = renderTurn(turn({ id: 'm-ok', runStatus: 'succeeded' }));
-    const dot = dotOf(container);
-    expect(dot, '完成档没渲染出记号').toBeTruthy();
-    expect(dot!.tagName.toLowerCase(), '完成档不再是勾那一档的 <svg> 了').toBe('svg');
-  });
-
-  it('中断档用的是 `<i>`:点只说「有个状态」,勾说的是「过了」', () => {
-    const { container } = renderTurn(turn({ id: 'm-stop', runStatus: 'canceled' }));
-    const dot = dotOf(container);
-    expect(dot, '中断档没渲染出记号').toBeTruthy();
-    expect(dot!.tagName.toLowerCase(), '中断的一轮戴上了完成勾').toBe('i');
-    // 点不许还在跳 —— `data-active` 那一档是「正在跑」的绿色脉冲
-    expect(dot!.getAttribute('data-active')).not.toBe('true');
-  });
-
-  it('换勾那条规则命中完成档、**不**命中中断档', () => {
-    const sel = tickSelector();
-    // 量尺自证:这条选择器必须真的能命中点什么,否则下面的 false 是白得的
-    const ok = renderTurn(turn({ id: 'm-ok', runStatus: 'succeeded' }));
-    const okDot = dotOf(ok.container);
-    expect(okDot!.matches(sel), `完成档没被换勾规则命中(${sel})`).toBe(true);
-    cleanup();
-
-    const stopped = renderTurn(turn({ id: 'm-stop', runStatus: 'canceled' }));
-    const stoppedDot = dotOf(stopped.container);
-    expect(stoppedDot!.matches(sel), '中断档被换勾规则命中了').toBe(false);
-  });
+  // P0-24 Q6: the settled status word this measured was removed; status lives in the turn header.
 
   /*
    * ── 别拿陈列页的读数当产品缺陷 ────────────────────────────────────

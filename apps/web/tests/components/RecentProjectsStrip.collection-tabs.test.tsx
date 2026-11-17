@@ -7,11 +7,14 @@
 // OPEND-3201 rides along: the card's relative time must sit in its own
 // non-shrinking element so the creator, not the time, gives way.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RecentProjectsStrip } from '../../src/components/RecentProjectsStrip';
 import type { Project } from '../../src/types';
+
+const analytics = vi.hoisted(() => ({ track: vi.fn(), newRequestId: () => 'open-request' }));
+vi.mock('../../src/analytics/provider', () => ({ useAnalytics: () => analytics }));
 
 vi.mock('../../src/providers/registry', () => ({
   fetchProjectFileText: vi.fn(async () => null),
@@ -21,9 +24,7 @@ vi.mock('../../src/providers/registry', () => ({
 }));
 
 
-// The collection tabs read the workspace kind (OPEND-3285): the 团队项目 tab
-// exists only in a team workspace. Default the mock to a team so the OPEND-3108
-// cases keep their three tabs; the OPEND-3285 cases flip it to personal.
+// Both Team and Personal workspaces can contain explicitly shared projects.
 const workspaceState: {
   context: Record<string, unknown> | null;
   loading: boolean;
@@ -56,6 +57,7 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 beforeEach(() => {
+  analytics.track.mockClear();
   workspaceState.context = teamContext();
   workspaceState.loading = false;
 });
@@ -78,9 +80,9 @@ function project(overrides: Partial<Project>): Project {
   };
 }
 
-const MINE = project({ id: 'p-mine', name: 'My draft', updatedAt: 3 });
-const SHARED = project({ id: 'p-shared', name: 'Shared with the team', updatedAt: 2 });
-const OLDER_MINE = project({ id: 'p-older', name: 'Older draft', updatedAt: 1 });
+const MINE = project({ id: 'p-mine', name: 'My draft', updatedAt: 3, lastUserQueryAt: 3 });
+const SHARED = project({ id: 'p-shared', name: 'Shared with the team', updatedAt: 2, lastUserQueryAt: 2 });
+const OLDER_MINE = project({ id: 'p-older', name: 'Older draft', updatedAt: 1, lastUserQueryAt: 1 });
 const PROJECTS = [MINE, SHARED, OLDER_MINE];
 const isShared = (id: string) => id === SHARED.id;
 
@@ -208,16 +210,25 @@ describe('project card footer keeps the time whole (OPEND-3201)', () => {
   });
 });
 
-describe('personal workspace hides the 团队项目 tab (OPEND-3285)', () => {
-  it('shows only 最近浏览过 / 个人项目 in a personal workspace', () => {
+describe('Personal workspace shared-project collection', () => {
+  it('shows the shared-project tab for an active Personal workspace with members', () => {
+    workspaceState.context = { ...personalContext(), memberCount: 2 };
+    const { container } = renderPage({ collection: 'teamProjects' });
+    expect(within(tabs(container)).getAllByRole('radio')).toHaveLength(3);
+    expect(screen.getByTestId('recent-projects-collection-teamProjects').getAttribute('aria-checked')).toBe('true');
+    expect(cardNames(container)).toEqual(['Shared with the team']);
+  });
+
+  it('shows shared projects even before a second member joins', () => {
     workspaceState.context = personalContext();
     const { container } = renderPage();
     const group = tabs(container);
     expect(within(group).getAllByRole('radio').map((tab) => tab.textContent)).toEqual([
       'Recently viewed',
       'Personal projects',
+      'Team projects',
     ]);
-    expect(screen.queryByTestId('recent-projects-collection-teamProjects')).toBeNull();
+    expect(screen.getByTestId('recent-projects-collection-teamProjects')).toBeTruthy();
   });
 
   it('keeps all three tabs in a team workspace', () => {
@@ -226,12 +237,12 @@ describe('personal workspace hides the 团队项目 tab (OPEND-3285)', () => {
     expect(within(tabs(container)).getAllByRole('radio')).toHaveLength(3);
   });
 
-  it('falls back to 最近浏览过 when a personal workspace lands on the team tab (deep link / stale state)', () => {
+  it('preserves a shared-project deep link in a Personal workspace', () => {
     workspaceState.context = personalContext();
     const onCollectionChange = vi.fn();
     renderPage({ collection: 'teamProjects', onCollectionChange });
-    expect(onCollectionChange).toHaveBeenCalledWith('recent');
-    expect(screen.queryByTestId('recent-projects-collection-teamProjects')).toBeNull();
+    expect(onCollectionChange).not.toHaveBeenCalledWith('recent');
+    expect(screen.getByTestId('recent-projects-collection-teamProjects').getAttribute('aria-checked')).toBe('true');
   });
 
   it('does not reset the team tab while the workspace context is still loading', () => {
@@ -241,4 +252,15 @@ describe('personal workspace hides the 团队项目 tab (OPEND-3285)', () => {
     renderPage({ collection: 'teamProjects', onCollectionChange });
     expect(onCollectionChange).not.toHaveBeenCalled();
   });
+});
+
+it.each([true, false])('links shared project open outcome %s to the member and project for later creation', async (opened) => {
+  renderPage({ space: 'team', onOpen: async () => opened });
+  fireEvent.click(screen.getByText('Shared with the team').closest('button')!);
+  await waitFor(() => expect(analytics.track).toHaveBeenCalledWith(
+    'workspace_shared_project_open_result',
+    expect.objectContaining({ project_key: 'p-shared', workspace_key: 'ws-team', workspace_member_id: 'wm-1', result: opened ? 'success' : 'failed' }),
+    expect.anything(),
+  ));
+  expect(analytics.track.mock.calls.filter(([name]) => name === 'workspace_shared_project_open_result')).toHaveLength(1);
 });

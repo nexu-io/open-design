@@ -66,6 +66,16 @@ const brandSizzleReel = make({
   scenario: 'video',
 });
 
+// Mirrors plugins/_official/examples/motion-showreel.
+const motionShowreel = make({
+  id: 'example-motion-showreel',
+  title: 'Motion Designer Showreel',
+  tags: ['example', 'first-party', 'video', 'motion-design', 'showreel', 'kinetic-typography', 'shape-morph', 'brand'],
+  mode: 'video',
+  surface: 'video',
+  scenario: 'video',
+});
+
 // Mirrors plugins/_official/examples/audio-jingle.
 const audioJingle = make({
   id: 'example-audio-jingle',
@@ -105,5 +115,40 @@ describe('homeHeroExamplePluginsForChip — audio chip', () => {
     expect(ids).toContain('example-audio-jingle');
     expect(ids).not.toContain('video-template-hyperframes-brand-sizzle-reel');
     expect(ids).not.toContain('od-media-generation');
+  });
+});
+
+describe('pluginMatchesExampleChip — motion-design chip', () => {
+  it('places a motion design template under the motion-design chip only', () => {
+    expect(pluginMatchesExampleChip(motionShowreel, 'motion-design')).toBe(true);
+    expect(pluginMatchesExampleChip(motionShowreel, 'video')).toBe(false);
+    expect(pluginMatchesExampleChip(motionShowreel, 'hyperframes')).toBe(false);
+  });
+
+  it('keeps generative video and HyperFrames templates off the motion-design chip', () => {
+    expect(pluginMatchesExampleChip(brandSizzleReel, 'motion-design')).toBe(false);
+    expect(pluginMatchesExampleChip(mediaGeneration, 'motion-design')).toBe(false);
+  });
+});
+
+describe('homeHeroExamplePluginsForChip — motion-design chip', () => {
+  it('leads with the paper story and preserves the remaining Motion order regardless of catalogue order', () => {
+    const order = ['visual-lesson', 'future', 'showreel', 'ui-morph', 'product-promo'];
+    const installed = [...order].reverse().map((name) => make({
+      id: `example-motion-${name}`,
+      tags: ['motion-design'],
+      mode: 'video',
+    }));
+    expect(homeHeroExamplePluginsForChip('motion-design', installed, 'en').map((record) => record.id))
+      .toEqual(order.map((name) => `example-motion-${name}`));
+  });
+
+  it('shows only motion design templates', () => {
+    const ids = homeHeroExamplePluginsForChip(
+      'motion-design',
+      [motionShowreel, brandSizzleReel, audioJingle, mediaGeneration],
+      'en',
+    ).map((p) => p.id);
+    expect(ids).toEqual(['example-motion-showreel']);
   });
 });

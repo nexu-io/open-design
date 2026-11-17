@@ -35,6 +35,7 @@ jobs:
         && github.event.workflow_run.conclusion != 'success'
         && github.event.workflow_run.conclusion != 'skipped'
         && github.event.workflow_run.run_attempt < 2
+        && !startsWith(github.event.workflow_run.head_branch, 'release-bot/bump-main-v')
         && (
           github.event.workflow_run.event == 'pull_request'
           || github.event.workflow_run.event == 'merge_group'

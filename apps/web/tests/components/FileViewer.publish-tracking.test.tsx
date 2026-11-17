@@ -129,7 +129,7 @@ function stubFetch(
         const body =
           publishBody ??
           (publishStatus === 200
-            ? { url: 'https://open-design.ai/p/slug-1', slug: 'slug-1', fileName: 'index.html' }
+            ? { status: 'published', url: 'https://open-design.ai/p/slug-1', receipt: { filePath: 'index.html', slug: 'slug-1', publishedAt: 1, version: 1, versionId: 'v1' } }
             : { error: { message: 'WORKSPACE_IDENTITY_REQUIRED' } });
         return new Response(JSON.stringify(body), { status: publishStatus });
       }
@@ -138,7 +138,7 @@ function stubFetch(
           unpublishBody ??
           (unpublishStatus === 200
             ? { ok: true, slug: 'slug-1', fileName: 'index.html' }
-            : { error: { message: 'WORKSPACE_IDENTITY_REQUIRED' } });
+            : { error: { message: unpublishStatus === 403 ? 'WORKSPACE_IDENTITY_REQUIRED' : 'stop unavailable' } });
         return new Response(JSON.stringify(body), { status: unpublishStatus });
       }
       return new Response(JSON.stringify({ publication: null }), { status: 200 });
@@ -177,15 +177,16 @@ function reactComponentFile(): ProjectFile {
 
 // The publish trigger is the Share panel's `role="menuitem"` row labelled by
 // `fileViewer.publishSingleFileTitle`; once published it is replaced by the
-// copy-link / `fileViewer.unpublishFile` pair.
-const PUBLISH_ROW = /get a share link/i;
-const UNPUBLISH_ROW = /stop sharing/i;
-// `fileViewer.publishingFile` — the row's in-flight label, and therefore the
+// copy-link control and the single link-access switch.
+const PUBLISH_ROW = /generate and copy link|get a share link/i;
+const UNPUBLISH_ROW = /link access/i;
+// HTML uses `fileViewer.uploadingFile`; the legacy React card still uses
+// `fileViewer.publishingFile`. Both labels identify the in-flight row, and the
 // state the publish handler leaves behind only once its `finally` has run.
-const BUSY_PUBLISH_ROW = /creating link/i;
+const BUSY_PUBLISH_ROW = /creating link|uploading/i;
 // Either settled shape of the panel: the idle publish row, or the copy-link
 // control that replaces it once a published URL is committed.
-const SETTLED_PUBLISH_PANEL = /get a share link|copy share link/i;
+const SETTLED_PUBLISH_PANEL = /generate and copy link|get a share link|copy share link/i;
 
 async function openPublishPanel() {
   renderProjectFileViewer(teamWorkspaceContext(), {
@@ -193,19 +194,6 @@ async function openPublishPanel() {
     projectKind: 'prototype',
     file: htmlFile(),
     liveHtml: '<html><body><h1>Hello</h1></body></html>',
-  });
-  const shareButton = await screen.findByRole('button', { name: /^share$/i });
-  fireEvent.click(shareButton);
-  return await screen.findByRole('menuitem', { name: PUBLISH_ROW });
-}
-
-// Same flow through the ReactComponentViewer copy of the publish card, which
-// is hand-duplicated from HtmlViewer and can regress independently.
-async function openReactComponentPublishPanel() {
-  renderProjectFileViewer(teamWorkspaceContext(), {
-    projectId: 'project-pub',
-    projectKind: 'prototype',
-    file: reactComponentFile(),
   });
   const shareButton = await screen.findByRole('button', { name: /^share$/i });
   fireEvent.click(shareButton);
@@ -248,6 +236,9 @@ describe('publish flow analytics', () => {
         expect.objectContaining({
           action: 'publish',
           result: 'success',
+          publish_id: 'slug-1',
+          share_version: 1,
+          published_at: 1,
           publish_duration_ms: expect.any(Number),
           artifact_kind: 'html',
         }),
@@ -260,10 +251,49 @@ describe('publish flow analytics', () => {
       expect.objectContaining({
         area: 'share_option_popover',
         element: 'copy_publish_link',
+        publish_id: 'slug-1',
         artifact_kind: 'html',
       }),
     );
   });
+
+  it.each(['disabled', 'enabled', 'throws', 'pending'] as const)(
+    'keeps publish/copy/stop business behavior when measurement is %s', async mode => {
+      const fetchMock = stubFetch();
+      const clipboard = vi.fn(async () => {});
+      vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: clipboard } });
+      const publishButton = await openPublishPanel();
+      analytics.track.mockImplementation(() => {
+        if (mode === 'throws') throw new Error('analytics failed');
+        if (mode === 'pending') return new Promise<void>(() => {});
+      });
+      if (mode === 'disabled') analytics.track.mockImplementation(() => undefined);
+      fireEvent.click(publishButton);
+      const copy = await screen.findByRole('button', { name: /copy share link/i });
+      await waitFor(() => expect(clipboard).toHaveBeenCalledWith('https://open-design.ai/p/slug-1'));
+      fireEvent.click(copy);
+      await waitFor(() => expect(clipboard).toHaveBeenCalledTimes(2));
+      fireEvent.click(screen.getByRole('switch', { name: UNPUBLISH_ROW }));
+      await waitFor(() => expect(screen.getByRole('switch', { name: UNPUBLISH_ROW })).not.toBeChecked());
+      const mutations = fetchMock.mock.calls.filter(([input, init]) =>
+        String(input).includes('publish-public') && ['POST', 'DELETE'].includes(init?.method ?? ''));
+      expect(mutations).toHaveLength(2);
+      expect(mutations[0]).toEqual([
+        '/api/projects/project-pub/files/index.html/publish-public',
+        expect.objectContaining({ method: 'POST' }),
+      ]);
+      expect(mutations[1]).toEqual([
+        '/api/projects/project-pub/files/index.html/publish-public',
+        expect.objectContaining({ method: 'DELETE' }),
+      ]);
+      expect(mutations.map(([, init]) => init?.body)).toEqual([undefined, JSON.stringify({ slug: 'slug-1' })]);
+      expect(mutations.map(([, init]) => init?.headers)).toEqual([
+        expect.objectContaining({ 'x-od-request-id': 'request-publish-1' }),
+        expect.objectContaining({ 'x-od-request-id': 'request-publish-1' }),
+      ]);
+      expect(trackedEvents('artifact_publish_result').some(props => props.result === 'failed')).toBe(false);
+    },
+  );
 
   it('reports a failed publish with the workspace-identity error code', async () => {
     stubFetch({ publishStatus: 403 });
@@ -290,17 +320,37 @@ describe('publish flow analytics', () => {
     const publishButton = await openPublishPanel();
     fireEvent.click(publishButton);
 
-    const unpublishButton = await screen.findByRole('button', { name: UNPUBLISH_ROW });
+    const unpublishButton = await screen.findByRole('switch', { name: UNPUBLISH_ROW });
     fireEvent.click(unpublishButton);
     await waitFor(() => {
       expect(trackedEvents('artifact_publish_result')).toContainEqual(
         expect.objectContaining({
           action: 'unpublish',
           result: 'success',
+          publish_id: 'slug-1',
           publish_duration_ms: expect.any(Number),
         }),
       );
     });
+  });
+
+  it.each([500, 503])('S10 keeps the link and deliberate retry after an explicit HTTP %s stop failure', async status => {
+    const fetchMock = stubFetch({ unpublishStatus: status });
+    fireEvent.click(await openPublishPanel());
+    const stop = await screen.findByRole('switch', { name: UNPUBLISH_ROW });
+    fireEvent.click(stop);
+    await screen.findByText('Could not turn off the link. Please try again.');
+    expect(stop).toBeEnabled();
+    expect(screen.getByRole('button', { name: /copy share link/i })).toBeEnabled();
+    expect(screen.getByText('https://open-design.ai/p/slug-1')).toBeVisible();
+    expect(screen.queryByText(/please manually copy/i)).toBeNull();
+    expect(screen.queryByText(/failed to generate/i)).toBeNull();
+    const stops = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'DELETE');
+    expect(stops()).toHaveLength(1);
+    fireEvent.click(stop);
+    await waitFor(() => expect(stops()).toHaveLength(2));
+    await screen.findByText('Could not turn off the link. Please try again.');
+    expect(stop).toBeEnabled();
   });
 
   it('reports a failed unpublish with the workspace-identity error code', async () => {
@@ -308,7 +358,7 @@ describe('publish flow analytics', () => {
     const publishButton = await openPublishPanel();
     fireEvent.click(publishButton);
 
-    const unpublishButton = await screen.findByRole('button', { name: UNPUBLISH_ROW });
+    const unpublishButton = await screen.findByRole('switch', { name: UNPUBLISH_ROW });
     fireEvent.click(unpublishButton);
     await waitFor(() => {
       expect(trackedEvents('artifact_publish_result')).toContainEqual(
@@ -348,9 +398,9 @@ describe('publish flow analytics', () => {
               await publishGate;
               return new Response(
                 JSON.stringify({
+                  status: 'published',
                   url: 'https://open-design.ai/p/slug-1',
-                  slug: 'slug-1',
-                  fileName: 'index.html',
+                  receipt: { filePath: 'index.html', slug: 'slug-1', publishedAt: 1, version: 1, versionId: 'v1' },
                 }),
                 { status: 200 },
               );
@@ -379,7 +429,7 @@ describe('publish flow analytics', () => {
       // Wait for the operation's own completion signal rather than timer turns.
       // The handler clears `publishingPublicFile` in its `finally`, strictly
       // after the point where the result event would have been emitted, so the
-      // panel leaving its "Creating link…" state proves the continuation ran
+      // panel leaving its busy state proves the continuation ran
       // past the emission site. A retained viewer renders no chrome at all, so
       // switch back first to observe it — the inactive window has already
       // closed, and an event emitted during it would still be recorded.
@@ -407,14 +457,30 @@ describe('publish flow analytics', () => {
     },
     'HtmlViewer',
   );
-  inactiveViewerCase(
-    { projectId: 'project-pub', projectKind: 'prototype', file: reactComponentFile() },
-    'ReactComponentViewer',
-  );
+  it('does not publish or report publish analytics for a React component, even when retained', async () => {
+    const fetchMock = stubFetch();
+    const props: ComponentProps<typeof FileViewer> = {
+      projectId: 'project-pub',
+      projectKind: 'prototype',
+      file: reactComponentFile(),
+    };
+    const { rerenderWith } = renderProjectFileViewer(teamWorkspaceContext(), props);
+    const shareButton = await screen.findByRole('button', { name: /^share$/i });
+    await waitFor(() => expect(shareButton).toBeDisabled());
+    fireEvent.click(shareButton);
+    expect(screen.queryByRole('menuitem', { name: PUBLISH_ROW })).toBeNull();
 
-  it('reports the project kind and artifact kind from the ReactComponentViewer copy of the flow', async () => {
+    rerenderWith({ ...props, workspaceActive: false });
+    rerenderWith({ ...props, workspaceActive: true });
+    expect(await screen.findByRole('button', { name: /^share$/i })).toBeDisabled();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('publish-public'))).toBe(false);
+    expect(trackedEvents('ui_click').filter((event) => event.element === 'publish_file')).toEqual([]);
+    expect(trackedEvents('artifact_publish_result')).toEqual([]);
+  });
+
+  it('reports the project kind and artifact kind from a supported HTML publication', async () => {
     stubFetch();
-    const publishButton = await openReactComponentPublishPanel();
+    const publishButton = await openPublishPanel();
     fireEvent.click(publishButton);
 
     expect(trackedEvents('ui_click')).toContainEqual(
@@ -519,7 +585,7 @@ describe('publish failure detail analytics', () => {
       },
     });
     fireEvent.click(await openPublishPanel());
-    fireEvent.click(await screen.findByRole('button', { name: UNPUBLISH_ROW }));
+    fireEvent.click(await screen.findByRole('switch', { name: UNPUBLISH_ROW }));
 
     await waitFor(() => {
       expect(trackedEvents('artifact_publish_result')).toContainEqual(

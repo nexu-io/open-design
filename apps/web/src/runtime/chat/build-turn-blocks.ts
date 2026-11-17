@@ -555,6 +555,13 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
    * 收窄到 run 之后整条流的那份名单没有第二个读者,所以不再攒。
    */
   let runShells: ExecutionShell[] = [];
+  /**
+   * 接着下一段继续用的壳,在前面几段里已经攒下的时长(P0-24 推测项 A-01,见 `continueRun`)。
+   * `null` = 有一段算不出来,合计也就算不出来。
+   */
+  const carriedMs = new Map<ExecutionShell, number | null>();
+  /** 第几段自动续跑合进了当前这张壳(0 = 没合并过);推理按段分格,见 `ShellText.segment` */
+  let mergedSegment = 0;
   const nextShell = (): ExecutionShell => {
     shellSeq += 1;
     const shell = makeShell(shellSeq);
@@ -833,7 +840,12 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     }
     if (!text.trim()) return;
     openText = thinking
-      ? { kind: 'text', text: text.replace(/^\s+/, ''), thinking: true }
+      ? {
+        kind: 'text',
+        text: text.replace(/^\s+/, ''),
+        thinking: true,
+        ...(mergedSegment > 0 ? { segment: mergedSegment } : {}),
+      }
       : { kind: 'text', text: text.replace(/^\s+/, '') };
     arr.push(openText);
     // thinking / text 都不带时刻 —— 它们占掉的是这段空白里的时间,记上账(见 `gapLanded`)
@@ -902,16 +914,27 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     if (event.kind === 'done_key') {
       const key = typeof event.key === 'string' ? event.key.trim() : '';
       if (key && key !== runKey) {
+        /*
+         * P0-24 推测项 A-01(N13 ①):daemon 自动接着跑的那一段不另起回合标题 ——
+         * 一条消息到最终答复算一轮,只有一个标题、时长相加,中间那段说明收进执行记录。
+         * 用户回答问答卡之后开始的那一段照旧另起(Q8 选项 A),见 `done_key.afterUserReply`。
+         */
+        const continued = started
+          && MERGE_AUTO_CONTINUED_RUNS
+          && !input.preserveRunBoundaries
+          && event.afterUserReply !== true
+          && continueRun();
         // 前一个 run 一个字都没产出时没有壳可收,但密钥仍要换 —— 不换的话
         // 后面那个 run 的 `<od-done key="…"/>` 会对不上,整段结论留在壳里
-        if (started) closeRun();
+        if (started && !continued) closeRun();
         runKey = key;
         /*
          * 新的 run = 新的钟。先清零再认盖章:拿不到盖章时留 `null`,让秒表
          * 退回「只认事件时刻」,而不是继承上一个 run 的边界(那会把别人的时间
          * 记在这个 run 头上)。
+         * 接着上一段的那张壳(`continueRun`)留在名单里:它开了这一个 run。
          */
-        runShells = [];
+        runShells = continued && top ? [top] : [];
         runStartedAt = null;
         runEndedAt = null;
       }
@@ -1221,6 +1244,9 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
       }
     }
     ensureShell();
+  } else if (input.runStatus === 'canceled') {
+    // P0-24 N8:刚发出就被停止、一条事件都没落库的一轮,也要有那一行「已停止」
+    ensureShell();
   }
   finishTurn();
   /*
@@ -1228,9 +1254,22 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
    * 不告诉任何人任何事。**还在跑的空壳要留** —— 它就是「进行中」那一行本身。
    */
   const turnStatus = input.runStatus ?? 'running';
+  const shellHasContent = (b: ExecutionShell): boolean => b.items.length > 0 || b.segments.length > 0;
+  /*
+   * P0-24 N8:被停止的一轮**始终**有回合标题 —— 刚发出就停、壳里一件事都没有,
+   * 也要留一行「已停止 0s」(PRD 场景 E2)。B47 当年撤掉取消档的理由是壳头写着
+   * 「进行中」、和下面那行「已取消」自相矛盾;一期起壳头已改成「已停止」,那个
+   * 矛盾不在了。只留**一张**(最前那张,排在正文之前),且只在这一轮没有别的壳留下时才留 ——
+   * 有内容的壳已经带着「已停止」的头。只回复文字的正常轮次仍按 B47 不出壳。
+   */
+  const keptStoppedShell = turnStatus === 'canceled'
+    && !blocks.some((b) => b.kind === 'shell' && shellHasContent(b))
+    ? blocks.find((b): b is ExecutionShell => b.kind === 'shell')
+    : undefined;
   const kept = blocks.filter((b) => {
     if (b.kind !== 'shell') return true;
-    if (b.items.length > 0 || b.segments.length > 0) return true;
+    if (shellHasContent(b)) return true;
+    if (b === keptStoppedShell) return true;
     // 还在跑:空壳就是「进行中」那一行本身,必须留
     if (turnIsLive) return true;
     /*
@@ -1243,6 +1282,8 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
      * 既没有信息,又和紧跟在下面那行「已取消」自相矛盾。用户 2026-08-27 指认:
      * 「之前不是说如果 done 之前,没有任何工具调用或 thinking 或普通文案,
      * 就不出现这个了吗?」—— B47 的原话本来就该管到这一格。
+     * (P0-24 N8 已改:取消档现在留一张空壳,见上面 `keptStoppedShell`;这里只
+     * 再丢掉多余的那些。)
      */
     return turnStatus === 'failed';
   });
@@ -1474,11 +1515,11 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     // `todoCard` 常常就是 `top` 本人(D50 之后清单不另起卡),去重再收
     for (const shell of new Set([top, todoCard])) {
       if (!shell) continue;
-      shell.elapsedMs = shellElapsed(
+      shell.elapsedMs = withCarried(shell, shellElapsed(
         shell,
         shell === runShells[0] ? runStartedAt : null,
         shell === lastRunShell ? runEndedAt : null,
-      );
+      ));
       shell.quietMs = null;
       if (shell.status === 'running') shell.status = 'done';
       closeRunningSegments(shell);
@@ -1493,6 +1534,60 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     top = null;
     started = false;
     gapLanded = [];
+  }
+
+  /**
+   * 前一个 run 由 daemon 自动接上了下一个(P0-24 推测项 A-01)—— 用户只问了一次,
+   * 这一轮没有结束,所以它**不收壳**:
+   *
+   *  · 收这个 run 的那张壳留着,后继 run 的事件继续落进它,状态仍是「进行中」;
+   *  · 它在这个 run 里的时长记进 `carriedMs`,后继 run 结算时加上去 —— 「时长合计」
+   *    是各段之和,两段之间 daemon 衔接的空档不算(谁也没在跑);
+   *  · 这个 run 的结论(方案说明)**照旧留在执行记录外面**,排在最终答复之前 ——
+   *    产品对 D8 的答复是「什么都不改」(2026-10-26):只合并标题,不挪中间那段文字。
+   *    没发 done 的那段也和 `closeRun` 一样从壳里提出来,和改动前的显示位置相同。
+   *
+   * 同一个 run 里另开的那张壳(清单卡另起时的 `top`)照 `closeRun` 的办法定死。
+   */
+  function continueRun(): boolean {
+    const keep = todoCard ?? top;
+    if (!keep) return false;
+    liftConclusion();
+    mergedSegment += 1;
+    const thinkEnd = runEndedAt ?? lastEndedAt;
+    if (thinkEnd != null) closeThink(thinkEnd);
+    openThink = null;
+    for (const shell of new Set([top, todoCard])) {
+      if (!shell) continue;
+      const own = shellElapsed(
+        shell,
+        shell === runShells[0] ? runStartedAt : null,
+        shell === keep ? runEndedAt : null,
+      );
+      if (shell === keep) {
+        carriedMs.set(shell, sumElapsed(carriedMs.get(shell), own));
+        shellSpan.delete(shell);
+        continue;
+      }
+      shell.elapsedMs = withCarried(shell, own);
+      shell.quietMs = null;
+      if (shell.status === 'running') shell.status = 'done';
+      closeRunningSegments(shell);
+    }
+    top = keep;
+    todoCard = todoCard === keep ? keep : null;
+    doneSeen = false;
+    openText = null;
+    openProse = null;
+    markerBuf = '';
+    markerSearchBuf = '';
+    gapLanded = [];
+    return true;
+  }
+
+  /** 这张壳在前面几段攒下的时长加上这一段的;任何一段算不出来,合计就算不出来(§2.2b) */
+  function withCarried(shell: ExecutionShell, own: number | null): number | null {
+    return carriedMs.has(shell) ? sumElapsed(carriedMs.get(shell), own) : own;
   }
 
   function finishTurn(): void {
@@ -1573,11 +1668,11 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
        * 最后一个 run 的 `endedAt`),所以这里兜一手 `input.endedAtMs`。
        */
       const closeTo = live ? (input.nowMs ?? null) : (runEndedAt ?? input.endedAtMs ?? null);
-      shell.elapsedMs = shellElapsed(
+      shell.elapsedMs = withCarried(shell, shellElapsed(
         shell,
         shell === firstShell ? runStartedAt : null,
         shell === lastShell ? closeTo : null,
-      );
+      ));
       shell.quietMs = shellQuiet(live, shell);
     }
 
@@ -1712,13 +1807,31 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     if (from == null || to == null) return null;
     const ms = to - from;
     /*
-     * 门槛用 `UNKNOWN_ELAPSED_BELOW_MS` 而不是 `> 0`:整张壳的跨度不到 100ms,
-     * 意思是壳里所有带时刻的事**同一批到达**(codex 的 `tool_use` 与 `tool_result`
-     * 间隔 p50 4ms),那不是「跑得快」,是「不知道」—— 和 `format.ts` 开头给
-     * 单条工具行定的判据是同一条。
+     * 两头都是这个 run 自己的起止时刻时,量出来多少就是多少:一轮刚开始就被停掉,
+     * 跨度可以真的不到 100ms,P0-24 要求它写「已停止 0s」,不是当作量不到。
+     */
+    if (openFrom != null && closeTo != null) return ms >= 0 ? ms : null;
+    /*
+     * 只靠事件时刻拼出来的跨度,门槛用 `UNKNOWN_ELAPSED_BELOW_MS` 而不是 `> 0`:
+     * 不到 100ms 意思是壳里所有带时刻的事**同一批到达**(codex 的 `tool_use` 与
+     * `tool_result` 间隔 p50 4ms),那不是「跑得快」,是「不知道」—— 和 `format.ts`
+     * 开头给单条工具行定的判据是同一条。
      */
     return ms >= UNKNOWN_ELAPSED_BELOW_MS ? ms : null;
   }
+}
+
+/**
+ * P0-24 推测项 A-01:daemon 自动接着跑的几段合成一个回合标题(见 `continueRun`)。
+ * 推翻时改为 false,恢复「每个物理 run 各一个标题」。
+ */
+const MERGE_AUTO_CONTINUED_RUNS = true as boolean;
+
+/** 两段时长相加;`undefined` = 前面没有攒下的,任何一段是 `null` 合计就是 `null` */
+function sumElapsed(carried: number | null | undefined, own: number | null): number | null {
+  if (carried === undefined) return own;
+  if (carried == null || own == null) return null;
+  return carried + own;
 }
 
 /**

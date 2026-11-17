@@ -1,0 +1,52 @@
+/* Owner C0 toolbar pair: primary Share / secondary Export. Scope the host
+   selectors so later workspace compatibility rules cannot flatten the pair;
+   artifact-card entries below keep their independent geometry and palette. */
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbar,
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbarSecondary {
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--toolbar-action-background);
+  color: var(--toolbar-action-color);
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.toolbar {
+  --toolbar-action-background: #242424;
+  --toolbar-action-color: #fff;
+}
+
+.toolbarSecondary {
+  --toolbar-action-background: #f2f2f3;
+  --toolbar-action-color: #555;
+}
+
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbar:hover:not(:disabled),
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbarSecondary:hover:not(:disabled) {
+  background: var(--toolbar-action-background);
+  color: var(--toolbar-action-color);
+}
+
+:global(.app .ws-tabs-actions .chrome-action.chrome-action-secondary).toolbar:disabled {
+  background: #E4E4E6;
+  color: #A6A6AA;
+  opacity: 1;
+}
+
+:global(.chrome-action.chrome-action-secondary).toolbar > svg:first-child {
+  transform: none;
+}
+
+/* Keep collaboration's disabled feedback while enabled card actions use
+   the pre-#8408 glass-pill styles in styles/viewer/tools.css. */
+:global(.artifact-card) .card:global(.artifact-card-act):disabled {
+  background: #F3F3F1;
+  color: #BDBDB8;
+  opacity: 1;
+}

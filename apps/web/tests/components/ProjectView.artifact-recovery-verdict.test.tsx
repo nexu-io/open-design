@@ -26,7 +26,10 @@ vi.mock('../../src/providers/registry', async () => {
 });
 vi.mock('../../src/state/projects', async () => {
   const actual = await vi.importActual<typeof import('../../src/state/projects')>('../../src/state/projects');
-  return { ...actual, createConversation: vi.fn(), listPlugins: vi.fn().mockResolvedValue([]),
+  return { ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })), createConversation: vi.fn(), listPlugins: vi.fn().mockResolvedValue([]),
     getTemplate: vi.fn().mockResolvedValue(null), loadTabs: vi.fn().mockResolvedValue({ tabs: [], active: null }),
     patchConversation: vi.fn(), patchProject: vi.fn(), saveTabs: vi.fn() };
 });

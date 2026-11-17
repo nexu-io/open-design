@@ -193,8 +193,9 @@ describe('CLI startup boundaries', () => {
           const checkDb = new Database(join(dataDir, 'app.sqlite'), { readonly: true });
           try {
             const row = checkDb.prepare(`SELECT run_status AS status FROM messages WHERE id = ?`).get(messageId) as { status?: string } | undefined;
-            return state.status === 'failed'
-              && row?.status === 'failed'
+            // P0-24 Q5: a run cut off by process loss is recorded as stopped.
+            return state.status === 'canceled'
+              && row?.status === 'canceled'
               && typeof state.analyticsRecovery?.completedAt === 'number';
           } finally {
             checkDb.close();
@@ -207,7 +208,7 @@ describe('CLI startup boundaries', () => {
           analyticsRecovery?: { completedAt?: number };
         };
         expect(recoveredState).toMatchObject({
-          status: 'failed',
+          status: 'canceled',
           errorCode: 'DAEMON_RESTARTED',
           terminalRecoveryReason: 'daemon_restart',
           analyticsRecovery: { completedAt: expect.any(Number) },
@@ -244,8 +245,8 @@ describe('CLI startup boundaries', () => {
           const sentinelState = JSON.parse(await readFile(reconciliationSentinelPath, 'utf8')) as {
             status?: string;
           };
-          expect(sentinelState.status).toBe('failed');
-          expect(replayedState.status).toBe('failed');
+          expect(sentinelState.status).toBe('canceled');
+          expect(replayedState.status).toBe('canceled');
           expect(replayedState.analyticsRecovery?.completedAt).toBe(checkpoint);
         } finally {
           await terminateChild(third);

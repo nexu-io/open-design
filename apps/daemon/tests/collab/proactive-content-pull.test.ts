@@ -92,6 +92,19 @@ function makeRetryScheduler() {
 }
 
 describe('proactive content pull (hub project-content-changed consumer)', () => {
+  it('uses the workspace id for a shared Personal project without a team id', () => {
+    expect(activeTeamWorkspaceIdentity({
+      workspaceId: 'ws-personal',
+      workspaceMemberId: 'wm-member',
+      workspaceType: 'personal',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+    })).toEqual({
+      workspaceId: 'ws-personal',
+      resourceTeamId: 'ws-personal',
+      workspaceMemberId: 'wm-member',
+    });
+  });
   it.each([
     ['billing_past_due'],
     ['locked'],

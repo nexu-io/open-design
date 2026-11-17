@@ -117,6 +117,34 @@ describe('team-projects coalescing key is shape-safe across call sites', () => {
 
     await expect(projectIsSharedWithWorkspace('p-shared', TEAM_CONTEXT)).resolves.toBe(true);
   });
+  it('coalesces same-event fresh scope reads and re-reads for a distinct rapid team event', async () => {
+    let statusReads = 0;
+    let catalogReads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/collab/status')) {
+        statusReads++;
+        return new Response('not found', { status: 404 });
+      }
+      if (url.includes('/api/workspace/projects/team')) {
+        catalogReads++;
+        return Response.json({ projects: catalogReads === 1 ? [TEAM_PROJECT] : [] });
+      }
+      throw new Error(`unexpected scope request ${url}`);
+    }));
+    const firstEvent = new Event('od:team-projects-changed');
+    const [first, sibling] = await Promise.all([
+      projectIsSharedWithWorkspace('p-shared', TEAM_CONTEXT, { event: firstEvent }),
+      projectIsSharedWithWorkspace('p-shared', TEAM_CONTEXT, { event: firstEvent }),
+    ]);
+    expect([first, sibling]).toEqual([true, true]);
+    expect(statusReads).toBe(1);
+    expect(catalogReads).toBe(1);
+    const secondEvent = new Event('od:team-projects-changed');
+    await expect(projectIsSharedWithWorkspace('p-shared', TEAM_CONTEXT, { event: secondEvent })).resolves.toBe(false);
+    expect(statusReads).toBe(2);
+    expect(catalogReads).toBe(2);
+  });
 });
 
 describe('shared-project predicate never white-screens on a malformed catalog', () => {

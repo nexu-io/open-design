@@ -23,6 +23,7 @@
 // event name (`extraction`) so the regular `change` listeners don't
 // trigger an entries re-fetch on every phase update.
 
+import type { MemoryExtractionOrigin } from '@open-design/contracts';
 import { randomUUID } from 'node:crypto';
 import { memoryEvents } from './memory.js';
 
@@ -31,6 +32,20 @@ const PREVIEW_CAP = 120;
 const ERROR_CAP = 240;
 
 const records = []; // newest first
+
+// Copy before asynchronous work: caller-owned option objects are not durable
+// evidence of which chat initiated an extraction.
+export function captureExtractionOrigin(value: unknown): MemoryExtractionOrigin | undefined {
+  if (!value || typeof value !== 'object'
+    || typeof value.projectId !== 'string' || !value.projectId.trim()
+    || typeof value.conversationId !== 'string' || !value.conversationId.trim()) return undefined;
+  return {
+    projectId: value.projectId,
+    conversationId: value.conversationId,
+    ...(typeof value.runId === 'string' && value.runId.trim() ? { runId: value.runId } : {}),
+    ...(typeof value.assistantMessageId === 'string' && value.assistantMessageId.trim() ? { assistantMessageId: value.assistantMessageId } : {}),
+  };
+}
 
 function trimPreview(s) {
   const text = String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -74,13 +89,14 @@ function pushNewest(record) {
 // caller can't accidentally mutate buffer state in place. `kind`
 // defaults to 'llm' for backwards compat with the original single-
 // writer call sites in memory-llm.ts.
-export function startExtraction({ userMessage, kind = 'llm' }) {
+export function startExtraction({ userMessage, kind = 'llm', extractionOrigin = undefined }) {
   const record = {
     id: randomUUID(),
     kind,
     startedAt: Date.now(),
     phase: 'running',
     userMessagePreview: trimPreview(userMessage),
+    ...(extractionOrigin ? { extractionOrigin: captureExtractionOrigin(extractionOrigin) } : {}),
   };
   pushNewest(record);
   emit(record);
@@ -115,7 +131,7 @@ export function markSkipped(id, reason) {
 // through the running phase (e.g. memory disabled, empty user message,
 // no provider configured). Returns the record's id so the caller can
 // pass it to listExtractions consumers if needed.
-export function recordSkip({ userMessage, reason, kind = 'llm' }) {
+export function recordSkip({ userMessage, reason, kind = 'llm', extractionOrigin = undefined }) {
   const record = {
     id: randomUUID(),
     kind,
@@ -124,6 +140,7 @@ export function recordSkip({ userMessage, reason, kind = 'llm' }) {
     phase: 'skipped',
     reason,
     userMessagePreview: trimPreview(userMessage),
+    ...(extractionOrigin ? { extractionOrigin: captureExtractionOrigin(extractionOrigin) } : {}),
   };
   pushNewest(record);
   emit(record);
@@ -138,7 +155,7 @@ export function recordSkip({ userMessage, reason, kind = 'llm' }) {
 // 'skipped' with reason 'no-match' so the UI can colour it like the
 // other skip rows ("regex looked, found nothing") instead of pretending
 // the regex never ran.
-export function recordHeuristic({ userMessage, writtenCount, writtenIds }) {
+export function recordHeuristic({ userMessage, writtenCount, writtenIds, extractionOrigin = undefined }) {
   const written = Number.isFinite(writtenCount)
     ? Math.max(0, Math.floor(writtenCount))
     : 0;
@@ -151,6 +168,7 @@ export function recordHeuristic({ userMessage, writtenCount, writtenIds }) {
     finishedAt: now,
     phase: written > 0 ? 'success' : 'skipped',
     userMessagePreview: trimPreview(userMessage),
+    ...(extractionOrigin ? { extractionOrigin: captureExtractionOrigin(extractionOrigin) } : {}),
     writtenCount: written,
     writtenIds: ids,
     ...(written === 0 ? { reason: 'no-match' } : {}),

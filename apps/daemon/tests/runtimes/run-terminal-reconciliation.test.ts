@@ -3,10 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reconcileDurableRunTerminals } from '../../src/runtimes/run-terminal-reconciliation.js';
 import { createChatRunService } from '../../src/runtimes/runs.js';
+import { createRunAnalyticsLifecycle } from '../../src/services/run-analytics-lifecycle.js';
 
 describe('durable run terminal reconciliation', () => {
   let tmpDir: string;
@@ -21,6 +23,7 @@ describe('durable run terminal reconciliation', () => {
         run_id TEXT,
         run_status TEXT,
         ended_at INTEGER,
+        cancel_origin TEXT,
         events_json TEXT
       )
     `);
@@ -30,6 +33,107 @@ describe('durable run terminal reconciliation', () => {
     vi.restoreAllMocks();
     db.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it.each([7, undefined])('replays the frozen workspace snapshot and original terminal identity once (memberCount=%s)', async (memberCount) => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      runsLogDir: tmpDir,
+    } as never);
+    const run = runs.create({
+      projectId: 'p1', conversationId: null, agentId: 'amr', clientRequestId: 'original-request',
+      workspaceScope: {
+        schemaVersion: 1, projectId: 'p1', workspaceId: 'workspace-a',
+        workspaceMemberId: 'project-creator', source: 'persisted_project_binding',
+      },
+    });
+    let resolveCreated: () => void = () => {};
+    const created = new Promise<void>((resolve) => { resolveCreated = resolve; });
+    let resolveCheckpoint: () => void = () => {};
+    const checkpoint = new Promise<void>((resolve) => { resolveCheckpoint = resolve; });
+    let createdInsertId = '';
+    const resolveExact = vi.fn(async () => ({
+      workspaceId: 'workspace-a', workspaceMemberId: 'actual-caller',
+      memberStatus: 'active', lifecycleState: 'active',
+      workspaceType: 'team', role: 'member', billingState: 'active', planId: 'team',
+      providerMode: 'platform_credits',
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 0, usedSeats: 0 }),
+      permissions: buildWorkspacePermissions({ role: 'member', lifecycleState: 'active' }),
+      ...(memberCount !== undefined ? { memberCount } : {}),
+    } satisfies WorkspaceCollabContext));
+    const lifecycle = createRunAnalyticsLifecycle({
+      db,
+      design: {
+        runs: {
+          ...runs,
+          finalizeAnalyticsDelivery: (currentRun: Parameters<typeof runs.finalizeAnalyticsDelivery>[0], result: Parameters<typeof runs.finalizeAnalyticsDelivery>[1]) => {
+            runs.finalizeAnalyticsDelivery(currentRun, result);
+            resolveCheckpoint();
+          },
+        } as never,
+        analytics: {
+          capture: (args) => {
+            if (args.eventName === 'run_created') {
+              createdInsertId = args.insertId;
+              resolveCreated();
+              return { status: 'queued', acknowledgement: 'local_buffer', errorType: null };
+            }
+            return { status: 'failed', acknowledgement: 'none', errorType: 'enqueue_failed' };
+          },
+        },
+        getAppVersion: () => '0.0.0-test',
+      },
+      paths: { PROJECTS_DIR: tmpDir, RUNTIME_DATA_DIR: tmpDir },
+      agents: { detectAgents: async () => [] },
+      telemetry: {
+        reportRunCompletionTelemetryFallback: () => {},
+        resolveRunProjectKindForAnalytics: () => null,
+        runArtifactBaselines: { take: () => undefined },
+        runRetryEventsForAnalytics: () => [],
+      },
+      workspaceContext: { resolveExact },
+    });
+    lifecycle.install({
+      run: run as never,
+      body: { analyticsHints: { taskExecutionId: 'task-original', initialRunId: run.id, taskRunIndex: 2, sourceRunId: 'source-run' } },
+      requestAnalyticsContext: { deviceId: 'device-original', sessionId: 'session-original', clientType: 'web', locale: 'en', requestId: 'http-original' },
+    });
+    await created;
+    runs.finish(run, 'succeeded', 0, null);
+    await checkpoint;
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    const stored = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    expect(stored.analyticsRecovery).toMatchObject({
+      insertId: createdInsertId,
+      context: { requestId: 'http-original' },
+      properties: { workspace_id: 'workspace-a', run_id: run.id, task_execution_id: 'task-original', source_run_id: 'source-run', result: 'success' },
+    });
+    expect(stored.analyticsRecovery).not.toHaveProperty('completedAt');
+    expect(stored.analyticsRecovery.properties).not.toHaveProperty('credit_type');
+    if (memberCount === undefined) expect(stored.analyticsRecovery.properties).not.toHaveProperty('member_count');
+    else expect(stored.analyticsRecovery.properties.member_count).toBe(memberCount);
+
+    const capture = vi.fn(async (_args: { properties: Record<string, unknown> }) => ({ status: 'queued', acknowledgement: 'local_buffer', errorType: null }));
+    const options = {
+      analytics: { capture }, db, runsLogDir: tmpDir,
+      reportLangfuse: vi.fn(async () => ({ langfuse_expected: false, langfuse_delivery_status: 'not_expected' as const })),
+    };
+    expect((await reconcileDurableRunTerminals(options)).analyticsReplayed).toBe(1);
+    expect(capture).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      eventName: 'run_finished', insertId: `${createdInsertId}-finish`,
+      context: expect.objectContaining({ requestId: 'http-original' }),
+      properties: expect.objectContaining({
+        workspace_id: 'workspace-a', run_id: run.id, task_execution_id: 'task-original',
+        initial_run_id: run.id, task_run_index: 2, source_run_id: 'source-run', result: 'success',
+      }),
+    }));
+    const replayedProperties = capture.mock.calls[0]?.[0]?.properties;
+    if (memberCount === undefined) expect(replayedProperties).not.toHaveProperty('member_count');
+    else expect(replayedProperties?.member_count).toBe(memberCount);
+    expect((await reconcileDurableRunTerminals(options)).analyticsReplayed).toBe(0);
+    expect(capture).toHaveBeenCalledOnce();
+    expect(resolveExact).toHaveBeenCalledExactlyOnceWith({ workspaceId: 'workspace-a' });
   });
 
   it('keeps the app version that started an interrupted run after a newer daemon restarts', async () => {
@@ -204,7 +308,9 @@ describe('durable run terminal reconciliation', () => {
     }));
   });
 
-  it('fails an interrupted run, repairs its message, and emits missing terminal telemetry once', async () => {
+  // P0-24 N1 / Q5: a run the restart interrupted is stopped, not failed; its
+  // reason (daemon_restart) is kept for analytics, without failure fields.
+  it('stops an interrupted run, repairs its message, and emits missing terminal telemetry once', async () => {
     const runId = 'run-interrupted';
     const runDir = path.join(tmpDir, runId);
     fs.mkdirSync(runDir, { recursive: true });
@@ -279,29 +385,18 @@ describe('durable run terminal reconciliation', () => {
     });
 
     expect(first).toMatchObject({ interrupted: 1, messagesReconciled: 1, analyticsReplayed: 1 });
-    expect(db.prepare(`SELECT run_status AS status, ended_at AS endedAt, events_json AS eventsJson FROM messages WHERE id = 'm1'`).get()).toMatchObject({
-      status: 'failed',
-      endedAt: expect.any(Number),
-      eventsJson: expect.stringContaining('daemon restarted'),
+    expect(db.prepare(`SELECT run_status AS status, ended_at AS endedAt, cancel_origin AS cancelOrigin, events_json AS eventsJson FROM messages WHERE id = 'm1'`).get()).toMatchObject({
+      status: 'canceled',
+      // P0-24 N1: the run ended at its last recorded activity (the persisted
+      // update at 2_000 is newer than the 1_500 event), not at restart time.
+      endedAt: 2_000,
+      cancelOrigin: 'daemon_shutdown',
     });
     expect(capture).toHaveBeenCalledWith(expect.objectContaining({
       eventName: 'run_finished',
       insertId: 'run-created-1-finish',
       properties: expect.objectContaining({
-        result: 'failed',
-        error_code: 'DAEMON_RESTARTED',
-        failure_category: 'process_exit',
-        failure_detail: 'interrupted',
-        failure_stage: 'finalize',
-        failure_mechanism: 'unknown',
-        failure_domain: 'cross_boundary',
-        evidence_level: 'lifecycle_signal',
-        repair_owner: 'shared_boundary',
-        admission_status: 'unknown',
-        admission_phase: 'unknown',
-        classifier_version: 'run-failure-v3',
-        retryable: true,
-        user_action: 'retry',
+        result: 'cancelled',
         terminal_trigger: 'daemon_restart',
         terminal_reconciled: true,
         terminal_integrity: 'reconciled',
@@ -318,15 +413,23 @@ describe('durable run terminal reconciliation', () => {
         tool_execution_evidence_incomplete: true,
       }),
     }));
+    // No internal reconciliation note is printed into the conversation (Q5).
+    const repaired = db.prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = 'm1'`).get() as { eventsJson: string | null };
+    expect(repaired.eventsJson ?? '').not.toContain('reconciled after daemon restart');
+    const runFinished = (capture.mock.calls as unknown as Array<[{ properties: Record<string, unknown> }]>)[0]![0].properties;
+    // The stop reason survives for SLO eligibility, the way a live cancel reports it.
+    expect(runFinished).toMatchObject({ cancel_origin: 'daemon_shutdown', terminal_trigger: 'daemon_restart' });
+    expect(runFinished).not.toHaveProperty('error_code');
     expect(reportLangfuse).toHaveBeenCalledWith(expect.objectContaining({
-      persistedRunStatus: 'failed',
-      run: expect.objectContaining({ id: runId, status: 'failed' }),
+      persistedRunStatus: 'canceled',
+      run: expect.objectContaining({ id: runId, status: 'canceled' }),
     }));
 
     const recoveredState = JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8'));
     expect(recoveredState).toMatchObject({
-      status: 'failed',
+      status: 'canceled',
       errorCode: 'DAEMON_RESTARTED',
+      terminalTrigger: 'daemon_restart',
       analyticsRecovery: { completedAt: expect.any(Number) },
       langfuseCompletedAt: expect.any(Number),
     });
@@ -522,7 +625,7 @@ describe('durable run terminal reconciliation', () => {
     }));
     const storageDb = new Database(':memory:');
     storageDb.exec(`CREATE TABLE messages (
-      id TEXT PRIMARY KEY, run_id TEXT, run_status TEXT, ended_at INTEGER, content TEXT NOT NULL DEFAULT '', events_json TEXT)`);
+      id TEXT PRIMARY KEY, run_id TEXT, run_status TEXT, ended_at INTEGER, cancel_origin TEXT, content TEXT NOT NULL DEFAULT '', events_json TEXT)`);
     storageDb.prepare(
       `INSERT INTO messages (id, run_id, run_status, content, events_json) VALUES ('m-storage', ?, 'failed', 'partial', '[]')`,
     ).run(runId);

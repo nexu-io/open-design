@@ -1,0 +1,54 @@
+name: Defer Windows packaging cache
+description: Upload a bounded cache snapshot and save it outside the release concurrency group.
+inputs:
+  key:
+    required: true
+    description: Exact outer cache key
+  prefix:
+    required: true
+    description: Platform and channel cache prefix
+runs:
+  using: composite
+  steps:
+    - name: Prepare bounded Windows cache handoff
+      id: snapshot
+      shell: pwsh
+      env:
+        PACK_CACHE_KEY: ${{ inputs.key }}
+        PACK_CACHE_PREFIX: ${{ inputs.prefix }}
+      run: |
+        $ErrorActionPreference = "Stop"
+        $root = Join-Path $env:RUNNER_TEMP "pack-cache-handoff"
+        $entry = python .github/scripts/handoff.py dir pack-cache windows --root $root
+        if ($LASTEXITCODE -ne 0) { throw "Cannot resolve cache handoff path" }
+        New-Item -ItemType Directory -Force $entry | Out-Null
+        node .github/scripts/release/cache/windows.ts (Join-Path $env:RUNNER_TEMP "tools-pack-cache") | Tee-Object -FilePath (Join-Path $entry "sizes.json")
+        if ($LASTEXITCODE -ne 0) { throw "Cache pruning failed" }
+        $archive = python .github/scripts/handoff.py payload-path pack-cache windows --root $root
+        # Transfer speed matters more than a slightly smaller one-day snapshot.
+        tar --options gzip:compression-level=1 -czf $archive -C (Join-Path $env:RUNNER_TEMP "tools-pack-cache") .
+        if ($LASTEXITCODE -ne 0) { throw "Cache snapshot failed" }
+        python .github/scripts/handoff.py write-pack-cache --root $root
+        if ($LASTEXITCODE -ne 0) { throw "Invalid cache handoff" }
+        $name = python .github/scripts/handoff.py artifact-name pack-cache windows
+        "name=$name" >> $env:GITHUB_OUTPUT
+        "path=$entry" >> $env:GITHUB_OUTPUT
+        "### Windows cache transfer budget" >> $env:GITHUB_STEP_SUMMARY
+        Get-Content (Join-Path $entry "sizes.json") >> $env:GITHUB_STEP_SUMMARY
+    - name: Upload Windows cache handoff
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.snapshot.outputs.name }}
+        path: ${{ steps.snapshot.outputs.path }}
+        compression-level: 0
+        retention-days: 1
+        if-no-files-found: error
+    - name: Dispatch cache maintenance
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        CACHE_WORKFLOW_REF: ${{ github.ref_name }}
+      run: |
+        gh workflow run cache-maintenance.yml --ref $env:CACHE_WORKFLOW_REF -f "pack_cache_run_id=$env:GITHUB_RUN_ID"
+        if ($LASTEXITCODE -ne 0) { throw "Cache maintenance dispatch failed; build artifacts remain usable" }

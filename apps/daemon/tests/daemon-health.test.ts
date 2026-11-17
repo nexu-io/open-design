@@ -1,7 +1,8 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createDaemonHealth,
@@ -54,6 +55,7 @@ function readCheckpoint(root: string) {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   resetDaemonHealthForTests();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -280,4 +282,61 @@ describe('fatal report opt-in', () => {
       report.directory = saved.directory;
     }
   });
+});
+
+it('does not repeatedly resurrect a stale previous checkpoint when current marker is missing', async () => {
+  const root = tempRoot();
+  createDaemonHealth({ dataRoot: root, pid: 10, readHeap: () => heap(10), instrumentProcess: false });
+  const second = createDaemonHealth({ dataRoot: root, pid: 11, readHeap: () => heap(10), instrumentProcess: false, isProcessAlive: () => false });
+  second.markCleanShutdown();
+  rmSync(daemonHealthPaths(root).current);
+  const third = createDaemonHealth({ dataRoot: root, pid: 12, readHeap: () => heap(10), instrumentProcess: false, isProcessAlive: () => false });
+  const { sink, events } = collect();
+  third.attachSink(sink);
+  await settle();
+  expect(events).toEqual([]);
+});
+
+it('treats an observed zero exit as clean even when shutdown cleanup was bypassed', async () => {
+  const root = tempRoot();
+  createDaemonHealth({ dataRoot: root, pid: 10, readHeap: () => heap(10), instrumentProcess: false });
+  const checkpoint = readCheckpoint(root);
+  writeFileSync(daemonHealthPaths(root).current, JSON.stringify({ ...checkpoint, exitCode: 0 }));
+  const next = createDaemonHealth({ dataRoot: root, pid: 11, readHeap: () => heap(10), instrumentProcess: false, isProcessAlive: () => false });
+  const { sink, events } = collect(); next.attachSink(sink); await settle();
+  expect(events[0]).toMatchObject({ eventName: 'daemon_health_summary', properties: { reason: 'clean-exit' } });
+});
+
+it('keeps failed pending deliveries for the next boot with the same insert ID', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const root = tempRoot();
+  createDaemonHealth({ dataRoot: root, pid: 10, readHeap: () => heap(10), instrumentProcess: false });
+  const next = createDaemonHealth({ dataRoot: root, pid: 11, readHeap: () => heap(10), instrumentProcess: false, isProcessAlive: () => false });
+  const id = readCheckpoint(root).pendingReports[0].insertId;
+  next.attachSink(async () => { throw new Error('delivery failed'); });
+  await settle();
+  await vi.advanceTimersByTimeAsync(5_001);
+  // No delayed blanket clearing of failed deliveries.
+  expect(readCheckpoint(root).pendingReports).toContainEqual(expect.objectContaining({ insertId: id }));
+});
+
+// Real local child exits exercise the exit listener and persist/restart boundary.
+it.each(['zero', 'nonzero', 'kill'])('classifies real daemon health child termination: %s', async mode => {
+  const root = tempRoot();
+  const moduleUrl = new URL('../src/services/daemon-health.ts', import.meta.url).href;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    const { createDaemonHealth } = await import(${JSON.stringify(moduleUrl)});
+    const health = createDaemonHealth({ dataRoot: ${JSON.stringify(root)} });
+    health.setAppVersion('1.0.0-beta.1');
+    health.setLaunchContext?.({ app_session_id: 'old-session', launch_attempt_id: 'old-launch' });
+    ${mode === 'kill' ? "process.kill(process.pid, 'SIGKILL')" : `process.exit(${mode === 'zero' ? 0 : 1})`};
+  `], { timeout: 10_000 });
+  expect(result.error).toBeUndefined();
+  expect(mode === 'kill' ? result.signal : result.status).toBe(mode === 'kill' ? 'SIGKILL' : mode === 'zero' ? 0 : 1);
+  const next = createDaemonHealth({ dataRoot: root, instrumentProcess: false, readHeap: () => heap(10), isProcessAlive: () => false });
+  const { sink, events } = collect(); next.attachSink(sink); await settle();
+  expect(events[0]).toMatchObject({ eventName: mode === 'zero' ? 'daemon_health_summary' : 'daemon_unclean_exit', properties: {
+    reason: mode === 'zero' ? 'clean-exit' : mode === 'nonzero' ? 'crash' : 'unknown', previous_app_version: '1.0.0-beta.1',
+    app_session_id: 'old-session', launch_attempt_id: 'old-launch',
+  } });
 });

@@ -128,10 +128,11 @@ async function patch(
   return response.status;
 }
 
-async function readScope(webUrl: string, projectId: string): Promise<ProjectWorkspaceScope> {
+async function readScope(webUrl: string, projectId: string, headers?: Record<string, string>): Promise<ProjectWorkspaceScope> {
   const body = await requestJson<{ scope: ProjectWorkspaceScope }>(
     webUrl,
     `/api/projects/${encodeURIComponent(projectId)}/workspace-scope`,
+    headers ? { headers } : {},
   );
   return body.scope;
 }
@@ -200,8 +201,8 @@ describe('local project mutations do not require remote Workspace authority', ()
           });
           expect(rename, 'rename runs the same gate').toBe(200);
 
-          // Headerless CLI operations stay usable for locally stored projects,
-          // even when the browser originally attributed one to a Workspace.
+          // Local unbound CLI operations remain usable. Copying an attributed
+          // project requires the exact workspace identity for the new copy.
           const elsewhere = await requestJson<CreatedProject>(webUrl, '/api/projects', {
             body: {
               designSystemId: null,
@@ -214,7 +215,7 @@ describe('local project mutations do not require remote Workspace authority', ()
             headers: workspaceHeaders(OTHER),
             method: 'POST',
           });
-          expect((await readScope(webUrl, elsewhere.project.id)).workspaceId).toBe(
+          expect((await readScope(webUrl, elsewhere.project.id, workspaceHeaders(OTHER))).workspaceId).toBe(
             OTHER.workspaceId,
           );
 
@@ -226,19 +227,24 @@ describe('local project mutations do not require remote Workspace authority', ()
           );
           expect(
             foreignBound.status,
-            'a headerless local caller must not need Vela authority',
-          ).toBe(200);
+            'a bound project copy requires its exact caller identity',
+          ).toBe(400);
+          expect(foreignBound.text).toContain('WORKSPACE_CONTEXT_REQUIRED');
+          const scopedCopy = await post(
+            webUrl, `/api/projects/${elsewhere.project.id}/duplicate`, workspaceHeaders(OTHER),
+            { name: 'Authorized workspace copy' },
+          );
+          expect(scopedCopy.status).toBe(200);
 
-          // A complete explicit pair on an unbound project is local attribution,
-          // not proof of remote membership.
+          // A complete pair alone cannot authorize attribution of an unbound project.
           const attributed = await post(webUrl, `/api/projects/${own}/duplicate`, workspaceHeaders({
             workspaceId: 'ws-hdl-forged',
             workspaceMemberId: 'mem-hdl-forged',
           }), { name: 'Forged duplicate' });
           expect(
             attributed.status,
-            'local attribution must not synchronously consult Vela',
-          ).toBe(200);
+            'unverified identity must not claim an unbound project',
+          ).toBe(403);
 
           // Once a project is bound, an explicitly different Workspace still
           // fails the local namespace match.

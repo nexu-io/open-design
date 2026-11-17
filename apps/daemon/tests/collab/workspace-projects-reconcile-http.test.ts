@@ -218,6 +218,9 @@ describe('reconcileWorkspaceProjectsWithRemote, verified through the real worksp
       collabSync: { requestTeamShare: noop, requestTeamUnshare: noop, invalidateTeamProjectCatalog: noop },
       teamProjectCatalog,
       authorizeProjectRequest,
+      fetchProjectCreationWorkspaceDirectory: async () => ({
+        ok: true as const, items: [verifiedContext],
+      }),
     } as unknown as Parameters<typeof registerProjectRoutes>[1];
   }
 

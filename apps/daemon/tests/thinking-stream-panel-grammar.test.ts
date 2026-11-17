@@ -82,10 +82,13 @@ describe('思考流也要过剧场语法剥离', () => {
   let server: http.Server;
   let baseUrl: string;
   let binDir: string;
+  const originalStrategyMode = process.env.OD_NEXT_STRATEGY_ROLLOUT;
   const originalPath = process.env.PATH;
   const originalTransport = process.env.OD_CODEX_TRANSPORT;
 
   beforeAll(async () => {
+    // These direct-chat fixtures exercise legacy runtime transport, not Task orchestration.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     process.env.OD_CODEX_TRANSPORT = 'exec-json';
     binDir = await mkdtemp(join(tmpdir(), 'od-thinking-grammar-'));
     const bin = join(binDir, 'codex');
@@ -119,6 +122,8 @@ setTimeout(() => process.exit(0), 10);
   }, 60_000);
 
   afterAll(async () => {
+    if (originalStrategyMode == null) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    else process.env.OD_NEXT_STRATEGY_ROLLOUT = originalStrategyMode;
     if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(binDir, { recursive: true, force: true });
     if (originalPath == null) delete process.env.PATH;

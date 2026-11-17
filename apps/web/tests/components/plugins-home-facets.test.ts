@@ -79,6 +79,15 @@ describe('extractCategories', () => {
     ).toEqual(['live-artifact']);
   });
 
+  it('splits motion design templates from the broader video mode', () => {
+    expect(
+      extractCategories(fixture({ id: 'motion', tags: ['video-template', 'video', 'motion-design'], od: { mode: 'video' } })),
+    ).toEqual(['motion-design']);
+    expect(
+      extractCategories(fixture({ id: 'other', tags: ['motion-design'], od: { mode: 'prototype' } })),
+    ).toEqual(['prototype']);
+  });
+
   it('splits HyperFrames from the broader video mode', () => {
     expect(
       extractCategories(fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } })),
@@ -240,6 +249,7 @@ describe('buildFacetCatalog', () => {
       fixture({ id: 'image', tags: ['profile-avatar'], od: { mode: 'image' } }),
       fixture({ id: 'video', tags: ['cinematic'], od: { mode: 'video' } }),
       fixture({ id: 'hf', tags: ['hyperframes'], od: { mode: 'video' } }),
+      fixture({ id: 'motion', tags: ['motion-design'], od: { mode: 'video' } }),
       fixture({ id: 'audio', od: { mode: 'audio' } }),
       fixture({ id: 'design-system', od: { mode: 'design-system' } }),
       fixture({ id: 'resume', tags: ['resume'], od: { mode: 'prototype' } }),
@@ -253,6 +263,7 @@ describe('buildFacetCatalog', () => {
       ['prototype', 1],
       ['live-artifact', 1],
       ['image', 1],
+      ['motion-design', 1],
       ['video', 1],
       ['hyperframes', 1],
       ['audio', 1],

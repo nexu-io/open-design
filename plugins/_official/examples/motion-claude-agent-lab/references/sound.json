@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "连续电子节奏、合成器纹理与脉冲低音",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "reference",
+        "energy": "mid"
+      },
+      {
+        "scene": "data",
+        "energy": "mid"
+      },
+      {
+        "scene": "story",
+        "energy": "mid"
+      },
+      {
+        "scene": "motion",
+        "energy": "mid"
+      },
+      {
+        "scene": "direct",
+        "energy": "mid"
+      },
+      {
+        "scene": "ship",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

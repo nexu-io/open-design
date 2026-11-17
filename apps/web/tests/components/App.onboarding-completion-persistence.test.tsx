@@ -52,6 +52,7 @@ const entryViewCapture = vi.hoisted(() => ({
     options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
   ) => unknown),
   activeSignOut: null as null | (() => void | Promise<void>),
+  registrationActiveChange: null as null | ((active: boolean) => void),
 }));
 
 const settingsCapture = vi.hoisted(() => ({
@@ -83,6 +84,7 @@ vi.mock('../../src/components/EntryView', () => ({
     onCompleteOnboarding,
     onRefreshAgents,
     onSignedOut,
+    onRegistrationInviteActiveChange,
   }: {
     config: AppConfig;
     onAgentChange: (agentId: string) => void;
@@ -91,11 +93,13 @@ vi.mock('../../src/components/EntryView', () => ({
       options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] },
     ) => unknown;
     onSignedOut: () => void | Promise<void>;
+    onRegistrationInviteActiveChange?: (active: boolean) => void;
   }) => {
     entryViewCapture.firstAgentChange ??= onAgentChange;
     entryViewCapture.firstCompleteOnboarding ??= onCompleteOnboarding;
     entryViewCapture.firstRefreshAgents ??= onRefreshAgents;
     entryViewCapture.activeSignOut = onSignedOut;
+    entryViewCapture.registrationActiveChange = onRegistrationInviteActiveChange ?? null;
     return (
       <>
         <div data-testid="onboarding-completed">{String(config.onboardingCompleted)}</div>
@@ -106,6 +110,8 @@ vi.mock('../../src/components/EntryView', () => ({
     );
   },
 }));
+
+vi.mock('../../src/components/PrivacyConsentModal', () => ({ PrivacyConsentModal: () => <div data-testid="privacy-consent">Privacy consent</div> }));
 
 vi.mock('../../src/components/ProjectView', () => ({
   ProjectView: () => <div>Project view</div>,
@@ -261,6 +267,7 @@ describe('App onboarding completion persistence', () => {
     entryViewCapture.firstCompleteOnboarding = null;
     entryViewCapture.firstRefreshAgents = null;
     entryViewCapture.activeSignOut = null;
+    entryViewCapture.registrationActiveChange = null;
     settingsCapture.resetOnboarding = null;
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
@@ -369,6 +376,23 @@ describe('App onboarding completion persistence', () => {
     });
   });
 
+  it('keeps the selected AMR environment when signing out to use another account', () => {
+    const current = {
+      ...returningUserConfig(),
+      agentCliEnv: {
+        amr: {
+          OPEN_DESIGN_AMR_PROFILE: 'test',
+          VELA_RUNTIME_KEY: 'account-a-key',
+          VELA_LINK_URL: 'https://account-a.example',
+        },
+      },
+    } as AppConfig;
+
+    expect(resetExecutionConfigAfterSignOut(current).agentCliEnv).toEqual({
+      amr: { OPEN_DESIGN_AMR_PROFILE: 'test' },
+    });
+  });
+
   it('persists the Cloud reset without discarding BYOK and returns to onboarding', async () => {
     mockedLoadConfig.mockReturnValue({
       ...returningUserConfig(),
@@ -420,6 +444,29 @@ describe('App onboarding completion persistence', () => {
       { allowOnboardingReset: true },
     );
     expect(await navigatedToOnboarding()).toBe(true);
+  });
+
+  it('persists the selected AMR environment through active sign-out', async () => {
+    const agentCliEnv = {
+      amr: { OPEN_DESIGN_AMR_PROFILE: 'test', VELA_RUNTIME_KEY: 'account-a-key' },
+    };
+    mockedLoadConfig.mockReturnValue({ ...returningUserConfig(), agentCliEnv });
+    mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true, agentCliEnv });
+
+    render(<App />);
+    await waitFor(() => {
+      expect(entryViewCapture.activeSignOut).toEqual(expect.any(Function));
+    });
+    await act(async () => {
+      await entryViewCapture.activeSignOut?.();
+    });
+
+    expect(mockedSyncConfigToDaemon).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } },
+      }),
+      { allowOnboardingReset: true },
+    );
   });
 
   it('keeps a completed user out of onboarding when the daemon copy still says false', async () => {
@@ -613,4 +660,13 @@ describe('App onboarding completion persistence', () => {
     expect(mockedFetchDaemonConfig).toHaveBeenCalledTimes(1);
     expect(await navigatedToOnboarding()).toBe(false);
   });
+  it('defers consent while the actual registration surface is active and restores disclosure after exit', async () => {
+    const config = returningUserConfig(); mockedLoadConfig.mockReturnValue(config);
+    mockedFetchDaemonConfig.mockResolvedValue(config); mockedSyncConfigToDaemon.mockResolvedValue(undefined);
+    render(<App />); await screen.findByTestId('privacy-consent');
+    expect(entryViewCapture.registrationActiveChange).toBeTypeOf('function');
+    act(() => entryViewCapture.registrationActiveChange?.(true)); expect(screen.queryByTestId('privacy-consent')).toBeNull();
+    act(() => entryViewCapture.registrationActiveChange?.(false)); expect(screen.getByTestId('privacy-consent')).toBeTruthy();
+  });
+
 });

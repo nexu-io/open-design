@@ -124,7 +124,7 @@ describe('图片产物卡 · OPEND-2547', () => {
  * 2 · 视频:9/16 letterbox 的专用布局没被误伤
  * ------------------------------------------------------------------ */
 describe('视频产物卡不受 OPEND-2547 影响', () => {
-  it('保留自己的居中 letterbox 布局,并且不走 data-preview-fit 那条路', () => {
+  it('铺满固定媒体框再 contain,竖屏与极宽视频都不裁切', () => {
     renderCards([fileOpEntry('reel.mp4')]);
     const card = screen.getByTestId('artifact-card-reel.mp4');
     expect(card.className).toContain('artifact-card--video');
@@ -139,13 +139,11 @@ describe('视频产物卡不受 OPEND-2547 影响', () => {
     expect({
       position: style.position,
       width: style.width,
-      maxWidth: style.maxWidth,
       height: style.height,
       objectFit: style.objectFit,
     }).toEqual({
-      position: 'relative',
-      width: 'auto',
-      maxWidth: '100%',
+      position: 'absolute',
+      width: '100%',
       height: '100%',
       objectFit: 'contain',
     });

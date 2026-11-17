@@ -100,7 +100,7 @@ const DESIGN_SYSTEM_PLUGIN = plugin({
   manifest: { od: { mode: 'design-system' } },
 });
 
-// A kind outside the four fixed tabs: reachable through the row's 更多 popover
+// A kind outside the five fixed tabs: reachable through the row's 更多 popover
 // only, and only mixed into the catalogue by the specs that exercise it.
 const VIDEO_TEMPLATE = plugin({
   id: 'video-template-teaser',
@@ -109,6 +109,21 @@ const VIDEO_TEMPLATE = plugin({
     description: 'A fifteen-second product teaser.',
     tags: ['teaser'],
     od: { mode: 'video', preview: { type: 'image', poster: 'https://assets.test/teaser.jpg' } },
+  },
+});
+
+// A motion design template: Use must bind it as the Motion design example card.
+const MOTION_TEMPLATE = plugin({
+  id: 'example-motion-showreel',
+  title: 'Motion Designer Showreel',
+  manifest: {
+    description: 'A 15-second motion designer showreel.',
+    tags: ['motion-design', 'showreel'],
+    od: {
+      mode: 'video',
+      preview: { type: 'html', entry: './example.html' },
+      useCase: { query: 'Make a 15-second motion design showreel.' },
+    },
   },
 });
 
@@ -231,11 +246,11 @@ describe('CommunityView catalogue source', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/plugins', undefined);
 
     // The row mirrors the Home type row's taxonomy and order — Prototype leads
-    // — and renders all four kinds even though the fixture catalogue has no
-    // Document template yet. Each tab wears the Home pill and its hue hook.
+    // — and keeps all five fixed kinds even without Motion or Document templates.
+    // Each tab wears the Home pill and its hue hook.
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
-    expect(facets.map((facet) => facet.tab.getAttribute('data-chip'))).toEqual(['prototype', 'deck', 'document', 'image']);
+    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Motion design', 'Slides', 'Document', 'Image']);
+    expect(facets.map((facet) => facet.tab.getAttribute('data-chip'))).toEqual(['prototype', 'motion-design', 'deck', 'document', 'image']);
     expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
     expect(facets[0]!.tab.getAttribute('aria-pressed')).toBe('true');
 
@@ -249,7 +264,7 @@ describe('CommunityView catalogue source', () => {
 
     // Each tab grids exactly the plugins the daemon served for its kind — not
     // a bundled demo array. Document is empty until document templates ship.
-    expect(readFacetCardCounts()).toEqual([1, 2, 0, 1]);
+    expect(readFacetCardCounts()).toEqual([1, 0, 2, 0, 1]);
   });
 
   it('keeps Prototype as the lead tab and shows the empty state when the catalogue has none', async () => {
@@ -261,7 +276,7 @@ describe('CommunityView catalogue source', () => {
     // The row is fixed to the Home taxonomy, so it does not fall through to
     // the first kind that happens to have cards.
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Motion design', 'Slides', 'Document', 'Image']);
     expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
     expect(renderedCards()).toHaveLength(0);
     expect(screen.getByText('No Prototype templates yet')).toBeTruthy();
@@ -313,8 +328,8 @@ describe('CommunityView catalogue source', () => {
     serveCatalogue([...CATALOGUE, VIDEO_TEMPLATE]);
     await renderCommunity();
 
-    // The four fixed tabs are unchanged; Video is not one of them.
-    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    // Video stays behind 更多; Motion design is always the second fixed tab.
+    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Motion design', 'Slides', 'Document', 'Image']);
     expect(screen.queryByTestId('community-type-tabs-popover')).toBeNull();
 
     // 更多 is a fixed product list (OPEND-3098), not the catalogue's leftovers:
@@ -323,15 +338,15 @@ describe('CommunityView catalogue source', () => {
     fireEvent.click(screen.getByTestId('community-type-tabs-more'));
     const popover = screen.getByTestId('community-type-tabs-popover');
     expect(Array.from(popover.querySelectorAll('button')).map((button) => button.textContent?.trim()))
-      .toEqual(['HyperFrames', 'Video', 'Audio', 'Live Artifact', 'WebGL']);
+      .toEqual(['HyperFrames', 'WebGL', 'Live Artifact', 'Video', 'Audio']);
 
     fireEvent.click(screen.getByTestId('community-type-tab-video-more'));
 
     // Picking it closes the popover and promotes the kind to an inline, lit
     // pill after 图片 so the selection is always visible.
     expect(screen.queryByTestId('community-type-tabs-popover')).toBeNull();
-    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image', 'Video']);
-    expect(readFacets()[4]!.tab.classList.contains('is-active')).toBe(true);
+    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Motion design', 'Slides', 'Document', 'Image', 'Video']);
+    expect(readFacets()[5]!.tab.classList.contains('is-active')).toBe(true);
     // The other four fixed 更多 kinds are still behind the trigger.
     expect(screen.getByTestId('community-type-tabs-more')).toBeTruthy();
     expect(renderedCards().map((card) => card.getAttribute('data-template-type'))).toEqual(['Video']);
@@ -339,7 +354,7 @@ describe('CommunityView catalogue source', () => {
 
     // Back on a fixed tab the promoted pill retires and 更多 returns.
     clickTab('Slides');
-    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Document', 'Image']);
+    expect(readFacets().map((facet) => facet.label)).toEqual(['Prototype', 'Motion design', 'Slides', 'Document', 'Image']);
     expect(screen.getByTestId('community-type-tabs-more')).toBeTruthy();
   });
 
@@ -482,6 +497,7 @@ describe('CommunityView remix', () => {
       prompt: 'A typography-led key art poster.',
       chipId: 'image',
       projectKind: 'image',
+      asExample: false,
     });
     expect(onUsePrompt).not.toHaveBeenCalled();
   });
@@ -589,6 +605,7 @@ describe('CommunityView use handoff', () => {
       prompt: 'A conversion-focused SaaS landing page.',
       chipId: 'prototype',
       projectKind: 'prototype',
+      asExample: false,
     });
   });
 
@@ -609,8 +626,97 @@ describe('CommunityView use handoff', () => {
         prompt: 'A conversion-focused SaaS landing page.',
         chipId: 'prototype',
         projectKind: 'prototype',
+        asExample: false,
       },
     );
+  });
+
+  function openMotionTab() {
+    const inline = readFacets().find(({ label }) => label === 'Motion design');
+    if (inline) {
+      fireEvent.click(inline.tab);
+      return;
+    }
+    fireEvent.click(screen.getByTestId('community-type-tabs-more'));
+    fireEvent.click(screen.getByTestId('community-type-tab-motion-design-more'));
+  }
+
+  function useClicks() {
+    return analytics.track.mock.calls.filter(
+      ([event, props]) => event === 'ui_click' && (props as { element?: string }).element === 'use_prompt',
+    );
+  }
+
+  it('leads the Motion shelf with Bring Ideas to Life and keeps the other templates in their curated order', async () => {
+    const titles = [
+      ['visual-lesson', 'Bring Ideas to Life'],
+      ['future', 'The Future Is Already Here'],
+      ['showreel', 'Motion Designer Showreel'],
+      ['ui-morph', 'One-Shape UI Motion'],
+      ['product-promo', 'Product Promo'],
+    ] as const;
+    const motionTemplates = [...titles].reverse().map(([name, title]) => plugin({
+      id: `example-motion-${name}`,
+      title,
+      manifest: {
+        tags: ['motion-design'],
+        od: { mode: 'video', preview: { type: 'html', entry: './example.html' } },
+      },
+    }));
+    serveCatalogue([...CATALOGUE, ...motionTemplates]);
+    await renderCommunity();
+    openMotionTab();
+    expect(Array.from(document.querySelectorAll('.community-template-card__title'), (el) => el.textContent))
+      .toEqual(titles.map(([, title]) => title));
+  });
+
+  it('binds a motion design template as its type example from the card Use, recording the card source once', async () => {
+    serveCatalogue([...CATALOGUE, MOTION_TEMPLATE]);
+    const onUsePlugin = vi.fn();
+    await renderCommunity({ onUsePlugin });
+    openMotionTab();
+    analytics.track.mockClear();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Try it now' })[0]!);
+
+    expect(onUsePlugin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'example-motion-showreel' }),
+      'use-with-query',
+      expect.objectContaining({ chipId: 'motion-design', projectKind: 'video', asExample: true }),
+    );
+    expect(useClicks()).toHaveLength(1);
+    expect(useClicks()[0]![1]).toMatchObject({
+      page_name: 'community',
+      area: 'community_templates',
+      template_key: 'example-motion-showreel',
+      template_type: 'Motion design',
+      use_source: 'card',
+      use_action: 'use_with_query',
+    });
+  });
+
+  it('records the details modal Use with its own source and action, and routes it as the example', async () => {
+    serveCatalogue([...CATALOGUE, MOTION_TEMPLATE]);
+    const onUsePlugin = vi.fn();
+    await renderCommunity({ onUsePlugin });
+    openMotionTab();
+    fireEvent.click(renderedCards()[0]!);
+    analytics.track.mockClear();
+
+    fireEvent.click(await screen.findByTestId('plugin-details-use-example-motion-showreel'));
+
+    expect(onUsePlugin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'example-motion-showreel' }),
+      'use-with-query',
+      expect.objectContaining({ chipId: 'motion-design', asExample: true }),
+    );
+    expect(useClicks()).toHaveLength(1);
+    expect(useClicks()[0]![1]).toMatchObject({
+      element: 'use_prompt',
+      template_key: 'example-motion-showreel',
+      use_source: 'detail_modal',
+      use_action: 'use_with_query',
+    });
   });
 });
 

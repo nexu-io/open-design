@@ -14,9 +14,8 @@
 //   - Poll-as-floor safe. This runs in ADDITION to the web polls; a client whose
 //     SSE never connects keeps polling with zero regression. This poller only
 //     accelerates delivery, it is not the sole source of truth.
-//   - Personal-user cheap. Team projects + members are only read when the
-//     current context is a team workspace; off-team the poller only reads the
-//     (already web-polled) workspace context to notice a team join.
+//   - Shared-project reads require an active, exact Workspace/member identity.
+//     Signed-out and removed members only poll Workspace context.
 
 import type {
   CollabCloudMemberDirectoryEntry,
@@ -26,12 +25,12 @@ import type {
 } from '@open-design/contracts';
 
 export interface WorkspaceInvalidationPollerDeps {
-  /** Current workspace context (proxies Vela/B in prod). Gates team reads and
-   *  drives `workspace-context-changed`. Returns null off-team / signed out. */
+  /** Current workspace context (proxies Vela/B in prod). Gates shared reads and
+   *  drives `workspace-context-changed`. Returns null while signed out. */
   getWorkspaceContext: () => Promise<WorkspaceCollabContext | null>;
-  /** Team-shared project discovery (resource hub). Only called on a team context. */
+  /** Workspace-shared project discovery (resource hub). */
   listTeamProjects: (context: WorkspaceCollabContext) => Promise<TeamProject[]>;
-  /** Team member directory. Only called on a team context. */
+  /** Workspace member directory. */
   listMembers: (
     context: WorkspaceCollabContext,
   ) => Promise<CollabCloudMemberDirectoryEntry[]>;
@@ -75,13 +74,15 @@ function contextSignature(context: WorkspaceCollabContext | null): string {
   return JSON.stringify(context);
 }
 
-/** Is this a team workspace we should read team projects / members for? */
+/** Is this an active workspace whose shared projects and members we can read? */
 function isTeamContext(
   context: WorkspaceCollabContext | null,
 ): context is WorkspaceCollabContext {
   if (!context) return false;
-  if (context.workspaceType === 'team') return true;
-  return typeof context.teamId === 'string' && context.teamId.trim().length > 0;
+  return (context.workspaceType === 'team' || context.workspaceType === 'personal')
+    && context.memberStatus === 'active'
+    && context.lifecycleState === 'active'
+    && Boolean(context.workspaceId?.trim() && context.workspaceMemberId?.trim());
 }
 
 /** Fail-closed prefilter for broad recovery. Keep this identity boundary
@@ -89,10 +90,10 @@ function isTeamContext(
  * without changing `isTeamContext`'s existing invalidation/read semantics. */
 function activeRecoveryWorkspaceId(context: WorkspaceCollabContext): string | null {
   const workspaceId = context.workspaceId?.trim() ?? '';
-  const resourceTeamId = context.teamId?.trim() ?? '';
+  const resourceTeamId = context.workspaceType === 'team' ? context.teamId?.trim() ?? '' : workspaceId;
   const workspaceMemberId = context.workspaceMemberId?.trim() ?? '';
   if (
-    context.workspaceType !== 'team' ||
+    (context.workspaceType !== 'team' && context.workspaceType !== 'personal') ||
     context.memberStatus !== 'active' ||
     context.lifecycleState !== 'active' ||
     !workspaceId ||
@@ -210,8 +211,8 @@ export function createWorkspaceInvalidationPoller(
     if (!isTeamContext(context)) {
       recoveryWorkspaceId = null;
       recoveryRequestedAt = null;
-      // Off-team: fold team projects / members to empty so RE-entering a team
-      // re-emits, but never spawn the team reads for a personal user.
+      // Without active membership, fold projects and members to empty so
+      // returning to a Workspace emits a fresh invalidation.
       teamProjectsSig = emitIfChanged(teamProjectsSig, teamProjectsSignature([]), {
         type: 'team-projects-changed',
         at: observedAt,

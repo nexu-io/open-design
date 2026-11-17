@@ -1,0 +1,296 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-mind-clarity-journey",
+  "title": "Mind Clarity Journey",
+  "title_i18n": {
+    "en": "Mind Clarity Journey",
+    "id": "Perjalanan Kejernihan Pikiran",
+    "de": "Reise zur Klarheit des Geistes",
+    "zh-CN": "清晰心智之旅",
+    "zh-TW": "心靈清晰之旅",
+    "pt-BR": "Jornada de Clareza Mental",
+    "es-ES": "Viaje de claridad mental",
+    "ru": "Путешествие к ясности ума",
+    "fa": "سفر شفافیت ذهن",
+    "ar": "رحلة صفاء العقل",
+    "ja": "マインド・クラリティ・ジャーニー",
+    "ko": "마음의 명확성 여행",
+    "pl": "Podróż jasności umysłu",
+    "hu": "Utazás a tiszta gondolkodás felé",
+    "fr": "Voyage de clarté d'esprit",
+    "uk": "Шлях до ясності думок",
+    "tr": "Zihin Netliği Yolculuğu",
+    "th": "การเดินทางที่ชัดเจนของจิตใจ",
+    "it": "Viaggio per la chiarezza della mente"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "A silhouette film about clarity, growth and focus, from a sunlit mind to an open doorway.",
+  "description_i18n": {
+    "en": "A silhouette film about clarity, growth and focus, from a sunlit mind to an open doorway.",
+    "id": "Film siluet tentang kejernihan, pertumbuhan, dan fokus, dari pikiran yang diterangi matahari hingga pintu yang terbuka.",
+    "de": "Ein Silhouettenfilm über Klarheit, Wachstum und Konzentration, vom sonnenbeschienenen Geist bis zur offenen Tür.",
+    "zh-CN": "通过太阳、植物、火柴和敞开的门，呈现清晰心智与专注成长的剪影短片。",
+    "zh-TW": "一部關於清晰、成長和專注的剪影電影，從陽光明媚的心靈到敞開的大門。",
+    "pt-BR": "Um filme de silhueta sobre clareza, crescimento e foco, desde uma mente iluminada pelo sol até uma porta aberta.",
+    "es-ES": "Una película de siluetas sobre claridad, crecimiento y concentración, desde una mente iluminada por el sol hasta una puerta abierta.",
+    "ru": "Силуэтный фильм о ясности, росте и сосредоточенности: от залитого солнцем ума до открытой двери.",
+    "fa": "یک فیلم شبح در مورد وضوح، رشد و تمرکز، از یک ذهن نور خورشید تا یک دری باز.",
+    "ar": "فيلم خيالي عن الوضوح والنمو والتركيز، من العقل المضاء بنور الشمس إلى المدخل المفتوح.",
+    "ja": "陽光に照らされた心から開いた戸口まで、明晰さ、成長、集中力を描いたシルエット映画。",
+    "ko": "햇빛이 비치는 마음부터 열린 출입구까지 명확성, 성장, 집중력에 관한 실루엣 영화입니다.",
+    "pl": "Film o sylwetkach o przejrzystości, wzroście i skupieniu, od oświetlonego słońcem umysłu po otwarte drzwi.",
+    "hu": "Sziluettfilm a tisztaságról, a növekedésről és a fókuszról, a napsütötte elmétől a nyitott ajtóig.",
+    "fr": "Un film de silhouettes sur la clarté, la croissance et la concentration, d'un esprit ensoleillé à une porte ouverte.",
+    "uk": "Силуетний фільм про ясність, зростання та зосередженість, від освітленого сонцем розуму до відкритих дверей.",
+    "tr": "Aydınlık bir zihinden açık bir kapı aralığına kadar netlik, büyüme ve odaklanma hakkında bir siluet filmi.",
+    "th": "ภาพยนตร์ภาพเงาเกี่ยวกับความชัดเจน การเติบโต และการมุ่งเน้น จากจิตใจที่สว่างไสวไปจนถึงประตูที่เปิดอยู่",
+    "it": "Un film in silhouette sulla chiarezza, la crescita e la concentrazione, da una mente illuminata dal sole a una porta aperta."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "editorial",
+    "silhouette",
+    "mindfulness",
+    "abstract"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "mindLine",
+        "type": "string",
+        "label": "opening copy",
+        "default": "The mind",
+        "label_i18n": {
+          "en": "opening copy",
+          "id": "salinan pembuka",
+          "de": "Eröffnungsexemplar",
+          "zh-CN": "开场文案",
+          "zh-TW": "開篇副本",
+          "pt-BR": "cópia de abertura",
+          "es-ES": "copia de apertura",
+          "ru": "открывающая копия",
+          "fa": "کپی باز کردن",
+          "ar": "نسخة الافتتاح",
+          "ja": "オープニングコピー",
+          "ko": "오프닝 카피",
+          "pl": "egzemplarz otwierający",
+          "hu": "nyitó példány",
+          "fr": "copie d'ouverture",
+          "uk": "відкриття копії",
+          "tr": "kopyayı açma",
+          "th": "กำลังเปิดสำเนา",
+          "it": "copia di apertura"
+        }
+      },
+      {
+        "name": "growthLine",
+        "type": "string",
+        "label": "emphasis word",
+        "default": "thrives",
+        "label_i18n": {
+          "en": "emphasis word",
+          "id": "kata penekanan",
+          "de": "Betonungswort",
+          "zh-CN": "强调词",
+          "zh-TW": "強調詞",
+          "pt-BR": "palavra de ênfase",
+          "es-ES": "palabra de énfasis",
+          "ru": "ударное слово",
+          "fa": "کلمه تاکیدی",
+          "ar": "كلمة التأكيد",
+          "ja": "強調語",
+          "ko": "강조 단어",
+          "pl": "słowo podkreślone",
+          "hu": "nyomatékos szó",
+          "fr": "mot d'emphase",
+          "uk": "наголошене слово",
+          "tr": "vurgu kelimesi",
+          "th": "คำเน้น",
+          "it": "parola di enfasi"
+        }
+      },
+      {
+        "name": "clarityLine",
+        "type": "string",
+        "label": "Opening and conclusion",
+        "default": "in clarity.",
+        "label_i18n": {
+          "en": "Opening and conclusion",
+          "id": "Pembukaan dan kesimpulan",
+          "de": "Eröffnung und Schluss",
+          "zh-CN": "开场结语",
+          "zh-TW": "開幕和結束",
+          "pt-BR": "Abertura e conclusão",
+          "es-ES": "Apertura y conclusión",
+          "ru": "Открытие и заключение",
+          "fa": "افتتاحیه و نتیجه گیری",
+          "ar": "الافتتاح والختام",
+          "ja": "冒頭と結論",
+          "ko": "오프닝과 결론",
+          "pl": "Otwarcie i zakończenie",
+          "hu": "Megnyitás és befejezés",
+          "fr": "Ouverture et conclusion",
+          "uk": "Відкриття і завершення",
+          "tr": "Açılış ve sonuç",
+          "th": "การเปิดและการสรุป",
+          "it": "Apertura e conclusione"
+        }
+      },
+      {
+        "name": "focusLine",
+        "type": "string",
+        "label": "Focus on copywriting",
+        "default": "Focus is",
+        "label_i18n": {
+          "en": "Focus on copywriting",
+          "id": "Fokus pada copywriting",
+          "de": "Konzentrieren Sie sich auf das Verfassen von Texten",
+          "zh-CN": "专注文案",
+          "zh-TW": "專注於文案寫作",
+          "pt-BR": "Concentre-se em direitos autorais",
+          "es-ES": "Centrarse en la redacción",
+          "ru": "Сосредоточьтесь на копирайтинге",
+          "fa": "روی کپی رایتینگ تمرکز کنید",
+          "ar": "التركيز على كتابة النصوص",
+          "ja": "コピーライティングに注力する",
+          "ko": "카피라이팅에 집중하세요",
+          "pl": "Skup się na copywritingu",
+          "hu": "Koncentrálj a szövegírásra",
+          "fr": "Concentrez-vous sur la rédaction",
+          "uk": "Зосередьтеся на копірайтингу",
+          "tr": "Metin yazarlığına odaklanın",
+          "th": "มุ่งเน้นไปที่การเขียนคำโฆษณา",
+          "it": "Concentrati sul copywriting"
+        }
+      },
+      {
+        "name": "fuelLine",
+        "type": "string",
+        "label": "Focus on conclusion",
+        "default": "the fuel.",
+        "label_i18n": {
+          "en": "Focus on conclusion",
+          "id": "Fokus pada kesimpulan",
+          "de": "Konzentrieren Sie sich auf die Schlussfolgerung",
+          "zh-CN": "专注结语",
+          "zh-TW": "專注於結論",
+          "pt-BR": "Concentre-se na conclusão",
+          "es-ES": "Centrarse en la conclusión",
+          "ru": "Сосредоточьтесь на заключении",
+          "fa": "روی نتیجه گیری تمرکز کنید",
+          "ar": "التركيز على الاستنتاج",
+          "ja": "結論に焦点を当てる",
+          "ko": "결론에 집중",
+          "pl": "Skup się na wnioskach",
+          "hu": "Koncentrálj a következtetésre",
+          "fr": "Concentrez-vous sur la conclusion",
+          "uk": "Зосередьтеся на висновках",
+          "tr": "Sonuca odaklan",
+          "th": "มุ่งเน้นไปที่ข้อสรุป",
+          "it": "Concentrati sulla conclusione"
+        }
+      },
+      {
+        "name": "portalArt",
+        "type": "string",
+        "label": "Scene inside the door",
+        "default": "assets/portal-art.png",
+        "label_i18n": {
+          "en": "Scene inside the door",
+          "id": "Adegan di dalam pintu",
+          "de": "Szene hinter der Tür",
+          "zh-CN": "门内景象",
+          "zh-TW": "門內場景",
+          "pt-BR": "Cena dentro da porta",
+          "es-ES": "Escena dentro de la puerta.",
+          "ru": "Сцена внутри двери",
+          "fa": "صحنه داخل در",
+          "ar": "المشهد داخل الباب",
+          "ja": "扉の中の様子",
+          "ko": "문 안의 풍경",
+          "pl": "Scena za drzwiami",
+          "hu": "Jelenet az ajtón belül",
+          "fr": "Scène à l'intérieur de la porte",
+          "uk": "Сцена всередині дверей",
+          "tr": "Kapının içindeki sahne",
+          "th": "ฉากภายในประตู",
+          "it": "Scena all'interno della porta"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a silhouette film about mental clarity with “{{mindLine}} / {{growthLine}} / {{clarityLine}}” and “{{focusLine}} / {{fuelLine}}”, using {{portalArt}} as the destination.",
+        "id": "Buatlah film siluet tentang kejernihan mental dengan “{{mindLine}}/{{growthLine}}/{{clarityLine}}” dan “{{focusLine}}/{{fuelLine}}”, dengan menggunakan {{portalArt}} sebagai tujuannya.",
+        "de": "Erstellen Sie einen Silhouettenfilm über geistige Klarheit mit „{{mindLine}} / {{growthLine}} / {{clarityLine}}“ und „{{focusLine}} / {{fuelLine}}“ und verwenden Sie {{portalArt}} als Ziel.",
+        "zh-CN": "制作一部心智成长剪影短片，文案为“{{mindLine}} / {{growthLine}} / {{clarityLine}}”与“{{focusLine}} / {{fuelLine}}”，以 {{portalArt}} 作为目的地景象。",
+        "zh-TW": "使用“{{mindLine}} / {{growthLine}} / {{clarityLine}}”和“{{focusLine}} / {{fuelLine}}”創建一部關於思維清晰度的剪影影片，使用 {{portalArt}} 作爲目的地。",
+        "pt-BR": "Crie um filme de silhueta sobre clareza mental com “{{mindLine}}/{{growthLine}}/{{clarityLine}}” e “{{focusLine}}/{{fuelLine}}”, usando {{portalArt}} como destino.",
+        "es-ES": "Cree una película de silueta sobre la claridad mental con “{{mindLine}} / {{growthLine}} / {{clarityLine}}” y “{{focusLine}} / {{fuelLine}}”, utilizando {{portalArt}} como destino.",
+        "ru": "Создайте силуэтный фильм о ясности ума с помощью «{{mindLine}}/{{growthLine}}/{{clarityLine}}» и «{{focusLine}}/{{fuelLine}}», используя в качестве пункта назначения {{portalArt}}.",
+        "fa": "با استفاده از {{portalArt}} به عنوان مقصد، یک فیلم شبح در مورد وضوح ذهنی با \"{{mindLine}} / {{growthLine}} / {{clarityLine}}\" و \"{{focusLine}} / {{fuelLine}}\" ایجاد کنید.",
+        "ar": "أنشئ فيلمًا خياليًا عن الوضوح العقلي باستخدام \"{{mindLine}} / {{growthLine}} / {{clarityLine}}\" و\"{{focusLine}} / {{fuelLine}}\"، باستخدام {{portalArt}} كوجهة.",
+        "ja": "{{portalArt}} を宛先として、「{{mindLine}} / {{growthLine}} / {{clarityLine}}」および「{{focusLine}} / {{fuelLine}}」で精神的明晰さに関するシルエット フィルムを作成します。",
+        "ko": "{{portalArt}}를 대상으로 사용하여 \"{{mindLine}} / {{growthLine}} / {{clarityLine}}\" 및 \"{{focusLine}} / {{fuelLine}}\"를 사용하여 정신 선명도에 대한 실루엣 영화를 만듭니다.",
+        "pl": "Utwórz film sylwetki o jasności umysłu za pomocą „{{mindLine}} / {{growthLine}} / {{clarityLine}}” i „{{focusLine}} / {{fuelLine}}”, używając {{portalArt}} jako miejsca docelowego.",
+        "hu": "Készítsen sziluettfilmet a mentális tisztaságról a „{{mindLine}} / {{growthLine}} / {{clarityLine}}” és a „{{focusLine}} / {{fuelLine}}” számokkal, és használja a {{portalArt}}-ot célként.",
+        "fr": "Créez un film de silhouettes sur la clarté mentale avec « {{mindLine}} / {{growthLine}} / {{clarityLine}} » et « {{focusLine}} / {{fuelLine}} », en utilisant {{portalArt}} comme destination.",
+        "uk": "Створіть силуетний фільм про ясність розуму за допомогою «{{mindLine}} / {{growthLine}} / {{clarityLine}}» і «{{focusLine}} / {{fuelLine}}», використовуючи {{portalArt}} як пункт призначення.",
+        "tr": "Hedef olarak {{portalArt}}'i kullanarak \"{{mindLine}} / {{growthLine}} / {{clarityLine}}\" ve \"{{focusLine}} / {{fuelLine}}\" ile zihinsel netlik hakkında bir siluet filmi oluşturun.",
+        "th": "สร้างภาพยนตร์ภาพเงาเกี่ยวกับความชัดเจนของจิตใจด้วย “{{mindLine}} / {{growthLine}} / {{clarityLine}}” และ “{{focusLine}} / {{fuelLine}}” โดยใช้ {{portalArt}} เป็นปลายทาง",
+        "it": "Crea un film in silhouette sulla chiarezza mentale con \"{{mindLine}} / {{growthLine}} / {{clarityLine}}\" e \"{{focusLine}} / {{fuelLine}}\", utilizzando {{portalArt}} come destinazione."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Mind Clarity Journey"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "Higgsfield (@higgsfield)",
+      "url": "https://x.com/higgsfield/status/2055166020831301636",
+      "note": "参考视频来源；仅内部复刻评估，未访问源链接。"
+    }
+  ]
+}

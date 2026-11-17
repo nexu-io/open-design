@@ -1,10 +1,16 @@
-import { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
+import { readLauncherHost } from "@open-design/launcher-proto";
+import type { AmrEndpointBinding } from "@open-design/contracts";
+import { recordIncomingUpdateStageResults, recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
 export { recordIncomingUpdateLifecycle, type UpdateLifecycleObservation } from "./update-lifecycle-observations.js";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, Menu, app, dialog, globalShortcut, shell, type MenuItemConstructorOptions } from "electron";
+import { BrowserWindow, Menu, app, dialog, globalShortcut, ipcMain, powerMonitor, shell, type MenuItemConstructorOptions } from "electron";
+import { attachStartupReadyIpc, createStartupTiming, type StartupTiming } from "./startup-timing.js";
+import { beginLaunchMarker } from "./launch-type.js";
+import { startMemorySampler } from "./memory-sampler.js";
+export { createStartupTiming, type StartupTiming } from "./startup-timing.js";
 
 import {
   APP_KEYS,
@@ -40,16 +46,19 @@ import {
 } from "@open-design/sidecar";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
+import { registerDesktopAuthWithDaemon } from "./register-desktop-auth.js";
+export { registerDesktopAuthWithDaemon } from "./register-desktop-auth.js";
 import { dispatchInviteDeeplink, registerInviteDeeplink } from "./invite-deeplink.js";
 import { focusDesktopForDeeplink } from "./deeplink-focus.js";
 import { setUpDesktopCrashReporter, writeDesktopGpuInfo } from "./crash-diagnostics.js";
-import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning } from "./session-lifecycle.js";
+import { beginDesktopSession, clearReportedCrash, endDesktopSessionCleanly, markDesktopSessionRunning, recordDesktopHostEvent, recordDesktopSessionExit } from "./session-lifecycle.js";
 import {
   attachDesktopChildProcessCrashReporter,
   reportDesktopObservabilityEvent,
+  attachDesktopHostLifecycleRecorder,
   reportPriorDesktopUncleanExits,
 } from "./observability.js";
-import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
+import { attachDesktopProcessErrorFilter, markDesktopShutdownInProgress } from "./uncaught-exception.js";
 import {
   DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
   deriveDesktopUpdateMenuItem,
@@ -193,7 +202,18 @@ export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): v
 }
 
 export type DesktopMainOptions = {
+  /** Immutable endpoint binding supplied by the packaged runtime. */
+  amrEndpointBinding?: AmrEndpointBinding;
+  electronReadyAtMs?: number;
+  /** Carries the packaged process origin and sidecar phases into desktop. */
+  startupTiming?: StartupTiming | null;
   beforeShutdown?: (record?: (event: UpdateLifecycleObservation) => Promise<void>) => Promise<void>;
+  /**
+   * Called synchronously when shutdown begins, before the window closes and
+   * cancels in-flight renderer requests. Packaged uses it to treat the
+   * resulting AbortErrors as expected teardown rather than fatal errors.
+   */
+  onShutdownStarted?: () => void;
   /** Prevent packaged renderer traffic from reaching sidecars as they retire. */
   quiesceRendererTransport?: () => void | Promise<void>;
   onExternalShow?: () => void | Promise<void>;
@@ -208,7 +228,12 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl: () => Promise<string | null>;
-  registerDesktopAuth: (secret: Buffer) => Promise<boolean>;
+  /**
+   * Register the desktop-auth secret with the daemon. `retry` is set for the
+   * on-demand re-registration (picker/import), which may wait and retry; the
+   * startup call blocks window load and stays a single short attempt.
+   */
+  registerDesktopAuth: (secret: Buffer, options?: { retry?: boolean }) => Promise<boolean>;
   /** Stable installed launcher used for Windows opendesign:// registration. */
   inviteProtocolClientPath?: string | null;
   preloadPath?: string;
@@ -331,7 +356,11 @@ export function mergeAmrEnvironmentProfileConfig(
 export function createAmrEnvironmentProfileMenuItems(
   selectedProfile: AmrEnvironmentProfile,
   onSelect: (profile: AmrEnvironmentProfile) => void,
+  binding?: AmrEndpointBinding,
 ): MenuItemConstructorOptions[] {
+  if (binding) {
+    return [{ label: "AMR Profile", submenu: [{ label: binding.webUrl, enabled: false }] }];
+  }
   return [
     {
       label: "AMR Profile",
@@ -391,6 +420,37 @@ async function writeAppConfigToDaemon(
   return payload.config;
 }
 
+// Run in the renderer's main world so the App can settle its navigation
+// guards before the daemon changes environments. A loading window without
+// an App listener has no edits to settle.
+const PREPARE_AMR_PROFILE_SWITCH = `new Promise((resolve) => {
+  const timer = setTimeout(() => resolve(false), 15000);
+  const complete = (allowed) => {
+    clearTimeout(timer);
+    resolve(allowed === true);
+  };
+  const unhandled = window.dispatchEvent(new CustomEvent('open-design:prepare-amr-profile-switch', {
+    cancelable: true,
+    detail: complete,
+  }));
+  if (unhandled) complete(true);
+})`;
+
+export async function writeAmrEnvironmentProfile(
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding">,
+  profile: AmrEnvironmentProfile,
+  prepareSwitch?: () => Promise<boolean>,
+): Promise<AmrEnvironmentProfile> {
+  if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
+  const baseUrl = await resolveDaemonBaseUrl(options)();
+  const config = await readAppConfigFromDaemon(baseUrl);
+  const currentProfile = normalizeAmrEnvironmentProfile(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
+  if (profile === currentProfile) return currentProfile;
+  if (prepareSwitch && !(await prepareSwitch())) return currentProfile;
+  const writtenConfig = await writeAppConfigToDaemon(baseUrl, mergeAmrEnvironmentProfileConfig(config, profile));
+  return normalizeAmrEnvironmentProfile(writtenConfig.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
+}
+
 type DesktopMenuController = {
   dispose(): void;
   setUpdateLabels(labels: DesktopUpdateMenuLabels): void;
@@ -398,7 +458,7 @@ type DesktopMenuController = {
 
 function installDesktopMenu(
   runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
-  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl"> & {
+  options: Pick<DesktopMainOptions, "discoverDaemonUrl" | "discoverWebUrl" | "amrEndpointBinding"> & {
     onOpenUpdateDialog?: () => void;
     updater: DesktopUpdater;
   },
@@ -417,32 +477,43 @@ function installDesktopMenu(
   const discoverAppConfigBaseUrl = resolveDaemonBaseUrl(options);
 
   const readCurrentAmrProfile = async (): Promise<AmrEnvironmentProfile> => {
+    if (options.amrEndpointBinding) return normalizeAmrEnvironmentProfile(options.amrEndpointBinding.profile);
     const baseUrl = await discoverAppConfigBaseUrl();
     const config = await readAppConfigFromDaemon(baseUrl);
     return normalizeAmrEnvironmentProfile(config.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY]);
   };
 
-  const writeCurrentAmrProfile = async (profile: AmrEnvironmentProfile): Promise<AmrEnvironmentProfile> => {
-    const baseUrl = await discoverAppConfigBaseUrl();
-    const config = await readAppConfigFromDaemon(baseUrl);
-    const nextConfig = mergeAmrEnvironmentProfileConfig(config, profile);
-    const writtenConfig = await writeAppConfigToDaemon(baseUrl, nextConfig);
-    return normalizeAmrEnvironmentProfile(
-      writtenConfig.agentCliEnv?.[AMR_PROFILE_AGENT_ID]?.[AMR_PROFILE_ENV_KEY],
-    );
-  };
-
+  let amrProfileSwitchInFlight = false;
   const selectAmrProfile = (profile: AmrEnvironmentProfile): void => {
-    void writeCurrentAmrProfile(profile)
+    if (options.amrEndpointBinding || amrProfileSwitchInFlight) return;
+    amrProfileSwitchInFlight = true;
+    let blocked = false;
+    void writeAmrEnvironmentProfile(options, profile, async () => {
+      const results = await Promise.allSettled(BrowserWindow.getAllWindows()
+        .filter((window) => !window.isDestroyed())
+        .map((window) => window.webContents.executeJavaScript(PREPARE_AMR_PROFILE_SWITCH)));
+      blocked = results.some((result) => result.status !== "fulfilled" || result.value !== true);
+      return !blocked;
+    })
       .then((writtenProfile) => {
         lastKnownAmrProfile = writtenProfile;
+        if (blocked) {
+          dialog.showErrorBox(
+            "AMR Environment Profile switch cancelled",
+            "The current environment was kept. Finish any pending edits and try again.",
+          );
+          return;
+        }
         for (const window of BrowserWindow.getAllWindows()) {
           window.webContents.send(APP_CONFIG_CHANGED_IPC_CHANNEL);
         }
-        rebuild();
       })
       .catch((error: unknown) => {
         showDevelopMenuError("AMR Environment Profile switch failed", error);
+      })
+      .finally(() => {
+        amrProfileSwitchInFlight = false;
+        rebuild();
       });
   };
 
@@ -550,7 +621,7 @@ function installDesktopMenu(
         ? [
             {
               label: "Develop",
-              submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile),
+              submenu: createAmrEnvironmentProfileMenuItems(lastKnownAmrProfile, selectAmrProfile, options.amrEndpointBinding),
             },
           ]
         : []),
@@ -633,8 +704,6 @@ function installDesktopMenu(
   };
 }
 
-const REGISTER_DESKTOP_AUTH_TIMEOUT_MS = 800;
-
 function summarizeDesktopIpcInput(input: unknown): Record<string, unknown> | null {
   if (input == null || typeof input !== "object") return null;
   if ("expression" in input && typeof (input as { expression?: unknown }).expression === "string") {
@@ -656,6 +725,17 @@ function summarizeDesktopIpcInput(input: unknown): Record<string, unknown> | nul
   return null;
 }
 
+/** Keep classification independent of the process-origin measurement. */
+export function createDesktopStartupTiming(options: Parameters<typeof createStartupTiming>[0] & { appVersion?: string | null } = { startupType: "cold" }): StartupTiming {
+  const { appVersion, ...timingOptions } = options;
+  if (timingOptions.enabled === false) return createStartupTiming(timingOptions);
+  const marker = beginLaunchMarker(app.getPath("userData"), appVersion ?? app.getVersion());
+  app.once("will-quit", marker.end);
+  process.once("exit", marker.end);
+  return createStartupTiming({ ...timingOptions, startupType: marker.launchType, startTime: 0, launchType: marker.launchType });
+}
+
+
 /**
  * Sends a fresh, per-process secret to the daemon over its sidecar IPC
  * before any BrowserWindow is created. The daemon stores the secret
@@ -669,10 +749,32 @@ function summarizeDesktopIpcInput(input: unknown): Record<string, unknown> | nul
  * (because no secret is in scope), instead of opening a renderer-
  * bypassable path. We log the failure so the operator can investigate.
  */
+
 export async function runDesktopMain(
   runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
   options: DesktopMainOptions,
 ): Promise<DesktopMainHandle> {
+  const startupTiming = options.startupTiming ?? createDesktopStartupTiming({
+    startupType: "cold", appVersion: options.update?.currentVersion, enabled: options.startupTiming !== null,
+  });
+  try {
+    return await runDesktopMainWithTiming(runtime, options, startupTiming);
+  } catch (error) {
+    startupTiming.finish("failed", "desktop_start_failed");
+    throw error;
+  }
+}
+
+async function runDesktopMainWithTiming(
+  runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout>,
+  options: DesktopMainOptions,
+  initialStartupTiming: StartupTiming,
+): Promise<DesktopMainHandle> {
+  const startupTiming = initialStartupTiming;
+  startupTiming.setReporter((event, properties) => reportDesktopObservabilityEvent(resolveDaemonBaseUrl(options),
+    event, { ...properties, client_type: "desktop", capture_source: "desktop/startup",
+      os_version: process.getSystemVersion(), platform: process.platform, arch: process.arch }));
+  startupTiming.mark("desktop_entry");
   // Install the defensive uncaughtException filter BEFORE awaiting
   // app.whenReady, so a setTypeOfService EINVAL thrown by undici during
   // the renderer's first fetch is intercepted rather than surfacing as
@@ -693,6 +795,26 @@ export async function runDesktopMain(
   applyLoopbackConnectionLimitSwitch(app);
 
   await app.whenReady();
+  startupTiming.mark("electron_ready");
+  const memorySampler = startMemorySampler({
+    readyAtMs: options.electronReadyAtMs ?? performance.now(),
+    context: { app_session_id: startupTiming.context().app_session_id, app_version: options.update?.currentVersion ?? app.getVersion(),
+      environment: null, platform: process.platform, arch: process.arch, os_version: process.getSystemVersion() },
+    app,
+    getManagedRendererPids: () => BrowserWindow.getAllWindows()
+      .filter(window => !window.isDestroyed() && !window.webContents.isDestroyed())
+      .map(window => window.webContents.getOSProcessId()),
+    report: async (samples, signal) => {
+      for (const sample of samples) {
+        if (signal.aborted) break;
+        await reportDesktopObservabilityEvent(resolveDaemonBaseUrl(options),
+          "client_process_memory_sample", { ...sample, metric_schema_version: 1, telemetry_capability: "supported",
+          client_type: "desktop", capture_source: "desktop/memory", occurred_at: sample.sampled_at }, signal);
+      }
+    },
+  });
+  app.on("before-quit", () => memorySampler.stop());
+  app.on("will-quit", () => memorySampler.stop());
   configureAboutPanel(options);
 
   // PR #974: mint a per-process auth secret and hand it to the daemon
@@ -734,7 +856,11 @@ export async function runDesktopMain(
       runtimeBase: runtime.base,
       source: runtime.source,
     },
-    { openPath: (path) => shell.openPath(path) },
+    {
+      openPath: (path) => shell.openPath(path),
+      appSessionId: startupTiming.context().app_session_id,
+      osVersion: process.getSystemVersion(),
+    },
   );
   // Resolve the namespace root the same way the daemon diagnostics export does
   // (apps/daemon/src/diagnostics-export.ts buildSidecarLogSources). In packaged
@@ -771,15 +897,31 @@ export async function runDesktopMain(
   const sessionStatePath = join(dirname(desktopLogPath), "session-state.json");
   const { previousUncleanSessions } = beginDesktopSession({
     stateFilePath: sessionStatePath,
-    sessionId: randomUUID(),
-    version: app.getVersion(),
+    sessionId: startupTiming.context().app_session_id,
+    version: options.update?.currentVersion ?? app.getVersion(),
+    launchAttemptId: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id,
     now: () => new Date(),
+  });
+  process.once("exit", code => recordDesktopSessionExit({ stateFilePath: sessionStatePath }, code));
+  // Sleep, shutdown, session end and an unfinished quit are recorded into this
+  // run's marker, so a later unclean exit can say how the run ended.
+  attachDesktopHostLifecycleRecorder({
+    powerMonitor,
+    window: {
+      // Windows delivers `session-end` per window; cover current and later ones.
+      on(event, listener) {
+        for (const window of BrowserWindow.getAllWindows()) window.on(event as "session-end", listener);
+        app.on("browser-window-created", (_created, window) => window.on(event as "session-end", listener));
+      },
+    },
+    record: (event) => recordDesktopHostEvent({ stateFilePath: sessionStatePath }, event),
   });
 
   let desktop: DesktopRuntime | null = null;
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
   let removeDiagnosticsIpc: () => void = () => undefined;
+  let removeStartupIpc: () => void = () => undefined;
   let shutdownPromise: Promise<void> | null = null;
   let shutdownComplete = false;
   let shutdownRequestCount = 0;
@@ -813,9 +955,12 @@ export async function runDesktopMain(
 
   async function desktopStatusSnapshot(activeDesktop: DesktopRuntime | null): Promise<DesktopStatusSnapshot> {
     const update = await snapshotUpdateForStatus();
+    // A launcher-hosted payload reports its logical payload identity,
+    // not the installed outer it physically runs on.
+    const executablePath = readLauncherHost()?.running.executablePath ?? process.execPath;
     if (activeDesktop == null) {
       return {
-        executablePath: process.execPath,
+        executablePath,
         capabilities: { frameRenderer: true },
         pid: process.pid,
         state: "idle",
@@ -826,7 +971,7 @@ export async function runDesktopMain(
       };
     }
     return {
-      executablePath: process.execPath,
+      executablePath,
       ...activeDesktop.status(),
       capabilities: { frameRenderer: true },
       ...update,
@@ -836,11 +981,18 @@ export async function runDesktopMain(
   // Every quit entry point joins the same cleanup, including repeated updater
   // requests while sidecars are still draining.
   function shutdown(): Promise<void> {
+    memorySampler.stop();
+    startupTiming.finish("cancelled", "quit_before_ready");
     shutdownRequestCount += 1;
+    if (shutdownPromise == null) recordDesktopHostEvent({ stateFilePath: sessionStatePath }, { kind: "quit-requested" });
     shutdownPromise ??= Promise.resolve().then(async () => {
       const startedAt = Date.now();
       let shutdownFailed = false;
       console.info("[open-design desktop] shutdown started");
+      // Closing the window below cancels in-flight requests; their aborts
+      // are expected from here on, in both this filter and the packaged one.
+      markDesktopShutdownInProgress();
+      options.onShutdownStarted?.();
       updateScheduler?.stop("shutdown");
       await updater.recordLifecycle?.({ stage: "shutdown_started", outcome: "started" });
       // Stop the request-producing renderer before retiring its web/daemon
@@ -849,6 +1001,7 @@ export async function runDesktopMain(
       // has already gone away for the entire graceful-stop window.
       disposeMenu();
       removeDiagnosticsIpc();
+      removeStartupIpc();
       let rendererQuiesceFailed = false;
       await desktop?.close().catch(() => {
         rendererQuiesceFailed = true;
@@ -956,8 +1109,10 @@ export async function runDesktopMain(
   disposeMenu = menuController.dispose;
 
   console.info("[open-design desktop] creating desktop runtime");
+  startupTiming.mark("window_creating");
   desktop = await createDesktopRuntime({
     desktopAuthSecret,
+    telemetryContext: { ...startupTiming.context(), launch_attempt_id: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id, app_version: options.update?.currentVersion ?? app.getVersion() },
     discoverUrl: options.discoverWebUrl,
     discoverDaemonUrl: options.discoverDaemonUrl,
     osLocale,
@@ -967,24 +1122,52 @@ export async function runDesktopMain(
     // (after a daemon restart, or after a missed startup window). The
     // runtime then mints a FRESH token (new nonce + new exp — replay
     // protection still works) and POSTs once more.
-    registerDesktopAuthWithDaemon: () => options.registerDesktopAuth(desktopAuthSecret),
+    registerDesktopAuthWithDaemon: () => options.registerDesktopAuth(desktopAuthSecret, { retry: true }),
     rendererLogPath,
     // Mark "reached running" only when the window is ACTUALLY revealed (web app
     // mounted + shown), not when createDesktopRuntime returns — it starts async
     // bootstrap via `void tick()` and returns before the first load. Until this
     // fires, a crash is still a startup failure (covered by
     // packaged_runtime_failed), not a runtime abnormal exit.
-    onRevealed: () => markDesktopSessionRunning({ stateFilePath: sessionStatePath }),
+    onRevealed: () => {
+      startupTiming.mark("window_revealed");
+      markDesktopSessionRunning({ stateFilePath: sessionStatePath });
+    },
     onUpdateMenuLabels: menuController.setUpdateLabels,
     requestQuit: shutdownAndExit,
     onMainWindowReady: () => {
+      startupTiming.mark("window_revealed");
       void recordIncomingUpdateLifecycle({ root: options.update?.installerObservationRoot, namespace: updater.config.namespace ?? "default", channel: updater.config.channel, version: updater.config.currentVersion }, { stage: "desktop_ready", outcome: "completed" });
+      void recordIncomingUpdateStageResults({
+        root: options.update?.installerObservationRoot, namespace: updater.config.namespace ?? "default",
+        channel: updater.config.channel, version: updater.config.currentVersion,
+        sessionId: startupTiming.context().app_session_id, osVersion: process.getSystemVersion(),
+        platform: process.platform, arch: process.arch,
+      });
     },
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
     windowTitle: options.windowTitle,
   });
+  removeStartupIpc = attachStartupReadyIpc({
+    ipc: ipcMain,
+    timing: () => startupTiming,
+    authorize: (event) => {
+      if (event.sender.isDestroyed() || event.senderFrame !== event.sender.mainFrame) return false;
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner.webContents !== event.sender || !desktop?.ownsWebContents(event.sender.id)) return false;
+      // The pet, splash, guest webviews and child frames cannot finish launch.
+      const expectedUrl = desktop?.status().url;
+      if (!expectedUrl) return false;
+      try {
+        const expected = new URL(expectedUrl);
+        const actual = new URL(event.sender.getURL());
+        return actual.protocol === expected.protocol && actual.host === expected.host;
+      } catch { return false; }
+    },
+  });
+
   if (pendingUpdateDialogRequest) {
     pendingUpdateDialogRequest = false;
     desktop.openUpdateDialog({ source: "mac-app-menu" });
@@ -1007,7 +1190,7 @@ export async function runDesktopMain(
     });
     void reportPriorDesktopUncleanExits({
       previousUncleanSessions,
-      currentVersion: app.getVersion(),
+      currentVersion: options.update?.currentVersion ?? app.getVersion(),
       stateFilePath: sessionStatePath,
       report: (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
       clearReported: clearReportedCrash,
@@ -1018,7 +1201,9 @@ export async function runDesktopMain(
   // vanishes), and the child can't report itself. `clean-exit` is normal teardown.
   attachDesktopChildProcessCrashReporter(
     app,
-    (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, properties),
+    (event, properties) => reportDesktopObservabilityEvent(discoverDaemonBaseUrl, event, {
+      ...startupTiming.context(), launch_attempt_id: options.startupTiming === null ? null : startupTiming.context().launch_attempt_id, app_version: options.update?.currentVersion ?? app.getVersion(), ...properties,
+    }),
   );
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc({
     discoverDaemonBaseUrl: resolveDaemonBaseUrl(options),
@@ -1117,19 +1302,7 @@ if (isDirectEntry()) {
               return null;
             }
           },
-          registerDesktopAuth: async (secret) => {
-            try {
-              const result = await client.invoke<RegisterDesktopAuthResult>(
-                APP_KEYS.DAEMON,
-                SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
-                { secret: secret.toString("base64") },
-                { timeoutMs: REGISTER_DESKTOP_AUTH_TIMEOUT_MS },
-              );
-              return result.accepted === true;
-            } catch {
-              return false;
-            }
-          },
+          registerDesktopAuth: (secret, authOptions) => registerDesktopAuthWithDaemon(client, secret, authOptions),
         });
         runtimeHandle = started;
         return started;

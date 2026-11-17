@@ -232,8 +232,9 @@ describe('ChatPane 真的把 previousTodos 递下去了', () => {
   });
 });
 
+// P0-24 Q6:回合末尾不再画〔继续剩余任务〕,也不再出状态词;下面各条钉住它确实不出、回调不被调用。
 describe('〔继续剩余任务〕—— agent 不照做时的用户出口', () => {
-  it('成功回合已用本轮 od-done 交付最终总结时,漏收尾的 Todo 快照不再伪装成未完成', () => {
+  it('成功回合已用本轮 od-done 交付最终总结时,回合末尾不出状态词也不出按钮(P0-24)', () => {
     const onContinueRemainingTasks = vi.fn();
     const doneKey = 'a7f3c91ed2b40561';
     const messages: ChatMessage[] = [
@@ -249,15 +250,16 @@ describe('〔继续剩余任务〕—— agent 不照做时的用户出口', () 
       ] as PersistedAgentEvent[], { id: 'a1', runStatus: 'succeeded' }),
     ];
 
-    const { getByTestId, queryByTestId } = render(
+    const { queryByTestId } = render(
       chatPaneEl(messages, { onContinueRemainingTasks, onAssistantFeedback: vi.fn() }),
     );
 
-    expect(getByTestId('assistant-label').textContent).toContain('已完成');
+    expect(queryByTestId('assistant-label')).toBeNull();
     expect(queryByTestId('assistant-continue-remaining')).toBeNull();
+    expect(onContinueRemainingTasks).not.toHaveBeenCalled();
   });
 
-  it('最后一轮留着没做完的活时,按钮在,点了把那几条发回去', () => {
+  it('最后一轮留着没做完的活时,回合末尾也不再出按钮(P0-24)', () => {
     const onContinueRemainingTasks = vi.fn();
     const messages: ChatMessage[] = [
       { id: 'u1', role: 'user', content: '开工', createdAt: 1 } as ChatMessage,
@@ -266,15 +268,12 @@ describe('〔继续剩余任务〕—— agent 不照做时的用户出口', () 
         { content: '补 FAQ', status: 'pending' },
       ])], { id: 'a1' }),
     ];
-    const { getByTestId } = render(chatPaneEl(messages, { onContinueRemainingTasks }));
-    fireEvent.click(getByTestId('assistant-continue-remaining'));
-    expect(onContinueRemainingTasks).toHaveBeenCalledTimes(1);
-    const [assistantMessage, todos] = onContinueRemainingTasks.mock.calls[0]!;
-    expect((assistantMessage as ChatMessage).id).toBe('a1');
-    expect(todos).toEqual([{ content: '补 FAQ', status: 'pending', activeForm: undefined }]);
+    const { queryByTestId } = render(chatPaneEl(messages, { onContinueRemainingTasks }));
+    expect(queryByTestId('assistant-continue-remaining')).toBeNull();
+    expect(onContinueRemainingTasks).not.toHaveBeenCalled();
   });
 
-  it('这一轮没发清单、但更早那份还欠着 → 出口仍然在', () => {
+  it('这一轮没发清单、但更早那份还欠着 → 回合末尾也不再出按钮(P0-24)', () => {
     const onContinueRemainingTasks = vi.fn();
     const messages: ChatMessage[] = [
       { id: 'u1', role: 'user', content: '开工', createdAt: 1 } as ChatMessage,
@@ -282,11 +281,9 @@ describe('〔继续剩余任务〕—— agent 不照做时的用户出口', () 
       { id: 'u2', role: 'user', content: '顺便问个别的', createdAt: 3 } as ChatMessage,
       msg([{ kind: 'text', text: '答' }] as PersistedAgentEvent[], { id: 'a2' }),
     ];
-    const { getByTestId } = render(chatPaneEl(messages, { onContinueRemainingTasks }));
-    fireEvent.click(getByTestId('assistant-continue-remaining'));
-    const [assistantMessage, todos] = onContinueRemainingTasks.mock.calls[0]!;
-    expect((assistantMessage as ChatMessage).id).toBe('a2');
-    expect((todos as Array<{ content: string }>).map((todo) => todo.content)).toEqual(['补 FAQ']);
+    const { queryByTestId } = render(chatPaneEl(messages, { onContinueRemainingTasks }));
+    expect(queryByTestId('assistant-continue-remaining')).toBeNull();
+    expect(onContinueRemainingTasks).not.toHaveBeenCalled();
   });
 
   it('活全干完了就没有这个出口', () => {

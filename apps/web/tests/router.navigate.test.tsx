@@ -46,6 +46,8 @@ async function flushMicrotasks() {
   });
 }
 
+import { navigationTiming } from '../src/observability/navigation-timing';
+
 describe('navigate / useRoute timing', () => {
   let consoleError: ReturnType<typeof vi.spyOn>;
 
@@ -58,6 +60,17 @@ describe('navigate / useRoute timing', () => {
     cleanup();
     consoleError.mockRestore();
     window.history.replaceState(null, '', '/');
+  });
+
+  it.each(['beginPage', 'commit'] as const)('commits navigation and the business callback when observation %s throws', async method => {
+    const spy = vi.spyOn(navigationTiming, method).mockImplementation(() => { throw new Error('observer failed'); });
+    const onCommit = vi.fn();
+    try {
+      expect(() => navigate({ kind: 'home', view: 'onboarding' }, { onCommit })).not.toThrow();
+      expect(window.location.pathname).toBe('/onboarding');
+      expect(onCommit).toHaveBeenCalledOnce();
+      await flushMicrotasks();
+    } finally { spy.mockRestore(); navigationTiming.cancel('page_exit'); }
   });
 
   it('updates history synchronously and notifies listeners after the microtask boundary', async () => {
@@ -341,5 +354,66 @@ describe('goBack', () => {
     expect(guard).toHaveBeenCalledTimes(1);
 
     unregister();
+  });
+});
+
+describe('navigation cancellation callbacks', () => {
+  it('reports a rejected guard without committing', async () => {
+    window.history.replaceState(null, '', '/');
+    const remove = registerNavigationGuard(async () => false);
+    const onCancel = vi.fn();
+    try {
+      navigate({ kind: 'project', projectId: 'a', fileName: null }, { onCancel });
+      await flushMicrotasks();
+      expect(onCancel).toHaveBeenCalledExactlyOnceWith('guard_rejected');
+      expect(window.location.pathname).toBe('/');
+    } finally { remove(); }
+  });
+  it('reports a superseded pending guard and a same-route no-op', async () => {
+    window.history.replaceState(null, '', '/');
+    let resolveGate!: (value: boolean) => void;
+    const gate = { promise: new Promise<boolean>(resolve => { resolveGate = resolve; }), resolve: (value: boolean) => resolveGate(value) };
+    const remove = registerNavigationGuard(() => gate.promise);
+    const first = vi.fn(); const second = vi.fn();
+    try {
+      navigate({ kind: 'project', projectId: 'a', fileName: null }, { onCancel: first });
+      navigate({ kind: 'home', view: 'home' }, { onCancel: second });
+      expect(first).not.toHaveBeenCalled();
+      gate.resolve(true);
+      await flushMicrotasks();
+      expect(first).toHaveBeenCalledExactlyOnceWith('superseded');
+      expect(second).toHaveBeenCalledExactlyOnceWith('same_route');
+    } finally { remove(); }
+  });
+});
+
+describe('page metric router integration', () => {
+  it('starts at intent, rejects precommit Ready, and cancels a rejected guard', async () => {
+    const { navigationTiming } = await import('../src/observability/navigation-timing');
+    window.history.replaceState(null, '', '/');
+    render(<RouteLabel />);
+    let release!: (allowed: boolean) => void;
+    const unregister = registerNavigationGuard(() => new Promise<boolean>(resolve => { release = resolve; }));
+    act(() => navigate({ kind: 'home', view: 'settings' }));
+    const attempt = navigationTiming.getSnapshot()!;
+    expect(attempt.navigationType).toBe('page_switch');
+    expect(attempt.routeCommitted).toBe(false);
+    act(() => navigationTiming.finish(attempt.id, 'ready'));
+    expect(navigationTiming.isCurrent(attempt.id)).toBe(true);
+    await act(async () => { release(false); await Promise.resolve(); });
+    expect(navigationTiming.getSnapshot()).toBeNull();
+    unregister(); cleanup();
+  });
+  it('commits homepage/settings navigation once and excludes same-route no-ops', async () => {
+    const { navigationTiming } = await import('../src/observability/navigation-timing');
+    window.history.replaceState(null, '', '/'); render(<RouteLabel />);
+    act(() => navigate({ kind: 'home', view: 'settings' })); await flushMicrotasks();
+    expect(navigationTiming.getSnapshot()).toMatchObject({ targetPage: 'settings', routeCommitted: true });
+    navigationTiming.cancel('page_exit');
+    act(() => navigate({ kind: 'home', view: 'settings' })); await flushMicrotasks();
+    expect(navigationTiming.getSnapshot()).toBeNull();
+    act(() => navigate({ kind: 'home', view: 'home' })); await flushMicrotasks();
+    expect(navigationTiming.getSnapshot()).toMatchObject({ targetPage: 'home', routeCommitted: true });
+    navigationTiming.cancel('page_exit'); cleanup();
   });
 });

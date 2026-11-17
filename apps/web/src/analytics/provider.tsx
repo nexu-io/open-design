@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import { useI18n } from '../i18n';
+import { getOpenDesignHost } from '@open-design/host';
+import { subscribeDesktopDisplayRefresh } from '../observability/desktop-display-refresh';
 import {
   ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
@@ -28,7 +30,7 @@ import {
   setConfigureGlobals,
 } from './client';
 import { APP_VERSION_PLACEHOLDER } from './app-version';
-import { patchExceptionTrackingAppVersion } from './error-tracking';
+import { patchExceptionTrackingAppVersion, patchExceptionTrackingDistinctId } from './error-tracking';
 import { setChatCorrelation } from '../observability/chat-context';
 import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
@@ -341,10 +343,14 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
           insertId,
           requestId,
         });
-      })();
+      })().catch(() => {
+        // An asynchronous measurement failure cannot escape into the product.
+      });
     },
     [identity, locale, appVersion],
   );
+
+  useEffect(() => subscribeDesktopDisplayRefresh(getOpenDesignHost(), track), [track]);
 
   const value = useMemo<AnalyticsContextValue>(
     () => ({
@@ -378,6 +384,10 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         }
       },
       setIdentity: (installationId: string | null) => {
+        // The safety channel bootstraps before a fresh install mints its id;
+        // move it onto the installation identity too so renderer stability
+        // events match native ones within the same session (OPEND-4220).
+        patchExceptionTrackingDistinctId(installationId);
         applyIdentity(installationId);
         // Keep the fetch wrapper's header in sync so daemon-side captures
         // start using the new id immediately, not after the next reload.

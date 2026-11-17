@@ -11,3 +11,18 @@ it('A-08 sums deduplicated last-call counters in one explicit turn', () => {
   usage.start('turn-b');
   expect(usage.add('turn-a', first)).toBeNull();
 });
+
+it('sums three Codex last-call increments without readding duplicate or late totals', () => {
+  const usage = createCodexTurnUsage();
+  usage.start('use-016-turn');
+  const snapshot = (total: number, last: number) => ({
+    total: { inputTokens: total, outputTokens: 0, totalTokens: total },
+    last: { inputTokens: last, outputTokens: 0, totalTokens: last },
+  });
+
+  expect(usage.add('use-016-turn', snapshot(100, 100))?.total).toBe(100);
+  expect(usage.add('use-016-turn', snapshot(180, 80))?.total).toBe(180);
+  expect(usage.add('use-016-turn', snapshot(240, 60))?.total).toBe(240);
+  expect(usage.add('use-016-turn', snapshot(240, 60))?.total).toBe(240);
+  expect(usage.add('use-016-turn', snapshot(180, 80))).toBeNull();
+});

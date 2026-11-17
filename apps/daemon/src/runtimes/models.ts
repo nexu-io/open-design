@@ -12,10 +12,29 @@ export const DEFAULT_MODEL_OPTION: RuntimeModelOption = {
 // gets rejected so a stale or hostile value can't smuggle arbitrary flags.
 const liveModelOrder = new Map<string, RuntimeModelOption[]>();
 const liveModelCache = new Map<string, Map<string, RuntimeModelOption>>();
+// The last caller-specific (remote) list per scope. The shared preset seed may
+// also be remembered above for metadata and known-model checks, but it must
+// never displace a caller's own catalog when a default model is chosen.
+const remoteLiveModelOrder = new Map<string, RuntimeModelOption[]>();
 
 function liveModelCacheKey(agentId: string, scope?: string | null): string {
   const trimmedScope = typeof scope === 'string' ? scope.trim() : '';
   return trimmedScope ? `${agentId}\0${trimmedScope}` : agentId;
+}
+
+export function resetLiveModelsForTests(): void {
+  liveModelOrder.clear();
+  liveModelCache.clear();
+  remoteLiveModelOrder.clear();
+}
+
+export function rememberRemoteLiveModels(agentId: string, models: RuntimeModelOption[], scope?: string | null) {
+  rememberLiveModels(agentId, models, scope);
+  remoteLiveModelOrder.set(liveModelCacheKey(agentId, scope), liveModelOrder.get(liveModelCacheKey(agentId, scope)) ?? []);
+}
+
+export function getRememberedRemoteLiveModels(agentId: string, scope?: string | null): RuntimeModelOption[] {
+  return remoteLiveModelOrder.get(liveModelCacheKey(agentId, scope)) ?? [];
 }
 
 export function rememberLiveModels(agentId: string, models: RuntimeModelOption[], scope?: string | null) {

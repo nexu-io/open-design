@@ -11,7 +11,7 @@ import { readRunEvents, startRun, waitForRunTerminal } from '@/vitest/runs';
 import { createSmokeSuite } from '@/vitest/suite';
 
 describe('Antigravity error convergence', () => {
-  test('marks the run and assistant message as failed with AGENT_AUTH_REQUIRED when agy print mode hits OAuth auth flow', { timeout: 180_000 }, async () => {
+  test('marks the run and assistant message as failed with AGENT_AUTH_REQUIRED when headless agy reports it is signed out', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('antigravity-auth-error-convergence');
     const fakeAgy = await writeFakeAgyBin(
       join(suite.scratchDir, 'fake-antigravity-auth'),
@@ -50,7 +50,7 @@ describe('Antigravity error convergence', () => {
     });
   });
 
-  test('marks the run and assistant message as failed with RATE_LIMITED when agy log file records quota exhaustion', { timeout: 180_000 }, async () => {
+  test('marks the run and assistant message as failed with RATE_LIMITED when headless agy reports quota exhaustion', { timeout: 180_000 }, async () => {
     const suite = await createSmokeSuite('antigravity-rate-limited-convergence');
     const fakeAgy = await writeFakeAgyBin(
       join(suite.scratchDir, 'fake-antigravity-rate-limited'),

@@ -104,7 +104,9 @@ export function useTeamMembers(
   // useWorkspaceContext resolves its verified context.
   const activeWorkspaceContext =
     !identityChangePending
-    && workspaceContext?.workspaceType === 'team'
+    && (workspaceContext?.workspaceType === 'team' || workspaceContext?.workspaceType === 'personal')
+    && workspaceContext.memberStatus === 'active'
+    && workspaceContext.lifecycleState === 'active'
     && Boolean(workspaceContext.workspaceId.trim())
     && Boolean(workspaceContext.workspaceMemberId.trim())
       ? workspaceContext
@@ -187,7 +189,7 @@ export function useTeamMembers(
       // role, and it stays right when the viewer's own role changes mid-session.
       const entry = byId.get(memberId);
       if (entry) return entry;
-      // Me, with no roster (personal workspace) or before it lands.
+      // Me, while the roster is still loading or temporarily unavailable.
       if (self && self.memberId === memberId) return self;
       return null;
     },

@@ -13,3 +13,7 @@ are carried in TypeScript, not in these task profiles. Before changing anything
 here, read [`docs/prompt-composition.md`](../../../../docs/prompt-composition.md):
 the fork point, the variant axes, the host contract table, the asset roster and
 package-hash rules, and the known gaps.
+
+The motion-design task asset is generated from `skills/motion-design/SKILL.md`.
+Edit the public skill and run `pnpm exec tsx scripts/sync-motion-design-skill.ts`
+from the repository root. The integration test enforces byte equality.

@@ -1,4 +1,4 @@
-import type { ProjectMetadata, TeamProject } from '@open-design/contracts';
+import type { ProjectMetadata, PublicShareProjectRegistration, TeamProject } from '@open-design/contracts';
 import type {
   UpsertVelaTeamProjectInput,
   VelaTeamProjectCatalogClient,
@@ -11,8 +11,34 @@ import {
 } from '../integrations/vela-command.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
 import { createSwrCache, type SwrCache } from './swr-cache.js';
+import { parseCommentFileState } from './comment-file-facts.js';
 
 const PROJECT_RESOURCE_PREFIX = 'project-';
+
+/** Latest paired CLI only: no catalog/list or root-upload fallback. */
+export async function ensurePrivateVelaTeamProject(
+  projectId: string,
+  principal: ResourceHubPrincipal,
+  run: typeof runVelaCommand,
+): Promise<PublicShareProjectRegistration> {
+  const record = JSON.parse(await run(['team-projects', 'ensure-private', projectId])) as Partial<PublicShareProjectRegistration>;
+  if (record.projectId !== projectId || record.workspaceId !== principal.teamId
+    || record.ownerMemberId !== principal.memberId
+    || typeof record.resourceId !== 'string' || !record.resourceId.trim()
+    || (record.visibility !== 'private' && record.visibility !== 'team')
+    || typeof record.createdAt !== 'string' || !Number.isFinite(Date.parse(record.createdAt))) {
+    throw new Error('PUBLIC_SHARE_PROJECT_CATALOG_UNAVAILABLE');
+  }
+  return record as PublicShareProjectRegistration;
+}
+
+/** Await the association ACK before any selected-file version/blob transport. */
+export async function registerVelaTeamProjectResource(
+  projectId: string, resourceId: string, run: typeof runVelaCommand,
+): Promise<void> {
+  const result = JSON.parse(await run(['team-projects', 'register-resource', projectId, resourceId])) as { ok?: unknown };
+  if (result?.ok !== true) throw new Error('PUBLIC_SHARE_RESOURCE_REGISTRATION_UNAVAILABLE');
+}
 
 export type RunVelaTeamProjects = (
   args: string[],
@@ -29,6 +55,8 @@ interface VelaCliTeamProjectCatalogOptions {
   supportsTeamProjects?: () => boolean | Promise<boolean>;
 }
 
+export type VelaOwnerProjectRegistration = Omit<PublicShareProjectRegistration, 'resourceId'> & { resourceId: string | null };
+
 export interface VelaTeamProjectCatalog {
   list(workspaceId: string): Promise<TeamProject[]>;
   get(projectId: string, workspaceId: string): Promise<TeamProject | null>;
@@ -41,6 +69,10 @@ export interface VelaTeamProjectCatalog {
     metadata?: Record<string, unknown> | null;
   }, principal?: ResourceHubPrincipal | null): Promise<void>;
   remove(projectId: string, principal?: ResourceHubPrincipal | null): Promise<void>;
+  ensurePrivate(projectId: string, principal: ResourceHubPrincipal): Promise<PublicShareProjectRegistration>;
+  setVisibility(projectId: string, visibility: 'private' | 'team', principal: ResourceHubPrincipal): Promise<void>;
+  /** Exact owner authority, independent of readable versions or team membership. */
+  getRegistration(projectId: string, principal: ResourceHubPrincipal): Promise<VelaOwnerProjectRegistration | null>;
 }
 
 export interface ScopedVelaTeamProjectCatalogClientCache
@@ -66,6 +98,8 @@ type TeamProjectWire = {
   metadata?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
+  visibility?: unknown;
+  workspaceId?: unknown;
 };
 
 type TeamProjectsListWire = {
@@ -124,6 +158,19 @@ export function createVelaCliTeamProjectCatalog(
     const payload = stdout.trim()
       ? JSON.parse(stdout.trim()) as TeamProjectsListWire
       : {};
+    // The CLI command is workspace-scoped, but its response is still an
+    // untrusted transport boundary. In particular a Personal workspace may
+    // now use this catalog, so an active Team selection must never lend its
+    // rows to the Personal caller if a CLI build ignores the explicit scope.
+    if (payload.workspaceId !== undefined && payload.workspaceId !== resolvedWorkspaceId) {
+      throw new Error('incomplete team project catalog: workspace mismatch');
+    }
+    if (Array.isArray(payload.projects) && payload.projects.some((row) => {
+      const workspace = recordObject(row)?.workspaceId;
+      return workspace !== undefined && workspace !== resolvedWorkspaceId;
+    })) {
+      throw new Error('incomplete team project catalog: workspace mismatch');
+    }
     return Array.isArray(payload.projects)
       ? payload.projects.map(toTeamProject).filter((project): project is TeamProject => project != null)
       : [];
@@ -133,6 +180,35 @@ export function createVelaCliTeamProjectCatalog(
 
   return {
     list,
+    ensurePrivate(projectId, principal) {
+      return ensurePrivateVelaTeamProject(projectId, principal, (args) => run(args.slice(1), requirePrincipalWorkspaceId(principal)));
+    },
+    async setVisibility(projectId, visibility, principal) {
+      const record = await runJson<TeamProjectWire>(['visibility', projectId, visibility], requirePrincipalWorkspaceId(principal));
+      if (record.projectId !== projectId || record.workspaceId !== principal.teamId
+        || record.ownerMemberId !== principal.memberId || record.visibility !== visibility
+        || typeof record.resourceId !== 'string' || !record.resourceId.trim()) {
+        throw new Error('TEAM_PROJECT_VISIBILITY_UNAVAILABLE');
+      }
+    },
+    async getRegistration(projectId, principal) {
+      try {
+        const record = await runJson<TeamProjectWire>(['get', projectId, '--json'], requirePrincipalWorkspaceId(principal));
+        if (record.projectId !== projectId || record.workspaceId !== principal.teamId
+          || record.ownerMemberId !== principal.memberId
+          || (record.visibility !== 'private' && record.visibility !== 'team')
+          || (record.resourceId != null && typeof record.resourceId !== 'string')
+          || typeof record.createdAt !== 'string' || !Number.isFinite(Date.parse(record.createdAt))) {
+          throw new Error('TEAM_PROJECT_REGISTRATION_UNAVAILABLE');
+        }
+        // A pending private row has owner authority even without a readable root.
+        return { projectId, workspaceId: principal.teamId, ownerMemberId: principal.memberId,
+          visibility: record.visibility, resourceId: typeof record.resourceId === 'string' ? record.resourceId : null, createdAt: record.createdAt };
+      } catch (error) {
+        if (isAuthoritativeTeamProjectNotFound(error)) return null;
+        throw error;
+      }
+    },
 
     async get(projectId, workspaceId): Promise<TeamProject | null> {
       const resolvedWorkspaceId = requireWorkspaceId(workspaceId);
@@ -147,6 +223,9 @@ export function createVelaCliTeamProjectCatalog(
           projectId,
           '--json',
         ], resolvedWorkspaceId);
+        if (payload.workspaceId !== undefined && payload.workspaceId !== resolvedWorkspaceId) {
+          throw new Error('incomplete team project catalog: workspace mismatch');
+        }
         return toTeamProject(payload);
       } catch (error) {
         if (isAuthoritativeTeamProjectNotFound(error)) return null;
@@ -159,10 +238,9 @@ export function createVelaCliTeamProjectCatalog(
 
     async upsert(input, principal): Promise<void> {
       const workspaceId = requirePrincipalWorkspaceId(principal);
-      // Older packaged Vela builds expose only the resource index. The project
-      // push writes the same discovery metadata there, so no second catalog
-      // write is required in compatibility mode.
-      if (!(await supportsTeamProjects(workspaceId))) return;
+      // Explicit root synchronization cannot claim success when its catalog
+      // transport is unavailable; no resource-index fallback is authority.
+      if (!(await supportsTeamProjects(workspaceId))) throw new Error('TEAM_PROJECT_CATALOG_UNAVAILABLE');
       const args = [
         'upsert',
         input.projectId,
@@ -228,13 +306,13 @@ export function createVelaCliTeamProjectCatalogClient(
       if (!Array.isArray(payload.projects)) {
         throw new Error('incomplete team project catalog: projects are missing');
       }
-      const records = payload.projects.map((project) =>
-        toVelaTeamProjectRecord(project),
-      );
+      const records = payload.projects
+        .filter((project) => recordObject(project)?.visibility !== 'private')
+        .map((project) => toVelaTeamProjectRecord(project));
       if (records.some((project) => project == null)) {
         throw new Error('incomplete team project catalog: invalid project row');
       }
-      const completeRecords = records as VelaTeamProjectRecord[];
+      const completeRecords = (records as VelaTeamProjectRecord[]).filter((project) => project.visibility === undefined || project.visibility === 'team');
       if (completeRecords.some((project) => project.workspaceId !== workspaceId)) {
         throw new Error('incomplete team project catalog: workspace mismatch');
       }
@@ -364,6 +442,7 @@ export function shouldUseVelaCliTeamProjectCatalog(env: NodeJS.ProcessEnv = proc
 function toTeamProject(input: unknown): TeamProject | null {
   if (!input || typeof input !== 'object') return null;
   const record = input as TeamProjectWire;
+  if (record.visibility !== undefined && record.visibility !== 'team') return null;
   // The published ref is the durable read boundary. A failed newer sync must
   // not hide the last successfully published version. Older Vela responses do
   // not carry this field, so retain their last known successful-version hint;
@@ -391,7 +470,12 @@ function toTeamProject(input: unknown): TeamProject | null {
     if (typeof metadata.skillId === 'string') project.skillId = metadata.skillId;
     if (typeof metadata.designSystemId === 'string') project.designSystemId = metadata.designSystemId;
     const projectMetadata = recordObject(metadata.metadata);
-    if (projectMetadata) project.metadata = projectMetadata as unknown as ProjectMetadata;
+    if (projectMetadata) {
+      // SAFETY: this opaque app-owned DTO round-trips persisted catalog metadata.
+      const unreserved = { ...projectMetadata };
+      delete unreserved._commentFiles;
+      project.metadata = unreserved as unknown as ProjectMetadata;
+    }
     if (typeof metadata.createdAt === 'number') project.createdAt = metadata.createdAt;
     if (typeof metadata.updatedAt === 'number') project.updatedAt = metadata.updatedAt;
   }
@@ -399,6 +483,9 @@ function toTeamProject(input: unknown): TeamProject | null {
     const updatedAt = Date.parse(record.updatedAt);
     if (Number.isFinite(updatedAt) && project.updatedAt === undefined) project.updatedAt = updatedAt;
   }
+  const commentFiles = parseCommentFileState(metadata?._commentFiles);
+  if (metadata?._commentFiles !== undefined && !commentFiles) throw new Error('COMMENT_FILE_AUTHORITY_UNAVAILABLE');
+  if (commentFiles) project.metadata = { kind: project.metadata?.kind ?? 'other', ...project.metadata, _commentFiles: commentFiles };
   const createdAt = Date.parse(record.createdAt);
   if (Number.isFinite(createdAt) && project.createdAt === undefined) project.createdAt = createdAt;
   return project;
@@ -431,6 +518,7 @@ function toVelaTeamProjectRecord(input: unknown): VelaTeamProjectRecord | null {
   const originProjectUpdatedAt = metadata?.updatedAt;
   return {
     id: record.id,
+    ...(record.visibility !== undefined ? { visibility: record.visibility as 'private' | 'team' } : {}),
     workspaceId: record.workspaceId,
     projectId: record.projectId,
     resourceId: record.resourceId,
@@ -609,7 +697,12 @@ function toFallbackTeamProject(resource: SharedResourceWire): TeamProject {
   if (typeof metadata.createdAt === 'number') project.createdAt = metadata.createdAt;
   if (typeof metadata.updatedAt === 'number') project.updatedAt = metadata.updatedAt;
   const projectMetadata = recordObject(metadata.metadata);
-  if (projectMetadata) project.metadata = projectMetadata as unknown as ProjectMetadata;
+  if (projectMetadata) {
+    const unreserved = { ...projectMetadata };
+    delete unreserved._commentFiles;
+    // SAFETY: opaque app metadata is round-tripped only after removing authority-bearing fields.
+    project.metadata = unreserved as unknown as ProjectMetadata;
+  }
   return project;
 }
 

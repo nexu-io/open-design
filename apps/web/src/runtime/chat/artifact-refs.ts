@@ -49,6 +49,7 @@
  * 这里没有、也不该有「点击目标」:点击一律是工作区最新文件,宿主拿文件名就够了。
  */
 export interface ArtifactRefTargets {
+  motionPreview?: import('@open-design/contracts').MotionArtifactPreview;
   /**
    * 当轮**静态首屏截图**的 URL(HTML / 原型 / slide / 文档)。
    * 卡面读它;拿不到就降级 live iframe 显示最新。
@@ -63,6 +64,7 @@ export interface ArtifactRefTargets {
  * 全部字段可选:这是从 `unknown` 收敛出来的东西,不是写入端契约。
  */
 interface ChatArtifactRefLike {
+  motionPreview?: unknown;
   label?: unknown;
   displayPolicy?: unknown;
   thumbnailUrl?: unknown;
@@ -116,6 +118,15 @@ export function indexArtifactRefs(input: unknown): Map<string, ArtifactRefTarget
     if (ref.snapshotState !== 'ready') continue;
 
     const targets: ArtifactRefTargets = {};
+    const motion = ref.motionPreview as import('@open-design/contracts').MotionArtifactPreview | undefined;
+    if (motion && typeof motion === 'object'
+      && Number.isSafeInteger(motion.width) && Number.isSafeInteger(motion.height)
+      && motion.width > 0 && motion.height > 0 && motion.width <= 16384 && motion.height <= 16384
+      && Number.isFinite(motion.duration) && motion.duration > 0
+      && Number.isFinite(motion.posterTime) && motion.posterTime >= 0 && motion.posterTime < motion.duration
+      && typeof motion.sourcePath === 'string' && typeof motion.videoPath === 'string') {
+      targets.motionPreview = motion;
+    }
 
     /*
      * 用哪个 URL 由 **daemon 宣布的 policy** 决定,不由 Web 猜后缀:同一个

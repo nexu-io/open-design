@@ -16,11 +16,8 @@
 //   client_chat_memory_pressure  "Who is about to OOM?"
 //   client_chat_stream_health    "How janky is the UI while a run streams?"
 //
-// Transport is `reportSafetyEvent` — the consent-bypassing direct-fetch
-// path that already carries `client_long_task`, `client_white_screen` and
-// `client_boot_timing`. Stability ground truth must not disappear when a
-// user opts out of product analytics; the reasoning is documented at the
-// top of `analytics/error-tracking.ts`.
+// Transport uses the existing safety channel independently of metrics consent.
+// Reports retain the existing envelope/validation path.
 //
 // Cost discipline. Measurement must never become the jank it measures:
 //
@@ -51,7 +48,10 @@ import type {
   ChatStreamHealthProps,
 } from '@open-design/contracts/analytics';
 
-import { reportSafetyEvent } from '../analytics/error-tracking';
+import {
+  reportResponsiveness,
+  responsivenessVisible,
+} from './responsiveness';
 import {
   chatBreadcrumbTrail,
   chatCorrelation,
@@ -139,6 +139,11 @@ export function markChatOpenIntent(kind: ChatOpenKind, at?: number): void {
   pendingIntent = { kind, at: typeof at === 'number' ? at : performance.now() };
 }
 
+/** A cancelled navigation must not lend its clock to a later remount. */
+export function clearChatOpenIntent(): void {
+  pendingIntent = null;
+}
+
 /**
  * Begin monitoring a chat log element. Replaces (and tears down) any
  * previously attached surface, so a conversation switch cannot leave two
@@ -209,6 +214,7 @@ class ChatSurface implements ChatSurfaceHandle {
   private readonly element: HTMLElement;
   private readonly openKind: ChatOpenKind;
   private readonly openedAt: number;
+  private readonly timingOrigin: 'navigation_intent' | 'surface_attach_fallback';
   private readonly attachedAt: number;
 
   private messageCount: number;
@@ -255,6 +261,7 @@ class ChatSurface implements ChatSurfaceHandle {
     const intent = consumeOpenIntent(this.attachedAt);
     this.openKind = intent?.kind ?? input.fallbackOpenKind ?? 'remount';
     this.openedAt = intent?.at ?? this.attachedAt;
+    this.timingOrigin = intent ? 'navigation_intent' : 'surface_attach_fallback';
 
     this.sampleTimer = setInterval(() => {
       // A hidden tab is throttled: its timers fire late, its heap is not
@@ -284,10 +291,15 @@ class ChatSurface implements ChatSurfaceHandle {
     if (this.detached || this.paintReported) return;
     this.paintReported = true;
     pushChatBreadcrumb('first_paint');
+    const trust = chatMeasurementTrust({ hiddenDuringWindow: this.hiddenSincePaintWindow });
     const props: ChatFirstPaintProps = {
       ...chatCorrelation(),
-      ...chatMeasurementTrust({ hiddenDuringWindow: this.hiddenSincePaintWindow }),
+      ...trust,
+      ...(this.timingOrigin === 'surface_attach_fallback' ? { measurement_trusted: false,
+        untrusted_reason: trust.untrusted_reason ?? 'missing_open_intent' as const } : {}),
       open_kind: this.openKind,
+      timing_origin: this.timingOrigin,
+      metric_schema_version: 1,
       duration_ms: Math.round(now() - this.openedAt),
       message_count: this.messageCount,
       rendered_row_count: input.renderedRowCount,
@@ -298,7 +310,7 @@ class ChatSurface implements ChatSurfaceHandle {
         ? { stream_event_count: this.streamEventCount }
         : {}),
     };
-    reportSafetyEvent('client_chat_first_paint', { ...props });
+    reportResponsiveness('client_chat_first_paint', { ...props });
   }
 
   setMessageCount(count: number): void {
@@ -342,7 +354,7 @@ class ChatSurface implements ChatSurfaceHandle {
           }
         : {}),
     };
-    reportSafetyEvent('client_chat_dom_growth', { ...props });
+    reportResponsiveness('client_chat_dom_growth', { ...props });
 
     if (heap) this.evaluateHeapPressure(heap, domNodeCount);
   }
@@ -358,7 +370,7 @@ class ChatSurface implements ChatSurfaceHandle {
     this.resetStreamWindow();
     if (this.streamTimer == null) {
       this.streamTimer = setInterval(() => {
-        if (this.activeRunId == null) return;
+        if (this.activeRunId == null || !responsivenessVisible()) return;
         this.flushStreamWindow(false);
         this.resetStreamWindow();
       }, STREAM_WINDOW_MS);
@@ -393,16 +405,20 @@ class ChatSurface implements ChatSurfaceHandle {
     if (this.streamTimer != null) clearInterval(this.streamTimer);
     this.sampleTimer = null;
     this.streamTimer = null;
+    this.stopLongTaskObserver();
+    if (activeSurface === this) activeSurface = null;
+  }
+
+  // -- internals ------------------------------------------------------------
+
+  private stopLongTaskObserver(): void {
     try {
       this.longTaskObserver?.disconnect();
     } catch {
       // best-effort — teardown must never propagate
     }
     this.longTaskObserver = null;
-    if (activeSurface === this) activeSurface = null;
   }
-
-  // -- internals ------------------------------------------------------------
 
   private installLongTaskObserver(): void {
     if (typeof PerformanceObserver === 'undefined') return;
@@ -411,7 +427,7 @@ class ChatSurface implements ChatSurfaceHandle {
       // Only tasks that land inside an open streaming window are ours.
       // Idle-time jank belongs to whatever else the app was doing and is
       // already covered by the global `client_long_task`.
-      if (this.activeRunId == null) return;
+      if (this.activeRunId == null || !responsivenessVisible()) return;
       for (const entry of list.getEntries()) {
         const duration = entry.duration;
         if (typeof duration !== 'number' || duration <= 0) continue;
@@ -459,7 +475,7 @@ class ChatSurface implements ChatSurfaceHandle {
       run_completed: runCompleted,
       details_count: this.element.getElementsByTagName('details').length,
     };
-    reportSafetyEvent('client_chat_stream_health', { ...props });
+    reportResponsiveness('client_chat_stream_health', { ...props });
   }
 
   private evaluateHeapPressure(heap: HeapSnapshot, domNodeCount: number): void {
@@ -488,7 +504,7 @@ class ChatSurface implements ChatSurfaceHandle {
       breadcrumbs: chatBreadcrumbTrail(),
       heap_trend_mb: chatHeapTrend(),
     };
-    reportSafetyEvent('client_chat_memory_pressure', { ...props });
+    reportResponsiveness('client_chat_memory_pressure', { ...props });
   }
 
   /**

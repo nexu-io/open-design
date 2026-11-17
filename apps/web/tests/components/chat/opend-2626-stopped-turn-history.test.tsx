@@ -138,7 +138,7 @@ describe('OPEND-2626 · 停止过的历史回合恢复后的终态', () => {
     const { container } = renderRestoredHistoryTurn();
     const text = container.textContent ?? '';
     expect(text).not.toContain(en['chat.record.running']);
-    expect(text).toContain(en['chat.record.canceled']);
+    expect(text).toContain(en['chat.record.turnStopped']);
   });
 
   it('壳头那句话是这一轮唯一常驻的陈述 —— 「已手动停止」在历史回合上是 hover 才揭示的', () => {
@@ -162,7 +162,7 @@ describe('OPEND-2626 · 停止过的历史回合恢复后的终态', () => {
      * 那一档没人取消过它。判据与反例在 `w85-orb-mark-say-term.test.tsx`。
      */
     expect(labels).toContain(en['chat.record.unfinished']);
-    expect(labels).not.toContain(en['chat.record.canceled']);
+    expect(labels).not.toContain(en['chat.record.turnStopped']);
   });
 
   /*

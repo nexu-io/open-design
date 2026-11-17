@@ -65,6 +65,11 @@ export interface ChatReconnectView {
   /** 预算用尽:自动重连停止,交回给人(22-3)。 */
   exhausted: boolean;
   /**
+   * 自动重跑的原因(只有 `agent-retry` 会带)。`rate_limit` = 这一轮撞上了供应商的
+   * 请求频率上限,那一行说「模型服务请求繁忙」(S09a,OPEND-2849)。
+   */
+  retryCause?: 'rate_limit';
+  /**
    * 这一行现在显示的是**用户按下〔重新连接〕之后的乐观读数**,不是传输层的原话。
    *
    * 它存在的唯一理由是让「按下」这件事有回音:重挂能不能起来要过好几道前置条件,
@@ -128,6 +133,8 @@ export type ChatReconnectSignal =
       attempt: number;
       max: number;
       phase: 'retrying' | 'cleared';
+      /** 限流触发的重跑(见 `DaemonAgentRetryState.cause`)。 */
+      cause?: 'rate_limit';
     }
   /** Agent CLI is reconnecting its upstream model stream (for example Codex). */
   | {
@@ -261,6 +268,7 @@ export function nextChatReconnectView(
       exhausted: false,
       manualRetry: false,
       offline: false,
+      ...(signal.kind === 'agent-retry' && signal.cause ? { retryCause: signal.cause } : {}),
     };
   }
 

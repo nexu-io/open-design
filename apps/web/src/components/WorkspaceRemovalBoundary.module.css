@@ -1,0 +1,12 @@
+.surface { position: fixed; inset: 0; z-index: 10000; background: var(--bg-app, #f7f7f5); }
+.backdrop { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .38); }
+.dialog { position: relative; box-sizing: border-box; width: 420px; min-width: min(288px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 24px; border-radius: 14px; background: #fff; color: #202020; box-shadow: 0 24px 72px #0000001f; overflow: auto; text-align: left; font-family: Inter, -apple-system, system-ui, "Segoe UI", "PingFang SC", sans-serif; }
+.dialog h2 { margin: 0 0 14px; padding: 0 32px 0 0; font-size: 16px; font-weight: 600; line-height: 24px; overflow-wrap: anywhere; }
+.dialog p { margin: 0; color: #666; font-size: 13px; font-weight: 500; line-height: 1.7; overflow-wrap: anywhere; }
+.dialog .error { margin-top: 12px; color: #bd4f4f; }
+.actions { display: flex; justify-content: flex-end; margin-top: 20px; }
+.actions .confirm { min-width: 64px; min-height: 36px; padding: 8px 16px; border: 0; border-radius: 8px; background: #202020; color: #fff; font-family: inherit; font-size: 13px; font-weight: 500; line-height: 20px; justify-content: center; white-space: normal; }
+.actions .confirm:hover:not(:disabled),
+.actions .confirm:active:not(:disabled) { background: #333; color: #fff; transform: none; }
+.actions .confirm:disabled { opacity: .55; cursor: wait; }
+.actions .confirm:focus-visible { outline: 1px solid #c7c7c7; outline-offset: 1px; }

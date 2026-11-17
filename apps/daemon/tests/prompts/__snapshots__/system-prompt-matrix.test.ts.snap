@@ -12,9 +12,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "project-metadata",
       "media-dispatch-hint",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 67528,
+    "totalChars": 68130,
   },
   "ask-mode-full-context": {
     "sections": [
@@ -32,9 +33,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "project-metadata",
       "filesystem-handoff-override",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 19027,
+    "totalChars": 19430,
   },
   "codex-image-dispatcher": {
     "sections": [
@@ -45,9 +47,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 54086,
+    "totalChars": 54999,
   },
   "critique-enabled": {
     "sections": [
@@ -67,9 +70,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 67056,
+    "totalChars": 67658,
   },
   "deck-kind-no-skill": {
     "sections": [
@@ -83,9 +87,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 95822,
+    "totalChars": 96424,
   },
   "deck-kind-with-skill-seed": {
     "sections": [
@@ -99,9 +104,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 66584,
+    "totalChars": 67186,
   },
   "design-ds-fixture-fallback": {
     "sections": [
@@ -121,9 +127,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 91577,
+    "totalChars": 92179,
   },
   "design-full-stack": {
     "sections": [
@@ -150,9 +157,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 74209,
+    "totalChars": 74811,
   },
   "design-minimal": {
     "sections": [
@@ -166,9 +174,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 95778,
+    "totalChars": 96380,
   },
   "design-no-ds-multitarget": {
     "sections": [
@@ -182,9 +191,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 72150,
+    "totalChars": 72752,
   },
   "example-prompt": {
     "sections": [
@@ -198,9 +208,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 70397,
+    "totalChars": 70999,
   },
   "freeform-other": {
     "sections": [
@@ -215,9 +226,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 99474,
+    "totalChars": 100076,
   },
   "freeform-other-no-deck-signal": {
     "sections": [
@@ -230,9 +242,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 69320,
+    "totalChars": 69922,
   },
   "media-image": {
     "sections": [
@@ -243,9 +256,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 54084,
+    "totalChars": 54997,
   },
   "memory-hooks-off": {
     "sections": [
@@ -260,9 +274,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 97283,
+    "totalChars": 97885,
   },
   "plan-mode": {
     "sections": [
@@ -276,9 +291,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 73344,
+    "totalChars": 73946,
   },
   "plugin-stages": {
     "sections": [
@@ -294,9 +310,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 95874,
+    "totalChars": 96476,
   },
   "skip-discovery-brief": {
     "sections": [
@@ -310,9 +327,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "filesystem-handoff-override",
       "skill-write-boundary",
       "clarifying-questions",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 69908,
+    "totalChars": 70510,
   },
   "slim-design-full-stack": {
     "sections": [
@@ -336,9 +354,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "project-metadata",
       "media-dispatch-hint",
       "skill-write-boundary",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 50245,
+    "totalChars": 50847,
   },
   "slim-freeform-no-deck-signal": {
     "sections": [
@@ -347,9 +366,10 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "project-metadata",
       "media-dispatch-hint",
       "skill-write-boundary",
+      "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 42300,
+    "totalChars": 42902,
   },
 }
 `;

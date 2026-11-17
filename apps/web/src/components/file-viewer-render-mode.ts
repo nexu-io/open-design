@@ -52,6 +52,8 @@ export interface UrlLoadDecision {
   forceInline: boolean;
   /** The artifact needs the opaque-origin Web Storage/history sandbox shim. */
   needsSandboxShim?: boolean;
+  /** Local forms/hash routers require the current client interaction bridge. */
+  needsLocalInteractionBridge?: boolean;
   /** The daemon-served URL response includes the sandbox shim. */
   urlSandboxGuard?: boolean;
   /**
@@ -120,6 +122,7 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // the artifact ships a `.tw-panel`.
   if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
+  if (d.needsLocalInteractionBridge) return false;
   if (d.needsSandboxShim && !d.urlSandboxGuard) return false;
   if (d.needsFocusGuard && !d.urlFocusGuard) return false;
   // A self-redirecting document needs the redirect-loop guard on whichever
@@ -236,6 +239,8 @@ export function htmlNeedsFocusGuard(source: string): boolean {
  */
 export function htmlNeedsPoweredPreview(source: string | null | undefined): boolean {
   if (!source) return false;
+  // Web Storage stays in srcDoc: the host restores localStorage within the
+  // workspace/member/project/file scope; sessionStorage remains document-local.
   // Hard requirement — SharedArrayBuffer only exists in a crossOriginIsolated
   // document, which ONLY the powered path provides.
   if (/\bSharedArrayBuffer\b/.test(source)) return true;
@@ -253,6 +258,10 @@ export function htmlNeedsPoweredPreview(source: string | null | undefined): bool
   if (/\bOffscreenCanvas\b/.test(source)) return true;
   if (/\bnavigator\s*\.\s*gpu\b/.test(source)) return true;
   return false;
+}
+
+export function htmlNeedsLocalInteractionBridge(source: string): boolean {
+  return /<form\b/i.test(source) || /\bhref\s*=\s*["']#(?:\/|!)/i.test(source);
 }
 
 export function htmlNeedsSandboxShim(source: string): boolean {

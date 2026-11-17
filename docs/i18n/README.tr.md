@@ -1,11 +1,9 @@
-<h1 align="center">OpenDesign: ilk iş birliğine dayalı tasarım ajanı çalışma alanı</h1>
+<h1 align="center">OpenDesign: ilk iş birliğine dayalı yapay zekâ tasarım ajanı çalışma alanı</h1>
 
-> ✨ **[OpenDesign Go ile tanışın](https://open-design.ai/pricing/)**. Go Plan ilk ay 8 ABD dolarından başlar ve aşağıdakiler dahil 10'dan fazla model için aylık kredi sunar: GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X ve MiMo V2.6 Flash. Tüm bireysel planlar Codex, Claude Code, DSH, OpenCode ve diğer araçlar için API erişimi içerir.
->
-> 🧩 **[DeepSeek Harness artık destekleniyor.](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek'in resmî `dsh` Agent Harness'ini yapılandırılmış düşünme, araç çağrıları, model keşfi, iptal ve oturum devam ettirme özellikleriyle OpenDesign'a yerel bir runtime olarak bağlayın. Üretilen dosyalar canlı önizleme ve teslimat için OpenDesign iş akışında kalır.
+> ✨ **[OpenDesign Go ile GitHub’da 100K yıldızı kutluyoruz](https://open-design.ai/pricing/)** — Go kredileri iki katına çıktı: **İlk ay 8 ABD doları karşılığında uygun Design Plan modelleri için aylık 120 ABD dolarına kadar kredi**. GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X ve MiMo V2.6 Flash dahil 10’dan fazla modelde kullanın. Tüm bireysel planlar Codex, Claude Code, DSH, OpenCode ve diğer araçlar için API erişimi içerir.
 
 <p align="center">
-  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: ilk iş birliğine dayalı tasarım ajanı çalışma alanı" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: ilk iş birliğine dayalı yapay zekâ tasarım ajanı çalışma alanı" width="100%" />
 </p>
 
 <p align="center">
@@ -29,9 +27,9 @@
 
 ## OpenDesign nedir
 
-OpenDesign, **iş birliğine dayalı bir tasarım ajanı çalışma alanıdır**. Bir proje özetiyle başlayın; alıştığınız kodlama ajanını veya OpenDesign Cloud'u kullanarak tasarım sisteminize uygun bir prototip oluşturun. Ekibinizle paylaşın, geri bildirim toplayın ve ajanınızın aynı projede çalışmayı geliştirmesine izin verin.
+OpenDesign, **ilk iş birliğine dayalı yapay zekâ tasarım ajanı çalışma alanıdır**. Bir proje özetiyle başlayın; alıştığınız kodlama ajanını veya OpenDesign Cloud'u kullanarak tasarım sisteminize uygun bir prototip oluşturun. Ekibinizle paylaşın, geri bildirim toplayın ve ajanınızın aynı projede çalışmayı geliştirmesine izin verin.
 
-Bu iş akışı açık ve genişletilebilir. **Açık kaynaklı Claude Design alternatifi** olan OpenDesign, Apache 2.0 lisansıyla sunulur; ekipler becerileri, tasarım şablonlarını, tasarım sistemlerini ve eklentileri inceleyip kendi süreçlerine uyarlayabilir.
+Bu iş akışı açık ve genişletilebilir. OpenDesign, Apache 2.0 lisansıyla sunulur; ekipler becerileri, tasarım şablonlarını, tasarım sistemlerini ve eklentileri inceleyip kendi süreçlerine uyarlayabilir.
 
 
 ---
@@ -232,29 +230,12 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 
 ## Neden OpenDesign
 
-> **Nisan 2026'da Anthropic Claude Design'ı yayınladı — bir LLM'in ilk kez düz metin yazmayı bırakıp doğrudan tasarım artifact'leri sunduğu an.** Viral oldu. Ama kapalı kaynaklı, yalnızca ücretli, yalnızca bulut tabanlı kaldı; Anthropic'in modeline, Anthropic'in becerilerine, Anthropic'in yüzeyine kilitliydi. Ödeme yok, kendi sunucunda barındırma yok, Vercel dağıtımı yok, kendi ajanını takma yok.
-
-OpenDesign (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact öncelikli zihinsel model, hiçbir bağımlılık kilidi olmadan:
-
 - 🤖 **Ajan-yerel, modelden bağımsız.** Bir ajan sunmuyoruz. `PATH`'inizde zaten bulunan `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` tasarım motorudur. Tek tıkla değiştirin.
 - 🧠 **Varsayılan olarak marka düzeyinde.** Her render etkin paketin `DESIGN.md` dosyasını temel marka sözleşmesi olarak okur. Depoda 151 tasarım sistemi paketi bulunur; eski paketler yalnızca `DESIGN.md` içerebilir, yenileri `manifest.json`, `tokens.css`, bileşenler, varlıklar ve provenance ekleyebilir. Bir klasör bırakın, seçici onu bulur.
-- 🖥️ **Yerel öncelikli, her katmanda BYOK.** Yerel masaüstü uygulamaları buluta gidip gelmeden yerel öncelikli kalır. Daemon veri yollarını açıklamadan önce kökteki `AGENTS.md` dosyasında **Daemon data directory contract** bölümünü MUTLAKA okuyun.
+- 🖥️ **Yerel öncelikli, her katmanda BYOK.** Yerel masaüstü uygulamaları yerel öncelikli kalır. Ürün analitiği ve oturum tekrarı onay gerektirir; hassas verilerden arındırılmış güvenlik ve güvenilirlik telemetrisi her zaman açıktır. Daemon veri yollarını açıklamadan önce kökteki `AGENTS.md` dosyasında **Daemon data directory contract** bölümünü MUTLAKA okuyun.
 - 🌍 **Dört düzlemde birleştirilebilir.** **Eklentiler** çalıştırılabilir iş akışları taşır · işlevsel **beceriler** ajan davranışını taşır · **tasarım şablonları** render planlarını taşır · **tasarım sistemleri** markayı taşır. Dördü de herkesin yazıp yayınlayabileceği taşınabilir, sürümlenebilir dizinler kullanır.
-- 🔁 **Mevcut bir kod tabanını yenileyin.** Ajana bir `git` deposu + `DESIGN.md` verin, gerçek bileşenlerinizi marka spesifikasyonuna göre yeniden düzenler. Özel eklentiler Figma / Pencil iş akışlarını React / Next.js / Vue koduna taşır.
-- 🔒 **İlkesel gizlilik.** Her şey verilerinizin bulunduğu yerde çalışır — dizüstü bilgisayarınız, ekibinizin sunucusu, Vercel projeniz. Ağ gerektiğinde, BYOK proxy SSRF korumalıdır.
-
-### Karşılaştırma
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| Açık kaynak | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| Kendi sunucunda barındırma / masaüstü | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| Ajan-yerel (CLI'nizde çalışır) | Yalnızca Anthropic | ❌ | Yalnızca bulut ajanı | **✅ 25 CLI + BYOK** |
-| Marka düzeyinde `DESIGN.md` | Tescilli | Theme JSON | Sınırlı token | **✅ 151 sistem sunuluyor** |
-| Beceriler / eklentiler / şablonlar | Kapalı | Eklenti mağazası | Kapalı | **✅ 100+ işlevsel beceri · ayrı render şablonu kataloğu · 277 eklenti** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Birinci sınıf** |
-| Mevcut bir depoyu markaya yenileme | ❌ | ❌ | ❌ | **✅ ajan + `DESIGN.md` ile** |
-| Minimum faturalandırma | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · herhangi bir uyumlu uç nokta** |
+- 🔁 **Mevcut bir kod tabanını yenileyin.** Ajana bir `git` deposu + `DESIGN.md` verin, gerçek bileşenlerinizi marka spesifikasyonuna göre yeniden düzenler.
+- 🔒 **İlkesel gizlilik.** Projeler yerel olarak veya kendi dağıtımınızda çalışabilir. Bulut modellerine ve OpenDesign Cloud’a yapılan istekler ilgili hizmetlere gönderilir. BYOK proxy SSRF koruması içerir.
 
 ---
 
@@ -324,7 +305,7 @@ Node `~24`, pnpm `10.33.x`. Windows kullanıcıları, bkz. [`docs/windows-troubl
 `özet → eklenti → yön → tasarım sistemi → artifact → devir → bellek`
 
 1. **Bir PM özet gönderir.** Eklenti seçici şunları sunar: açılış sayfası · tanıtım destesi · pano · sosyal gönderi · PM spesifikasyonu · OKR puan kartı…
-2. **Bir tasarımcı (veya ajan) yönü kilitler.** Marka yok mu? 5 seçilmiş yönden birini seçin. Markanız var mı? Bir ekran görüntüsü / URL bırakın → ajan GitHub'a bağlanır, Figma'yı içe aktarır ve yeniden kullanılabilir bir `DESIGN.md` dosyasına kodlar.
+2. **Bir tasarımcı (veya ajan) yönü kilitler.** Marka yok mu? 5 seçilmiş yönden birini seçin. Markanız var mı? Bir ekran görüntüsü / URL bırakın → ajan GitHub'a bağlanır ve yeniden kullanılabilir bir `DESIGN.md` dosyasına kodlar.
 3. **Ajan ilk teslimatı oluşturur.** Filesystem destekli CLI çalıştırmaları kanonik dosyaları yazar; dosya araçsız BYOK/API çalıştırmaları eksiksiz bir `<artifact>` bloğu döndürür.
 4. **Mühendisliğe devredin.** Artifact gerçek HTML/CSS'tir — kod olarak inşa etmeye devam etmek için Cursor, Codex veya Claude Code'a bırakın. Veya doğrudan pazarlamaya PPTX / PDF / MP4 olarak dışa aktarın.
 5. **OpenDesign kullandıkça akıllanır.** Ekran görüntüleriniz, yazı tipleriniz, paletleriniz ve onaylanmış artifact'leriniz bir sonraki oturum için varsayılan olarak birikir. Daha az yeniden çalışma, daha az sapma.
@@ -397,9 +378,9 @@ Protokol ve dizin ayrımı → [`docs/skills-protocol.md`](../../docs/skills-pro
 
 **AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**Geliştirici Araçları** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**Geliştirici Araçları** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**Üretkenlik** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**Üretkenlik** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **Fintech** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -455,7 +436,7 @@ Eklentiler **web UI** ve **`od` CLI** arasında tam eşitliktedir — aynı `/ap
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -476,7 +457,7 @@ my-plugin/
 └── examples/           ← optional: concrete use cases
 ```
 
-Temel alanlar `specVersion`, `name`, `version`, yalnızca Agent Skill sunulduğunda isteğe bağlı `compat.agentSkills[].path`, ayrıca `od.kind`, `od.taskKind`, `od.mode`, `od.capabilities[]` ve `od.inputs[]` alanlarıdır.
+Temel alanlar `specVersion`, `name`, `version`, yalnızca Agent Skill sunulduğunda isteğe bağlı `compat.agentSkills[].path`, ayrıca `od.kind`, `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode`, `od.capabilities[]` ve `od.inputs[]` alanlarıdır.
 
 Yerel olarak iskeletle + doğrula:
 
@@ -691,11 +672,10 @@ Bu size otuz dakika kazandırdıysa, bir ★ verin. Yıldızlar kira ödemez —
 
 | Proje | Rol |
 |---|---|
-| Claude Design | Bu deponun açık kaynaklı alternatifi olduğu kapalı kaynaklı ürün. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | Tasarım felsefesi pusulası — junior-tasarımcı iş akışı, marka-varlığı protokolü, anti-AI-slop kontrol listesi, beş boyutlu eleştiri. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | Dergi tarzı web PPT becerisi, [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) altında birebir paketlenmiştir. Deste modu için varsayılan. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio ailesi — 15 deste şablonu, 36 tema, 31 sayfa düzeni, animasyon çalışma zamanı, manyetik-kart sunucu modu. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | İlk açık kaynaklı Claude Design alternatifi; ödünç aldığımız UX desenleri (akış-artifact döngüsü, yalıtılmış iframe, canlı ajan paneli). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | ödünç aldığımız UX desenleri (akış-artifact döngüsü, yalıtılmış iframe, canlı ajan paneli). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | Daemon + adaptör mimarisi — PATH-tarama ajan algılama, tek ayrıcalıklı süreç olarak yerel daemon. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | İlk 9 bölümlük `DESIGN.md` şemasının ve upstream'den türetilen 70 sistemin tarihsel kaynağı; güncel paketler bu temeli genişletebilir. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` altına eklenen 57 tasarım becerisinin kaynağı. |

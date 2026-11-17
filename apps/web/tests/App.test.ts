@@ -140,6 +140,18 @@ describe('hydrateReadyTeamProject', () => {
     expect(result).toEqual(project);
   });
 
+  it('hydrates an explicitly shared project in a Personal workspace', async () => {
+    const personal = { ...teamContext, workspaceType: 'personal' as const };
+    delete personal.teamId;
+    const applyProject = vi.fn();
+    await expect(hydrateReadyTeamProject('shared-ready', 'ws-1', {
+      getWorkspaceContext: () => personal,
+      listWorkspaceProjects: async () => [summary],
+      applyProject,
+    })).resolves.toEqual(project);
+    expect(applyProject).toHaveBeenCalledWith(project);
+  });
+
   it('invalidates the exact file authority before publishing readiness', async () => {
     const order: string[] = [];
     const onReady = vi.fn((_project: Project, context: WorkspaceCollabContext) => {

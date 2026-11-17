@@ -260,12 +260,48 @@ describe('UpdateDialog', () => {
 
     expect(
       await screen.findByText(
-        "Couldn't check for updates. Version information is temporarily unavailable. Check your network connection and try again.",
+        "Couldn't check for updates Version information is temporarily unavailable. Check your network connection and try again.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/ETIMEDOUT/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Explore new features' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
+  });
+
+  it('renders the S31b product copy as an unpunctuated title line plus body (OPEND-2849)', async () => {
+    let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
+    const failed = idleStatus({
+      error: { code: 'network-timeout', message: 'ETIMEDOUT https://updates.example.test/latest.yml' },
+      state: 'error',
+    });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          check: vi.fn(async () => failed),
+          status: vi.fn(async () => idleStatus()),
+          subscribeOpenDialog: vi.fn((listener) => {
+            openDialogListener = listener;
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    render(<I18nProvider initial="zh-CN"><UpdateDialog /></I18nProvider>);
+    await act(async () => {
+      openDialogListener?.({ source: 'mac-app-menu' });
+      await Promise.resolve();
+    });
+
+    const dialog = await screen.findByRole('dialog');
+    const status = dialog.querySelector('#update-dialog-status') as HTMLElement;
+    await waitFor(() => expect(status.textContent).toContain('暂时无法获取版本信息'));
+    // The status paragraph renders with `white-space: pre-line`, so the first
+    // line is the visible title and the second line is the body.
+    expect(status.textContent?.split('\n')).toEqual([
+      '检查更新失败',
+      '暂时无法获取版本信息，请检查网络连接后重试。',
+    ]);
   });
 
   it('offers a manual download instead of another check when in-app updates are unsupported', async () => {

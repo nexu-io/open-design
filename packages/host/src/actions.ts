@@ -1,6 +1,7 @@
 import { OPEN_DESIGN_HOST_UPDATER_ACTIONS } from "./protocol.js";
 import type {
   OpenDesignHostActionResult,
+  OpenDesignHostDownloadResult,
   OpenDesignHostBrowserClearDataOptions,
   OpenDesignHostCaptureOptions,
   OpenDesignHostCaptureResult,
@@ -123,6 +124,18 @@ export async function pickAndReplaceHostProjectWorkingDir(
   }
 }
 
+/** Failure reason when the running host predates `project.pickWorkingDir`. */
+export const HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON = "host build does not support pickWorkingDir";
+
+/**
+ * True when a pick failed because the host build lacks the picker capability
+ * (only an app update fixes it), as opposed to a pick that ran and failed
+ * (retrying can succeed).
+ */
+export function isHostPickWorkingDirUnsupported(result: OpenDesignHostPickWorkingDirResult): boolean {
+  return result.ok === false && "reason" in result && result.reason === HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON;
+}
+
 // Picks a folder via the host's native dialog and returns the chosen path
 // plus a single-use token, WITHOUT touching any project. The Home flow uses
 // this to let the user choose a working directory before the project exists;
@@ -133,7 +146,7 @@ export async function pickHostWorkingDir(
   const host = getOpenDesignHost(scope);
   if (host == null) return unavailable("OpenDesign host is not available");
   if (typeof host.project.pickWorkingDir !== "function") {
-    return unavailable("host build does not support pickWorkingDir");
+    return unavailable(HOST_PICK_WORKING_DIR_UNSUPPORTED_REASON);
   }
   try {
     return await host.project.pickWorkingDir();
@@ -164,6 +177,22 @@ export function setHostPetVisible(visible: boolean, scope: OpenDesignHostGlobalS
   if (host == null) return unavailable("OpenDesign host is not available");
   try {
     host.pet.setVisible(visible);
+    return { ok: true };
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+/**
+ * Bring the host's app window to the front, restoring it when minimized or
+ * hidden. Fails as unavailable on a host without the capability (web, or an
+ * older desktop build), so the caller can fall back to `window.focus()`.
+ */
+export function showHostWindow(scope: OpenDesignHostGlobalScope = globalThis): OpenDesignHostActionResult {
+  const host = getOpenDesignHost(scope);
+  if (typeof host?.window?.show !== "function") return unavailable("OpenDesign host window control is not available");
+  try {
+    host.window.show();
     return { ok: true };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
@@ -309,4 +338,12 @@ export async function setHostUpdaterMenuLabels(
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }
+}
+
+/** Observe native download completion when the host supports it. */
+export function subscribeHostDownloads(
+  listener: (result: OpenDesignHostDownloadResult) => void,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): (() => void) | null {
+  return getOpenDesignHost(scope)?.downloads?.subscribe(listener) ?? null;
 }

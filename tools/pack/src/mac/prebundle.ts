@@ -1,3 +1,4 @@
+import { MAC_THIN_LAUNCHER_FILE } from "./thin-launcher.js";
 import { renderPackagedMainEntry } from "../launcher/packaged-entry.js";
 import { readFile } from "node:fs/promises";
 
@@ -29,6 +30,7 @@ export const MAC_PREBUNDLE_RUNTIME_DEPENDENCIES = {
   "better-sqlite3": "12.10.0",
   "blake3-wasm": "2.1.5",
   "hyperframes": "0.8.1",
+  "gsap": "3.14.2",
   "node-pty": "1.1.0",
   "sharp": "0.35.3",
 } as const;
@@ -64,7 +66,7 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "packaged main",
   },
   daemonCli: {
-    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "gsap", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/@ffmpeg-installer/ffmpeg/",
@@ -73,6 +75,7 @@ export const MAC_PREBUNDLE_POLICIES = {
       "/node_modules/electron/",
       "/node_modules/fsevents/",
       "/node_modules/hyperframes/",
+      "/node_modules/gsap/",
       "/node_modules/next/",
       "/node_modules/node-pty/",
       "/node_modules/openai/",
@@ -82,7 +85,7 @@ export const MAC_PREBUNDLE_POLICIES = {
     label: "daemon cli",
   },
   daemonSidecar: {
-    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "node-pty"],
+    externals: ["@ffmpeg-installer/ffmpeg", "@open-design/sidecar", "better-sqlite3", "blake3-wasm", "fsevents", "hyperframes", "gsap", "node-pty"],
     forbiddenInputs: [
       "/node_modules/@open-design/daemon/",
       "/node_modules/@ffmpeg-installer/ffmpeg/",
@@ -91,6 +94,7 @@ export const MAC_PREBUNDLE_POLICIES = {
       "/node_modules/electron/",
       "/node_modules/fsevents/",
       "/node_modules/hyperframes/",
+      "/node_modules/gsap/",
       "/node_modules/next/",
       "/node_modules/node-pty/",
       "/node_modules/openai/",
@@ -156,5 +160,14 @@ export async function assertMacPrebundleMetafile(options: {
 }
 
 export function renderMacPackagedMainEntry(usePrebundle: boolean): string {
-  return renderPackagedMainEntry(usePrebundle);
+  const bundledEntry = usePrebundle ? "./prebundled/packaged-main.mjs" : "@open-design/packaged";
+  const select = `Promise.resolve().then(() => {
+    if (!process.versions.electron || process.env.ELECTRON_RUN_AS_NODE === "1") return { entry: ${JSON.stringify(bundledEntry)} };
+    return require("./${MAC_THIN_LAUNCHER_FILE}").selectAppEntry({
+    app: require("electron").app, appRoot: __dirname, bundledEntry: ${JSON.stringify(bundledEntry)}
+    });
+  }).then(selected => selected == null ? undefined : import(selected.entry))`;
+  // Keep the dependency-free recovery handler; never fall back after acquiring
+  // the hosted lock or mutating its journal.
+  return renderPackagedMainEntry(usePrebundle).replace(`import(${JSON.stringify(bundledEntry)})`, select);
 }

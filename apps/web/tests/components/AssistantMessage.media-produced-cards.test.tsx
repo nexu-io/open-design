@@ -23,7 +23,7 @@
  * `f.name.toLowerCase()` 上炸掉整个会话视图。
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
@@ -214,5 +214,19 @@ describe('OPEND-2608 · 视频产物已归档时,消息底部要出视频卡', (
 
     expect(screen.getByText(/已生成/)).toBeTruthy();
     expect(screen.queryByTestId(`artifact-card-${VIDEO_FILE.name}`)).toBeNull();
+  });
+});
+
+
+describe('registered live artifact delivery', () => {
+  it('opens the rendered live view instead of presenting the input template as the result', () => {
+    const template = { ...AUDIO_FILE, name: 'template.html', path: 'template.html', kind: 'html', mime: 'text/html' } as ProjectFile;
+    const message = mediaTurn({ producedFiles: [template] });
+    message.events = [...(message.events ?? []), { kind: 'live_artifact', action: 'created', projectId: PROJECT_ID, artifactId: 'la-board', title: '任务看板' }];
+    const open = vi.fn();
+    render(<CollabProvider value={projectCollabValue()}><AssistantMessage message={message} streaming={false} projectId={PROJECT_ID} projectFiles={[template]} onRequestOpenFile={open} isLast /></CollabProvider>);
+    fireEvent.click(screen.getByRole('button', { name: '任务看板' }));
+    expect(open).toHaveBeenCalledWith('live:la-board');
+    expect(screen.queryByTestId('artifact-card-template.html')).toBeNull();
   });
 });

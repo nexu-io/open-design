@@ -14,9 +14,10 @@ import {
   type ReleaseChannel,
 } from '@open-design/release';
 
+import { buildClientTelemetryParams, parseClientMetricEvent, UPDATE_METRIC_STAGES, updateStageMetricSchema } from '@open-design/contracts/analytics';
 import type { AnalyticsContext, AnalyticsService } from '../analytics.js';
 import { readPosthogConfig } from '../analytics.js';
-import { readAppConfig, type AppConfigPrefs } from '../app-config.js';
+import { readAppConfig, readMetricsConsent, type AppConfigPrefs } from '../app-config.js';
 
 const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';
@@ -263,7 +264,7 @@ export async function observePendingInstallerApplyAttempts(
   }
   if (summaries.length === 0) return { observed: 0 };
 
-  const appConfig = await (options.readConfig ?? readAppConfig)(options.dataRoot).catch(() => ({} as AppConfigPrefs));
+  const appConfig = await (options.readConfig ?? readObservationConfig)(options.dataRoot).catch(() => ({} as AppConfigPrefs));
   const currentChannel = normalizeUpdateObservationChannel(options.currentVersion, options.currentChannel);
   let observed = 0;
   for (const { filePath, summary } of summaries) {
@@ -307,15 +308,19 @@ export async function observePendingInstallerApplyAttempts(
   return { observed };
 }
 
+export type ObserveUpdateLifecycleStagesOptions = Omit<ObservePendingInstallerApplyAttemptsOptions, 'analytics'> & {
+  analytics: Pick<AnalyticsService, 'capture' | 'captureSafety'>;
+};
+
 /** Replay immutable stage records independently of version-apply classification. */
 export async function observeUpdateLifecycleStages(
-  options: ObservePendingInstallerApplyAttemptsOptions,
+  options: ObserveUpdateLifecycleStagesOptions,
 ): Promise<{ queued: number }> {
   const root = installerObservationRoot(options.dataRoot);
   const now = options.now?.() ?? new Date();
   let entries;
   try { entries = await readdir(root, { withFileTypes: true }); } catch { return { queued: 0 }; }
-  const config = await (options.readConfig ?? readAppConfig)(options.dataRoot).catch(() => ({} as AppConfigPrefs));
+  const config = await (options.readConfig ?? readObservationConfig)(options.dataRoot).catch(() => ({} as AppConfigPrefs));
   const decision = deliveryForConfig(config, options.env ?? process.env, now.toISOString());
   const channel = normalizeUpdateObservationChannel(options.currentVersion, options.currentChannel);
   let queued = 0;
@@ -361,5 +366,65 @@ export async function observeUpdateLifecycleStages(
       } catch { /* Offline, malformed, or unavailable observations never fail startup. */ }
     }
   }
+  queued += await replayUpdateStageMetrics(options, entries.map(entry => entry.isDirectory() ? entry.name : ""), now);
   return { queued };
+}
+
+
+async function readObservationConfig(dataRoot: string): Promise<AppConfigPrefs> {
+  if (!(await readMetricsConsent(dataRoot)).metrics) return {} as AppConfigPrefs;
+  return await readAppConfig(dataRoot);
+}
+
+/** Fixed names only; no arbitrary local properties reach the network. */
+let metricScanOffset = 0;
+async function replayUpdateStageMetrics(
+  options: ObserveUpdateLifecycleStagesOptions, entries: string[], now: Date,
+): Promise<number> {
+  let queued = 0;
+  const root = installerObservationRoot(options.dataRoot);
+  const currentChannel = normalizeUpdateObservationChannel(options.currentVersion, options.currentChannel);
+  const candidates = entries.filter(isSafeFlowId).sort();
+  const batch = Array.from({ length: Math.min(64, candidates.length) }, (_, index) => candidates[(metricScanOffset + index) % candidates.length]!);
+  metricScanOffset = candidates.length === 0 ? 0 : (metricScanOffset + batch.length) % candidates.length;
+  for (const flowId of batch) {
+    if (!isSafeFlowId(flowId)) continue;
+    for (const stage of UPDATE_METRIC_STAGES) for (const phase of ['started', 'result']) {
+      const file = path.join(root, flowId, 'stages', `${stage}-${phase}.json`);
+      const receipt = `${file}.receipt`;
+      try {
+        try {
+          const prior = JSON.parse(await readFile(receipt, 'utf8'));
+          // Old consent/identity skips are not safety-channel delivery receipts.
+          if (prior.status === 'queued' || prior.status === 'skipped_analytics_disabled') continue;
+        } catch { /* Unacknowledged records may retry with the same ID. */ }
+        const raw = JSON.parse(await readFile(file, 'utf8'));
+        const parsed = updateStageMetricSchema.safeParse(raw);
+        const at = Date.parse(raw.occurred_at);
+        if (!parsed.success || raw.metric_schema_version !== 1 || parsed.data.stage !== stage || parsed.data.flow_id !== flowId ||
+            (parsed.data.result === 'started') !== (phase === 'started') ||
+            raw.namespace !== options.namespace || raw.channel !== currentChannel ||
+            !Number.isFinite(at) || at > now.getTime() || now.getTime() - at > INSTALLER_OBSERVATION_TTL_MS) continue;
+        const insertId = `update_stage:${flowId}:${stage}:${phase}`;
+        let status = 'skipped_analytics_disabled';
+        if (readPosthogConfig(options.env ?? process.env) != null) {
+          const properties = parseClientMetricEvent('client_update_stage_result', {
+            ...parsed.data, metric_schema_version: 1, telemetry_capability: 'supported',
+            ...buildClientTelemetryParams({ ...raw, occurred_at: new Date(at).toISOString() }, { eventId: insertId, deviceId: null,
+              clientType: 'desktop', captureSource: 'desktop/updater', env: 'unknown',
+              appVersion: null, platform: null, arch: null, reportedAt: now.toISOString() }),
+          });
+          if (properties == null) continue;
+          await options.analytics.captureSafety({ eventName: 'client_update_stage_result',
+            appVersion: options.appVersion, properties, insertId });
+          status = 'queued';
+          queued += 1;
+        }
+        const temporary = `${receipt}.${process.pid}.tmp`;
+        await writeFile(temporary, JSON.stringify({ status, insertId, updatedAt: now.toISOString() }));
+        await rename(temporary, receipt);
+      } catch { /* Telemetry cannot break startup or the periodic scanner. */ }
+    }
+  }
+  return queued;
 }

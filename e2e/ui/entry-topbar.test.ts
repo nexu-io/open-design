@@ -123,6 +123,85 @@ test('[P2] home chrome exposes the composer execution pill and the rail settings
   await expect(page.getByTestId('entry-settings-button')).toBeVisible();
 });
 
+test('[P1] OPEND-4452 project tabs omit the duplicate invitation button while shell invitation remains usable', async ({ page }, info) => {
+  const scope = { workspaceId: 'invite-project-tabs', workspaceMemberId: 'invite-project-owner',
+    workspaceName: 'Project tabs', workspaceType: 'team', role: 'owner', memberStatus: 'active', lifecycleState: 'active',
+    billingState: 'active', planId: 'max', permissions: { canInviteMembers: true, canShareProjects: true, canManageSharedResources: true, canViewWorkspaceSettings: true } };
+  await page.route('**/api/integrations/vela/status*', route => route.fulfill({ json: {
+    loggedIn: true, profile: 'test', user: { id: 'project-invite-user', email: 'projects@example.invalid' },
+  } }));
+  await page.route('**/api/workspace/context', route => route.fulfill({ json: { context: scope } }));
+  await page.route('**/api/workspace/directory', route => route.fulfill({ json: { items: [scope], activeWorkspaceId: scope.workspaceId } }));
+  await page.route('**/api/projects*', route => route.fulfill({ json: { projects: [{
+    id: 'opend-4452-project', name: 'Invitation entry review', skillId: null, designSystemId: null,
+    createdAt: 1, updatedAt: 2, status: { value: 'not_started' },
+  }] } }));
+  await page.route('**/api/workspaces/*/projects*', route => route.fulfill({ json: { projects: [{
+    workspaceId: scope.workspaceId, visibility: 'private', project: {
+      id: 'opend-4452-project', name: 'Invitation entry review', skillId: null, designSystemId: null,
+      createdAt: 1, updatedAt: 2, status: { value: 'not_started' },
+    },
+  }] } }));
+  await gotoEntryHome(page);
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-drafts').click();
+  for (const collection of ['recent', 'personalProjects', 'teamProjects']) {
+    const tab = page.getByTestId(`recent-projects-collection-${collection}`);
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('.recent-projects__controls').getByRole('button', { name: 'Invite teammates', exact: true })).toHaveCount(0);
+  }
+  await info.attach('projects-without-duplicate-invite', { body: await page.screenshot(), contentType: 'image/png' });
+  const invite = page.getByRole('button', { name: 'Invite', exact: true });
+  await expect(invite).toBeVisible();
+  await invite.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+});
+
+test('[P1] OPEND-4440 unresolved workspace stays neutral before switching to a known Max plan', async ({ page }, info) => {
+  const scopes = ['unknown', 'max'].map(plan => ({
+    workspaceId: `plan-${plan}`, workspaceMemberId: `member-${plan}`,
+    workspaceName: `Plan ${plan}`, workspaceType: 'team', role: 'owner',
+    memberStatus: 'active', lifecycleState: 'active',
+  }));
+  let active = scopes[0]!;
+  const context = () => ({ ...active, billingState: 'active',
+    planId: active === scopes[1] ? 'max' : null,
+    permissions: { canViewWorkspaceSettings: true, canInviteMembers: true, canManageBilling: true } });
+  await page.route('**/api/integrations/vela/status*', route => route.fulfill({ json: {
+    loggedIn: true, profile: 'test', user: { id: 'plan-user', email: 'plan@example.invalid' },
+  } }));
+  await page.route('**/api/projects*', route => route.fulfill({ json: { projects: [] } }));
+  await page.route('**/api/workspace/directory', route => route.fulfill({ json: { items: scopes, activeWorkspaceId: active.workspaceId } }));
+  await page.route('**/api/workspace/context', route => route.fulfill({ json: { context: context() } }));
+  await page.route('**/api/workspace/active', route => {
+    active = scopes.find(scope => scope.workspaceId === route.request().postDataJSON().workspaceId)!;
+    return route.fulfill({ json: { activeWorkspaceId: active.workspaceId, context: context() } });
+  });
+  await page.route('**/api/workspace/billing?*', route => route.fulfill({ json: {
+    summary: null,
+    workspaceBalance: { ...active, balanceUsd: '0', billingScopeVersion: 2, updatedAt: new Date().toISOString(), expiresAt: null },
+  } }));
+  await gotoEntryHome(page);
+  const pill = page.getByTestId('entry-top-right-credits');
+  await expect(pill).toBeVisible();
+  await expect(pill).toHaveAttribute('aria-busy', 'true');
+  await expect(pill.locator('.plan-wordmark')).toHaveCount(0);
+  await pill.hover();
+  const panel = page.getByTestId('entry-top-right-credits-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('.entry-nav-rail__menu-credits-plan')).not.toContainText(/Team|团队/);
+  await info.attach('unresolved-plan-neutral', { body: await page.screenshot(), contentType: 'image/png' });
+  await ensureRailOpen(page);
+  await page.getByTestId('workspace-switcher').click();
+  await page.getByTestId('workspace-switcher-list').getByText('Plan max', { exact: true }).click();
+  await expect(pill).not.toHaveAttribute('aria-busy', 'true');
+  await expect(pill.locator('.plan-wordmark')).toHaveCount(1);
+  await pill.hover();
+  await expect(panel.getByRole('img', { name: 'max', exact: true })).toBeVisible();
+  await info.attach('known-plan-max', { body: await page.screenshot(), contentType: 'image/png' });
+});
+
 test('[P1] home execution pill reflects the selected Local CLI agent and opens the switcher', async ({ page }) => {
   await gotoEntryHome(page);
 

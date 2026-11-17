@@ -1,3 +1,5 @@
+import os from 'node:os';
+
 import { asObject } from './agent-protocol/acp/json.js';
 import type {
   TrackingRunCancelOrigin,
@@ -50,6 +52,17 @@ export interface RunFailureClassificationInput {
   terminalTrigger?: TrackingRunTerminalTrigger | null;
   events?: RunEventForFailureClassification[];
   admissionEvidence?: RunAdmissionEvidence | undefined;
+  /**
+   * The OS the agent ran on. Defaults to this daemon's host, which is where
+   * every agent child is spawned; tests pass it explicitly.
+   */
+  hostOs?: RunFailureHostOs;
+}
+
+export interface RunFailureHostOs {
+  platform: string;
+  /** `os.release()`, e.g. `10.0.16299` on Windows 10 1709. */
+  release: string;
 }
 
 export interface RunFailureClassification {
@@ -352,6 +365,20 @@ function isSessionResumeExpiredText(text: string): boolean {
     /\bno conversation found with session id\b/i.test(text) ||
     /\bno session found\b/i.test(text) ||
     /\bsession [\w-]+ not found\b/i.test(text);
+}
+
+// A lost race for the local credential-refresh lock, not a bad credential.
+//
+// Anchored on the contention itself — another holder, or a holder that died
+// mid-refresh — because that is what separates this from a genuinely unusable
+// token. An expired or replayed refresh token reads as "refresh token expired
+// / already used" and belongs to `authDetail`; those phrases are deliberately
+// not matched here. The trailing "or sign in again" in the agent's own message
+// is advice for the persistent case and is likewise not treated as evidence,
+// so a first occurrence cannot be laundered into a sign-in prompt.
+function isTransientCredentialRefreshText(text: string): boolean {
+  return /\banother [\w ]*process is refreshing it\b/i.test(text) ||
+    /\bexited mid-refresh\b/i.test(text);
 }
 
 function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
@@ -701,6 +728,41 @@ function isAccountSuspendedText(text: string): boolean {
   return /\btemporarily suspended account access\b/i.test(text);
 }
 
+// Oldest Windows build the bundled OpenCode (a Bun-compiled binary) can run on:
+// Bun requires Windows 10 1809 / build 17763 (https://bun.com/docs/installation).
+const MIN_BUN_WINDOWS_BUILD = 17763;
+
+function hostOsOf(input: RunFailureClassificationInput): RunFailureHostOs {
+  return input.hostOs ?? { platform: process.platform, release: os.release() };
+}
+
+function windowsBuildNumber(hostOs: RunFailureHostOs): number | null {
+  if (hostOs.platform !== 'win32') return null;
+  const match = /^\d+\.\d+\.(\d+)/.exec(hostOs.release);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * The bundled OpenCode died at load time because this Windows build is older
+ * than Bun supports. On such builds the loader cannot resolve a Windows API
+ * the binary imports and the process exits with STATUS_ENTRYPOINT_NOT_FOUND
+ * (hex 0xC0000139, or Go/Node's decimal rendering 3221225785) before
+ * readiness. Two gates keep this from mislabeling other failures:
+ * - the status must sit inside vela's bundled-opencode startup wrapper
+ *   (`isManagedRuntimeStartupFailureText`), since any binary can die with a
+ *   missing entry point for unrelated reasons (a broken DLL on PATH);
+ * - the host must be Windows with a build below Bun's floor. On a supported
+ *   build the same status is not explained by the OS version and keeps its
+ *   existing path.
+ * The same binary on the same OS fails deterministically, so this is never
+ * retried.
+ */
+function isWindowsTooOldForBundledRuntime(text: string, hostOs: RunFailureHostOs): boolean {
+  const build = windowsBuildNumber(hostOs);
+  if (build === null || build >= MIN_BUN_WINDOWS_BUILD) return false;
+  return /0xc0000139|\b3221225785\b/i.test(text) && isManagedRuntimeStartupFailureText(text);
+}
+
 function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
@@ -871,7 +933,7 @@ function classification(
   const environment = [
     'auth_required', 'stale_profile', 'refresh_token_reused', 'missing_api_key',
     'invalid_api_key', 'cli_not_installed', 'git_bash_missing',
-    'agent_config_invalid', 'cpu_unsupported', 'host_policy_block',
+    'agent_config_invalid', 'cpu_unsupported', 'os_unsupported', 'host_policy_block',
     'local_storage_failure', 'certificate_failure', 'proxy_configuration',
     'network_configuration',
   ].includes(failure_detail) || localModel;
@@ -1212,6 +1274,31 @@ function classifyRunFailureBase(
     );
   }
 
+  // Concurrent refreshes of one stored OAuth credential: a second agent process
+  // (or a `claude login` run by hand) held the refresh lock, so this run's
+  // refresh aborted before a request was ever sent.
+  //
+  // Claimed ahead of every auth branch below on purpose. The agent's message
+  // ends "…or sign in again", and `auth` is fixed at `retryable: false` /
+  // `user_action: 'login'` — so reaching that verdict would tell the user to
+  // re-authenticate a credential that is perfectly valid, and strand the run.
+  // Claimed ahead of the `process_exit` fallbacks for the opposite reason:
+  // there it lands on `exit_nonzero`, which `transientSuppressedReason` refuses
+  // as a non-retryable category, which is how this surfaces today — a dead-end
+  // failure card for a condition the agent itself describes as transient.
+  //
+  // Nothing streamed and no tool ran at `session_init`, so the replay is safe
+  // and the side-effect gates in the retry policy stay satisfied.
+  if (isTransientCredentialRefreshText(text)) {
+    return classification(
+      'process_exit',
+      'credential_refresh_contention',
+      'session_init',
+      true,
+      'retry',
+    );
+  }
+
   if (errorCode === 'AGENT_UNAVAILABLE') {
     return classification(
       'process_exit',
@@ -1529,6 +1616,18 @@ function classifyRunFailureBase(
     return classification(
       'process_exit',
       'cpu_unsupported',
+      inferFailureStageFromEvents(events, 'session_init'),
+      false,
+      'none',
+    );
+  }
+
+  // Same reasoning as cpu_unsupported: the bundled runtime cannot load on this
+  // Windows build, and the fatal_rpc_error promotion below would retry it.
+  if (isWindowsTooOldForBundledRuntime(text, hostOsOf(input))) {
+    return classification(
+      'process_exit',
+      'os_unsupported',
       inferFailureStageFromEvents(events, 'session_init'),
       false,
       'none',

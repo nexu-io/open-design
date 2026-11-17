@@ -63,8 +63,17 @@ async function writeTeamProjectsVelaBin(path: string): Promise<string> {
   await writeFile(
     path,
     `#!/usr/bin/env node
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
+const stateFile = ${JSON.stringify(path + '.catalog.json')};
+const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : {};
+const catalogWorkspaceId = process.env.FAKE_CATALOG_WORKSPACE_ID ?? 'ws-team-catalog';
+const value = name => { const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1]; };
+const saveState = () => writeFileSync(stateFile, JSON.stringify(state));
+const ownedRecord = id => ({ id: 'catalog-' + id, projectId: id, workspaceId: 'ws-team-catalog',
+  resourceId: 'server-root-' + id, ownerMemberId: 'mem-team-catalog', visibility: 'private',
+  syncState: 'pending_upload', createdAt: '2026-07-31T00:00:00Z', updatedAt: '2026-07-31T00:00:00Z',
+  access: { canView: true, canComment: true, canEdit: true, frozen: false } });
 if (args[0] === 'collab') process.exit(0);
 if (args[0] === 'resource' && args[1] === 'head') {
   process.stdout.write(JSON.stringify({ version: 7, versionId: 'v7' }) + '\\n');
@@ -74,14 +83,16 @@ if (args[0] === 'resource' && args[1] === 'push') {
   process.stdout.write(JSON.stringify({ version: 8, versionId: 'v8' }) + '\\n');
   process.exit(0);
 }
-if (args[0] === 'resource' && args[1] === 'pull') {
+if ((args[0] === 'resource' || args[0] === 'team-projects') && args[1] === 'pull') {
+  const authorizeOnly = args.includes('--authorize-only');
   const failOnceFile = process.env.FAKE_PULL_FAIL_ONCE_FILE;
-  if (failOnceFile && !existsSync(failOnceFile)) {
+  if (!authorizeOnly && failOnceFile && !existsSync(failOnceFile)) {
     writeFileSync(failOnceFile, 'failed-once');
     process.stderr.write('transient pull failure\\n');
     process.exit(1);
   }
-  const targetDir = args[4];
+  const targetDir = args[0] === 'team-projects' ? args[3] : args[4];
+  if (!authorizeOnly) {
   mkdirSync(targetDir, { recursive: true });
   writeFileSync(
     targetDir + '/index.html',
@@ -91,22 +102,51 @@ if (args[0] === 'resource' && args[1] === 'pull') {
     targetDir + '/open-design.json',
     JSON.stringify({ name: 'First-open materialized project', createdAt: 1, updatedAt: 2 }),
   );
+  }
+  if (args[0] === 'team-projects') {
+    const now = Date.now();
+    process.stdout.write(JSON.stringify({ schemaVersion: 1, workspaceId: 'ws-team-catalog',
+      resourceTeamId: 'ws-team-catalog', viewerMemberId: 'mem-team-catalog',
+      ownerMemberId: 'mem-first-open-owner', projectId: args[2], resourceId: 'resource-first-open',
+      ref: 'published', version: Number(value('--expected-version')), versionId: 'v7',
+      manifestDigest: 'sha256:' + 'a'.repeat(64), lifecycleState: 'active',
+      authorizedAt: new Date(now).toISOString(), expiresAt: new Date(now + 2000).toISOString(),
+      ...(authorizeOnly ? { manifestEntryCount: 2 } : {}),
+    }) + '\\n');
+    process.exit(0);
+  }
   process.stdout.write(JSON.stringify({ version: 7, versionId: 'v7' }) + '\\n');
   process.exit(0);
 }
 if (args[0] !== 'team-projects') process.exit(1);
 if (args[1] === '--help') {
-  process.stdout.write('team-projects list\\n');
+  process.stdout.write('team-projects list get ensure-private visibility upsert remove pull\\n');
   process.exit(0);
 }
-if (args[1] === 'upsert' || args[1] === 'remove') {
+if (args[1] === 'ensure-private' || args[1] === 'visibility' || args[1] === 'upsert' || args[1] === 'remove') {
+  const record = state[args[2]] ?? ownedRecord(args[2]);
+  if (args[1] === 'visibility') record.visibility = args[3];
+  if (args[1] === 'upsert') {
+    record.resourceId = value('--resource-id') ?? record.resourceId;
+    record.displayName = value('--display-name') ?? record.displayName;
+    record.syncState = value('--sync-state') ?? record.syncState;
+    record.lastSyncedVersionId = value('--last-synced-version-id') ?? record.lastSyncedVersionId;
+    if (value('--metadata-json')) record.metadata = JSON.parse(value('--metadata-json'));
+  }
+  if (args[1] === 'remove') delete state[args[2]];
+  else state[args[2]] = record;
+  saveState();
   if (process.env.FAKE_TEAM_PROJECT_MUTATION_LOG) {
     appendFileSync(
       process.env.FAKE_TEAM_PROJECT_MUTATION_LOG,
       JSON.stringify({ args, workspaceId: process.env.OPEN_DESIGN_WORKSPACE_ID ?? null }) + '\\n',
     );
   }
-  process.stdout.write('{}\\n');
+  process.stdout.write(JSON.stringify(record) + '\\n');
+  process.exit(0);
+}
+if (args[1] === 'get' && args[2] !== 'first-open-shared-project') {
+  process.stdout.write(JSON.stringify(state[args[2]] ?? { ...ownedRecord(args[2]), visibility: 'team', syncState: 'synced', lastSyncedVersionId: 'v7' }) + '\\n');
   process.exit(0);
 }
 if (args[1] === 'get' && args[2] === 'first-open-shared-project') {
@@ -115,6 +155,7 @@ if (args[1] === 'get' && args[2] === 'first-open-shared-project') {
     workspaceId: 'ws-team-catalog',
     projectId: 'first-open-shared-project',
     resourceId: 'resource-first-open',
+    visibility: 'team',
     ownerMemberId: 'mem-first-open-owner',
     displayName: 'First-open materialized project',
     syncState: 'synced',
@@ -171,7 +212,11 @@ if (args[1] === 'list' || args[1] === undefined) {
       updatedAt: '2026-07-31T00:01:00Z',
     });
   }
-  process.stdout.write(JSON.stringify({ projects }) + '\\n');
+  process.stdout.write(JSON.stringify({ workspaceId: catalogWorkspaceId, projects: projects.map(project => ({
+    id: 'catalog-' + project.projectId, workspaceId: catalogWorkspaceId, visibility: 'team',
+    access: { canView: true, canComment: true, canEdit: project.ownerMemberId === 'mem-team-catalog', frozen: false },
+    ...project,
+  })) }) + '\\n');
   process.exit(0);
 }
 process.exit(1);
@@ -233,7 +278,7 @@ describe('team shared-project catalog', () => {
   );
 
   test(
-    'does not expose team shared projects while the active workspace is personal',
+    'reads explicitly shared projects from the active Personal workspace',
     { timeout: 240_000 },
     async () => {
       const suite = await createSmokeSuite('collab-personal-project-catalog');
@@ -253,9 +298,11 @@ describe('team shared-project catalog', () => {
             new URL('/api/workspace/projects/team', webUrl),
             { headers: workspaceHeaders(PERSONAL) },
           );
-          expect(catalog.status).toBe(403);
+          expect(catalog.status).toBe(200);
           expect(await catalog.json()).toMatchObject({
-            error: 'WORKSPACE_ACCESS_DENIED',
+            projects: [expect.objectContaining({
+              projectId: 'shared-project-1', name: 'Shared durable project',
+            })],
           });
         },
         {
@@ -263,6 +310,7 @@ describe('team shared-project catalog', () => {
             AMR_HOME: join(suite.scratchDir, 'empty-amr-home'),
             OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
             OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli',
+            FAKE_CATALOG_WORKSPACE_ID: PERSONAL.workspaceId,
             VELA_API_URL: authorityUrl,
             VELA_CONTROL_KEY: 'e2e-personal-catalog-control-key',
             VELA_BIN: velaBin,
@@ -344,17 +392,24 @@ describe('team shared-project catalog', () => {
             visibility: 'personal',
           });
 
-          // The stale upstream catalog is unavailable after the local
-          // unshare. Fail closed instead of merging its old shared row back
-          // into the authoritative local Personal state.
+          // An explicit private policy outranks a stale Team directory row.
+          // Both the all-project view and the Team-only view must preserve it.
           const list = await fetch(
             new URL(`/api/workspaces/${TEAM.workspaceId}/projects?view=all`, webUrl),
             { headers },
           );
-          expect(list.status).toBe(502);
-          expect(await list.json()).toMatchObject({
-            error: { code: 'TEAM_PROJECT_CATALOG_UNAVAILABLE' },
-          });
+          expect(list.status).toBe(200);
+          const all: { projects: Array<{ id: string; visibility: string }> } = await list.json();
+          expect(all.projects.filter(project => project.id === created.project.id))
+            .toEqual([expect.objectContaining({ id: created.project.id, visibility: 'personal' })]);
+          const team = await requestJson<{ projects: Array<{ id: string }> }>(
+            webUrl, `/api/workspaces/${TEAM.workspaceId}/projects?view=team`, { headers },
+          );
+          expect(team.projects.some(project => project.id === created.project.id)).toBe(false);
+          const after = await requestJson<{ scope: { visibility: string } }>(
+            webUrl, `/api/projects/${created.project.id}/workspace-scope`, { headers },
+          );
+          expect(after.scope.visibility).toBe('personal');
         },
         {
           env: {

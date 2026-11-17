@@ -45,6 +45,7 @@ import {
   serializeSupervisedSidecarContext,
   SIDECAR_SUPERVISED_CONTEXT_ENV,
   SIDECAR_STAMP_CONTRACT,
+  SIDECAR_ADOPT_PARENT_ARG,
   type SidecarStamp,
 } from "./stamp.js";
 
@@ -143,6 +144,7 @@ export function registerSidecarProcess(
     stamp,
     context.generationPid,
     resources,
+    context.adoptedPid,
   );
   return stamp;
 }
@@ -186,6 +188,35 @@ export async function bootstrapSidecarProcess(
     throw error;
   }
   return true;
+}
+
+/** Keep the current OS-owned application as the target of a stamped generation. */
+export async function adoptSidecarProcess(
+  stampInput: SidecarStamp,
+  resources: Omit<SidecarResources, "pid">,
+  options: { command?: string } = {},
+): Promise<{ generationPid: number }> {
+  const stamp = normalizeSidecarStamp(stampInput);
+  const existing = readSupervisedSidecarContext();
+  if (existing != null) {
+    registerSidecarProcess(stamp, resources);
+    return { generationPid: existing.generationPid };
+  }
+  const entry = import.meta.url.endsWith(".ts")
+    ? fileURLToPath(new URL("./adopted-supervisor.ts", import.meta.url))
+    : fileURLToPath(new URL("./adopted-supervisor.mjs", import.meta.url));
+  const child = await spawnLoggedProcess({
+    command: options.command ?? process.execPath,
+    args: [entry, `${SIDECAR_ADOPT_PARENT_ARG}=${process.pid}`, ...createProcessStampArgs(stamp, SIDECAR_STAMP_CONTRACT)],
+    env: { ...prepareSidecarLaunchEnvironment(process.env, resources), ELECTRON_RUN_AS_NODE: "1" },
+    logFd: null,
+  });
+  if (child.pid == null) throw new Error("adopted sidecar supervisor has no pid");
+  process.env[SIDECAR_SUPERVISED_CONTEXT_ENV] = serializeSupervisedSidecarContext(stamp, child.pid, resources, process.pid);
+  // Losing the discovery root cannot leave an undiscoverable desktop alive.
+  child.once("exit", () => { if (isProcessAlive(process.pid)) process.kill(process.pid, "SIGTERM"); });
+  child.unref();
+  return { generationPid: child.pid };
 }
 
 export async function launchSidecar(request: SidecarLaunchRequest): Promise<{ pid: number }> {
@@ -266,7 +297,12 @@ export async function convergeSidecarLaunch(
       const generationStable = ownerSnapshot != null &&
         description != null && matchesStampedProcess(ownerSnapshot, description.stamp, SIDECAR_STAMP_CONTRACT) &&
         !isSidecarLauncherCommand(ownerSnapshot.command);
-      const launcherConverged = exit != null && exit.signal == null && (
+      // A hosted desktop remains the OS application process. Its independently
+      // stamped monitor proves adoption through actual parentage; it cannot
+      // satisfy the legacy condition that the launcher has already exited.
+      const launcherAdopted = exit == null && ownerSnapshot?.ppid === launcher.pid &&
+        ownerSnapshot.command.split(/\s+/).includes(`${SIDECAR_ADOPT_PARENT_ARG}=${launcher.pid}`);
+      const launcherConverged = launcherAdopted || exit != null && exit.signal == null && (
         exit.code === 0 || exit.code === SIDECAR_LAUNCHER_RETRY_EXIT_CODE
       );
       if (launcherConverged && generationStable && description != null && ownerPid != null) {

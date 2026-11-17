@@ -138,6 +138,58 @@ function comesAfter(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
+describe('OD Next balance failure after multiple physical runs', () => {
+  const planning: ChatMessage = {
+    ...turn('planning', 'succeeded'),
+    strategyTaskExecutionId: 'task-1',
+    strategyTaskRunIndex: 0,
+  };
+  const production: ChatMessage = {
+    ...turn('production', 'failed'),
+    strategyTaskExecutionId: 'task-1',
+    strategyTaskRunIndex: 1,
+    events: [{ kind: 'status', label: 'error', code: 'AMR_INSUFFICIENT_BALANCE', amrBalanceUsd: 0 }],
+  };
+
+  it('shows the production failure card under the folded turn, including after remount', () => {
+    const props = {
+      messages: [planning, production],
+      amrBalanceCardUsd: 0,
+      amrBalanceCardAnchorMessageId: production.id,
+    };
+    const view = renderChat(props);
+    expect(cards()).toHaveLength(1);
+    expect(cards()[0]!.getAttribute('data-out')).toBe('true');
+    expect(comesAfter(screen.getByTestId('assistant-planning'), cards()[0]!)).toBe(true);
+    expect(screen.queryByTestId('assistant-production')).toBeNull();
+
+    view.rerender({ messages: [...props.messages, turn('next', 'running')] });
+    expect(cards()).toHaveLength(1);
+    expect(comesAfter(cards()[0]!, screen.getByTestId('assistant-next'))).toBe(true);
+
+    view.unmount();
+    renderChat(props);
+    expect(cards()).toHaveLength(1);
+  });
+
+  it('keeps a third-run failure attached to its own logical task', () => {
+    renderChat({
+      messages: [
+        { ...planning, id: 'other', strategyTaskExecutionId: 'other-task' },
+        planning,
+        { ...production, runStatus: 'succeeded', events: [] },
+        { ...production, id: 'revision', strategyTaskRunIndex: 2 },
+        turn('next', 'running'),
+      ],
+      amrBalanceCardUsd: 0,
+      amrBalanceCardAnchorMessageId: 'revision',
+    });
+    expect(cards()).toHaveLength(1);
+    expect(comesAfter(screen.getByTestId('assistant-planning'), cards()[0]!)).toBe(true);
+    expect(comesAfter(cards()[0]!, screen.getByTestId('assistant-next'))).toBe(true);
+  });
+});
+
 describe('T61 ① 运行中不出现', () => {
   it('锚点那一轮还在跑:读数已经有了,也一张卡都不画', () => {
     renderChat({

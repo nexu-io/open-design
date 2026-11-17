@@ -28,8 +28,9 @@ import { formatDiscordPresenceCount, useDiscordPresence } from './useDiscordPres
 import { Icon } from './Icon';
 import { SocialShareGrid } from './SocialShareGrid';
 import { enterpriseUrl } from './enterpriseUrl';
+import { communityForLocale } from '../lib/community-links';
+import { FeishuIcon } from './chat/support-brand-icons';
 
-const DISCORD_URL = 'https://discord.gg/mHAjSMV6gz';
 const X_URL = 'https://x.com/OpenDesignHQ';
 const THREADS_URL = 'https://www.threads.com/@opendesign.ai';
 const YOUTUBE_URL = 'https://www.youtube.com/@Open-Design-ai';
@@ -80,7 +81,8 @@ export function EntrySettingsMenu({
   const analytics = useAnalytics();
   const t = useT();
   const { locale, setLocale } = useI18n();
-  const discordPresence = useDiscordPresence();
+  const community = communityForLocale(locale);
+  const discordPresence = useDiscordPresence(community.platform === 'discord');
   const [open, setOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
   const [openDesignShare, setOpenDesignShare] = useState<SocialShareResponse | null>(null);
@@ -320,23 +322,26 @@ export function EntrySettingsMenu({
           </a>
           <a
             className="entry-settings-menu__item"
-            href={DISCORD_URL}
+            href={community.href}
             target="_blank"
             rel="noreferrer noopener"
             role="menuitem"
+            data-community-platform={community.platform}
             onClick={() => {
               trackSettingsPopoverClick(analytics.track, {
                 page_name: pageName,
                 area: 'settings_popover',
-                element: 'join_discord',
+                element: community.platform === 'feishu' ? 'join_feishu' : 'join_discord',
               });
               setOpen(false);
             }}
           >
             <span className="entry-settings-menu__item-icon" aria-hidden>
-              <Icon name="discord" size={14} />
+              {community.platform === 'feishu'
+                ? <FeishuIcon monochrome width={14} height={14} />
+                : <Icon name="discord" size={14} />}
             </span>
-            <span>{t('entry.discordLabel')}</span>
+            <span>{t('entry.communityLabel')}</span>
             {discordOnlineLabel ? (
               <span className="entry-settings-menu__item-meta">
                 {discordOnlineLabel}

@@ -96,7 +96,7 @@ describe('buildProxyMessages', () => {
     );
 
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(String(url)).toBe('/api/projects/project-1/raw/references/logo.png');
+    expect(String(url)).toBe('/api/projects/project-1/raw/references/logo.png?workspaceId=workspace-a&workspaceMemberId=member-a');
     const headers = new Headers((init as RequestInit).headers);
     expect(headers.get('x-od-workspace-id')).toBe('workspace-a');
     expect(headers.get('x-od-workspace-member-id')).toBe('member-a');

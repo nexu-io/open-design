@@ -94,3 +94,80 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
   daemon bridge is unit-tested and the win spec covers the legacy-executable
   identity variant.
 - Linux ships no packaged auto-update (AppImage manual) by design.
+
+## H. macOS installed launcher host (contract 1)
+
+The installer owns the Electron process and imports compatible payload code in
+that process. Older installed launchers retain their subprocess behavior when
+receiving these payloads. This migration does not change the installer version
+floor or Electron version.
+
+| Node | Coverage | Owning tests |
+| --- | --- | --- |
+| Namespace lock precedes state writes; same-version cover install adopts host | U | launcher `hosted-launcher.test.ts` |
+| Installer adoption preserves failed newer attempts and compatible last-good code, including a missing failed payload | U | launcher `hosted-launcher.test.ts` |
+| Cached-entry redirect checks LaunchServices exit status before retiring the caller | U | launcher `relaunch.test.ts` |
+| Hosted selection, delegated confirm, missing/corrupt entry fallback, later release recovery | U | launcher `hosted-launcher.test.ts` |
+| Manifest Electron/host compatibility and canonical path containment | U | launcher `hosted-launcher.test.ts` |
+| Headless duplicate-instance restore and unchanged installed identity | U, P, M | launcher + packaged managed-headless tests; mac full spec real LaunchServices headless restore; signed Dock acceptance required |
+| Adopted sidecar discovery, convergence, stop, monitor-loss exit | U (real subprocess) | sidecar `adopted-lifecycle.test.ts`, `adoption.test.ts` |
+| Running hosted resources survive pointer changes and cleanup | U | desktop `hosted-payload.test.ts` |
+| Persistent/recent Dock entry repair and namespace-scoped LaunchServices cleanup | U, M | launcher `platforms/macos/dock-entry.test.ts`, `platforms/macos/launch-services.test.ts`; signed macOS acceptance required |
+| Installed physical executable with payload logical identity across update/cold start | P | mac full spec checks both identities |
+
+Developer ID signing/notarization, Dock behavior across login/reboot and
+Background Task Management on affected macOS versions remain release gates.
+Unsigned local artifacts alone do not satisfy those gates.
+
+### Lifecycle ownership and artifact topology
+
+`launcher-proto` defines the main-process lifecycle interface and the portable
+artifact contract. `tools-pack` describes code/resource/entry paths plus host
+contract, OS, architecture and exact Electron compatibility. `launcher` validates
+those descriptions and owns the next-start journal; application packages never
+own a second hosted state machine.
+
+```text
+build:   tools-pack -> launcher-proto contract + launcher source -> installer / payload
+runtime: installed Electron -> launcher lifecycle -> selected application entry
+                                      |                     |
+                                      v                     v
+                               platform adapter       ready / candidate / relaunch intents
+```
+
+- `validateCandidate` checks staged or promoted bytes without changing runtime
+  pointers or maintaining a second candidate-state machine. The updater owns
+  download/extraction/promotion; the launcher owns compatibility and activation.
+- Activating a candidate selects and pre-arms the next start; it does not replace
+  the currently running code or restart the process.
+- A relaunch request uses the host's own PID and selected pointer. The platform
+  adapter validates and opens the installed carrier after predecessor exit.
+- Readiness confirms only the running generation, is idempotent, and never
+  confirms a failed successor. Confirmation remains retryable if either runtime
+  persistence or attempt removal fails. Headless readiness does not require a window.
+- Cold start recovers from an unconfirmed attempt using last-good or bundled
+  code inside the installed host. Only explicit manual recovery resets failure
+  evidence; cleanup asks the host whether resources are still in use.
+- System entry repair belongs to the platform adapter and cannot block business
+  readiness or cause rollback.
+
+`launcher/tests/lifecycle.test.ts` runs this protocol with injected Windows and
+Linux layouts that have no `.app`, `Contents`, or LaunchServices. These are core
+contract tests, not Windows/Linux native acceptance. Only macOS packaging opts
+into hosting in this delivery; Windows and historical outers retain legacy
+assembly, state handling and executable handoff. An old outer receiving a new
+payload remains legacy, while same-version installer replacement claims the new
+host contract and retains a newer compatible payload. Adoption preserves a failed
+newer generation's attempt and compatible last-successful pointer, so replacement
+does not silently retry that failed update. Electron and the installer
+version floor are unchanged.
+
+Review the hosted path in this order: `tools/pack/src/mac/{app,payload,prebundle}.ts`
+assembles the shared contract; `launcher/src/lifecycle.ts` resolves installation,
+claims the instance, adopts the installer, selects code, and publishes lifecycle
+operations; `launcher/src/platforms/macos/` implements OS actions; desktop and
+packaged consume that interface. `launcherHost` in installed config and `host` in
+payload manifests are the authoritative host compatibility metadata. The legacy
+manifest's platform/version/channel/namespace/executable entry retains its old
+meaning. Runtime and packaging resolve channels through the same release-domain
+rules, including preview versions and release namespaces.

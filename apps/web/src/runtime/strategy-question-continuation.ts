@@ -1,6 +1,8 @@
+import { strategyTaskProvesDelivery } from '@open-design/contracts';
 import type {
   ChatRunStatusResponse,
   StrategyTaskProjectionV2,
+  TaskDisplayProjection,
 } from '@open-design/contracts';
 
 type FetchRunStatus = (runId: string) => Promise<ChatRunStatusResponse | null>;
@@ -55,12 +57,10 @@ export function strategyBlockedMessageFields(
 /**
  * Message fields persisting ANY terminal strategy-task verdict.
  *
- * `blocked` terminates the turn's question form (above). `completed` is the
- * other verdict a surface has to remember: the daemon reached it by verifying
- * the canonical deliverable on disk, which outranks a TodoWrite snapshot the
- * agent left with stale pending items. Without the stamp the chat keeps
- * offering to "continue remaining tasks" on finished work, and accepting opens
- * a second task that can only block.
+ * `blocked` terminates the turn's question form (above). A marker-based task
+ * may complete without a usable deliverable, so only stamp delivery when the
+ * host's file check explicitly succeeded. Missing historical evidence does not
+ * imply delivery.
  *
  * Every surface observing a task projection (run-status probe, SSE settle,
  * reattach) derives its message stamp here, so the three cannot drift. Returns
@@ -71,13 +71,14 @@ export function strategySettledMessageFields(
 ):
   | { strategyTaskBlocked: true; strategyTaskBlockedText: string | null }
   | { strategyTaskDelivered: true }
+  | { taskDisplay: TaskDisplayProjection }
   | null {
   const blocked = strategyBlockedMessageFields(strategyTask);
-  if (blocked) return blocked;
-  if (strategyTask?.terminal && strategyTask.outcome === 'completed') {
-    return { strategyTaskDelivered: true };
+  if (blocked) return { ...blocked, ...(strategyTask?.display ? { taskDisplay: strategyTask.display } : {}) };
+  if (strategyTaskProvesDelivery(strategyTask)) {
+    return { strategyTaskDelivered: true, ...(strategyTask?.display ? { taskDisplay: strategyTask.display } : {}) };
   }
-  return null;
+  return strategyTask?.display ? { taskDisplay: strategyTask.display } : null;
 }
 
 /** Resolve a physical Run's task position only from the daemon's matching map.

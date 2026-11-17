@@ -267,7 +267,7 @@ function normalizePromptSource(value: unknown): VersionPromptSource | undefined 
 }
 
 function normalizeVersionSource(value: unknown): VersionSource | undefined {
-  return value === 'ai' || value === 'manual' || value === 'restore' ? value : undefined;
+  return value === 'ai' || value === 'manual' || value === 'restore' || value === 'sync' ? value : undefined;
 }
 
 function inferVersionSource(

@@ -56,17 +56,20 @@ export async function checkUpdateRestartSafety(input: {
   try {
     const baseUrl = (await input.discoverDaemonBaseUrl()).replace(/\/$/, "");
     if (baseUrl.length === 0) throw new Error("daemon URL is unavailable");
-    const response = await (input.fetchImpl ?? fetch)(`${baseUrl}/api/runs?status=active`, {
+    // A count-only, loopback-only route: the unscoped `GET /api/runs` listing
+    // refuses host callers once any run belongs to a Workspace-bound project.
+    const response = await (input.fetchImpl ?? fetch)(`${baseUrl}/api/runs/active-count`, {
       cache: "no-store",
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(input.timeoutMs ?? 1500),
     });
     if (!response.ok) throw new Error(`active runs request failed with ${response.status}`);
     const payload: unknown = await response.json();
-    if (!isRecord(payload) || !Array.isArray(payload.runs)) {
+    if (!isRecord(payload)) throw new Error("active runs response is invalid");
+    const activeRunCount = payload.activeRunCount;
+    if (typeof activeRunCount !== "number" || !Number.isSafeInteger(activeRunCount) || activeRunCount < 0) {
       throw new Error("active runs response is invalid");
     }
-    const activeRunCount = payload.runs.length;
     return activeRunCount === 0
       ? { activeRunCount: 0, state: "clear" }
       : { activeRunCount, state: "blocked" };

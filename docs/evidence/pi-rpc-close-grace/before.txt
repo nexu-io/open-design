@@ -1,0 +1,21 @@
+FAIL  tests/runtimes/pi-rpc-run-close.test.ts > Pi RPC public Run close > keeps 'nonzero' as 'failed' when the Pi process remains alive after EOF
+AssertionError: expected 'succeeded' to be 'failed' // Object.is equality
+
+Expected: "failed"
+Received: "succeeded"
+
+ ❯ tests/runtimes/pi-rpc-run-close.test.ts:104:41
+    102|     }
+    103|     const run = await waitForStatus(started.url, runId, run => ['succe…
+    104|     expect(run.status, run.error ?? '').toBe(expected);
+       |                                         ^
+    105|     if (mode === 'success') {
+    106|       expect(run.signal).toBe('SIGTERM');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  20:54:30
+   Duration  13.19s (transform 3.82s, setup 20ms, import 4.96s, tests 8.12s, environment 0ms)

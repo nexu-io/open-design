@@ -114,8 +114,8 @@ describe('personal card loading with directory-only workspace context', () => {
     globalThis.fetch = vi.fn(() => new Promise<Response>(() => {}));
     renderRail(tier, 'zh-CN', null);
     expect(planHead().el.getAttribute('aria-label')).toBe(tier);
-    expect(screen.queryAllByTestId('coding-plan-skeleton-block')).toHaveLength(blocks);
-    expect(screen.getByTestId('coding-plan-wallet-skeleton')).toBeTruthy();
+    expect(screen.queryAllByTestId('workspace-quota-window-skeleton')).toHaveLength(1);
+    expect(screen.getByTestId('workspace-quota-wallet-skeleton')).toBeTruthy();
     expect(screen.queryByTestId('entry-nav-credits-row')).toBeNull();
   });
 });

@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
 import {
+  notifyWorkspaceContextRefresh,
   resetWorkspaceContextCache,
   useWorkspaceContext,
 } from '../../src/collab/useWorkspaceContext';
@@ -205,7 +206,7 @@ describe('workspace switch — seeding the context from the PUT response', () =>
     });
   });
 
-  it('clears a cached Team selection when the authoritative directory becomes signed-out empty', async () => {
+  it('clears a cached Team selection after explicit sign-out and an empty directory', async () => {
     let signedOut = false;
     let contextReads = 0;
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -233,7 +234,7 @@ describe('workspace switch — seeding the context from the PUT response', () =>
 
     signedOut = true;
     act(() => {
-      window.dispatchEvent(new Event('od:workspace-context-refresh'));
+      notifyWorkspaceContextRefresh();
     });
 
     await waitFor(() =>

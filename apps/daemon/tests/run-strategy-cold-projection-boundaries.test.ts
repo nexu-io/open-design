@@ -178,8 +178,7 @@ async function coldStatus(fixture: Awaited<ReturnType<typeof seed>>, strategy = 
   const persistedTask = getStrategyTaskExecutionByRunId(db, fixture.runId);
   if (strategy) {
     expect(persistedTask).toMatchObject({
-      taskExecutionId: TASK, outcome: 'blocked', snapshotId: fixture.snapshotId,
-      blockedContext: { reasonCodes: [REASON] },
+      taskExecutionId: TASK, outcome: 'completed', snapshotId: fixture.snapshotId,
     });
   } else expect(persistedTask).toBeNull();
   return readStatus(await serve(db, newRuns(fixture.root), fixture.root), fixture.runId);

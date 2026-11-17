@@ -173,7 +173,7 @@ describe('ProjectSearchModal keyboard navigation', () => {
 
     const image = screen.getByTestId('project-search-item-team-project').querySelector('img');
     expect(image?.getAttribute('src')).toBe(
-      '/api/projects/team-project/raw/cover.png?v=4000',
+      '/api/projects/team-project/raw/cover.png?workspaceId=workspace-team&workspaceMemberId=member-1&v=4000',
     );
   });
 });

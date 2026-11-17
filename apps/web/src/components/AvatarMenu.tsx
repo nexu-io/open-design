@@ -631,10 +631,13 @@ export function AvatarMenu({
                               role="radio"
                               aria-checked={active}
                               aria-disabled={locked ? 'true' : undefined}
+                              /* Rows ellipsise to a shared prefix; the full
+                                 name must stay reachable on hover. A locked
+                                 row keeps its upgrade reason. */
                               title={
                                 locked
                                   ? t('settings.amrModelUpgradeHint')
-                                  : undefined
+                                  : model.label
                               }
                               className={`avatar-model-option${active ? ' is-active' : ''}${
                                 locked ? ' is-locked' : ''
@@ -809,6 +812,7 @@ export function AvatarMenu({
                           type="button"
                           role="radio"
                           aria-checked={active}
+                          title={model.label}
                           className={`avatar-model-option${active ? ' is-active' : ''}`}
                           data-testid={`avatar-model-option-${model.id}`}
                           onClick={() => {

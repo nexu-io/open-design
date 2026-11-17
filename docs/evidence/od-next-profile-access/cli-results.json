@@ -1,0 +1,125 @@
+{
+  "baseline": "9724c44142ea0afaee3d207f37901b31c66a44ad",
+  "host": "macOS 27.0.1 arm64",
+  "node": "24.19.0",
+  "opencode": "0.0.0--202610200818",
+  "runtimePackage": "@powerformer/vela-cli-darwin-arm64@0.1.7",
+  "evidenceBoundary": "Real OpenCode CLI and file tools, with a deterministic loopback OpenAI-compatible SSE provider. Paths normalized; verbose deny-rule dumps omitted. No real model service or credentials.",
+  "results": [
+    {
+      "case": "before",
+      "exitCode": 0,
+      "timedOut": false,
+      "localProviderRequests": 2,
+      "tools": [
+        {
+          "tool": "read",
+          "status": "error",
+          "input": {
+            "filePath": "<checkout>/plugins/_official/scenarios/od-next-strategy/assets/task-profiles/prototype.md",
+            "limit": 5
+          },
+          "error": "The user rejected permission to use this specific tool call."
+        }
+      ],
+      "stderr": "! permission requested: external_directory (<checkout>/plugins/_official/scenarios/od-next-strategy/assets/task-profiles/*); auto-rejecting\n"
+    },
+    {
+      "case": "after",
+      "exitCode": 0,
+      "timedOut": false,
+      "localProviderRequests": 3,
+      "tools": [
+        {
+          "tool": "read",
+          "status": "completed",
+          "input": {
+            "filePath": "<checkout>/plugins/_official/scenarios/od-next-strategy/assets/task-profiles/prototype.md",
+            "limit": 5
+          },
+          "output": "<path><checkout>/plugins/_official/scenarios/od-next-strategy/assets/task-profiles/prototype.md</path>\n<type>file</type>\n<content>\n1: # OD Next Prototype Task Profile v3.1.9\n2: \n3: > Rollout: active\n4: \n5: Task routing, clarification, Build, and the ship-on-write boundary follow the\n\n(Showing lines 1-5 of 447. Use offset=6 to continue.)\n</content>"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "case": "sibling",
+      "exitCode": 0,
+      "timedOut": false,
+      "localProviderRequests": 2,
+      "tools": [
+        {
+          "tool": "read",
+          "status": "error",
+          "input": {
+            "filePath": "<checkout>/plugins/_official/scenarios/od-next-strategy/assets/core-system-prompt.md",
+            "limit": 5
+          },
+          "error": "The user rejected permission to use this specific tool call."
+        }
+      ],
+      "stderr": "! permission requested: external_directory (<checkout>/plugins/_official/scenarios/od-next-strategy/assets/*); auto-rejecting\n"
+    },
+    {
+      "case": "edit",
+      "exitCode": 0,
+      "timedOut": false,
+      "localProviderRequests": 3,
+      "tools": [
+        {
+          "tool": "write",
+          "status": "error",
+          "input": {
+            "filePath": "<fixture>/protected/task-profiles/prototype.md",
+            "content": "changed by tool\n"
+          },
+          "error": "The user has specified a rule which prevents you from using this specific tool call."
+        }
+      ],
+      "stderr": "",
+      "originalContent": "protected resource\n",
+      "contentAfter": "protected resource\n",
+      "unchanged": true
+    },
+    {
+      "case": "git-edit",
+      "exitCode": 0,
+      "timedOut": false,
+      "localProviderRequests": 3,
+      "tools": [
+        {
+          "tool": "write",
+          "status": "error",
+          "input": {
+            "filePath": "<fixture>/protected/task-profiles/prototype.md",
+            "content": "changed by tool\n"
+          },
+          "error": "The user has specified a rule which prevents you from using this specific tool call."
+        }
+      ],
+      "stderr": "",
+      "originalContent": "protected resource\n",
+      "contentAfter": "protected resource\n",
+      "unchanged": true
+    },
+    {
+      "case": "project-write",
+      "exitCode": 0,
+      "timedOut": false,
+      "localProviderRequests": 3,
+      "tools": [
+        {
+          "tool": "write",
+          "status": "completed",
+          "input": {
+            "filePath": "<fixture>/project/output.md",
+            "content": "changed by tool\n"
+          },
+          "output": "Wrote file successfully."
+        }
+      ],
+      "stderr": "",
+      "contentAfter": "changed by tool\n"
+    }
+  ]
+}

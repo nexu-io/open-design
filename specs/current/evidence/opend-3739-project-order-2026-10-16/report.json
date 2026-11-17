@@ -1,0 +1,54 @@
+{
+  "startedAt": "2026-10-16T06:42:47.561Z",
+  "base": "http://127.0.0.1:17773",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "before": {
+    "recency-demo-d": null,
+    "recency-demo-c": 1792112400000,
+    "recency-demo-b": 1792119600000,
+    "recency-demo-a": 1792116000000
+  },
+  "assertions": [],
+  "homeBefore": [
+    "排序验收 B · 11:00",
+    "排序验收 A · 10:00",
+    "排序验收 C · 9:00",
+    "排序验收 D · 从未发送"
+  ],
+  "dropdownCurrentC": [
+    "排序验收 C · 9:00",
+    "排序验收 B · 11:00",
+    "排序验收 A · 10:00",
+    "排序验收 D · 从未发送"
+  ],
+  "dropdownCurrentA": [
+    "排序验收 A · 10:00",
+    "排序验收 B · 11:00",
+    "排序验收 C · 9:00",
+    "排序验收 D · 从未发送"
+  ],
+  "homeAfter": [
+    "排序验收 B · 11:00",
+    "排序验收 A · 10:00",
+    "排序验收 C · 9:00",
+    "排序验收 D · 从未发送"
+  ],
+  "homeAfterReload": [
+    "排序验收 B · 11:00",
+    "排序验收 A · 10:00",
+    "排序验收 C · 9:00",
+    "排序验收 D · 从未发送"
+  ],
+  "after": {
+    "recency-demo-d": null,
+    "recency-demo-c": 1792112400000,
+    "recency-demo-b": 1792119600000,
+    "recency-demo-a": 1792116000000
+  },
+  "result": "PASS",
+  "browser": "155.0.8059.80",
+  "completedAt": "2026-10-16T06:42:53.973Z"
+}

@@ -6,6 +6,7 @@ await build({
   entryPoints: [
     "./src/index.ts",
     "./src/critique.ts",
+    "./src/prompts/comment-identity.ts",
     "./src/api/connectionTest.ts",
     "./src/api/amrWallet.ts",
     "./src/api/orbit.ts",
@@ -17,6 +18,7 @@ await build({
     "./src/api/touchpointOffline.ts",
     "./src/api/touchpointTestRuntime.ts",
     "./src/runtime/deck-stage-fallback.ts",
+    "./src/runtime/motion-source-player.ts",
     "./src/runtime/deck-protocol.ts",
     "./src/runtime/preview-observability.ts",
     "./src/runtime/preview-build-focus.ts",

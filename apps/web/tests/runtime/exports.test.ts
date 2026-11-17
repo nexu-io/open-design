@@ -485,6 +485,14 @@ describe('exportProjectAsPdf', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([{}, { ok: 'true' }, null])('does not confirm saving from an invalid PDF acknowledgement %j', async body => {
+    const fallback = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(body)));
+    const result = await exportProjectAsPdf({ deck: false, fallbackPdf: fallback, filePath: 'index.html', projectId: 'proj-1', title: 'Page' });
+    expect(result).toBe('fallback');
+    expect(fallback).toHaveBeenCalledOnce();
+  });
   it('uses the daemon desktop PDF export API before falling back to browser print', async () => {
     const fallback = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));

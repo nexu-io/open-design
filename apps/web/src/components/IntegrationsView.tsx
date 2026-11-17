@@ -1,3 +1,4 @@
+import { usePageNavigationReady } from '../observability/navigation-timing';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AppConfig } from '../types';
@@ -61,6 +62,7 @@ export function IntegrationsView({
     trackPageView(analytics.track, { page_name: 'integrations' });
   }, [analytics.track]);
   const [activeTab, setActiveTab] = useState<IntegrationTab>(initialTab);
+  usePageNavigationReady({ page: 'integrations', visible: true, ready: activeTab === 'use-everywhere' || (activeTab === 'connectors' && !composioConfigLoading) });
   const [localConfig, setLocalConfig] = useState<AppConfig>(config);
   const localConfigRef = useRef(localConfig);
 
@@ -162,7 +164,7 @@ export function IntegrationsView({
       </nav>
 
       <div className="integrations-view__panel">
-        {activeTab === 'mcp' ? <McpClientSection /> : null}
+        {activeTab === 'mcp' ? <McpClientSection navigationPage="integrations" /> : null}
 
         {activeTab === 'connectors' ? (
           <ConnectorSection

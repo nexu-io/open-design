@@ -12,7 +12,7 @@
     "description": "Official OpenDesign plugin registry seed. The generated public catalog is served from open-design.ai/marketplace.",
     "version": "0.1.0",
     "generatedFrom": "plugins/_official",
-    "bundledPreinstallCount": 414
+    "bundledPreinstallCount": 419
   },
   "plugins": [
     {
@@ -12046,6 +12046,146 @@
         "presentation"
       ],
       "homepage": "https://github.com/nexu-io/html-video/tree/main/templates/vfx-text-cursor",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/example-motion-future",
+      "title": "The Future Is Already Here",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/motion-future",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "description": "A 20-second electric-blue tech reel, rebuilt from the viral original: 3D cubes, a word tunnel, liquid chrome type, a FUTURE.EXE desktop, a countdown, glass objects and a chrome FUTURE hero, cut to 120 BPM.",
+      "tags": [
+        "example",
+        "first-party",
+        "video",
+        "motion-design",
+        "tech",
+        "3d",
+        "kinetic-typography",
+        "viral-remake"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/example-motion-showreel",
+      "title": "Motion Designer Showreel",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/motion-showreel",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "description": "A 15-second motion designer showreel at 128 BPM, rebuilt from the viral original: an Open Design mark opener, a stretching wordmark, six easing curves, a morphing shape, a truchet field, a 3D point cloud, kinetic type and an end card.",
+      "tags": [
+        "example",
+        "first-party",
+        "video",
+        "motion-design",
+        "showreel",
+        "kinetic-typography",
+        "shape-morph",
+        "viral-remake"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/example-motion-ui-morph",
+      "title": "One-Shape UI Motion",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/motion-ui-morph",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "description": "A 14-second code-only UI motion piece, rebuilt from the viral original: one shape morphs from a button into a loader, player, slider, toggle, tabs, chart, command palette and toast, driven by a cursor at 120 BPM.",
+      "tags": [
+        "example",
+        "first-party",
+        "video",
+        "motion-design",
+        "ui-animation",
+        "interaction",
+        "product",
+        "viral-remake"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/example-motion-product-promo",
+      "title": "Product Promo",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/motion-product-promo",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "description": "A 15-second product promo rebuilt from the viral original with a fictional brand: a halftone mascot asks \"Got something to sell?\", product cards pop onto blue, a phone store fills in, a checkout board is stamped \"Handled.\" and the wordmark closes it.",
+      "tags": [
+        "example",
+        "first-party",
+        "video",
+        "motion-design",
+        "product-promo",
+        "halftone",
+        "ui-motion",
+        "viral-remake"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design",
+      "license": "Apache-2.0",
+      "mode": "video",
+      "taskKind": "new-generation"
+    },
+    {
+      "name": "open-design/example-motion-visual-lesson",
+      "title": "Bring Ideas to Life",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/motion-visual-lesson",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject"
+      ],
+      "description": "A 20-second paper-cutout story: a girl asks OpenDesign what it can design. Interactive prototypes, websites, PPT, posters and motion films unfold into a book of possibilities. It starts with your idea.",
+      "tags": [
+        "example",
+        "first-party",
+        "video",
+        "motion-design",
+        "paper-cutout",
+        "storytelling",
+        "illustration",
+        "viral-remake"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design",
       "license": "Apache-2.0",
       "mode": "video",
       "taskKind": "new-generation"

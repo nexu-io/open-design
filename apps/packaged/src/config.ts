@@ -1,5 +1,8 @@
+import { readLauncherHost } from "@open-design/launcher-proto";
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+
+import { type AmrEndpointBinding, parseAmrEndpointBinding } from "@open-design/contracts";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
 
@@ -11,6 +14,9 @@ async function loadElectronApp() {
   const electron = await import("electron");
   return electron.app;
 }
+
+/** The host's code resources may differ from its installed executable. */
+function packagedResourcesPath(): string { return readLauncherHost()?.running.resourcesPath ?? process.resourcesPath; }
 
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
@@ -25,6 +31,7 @@ export type PackagedVelaWebUrls = Partial<Record<PackagedAmrProfile, string>>;
 
 export type RawPackagedConfig = {
   amrProfile?: string;
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion?: string;
   daemonCliEntryRelative?: string;
   daemonSidecarEntryRelative?: string;
@@ -59,6 +66,7 @@ export type RawPackagedConfig = {
 
 export type PackagedConfig = {
   amrProfile: PackagedAmrProfile | null;
+  amrEndpointBinding?: AmrEndpointBinding;
   appVersion: string | null;
   daemonCliEntry: string | null;
   daemonSidecarEntry: string | null;
@@ -92,11 +100,14 @@ async function readJsonIfExists(filePath: string): Promise<RawPackagedConfig | n
 }
 
 function resolveDefaultConfigPath(): string {
-  return join(process.resourcesPath, "open-design-config.json");
+  return join(packagedResourcesPath(), "open-design-config.json");
 }
 
 async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
-  const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
+  // A tools-pack cold start may still name the installed outer's config.
+  // Hosted payload code must read its own version/resources, with only the
+  // namespace root frozen by the host.
+  const explicit = readLauncherHost()?.running.source === "payload" ? undefined : process.env[PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));
     if (config == null) throw new Error(`packaged config not found at ${explicit}`);
@@ -170,13 +181,13 @@ function resolvePackagedWebStandaloneRoot(
   const configured = resolveOptionalPath(value);
   if (configured != null) return configured;
   if (webOutputMode !== "standalone") return null;
-  return join(process.resourcesPath, "open-design-web-standalone");
+  return join(packagedResourcesPath(), "open-design-web-standalone");
 }
 
 async function resolvePackagedRelativeEntry(value: string | undefined): Promise<string | null> {
   const cleaned = cleanOptionalString(value);
   if (cleaned == null) return null;
-  const entry = join(process.resourcesPath, cleaned);
+  const entry = join(packagedResourcesPath(), cleaned);
   if (!(await pathExists(entry))) {
     throw new Error(`configured packaged entry not found at ${entry}`);
   }
@@ -185,20 +196,21 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 
 export async function readPackagedConfig(): Promise<PackagedConfig> {
   const raw = await readRawPackagedConfig();
+  const amrEndpointBinding = parseAmrEndpointBinding(raw.amrEndpointBinding);
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
   const electronApp = await loadElectronApp();
-  const namespaceBaseRoot = resolvePackagedNamespaceBaseRoot(
+  const namespaceBaseRoot = readLauncherHost()?.namespaceBaseRoot ?? resolvePackagedNamespaceBaseRoot(
     raw.namespaceBaseRoot,
     electronApp.getPath("userData"),
   );
-  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
+  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(packagedResourcesPath(), "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
       ? join("open-design", "bin", "node")
       : raw.nodeCommandRelative;
-  const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
+  const nodeCommandCandidate = join(packagedResourcesPath(), relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
   const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);
   const webOutputMode = resolvePackagedWebOutputMode(
@@ -217,7 +229,8 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
   const webSidecarEntry = await resolvePackagedRelativeEntry(raw.webSidecarEntryRelative);
 
   return {
-    amrProfile: resolvePackagedAmrProfile(raw.amrProfile),
+    amrEndpointBinding,
+    amrProfile: amrEndpointBinding?.profile ?? resolvePackagedAmrProfile(raw.amrProfile),
     appVersion: cleanOptionalString(raw.appVersion),
     daemonCliEntry,
     daemonSidecarEntry,
@@ -229,8 +242,11 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),
-    velaWebUrl: cleanOptionalString(raw.velaWebUrl),
-    velaWebUrls: cleanVelaWebUrls(raw.velaWebUrls),
+    velaWebUrl: amrEndpointBinding?.webUrl ?? cleanOptionalString(raw.velaWebUrl),
+    velaWebUrls: {
+      ...cleanVelaWebUrls(raw.velaWebUrls),
+      ...(amrEndpointBinding ? { [amrEndpointBinding.profile]: amrEndpointBinding.webUrl } : {}),
+    },
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

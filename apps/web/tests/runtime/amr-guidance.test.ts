@@ -105,10 +105,10 @@ describe('workspace-scoped AMR URLs', () => {
   it('pins both console links to the workspace', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?workspaceId=workspace-a&source=open_design`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?workspaceId=workspace-a&source=open_design&billing=plan`,
     );
   });
 
@@ -324,6 +324,20 @@ describe('resolveRunFailureUi', () => {
         messageKey: 'chat.runError.cpuUnsupportedMessage',
         secondaryRetry: false,
         cloudSwitchCta: agent !== 'amr',
+      });
+    }
+  });
+
+  // os_unsupported: the bundled runtime cannot load on a Windows build older
+  // than 10 1809. Same deterministic shape as cpu_unsupported — no Retry; the
+  // card names the OS version so the user stops retrying and updates Windows.
+  it('maps os_unsupported to Windows-version guidance without retry', () => {
+    for (const agent of ['claude', 'codex', 'amr', null]) {
+      expect(resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'os_unsupported', agent)).toMatchObject({
+        primaryAction: 'contact-support',
+        titleKey: 'chat.runError.title.osUnsupported',
+        messageKey: 'chat.runError.osUnsupportedMessage',
+        secondaryRetry: false,
       });
     }
   });

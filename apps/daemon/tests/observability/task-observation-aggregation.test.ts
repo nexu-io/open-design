@@ -433,6 +433,19 @@ describe('strategy task observation aggregation', () => {
     ]));
   });
 
+  it('keeps physical failure visible after the logical task ends', () => {
+    const ended = task('completed');
+    ended.runs.at(-1)!.settlementReason = 'ended';
+    ended.runs.at(-1)!.settlementFacts = { physicalStatus: 'failed', deliverableValid: false };
+    const aggregate = aggregateStrategyTaskObservations({ task: ended,
+      observations: RUNS.map(run => runObservation(run, run.inputStage === 'production' ? { status: 'failed' } : {})),
+    });
+    expect(aggregate.root.status).toBe('failed');
+    expect(aggregate.root.roundSettlements).toEqual([{ runId: 'run-production', reason: 'ended',
+      facts: { physicalStatus: 'failed', deliverableValid: false } }]);
+    expect(aggregate.stageTotals.at(-1)?.runStatuses).toEqual(['failed']);
+  });
+
   it('keeps canceled as a distinct task and Run terminal', () => {
     const facts = RUNS.map((run) => runObservation(run, run.inputStage === 'production'
       ? { status: 'canceled' }

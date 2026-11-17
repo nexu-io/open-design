@@ -210,6 +210,8 @@ describe('Website Clone main path', () => {
         });
       }, {
         env: {
+          // This recon fixture exercises legacy web-clone Skill staging.
+          OD_NEXT_STRATEGY_ROLLOUT: 'off',
           CODEX_BIN: fakeCodex,
           OD_BROWSER_EXECUTABLE_PATH: browserExecutable,
         },

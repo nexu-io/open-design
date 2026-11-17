@@ -22,7 +22,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTouchpointContentCache } from '../src/routes/touchpoint-content-cache.js';
+import { createTouchpointContentCache as createCache } from '../src/routes/touchpoint-content-cache.js';
+
+// Cache-only cold-start fixtures release the prior owner's OS lock. Real
+// overlapping owners and SIGKILL are covered by the child-process suite.
+const fixtureCaches = new Map<string, ReturnType<typeof createCache>>();
+function createTouchpointContentCache(directory: string) {
+  fixtureCaches.get(directory)?.close();
+  const cache = createCache(directory);
+  fixtureCaches.set(directory, cache);
+  return cache;
+}
+afterEach(() => { for (const cache of fixtureCaches.values()) cache.close(); fixtureCaches.clear(); });
 
 const digest = (value: string) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const base64 = (value: string) => Buffer.from(value, 'utf8').toString('base64');
@@ -604,5 +615,57 @@ describe('offline schedule cache', () => {
     vi.setSystemTime(T0 + HOUR);
     const restarted = createTouchpointContentCache(dataDir);
     expect(restarted.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+});
+
+
+describe('generation provenance and durable renewal failures', () => {
+  it('v2 legacy authority reuses verified bytes but requires first online authorization for each key', () => {
+    const writer = createTouchpointContentCache(dataDir);
+    const alias = { ...MODAL, locale: 'zh-TW' };
+    writer.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    writer.remember(alias, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    for (const file of storedBlobs().filter(file => file.includes(`${path.sep}assemblies${path.sep}`))) {
+      const record = JSON.parse(fs.readFileSync(file, 'utf8')); record.version = 2; delete record.generation;
+      fs.writeFileSync(file, JSON.stringify(record));
+    }
+    const reader = createTouchpointContentCache(dataDir);
+    expect(reader.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+    expect(reader.replayOffline(alias, 'upstream_unreachable')).toBeNull();
+    const held = reader.held(MODAL)!; expect(held).not.toBeNull();
+    vi.advanceTimersByTime(1_000);
+    const { content: _content, ...envelope } = fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY, { serverTime: iso(T0 + 1_000) });
+    expect(reader.reassemble(MODAL, held, { ...envelope, contentOmitted: true })).not.toBeNull();
+    expect(reader.replayOffline(MODAL, 'upstream_unreachable')).not.toBeNull();
+    expect(reader.replayOffline(alias, 'upstream_unreachable')).toBeNull();
+  });
+  it.each(['missing', 'corrupt'])('generation-tagged records cannot replay with %s journal', fault => {
+    const writer = createTouchpointContentCache(dataDir);
+    writer.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY)); writer.close();
+    const journal = storedBlobs().find(file => file.endsWith('replay-authority.json'))!;
+    if (fault === 'missing') fs.rmSync(journal); else fs.writeFileSync(journal, '{corrupt');
+    const reader = createTouchpointContentCache(dataDir);
+    expect(reader.held(MODAL)).not.toBeNull(); expect(reader.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+  });
+  it.each(['full', 'trimmed'].flatMap(kind => ['file-fsync', 'directory-fsync'].map(fault => [kind, fault] as const)))
+  ('%s renewal with %s failure never settles old replay eligibility', (kind, fault) => {
+    const writer = createTouchpointContentCache(dataDir);
+    writer.remember(MODAL, fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY));
+    const held = writer.held(MODAL)!;
+    const token = writer.beginAuthority(MODAL.scope)!; expect(token).not.toBeNull();
+    vi.advanceTimersByTime(1_000);
+    const original = fs.fsyncSync;
+    vi.spyOn(fs, 'fsyncSync').mockImplementation(fd => {
+      if (fs.fstatSync(fd).isDirectory() === (fault === 'directory-fsync')) throw new Error('sync failure');
+      original(fd);
+    });
+    const response = fullResponse(MODAL.placementKey, 'modal.js', MODAL_ENTRY, { serverTime: iso(T0 + 1_000), endsAt: iso(T0 + 2_000) });
+    if (kind === 'full') writer.remember(MODAL, response);
+    else { const { content: _content, ...envelope } = response; writer.reassemble(MODAL, held, { ...envelope, contentOmitted: true }); }
+    writer.settleAuthority(MODAL.scope, token);
+    expect(writer.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
+    vi.restoreAllMocks(); writer.close();
+    const reader = createTouchpointContentCache(dataDir);
+    expect(reader.replayOffline(MODAL, 'upstream_unreachable')).toBeNull();
   });
 });

@@ -37,7 +37,7 @@ import { CollabProvider } from '../../src/collab/collab-context';
 import { workspaceContextFixture } from '../helpers/workspace-context';
 
 const PROJECT_ID = 'c7e3b234-2fb3-4f6e-8aae-a3a00697c476';
-const raw = (name: string) => `/api/projects/${PROJECT_ID}/raw/${name}`;
+const raw = (name: string) => `/api/projects/${PROJECT_ID}/raw/${name}?workspaceId=workspace-a&workspaceMemberId=member-a`;
 const COVER = '/api/projects/p1/chat-artifact-snapshots/snap-html-1/thumbnail';
 
 /*
@@ -236,7 +236,7 @@ describe('反向对照 · 产品行为原样', () => {
     const card = cardOf('deck.html');
     const img = card.querySelector<HTMLImageElement>('img.artifact-card-media');
     expect(img, '有 coverUrl 就该是静态截图 <img>').not.toBeNull();
-    expect(img!.getAttribute('src')).toBe(COVER);
+    expect(img!.getAttribute('src')).toBe(`${COVER}?workspaceId=workspace-a&workspaceMemberId=member-a`);
     expect(card.querySelector('iframe')).toBeNull();
   });
 

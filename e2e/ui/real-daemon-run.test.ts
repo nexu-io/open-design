@@ -297,7 +297,7 @@ for (const strategyMode of ['active', 'off'] as const) {
   });
 }
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next form answers start a new task after the question run ends', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -314,22 +314,23 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   await expect.poll(async () => {
     const response = await page.request.get(`/api/runs/${created.runId}`);
     return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
-  }, { timeout: 20_000 }).toBe('clarification_required');
+  }, { timeout: 20_000 }).toBe('completed');
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
   await form.getByText('Desktop web', { exact: true }).click();
   const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await form.getByRole('button', { name: 'Send answers' }).click();
+  await form.getByRole('button', { name: 'Next', exact: true }).click();
   const clarificationResponse = await clarificationResponsePromise;
   const clarificationText = await clarificationResponse.text();
   expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
   const clarification = JSON.parse(clarificationText) as {
+    runId: string;
     taskExecutionId: string;
     strategyTask?: { inputStage: string };
   };
-  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
-  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+  expect(clarification.taskExecutionId).not.toBe(created.taskExecutionId);
+  expect(clarification.strategyTask?.inputStage).toBe('request');
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
@@ -337,18 +338,18 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
     'Created od-next-active-canary.html through the continued native session.',
   ).last()).toBeVisible();
   await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${created.runId}`);
+    const response = await page.request.get(`/api/runs/${clarification.runId}`);
     return (await response.json() as {
       strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
-    taskExecutionId: created.taskExecutionId,
+    taskExecutionId: clarification.taskExecutionId,
     outcome: 'completed',
     terminal: true,
   });
 });
 
-test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {
+test('[P0] local OD Next public canaries preserve normal no-artifact endings and cancellation', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -368,7 +369,7 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
     }).strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
     taskExecutionId: blocked.taskExecutionId,
-    outcome: 'blocked',
+    outcome: 'completed',
     terminal: true,
   });
 
@@ -393,7 +394,7 @@ test('[P0] local OD Next public canaries project blocked and canceled terminal m
   });
 });
 
-test('[P0] OD Next app-config switch takes effect immediately and rejects invalid modes atomically', async ({ page }) => {
+test('[P0] OD Next retired app-config preference preserves the active default and rejects invalid modes atomically', async ({ page }) => {
   const readRollout = async () => {
     const response = await page.request.get('/api/strategies/od-next/rollout');
     expect(response.ok(), await response.text()).toBeTruthy();
@@ -412,7 +413,7 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
   expect(activeWrite.ok(), await activeWrite.text()).toBeTruthy();
   await expect.poll(readRollout).toMatchObject({
     requestedMode: 'active',
-    requestedModeSource: 'app_config',
+    requestedModeSource: 'default',
     effectiveMode: 'active',
   });
 
@@ -432,7 +433,7 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
   });
   await expect.poll(readRollout).toMatchObject({
     requestedMode: 'active',
-    requestedModeSource: 'app_config',
+    requestedModeSource: 'default',
     effectiveMode: 'active',
   });
   const afterInvalid = await page.request.get('/api/app-config');
@@ -444,9 +445,9 @@ test('[P0] OD Next app-config switch takes effect immediately and rejects invali
   });
   expect(offWrite.ok(), await offWrite.text()).toBeTruthy();
   await expect.poll(readRollout).toMatchObject({
-    requestedMode: 'off',
-    requestedModeSource: 'app_config',
-    effectiveMode: 'off',
+    requestedMode: 'active',
+    requestedModeSource: 'default',
+    effectiveMode: 'active',
   });
 });
 
@@ -888,6 +889,7 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     expectedUserMessages: 1,
+    expectedAssistantMessages: 2,
     expectedThinking: false,
   });
 });
@@ -1016,35 +1018,33 @@ test('[P1] real daemon run survives reload before the create response reaches th
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     requireRunId: true,
+    expectedAssistantMessages: 2,
     expectedThinking: false,
   });
 });
 
-test('[P0] empty daemon output fails cleanly, persists after reload, and does not leave ghost files', async ({ page }) => {
-  await createProject(page, 'Empty daemon failure smoke');
+// P0-24 Q6 (PRD failure rule; test case X08): a CLI that exits cleanly without
+// output is not a failure. After the existing automatic retry the turn ends
+// normally — no failure card, no failure status — and still leaves no files.
+test('[P0] empty daemon output ends normally, persists after reload, and does not leave ghost files', async ({ page }) => {
+  await createProject(page, 'Empty daemon output smoke');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Return an empty daemon smoke response');
 
-  const rawError = 'Agent completed without producing any output.';
-  const card = runErrorCard(page);
-  await expect(card).toContainText('Unable to generate content', { timeout: 15_000 });
-  await expect(card).toContainText('The AI could not generate content. Please start the task again, or switch models and try again.');
-  await expect(card).not.toContainText(rawError);
-
   const { projectId, conversationId } = await currentProjectContext(page);
-  await expectPersistedAssistantErrorDetail(page, projectId, conversationId, rawError);
   await expect.poll(async () => {
     const messages = await listConversationMessages(page, projectId, conversationId);
     return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
-  }, { timeout: 15_000 }).toBe('failed');
+  }, { timeout: 30_000 }).toBe('succeeded');
+  await expect(runErrorCard(page)).toHaveCount(0);
+  await expect(page.getByText('Unable to generate content')).toHaveCount(0);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText('Unable to generate content');
-  await expect(runErrorCard(page)).toContainText('The AI could not generate content. Please start the task again, or switch models and try again.');
-  await expect(runErrorCard(page)).not.toContainText(rawError);
+  await expect(runErrorCard(page)).toHaveCount(0);
+  await expect(page.getByText('Unable to generate content')).toHaveCount(0);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -2021,6 +2021,7 @@ async function expectRestoredDelayedAssistantMessage(
   conversationId: string,
   options: {
     expectedUserMessages?: number;
+    expectedAssistantMessages?: number;
     requireRunId?: boolean;
     expectedThinking?: boolean;
     producedFiles?: string[];
@@ -2029,7 +2030,7 @@ async function expectRestoredDelayedAssistantMessage(
   await expect
     .poll(async () => {
       const messages = await listConversationMessages(page, projectId, conversationId);
-      const assistant = messages.find((message) => message.role === 'assistant');
+      const assistant = messages.filter((message) => message.role === 'assistant').at(-1);
       return {
         userMessages: messages.filter((message) => message.role === 'user').length,
         assistantMessages: messages.filter((message) => message.role === 'assistant').length,
@@ -2041,7 +2042,7 @@ async function expectRestoredDelayedAssistantMessage(
     }, { timeout: 15_000 })
     .toEqual({
       userMessages: options.expectedUserMessages ?? expect.any(Number),
-      assistantMessages: 1,
+      assistantMessages: options.expectedAssistantMessages ?? 1,
       hasRunId: options.requireRunId ? true : expect.any(Boolean),
       runStatus: 'succeeded',
       producedFiles: options.producedFiles ?? [DELAYED_FILE],
@@ -2057,7 +2058,7 @@ async function expectPersistedAssistantContent(
 ) {
   await expect.poll(async () => {
     const messages = await listConversationMessages(page, projectId, conversationId);
-    return messages.find((message) => message.role === 'assistant')?.content ?? '';
+    return messages.filter((message) => message.role === 'assistant').at(-1)?.content ?? '';
   }, { timeout: 15_000 }).toContain(expectedContent);
 }
 

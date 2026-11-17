@@ -1,3 +1,4 @@
+import { z } from 'zod';
 // Typed shapes for the browser-side `client_*` safety-telemetry namespace.
 //
 // These events do NOT go through the consent-gated product-analytics
@@ -55,7 +56,8 @@ export type ChatMeasurementDoubt =
   /** A stylesheet was still in flight — layout was not final. */
   | 'stylesheets_pending'
   /** Restored from bfcache; the clock origin is not the user's open. */
-  | 'bfcache_restore';
+  | 'bfcache_restore'
+  | 'missing_open_intent';
 
 /**
  * Attached to every timing-sensitive event. Headline dashboard numbers MUST
@@ -144,6 +146,9 @@ export interface ChatFirstPaintProps
   extends ChatCorrelationProps,
     ChatMeasurementTrustProps {
   open_kind: ChatOpenKind;
+  /** Explicit intent is comparable separately from an effect-local fallback. */
+  timing_origin?: 'navigation_intent' | 'surface_attach_fallback';
+  metric_schema_version?: 1;
   /** Open intent (route/conversation change) → first message row painted. */
   duration_ms: number;
   /** Messages in the conversation being opened. */
@@ -460,6 +465,67 @@ export interface ChatScrollFreezeProps extends ChatCorrelationProps {
   packaged: boolean;
 }
 
+/** What the self-heal decided after a freeze verdict. */
+export type ChatScrollHealOutcome =
+  /** One frame of `will-change: transform` and the next wheel moved the log as asked. */
+  | 'healed'
+  /** The next wheel still stuck, fell short or snapped back; JS now drives the scroller. */
+  | 'takeover';
+
+/**
+ * `client_chat_scroll_heal` — what happened AFTER `client_chat_scroll_frozen`.
+ *
+ * Joined to its freeze by `probe_id`. Exactly one per freeze that reached a
+ * verdict; a surface released before its observation notch arrived sends
+ * nothing, so `frozen − heal` is the count of freezes nobody scrolled past.
+ *
+ * The kick is a one-frame `will-change: transform` on the chat log, meant to
+ * make Blink rebuild the scroller's compositing state from the current layout.
+ * It changes no layout and writes no `scrollTop`, and the six `kick_*`
+ * numbers exist to prove that per event. The notch is the first downward wheel
+ * after the kick, let through natively and measured: `notch_expected_px` is the
+ * request clamped to the room layout had left, `notch_moved_px` is what the
+ * scroller actually did. `healed` means the two agree within the detector's
+ * own 8px yardstick.
+ *
+ * Structural only: pixels, counts, durations, enums, the probe id.
+ */
+export interface ChatScrollHealProps extends ChatCorrelationProps {
+  outcome: ChatScrollHealOutcome;
+  /** The `probe_id` of the `client_chat_scroll_frozen` this answers. */
+  probe_id: string;
+  /** The freeze's own trigger, repeated so the heal can be sliced by it alone. */
+  trigger: ChatScrollFreezeTrigger;
+
+  // -- the kick -------------------------------------------------------------
+  kick_scroll_top_before: number;
+  kick_scroll_height_before: number;
+  kick_client_height_before: number;
+  kick_scroll_top_after: number;
+  kick_scroll_height_after: number;
+  kick_client_height_after: number;
+  /** ms from the freeze verdict to the first notch of the observation. */
+  kick_to_notch_ms: number;
+
+  // -- the observation notch ------------------------------------------------
+  /** Downward wheel events folded into the observation. */
+  notch_wheel_count: number;
+  /** Pixels those wheels asked for, normalised exactly as the detector does. */
+  notch_requested_px: number;
+  /** The request clamped to the travel layout actually had left. */
+  notch_expected_px: number;
+  /** `notch_scroll_top_after − notch_scroll_top_before`; negative is a snap-back. */
+  notch_moved_px: number;
+  notch_scroll_top_before: number;
+  notch_scroll_top_after: number;
+  /** `scrollHeight − clientHeight` when the verdict was taken. */
+  notch_layout_max_after: number;
+  /** Scroll events the notch produced before the verdict. Zero is "stuck". */
+  notch_scroll_event_count: number;
+  /** Notches discarded because the log had no room to show anything. */
+  notch_inconclusive_count: number;
+}
+
 /**
  * The full `client_chat_*` event surface. Adding a member here is the
  * only sanctioned way to introduce a new chat observability event.
@@ -472,6 +538,71 @@ export type ChatObservabilityEvent =
   | { event: 'client_chat_interaction_latency'; props: ChatInteractionLatencyProps }
   | { event: 'client_chat_protocol_anomaly'; props: ChatProtocolAnomalyProps }
   | { event: 'client_chat_recovery'; props: ChatRecoveryProps }
-  | { event: 'client_chat_scroll_frozen'; props: ChatScrollFreezeProps };
+  | { event: 'client_chat_scroll_frozen'; props: ChatScrollFreezeProps }
+  | { event: 'client_chat_scroll_heal'; props: ChatScrollHealProps };
 
 export type ChatObservabilityEventName = ChatObservabilityEvent['event'];
+
+/** OPEND-3720: metric fields are additive; legacy safety events keep their shape. */
+export type ResponsivenessInputArea = 'composer' | 'search' | 'settings' | 'other_input';
+export interface InputResponsivenessCounts {
+  area: ResponsivenessInputArea;
+  /** Trusted DOM keydowns, including those censored by the Event Timing floor. */
+  input_attempt_count: number;
+  /** Event Timing keydowns with duration >=16ms; denominator for sample rate. */
+  qualified_sample_count: number;
+  over_500ms_count: number;
+  max_input_to_presentation_ms: number | null;
+  max_queue_delay_ms: number | null;
+  sample_floor_ms: 16;
+}
+
+
+const count = z.number().int().safe().nonnegative();
+const ms = z.number().finite().nonnegative();
+// Fields only: client-metrics.ts supplies the common, versioned envelope.
+export const responsivenessWindowFields = {
+  measurement: z.enum(['long_task', 'event_timing']),
+  measurable: z.boolean(),
+  unavailable_reason: z.enum(['unsupported', 'background_or_sleep']).nullable(),
+  window_ms: ms.nullable(),
+  long_task_count: count.nullable().optional(),
+  severe_task_count: count.nullable().optional(),
+  max_duration_ms: ms.nullable().optional(),
+};
+export const inputResponsivenessFields = {
+  area: z.enum(['composer', 'search', 'settings', 'other_input']),
+  window_ms: ms,
+  input_attempt_count: count,
+  qualified_sample_count: count,
+  over_500ms_count: count,
+  max_input_to_presentation_ms: ms.nullable(),
+  max_queue_delay_ms: ms.nullable(),
+  sample_floor_ms: z.literal(16),
+};
+export const scrollFrameFields = {
+  measurable: z.boolean(), window_ms: ms.nullable(), frame_count: count.nullable(),
+  interval_count: count.nullable(), over_50ms_count: count.nullable(), max_frame_interval_ms: ms.nullable(),
+  sampling_truncated: z.boolean(),
+};
+export const responsivenessRecoveryFields = {
+  recovery_id: z.string().min(1).max(80).regex(/^[a-zA-Z0-9-]+$/),
+  previous_occurred_at: z.string().datetime({ offset: true }),
+  duration_ms: ms.nullable(), severe_task_count: count,
+  reason: z.enum(['unclean_exit_unknown', 'observed_severe_task']),
+};
+
+
+/** Parent-owned death observation; no PID, path or diagnostic content. */
+export const daemonExitObservationSchema = z.object({
+  process_instance_id: z.string().uuid(),
+  app_session_id: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_.:-]+$/).nullable(),
+  launch_attempt_id: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_.:-]+$/).nullable(),
+  app_version: z.string().min(1).max(128).nullable(),
+  occurred_at: z.string().datetime({ offset: true }),
+  exit_code: z.number().int().nullable(),
+  signal: z.string().max(24).regex(/^SIG[A-Z0-9]+$/).nullable(),
+  reason: z.enum(['killed', 'crash', 'oom', 'clean-exit', 'unknown']),
+  delivered: z.boolean(),
+});
+export type DaemonExitObservation = z.infer<typeof daemonExitObservationSchema>;

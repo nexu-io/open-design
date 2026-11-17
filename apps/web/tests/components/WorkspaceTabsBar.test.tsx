@@ -1950,18 +1950,45 @@ describe('WorkspaceTabsBar dock dropdown run status', () => {
     dock.remove();
   });
 
-  it('marks a finished project with the unread dot and spends it when the row opens it', async () => {
-    // OPEND-3133: the notice is the dot at the row's end, announced as the
-    // finished status; the lead slot keeps the folder.
+  it('pins the current project but orders the other tabs by user sends rather than visits', async () => {
+    render(<WorkspaceTabsBar
+      route={{ ...projectRoute, projectId: projectGamma.id }}
+      projects={[
+        { ...project, lastUserQueryAt: 5 },
+        { ...projectBeta, lastUserQueryAt: 10 },
+        { ...projectGamma, lastUserQueryAt: 20 },
+      ]}
+    />);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    act(() => { openWorkspaceTab({ ...projectRoute }); });
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const names = () => within(screen.getByRole('listbox')).getAllByRole('option')
+      .map(row => row.textContent);
+    expect(names()).toEqual([
+      expect.stringContaining('Project Alpha'),
+      expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Beta'),
+    ]);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    expect(names()).toEqual([
+      expect.stringContaining('Project Beta'),
+      expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Alpha'),
+    ]);
+  });
+
+  it('marks a finished project with the still blue ball and spends it when the row opens it', async () => {
+    // P0-24 design reply (2026-10-26): the new-result mark is a static blue ball
+    // in the lead slot, announced as the finished status — no folder, no
+    // row-end dot.
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
     fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
     const listbox = screen.getByRole('listbox');
     await waitFor(() => {
       expect(within(listbox).getByRole('img', { name: 'designs.status.succeeded' })).toBeTruthy();
     });
-    expect(within(listbox).getByRole('img', { name: 'designs.status.succeeded' }).getAttribute('data-testid'))
-      .toBe('workspace-tabs-dropdown-unread');
-    expect(within(listbox).getByTestId('project-folder-glyph')).toBeTruthy();
+    expect(within(listbox).queryByTestId('workspace-tabs-dropdown-unread')).toBeNull();
+    expect(within(listbox).queryByTestId('project-folder-glyph')).toBeNull();
 
     fireEvent.click(within(listbox).getByRole('option', { name: /Project Alpha/ }));
     // Same acknowledgement record the rail keeps, keyed on THIS finished run.
@@ -2038,6 +2065,11 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
             updatedAt: 2,
           },
         }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url === '/api/projects/' + project.id + '/share-state') {
+        return new Response(JSON.stringify({ projectId: project.id, bindingExists: false, hasEverShared: false, publications: [] }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        });
       }
       if (url.startsWith('/api/runs?')) {
         return new Response(JSON.stringify({ runs: [], awaitingInputProjectIds: [] }), {
@@ -2117,7 +2149,7 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
     ]);
   });
 
-  it('hides move-to-team in a personal workspace', async () => {
+  it('offers move-to-team in an authorized personal workspace', async () => {
     render(
       <WorkspaceTabsBar
         route={projectRoute}
@@ -2129,7 +2161,7 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
       />,
     );
     const menu = await openRowMenu();
-    expect(within(menu).queryByRole('menuitem', { name: 'recentProjects.moveToTeam' })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'recentProjects.moveToTeam' })).toBeTruthy();
     expect(within(menu).getByRole('menuitem', { name: 'designs.menuDelete' })).toBeTruthy();
   });
 
@@ -2152,7 +2184,9 @@ describe('WorkspaceTabsBar dock dropdown project actions', () => {
     expect(screen.queryByTestId('project-delete-confirm-dialog')).toBeNull();
 
     fireEvent.click(within(await openRowMenu()).getByRole('menuitem', { name: 'designs.menuDelete' }));
-    fireEvent.click(within(await screen.findByTestId('project-delete-confirm-dialog')).getByTestId('project-delete-confirm-accept'));
+    const accept = within(await screen.findByTestId('project-delete-confirm-dialog')).getByTestId('project-delete-confirm-accept');
+    await waitFor(() => expect(accept).toBeEnabled());
+    fireEvent.click(accept);
     await waitFor(() => expect(remove).toHaveBeenCalledWith(project.id));
     await waitFor(() => expect(screen.queryByTestId('project-delete-confirm-dialog')).toBeNull());
   });

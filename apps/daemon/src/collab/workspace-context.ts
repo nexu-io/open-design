@@ -278,6 +278,7 @@ export function parseWorkspaceCollabContext(input: unknown): WorkspaceCollabCont
   const usedSeats = nonNegativeInt(raw.usedSeats, 1);
 
   const context: WorkspaceCollabContext = {
+    ...(typeof raw.memberCount === 'number' && Number.isSafeInteger(raw.memberCount) && raw.memberCount > 0 ? { memberCount: raw.memberCount } : {}),
     workspaceId,
     workspaceType,
     workspaceMemberId,

@@ -152,12 +152,13 @@ export interface ChatScrollForensicsRuntime {
   commit: null;
   commitNote: string;
   /**
-   * The wheel-takeover switch, as this machine actually had it.
+   * The self-heal escape hatch, as this machine actually had it.
    *
    * Without this a reader cannot rule out the one local setting that changes
    * how the chat log scrolls, and "was the takeover on?" is unanswerable after
-   * the fact — the switch lives in the colleague's `localStorage`, not in
-   * anything the bundle otherwise carries.
+   * the fact — the hatch lives in the colleague's `localStorage`, not in
+   * anything the bundle otherwise carries. The takeover is on unless the key
+   * holds `'0'`.
    *
    * Read, never inferred: `rawValue` is whatever the key held, verbatim, and
    * `readable: false` says the storage itself could not be reached (private
@@ -175,9 +176,9 @@ export interface ChatScrollForensicsTakeover {
   rawValue: string | null;
   /**
    * Whether a scroller is being driven from JavaScript at capture time. Not
-   * derivable from `rawValue`: the switch is read once at install, so a value
+   * derivable from `rawValue`: the hatch is read once at install, so a value
    * set after boot has not taken effect, and the takeover only engages once the
-   * freeze probe has actually called a freeze.
+   * freeze probe has called a freeze AND the one-frame kick failed to fix it.
    */
   engaged: boolean;
   note: string;
@@ -444,10 +445,10 @@ const TAKEOVER_UNREADABLE_NOTE =
   + 'is UNKNOWN for this capture — not "off".';
 
 /**
- * The takeover switch as read, with no interpretation layered on top.
+ * The takeover's escape hatch as read, with no interpretation layered on top.
  *
- * Deliberately not `chatScrollTakeoverFlagSet()`: that collapses "absent",
- * "set to something other than 1" and "storage threw" into one `false`, and
+ * Deliberately not `chatScrollTakeoverSwitchedOff()`: that collapses "absent",
+ * "set to something other than 0" and "storage threw" into one `false`, and
  * those are three different things to a reader trying to explain a scene.
  */
 export function collectTakeoverSection(): ChatScrollForensicsTakeover {
@@ -475,9 +476,10 @@ export function collectTakeoverSection(): ChatScrollForensicsTakeover {
     rawValue,
     engaged,
     note: readable
-      ? "Raw localStorage value of the wheel-takeover switch; only '1' arms it, and it "
-        + 'is read once at boot. `engaged` is whether a scroller was actually being '
-        + 'driven from JavaScript when this capture ran.'
+      ? "Raw localStorage value of the scroll self-heal's escape hatch; only '0' "
+        + 'disarms it (absent means ON), and it is read once at boot. `engaged` is '
+        + 'whether a scroller was actually being driven from JavaScript when this '
+        + 'capture ran.'
       : TAKEOVER_UNREADABLE_NOTE,
   };
 }

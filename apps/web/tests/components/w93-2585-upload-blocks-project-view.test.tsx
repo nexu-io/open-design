@@ -358,9 +358,8 @@ describe('OPEND-2585 · 首帧不等上传', () => {
       expect(mockedUploadProjectFiles).toHaveBeenCalled();
     });
 
-    // 十九秒那一屏的判据:项目在,准备中那一屏已经让位,而上传一个都还没回来。
+    // 十九秒那一屏的判据:项目页在屏幕上(OPEND-3334 起点击即挂载),而上传一个都还没回来。
     await screen.findByTestId('project-view');
-    expect(screen.queryByTestId('project-creation-pending-view')).toBeNull();
     expect(window.sessionStorage.getItem(autoSendAttachmentsKey())).toBeNull();
   });
 

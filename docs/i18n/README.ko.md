@@ -1,11 +1,9 @@
-<h1 align="center">OpenDesign: 최초의 협업형 디자인 에이전트 워크스페이스</h1>
+<h1 align="center">OpenDesign: 최초의 협업형 AI 디자인 에이전트 워크스페이스</h1>
 
-> ✨ **[OpenDesign Go 소개](https://open-design.ai/pricing/)**. Go Plan은 첫 달 8달러부터 시작하며, 매월 다음을 포함한 10개 이상의 모델에 사용할 수 있는 크레딧이 제공됩니다: GPT-6.1 Sol, GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X 및 MiMo V2.6 Flash. 모든 개인 플랜에는 Codex, Claude Code, DSH, OpenCode 등에서 사용할 수 있는 API 액세스가 포함됩니다.
->
-> 🧩 **[DeepSeek Harness를 지원합니다.](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek 공식 `dsh` Agent Harness를 OpenDesign의 네이티브 런타임으로 연결하고 구조화된 사고, 도구 호출, 모델 검색, 취소, 세션 재개를 사용할 수 있습니다. 생성된 파일은 라이브 미리보기와 전달을 위해 OpenDesign 워크플로 안에 유지됩니다.
+> ✨ **[GitHub 스타 100K 기념 — OpenDesign Go 크레딧 2배](https://open-design.ai/pricing/)** — **첫 달 8달러로 지원되는 Design Plan 모델에서 매월 최대 120달러 상당의 크레딧**을 이용하세요. GPT-6 Luna, DeepSeek V4.1 Flash, GLM-5.3 Flash-X, MiMo V2.6 Flash 등 10개 이상의 모델에서 사용할 수 있습니다. 모든 개인 플랜에는 Codex, Claude Code, DSH, OpenCode 등에서 사용할 수 있는 API 액세스가 포함됩니다.
 
 <p align="center">
-  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: 최초의 협업형 디자인 에이전트 워크스페이스" width="100%" />
+  <img src="../../docs/assets/readme-hero-design-agent.webp" alt="OpenDesign: 최초의 협업형 AI 디자인 에이전트 워크스페이스" width="100%" />
 </p>
 
 <p align="center">
@@ -29,9 +27,9 @@
 
 ## OpenDesign란
 
-OpenDesign은 **협업형 디자인 에이전트 워크스페이스**입니다. 작업 내용을 설명하고 평소 사용하는 코딩 에이전트나 OpenDesign Cloud로 디자인 시스템에 맞는 프로토타입을 만드세요. 팀과 공유해 피드백을 받은 뒤 같은 프로젝트에서 에이전트와 계속 다듬을 수 있습니다.
+OpenDesign은 **최초의 협업형 AI 디자인 에이전트 워크스페이스**입니다. 작업 내용을 설명하고 평소 사용하는 코딩 에이전트나 OpenDesign Cloud로 디자인 시스템에 맞는 프로토타입을 만드세요. 팀과 공유해 피드백을 받은 뒤 같은 프로젝트에서 에이전트와 계속 다듬을 수 있습니다.
 
-이 워크플로는 개방적이고 확장 가능합니다. **오픈소스 Claude Design 대안**인 OpenDesign은 Apache 2.0 라이선스로 제공되며, 팀은 스킬, 디자인 템플릿, 디자인 시스템, 플러그인을 살펴보고 자신의 프로세스에 맞게 수정할 수 있습니다.
+이 워크플로는 개방적이고 확장 가능합니다. OpenDesign은 Apache 2.0 라이선스로 제공되며, 팀은 스킬, 디자인 템플릿, 디자인 시스템, 플러그인을 살펴보고 자신의 프로세스에 맞게 수정할 수 있습니다.
 
 
 ---
@@ -232,29 +230,12 @@ Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 
 ## 왜 OpenDesign인가
 
-> **2026년 4월, Anthropic은 Claude Design을 출시했습니다 — LLM이 산문 작성을 멈추고 디자인 아티팩트를 직접 전달하기 시작한 최초의 순간이었습니다.** 그것은 입소문을 탔습니다. 그러나 그것은 닫힌 소스로, 유료 전용으로, 클라우드 전용으로 머물렀고, Anthropic의 모델, Anthropic의 스킬, Anthropic의 표면에 묶여 있었습니다. 결제도, 셀프 호스트도, Vercel 배포도, 자신의 에이전트로 교체하는 것도 없었습니다.
-
-OpenDesign(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
-
 - 🤖 **에이전트 네이티브, 모델에 구애받지 않음.** 우리는 에이전트를 제공하지 않습니다. 이미 당신의 `PATH`에 있는 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`가 디자인 엔진입니다. 한 번의 클릭으로 교체하세요.
 - 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 151개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
-- 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 클라우드 왕복 없이 로컬 우선을 유지합니다. daemon 데이터 경로를 설명하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
+- 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 로컬 우선을 유지합니다. 제품 분석과 세션 리플레이에는 동의가 필요하며, 민감 정보를 정리한 안전성 및 신뢰성 텔레메트리는 항상 활성화됩니다. daemon 데이터 경로를 설명하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
 - 🌍 **네 가지 평면에서 조합 가능.** **플러그인**은 워크플로, **기능 스킬**은 에이전트 동작, **디자인 템플릿**은 렌더링 청사진, **디자인 시스템**은 브랜드를 담습니다.
-- 🔁 **기존 코드베이스를 새롭게.** `git` 저장소 + `DESIGN.md`를 에이전트에 넘기면 당신의 실제 컴포넌트를 브랜드 사양에 맞게 리팩터링합니다. 전용 플러그인이 Figma / Pencil 워크플로를 React / Next.js / Vue 코드로 마이그레이션합니다.
-- 🔒 **신념에 기반한 프라이버시.** 모든 것은 당신의 데이터가 있는 곳에서 실행됩니다 — 당신의 노트북, 당신 팀의 서버, 당신의 Vercel 프로젝트. 네트워크가 필요할 때 BYOK 프록시는 SSRF로부터 보호됩니다.
-
-### 비교
-
-| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
-|---|---|---|---|---|
-| 오픈소스 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
-| 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
-| 에이전트 네이티브(당신의 CLI에서 실행) | Anthropic 전용 | ❌ | 클라우드 에이전트 전용 | **✅ 25개 CLI + BYOK** |
-| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 151개 시스템 제공** |
-| 스킬 / 플러그인 / 템플릿 | 비공개 | 플러그인 스토어 | 비공개 | **✅ 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 277개 플러그인** |
-| HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 일급 지원** |
-| 기존 저장소를 브랜드에 맞게 새롭게 | ❌ | ❌ | ❌ | **✅ 에이전트 + `DESIGN.md`로** |
-| 최소 결제 | Pro / Max / Team | Pro / Org | Pro / Team | **BYOK · 호환 엔드포인트라면 무엇이든** |
+- 🔁 **기존 코드베이스를 새롭게.** `git` 저장소 + `DESIGN.md`를 에이전트에 넘기면 당신의 실제 컴포넌트를 브랜드 사양에 맞게 리팩터링합니다.
+- 🔒 **신념에 기반한 프라이버시.** 프로젝트는 로컬 또는 직접 관리하는 배포 환경에서 실행할 수 있습니다. 클라우드 모델과 OpenDesign Cloud 요청은 해당 서비스로 전송됩니다. BYOK 프록시에는 SSRF 보호 기능이 포함됩니다.
 
 ---
 
@@ -324,7 +305,7 @@ Node `~24`, pnpm `10.33.x`. Windows 사용자는 [`docs/windows-troubleshooting.
 `brief → plugin → direction → design system → artifact → handoff → memory`
 
 1. **PM이 브리프를 제출합니다.** 플러그인 피커가 랜딩 페이지 · 피치 덱 · 대시보드 · 소셜 포스트 · PM 스펙 · OKR 스코어카드… 를 제안합니다.
-2. **디자이너(또는 에이전트)가 방향을 확정합니다.** 브랜드가 없나요? 엄선된 5가지 방향 중에서 고르세요. 브랜드가 있나요? 스크린샷 / URL을 넣으면 → 에이전트가 GitHub에 연결하고, Figma를 가져오고, 재사용 가능한 `DESIGN.md`로 코드화합니다.
+2. **디자이너(또는 에이전트)가 방향을 확정합니다.** 브랜드가 없나요? 엄선된 5가지 방향 중에서 고르세요. 브랜드가 있나요? 스크린샷 / URL을 넣으면 → 에이전트가 GitHub에 연결하고, 재사용 가능한 `DESIGN.md`로 코드화합니다.
 3. **에이전트가 첫 결과물을 만듭니다.** 파일시스템 기반 CLI 실행은 정규 파일을 쓰고, 파일 도구가 없는 BYOK/API 실행은 완전한 `<artifact>` 블록을 반환합니다.
 4. **엔지니어링으로 넘깁니다.** 아티팩트는 실제 HTML/CSS입니다 — Cursor, Codex, 또는 Claude Code에 넣어 코드로 계속 빌드하세요. 또는 PPTX / PDF / MP4를 마케팅으로 곧바로 내보내세요.
 5. **OpenDesign는 사용할수록 더 똑똑해집니다.** 당신의 스크린샷, 폰트, 팔레트, 확정된 아티팩트가 다음 세션의 기본값으로 쌓입니다. 재작업도 줄고, 표류도 줄어듭니다.
@@ -397,9 +378,9 @@ od skills list --json
 
 **AI & LLM** — `claude` · `cohere` · `mistral-ai` · `minimax` · `together-ai` · `replicate` · `runwayml` · `elevenlabs` · `ollama` · `x-ai`
 
-**개발자 도구** — `cursor` · `vercel` · `linear-app` · `framer` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `webflow` · `sanity` · `mintlify` · `lovable` · `composio` · `opencode-ai` · `voltagent`
+**개발자 도구** — `cursor` · `vercel` · `linear-app` · `expo` · `clickhouse` · `mongodb` · `supabase` · `hashicorp` · `posthog` · `sentry` · `warp` · `sanity` · `mintlify` · `composio` · `opencode-ai` · `voltagent`
 
-**생산성** — `notion` · `figma` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
+**생산성** — `notion` · `miro` · `airtable` · `superhuman` · `intercom` · `zapier` · `cal` · `clay` · `raycast`
 
 **핀테크** — `stripe` · `coinbase` · `binance` · `kraken` · `mastercard` · `revolut` · `wise`
 
@@ -455,7 +436,7 @@ od skills list --json
 od plugin list                       # list installed plugins (--task-kind / --mode / --tag filters)
 od plugin search "landing page"      # search by keyword
 od plugin info od-default            # inspect a plugin's metadata, inputs, capabilities
-od plugin install od-figma-migration # install from a registry; also accepts ./local-folder or an https://… link
+od plugin install od-default        # install from a registry; also accepts ./local-folder or an https://… link
 od plugin apply od-default --input brief="a one-page pitch for our seed round"
 od plugin upgrade od-default         # upgrade
 od plugin uninstall od-default       # uninstall
@@ -476,7 +457,7 @@ my-plugin/
 └── examples/           ← optional: concrete use cases
 ```
 
-핵심 필드는 `specVersion`, `name`, `version`, Agent Skill을 공개할 때만 선택적인 `compat.agentSkills[].path`, 그리고 `od.kind`, `od.taskKind`, `od.mode`, `od.capabilities[]`, `od.inputs[]`입니다.
+핵심 필드는 `specVersion`, `name`, `version`, Agent Skill을 공개할 때만 선택적인 `compat.agentSkills[].path`, 그리고 `od.kind`, `od.taskKind` (`new-generation` / `figma-migration` / `code-migration` / `tune-collab`), `od.mode`, `od.capabilities[]`, `od.inputs[]`입니다.
 
 로컬에서 스캐폴드 + 검증:
 
@@ -691,11 +672,10 @@ gh pr create --fill
 
 | 프로젝트 | 역할 |
 |---|---|
-| Claude Design | 이 저장소가 오픈소스 대안으로 삼는 폐쇄 소스 제품. |
 | [`alchaincyf/huashu-design`](https://github.com/alchaincyf/huashu-design) | 디자인 철학의 나침반 — 주니어 디자이너 워크플로, 브랜드 에셋 프로토콜, 안티 AI 슬롭 체크리스트, 5차원 비평. |
 | [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) | 매거진 스타일 웹 PPT 스킬로, [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) 아래에 똑같이 번들로 제공됨. 덱 모드의 기본값. |
 | [`lewislulu/html-ppt-skill`](https://github.com/lewislulu/html-ppt-skill) | HTML PPT Studio 제품군 — 15개 덱 템플릿, 36개 테마, 31개 페이지 레이아웃, 애니메이션 런타임, 마그네틱 카드 프레젠터 모드. |
-| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 최초의 오픈소스 Claude Design 대안; 우리가 빌려온 UX 패턴(스트리밍 아티팩트 루프, 샌드박스 iframe, 라이브 에이전트 패널). |
+| [`OpenCoworkAI/open-codesign`](https://github.com/OpenCoworkAI/open-codesign) | 우리가 빌려온 UX 패턴(스트리밍 아티팩트 루프, 샌드박스 iframe, 라이브 에이전트 패널). |
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | 데몬 + 어댑터 아키텍처 — PATH 스캔 에이전트 감지, 유일한 특권 프로세스로서의 로컬 데몬. |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 원래 9개 섹션 `DESIGN.md` 스키마와 업스트림에서 파생된 70개 시스템의 역사적 출처이며, 현재 패키지는 이 기반을 확장할 수 있습니다. |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 아래에 추가된 57개 디자인 스킬의 출처. |

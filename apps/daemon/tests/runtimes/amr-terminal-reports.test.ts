@@ -287,17 +287,19 @@ describe("AMR terminal report outbox", () => {
     const recovered = restarted.get(active.id);
     const terminalAt = Date.now();
 
-    expect(recovered).toMatchObject({ status: 'failed', terminalAt });
+    // P0-24 Q5: the restart-interrupted run is recorded as stopped …
+    expect(recovered).toMatchObject({ status: 'canceled', terminalAt });
     expect(recovered.events.at(-1)).toMatchObject({
       event: 'end',
       timestamp: terminalAt,
-      data: { status: 'failed', terminalAt },
+      data: { status: 'canceled', terminalAt },
     });
     expect(JSON.parse(fs.readFileSync(active.statePath, 'utf8'))).toMatchObject({
-      status: 'failed',
+      status: 'canceled',
       updatedAt: terminalAt,
       terminalAt,
     });
+    // … but AMR billing keeps receiving the outcome it always got for it.
     expect(outbox.listPending()).toEqual([{ runId: active.id, outcome: 'failed', terminalAt }]);
   });
 

@@ -3,13 +3,6 @@ export const AMR_ARTIFACT_UPGRADE_REQUEST_EVENT =
 
 export type AmrArtifactUpgradeDecision = 'proceed' | 'cancel';
 
-export interface AmrArtifactUpgradeHomeOffer {
-  sessionKey: string;
-  projectId: string;
-  conversationId: string;
-  fileName: string | null;
-}
-
 export interface AmrArtifactUpgradeRequest {
   projectId: string;
   conversationId: string;
@@ -21,33 +14,6 @@ export interface AmrArtifactUpgradeRequestDetail {
   conversationId: string;
   source: 'chat_send';
   settle: (decision: AmrArtifactUpgradeDecision) => void;
-}
-
-export function amrArtifactUpgradeHomeMockOffer(
-  search: string,
-): AmrArtifactUpgradeHomeOffer | null {
-  const params = new URLSearchParams(search);
-  if (params.get('mock-amr-artifact-upgrade-home') !== '1') return null;
-
-  const projectId = params.get('mock-amr-artifact-upgrade-project')?.trim() ?? '';
-  const conversationId =
-    params.get('mock-amr-artifact-upgrade-conversation')?.trim() ?? '';
-  const sessionKey = amrArtifactUpgradeSessionKey(projectId, conversationId);
-  if (!sessionKey) {
-    return {
-      sessionKey: 'local-ui-mock',
-      projectId: '',
-      conversationId: '',
-      fileName: null,
-    };
-  }
-
-  return {
-    sessionKey,
-    projectId,
-    conversationId,
-    fileName: params.get('mock-amr-artifact-upgrade-file')?.trim() || null,
-  };
 }
 
 export function amrArtifactUpgradeSessionKey(

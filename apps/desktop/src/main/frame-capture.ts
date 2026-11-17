@@ -30,7 +30,6 @@ type FrameCaptureStage =
   | "attach-debugger"
   | "configure-viewport"
   | "seek"
-  | "settle-paint"
   | "capture-screenshot"
   | "write-frame";
 
@@ -220,10 +219,8 @@ export async function renderDeterministicFrames(
         ),
         { ...frameContext, stage: "seek" },
       );
-      await deadline.wait(settleFramePaint(window), {
-        ...frameContext,
-        stage: "settle-paint",
-      });
+      // The bridge resolves seek after its paint/compositor work. CDP captures
+      // that fresh surface without a second animation-frame wait here.
       const shot = (await deadline.wait(
         dbg.sendCommand("Page.captureScreenshot", {
           clip: {
@@ -234,6 +231,7 @@ export async function renderDeterministicFrames(
             scale: 1,
           },
           format: "png",
+          optimizeForSpeed: true,
           fromSurface: true,
         }),
         { ...frameContext, stage: "capture-screenshot" },
@@ -285,22 +283,6 @@ export function frameFilePath(outputDir: string, frameIndex: number): string {
 
 function positiveFinite(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
-}
-
-async function settleFramePaint(window: BrowserWindow): Promise<void> {
-  await window.webContents.executeJavaScript(
-    `new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      setTimeout(finish, 100);
-      requestAnimationFrame(() => requestAnimationFrame(finish));
-    })`,
-    true,
-  );
 }
 
 function injectBaseHref(doc: string, baseHref: string | undefined): string {

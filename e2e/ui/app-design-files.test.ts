@@ -995,6 +995,132 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
+test('[P0] @critical HTML preview permits client-side form submission while isolating the host', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createProjectViaApi(page, 'Interactive form preview');
+  await seedHtmlArtifact(page, projectId, 'form.html', `<!doctype html><html><head><style>
+    .modal-layer { display: grid; position: fixed; inset: 0; z-index: 10; }
+    .authored[hidden] { display: block; }
+  </style></head><body>
+    <h1>Interactive form</h1>
+    <div class="modal-layer" hidden>Hidden popup</div>
+    <p class="authored" hidden>Intentional authored override</p>
+    <p hidden="until-found">Findable content</p>
+    <p hidden="UNTIL-FOUND">Findable content with an uppercase attribute</p>
+    <form><label>Task name<input name="task"></label><button>Save task</button></form>
+    <output aria-label="Saved task"></output>
+    <script>document.querySelector('form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      document.querySelector('output').textContent = document.querySelector('input').value;
+    });</script>
+  </body></html>`);
+
+  for (const query of ['', '?forceInline=1']) {
+    await page.goto(`/projects/${projectId}${query}`, { waitUntil: 'domcontentloaded' });
+    await expectWorkspaceReady(page);
+    await openDesignFile(page, 'form.html');
+    const preview = page.frameLocator('[data-testid="artifact-preview-frame"]');
+    await expect(preview.locator('.modal-layer')).toHaveCount(1);
+    await expect(preview.locator('.modal-layer')).toBeHidden();
+    await expect(preview.locator('.authored')).toBeVisible();
+    const findableStyles = await preview.locator('[hidden="until-found" i]').evaluateAll((nodes) => nodes.map((node) => {
+      const style = getComputedStyle(node);
+      return { display: style.display, contentVisibility: style.contentVisibility };
+    }));
+    expect(findableStyles).toHaveLength(2);
+    for (const style of findableStyles) {
+      expect(style.display).not.toBe('none');
+      expect(style.contentVisibility).toBe('hidden');
+    }
+    await preview.getByLabel('Task name').fill('Created through the preview');
+    await preview.getByRole('button', { name: 'Save task' }).click();
+    await expect(preview.getByLabel('Saved task')).toHaveText('Created through the preview');
+    expect(await preview.locator('body').evaluate(() => {
+      try { void window.parent.document.body; return true; } catch { return false; }
+    })).toBe(false);
+  }
+});
+
+test('[P0] @critical storage-backed HTML keeps project state isolated across preview reloads', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectIds = [
+    await createProjectViaApi(page, 'Persistent form preview A'),
+    await createProjectViaApi(page, 'Persistent form preview B'),
+  ];
+  // Generated pages commonly use the same ordinary key in separate projects.
+  // A project-specific artifact key would hide an origin-isolation regression.
+  const storageKey = JSON.stringify('task-board-state');
+  for (const [index, projectId] of projectIds.entries()) {
+    await seedHtmlArtifact(page, projectId, 'saved-form.html', `<!doctype html><html><body>
+    <h1>Persistent form ${index === 0 ? 'A' : 'B'}</h1>
+    <form><label>Task name<input name="task"></label><button>Save task</button></form>
+    <output aria-label="Saved task"></output>
+    <script>const key=${storageKey};
+    document.querySelector('output').textContent=localStorage.getItem(key)||'';
+    document.querySelector('form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const value=document.querySelector('input').value;
+      localStorage.setItem(key,value);
+      document.querySelector('output').textContent=value;
+    });</script>
+  </body></html>`);
+  }
+  const openProject = async (index: number) => {
+    await page.goto(`/projects/${projectIds[index]}`, { waitUntil: 'domcontentloaded' });
+    await expectWorkspaceReady(page);
+    await openDesignFile(page, 'saved-form.html');
+    await expect(preview.getByRole('heading', { name: `Persistent form ${index === 0 ? 'A' : 'B'}` })).toBeVisible();
+  };
+  const frame = page.locator('[data-testid="artifact-preview-frame"]');
+  const preview = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await openProject(0);
+  await preview.getByLabel('Task name').fill('Project A saved across reload');
+  await preview.getByRole('button', { name: 'Save task' }).click();
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project A saved across reload');
+  await expect(frame).toHaveAttribute('data-od-render-mode', 'srcdoc');
+  expect(await frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+  expect(await preview.locator('body').evaluate(() => {
+    try { void window.parent.document.body; return true; } catch { return false; }
+  })).toBe(false);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await openDesignFile(page, 'saved-form.html');
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project A saved across reload');
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'In this tab', exact: true }).click();
+  const presentation = page.frameLocator('.present-overlay iframe');
+  await expect(presentation.getByLabel('Saved task')).toHaveText('Project A saved across reload');
+  expect(await presentation.locator('body').evaluate(() => {
+    try { void window.parent.document.body; return true; } catch { return false; }
+  })).toBe(false);
+  await presentation.getByLabel('Task name').fill('Project A saved from presentation');
+  await presentation.getByRole('button', { name: 'Save task' }).click();
+  await expect(presentation.getByLabel('Saved task')).toHaveText('Project A saved from presentation');
+  await page.getByRole('button', { name: 'Exit presentation', exact: true }).click();
+
+  await openProject(1);
+  await expect(preview.getByLabel('Saved task')).toHaveText('');
+  await preview.getByLabel('Task name').fill('Project B saved separately');
+  await preview.getByRole('button', { name: 'Save task' }).click();
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project B saved separately');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+  await openDesignFile(page, 'saved-form.html');
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project B saved separately');
+
+  await openProject(0);
+  await expect(preview.getByLabel('Saved task')).toHaveText('Project A saved from presentation');
+  const blockedRoutes = await preview.locator('body').evaluate(async (_, otherProjectId) => {
+    const paths = ['/api/projects', `/api/projects/${otherProjectId}/powered/saved-form.html`];
+    return Promise.all(paths.map(async (path) => {
+      try { return { path, readable: (await fetch(path)).ok }; }
+      catch { return { path, readable: false }; }
+    }));
+  }, projectIds[1]);
+  expect(blockedRoutes.map((route) => route.readable)).toEqual([false, false]);
+});
+
 test('[P0] @critical white-screen monitoring recovers layout stalls and confirms persistent blanks', async ({ page }) => {
   const safetyEvents = await captureSafetyTelemetry(page);
   await routeMockAgents(page);

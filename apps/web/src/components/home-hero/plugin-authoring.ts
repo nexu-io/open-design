@@ -21,6 +21,11 @@ export type HomePromptHandoff =
     /** Preserve the Home creation type when a template is picked elsewhere. */
     chipId?: string;
     projectKind?: ProjectKind;
+    /** Bind as that type's own example card, so Home routes it exactly like a
+     *  pick from the type's example list instead of pinning the plugin. */
+    asExample?: boolean;
+    /** The originating surface already recorded this use click. */
+    useTracked?: boolean;
   }
   | {
     id: number;
@@ -124,6 +129,8 @@ export function createPluginUseHandoff(
     inputs?: Record<string, unknown>;
     chipId?: string;
     projectKind?: ProjectKind;
+    asExample?: boolean;
+    useTracked?: boolean;
   } = {},
 ): HomePromptHandoff {
   return {
@@ -133,6 +140,8 @@ export function createPluginUseHandoff(
     ...(options.inputs ? { inputs: options.inputs } : {}),
     ...(options.chipId ? { chipId: options.chipId } : {}),
     ...(options.projectKind ? { projectKind: options.projectKind } : {}),
+    ...(options.asExample ? { asExample: true } : {}),
+    ...(options.useTracked ? { useTracked: true } : {}),
     focus: true,
     source: 'plugin-use',
   };

@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
+import * as ts from '@typescript/native/unstable/ast';
+import { API } from '@typescript/native/unstable/sync';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -123,10 +124,8 @@ function isErasedTypePosition(node: ts.Node): boolean {
 function identifierAt(sourceFile: ts.SourceFile, pos: number): ts.Identifier | null {
   function visit(node: ts.Node): ts.Identifier | null {
     if (pos < node.getStart(sourceFile) || pos >= node.getEnd()) return null;
-    for (const child of node.getChildren(sourceFile)) {
-      const found = visit(child);
-      if (found) return found;
-    }
+    const found = node.forEachChild(visit);
+    if (found) return found;
     return ts.isIdentifier(node) ? node : null;
   }
   return visit(sourceFile);
@@ -140,45 +139,37 @@ function identifierAt(sourceFile: ts.SourceFile, pos: number): ts.Identifier | n
  * dependency graph stays out of the check.
  */
 function unresolvedRuntimeReferences(source: string, fileName: string): UnresolvedReference[] {
-  const options: ts.CompilerOptions = {
-    allowJs: false,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    noEmit: true,
-    noResolve: true,
-    skipLibCheck: true,
-    target: ts.ScriptTarget.ES2022,
-  };
+  const config = path.join(path.dirname(fileName), 'tsconfig.native-scope.json');
+  const configText = JSON.stringify({
+    compilerOptions: { allowJs: false, module: 'ESNext', moduleResolution: 'Bundler', noEmit: true, noResolve: true, skipLibCheck: true, target: 'ES2022' },
+    files: [fileName],
+  });
+  const api = new API({ fs: {
+    readFile: (name) => path.resolve(name) === path.resolve(fileName) ? source : path.resolve(name) === config ? configText : undefined,
+    fileExists: (name) => name === fileName || path.resolve(name) === config ? true : undefined,
+  } });
+  try {
+    using snapshot = api.updateSnapshot({ openProjects: [config] });
+    const program = snapshot.getProject(config)?.program;
+    const sourceFile = program?.getSourceFile(fileName);
+    if (!program || !sourceFile) throw new Error(`scope guard could not load ${fileName}`);
 
-  const host = ts.createCompilerHost(options, true);
-  const baseGetSourceFile = host.getSourceFile.bind(host);
-  const isTarget = (candidate: string) => path.resolve(candidate) === path.resolve(fileName);
-
-  host.getSourceFile = (candidate, languageVersion, onError, shouldCreate) =>
-    isTarget(candidate)
-      ? ts.createSourceFile(candidate, source, languageVersion, true, ts.ScriptKind.TS)
-      : baseGetSourceFile(candidate, languageVersion, onError, shouldCreate);
-  host.fileExists = (candidate) => isTarget(candidate) || ts.sys.fileExists(candidate);
-  host.readFile = (candidate) => (isTarget(candidate) ? source : ts.sys.readFile(candidate));
-
-  const program = ts.createProgram([fileName], options, host);
-  const sourceFile = program.getSourceFile(fileName);
-  if (!sourceFile) throw new Error(`scope guard could not load ${fileName}`);
-
-  const found: UnresolvedReference[] = [];
-  for (const diagnostic of program.getSemanticDiagnostics(sourceFile)) {
-    if (diagnostic.code !== CANNOT_FIND_NAME) continue;
-    if (diagnostic.start === undefined) continue;
-    const identifier = identifierAt(sourceFile, diagnostic.start);
-    if (!identifier) continue;
-    if (AMBIENT_RUNTIME_GLOBALS.has(identifier.text)) continue;
-    if (isErasedTypePosition(identifier)) continue;
-    found.push({
-      name: identifier.text,
-      line: sourceFile.getLineAndCharacterOfPosition(diagnostic.start).line + 1,
-    });
+    const found: UnresolvedReference[] = [];
+    for (const diagnostic of program.getSemanticDiagnostics(fileName)) {
+      if (diagnostic.code !== CANNOT_FIND_NAME) continue;
+        const identifier = identifierAt(sourceFile, diagnostic.pos);
+      if (!identifier) continue;
+      if (AMBIENT_RUNTIME_GLOBALS.has(identifier.text)) continue;
+      if (isErasedTypePosition(identifier)) continue;
+      found.push({
+        name: identifier.text,
+        line: sourceFile.getLineAndCharacterOfPosition(diagnostic.pos).line + 1,
+      });
+    }
+    return found;
+  } finally {
+    api.close();
   }
-  return found;
 }
 
 describe('server.ts identifier scope', () => {

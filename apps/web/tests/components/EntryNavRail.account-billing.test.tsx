@@ -78,7 +78,7 @@ describe('account menu 账单 row', () => {
     expect(row.textContent).toContain('账单');
     // `settings` is swapped for `dashboard` in place, so the workspace deep-link
     // param the context supplied survives.
-    expect(row.href).toBe('https://web.example.com/console/dashboard?workspaceId=ws-team');
+    expect(row.href).toBe('https://web.example.com/console/dashboard?workspaceId=ws-team&source=open_design');
     // Opens away from the app, so it must carry the same rel the menu's other
     // outbound links do.
     expect(row.target).toBe('_blank');

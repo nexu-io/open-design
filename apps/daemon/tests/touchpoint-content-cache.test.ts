@@ -303,6 +303,6 @@ describe('touchpoint content cache', () => {
     expect(fs.existsSync(root)).toBe(true);
     // One directory per (environment, account), and the three layers inside it.
     expect(fs.readdirSync(root)).toHaveLength(1);
-    expect(fs.readdirSync(scopeDir()).sort()).toEqual(['assemblies', 'blobs', 'modules']);
+    expect(fs.readdirSync(scopeDir()).sort()).toEqual(['assemblies', 'blobs', 'modules', 'replay-authority.json', 'replay-owner.sqlite']);
   });
 });

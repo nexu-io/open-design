@@ -15,7 +15,7 @@ function jsonResponse(status: number, body: unknown): Response {
 
 describe('createWorkspaceInvite', () => {
   it('POSTs to B with the session bearer + { email, role, workspaceId } body', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(201, { inviteId: 'inv-9' })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(async () => jsonResponse(201, { inviteId: 'inv-9', deliveryStatus: 'sent' })) as unknown as typeof fetch;
     const out = await createWorkspaceInvite(
       { email: '  new@company.com ', role: 'admin', workspaceId: 'ws-team-1' },
       { fetch: fetchImpl, readSession: () => SESSION },
@@ -31,6 +31,29 @@ describe('createWorkspaceInvite', () => {
       invitedEmail: 'new@company.com',
       role: 'admin',
     });
+  });
+
+  it.each([
+    ['pending', 'delivery_pending'],
+    ['delivery_failed', 'delivery_failed'],
+    [undefined, 'create_invalid_response'],
+    ['unknown', 'create_invalid_response'],
+  ])('does not count delivery status %s as sent', async (deliveryStatus, error) => {
+    const out = await createWorkspaceInvite(
+      { email: 'new@company.com', role: 'member', workspaceId: 'ws-team-1' },
+      { fetch: (async () => jsonResponse(201, { id: 'inv-9', deliveryStatus })) as typeof fetch,
+        readSession: () => SESSION },
+    );
+    expect(out).toMatchObject({ ok: false, error });
+  });
+
+  it('rejects a sent response with no invite identity', async () => {
+    const out = await createWorkspaceInvite(
+      { email: 'new@company.com', role: 'member', workspaceId: 'ws-team-1' },
+      { fetch: (async () => jsonResponse(201, { deliveryStatus: 'sent' })) as typeof fetch,
+        readSession: () => SESSION },
+    );
+    expect(out).toMatchObject({ ok: false, error: 'create_invalid_response' });
   });
 
   it('returns no_session without calling B when signed out', async () => {
@@ -139,4 +162,10 @@ describe('createWorkspaceInvite', () => {
     );
     expect(out).toEqual({ ok: false, status: 502, error: 'create_unreachable' });
   });
+});
+
+it('forwards the unchanged invitation operation key for explicit delivery retries', async () => {
+ const fetcher=vi.fn(async()=>jsonResponse(200,{id:'invite',deliveryStatus:'sent'}));
+ await createWorkspaceInvite({email:'new@example.test',role:'member',workspaceId:'workspace',idempotencyKey:'stable-row-operation'}, {fetch:fetcher as typeof fetch,readSession:()=>SESSION});
+ expect((fetcher.mock.calls[0] as unknown as [unknown,RequestInit])[1].headers).toMatchObject({'Idempotency-Key':'stable-row-operation'});
 });

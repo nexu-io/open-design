@@ -24,6 +24,11 @@ export interface PublishedResourceVersion {
   versionId?: string;
 }
 
+/** Identity of the bytes actually landed by a pull, never a later head read. */
+export interface MaterializedResourceVersion extends PublishedResourceVersion {
+  resourceId?: string;
+}
+
 export interface ResourcePublishAdapter {
   /**
    * Publish the current state of a project's sync unit to the resource hub and
@@ -47,7 +52,7 @@ export interface ResourcePublishAdapter {
    * read is not equivalent because the ref may advance while bytes are in
    * flight.
    */
-  pull?(input: ResourcePublishInput): Promise<PublishedResourceVersion | null>;
+  pull?(input: ResourcePublishInput): Promise<MaterializedResourceVersion | null>;
   /**
    * Remove the project from the shared team index. Existing immutable versions may
    * remain in the hub, but team members should no longer discover/pull it from the

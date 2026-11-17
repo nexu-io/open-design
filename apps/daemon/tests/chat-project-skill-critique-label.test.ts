@@ -38,9 +38,12 @@ describe('project skill critique label —— 评审剧场已下线', () => {
   let fakeBinDir: string;
   const originalPath = process.env.PATH;
   const originalCritiqueEnabled = process.env.OD_CRITIQUE_ENABLED;
+  const originalRollout = process.env.OD_NEXT_STRATEGY_ROLLOUT;
 
   beforeAll(async () => {
     process.env.OD_CRITIQUE_ENABLED = '1';
+    // This fixture owns the legacy /api/chat grammar boundary.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     fakeBinDir = await mkdtemp(join(tmpdir(), 'od-project-skill-critique-'));
     const fakeQwenPath = join(fakeBinDir, 'qwen');
     await writeFile(
@@ -94,6 +97,8 @@ setTimeout(() => process.exit(0), 250);
     else process.env.PATH = originalPath;
     if (originalCritiqueEnabled == null) delete process.env.OD_CRITIQUE_ENABLED;
     else process.env.OD_CRITIQUE_ENABLED = originalCritiqueEnabled;
+    if (originalRollout == null) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    else process.env.OD_NEXT_STRATEGY_ROLLOUT = originalRollout;
   });
 
   it('keeps the theater retired for a project that opted in, and lets no panel grammar reach the chat body', async () => {

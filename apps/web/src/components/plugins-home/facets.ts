@@ -130,8 +130,15 @@ function isHyperFramesPlugin(record: InstalledPluginRecord): boolean {
   return matchesAny(record, HYPERFRAMES_TESTS);
 }
 
+// Motion design: templates for the Home `motion-design` task type. They are
+// video-mode plugins, but their Use path must open the OD Next motion-design
+// route, not the generative Video chip.
+function isMotionDesignPlugin(record: InstalledPluginRecord): boolean {
+  return byMode('video')(record) && hasAnySlug(record, ['motion-design']);
+}
+
 function isVideoPlugin(record: InstalledPluginRecord): boolean {
-  return byMode('video')(record) && !isHyperFramesPlugin(record);
+  return byMode('video')(record) && !isHyperFramesPlugin(record) && !isMotionDesignPlugin(record);
 }
 
 function isLiveArtifactPlugin(record: InstalledPluginRecord): boolean {
@@ -222,6 +229,12 @@ const PRIMARY_CATEGORIES: readonly CategoryDef[] = [
     label: 'Image',
     starterPrompt: 'Create an OpenDesign plugin that generates image assets from structured creative direction.',
     test: byMode('image'),
+  },
+  {
+    slug: 'motion-design',
+    label: 'Motion design',
+    starterPrompt: 'Create an OpenDesign plugin that generates an editable, timeline-driven motion design film from a brief.',
+    test: isMotionDesignPlugin,
   },
   {
     slug: 'video',

@@ -215,4 +215,26 @@ describe('collab presence upstream error relay', () => {
     await api.heartbeat();
     expect(heartbeatPresence).toHaveBeenCalledTimes(3);
   });
+
+  it('OPEND-3520: logs a presence failure without the display name or activity payload', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const heartbeatPresence = vi.fn(async () => {
+        throw new Error(
+          'Command failed: /opt/homebrew/bin/vela collab presence heartbeat p1 --client-id m1'
+            + ' --display-name Alice Example --activity-json {"file":"secret-plan.html"}'
+            + '\nError: API request failed with status 404: not_found',
+        );
+      });
+      const api = await startPresenceServer({ heartbeatPresence } as unknown as CollabPresenceCloudClient);
+      expect((await api.heartbeat()).status).toBe(404);
+      const logged = warn.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+      expect(logged).toContain('collab_presence_upstream_failure');
+      expect(logged).not.toContain('Alice Example');
+      expect(logged).not.toContain('secret-plan.html');
+      expect(logged).toContain('upstreamStatus=404');
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

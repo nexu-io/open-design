@@ -34,7 +34,7 @@ test('[P2] captures the onboarding cloud sign-in surface', async ({ page }) => {
     page.getByRole('heading', { name: /Welcome to OpenDesign|欢迎使用 OpenDesign/i }),
   ).toBeVisible({ timeout: T.medium });
   await expect(
-    page.getByRole('button', { name: /Sign in \/ Sign up|登录 \/ 注册/i }),
+    page.getByRole('button', { name: /Sign up \/ Log in|登录 \/ 注册/i }),
   ).toBeVisible();
   await expect(
     page.getByRole('button', { name: /Local AI|本地 AI/i }),
@@ -67,14 +67,10 @@ test('[P2] captures the onboarding Local Agent CLI list surface', async ({ page 
   await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
-  await page
-    .getByRole('button', { name: /Continue \(signed in\)|继续（已登录）/i })
-    .click();
   await expect(
-    page.getByRole('heading', { name: /Choose your model source|选择模型来源/i }),
+    page.getByRole('button', { name: /Continue \(signed in\)|继续（已登录）/i }),
   ).toBeVisible({ timeout: T.medium });
-  await page.getByRole('radio', { name: /Local Agent|本地 Agent/i }).click();
-  await page.getByRole('button', { name: /^(Continue|继续)$/ }).click();
+  await page.getByRole('button', { name: /Local AI|本地 AI/i }).click();
 
   const panel = page.locator('.onboarding-view__setup-panel');
   await expect(panel).toBeVisible({ timeout: T.medium });

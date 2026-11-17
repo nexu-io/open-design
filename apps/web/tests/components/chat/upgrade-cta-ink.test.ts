@@ -112,13 +112,16 @@ describe('Upgrade 按钮 · 绿是底,不是墨', () => {
     expect(hover.some((r) => /color\s*:/.test(r.body))).toBe(true);
   });
 
-  it('尺寸换成底排那一档 —— 44px 的触达高度,不再是卡头里那枚 8px 方块', () => {
-    // 旧稿这颗单独站在卡头右侧,四边等距 8px。搬到底排后稿子给的是
-    // `min-height: 44px; padding: 12px 16px 12px 12px`,而 `.btn` 基底的
-    // 固定 36px 高必须先松开,否则 min-height 永远不生效。
+  it('冻结 r506 的 44px 高、8px 圆角和 1px 绿边覆盖共享 Button 的默认外观', () => {
+    // 原始 `.limit-upBtn` 的计算样式是 86 × 44px、8px 圆角、1px 实线绿边。
+    // 加边框后仍需固定 44px 高，不能让 auto 高度随内距长到 46px。
     const sized = ctaRulesDeclaring('min-height');
     expect(sized.some((r) => /min-height\s*:\s*44px/.test(r.body))).toBe(true);
-    expect(ctaRulesDeclaring('height').some((r) => /(^|;)\s*height\s*:\s*auto/m.test(r.body)))
+    expect(ctaRulesDeclaring('height').some((r) => /(^|;)\s*height\s*:\s*44px/m.test(r.body)))
+      .toBe(true);
+    expect(ctaRulesDeclaring('border-radius').some((r) => /border-radius\s*:\s*8px/.test(r.body)))
+      .toBe(true);
+    expect(ctaRulesDeclaring('border').some((r) => /border\s*:\s*1px solid var\(--upgrade-surface\)/.test(r.body)))
       .toBe(true);
   });
 

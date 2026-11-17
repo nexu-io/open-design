@@ -10,6 +10,18 @@ function assistant(over: Record<string, unknown>): ChatMessage {
 }
 
 describe('foldStrategyTaskTurns', () => {
+  it('preserves production covers and lets a newer failed ref replace an older ready cover', () => {
+    const ref = { id: 'cover', label: 'film.mp4', kind: 'video', displayPolicy: 'latest_with_static_preview', snapshotState: 'ready', thumbnailUrl: '/old.jpg' };
+    const folded = foldStrategyTaskTurns([
+      assistant({ strategyTaskExecutionId: 'motion', strategyTaskRunIndex: 0, artifactRefs: [ref] }),
+      assistant({ strategyTaskExecutionId: 'motion', strategyTaskRunIndex: 1, runStatus: 'succeeded', artifactRefs: [{ ...ref, id: 'new', snapshotState: 'failed', thumbnailUrl: undefined }, { ...ref, id: 'html', label: 'index.html', kind: 'html', thumbnailUrl: '/source.jpg' }] }),
+    ]);
+    expect(folded[0]?.artifactRefs).toEqual([
+      { ...ref, id: 'new', snapshotState: 'failed', thumbnailUrl: undefined },
+      { ...ref, id: 'html', label: 'index.html', kind: 'html', thumbnailUrl: '/source.jpg' },
+    ]);
+  });
+
   it('renders one turn for a Full Plan task without duplicating its output', () => {
     const folded = foldStrategyTaskTurns([
       { id: 'u1', role: 'user', content: '做一个原型' } as ChatMessage,
@@ -28,7 +40,7 @@ describe('foldStrategyTaskTurns', () => {
         content: 'PRODUCTION_TEXT',
         runId: 'run-production',
         runStatus: 'running',
-        events: [{ kind: 'status', label: 'building' }],
+        events: [{ kind: 'done_key', key: '2222222222222222' }, { kind: 'status', label: 'building' }],
         producedFiles: [{ name: 'index.html' } as ProjectFile],
         strategyTaskExecutionId: 'odnext_1',
         strategyTaskRunIndex: 1,
@@ -46,7 +58,7 @@ describe('foldStrategyTaskTurns', () => {
     expect(turn.content.indexOf('PLAN_TEXT')).toBeLessThan(turn.content.indexOf('PRODUCTION_TEXT'));
 
     // Events and files accumulate without loss or repetition.
-    expect(turn.events).toHaveLength(2);
+    expect(turn.events).toHaveLength(3);
     expect(turn.producedFiles?.map((f) => f.name)).toEqual(['plan.md', 'index.html']);
 
     // The turn tracks the latest Run: an intermediate Run finishing is not the

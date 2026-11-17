@@ -63,7 +63,7 @@ describe('DeepSeek V4 Flash workbench campaign entry', () => {
     // touchpoints beside it are home placements and are asserted separately
     // below; that is why this slot may no longer open on `amrLoggedIn` alone.
     expect(entryShellSource).toMatch(
-      /topRightSlot=\{\s*topRightCampaignAudience\s*\|\|\s*\(homeCampaignHostsVisible && amrLoggedIn === true\)\s*\?\s*\(/,
+      /topRightSlot=\{[\s\S]*?topRightCampaignAudience\s*\|\|\s*\(homeCampaignHostsVisible && amrLoggedIn === true\)\s*\?\s*\(/,
     );
     expect(entryShellSource).toMatch(
       /topRightSlot=\{[\s\S]*?\{\s*topRightCampaignAudience\s*\?\s*\([\s\S]*?<WorkbenchCampaignBadge[\s\S]*?audience=\{topRightCampaignAudience\}[\s\S]*?page="home"/,

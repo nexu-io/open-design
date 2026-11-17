@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { touchpointRevocationReceiptOf } from "@open-design/contracts/api/touchpointOffline";
 import { ProductionTouchpointLoadError, loadProductionTouchpointDecision } from "../../src/components/production-touchpoint-loader";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -62,6 +63,19 @@ describe("production touchpoint decision loader", () => {
 				touchpointWithdrawal: true,
 			});
 		}
+	});
+
+
+	it.each(["activityId", "deploymentId", "contentVersionId", "touchpointDecisionId", "all"] as const)("agrees with the shared parser and withdraws for empty %s identity", async (field) => {
+		const receipt = { activityId: "activity-1", deploymentId: "deployment-1", contentVersionId: "version-1", touchpointDecisionId: "decision-1" };
+		for (const key of Object.keys(receipt) as Array<keyof typeof receipt>) {
+			if (field === "all" || key === field) receipt[key] = "";
+		}
+		const body = { error: "production_runtime_revoked", receipt };
+		expect(touchpointRevocationReceiptOf(body)).toBeNull();
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body, { status: 410 })));
+		await expect(loadProductionTouchpointDecision("opend.home.account-badge", "en-US", new AbortController().signal, "decision-1"))
+			.rejects.toMatchObject({ detail: "http_410", touchpointWithdrawal: true });
 	});
 
 	it("does not translate an abort into a load diagnostic", async () => {

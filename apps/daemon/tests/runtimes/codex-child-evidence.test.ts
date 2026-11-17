@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 
 import {
   evaluateRuntimeEvidenceGraphV1,
-  evaluateRuntimeFixtureCaseV1,
   normalizeAgentObservationV1,
   type NormalizedAgentObservationV1,
 } from '@open-design/contracts';
@@ -361,11 +360,11 @@ describe('collectCodexChildEvidence', () => {
         },
       });
       if (replay.caseId !== 'cancel') {
-        expect(evaluateRuntimeFixtureCaseV1(replay.caseId, [
+        expect(evaluateRuntimeEvidenceGraphV1([
           root('running', replay.parentSessionId),
           ...result.observations,
           root('completed', replay.parentSessionId),
-        ])).toMatchObject({ outcome: 'passed' });
+        ])).toMatchObject({ valid: true });
       }
     }
   });
@@ -422,11 +421,6 @@ describe('collectCodexChildEvidence', () => {
       observation.kind === 'child_agent' && observation.status === 'completed'
     ))).toHaveLength(2);
     expect(graph).toMatchObject({ valid: true, evidenceLevel: 'L3' });
-    expect(evaluateRuntimeFixtureCaseV1('child_success', [
-      root('running'),
-      ...result.observations,
-      root('completed'),
-    ])).toMatchObject({ outcome: 'passed' });
     expect(serialized).not.toContain(secretPrompt);
     expect(serialized).not.toContain(home);
     expect(serialized).toContain('open-design.child-injected-prompt');
@@ -483,7 +477,7 @@ describe('collectCodexChildEvidence', () => {
     const childStatuses = result.observations
       .filter((observation) => observation.kind === 'child_agent')
       .map((observation) => observation.status);
-    const fixture = evaluateRuntimeFixtureCaseV1('child_failure_parent_recovers', [
+    const graph = evaluateRuntimeEvidenceGraphV1([
       root('running'),
       ...result.observations,
       root('completed'),
@@ -491,7 +485,7 @@ describe('collectCodexChildEvidence', () => {
 
     expect(childStatuses).toContain('failed');
     expect(childStatuses).toContain('canceled');
-    expect(fixture).toMatchObject({ outcome: 'passed' });
+    expect(graph).toMatchObject({ valid: true });
     expect(result.observations).toContainEqual(expect.objectContaining({
       kind: 'child_agent',
       status: 'failed',
