@@ -3564,18 +3564,27 @@ describe('DesignFilesPanel plugin folders', () => {
     });
     expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'install');
 
-    const publish = container.querySelector<HTMLButtonElement>(
+    // Publish repo and OpenDesign PR live in the row's ⋯ menu.
+    const openMenu = () =>
+      act(() => {
+        container
+          .querySelector<HTMLButtonElement>('[data-testid="design-plugin-folder-menu-generated-plugin"]')
+          ?.click();
+      });
+    openMenu();
+    const publish = container.ownerDocument.querySelector<HTMLButtonElement>(
       '[data-testid="design-plugin-folder-publish-generated-plugin"]',
     );
-    const contribute = container.querySelector<HTMLButtonElement>(
-      '[data-testid="design-plugin-folder-contribute-generated-plugin"]',
-    );
     expect(publish).toBeTruthy();
-    expect(contribute).toBeTruthy();
     await act(async () => {
       publish?.click();
     });
     expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'publish');
+    openMenu();
+    const contribute = container.ownerDocument.querySelector<HTMLButtonElement>(
+      '[data-testid="design-plugin-folder-contribute-generated-plugin"]',
+    );
+    expect(contribute).toBeTruthy();
     await act(async () => {
       contribute?.click();
     });

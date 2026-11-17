@@ -7,7 +7,7 @@ import { communityForLocale } from '../lib/community-links';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import { projectFileUrl, projectRawUrl, refreshLiveArtifact } from '../providers/registry';
 import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
@@ -28,6 +28,7 @@ import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { RemixIcon } from './RemixIcon';
+import { Button } from '@open-design/components';
 import {
   getHtmlSourceSnapshot,
   htmlSourceSnapshotRefreshKey,
@@ -500,6 +501,7 @@ export function DesignFilesPanel({
   liveArtifacts,
   onOpenFile,
   onOpenLiveArtifact,
+  onRefreshFiles,
   onRenameFile,
   onDeleteFile,
   onDeleteFiles,
@@ -550,7 +552,18 @@ export function DesignFilesPanel({
   const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
+  // `kind` picks which item set the shared row popover shows: file rows get
+  // open / rename / copy path / download / delete, plugin-folder result rows
+  // get their secondary share actions.
+  const [menuPos, setMenuPos] = useState<{
+    kind: 'file' | 'plugin-folder';
+    name: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  // The ⋯ trigger that opened the popover, so Escape can hand focus back.
+  const menuTriggerRef = useRef<HTMLElement | null>(null);
+  const menuPopoverRef = useRef<HTMLDivElement | null>(null);
   const MENU_ESTIMATED_HEIGHT = 180;
   const MENU_SAFE_PADDING = 8;
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -558,6 +571,8 @@ export function DesignFilesPanel({
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
+  const [refreshingArtifactId, setRefreshingArtifactId] = useState<string | null>(null);
+  const [liveRefreshNotice, setLiveRefreshNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [copiedLocalPath, setCopiedLocalPath] = useState<string | null>(null);
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
@@ -782,8 +797,15 @@ export function DesignFilesPanel({
     if (!menuPos) return;
     const close = () => setMenuPos(null);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        close();
+        menuTriggerRef.current?.focus();
+      }
     };
+    // Move focus into the menu so keyboard users land on its first item.
+    menuPopoverRef.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+      ?.focus();
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', onKey);
     return () => {
@@ -839,9 +861,15 @@ export function DesignFilesPanel({
     setSelected(new Set());
   }
 
-  function openMenuFor(name: string, el: HTMLElement) {
-    const rect = el.closest('.df-row-menu')?.getBoundingClientRect();
+  function openMenuFor(
+    name: string,
+    el: HTMLElement,
+    kind: 'file' | 'plugin-folder' = 'file',
+  ) {
+    const trigger = el.closest<HTMLElement>('.df-row-menu');
+    const rect = trigger?.getBoundingClientRect();
     if (!rect) return;
+    menuTriggerRef.current = trigger;
 
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - rect.bottom;
@@ -861,7 +889,7 @@ export function DesignFilesPanel({
 
     const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
 
-    setMenuPos({ name, top, left });
+    setMenuPos({ kind, name, top, left });
   }
 
   async function copyLocalPath(fileName: string) {
@@ -1385,6 +1413,24 @@ export function DesignFilesPanel({
     }
   }
 
+  async function handleRefreshLiveArtifact(artifactId: string) {
+    if (refreshingArtifactId) return;
+    setRefreshingArtifactId(artifactId);
+    setLiveRefreshNotice(null);
+    try {
+      await refreshLiveArtifact(projectId, artifactId, workspaceContext);
+    } catch (err) {
+      setLiveRefreshNotice({ message: err instanceof Error ? err.message : String(err) });
+    }
+    try {
+      // Pull the new refresh status (Refresh failed / updated time) into the
+      // row before dropping the local Refreshing state.
+      await onRefreshFiles();
+    } finally {
+      setRefreshingArtifactId(null);
+    }
+  }
+
   const fileActions = viewerOnly ? null : (
     <div className="df-actions">
       {LIBRARY_UI_VISIBLE && onSelectFromLibrary ? (
@@ -1770,36 +1816,69 @@ export function DesignFilesPanel({
               ) : null}
               {resolvedTab === 'live-artifacts' ? (
                 <div className="df-section" key="live-artifacts">
-                  {liveArtifacts.map((artifact) => (
-                    <button
+                  {liveRefreshNotice ? (
+                    <div className="df-inline-notice" role="status">
+                      <ActionNoticeView notice={liveRefreshNotice} />
+                    </div>
+                  ) : null}
+                  {liveArtifacts.map((artifact) => {
+                    const refreshing =
+                      refreshingArtifactId === artifact.artifactId
+                      || artifact.refreshStatus === 'running';
+                    return (
+                    // A div row (not a <button>) so the name button, Refresh
+                    // and ⋯ can sit inside it, and so the global 36px button
+                    // height no longer clips the row. Row click opens.
+                    <div
                       key={artifact.artifactId}
-                      type="button"
                       data-testid={`design-file-row-${artifact.tabId}`}
-                      className="df-row df-row-live-artifact"
-                      onDoubleClick={() => onOpenLiveArtifact(artifact.tabId)}
+                      className="df-row df-row-result df-row-live-artifact df-row-openable"
                       onClick={() => onOpenLiveArtifact(artifact.tabId)}
                     >
+                      <span className="df-row-check" aria-hidden />
                       <span className="df-row-icon" data-kind="live-artifact" aria-hidden>
                         ◉
                       </span>
-                      <span className="df-row-name-wrap">
-                        <span className="df-row-name" title={artifact.title}>
-                          {artifact.title}
-                        </span>
-                        <span className="df-row-sub">
-                          <span>{t('designFiles.kindLiveArtifact')}</span>
-                          <LiveArtifactBadges
-                            compact
-                            status={artifact.status}
-                            refreshStatus={artifact.refreshStatus}
-                          />
-                        </span>
+                      <div className="df-row-name-wrap">
+                        <button type="button" className="df-row-name-btn">
+                          <span className="df-row-name-wrap">
+                            <span className="df-row-name" title={artifact.title}>
+                              {artifact.title}
+                            </span>
+                            <span className="df-row-sub">{t('designFiles.kindLiveArtifact')}</span>
+                          </span>
+                        </button>
+                      </div>
+                      <span className="df-row-status" data-testid={`design-file-status-${artifact.tabId}`}>
+                        <LiveArtifactBadges
+                          compact
+                          status={artifact.status}
+                          refreshStatus={refreshing ? 'running' : artifact.refreshStatus}
+                        />
                       </span>
                       <span className="df-row-time">
                         {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
                       </span>
-                    </button>
-                  ))}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="df-row-action"
+                        data-testid={`design-live-artifact-refresh-${artifact.tabId}`}
+                        disabled={refreshing}
+                        aria-busy={refreshing}
+                        title={t('liveArtifact.refresh.buttonTitle')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRefreshLiveArtifact(artifact.artifactId);
+                        }}
+                      >
+                        {t('liveArtifact.refresh.button')}
+                      </Button>
+                      {/* Live rows have no row-menu items today; the inert
+                          placeholder keeps the ⋯ column aligned with file rows. */}
+                      <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
+                    </div>
+                  );})}
                 </div>
               ) : null}
               {resolvedTab === 'plugin-folders' ? (
@@ -1811,65 +1890,72 @@ export function DesignFilesPanel({
                   ) : null}
                   {pluginFolders.filter((folder) => !hiddenPluginActionPaths.has(folder.path)).map((folder) => {
                     const actionBusy = activePluginActionPaths.has(folder.path);
+                    const sending =
+                      installingFolder === folder.path
+                      || sharingFolder === `publish:${folder.path}`
+                      || sharingFolder === `contribute:${folder.path}`;
+                    const menuOpen = menuPos?.kind === 'plugin-folder' && menuPos.name === folder.path;
                     return (
                     <div
                       key={folder.path}
-                      className="df-row df-row-plugin-folder"
+                      className="df-row df-row-result df-row-plugin-folder df-row-openable"
                       data-testid={`design-plugin-folder-${folder.path}`}
+                      onClick={() => onOpenFile(folder.manifestPath)}
                     >
-                      <button
-                        type="button"
-                        className="df-row-folder-main"
-                        onClick={() => onOpenFile(folder.manifestPath)}
-                      >
-                        <span className="df-row-icon" data-kind="folder" aria-hidden>
-                          DIR
-                        </span>
-                        <span className="df-row-name-wrap">
-                          <span className="df-row-name">{folder.path}</span>
-                          <span className="df-row-sub">
-                            {folder.fileCount} files · ready to add to My plugins
+                      <span className="df-row-check" aria-hidden />
+                      <span className="df-row-icon" data-kind="folder" aria-hidden>
+                        DIR
+                      </span>
+                      <div className="df-row-name-wrap">
+                        <button type="button" className="df-row-name-btn">
+                          <span className="df-row-name-wrap">
+                            <span className="df-row-name" title={folder.path}>{folder.path}</span>
+                            <span className="df-row-sub">
+                              {folder.fileCount} files · ready to add to My plugins
+                            </span>
                           </span>
-                        </span>
-                      </button>
+                        </button>
+                      </div>
+                      <span className="df-row-status" data-testid={`design-plugin-folder-status-${folder.path}`}>
+                        {sending ? <span className="df-row-status-chip">Sending…</span> : null}
+                      </span>
                       <span className="df-row-time">{relativeTime(folder.updatedAt, t)}</span>
                       {onPluginFolderAgentAction ? (
-                        <div className="df-plugin-actions">
-                          <button
-                            type="button"
-                            className="df-plugin-install"
+                        <>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="df-row-action"
                             data-testid={`design-plugin-folder-install-${folder.path}`}
                             disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
-                            onClick={() =>
-                              void handlePluginFolderAgentAction(folder.path, 'install')
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handlePluginFolderAgentAction(folder.path, 'install');
+                            }}
                           >
-                            {installingFolder === folder.path ? 'Sending…' : 'Add to My plugins'}
-                          </button>
+                            Add to My plugins
+                          </Button>
                           <button
                             type="button"
-                            className="df-plugin-install"
-                            data-testid={`design-plugin-folder-publish-${folder.path}`}
-                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
-                            onClick={() =>
-                              void handlePluginFolderAgentAction(folder.path, 'publish')
-                            }
+                            className="df-row-menu"
+                            data-testid={`design-plugin-folder-menu-${folder.path}`}
+                            aria-label={t('designFiles.rowMenuFor', { name: folder.path })}
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpen}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openMenuFor(folder.path, e.currentTarget, 'plugin-folder');
+                            }}
                           >
-                            {sharingFolder === `publish:${folder.path}` ? 'Sending…' : 'Publish repo'}
+                            ⋯
                           </button>
-                          <button
-                            type="button"
-                            className="df-plugin-install"
-                            data-testid={`design-plugin-folder-contribute-${folder.path}`}
-                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
-                            onClick={() =>
-                              void handlePluginFolderAgentAction(folder.path, 'contribute')
-                            }
-                          >
-                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'OpenDesign PR'}
-                          </button>
-                        </div>
-                      ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <span aria-hidden />
+                          <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
+                        </>
+                      )}
                     </div>
                   )})}
                 </div>
@@ -1924,70 +2010,126 @@ export function DesignFilesPanel({
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
+          ref={menuPopoverRef}
+          role={menuPos.kind === 'plugin-folder' ? 'menu' : undefined}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            const items = Array.from(
+              e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'),
+            );
+            if (items.length === 0) return;
+            const current = items.indexOf(document.activeElement as HTMLButtonElement);
+            const step = e.key === 'ArrowDown' ? 1 : -1;
+            items[(current + step + items.length) % items.length]?.focus();
+          }}
         >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const name = menuPos.name;
-              setMenuPos(null);
-              onOpenFile(name);
-            }}
-          >
-            {t('designFiles.openInTab')}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              startRename(menuPos.name);
-            }}
-          >
-            {t('common.rename')}
-          </button>
-          <button
-            type="button"
-            disabled={!files.some((file) => file.name === menuPos.name && file.localPath)}
-            onClick={(e) => {
-              e.stopPropagation();
-              const name = menuPos.name;
-              setMenuPos(null);
-              void copyLocalPath(name);
-            }}
-          >
-            {copiedLocalPath === menuPos.name
-              ? t('designFiles.copiedLocalPath')
-              : t('designFiles.copyLocalPath')}
-          </button>
-          <a
-            href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
-            download={menuPos.name}
-            style={{ textDecoration: 'none' }}
-          >
+          {menuPos.kind === 'plugin-folder' ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`design-plugin-folder-publish-${menuPos.name}`}
+                disabled={
+                  activePluginActionPaths.has(menuPos.name)
+                  || installingFolder !== null
+                  || sharingFolder !== null
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = menuPos.name;
+                  setMenuPos(null);
+                  void handlePluginFolderAgentAction(name, 'publish');
+                }}
+              >
+                Publish repo
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`design-plugin-folder-contribute-${menuPos.name}`}
+                disabled={
+                  activePluginActionPaths.has(menuPos.name)
+                  || installingFolder !== null
+                  || sharingFolder !== null
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = menuPos.name;
+                  setMenuPos(null);
+                  void handlePluginFolderAgentAction(name, 'contribute');
+                }}
+              >
+                OpenDesign PR
+              </button>
+            </>
+          ) : (
+            <>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                const name = menuPos.name;
                 setMenuPos(null);
+                onOpenFile(name);
               }}
             >
-              {t('designFiles.download')}
+              {t('designFiles.openInTab')}
             </button>
-          </a>
-          <button
-            type="button"
-            className="danger"
-            data-testid={`design-file-delete-${menuPos.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              const name = menuPos.name;
-              setMenuPos(null);
-              onDeleteFile(name);
-            }}
-          >
-            {t('designFiles.delete')}
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                startRename(menuPos.name);
+              }}
+            >
+              {t('common.rename')}
+            </button>
+            <button
+              type="button"
+              disabled={!files.some((file) => file.name === menuPos.name && file.localPath)}
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = menuPos.name;
+                setMenuPos(null);
+                void copyLocalPath(name);
+              }}
+            >
+              {copiedLocalPath === menuPos.name
+                ? t('designFiles.copiedLocalPath')
+                : t('designFiles.copyLocalPath')}
+            </button>
+            <a
+              href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
+              download={menuPos.name}
+              style={{ textDecoration: 'none' }}
+            >
+              <button
+                type="button"
+                  onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuPos(null);
+                }}
+              >
+                {t('designFiles.download')}
+              </button>
+            </a>
+            <button
+              type="button"
+              className="danger"
+              data-testid={`design-file-delete-${menuPos.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const name = menuPos.name;
+                setMenuPos(null);
+                onDeleteFile(name);
+              }}
+            >
+              {t('designFiles.delete')}
+            </button>
+            </>
+          )}
         </div>
       ) : null}
     </div>

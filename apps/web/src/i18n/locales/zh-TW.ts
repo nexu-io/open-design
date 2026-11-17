@@ -3223,6 +3223,7 @@ export const zhTW: Dict = {
   "designFiles.back": "返回",
   "designFiles.crumbs": "專案",
   "designFiles.rowMenu": "列選單",
+  "designFiles.rowMenuFor": "{name} 的更多操作",
   "designFiles.openInTab": "在分頁中開啟",
   "designFiles.download": "下載",
   "designFiles.downloadSelected": "下載選中的 {n} 個檔案為 ZIP",

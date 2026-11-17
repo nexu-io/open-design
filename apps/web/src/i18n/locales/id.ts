@@ -3009,6 +3009,7 @@ export const id: Dict = {
   'designFiles.back': 'Kembali',
   'designFiles.crumbs': 'Proyek',
   'designFiles.rowMenu': 'Menu baris',
+  'designFiles.rowMenuFor': 'Tindakan lainnya untuk {name}',
   'designFiles.openInTab': 'Buka di tab',
   'designFiles.download': 'Unduh',
   'designFiles.downloadSelected': 'Unduh {n} sebagai ZIP',

@@ -3020,6 +3020,7 @@ export const de: Dict = {
   'designFiles.back': 'Zurück',
   'designFiles.crumbs': 'Projekt',
   'designFiles.rowMenu': 'Zeilenmenü',
+  'designFiles.rowMenuFor': 'Weitere Aktionen für {name}',
   'designFiles.openInTab': 'In Tab öffnen',
   'designFiles.download': 'Herunterladen',
   'designFiles.downloadSelected': '{n} als ZIP herunterladen',

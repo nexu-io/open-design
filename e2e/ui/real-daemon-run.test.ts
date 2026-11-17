@@ -1267,6 +1267,8 @@ test('[P1] plugin authoring produces a generated-plugin scaffold with action car
   await openAllProjectFiles(page);
   await expect(page.getByTestId('design-plugin-folder-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('design-plugin-folder-install-generated-plugin')).toBeVisible();
+  // Publish repo and OpenDesign PR live in the row's ⋯ menu.
+  await page.getByTestId('design-plugin-folder-menu-generated-plugin').click();
   await expect(page.getByTestId('design-plugin-folder-publish-generated-plugin')).toBeVisible();
   await expect(page.getByTestId('design-plugin-folder-contribute-generated-plugin')).toBeVisible();
 });

@@ -3009,6 +3009,7 @@ export const tr: Dict = {
   'designFiles.back': 'Geri',
   'designFiles.crumbs': 'proje',
   'designFiles.rowMenu': 'Sıra menüsü',
+  'designFiles.rowMenuFor': '{name} için diğer işlemler',
   'designFiles.openInTab': 'Sekmede aç',
   'designFiles.download': 'İndir',
   'designFiles.downloadSelected': '{n} dosyayı ZIP olarak indir',

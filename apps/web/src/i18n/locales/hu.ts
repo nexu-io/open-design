@@ -3009,6 +3009,7 @@ export const hu: Dict = {
   'designFiles.back': 'Vissza',
   'designFiles.crumbs': 'projekt',
   'designFiles.rowMenu': 'Sor menü',
+  'designFiles.rowMenuFor': 'További műveletek: {name}',
   'designFiles.openInTab': 'Megnyitás lapon',
   'designFiles.download': 'Letöltés',
   'designFiles.downloadSelected': '{n} fájl letöltése ZIP-ként',

@@ -3009,6 +3009,7 @@ export const ru: Dict = {
   'designFiles.back': 'Назад',
   'designFiles.crumbs': 'проект',
   'designFiles.rowMenu': 'Меню строки',
+  'designFiles.rowMenuFor': 'Другие действия для {name}',
   'designFiles.openInTab': 'Открыть во вкладке',
   'designFiles.download': 'Скачать',
   'designFiles.downloadSelected': 'Скачать {n} как ZIP',

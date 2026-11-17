@@ -3009,6 +3009,7 @@ export const pl: Dict = {
   'designFiles.back': 'Wstecz',
   'designFiles.crumbs': 'projekt',
   'designFiles.rowMenu': 'Menu wiersza',
+  'designFiles.rowMenuFor': 'Więcej działań dla {name}',
   'designFiles.openInTab': 'Otwórz w karcie',
   'designFiles.download': 'Pobierz',
   'designFiles.downloadSelected': 'Pobierz {n} jako ZIP',

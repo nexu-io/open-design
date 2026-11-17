@@ -3915,6 +3915,7 @@ export interface Dict {
   'designFiles.back': string;
   'designFiles.crumbs': string;
   'designFiles.rowMenu': string;
+  'designFiles.rowMenuFor': string;
   'designFiles.openInTab': string;
   'designFiles.download': string;
   'designFiles.downloadSelected': string;

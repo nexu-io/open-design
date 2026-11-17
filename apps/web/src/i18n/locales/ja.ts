@@ -3009,6 +3009,7 @@ export const ja: Dict = {
   'designFiles.back': '戻る',
   'designFiles.crumbs': 'プロジェクト',
   'designFiles.rowMenu': '行メニュー',
+  'designFiles.rowMenuFor': '{name} のその他の操作',
   'designFiles.openInTab': 'タブで開く',
   'designFiles.download': 'ダウンロード',
   'designFiles.downloadSelected': '{n}件をZIPとしてダウンロード',

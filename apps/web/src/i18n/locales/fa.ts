@@ -3020,6 +3020,7 @@ export const fa: Dict = {
   'designFiles.back': 'بازگشت',
   'designFiles.crumbs': 'پروژه',
   'designFiles.rowMenu': 'منوی ردیف',
+  'designFiles.rowMenuFor': 'اقدامات بیشتر برای {name}',
   'designFiles.openInTab': 'باز کردن در تب',
   'designFiles.download': 'دانلود',
   'designFiles.downloadSelected': 'دانلود {n} به صورت ZIP',

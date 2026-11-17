@@ -3009,6 +3009,7 @@ export const ko: Dict = {
   'designFiles.back': '뒤로',
   'designFiles.crumbs': '프로젝트',
   'designFiles.rowMenu': '항목 메뉴',
+  'designFiles.rowMenuFor': '{name} 추가 작업',
   'designFiles.openInTab': '탭에서 열기',
   'designFiles.download': '다운로드',
   'designFiles.downloadSelected': '{n}개를 ZIP으로 다운로드',

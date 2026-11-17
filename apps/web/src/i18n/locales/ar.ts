@@ -3020,6 +3020,7 @@ export const ar: Dict = {
   'designFiles.back': 'رجوع',
   'designFiles.crumbs': 'مشروع',
   'designFiles.rowMenu': 'قائمة الصف',
+  'designFiles.rowMenuFor': 'مزيد من الإجراءات لـ {name}',
   'designFiles.openInTab': 'فتح في علامة تبويب',
   'designFiles.download': 'تحميل',
   'designFiles.downloadSelected': 'تنزيل {n} كـ ZIP',

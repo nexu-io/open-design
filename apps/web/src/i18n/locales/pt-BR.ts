@@ -3009,6 +3009,7 @@ export const ptBR: Dict = {
   'designFiles.back': 'Voltar',
   'designFiles.crumbs': 'projeto',
   'designFiles.rowMenu': 'Menu da linha',
+  'designFiles.rowMenuFor': 'Mais ações para {name}',
   'designFiles.openInTab': 'Abrir em aba',
   'designFiles.download': 'Baixar',
   'designFiles.downloadSelected': 'Baixar {n} selecionados como ZIP',

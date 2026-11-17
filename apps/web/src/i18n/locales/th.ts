@@ -3009,6 +3009,7 @@ export const th: Dict = {
   'designFiles.back': 'ย้อนกลับ',
   'designFiles.crumbs': 'โปรเจกต์',
   'designFiles.rowMenu': 'เมนูจัดการ',
+  'designFiles.rowMenuFor': 'การดำเนินการเพิ่มเติมสำหรับ {name}',
   'designFiles.openInTab': 'เปิดในแท็บ',
   'designFiles.download': 'ดาวน์โหลด',
   'designFiles.downloadSelected': 'โหลด {n} ลงเป็น ZIP',

@@ -3212,6 +3212,7 @@ export const zhCN: Dict = {
   "designFiles.back": "返回",
   "designFiles.crumbs": "项目",
   "designFiles.rowMenu": "行菜单",
+  "designFiles.rowMenuFor": "{name} 的更多操作",
   "designFiles.openInTab": "在标签页中打开",
   "designFiles.download": "下载",
   "designFiles.downloadSelected": "下载选中的 {n} 个文件为 ZIP",

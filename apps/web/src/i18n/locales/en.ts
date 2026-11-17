@@ -3031,6 +3031,7 @@ export const en: Dict = {
   'designFiles.back': 'Back',
   'designFiles.crumbs': 'Project',
   'designFiles.rowMenu': 'Row menu',
+  'designFiles.rowMenuFor': 'More actions for {name}',
   'designFiles.openInTab': 'Open in tab',
   'designFiles.download': 'Download',
   'designFiles.downloadSelected': 'Download {n} as ZIP',

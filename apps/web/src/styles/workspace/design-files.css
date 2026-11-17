@@ -433,57 +433,72 @@
   position: relative;
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.df-row-live-artifact {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+/* Result rows (plugin folders, live artifacts) share the file row's box and
+   leading columns (check, icon, name, ⋯) so their edges line up with file
+   rows. The trailing cluster is: status (fixed, empty when idle) · time
+   (fixed, right-aligned) · one action · ⋯. Fixed widths keep each column
+   aligned from row to row. */
+.df-row-result {
+  grid-template-columns: 20px 30px minmax(0, 1fr) 136px 72px auto 28px;
 }
-.df-row-plugin-folder {
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
-  cursor: default;
+.df-row-result .df-row-check {
+  /* Keeps the column; result rows are not batch-selectable. */
+  visibility: hidden;
 }
-.df-row-folder-main {
-  appearance: none;
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
+.df-row-result .df-row-time {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.df-row-status {
+  display: inline-flex;
+  justify-content: flex-end;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
+  overflow: hidden;
 }
-.df-plugin-install {
-  appearance: none;
+/* One chip per row: a specific state (Refreshing, Refresh failed, Archived)
+   replaces the generic Live badge so the column never wraps. */
+.df-row-status .live-artifact-badges {
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.df-row-status .live-artifact-badge.live:not(:only-child) {
+  display: none;
+}
+/* Tone stays in the badge fill and border; the label uses the strong text
+   token so it reads at 4.5:1 in both themes. */
+.df-row-status .live-artifact-badge {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-strong);
+}
+.df-row-status-chip {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 10px;
+  padding: 1px 7px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
 }
-.df-plugin-install:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+.df-row-action {
+  white-space: nowrap;
 }
-.df-plugin-install:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.df-plugin-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  flex-wrap: wrap;
+.df-row-menu[aria-expanded="true"] { opacity: 1; }
+@container (max-width: 470px) {
+  /* Narrow panes keep the name readable by dropping the time column. */
+  .df-row-result {
+    grid-template-columns: 20px 30px minmax(0, 1fr) auto auto 28px;
+  }
+  .df-row-result .df-row-time { display: none; }
 }
 .df-inline-notice {
   margin: 0 20px 6px;
