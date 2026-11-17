@@ -27,6 +27,7 @@ import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { refreshErrorMessage } from './live-artifact-refresh-message';
 import { RemixIcon } from './RemixIcon';
 import { Button } from '@open-design/components';
 import {
@@ -861,6 +862,11 @@ export function DesignFilesPanel({
     setSelected(new Set());
   }
 
+  function closeMenuAndRefocus() {
+    setMenuPos(null);
+    menuTriggerRef.current?.focus();
+  }
+
   function openMenuFor(
     name: string,
     el: HTMLElement,
@@ -1413,14 +1419,19 @@ export function DesignFilesPanel({
     }
   }
 
-  async function handleRefreshLiveArtifact(artifactId: string) {
+  async function handleRefreshLiveArtifact(artifactId: string, title: string) {
     if (refreshingArtifactId) return;
     setRefreshingArtifactId(artifactId);
     setLiveRefreshNotice(null);
     try {
-      await refreshLiveArtifact(projectId, artifactId, workspaceContext);
+      const result = await refreshLiveArtifact(projectId, artifactId, workspaceContext);
+      // Same outcome rule as the viewer toolbar: zero refreshed sources is
+      // not a success, so say so instead of silently going back to idle.
+      if (result.refresh.refreshedSourceCount === 0) {
+        setLiveRefreshNotice({ message: `${title}: ${t('liveArtifact.refresh.noSourceTitle')}` });
+      }
     } catch (err) {
-      setLiveRefreshNotice({ message: err instanceof Error ? err.message : String(err) });
+      setLiveRefreshNotice({ message: `${title}: ${refreshErrorMessage(err, t)}` });
     }
     try {
       // Pull the new refresh status (Refresh failed / updated time) into the
@@ -1825,6 +1836,9 @@ export function DesignFilesPanel({
                     const refreshing =
                       refreshingArtifactId === artifact.artifactId
                       || artifact.refreshStatus === 'running';
+                    // One refresh at a time from this list (the handler drops a
+                    // second click), so every row's Refresh reads as disabled.
+                    const refreshDisabled = refreshing || refreshingArtifactId !== null;
                     return (
                     // A div row (not a <button>) so the name button, Refresh
                     // and ⋯ can sit inside it, and so the global 36px button
@@ -1859,21 +1873,26 @@ export function DesignFilesPanel({
                       <span className="df-row-time">
                         {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
                       </span>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="df-row-action"
-                        data-testid={`design-live-artifact-refresh-${artifact.tabId}`}
-                        disabled={refreshing}
-                        aria-busy={refreshing}
-                        title={t('liveArtifact.refresh.buttonTitle')}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleRefreshLiveArtifact(artifact.artifactId);
-                        }}
-                      >
-                        {t('liveArtifact.refresh.button')}
-                      </Button>
+                      {viewerOnly ? (
+                        // Read-only viewers cannot refresh; keep the column.
+                        <span aria-hidden />
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="df-row-action"
+                          data-testid={`design-live-artifact-refresh-${artifact.tabId}`}
+                          disabled={refreshDisabled}
+                          aria-busy={refreshing}
+                          title={t('liveArtifact.refresh.buttonTitle')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleRefreshLiveArtifact(artifact.artifactId, artifact.title);
+                          }}
+                        >
+                          {t('liveArtifact.refresh.button')}
+                        </Button>
+                      )}
                       {/* Live rows have no row-menu items today; the inert
                           placeholder keeps the ⋯ column aligned with file rows. */}
                       <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
@@ -1942,8 +1961,13 @@ export function DesignFilesPanel({
                             aria-label={t('designFiles.rowMenuFor', { name: folder.path })}
                             aria-haspopup="menu"
                             aria-expanded={menuOpen}
+                            onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (menuOpen) {
+                                setMenuPos(null);
+                                return;
+                              }
                               openMenuFor(folder.path, e.currentTarget, 'plugin-folder');
                             }}
                           >
@@ -2011,6 +2035,15 @@ export function DesignFilesPanel({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           ref={menuPopoverRef}
+          onBlur={(e) => {
+            // Tabbing out of the plugin menu closes it, like Escape without
+            // the focus hand-back. The file menu keeps its existing behaviour.
+            if (menuPos.kind !== 'plugin-folder') return;
+            const next = e.relatedTarget as Node | null;
+            if (next && e.currentTarget.contains(next)) return;
+            if (next && next === menuTriggerRef.current) return;
+            setMenuPos(null);
+          }}
           role={menuPos.kind === 'plugin-folder' ? 'menu' : undefined}
           onKeyDown={(e) => {
             if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -2038,7 +2071,7 @@ export function DesignFilesPanel({
                 onClick={(e) => {
                   e.stopPropagation();
                   const name = menuPos.name;
-                  setMenuPos(null);
+                  closeMenuAndRefocus();
                   void handlePluginFolderAgentAction(name, 'publish');
                 }}
               >
@@ -2056,7 +2089,7 @@ export function DesignFilesPanel({
                 onClick={(e) => {
                   e.stopPropagation();
                   const name = menuPos.name;
-                  setMenuPos(null);
+                  closeMenuAndRefocus();
                   void handlePluginFolderAgentAction(name, 'contribute');
                 }}
               >
@@ -2106,7 +2139,7 @@ export function DesignFilesPanel({
             >
               <button
                 type="button"
-                  onClick={(e) => {
+                onClick={(e) => {
                   e.stopPropagation();
                   setMenuPos(null);
                 }}

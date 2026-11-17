@@ -1,4 +1,5 @@
 import { validateCommentSaveTarget } from '../comments/validate-save-target';
+import { refreshErrorMessage } from './live-artifact-refresh-message';
 import { previewStorageKey, readPreviewStorage, savePreviewStorageMessage } from '../runtime/preview-storage';
 import { commentSelectorsMatch, commentUsesIdentity, ownerCommentNeedsLocation, resolveOwnerCommentAnchor } from '../comments/owner-anchor';
 import { indexCommentTargets } from '../comments/target-index';
@@ -2669,17 +2670,6 @@ function LiveArtifactRefreshNotice({
       ) : null}
     </div>
   );
-}
-
-function refreshErrorMessage(error: unknown, t: TranslateFn): string {
-  if (error instanceof LiveArtifactRefreshError && error.status === 0) {
-    return t('liveArtifact.refresh.networkFailure');
-  }
-  if (error instanceof LiveArtifactRefreshError && error.code === 'LIVE_ARTIFACT_REFRESH_UNAVAILABLE') {
-    return t('liveArtifact.refresh.noSourceTitle');
-  }
-  if (error instanceof Error && error.message.length > 0) return error.message;
-  return t('liveArtifact.refresh.genericFailure');
 }
 
 function liveArtifactViewerTabs(t: TranslateFn): Array<{ id: LiveArtifactViewerTab; label: string }> {

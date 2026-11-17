@@ -162,6 +162,90 @@ describe("DesignFilesPanel live-artifact rows", () => {
   });
 });
 
+describe("DesignFilesPanel live-artifact refresh outcomes", () => {
+  function refreshResponse(refreshedSourceCount: number) {
+    return new Response(
+      JSON.stringify({ artifact: {}, refresh: { refreshedSourceCount } }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }
+
+  it("hides Refresh from read-only viewers but keeps the column", () => {
+    renderPanel({ liveArtifacts: [liveArtifact()], viewerOnly: true });
+    fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
+    expect(
+      screen.queryByTestId(`design-live-artifact-refresh-${liveArtifactTabId("la-1")}`),
+    ).toBeNull();
+    const row = screen.getByTestId(`design-file-row-${liveArtifactTabId("la-1")}`);
+    expect(row.children).toHaveLength(7);
+  });
+
+  it("says when a refresh had no source instead of looking like success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => refreshResponse(0)));
+    renderPanel({ liveArtifacts: [liveArtifact()] });
+    fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
+    await act(async () => {
+      fireEvent.click(
+        screen.getByTestId(`design-live-artifact-refresh-${liveArtifactTabId("la-1")}`),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe(
+        "Sales dashboard: No refresh source is available yet.",
+      ),
+    );
+  });
+
+  it("shows the localized network failure message, naming the artifact", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));
+    renderPanel({ liveArtifacts: [liveArtifact()] });
+    fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
+    await act(async () => {
+      fireEvent.click(
+        screen.getByTestId(`design-live-artifact-refresh-${liveArtifactTabId("la-1")}`),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe(
+        "Sales dashboard: Refresh request failed. Check your connection and try again.",
+      ),
+    );
+  });
+
+  it("disables every row's Refresh while one refresh is in flight", async () => {
+    let finish: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { finish = resolve; })));
+    renderPanel({
+      liveArtifacts: [
+        liveArtifact(),
+        liveArtifact({ artifactId: "la-2", tabId: liveArtifactTabId("la-2"), title: "Weekly KPIs" }),
+      ],
+    });
+    fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
+    const first = screen.getByTestId<HTMLButtonElement>(
+      `design-live-artifact-refresh-${liveArtifactTabId("la-1")}`,
+    );
+    const second = screen.getByTestId<HTMLButtonElement>(
+      `design-live-artifact-refresh-${liveArtifactTabId("la-2")}`,
+    );
+    await act(async () => {
+      fireEvent.click(first);
+    });
+    expect(first.disabled).toBe(true);
+    expect(second.disabled).toBe(true);
+    // The row being refreshed shows Refreshing… in its status column.
+    expect(
+      screen.getByTestId(`design-file-status-${liveArtifactTabId("la-1")}`).textContent,
+    ).toContain("Refreshing");
+
+    await act(async () => {
+      finish(refreshResponse(1));
+    });
+    await waitFor(() => expect(second.disabled).toBe(false));
+    expect(first.disabled).toBe(false);
+  });
+});
+
 describe("DesignFilesPanel plugin-folder rows", () => {
   it("keeps one primary action in the row and moves share actions into ⋯", async () => {
     const onPluginFolderAgentAction = vi.fn();
@@ -238,6 +322,35 @@ describe("DesignFilesPanel plugin-folder rows", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("returns focus to ⋯ after picking a menu item, and ⋯ toggles the menu", async () => {
+    renderPanel({ files: pluginFiles, onPluginFolderAgentAction: vi.fn() });
+    fireEvent.click(screen.getByTestId("design-files-tab-plugin-folders"));
+
+    const trigger = screen.getByTestId("design-plugin-folder-menu-generated-plugin");
+    fireEvent.mouseDown(trigger);
+    fireEvent.click(trigger);
+    expect(screen.getByTestId("design-file-menu-popover")).toBeTruthy();
+    fireEvent.mouseDown(trigger);
+    fireEvent.click(trigger);
+    expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(trigger);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("design-plugin-folder-publish-generated-plugin"));
+    });
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("closes the menu when focus leaves it", () => {
+    renderPanel({ files: pluginFiles, onPluginFolderAgentAction: vi.fn() });
+    fireEvent.click(screen.getByTestId("design-files-tab-plugin-folders"));
+    fireEvent.click(screen.getByTestId("design-plugin-folder-menu-generated-plugin"));
+    const item = screen.getByTestId("design-plugin-folder-contribute-generated-plugin");
+    fireEvent.blur(item, { relatedTarget: document.body });
+    expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
   });
 
   it("shows Sending… in the status column while an action is in flight", async () => {

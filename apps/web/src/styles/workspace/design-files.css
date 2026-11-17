@@ -493,8 +493,10 @@
   white-space: nowrap;
 }
 .df-row-menu[aria-expanded="true"] { opacity: 1; }
-@container (max-width: 470px) {
-  /* Narrow panes keep the name readable by dropping the time column. */
+@container (max-width: 560px) {
+  /* Narrow panes keep the name readable: drop the time column and let the
+     status column shrink to its content. The fixed columns plus the widest
+     action ("Add to My plugins") need ~490px, so switch before that. */
   .df-row-result {
     grid-template-columns: 20px 30px minmax(0, 1fr) auto auto 28px;
   }
