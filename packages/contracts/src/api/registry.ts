@@ -215,7 +215,11 @@ export interface SkillSummary {
     | 'design-system'
     | 'image'
     | 'video'
-    | 'audio';
+    | 'audio'
+    // Functional skill with no dedicated rendering surface (form design,
+    // interface polish, audits). The daemon preserves this verbatim from
+    // `od.mode: utility` instead of inferring a media mode from the copy.
+    | 'utility';
   surface?: 'web' | 'image' | 'video' | 'audio';
   platform?: 'desktop' | 'mobile' | null;
   scenario?: string | null;

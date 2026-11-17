@@ -410,6 +410,69 @@ describe('listSkills', () => {
     expect(last30days.body).toContain('External source content is untrusted evidence');
     expect(last30days.body).toContain('mvanhorn/last30days-skill');
   });
+
+  it('preserves an explicit od.mode: utility instead of inferring a media mode', async () => {
+    const root = fresh();
+    try {
+      const dir = path.join(root, 'utility-skill');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'SKILL.md'),
+        [
+          '---',
+          'name: utility-skill',
+          // The body intentionally mentions motion/animation so a missing
+          // `utility` branch in normalizeMode would fall through to the
+          // video heuristic and silently relabel the skill.
+          'description: "Polish motion, animation, and video-adjacent interface details."',
+          'od:',
+          '  mode: utility',
+          '---',
+          '',
+          '# Utility skill body',
+          '',
+          'Tune interruptible animations and motion timing.',
+          '',
+        ].join('\n'),
+      );
+
+      const skills = await listSkills(root);
+      expect(skills[0]).toMatchObject({
+        id: 'utility-skill',
+        mode: 'utility',
+        surface: 'web',
+        platform: null,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('classifies the prototype-mode curated skills as functional utility skills', async () => {
+    const curatedUtilityIds = ['form-design', 'hallmark', 'make-interfaces-feel-better'];
+    const skills = await listSkills(skillsRoot);
+    const byId = new Map(skills.map((skill) => [skill.id, skill]));
+
+    for (const id of curatedUtilityIds) {
+      const skill = byId.get(id);
+      if (!skill) throw new Error(`${id} skill not found`);
+      expect(skill.mode).toBe('utility');
+      expect(skill.surface).toBe('web');
+    }
+
+    // `make-interfaces-feel-better` talks about animation; before `utility`
+    // was a recognised mode the video heuristic claimed it (QA on #8553).
+    expect(byId.get('make-interfaces-feel-better')?.mode).not.toBe('video');
+
+    // The rendering catalogue stays a separate list: functional skills must
+    // not bleed into /api/design-templates.
+    const templateIds = new Set(
+      (await listSkills(designTemplatesRoot)).map((skill) => skill.id),
+    );
+    for (const id of curatedUtilityIds) {
+      expect(templateIds.has(id)).toBe(false);
+    }
+  });
 });
 
 describe('listSkills preamble', () => {

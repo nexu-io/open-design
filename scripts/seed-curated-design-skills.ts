@@ -35,10 +35,12 @@ interface CuratedSkill {
   // Lowercase keywords / phrases the agent matches against. Aim for 3-6
   // distinct phrases per skill so triggers stay specific.
   triggers: string[];
-  // Maps to the `od.mode` filter. Pick the closest functional-skill mode
-  // (`utility` or `design-system`) or one of the seven modes the daemon
-  // recognises; anything else falls back to "prototype" at serve time
-  // (see normalizeMode in apps/daemon/src/skills.ts).
+  // Maps to the `od.mode` filter. Prefer `utility` for functional skills
+  // (guidance-only workflows with no dedicated rendering surface),
+  // `design-system` for brand systems, or one of the rendering modes
+  // (image/video/audio/deck/template/prototype). Anything else falls back
+  // to "prototype" at serve time (see normalizeMode in
+  // apps/daemon/src/skills.ts).
   mode: Mode;
   // Free-form category slug that powers the new category filter row in
   // Settings → Skills. Keep the vocabulary tight so a few pills cover the

@@ -63,7 +63,7 @@ triggers: […]
 # --- OD extensions below this line ---
 
 od:
-  mode: deck                        # prototype | deck | template | design-system | image | video | audio
+  mode: deck                        # prototype | deck | template | design-system | utility | image | video | audio
   surface: web                      # web | image | video | audio
   scenario: marketing               # gallery/filter hint
   category: presentations           # free-form lowercase filter slug
@@ -150,7 +150,7 @@ link, but that storage detail is separate from per-run staging.
 
 ## 4. Registry modes
 
-The daemon normalizes `od.mode` to one of seven values. These values classify both functional skills and design-template bundles; they are not the same thing as the six New Project tabs described in [`modes.md`](modes.md).
+The daemon normalizes `od.mode` to one of eight values. These values classify both functional skills and design-template bundles; they are not the same thing as the six New Project tabs described in [`modes.md`](modes.md). The rendering modes (`prototype`, `deck`, `template`, `image`, `video`, `audio`) describe an artifact shape; the functional modes (`utility`, `design-system`) describe a workflow that has no dedicated rendering surface.
 
 ### 4.1 `prototype`
 
@@ -194,6 +194,13 @@ The daemon normalizes `od.mode` to one of seven values. These values classify bo
 - **Surface:** defaults to the matching media kind unless `od.surface` overrides it.
 - **Inputs:** provider/model controls and media-specific metadata are owned by the Media UI and shared contracts.
 - **Design system:** media bundles normally opt out because prompt templates, rather than interface tokens, drive these provider-backed generations.
+
+### 4.6 `utility`
+
+- **Purpose:** classify a functional skill that works on user input mid-task and has no dedicated rendering surface (form design, interface-polish passes, audits, briefs, packagers).
+- **Surface:** defaults to `web`; it is a `Skills` catalogue entry, not a design-template gallery entry, so it never appears in `/api/design-templates`.
+- **Output:** defined by the skill; the artifact kind comes from the project/run, not from the mode.
+- **Why explicit:** an inferred mode would read the skill copy and misclassify it. `make-interfaces-feel-better` mentions animation, so the video heuristic claimed it before `utility` was recognised; `form-design` and `hallmark` fell back to `prototype`. Functional skills should declare `od.mode: utility` rather than rely on that inference.
 
 ## 5. The DESIGN.md as skill context
 
