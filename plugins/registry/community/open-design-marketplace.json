@@ -143,7 +143,7 @@
     {
       "name": "community/vizney-blocks",
       "title": "Vizney Blocks",
-      "version": "0.29.0",
+      "version": "0.58.0",
       "source": "github:yehwanhwang/vizney-blocks@main/skills/vizney-blocks",
       "publisher": {
         "id": "vizney",
@@ -158,14 +158,15 @@
       "tags": [
         "community",
         "dashboard",
-        "kpi",
+        "motion",
+        "controls",
         "chart",
         "data-visualization",
         "html",
         "cards",
         "korean"
       ],
-      "description": "Copy-paste HTML dashboard cards (37 cards, 14 chart types) built on the Vizney chart guide: pick a card by the question the screen answers, keep the card code, change only its JSON."
+      "description": "Copy-paste HTML cards for dashboards: charts read through their motion and the controls that filter them, built on the Vizney chart guide. Keep the card code, change only its JSON, and connect controls to charts with a short page script."
     }
   ]
 }
