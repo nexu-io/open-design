@@ -421,17 +421,26 @@ const NAMED_HTML_ENTITIES: Record<string, string> = {
   nbsp: '\u00A0',
 };
 export function decodeHtmlEntity(s: string): string {
-  // Named entities: &name;
-  s = s.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (_, name) => NAMED_HTML_ENTITIES[name] ?? `&${name};`);
-  // Decimal numeric: &#digits;
+  // Named entities: &name; — case-insensitive per HTML spec.
+  s = s.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (_, name) => {
+    const mapped = NAMED_HTML_ENTITIES[name.toLowerCase()];
+    return mapped ?? `&${name};`;
+  });
+  // Decimal numeric: &#digits; — guard against out-of-range code points.
   s = s.replace(/&#(\d+);/g, (_, digits) => {
     const code = parseInt(digits, 10);
-    return Number.isNaN(code) ? `&#${digits};` : String.fromCodePoint(code);
+    if (!Number.isNaN(code) && code >= 0 && code <= 0x10ffff) {
+      return String.fromCodePoint(code);
+    }
+    return `&#${digits};`;
   });
-  // Hex numeric: &#xHH; or &#xHHH;
+  // Hex numeric: &#xHH; or &#xHHH; — guard against out-of-range code points.
   s = s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
     const code = parseInt(hex, 16);
-    return Number.isNaN(code) ? `&#x${hex};` : String.fromCodePoint(code);
+    if (!Number.isNaN(code) && code >= 0 && code <= 0x10ffff) {
+      return String.fromCodePoint(code);
+    }
+    return `&#x${hex};`;
   });
   return s;
 }
