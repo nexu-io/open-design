@@ -93,7 +93,7 @@ That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 an
 
 Find a visual starting point for a product launch, feature demo, brand story, or milestone. Browse selected motion references and adaptation guides, copy a brief into your agent, and bring your own message, brand, and assets.
 
-To remake a reference video, use [OpenMotion](https://github.com/nexu-io/openmotion) to edit its scenes in HTML and export an MP4.
+[OpenMotion](https://github.com/nexu-io/openmotion) is a full-stack agentic video studio and an open-source alternative to Claude Motion and CapCut. Upload a reference video or paste a social video link to recreate it with your own brand kit and copy.
 
 [Explore motion references and start creating →](docs/motion-templates/README.md)
 <!-- motion-template-library:end -->

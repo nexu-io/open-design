@@ -93,7 +93,7 @@ OpenDesign 是**首个协作式 AI 设计 Agent 工作台**。从需求描述出
 
 围绕产品发布、功能演示、品牌故事或阶段成果，找到适合这次传播的动效参考。浏览精选动效参考与制作说明，直接复制指令交给 Agent，再换成自己的文案、品牌与素材。
 
-如果你手头已有参考视频，可以用 [OpenMotion](https://github.com/nexu-io/openmotion) 复刻镜头，在 HTML 中编辑，然后导出 MP4。
+[OpenMotion](https://github.com/nexu-io/openmotion) 是一个由 AI Agent 驱动的全栈视频创作工作台，也是 Claude Motion 与 CapCut 的开源替代方案。上传参考视频或粘贴社交平台上的视频链接，就能用自己的品牌视觉规范和文案复刻原片。
 
 [浏览动效参考，开始创作 →](../motion-templates/README.zh-CN.md)
 <!-- motion-template-library:end -->
