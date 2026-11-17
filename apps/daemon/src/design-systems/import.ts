@@ -390,11 +390,32 @@ async function copyFonts(fonts: FileCandidate[], outDir: string): Promise<string
   const fontsDir = path.join(outDir, 'fonts');
   await mkdir(fontsDir, { recursive: true });
   const copied: string[] = [];
+  const manifestEntries: Array<{ family: string; weight: string; style: string; file: string; format: string }> = [];
   for (const font of fonts) {
-    const targetName = slugify(path.basename(font.relPath, path.extname(font.relPath))) + path.extname(font.relPath).toLowerCase();
+    const ext = path.extname(font.relPath).toLowerCase();
+    const baseSlug = slugify(path.basename(font.relPath, ext));
+    const targetName = baseSlug + ext;
     await copyFile(font.absPath, path.join(fontsDir, targetName));
     copied.push(`fonts/${targetName}`);
+    const rawBase = path.basename(font.relPath, ext);
+    // Keep the family verbatim-identical to manifest.json's fonts entry
+    // (cleanDisplayName of the raw basename) so the kit's typography families
+    // resolve against the injected @font-face declarations.
+    const family = cleanDisplayName(rawBase);
+    manifestEntries.push({
+      family,
+      weight: (baseSlug.match(/(?:^|-)(\d{3})(?:-|$)/)?.[1] ?? '400'),
+      style: /-italic(?:-|$)/.test(baseSlug) ? 'italic' : 'normal',
+      file: targetName,
+      format: ext === '.woff2' ? 'woff2' : ext === '.woff' ? 'woff' : ext === '.otf' ? 'otf' : 'truetype',
+    });
   }
+  await writeFile(
+    path.join(fontsDir, 'manifest.json'),
+    `${JSON.stringify({ files: manifestEntries }, null, 2)}\n`,
+    'utf8',
+  );
+  copied.push('fonts/manifest.json');
   return copied;
 }
 
@@ -507,13 +528,80 @@ function normalizeCraftList(value: unknown): string[] {
   return out;
 }
 
+const HEX_COLOR_VALUE_RE = /^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+// Keep only concrete hex values and dedupe by token name (first wins) so the
+// generated palette lists printable colors instead of var() indirections.
+function resolvePalettePool(cssVariables: CssVariable[]): CssVariable[] {
+  const byName = new Set<string>();
+  const out: CssVariable[] = [];
+  for (const token of cssVariables) {
+    if (byName.has(token.name)) continue;
+    if (!HEX_COLOR_VALUE_RE.test(token.value.trim())) continue;
+    byName.add(token.name);
+    out.push(token);
+  }
+  return out;
+}
+
+const PALETTE_SLOT_HINTS: Array<{ slot: string; fallback: string; hints: string[] }> = [
+  { slot: 'Canvas', fallback: '#ffffff', hints: ['background', 'canvas', 'surface', 'paper', 'bg'] },
+  { slot: 'Foreground', fallback: '#0f172a', hints: ['foreground', 'heading', 'ink', 'fg', 'text'] },
+  { slot: 'Accent', fallback: '#2563eb', hints: ['accent', 'brand', 'primary'] },
+  { slot: 'Support', fallback: '#64748b', hints: ['muted', 'border', 'secondary', 'meta', 'link'] },
+];
+
+function findPaletteToken(pool: CssVariable[], hints: string[]): CssVariable | undefined {
+  return pool.find((token) => hints.some((hint) => token.name.includes(hint)));
+}
+
+function paletteFrontmatterColors(pool: CssVariable[]): Record<string, string> | undefined {
+  if (pool.length === 0) return undefined;
+  const entries = PALETTE_SLOT_HINTS.map(({ slot, fallback, hints }) => {
+    const token = findPaletteToken(pool, hints);
+    return [slot, token?.value.trim() ?? fallback] as const;
+  });
+  return Object.fromEntries(entries);
+}
+
+function renderPaletteSection(pool: CssVariable[]): string {
+  if (pool.length === 0) return '';
+  const rows = pool.slice(0, 16).map((token) => {
+    const slot = PALETTE_SLOT_HINTS.find(({ hints }) => hints.some((hint) => token.name.includes(hint)));
+    const role = slot?.slot ?? 'Token';
+    const cleanName = token.name.replace(/^--/, '').replace(/-/g, ' ').trim();
+    const displayName = cleanName.length > 0 ? cleanName : role;
+    return `| ${role} | ${displayName} | \`${token.value.trim()}\` | imported from ${token.source} |`;
+  });
+  return [
+    '## Palette',
+    '',
+    '| Role | Name | Hex | Usage |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+    '',
+  ].join('\n');
+}
+
 function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
   const colors = tokenCandidates(scan.cssVariables, ['color', 'accent', 'primary', 'background', 'surface', 'border'])
     .slice(0, 16)
     .map((token) => `- \`${token.name}: ${token.value}\` from \`${token.source}\``);
   const components = scan.components.map((component) => `- ${component.name}: \`${component.relPath}\``);
   const assets = scan.assets.map((asset) => `- \`${asset.relPath}\``);
+  const palettePool = resolvePalettePool(scan.cssVariables);
+  const frontmatterColors = paletteFrontmatterColors(palettePool);
+  const frontmatter = [
+    '---',
+    `name: ${name}`,
+    `category: Imported`,
+    `surface: web`,
+    ...(frontmatterColors ? ['colors:', ...Object.entries(frontmatterColors).map(([key, value]) => `  ${key}: "${value}"`)] : []),
+    '---',
+    '',
+  ];
   return [
+    ...frontmatter,
     `# ${name}`,
     '',
     '> Category: Imported',
@@ -521,6 +609,7 @@ function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
     '',
     scan.packageDescription ?? `Imported design system extracted from \`${scan.sourceRoot}\`.`,
     '',
+    renderPaletteSection(palettePool),
     '## Source',
     '',
     `- Project path: \`${scan.sourceRoot}\``,

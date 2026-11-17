@@ -155,12 +155,15 @@ interface BrandFontManifestFile {
 
 // Load real typefaces so specimens render for real: append any Google Fonts
 // stylesheets the kit declares, and inject self-hosted @font-face from the
-// project's fonts/manifest.json. Both are best-effort and torn down on change.
+// project's fonts/manifest.json — or from a design-system bundle manifest
+// (fonts/manifest.json via the daemon static route) when there is no
+// project. Both are best-effort and torn down on change.
 export function useBrandFonts(
   projectId: string | undefined,
   fonts: { googleFontsUrl?: string }[],
   workspaceContext: WorkspaceCollabContext | null = null,
   workspaceReadGeneration?: string,
+  dsFontsManifestUrl?: string | null,
 ): void {
   const googleUrls = useMemo(() => {
     const urls = fonts
@@ -182,24 +185,48 @@ export function useBrandFonts(
     };
   }, [googleUrls]);
 
+  const brandFontSource = projectId
+    ? `project:${projectId}`
+    : dsFontsManifestUrl
+      ? `bundle:${dsFontsManifestUrl}`
+      : null;
+
   useEffect(() => {
-    if (!projectId) return;
+    const activeProjectId = brandFontSource?.startsWith('project:')
+      ? brandFontSource.slice('project:'.length)
+      : undefined;
+    const bundleManifestUrl = brandFontSource?.startsWith('bundle:')
+      ? brandFontSource.slice('bundle:'.length)
+      : undefined;
+    if (!activeProjectId && !bundleManifestUrl) return;
     let cancelled = false;
     let styleEl: HTMLStyleElement | null = null;
     void (async () => {
       try {
-        const manifest = await fetchProjectFileText(
-          projectId,
-          'fonts/manifest.json',
-          { cache: 'no-store', workspaceContext },
-        );
-        if (!manifest) return;
-        const data = JSON.parse(manifest) as { files?: BrandFontManifestFile[] };
-        const files = Array.isArray(data?.files) ? data.files : [];
+        let files: BrandFontManifestFile[] = [];
+        if (bundleManifestUrl) {
+          const response = await fetch(bundleManifestUrl, { cache: 'no-store' });
+          if (!response.ok) return;
+          const data = await response.json() as { files?: BrandFontManifestFile[] };
+          files = Array.isArray(data?.files) ? data.files : [];
+        } else if (activeProjectId) {
+          const manifest = await fetchProjectFileText(
+            activeProjectId,
+            'fonts/manifest.json',
+            { cache: 'no-store', workspaceContext },
+          );
+          if (!manifest) return;
+          const data = JSON.parse(manifest) as { files?: BrandFontManifestFile[] };
+          files = Array.isArray(data?.files) ? data.files : [];
+        }
         if (cancelled || files.length === 0) return;
+        const fontFileUrl = (file: string): string =>
+          bundleManifestUrl
+            ? new URL(`fonts/${file}`, bundleManifestUrl).toString()
+            : projectRawUrl(activeProjectId ?? projectId ?? '', `fonts/${file}`, workspaceContext);
         const css = files
           .map((f) => {
-            const url = projectRawUrl(projectId, `fonts/${f.file}`, workspaceContext);
+            const url = fontFileUrl(f.file);
             return [
               '@font-face {',
               `  font-family: '${f.family.replace(/'/g, '')}';`,
@@ -212,7 +239,7 @@ export function useBrandFonts(
           })
           .join('\n');
         styleEl = document.createElement('style');
-        styleEl.dataset.brandFonts = projectId;
+        styleEl.dataset.brandFonts = activeProjectId ?? bundleManifestUrl ?? 'brand-fonts';
         styleEl.textContent = css;
         document.head.appendChild(styleEl);
       } catch {
@@ -223,7 +250,7 @@ export function useBrandFonts(
       cancelled = true;
       if (styleEl) styleEl.remove();
     };
-  }, [projectId, workspaceContext, workspaceReadGeneration]);
+  }, [brandFontSource, projectId, workspaceContext, workspaceReadGeneration]);
 }
 
 interface BrandTokenSubset {
@@ -380,7 +407,7 @@ function DesignKitViewInner({
   const stickyHeaderRef = useRef<HTMLElement | null>(null);
   const logoSectionRef = useRef<HTMLElement | null>(null);
 
-  useBrandFonts(kit.projectId, kit.fonts, workspaceContext, workspaceReadGeneration);
+  useBrandFonts(kit.projectId, kit.fonts, workspaceContext, workspaceReadGeneration, kit.fontsManifestUrl);
 
   const logoCandidates = useMemo(
     () =>
