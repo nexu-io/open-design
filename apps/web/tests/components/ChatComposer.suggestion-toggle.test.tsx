@@ -109,25 +109,22 @@ describe('ChatComposer · toggleDraftSuggestion', () => {
 });
 
 describe('ChatComposer · draft view for suggestion rows', () => {
-  it('reports the current draft and notifies subscribers when it changes', async () => {
-    const ref = renderComposer();
+  it('reports the current draft and calls onDraftChange on mount and on every change', async () => {
+    const onDraftChange = vi.fn();
+    const ref = renderComposer({ onDraftChange });
     await flushMounts();
-    const listener = vi.fn();
-    const unsubscribe = ref.current!.subscribeDraft(listener);
+    // a (re)mounted composer announces itself so the host can re-sync its rows
+    expect(onDraftChange).toHaveBeenCalled();
 
+    onDraftChange.mockClear();
     act(() => ref.current!.toggleDraftSuggestion('Add a page', true));
     expect(ref.current!.getDraftText()).toBe('Add a page');
-    expect(listener).toHaveBeenCalled();
+    expect(onDraftChange).toHaveBeenCalled();
 
-    // manual edit: the draft view follows (this is what un-selects a pressed row)
-    listener.mockClear();
+    // manual edit: the host is told again (this is what un-selects a pressed row)
+    onDraftChange.mockClear();
     await typeAndSettle('');
     expect(ref.current!.getDraftText()).toBe('');
-    expect(listener).toHaveBeenCalled();
-
-    unsubscribe();
-    listener.mockClear();
-    await typeAndSettle('again');
-    expect(listener).not.toHaveBeenCalled();
+    expect(onDraftChange).toHaveBeenCalled();
   });
 });

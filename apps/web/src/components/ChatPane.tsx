@@ -1852,10 +1852,21 @@ export function ChatPane({
   );
 
   // Read-only view of the composer draft for the suggestion rows, which derive
-  // their selected state from it. Stable, so message rows stay memoized.
+  // their selected state from it. Stable, so message rows stay memoized. The
+  // listeners live here, not in the composer: ChatPane remounts the composer when
+  // it moves into its portal, and subscriptions must survive that.
+  const suggestionDraftListenersRef = useRef(new Set<() => void>());
+  const handleComposerDraftChange = useCallback(() => {
+    suggestionDraftListenersRef.current.forEach((listener) => listener());
+  }, []);
   const suggestionDraftStore = useMemo<SuggestionDraftStore>(
     () => ({
-      subscribe: (listener) => composerRef.current?.subscribeDraft?.(listener) ?? (() => undefined),
+      subscribe: (listener) => {
+        suggestionDraftListenersRef.current.add(listener);
+        return () => {
+          suggestionDraftListenersRef.current.delete(listener);
+        };
+      },
       getSnapshot: () => composerRef.current?.getDraftText?.() ?? '',
     }),
     [],
@@ -4146,6 +4157,7 @@ export function ChatPane({
           hover to expand); they no longer sit as quick pills above the input. */}
     <ChatComposer
       ref={composerRef}
+      onDraftChange={handleComposerDraftChange}
       quotes={quotes}
       onClearQuotes={clearQuotes}
       onRestoreQuotes={setQuotes}

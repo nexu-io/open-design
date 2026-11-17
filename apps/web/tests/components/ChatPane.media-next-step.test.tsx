@@ -191,3 +191,31 @@ test('deselecting removes only the suggestion line, not the same words in the us
   await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
   expect(screen.getByRole('combobox').textContent).toContain(typed);
 });
+
+// Review on #9518: with a measured, non-zero slot width ChatPane first mounts the
+// composer in flow and then remounts it in a portal. The suggestion rows must keep
+// following the draft after that remount (a jsdom slot has zero width, which skips
+// the portal path in every other test).
+test('suggestion rows keep following the draft after the composer moves into its portal', async () => {
+  const rect = { x: 0, y: 0, left: 0, top: 0, right: 640, bottom: 120, width: 640, height: 120, toJSON: () => ({}) };
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect as DOMRect);
+  try {
+    const message = deliveredImage();
+    const suggestion = '保留姿势并改成蓝色背景';
+    message.events?.push({ kind: 'next_steps', suggestions: [suggestion, '换成横向四宫格'] });
+    renderChat(message);
+    // the composer really is in the portal layer
+    await waitFor(() => expect(document.querySelector('.chat-composer-fixed-layer')).not.toBeNull());
+    const row = screen.getByRole('button', { name: suggestion });
+
+    fireEvent.click(row);
+    await waitFor(() => expect(screen.getByRole('combobox').textContent).toContain(suggestion));
+    await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+
+    fireEvent.click(row);
+    await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+    expect(screen.getByRole('combobox').textContent).not.toContain(suggestion);
+  } finally {
+    spy.mockRestore();
+  }
+});
