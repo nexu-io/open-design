@@ -1,4 +1,5 @@
-import type http from 'node:http';
+import http from 'node:http';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -206,6 +207,10 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     await writeFile(
       path.join(dir, 'large-powered.html'),
       Buffer.from(`<!doctype html><html><body>${'x'.repeat((2 * 1024 * 1024) + 256)}<script>new Worker("worker.js")</script></body></html>`),
+    );
+    await writeFile(
+      path.join(dir, 'large-storage.html'),
+      Buffer.from(`<!doctype html><html><body>${'x'.repeat((2 * 1024 * 1024) + 256)}<script>localStorage.setItem("task", "saved")</script></body></html>`),
     );
     await writeFile(path.join(dir, 'body.html'), Buffer.from('<html><body><main>Preview</main></body></html>'));
     // `<head>` is optional markup, so a document can legally have none while a
@@ -871,6 +876,18 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(body.poweredPreview.scannedBytes).toBeGreaterThan(2 * 1024 * 1024);
   });
 
+  it('returns a real-storage preview hint when the storage call is outside the returned HTML prefix', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}/text-preview/large-storage.html?limit=64`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      text: string;
+      poweredPreview: { required: boolean; scannedBytes: number };
+    };
+    expect(body.text).not.toContain('localStorage');
+    expect(body.poweredPreview.required).toBe(true);
+    expect(body.poweredPreview.scannedBytes).toBeGreaterThan(2 * 1024 * 1024);
+  });
+
   it('skips URL preview bridge injection for large HTML so first paint can stream', async () => {
     const res = await fetch(`${rawUrl('large.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability`, {
       headers: { Range: 'bytes=0-127' },
@@ -1424,11 +1441,66 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
         return { target, matches: !!target && document.querySelector(target.selector) === element };
       })()`);
       expect(result).toMatchObject({
-        target: { elementId: 'Home', selector: '[data-screen-label="Home"]' }, matches: true,
+        target: { elementId: 'Home', selector: '[data-screen-label="Home"]', domSelector: 'body > section:nth-of-type(1)' }, matches: true,
       });
     } finally {
       dom.window.close();
     }
+  });
+
+  it('URL comment save validates the live selector without requiring the old identity', async () => {
+    const response = await fetch(`${rawUrl('body.html')}?odPreviewBridge=selection`);
+    const bridge = load(await response.text())('script[data-od-url-selection-bridge]').text();
+    const dom = new JSDOM('<body><button data-od-id="new">Changed copy</button></body>', {
+      url: rawUrl('body.html'), runScripts: 'outside-only', pretendToBeVisual: true,
+    });
+    try {
+      dom.window.eval(`window.posted=[]; window.postMessage=data=>window.posted.push(data);
+        document.querySelector('button').getBoundingClientRect=()=>new DOMRect(0,0,100,40);`);
+      dom.window.eval(bridge);
+      const result = dom.window.eval(`(()=>{
+        var query={type:'od:comment-active-target',validateForSave:true,elementId:'old-id',selector:'body > button:nth-of-type(1)',requestId:'save'};
+        window.dispatchEvent(new MessageEvent('message',{data:query}));
+        var found=window.posted.at(-1);
+        var navigationResults=[];
+        window.location.hash='section';
+        window.dispatchEvent(new MessageEvent('message',{data:query}));
+        navigationResults.push(window.posted.at(-1));
+        history.pushState({},'', '?view=next#section');
+        window.dispatchEvent(new MessageEvent('message',{data:query}));
+        navigationResults.push(window.posted.at(-1));
+        history.replaceState({},'', '?view=last');
+        window.dispatchEvent(new MessageEvent('message',{data:query}));
+        navigationResults.push(window.posted.at(-1));
+        window.dispatchEvent(new MessageEvent('message',{data:{type:'od:comment-mode',enabled:true,mode:'picker'}}));
+        document.querySelector('button').setAttribute('data-od-comment-id','12345678-1234-4234-8234-123456789abc');
+        window.dispatchEvent(new MessageEvent('message',{data:query}));
+        var replacement=window.posted.at(-1);
+        document.querySelector('button').remove();
+        window.dispatchEvent(new MessageEvent('message',{data:query}));
+        var missing=window.posted.at(-1);
+        var fallbackResults=['span','div'].map(function(tag){
+          document.body.innerHTML='<'+tag+'>Original</'+tag+'>';
+          var node=document.querySelector(tag);
+          node.getBoundingClientRect=()=>new DOMRect(0,0,100,40);
+          node.innerHTML=tag==='span'?'':'<span>A</span><span>B</span>';
+          window.dispatchEvent(new MessageEvent('message',{data:Object.assign({},query,{selector:'body > '+tag+':nth-of-type(1)'})}));
+          return window.posted.at(-1);
+        });
+        return {found,navigationResults,replacement,missing,fallbackResults};
+      })()`);
+      expect(result).toMatchObject({ fallbackResults: [
+        { type: 'od:comment-active-target-update', text: '' },
+        { type: 'od:comment-active-target-update', text: 'AB' },
+      ] });
+      expect(result).toMatchObject({ navigationResults: Array.from({ length: 3 }, () => ({
+        type: 'od:comment-active-target-update', documentVersion: `url:${rawUrl('body.html')}`, elementId: 'new',
+      })) });
+      expect(result).toMatchObject({ found: { type: 'od:comment-active-target-update', documentVersion: `url:${rawUrl('body.html')}`, elementId: 'new', text: 'Changed copy' },
+        replacement: { elementId: 'cmt:12345678-1234-4234-8234-123456789abc',
+          selector: '[data-od-comment-id="12345678-1234-4234-8234-123456789abc"]', requestedSelector: 'body > button:nth-of-type(1)' },
+        missing: { type: 'od:comment-location-missing', requestId: 'save' } });
+    } finally { dom.window.close(); }
   });
 
   it('URL served complete bridge strictly describes and locates persisted comment identities', async () => {
@@ -1651,6 +1723,82 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(await api.json()).toEqual({
       error: 'Powered preview origin cannot access this API route',
     });
+  });
+
+  // Node fetch replaces a supplied Host header. Use the real HTTP transport
+  // to exercise the same request host that the browser's project URL sends.
+  function projectOriginRequest(
+    routePath: string,
+    options: { method?: string; headers: http.OutgoingHttpHeaders },
+  ): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+    return new Promise((resolve, reject) => {
+      const request = http.request(new URL(routePath, baseUrl), options, (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk: string) => { body += chunk; });
+        response.on('end', () => resolve({
+          status: response.statusCode ?? 0,
+          headers: response.headers,
+          body,
+        }));
+      });
+      request.on('error', reject);
+      request.end();
+    });
+  }
+
+  it('serves project-scoped powered files on their matching browser origin', async () => {
+    const host = `od-${createHash('sha256').update(projectId).digest('hex').slice(0, 32)}.localhost:${new URL(baseUrl).port}`;
+    const response = await projectOriginRequest(`/api/projects/${projectId}/powered/page.html`, {
+      headers: { Host: host, Origin: `http://${host}`, 'Sec-Fetch-Site': 'same-origin' },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers['document-isolation-policy']).toBe('isolate-and-credentialless');
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    expect(response.body).toBe('<html/>');
+    const capability = await fetch(`${baseUrl}/api/preview/isolation`);
+    expect(await capability.json()).toMatchObject({ projectOrigins: true });
+  });
+
+  it.each([
+    { method: 'GET', path: '/api/projects' },
+    { method: 'GET', path: '/api/preview/isolation' },
+    { method: 'GET', path: '/api/library/clipper-probe' },
+    { method: 'GET', path: '/api/live-artifacts/missing/preview' },
+    { method: 'GET', path: '/api/projects/another-project/powered/page.html' },
+    { method: 'GET', path: '/api/projects/proj-raw-range-test/raw/page.html' },
+    { method: 'POST', path: '/api/projects/proj-raw-range-test/powered/page.html' },
+    { method: 'GET', path: '/artifacts/private.png' },
+    { method: 'GET', path: '/frames/index.html' },
+    { method: 'GET', path: '/' },
+  ])('restricts project-scoped powered origins before serving $method $path', async ({ method, path: routePath }) => {
+    const host = `od-${createHash('sha256').update(projectId).digest('hex').slice(0, 32)}.localhost:${new URL(baseUrl).port}`;
+    const response = await projectOriginRequest(routePath, {
+      method,
+      headers: { Host: host, 'Sec-Fetch-Site': 'same-origin' },
+    });
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects foreign project-scoped powered subresources and API reads through the normal host', async () => {
+    const host = `od-${createHash('sha256').update(projectId).digest('hex').slice(0, 32)}.localhost:${new URL(baseUrl).port}`;
+    const otherHost = `od-${createHash('sha256').update('another-project').digest('hex').slice(0, 32)}.localhost:${new URL(baseUrl).port}`;
+    const foreignAsset = await projectOriginRequest(`/api/projects/${projectId}/powered/page.html`, {
+      headers: {
+        Host: host,
+        Referer: `http://${otherHost}/api/projects/another-project/powered/page.html`,
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-Dest': 'script',
+      },
+    });
+    expect(foreignAsset.status).toBe(403);
+    const api = await projectOriginRequest('/api/projects', {
+      headers: {
+        Referer: `http://${host}/api/projects/${projectId}/powered/page.html`,
+        'Sec-Fetch-Site': 'cross-site',
+      },
+    });
+    expect(api.status).toBe(403);
   });
 
   it('injects all URL preview bridges together', async () => {

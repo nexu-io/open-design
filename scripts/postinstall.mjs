@@ -28,6 +28,7 @@ const localDevelopment = Object.freeze({
     "packages/plugin-runtime",
     "packages/sidecar-proto",
     "packages/launcher-proto",
+    "packages/launcher",
     "packages/sidecar",
     "packages/diagnostics",
     "packages/dsh-runtime",

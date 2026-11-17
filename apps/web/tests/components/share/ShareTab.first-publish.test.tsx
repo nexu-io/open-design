@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ComponentProps } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildWorkspacePermissions, buildWorkspaceSeatSummary, type WorkspaceCollabContext } from '@open-design/contracts';
 import { parse } from 'postcss';
@@ -157,79 +157,17 @@ describe('S1 first-publish visual seam', () => {
     expect(publish).toHaveBeenCalledTimes(1);
   });
 
-  it('3771: explains failed preflight and refuses publishing', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
-    const publish = vi.fn().mockResolvedValue(undefined);
-    render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
-    const toggle = screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' });
-    expect(toggle).toBeEnabled();
-    await screen.findByRole('alert');
-    expect(screen.getByRole('alert')).toHaveTextContent('fileViewer.shareCheckFailed');
-    expect(screen.queryByText('fileViewer.sharePlanUnavailable')).toBeNull();
-    const generate = screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' });
-    expect(generate).toBeDisabled();
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-    expect(generate).toBeDisabled();
-    expect(publish).not.toHaveBeenCalled();
-    fireEvent.click(toggle);
-    await act(async () => { fireEvent.click(generate); });
-    expect(publish).not.toHaveBeenCalled();
-  });
-
-  it('surfaces a pre-check too-large plan through the shared red ShareErrorRow, not a yellow banner, and keeps publish blocked', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({
-      fileCount: 1, totalBytes: 30 * 1048576, exceedsSizeLimit: true, exclusions: [],
-    }) }));
-    const publish = vi.fn().mockResolvedValue(undefined);
-    render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html', publishCurrentFilePublic: publish })} />);
-    const notice = await screen.findByRole('status');
-    // 2026 refactor: item 2 — the red error row moved into the shared
-    // `ShareErrorRow` component (its own CSS Module, so the class name is no
-    // longer literally "publishError"); assert its actual rendered shape
-    // (a <p> with the row's warning-circle icon) instead of a class name.
-    expect(notice.tagName).toBe('P');
-    expect(notice.querySelector('svg')).not.toBeNull();
-    expect(notice).toHaveTextContent('fileViewer.publishFileTooLarge');
-    expect(notice).toHaveTextContent('30.00 MiB');
-    expect(screen.queryByRole('alert')).toBeNull();
-    const generate = screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' });
-    expect(generate).toBeDisabled();
-    fireEvent.click(generate);
-    expect(publish).not.toHaveBeenCalled();
-  });
-
-  it('shows animated progress immediately while the clicked share waits for preflight, without duplicate uploads', async () => {
-    let resolveFetch!: (value: Response) => void;
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { resolveFetch = resolve; })));
+  it('does not fetch a size precheck and submits directly', async () => {
+    const request = vi.fn().mockRejectedValue(new Error('offline'));
+    vi.stubGlobal('fetch', request);
     const input = firstProps();
     render(<ShareTab {...input} />);
     const generate = screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' });
+    expect(generate).toBeEnabled();
     fireEvent.click(generate);
-    const busy = screen.getByRole('menuitem');
-    expect(busy).toBe(generate);
-    expect(busy).toBeDisabled();
-    expect(busy).toHaveAttribute('aria-busy', 'true');
-    expect(busy.querySelector('.icon-spin')).not.toBeNull();
-    const progress = screen.getByRole('progressbar', { name: 'fileViewer.uploadingFile' });
-    expect(progress).not.toHaveAttribute('value');
-    fireEvent.click(busy);
-    expect(input.publishCurrentFilePublic).not.toHaveBeenCalled();
-    await act(async () => resolveFetch(Response.json({ fileCount: 1, totalBytes: 4, exceedsSizeLimit: false, exclusions: [] })));
-    expect(input.publishCurrentFilePublic).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('progressbar')).toBeNull();
-  });
-
-  it('keeps link-access selection usable while preflight is pending (OPEND-3536)', async () => {
-    let resolveFetch!: (value: unknown) => void;
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => { resolveFetch = resolve; })));
-    render(<ShareTab {...firstProps({ projectId: 'p1', filePath: 'index.html' })} />);
-    const toggle = screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' });
-    expect(toggle).toBeEnabled();
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-    resolveFetch({ ok: true, json: async () => ({ fileCount: 1, totalBytes: 4, exceedsSizeLimit: false, exclusions: [] }) });
-    await waitFor(() => expect(toggle).toBeEnabled());
+    await waitFor(() => expect(input.publishCurrentFilePublic).toHaveBeenCalledOnce());
+    expect(request).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('uses only the existing publish callback and leaves deployment outside the seam', async () => {
@@ -296,4 +234,36 @@ describe('S1 first-publish visual seam', () => {
     css.walkRules('button.primary', rule => { rule.walkDecls(decl => { values[decl.prop] = decl.value; }); });
     expect(values).toMatchObject({ height: '32px', 'border-radius': '6px', padding: '0 8px', gap: '5px', background: '#29292B', color: '#FFFFFF', 'font-size': '12px', 'font-weight': '500', 'line-height': '18px', border: '0' });
   });
+});
+
+it('OPEND-3862 puts update pending feedback on its button, not the link switch', () => {
+  const input = props({ publicationStatus: 'active', publicationFreshness: 'outdated',
+    publishingPublicFile: true, publicOperation: 'update', updateCurrentFilePublic: vi.fn(), t: key => zhCN[key] });
+  const { rerender } = render(<ShareTab {...input} />);
+  const updating = screen.getByRole('button', { name: '更新链接中…' });
+  expect(updating).toBeDisabled();
+  expect(updating).toHaveAttribute('aria-busy', 'true');
+  expect(updating.querySelector('.icon-spin')).not.toBeNull();
+  expect(screen.getByRole('switch', { name: '链接访问' }).querySelector('.icon-spin')).toBeNull();
+  rerender(<ShareTab {...input} publicOperation="stop" />);
+  expect(screen.queryByRole('button', { name: '更新链接中…' })).toBeNull();
+});
+
+it('OPEND-4105 separates unresolved queries from unpublished state and preserves known link copying', () => {
+  const retry = vi.fn();
+  const input = firstProps({ publicationQueryState: 'loading', retryPublicationQuery: retry });
+  const { rerender } = render(<ShareTab {...input} />);
+  expect(screen.queryByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' })).toBeNull();
+  expect(screen.getByText('common.loading')).toBeTruthy();
+  expect(screen.getByRole('switch', { name: 'fileViewer.linkAccessTitle' })).toBeDisabled();
+  rerender(<ShareTab {...input} publicationQueryState="error" />);
+  expect(screen.getByRole('alert')).toHaveTextContent('fileViewer.shareCheckFailed');
+  fireEvent.click(screen.getByRole('button', { name: 'preview.retry' }));
+  expect(retry).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' })).toBeNull();
+  rerender(<ShareTab {...input} publicationQueryState="error" filePublished />);
+  expect(screen.getByRole('button', { name: 'fileViewer.copyShareLink' })).not.toBeDisabled();
+  expect(screen.getByText(input.publishedFileUrl)).toBeTruthy();
+  rerender(<ShareTab {...input} publicationQueryState="success" />);
+  expect(screen.getByRole('menuitem', { name: 'fileViewer.generateAndCopyLink' })).not.toBeDisabled();
 });

@@ -12,8 +12,10 @@ vi.mock('../src/i18n', () => ({
 }));
 
 import { ExperienceSurvey } from '../src/components/ExperienceSurvey';
+import { lockWebModalScroll } from '../src/components/modal-scroll-lock';
 import {
   SURVEY_DELAY_MS,
+  isSurveyRetired,
   notifyArtifactDelivered,
 } from '../src/components/experience-survey-trigger';
 
@@ -93,5 +95,54 @@ describe('experience survey card arming', () => {
     passTheDelay();
 
     expect(card()).toBeNull();
+  });
+
+  it('stays armed until the last shared modal scroll lock releases', async () => {
+    const onExposure = vi.fn();
+    const releaseFirst = lockWebModalScroll();
+    const releaseSecond = lockWebModalScroll();
+    try {
+      render(<ExperienceSurvey metricsConsent onExposure={onExposure} />);
+      deliverArtifact();
+      passTheDelay();
+
+      expect(card()).toBeNull();
+      expect(isSurveyRetired()).toBe(false);
+      expect(onExposure).not.toHaveBeenCalled();
+
+      await act(async () => { releaseFirst(); });
+      expect(card()).toBeNull();
+      expect(isSurveyRetired()).toBe(false);
+
+      await act(async () => { releaseSecond(); });
+      expect(card()).not.toBeNull();
+      expect(isSurveyRetired()).toBe(true);
+      expect(onExposure).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseFirst();
+      releaseSecond();
+    }
+  });
+
+  it('waits for both lock owners and wakes on an attribute-only release', async () => {
+    document.body.style.overflow = 'hidden';
+    document.body.setAttribute('data-web-modal-scroll-lock', '');
+    try {
+      render(<ExperienceSurvey metricsConsent />);
+      deliverArtifact();
+      passTheDelay();
+      expect(card()).toBeNull();
+
+      await act(async () => { document.body.style.overflow = ''; });
+      expect(card()).toBeNull();
+      expect(isSurveyRetired()).toBe(false);
+
+      await act(async () => { document.body.removeAttribute('data-web-modal-scroll-lock'); });
+      expect(card()).not.toBeNull();
+      expect(isSurveyRetired()).toBe(true);
+    } finally {
+      document.body.style.overflow = '';
+      document.body.removeAttribute('data-web-modal-scroll-lock');
+    }
   });
 });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import express, { type Response } from 'express';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   closeDatabase,
@@ -140,8 +140,69 @@ describe('conversation routes over 0.22.x oversized run events', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     closeDatabase();
     rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it.each(['*/*', 'application/json', 'application/x-ndjson;q=0, application/json'])
+    ('retains the JSON envelope for Accept: %s', async (accept) => {
+      await withConversationRoutes(db, dataDir, async (baseUrl) => {
+        const response = await fetch(
+          `${baseUrl}/api/projects/${PROJECT_ID}/conversations/${CONVERSATION_ID}/messages`,
+          { headers: { Accept: accept } },
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-type')).toContain('application/json');
+        expect(response.headers.get('vary')).toContain('Accept');
+        expect(await response.json()).toEqual({ messages: [] });
+      });
+    });
+
+  it('returns the existing JSON error before starting a stream for a missing conversation', async () => {
+    await withConversationRoutes(db, dataDir, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/api/projects/${PROJECT_ID}/conversations/missing/messages`,
+        { headers: { Accept: 'application/x-ndjson' } },
+      );
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      expect(await response.json()).toHaveProperty('error');
+    });
+  });
+
+  it('streams full messages without serializing the whole conversation into one string', async () => {
+    for (let index = 0; index < 4; index += 1) {
+      upsertMessage(db, CONVERSATION_ID, {
+        id: `stream-message-${index}`,
+        role: 'assistant',
+        content: `Answer ${index}: ` + 'x'.repeat(12_000),
+        events: [{ kind: 'text', text: `Event ${index}: ` + 'y'.repeat(12_000) }],
+        runStatus: 'succeeded',
+      });
+    }
+    const expected = listMessages(db, CONVERSATION_ID);
+    const stringify = JSON.stringify;
+    // Scale V8's string ceiling down: every message fits, their envelope does not.
+    vi.spyOn(JSON, 'stringify').mockImplementation((value) => {
+      const serialized = stringify(value);
+      if (serialized.length > 32_000) throw new RangeError('Invalid string length');
+      return serialized;
+    });
+
+    await withConversationRoutes(db, dataDir, async (baseUrl) => {
+      const response = await fetch(
+        `${baseUrl}/api/projects/${PROJECT_ID}/conversations/${CONVERSATION_ID}/messages`,
+        { headers: { Accept: 'application/x-ndjson' } },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/x-ndjson');
+      expect(response.headers.get('vary')).toContain('Accept');
+      const records = (await response.text()).trim().split('\n')
+        .map((line) => JSON.parse(line));
+      expect(records.slice(0, -1)).toEqual(expected.map((message) => ({ type: 'message', message })));
+      expect(records.at(-1)).toEqual({ type: 'end', count: expected.length });
+    });
   });
 
   it('GET messages returns a bounded transcript for a conversation holding tens of MB of raw tool lines', async () => {

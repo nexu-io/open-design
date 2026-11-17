@@ -6,6 +6,11 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
+import { settingsSectionToTracking } from '@open-design/contracts/analytics';
+import type { LabsExperiment } from '../../src/components/labs-experiments';
+
+const { labsExperiments } = vi.hoisted(() => ({ labsExperiments: [] as LabsExperiment[] }));
+vi.mock('../../src/components/labs-experiments', () => ({ LABS_EXPERIMENTS: labsExperiments }));
 
 function optionNames(container: HTMLElement): string[] {
   return within(container).getAllByRole('option').map((option) => {
@@ -374,13 +379,13 @@ function renderSettingsDialog(
   const onClose = vi.fn();
   const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
-  const dialog = (
+  const makeDialog = (section = options.initialSection ?? 'execution') => (
     <SettingsDialog
       initial={{ ...baseConfig, ...initial }}
       agents={options.agents ?? availableAgents}
       daemonLive={options.daemonLive ?? true}
       appVersionInfo={options.appVersionInfo ?? null}
-      initialSection={options.initialSection ?? 'execution'}
+      initialSection={section}
       providerModelsCache={options.providerModelsCache}
       welcome={options.welcome}
       onPersist={onPersist}
@@ -391,11 +396,10 @@ function renderSettingsDialog(
       onRefreshAgents={onRefreshAgents}
     />
   );
-  const view = render(
-    options.locale
-      ? <I18nProvider initial={options.locale}>{dialog}</I18nProvider>
-      : dialog,
-  );
+  const wrapDialog = (section?: SettingsSection) => options.locale
+    ? <I18nProvider initial={options.locale}>{makeDialog(section)}</I18nProvider>
+    : makeDialog(section);
+  const view = render(wrapDialog());
 
   return {
     onPersist,
@@ -404,6 +408,7 @@ function renderSettingsDialog(
     onClose,
     onRefreshAgents,
     ...view,
+    rerenderSection: (section?: SettingsSection) => view.rerender(wrapDialog(section)),
   };
 }
 
@@ -492,6 +497,7 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  labsExperiments.length = 0;
   playSoundMock.mockReset();
   requestNotificationPermissionMock.mockReset();
   showCompletionNotificationMock.mockReset();
@@ -821,19 +827,25 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('gpt-4o');
   });
 
-  it('keeps BYOK file-editing limits discoverable from the provider heading (issue #1106)', () => {
-    // Regression cover: switching from Local CLI to BYOK previously gave no
-    // signal that file-editing tools (`Read`/`Write`/`Edit`) are absent on the
-    // API path. Users typed "continue adjusting the design" expecting edits
-    // and got an HTML monologue back. The notice now sits behind a heading
-    // info icon so it stays discoverable without competing with setup fields.
-    renderSettingsDialog();
+  it('keeps BYOK OpenCode file access discoverable from the provider heading', () => {
+    // BYOK now runs through OpenCode with project file tools. Keep that
+    // capability and its local runtime prerequisite discoverable in the
+    // existing provider-heading tooltip.
+    renderSettingsDialog({}, {
+      agents: [...availableAgents, {
+        id: 'byok-opencode', name: 'BYOK OpenCode', bin: 'opencode',
+        available: true, models: [{ id: 'default', label: 'Default' }],
+      }],
+    });
 
     const trigger = screen.getByTestId('settings-byok-no-file-tools-trigger');
     expect(trigger).toBeTruthy();
     const notice = screen.getByRole('tooltip');
-    expect(notice.textContent).toContain("BYOK can't read, write, or edit project files");
-    expect(notice.textContent).toContain('Local CLI');
+    expect(trigger.getAttribute('aria-label')).toBe(
+      'BYOK uses OpenCode to read, write, and edit project files. OpenCode must be installed and available.',
+    );
+    expect(notice.textContent).toContain('BYOK uses OpenCode to read, write, and edit project files');
+    expect(notice.textContent).toContain('OpenCode must be installed and available');
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
     expect(screen.getByTestId('settings-byok-no-file-tools-trigger')).toBeTruthy();
@@ -842,7 +854,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByTestId('settings-byok-no-file-tools-trigger')).toBeTruthy();
   });
 
-  it('hides the BYOK no-file-tools notice when Local CLI mode is selected', () => {
+  it('hides the BYOK OpenCode file-access notice when Local CLI mode is selected', () => {
     renderSettingsDialog({ mode: 'daemon' });
 
     expect(screen.queryByTestId('settings-byok-no-file-tools-notice')).toBeNull();
@@ -1067,6 +1079,66 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       );
       expect(testConnectionCalls).toHaveLength(1);
     });
+  });
+
+  it.each([
+    'http://127.0.0.1:11434',
+    'http://[::1]:11434',
+  ])('saves and auto-tests a keyless custom Ollama provider at %s', async (baseUrl) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(null);
+      }
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      expect(url).toBe('/api/test/connection');
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        mode: 'provider',
+        protocol: 'ollama',
+        apiKey: '',
+        baseUrl,
+        model: 'gemma3:4b',
+      });
+      return new Response(
+        JSON.stringify({ ok: true, kind: 'ok', latencyMs: 28, model: 'gemma3:4b' }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { onPersist } = renderSettingsDialog({
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl,
+      apiProviderBaseUrl: null,
+      model: 'gemma3:4b',
+    });
+
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+    fireEvent.change(screen.getByRole('spinbutton', { name: /Max tokens/ }), {
+      target: { value: '2048' },
+    });
+
+    await waitForPersist(onPersist, expect.objectContaining({
+      mode: 'api',
+      apiProtocol: 'ollama',
+      apiKey: '',
+      baseUrl,
+      model: 'gemma3:4b',
+      maxTokens: 2048,
+    }), {});
+    expect((onPersist.mock.calls.at(-1)?.[0] as AppConfig).byokPendingProviderKey).toBeUndefined();
+    await waitFor(() => {
+      expect(screen.getByText(/Connected\. Replied in 28 ms/)).toBeTruthy();
+    });
+    expect(fetchMock.mock.calls.filter(([input]) =>
+      input.toString() === '/api/test/connection',
+    )).toHaveLength(1);
   });
 
   it('keeps protocol drafts isolated without leaking API keys between tabs', () => {
@@ -1296,65 +1368,82 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(errorStatus?.parentElement).toHaveClass('settings-autosave-layer');
   });
 
-  it('keeps a newer failed Labs save ahead of an older ordinary autosave', async () => {
-    const ordinarySave = deferred<void>();
-    const labsSave = deferred<void>();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/strategies/od-next/rollout') {
-        return new Response(JSON.stringify({
-          status: {
-            strategyId: 'od-next-strategy',
-            scope: 'daemon_instance',
-            requestedMode: 'off',
-            requestedModeSource: 'default',
-            effectiveMode: 'off',
-          },
-        }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      if (url === '/api/app-config') {
-        await labsSave.promise;
-        return new Response('{}', { status: 500 });
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const view = renderSettingsDialog();
-    view.onPersist.mockImplementationOnce(() => ordinarySave.promise);
+  it('hides the Labs navigation when no experiments are available', () => {
+    renderSettingsDialog();
+    expect(screen.queryByRole('button', { name: /Labs/i })).toBeNull();
+    expect(screen.queryByTestId('labs-harness-switch')).toBeNull();
+  });
 
-    fireEvent.change(screen.getByLabelText('API key'), {
-      target: { value: 'sk-ant-held' },
-    });
-    await waitFor(() => expect(view.onPersist).toHaveBeenCalledTimes(1));
-    expect(screen.getByText('Saving…')).toBeTruthy();
+  describe('Labs availability', () => {
+    function registerExperiment() {
+      labsExperiments.push({
+        id: 'test-experiment',
+        Component: () => <input type="checkbox" role="switch" aria-label="Test experiment" />,
+      });
+    }
 
-    fireEvent.click(screen.getByRole('button', { name: /Labs/i }));
-    const labsSwitch = await screen.findByTestId('labs-harness-switch');
-    await waitFor(() => expect(labsSwitch.getAttribute('aria-disabled')).toBe('false'));
-    fireEvent.click(labsSwitch);
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.filter(([input]) => input.toString() === '/api/app-config'))
-        .toHaveLength(1);
+    function expectGeneral() {
+      expect(screen.getByRole('button', { name: /General/i })).toHaveClass('active');
+      expect(screen.queryByRole('switch', { name: 'Test experiment' })).toBeNull();
+    }
+
+    it('resolves an empty Labs deep link to General, including its analytics', () => {
+      renderSettingsDialog({}, { initialSection: 'labs' });
+      expectGeneral();
+      const views = analyticsTrackMock.mock.calls.filter(([event]) => event === 'settings_view');
+      expect(views.length).toBeGreaterThan(0);
+      expect(views.every(([, props]) => props.area === settingsSectionToTracking('general'))).toBe(true);
     });
 
-    await act(async () => {
-      ordinarySave.resolve();
-      await ordinarySave.promise;
-      await Promise.resolve();
+    it('shows registered experiments even when their switches are all off', () => {
+      registerExperiment();
+      renderSettingsDialog();
+      fireEvent.click(screen.getByRole('button', { name: /Labs/i }));
+      expect(screen.getByRole('button', { name: /Labs/i })).toHaveClass('active');
+      expect(screen.getByRole('switch', { name: 'Test experiment' })).not.toBeChecked();
     });
-    expect(screen.queryByText('All changes saved')).toBeNull();
-    expect(screen.getByText('Saving…')).toBeTruthy();
 
-    await act(async () => {
-      labsSave.resolve();
-      await labsSave.promise;
-      await Promise.resolve();
+    it('leaves an emptied Labs page and stays in General when experiments return', () => {
+      registerExperiment();
+      const view = renderSettingsDialog({}, { initialSection: 'labs' });
+      expect(screen.getByRole('switch', { name: 'Test experiment' })).toBeTruthy();
+      labsExperiments.length = 0;
+      view.rerenderSection();
+      expectGeneral();
+      expect(screen.queryByRole('button', { name: /Labs/i })).toBeNull();
+      registerExperiment();
+      view.rerenderSection();
+      expectGeneral();
+      expect(screen.getByRole('button', { name: /Labs/i })).not.toHaveClass('active');
     });
-    await waitFor(() => {
-      expect(screen.getByText(/Couldn’t save changes/i)).toBeTruthy();
+
+    it('discards a later empty Labs request before experiments return', () => {
+      const view = renderSettingsDialog();
+      view.rerenderSection('labs');
+      expectGeneral();
+      registerExperiment();
+      view.rerenderSection('labs');
+      expectGeneral();
+    });
+
+    it('honors a simultaneous deep link when the Labs page becomes empty', () => {
+      registerExperiment();
+      const view = renderSettingsDialog({}, { initialSection: 'labs' });
+      labsExperiments.length = 0;
+      view.rerenderSection('privacy');
+      expect(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i })).toHaveClass('active');
+    });
+
+    it('does not reset another selected section when availability changes', () => {
+      registerExperiment();
+      const view = renderSettingsDialog();
+      fireEvent.click(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i }));
+      labsExperiments.length = 0;
+      view.rerenderSection();
+      expect(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i })).toHaveClass('active');
+      registerExperiment();
+      view.rerenderSection();
+      expect(within(view.container.querySelector('.settings-sidebar') as HTMLElement).getByRole('button', { name: /^Privacy/i })).toHaveClass('active');
     });
   });
 

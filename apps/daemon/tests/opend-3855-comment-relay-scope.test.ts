@@ -40,11 +40,11 @@ it.each(['team', 'personal'] as const)('OPEND-3855: creator exact-file relay doe
   } finally { db.close(); }
 });
 
-it('team-visible project relay remains available without a public file link', () => {
+it.each(['team', 'personal'] as const)('%s workspace shared-project relay remains available without a public file link', (workspaceType) => {
   const db = new Database(':memory:');
   try {
     migratePublicFilePublications(db); migrateCommentRelayOutbox(db);
-    expect(commentRelayScope({ binding: { ...binding, visibility: 'team' }, context: owner,
+    expect(commentRelayScope({ binding: { ...binding, visibility: 'team' }, context: { ...owner, workspaceType },
       projectId: 'p', filePath: 'private.html', publications: createSqlitePublicFilePublicationStore(db) }))
       .toEqual({ workspaceId: 'w', teamId: 'w', ownerMemberId: 'owner', relayScope: 'team' });
   } finally { db.close(); }

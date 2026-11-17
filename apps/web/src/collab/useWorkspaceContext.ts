@@ -1,3 +1,4 @@
+import { clearWorkspaceRemoval, currentWorkspaceRemoval, recordWorkspaceRemoval } from './workspace-removal';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   TeamProject,
@@ -15,6 +16,7 @@ import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
   workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
 } from '@open-design/contracts';
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
@@ -31,6 +33,7 @@ import {
   resetTeamProjectMetadataRefreshOrdering,
 } from './team-projects-catalog';
 import { useWorkspaceInvalidation } from './workspace-events';
+import { createSharedDisplayRefresh } from './shared-display-refresh';
 import {
   advanceWorkspaceAccountGeneration,
   beginWorkspaceScopedRead,
@@ -310,6 +313,7 @@ export function workspaceContextFromDirectoryItem(
     workspaceId: item.workspaceId,
     workspaceType: item.workspaceType,
     workspaceMemberId: item.workspaceMemberId,
+    ...(item.memberCount !== undefined ? { memberCount: item.memberCount } : {}),
     role: item.role,
     memberStatus: item.memberStatus,
     lifecycleState: item.lifecycleState,
@@ -580,6 +584,7 @@ function workspaceDirectoryItemFromContext(
 
 /** Test seam: clear the module-level context cache between tests. */
 export function resetWorkspaceContextCache(): void {
+  clearWorkspaceRemoval();
   cachedWorkspaceContext = null;
   cachedWorkspaceContextGeneration = 'initial';
   workspaceContextRevision = 0;
@@ -712,6 +717,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
       exactScopeOnly?: boolean;
     } = {},
   ) => {
+    if (currentWorkspaceRemoval()) return;
     const requestEpoch = ++requestEpochRef.current;
     const requestGeneration = workspaceContextRequestToken;
     if (options.markLoading && mountedRef.current) {
@@ -744,13 +750,24 @@ export function useWorkspaceContext(): WorkspaceContextState {
           : await readWorkspaceDirectoryForCurrentGeneration();
       }
       if (
-        !mountedRef.current
+        currentWorkspaceRemoval()
+        || !mountedRef.current
         || requestEpochRef.current !== requestEpoch
         || workspaceContextRequestToken !== requestGeneration
       ) return;
+      // A dirty directory can arrive before the terminal member revocation.
+      // Keep a live tab's exact selection until its explicit transition: absence
+      // is neither proof of removal nor authority to choose another Workspace.
+      const retainedSelection = requestedSelection && cachedWorkspaceContext
+        && cachedWorkspaceContextGeneration === requestGeneration
+        && cachedWorkspaceContext.workspaceId === requestedSelection.workspaceId
+        && cachedWorkspaceContext.workspaceMemberId === requestedSelection.workspaceMemberId
+        && directory && !selectableWorkspaceItems(directory.items).some(item => item.workspaceId === requestedSelection.workspaceId
+          && item.workspaceMemberId === requestedSelection.workspaceMemberId)
+        ? workspaceDirectoryItemFromContext(cachedWorkspaceContext) : null;
       const selected = exactScopeContext
         ? workspaceDirectoryItemFromContext(exactScopeContext)
-        : chooseWorkspaceForTab(
+        : retainedSelection ?? chooseWorkspaceForTab(
             directory?.items ?? [],
             directory?.activeWorkspaceId ?? null,
           );
@@ -823,7 +840,8 @@ export function useWorkspaceContext(): WorkspaceContextState {
         ? await forceCoalescedGet(coalesceKey, fetchContext)
         : await coalescedGet(coalesceKey, fetchContext);
       if (
-        !mountedRef.current
+        currentWorkspaceRemoval()
+        || !mountedRef.current
         || requestEpochRef.current !== requestEpoch
         || workspaceContextRequestToken !== requestGeneration
       ) return;
@@ -850,7 +868,8 @@ export function useWorkspaceContext(): WorkspaceContextState {
       });
     } catch (error) {
       if (
-        !mountedRef.current
+        currentWorkspaceRemoval()
+        || !mountedRef.current
         || requestEpochRef.current !== requestEpoch
         || workspaceContextRequestToken !== requestGeneration
       ) return;
@@ -897,7 +916,16 @@ export function useWorkspaceContext(): WorkspaceContextState {
     // A pushed invalidation is authoritative new state. Reusing either settled
     // one-second cache here can keep a revoked Team membership selected until
     // the SSE-floor poll runs much later.
-    { 'workspace-context-changed': () => void loadContext({ fresh: true }) },
+    { 'workspace-context-changed': (event) => {
+      if (!workspaceContextIdentityChangePending
+        && cachedWorkspaceContextGeneration === workspaceContextRequestToken
+        && recordWorkspaceRemoval(event, state.context)) {
+        requestEpochRef.current += 1;
+        setState(prev => ({ ...prev, context: null, resourceReadIdentity: null, identityChangePending: true, loading: false }));
+        return;
+      }
+      void loadContext({ fresh: true });
+    } },
     {
       workspaceContext: state.context,
       // Reconnect is the gap-closing snapshot in the thin-event model. It must
@@ -969,6 +997,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key !== WORKSPACE_ACCOUNT_BOUNDARY_STORAGE_KEY) return;
+      clearWorkspaceRemoval();
       // The acting tab advanced its own token inside `notifyWorkspaceContextRefresh`;
       // a passive tab learns of the change only here. Advancing to the stamp the
       // acting tab WROTE keeps this idempotent across the many mounted consumers
@@ -1092,6 +1121,7 @@ export function notifyWorkspaceContextRefresh(
   seed?: { context: WorkspaceCollabContext } | null,
 ): void {
   if (typeof window === 'undefined') return;
+  clearWorkspaceRemoval();
   const stamp = `${Date.now()}:${localIdentityChangeSeq + 1}`;
   // Advance BEFORE dispatching: this call is the one place that knows a genuine
   // identity change just happened, and every handler the dispatch below runs must
@@ -1143,7 +1173,7 @@ function workspaceContextIdentity(context: WorkspaceCollabContext | null): strin
 const cachedWorkspaceBillingResponses = new Map<string, WorkspaceBillingResponse>();
 const MAX_BROWSER_TIMER_DELAY_MS = 2_147_483_647;
 
-function workspaceBillingRuntimeProjectionIsUsable(
+export function workspaceBillingRuntimeProjectionIsUsable(
   runtime: WorkspaceBillingRuntimeState,
   now = Date.now(),
 ): boolean {
@@ -1183,8 +1213,133 @@ class WorkspaceBillingHttpError extends Error {
 /** Test seam: clear last-good workspace billing snapshots between tests. */
 export function resetWorkspaceBillingCache(): void {
   cachedWorkspaceBillingResponses.clear();
+  workspaceBillingConsumptionRefresh.reset();
+  workspaceBillingPreflightRefresh.reset();
+  workspaceBillingPreflightProjections.clear();
+  workspaceBillingReadEpochs.clear();
+  workspaceBillingPreflightEpochs.clear();
+  workspaceBillingPreflightForceTokens.clear();
+  workspaceBillingPreflightForcedAt.clear();
+  for (const poller of workspaceBillingPreflightPollers.values()) poller.dispose();
+  workspaceBillingPreflightPollers.clear();
   resetWorkspaceBillingInterestRegistry();
   resetWorkspaceBillingRetrySchedules();
+}
+
+const workspaceBillingConsumptionRefresh = createSharedDisplayRefresh(5_000);
+const workspaceBillingPreflightRefresh = createSharedDisplayRefresh(30_000);
+const workspaceBillingPreflightProjections = new Map<string, Pick<WorkspaceBillingResponse, 'preflight' | 'quotaRealtime'>>();
+const workspaceBillingReadEpochs = new Map<string, number>();
+const workspaceBillingPreflightEpochs = new Map<string, number>();
+const workspaceBillingPreflightForceTokens = new Map<string, string>();
+const workspaceBillingPreflightForcedAt = new Map<string, number>();
+const workspaceBillingActionTokens = new WeakMap<Event, string>();
+let workspaceBillingActionSequence = 0;
+const WORKSPACE_BILLING_REVOKED_EVENT = 'od:workspace-billing-revoked';
+const workspaceBillingPreflightPollers = new Map<string, { owners: number; dispose: () => void }>();
+
+function workspaceBillingActionToken(event: Event): string {
+  let token = workspaceBillingActionTokens.get(event);
+  if (!token) {
+    token = `action:${++workspaceBillingActionSequence}`;
+    workspaceBillingActionTokens.set(event, token);
+  }
+  return token;
+}
+
+function forceWorkspaceBillingPreflight(key: string, token: string): void {
+  if (workspaceBillingPreflightForceTokens.get(key) === token) return;
+  workspaceBillingPreflightForceTokens.set(key, token);
+  const now = Date.now();
+  const previous = workspaceBillingPreflightForcedAt.get(key);
+  // Match the established explicit-refresh burst coalescer: multiple surfaces
+  // announcing one action must not each supersede its post-action probe.
+  if (previous !== undefined && now - previous < 250) return;
+  workspaceBillingPreflightForcedAt.set(key, now);
+  workspaceBillingPreflightEpochs.set(key, (workspaceBillingPreflightEpochs.get(key) ?? 0) + 1);
+  workspaceBillingPreflightRefresh.force(key);
+}
+
+function retainWorkspaceBillingPreflightPoll(key: string): () => void {
+  let poller = workspaceBillingPreflightPollers.get(key);
+  if (!poller) {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let activation = 0;
+    const activate = () => {
+      if (timer !== null) clearInterval(timer);
+      timer = null;
+      if (document.visibilityState !== 'visible') {
+        workspaceBillingPreflightRefresh.cancelPending(key);
+        return;
+      }
+      workspaceBillingPreflightRefresh.invalidate(key, `active:${++activation}`);
+      timer = setInterval(() => {
+        workspaceBillingPreflightRefresh.invalidate(key, `poll:${Math.floor(Date.now() / 30_000)}`);
+      }, 30_000);
+    };
+    poller = { owners: 0, dispose: () => {
+      if (timer !== null) clearInterval(timer);
+      document.removeEventListener('visibilitychange', activate);
+      window.removeEventListener('focus', activate);
+    } };
+    workspaceBillingPreflightPollers.set(key, poller);
+    document.addEventListener('visibilitychange', activate);
+    window.addEventListener('focus', activate);
+    activate();
+  }
+  const retained = poller;
+  retained.owners += 1;
+  return () => {
+    retained.owners -= 1;
+    if (!retained.owners) {
+      retained.dispose();
+      workspaceBillingPreflightPollers.delete(key);
+    }
+  };
+}
+
+function workspaceBillingReadEpoch(key: string): number {
+  return workspaceBillingReadEpochs.get(key) ?? 0;
+}
+
+function revokeWorkspaceBillingRead(key: string, scopeKey: string): void {
+  workspaceBillingReadEpochs.set(key, workspaceBillingReadEpoch(key) + 1);
+  workspaceBillingPreflightProjections.delete(key);
+  cachedWorkspaceBillingResponses.delete(scopeKey);
+  workspaceBillingConsumptionRefresh.cancelPending(key);
+  workspaceBillingPreflightRefresh.cancelPending(key);
+  window.dispatchEvent(new CustomEvent(WORKSPACE_BILLING_REVOKED_EVENT, { detail: { requestKey: key } }));
+}
+
+function withWorkspaceBillingPreflight(
+  response: WorkspaceBillingResponse,
+  key: string,
+): WorkspaceBillingResponse {
+  const projection = workspaceBillingPreflightProjections.get(key);
+  const preflight = projection?.preflight;
+  return enforceWorkspaceBillingHardExpiry({
+    ...response,
+    preflight: preflight && Math.abs(Date.now() - Date.parse(preflight.generatedAt)) < 60_000
+      ? preflight : undefined,
+    quotaRealtime: projection?.quotaRealtime ?? { healthy: false },
+  });
+}
+
+async function fetchWorkspaceBillingRead(
+  url: string,
+  scope: { workspaceId: string; workspaceMemberId: string },
+): Promise<WorkspaceBillingResponse> {
+  await ensureWorkspaceBillingInterestDeclared();
+  const res = await fetch(url, { cache: 'no-store', headers: workspaceBillingInterestHeaders(scope) });
+  if (!res.ok) {
+    let code = `workspace_billing_http_${res.status}`;
+    try {
+      const body = await res.json() as { error?: unknown };
+      if (typeof body.error === 'string' && body.error.trim()) code = body.error.trim();
+    } catch { /* The HTTP status remains authoritative for older non-JSON daemons. */ }
+    throw new WorkspaceBillingHttpError(res.status, code);
+  }
+  return await res.json() as WorkspaceBillingResponse;
 }
 
 type BillingInvalidation = Extract<
@@ -1248,19 +1403,22 @@ export function useWorkspaceBillingResponse(
 ): WorkspaceBillingResponse | null {
   const ambient = useWorkspaceContext();
   const context = explicitScope ? explicitScope.context : ambient.context;
-  const contextLoading = explicitScope
+  // The shell retains its last label while a new account is confirmed. Money
+  // must wait for that confirmation even when a caller supplies a pinned scope.
+  const selectedContextLoading = explicitScope
     ? explicitScope.loading === true
     : ambient.loading;
+  const contextLoading = selectedContextLoading || ambient.identityChangePending === true;
   const workspaceId = context?.workspaceId?.trim() ?? '';
   const workspaceMemberId = context?.workspaceMemberId?.trim() ?? '';
   const hasExactWorkspaceScope = Boolean(context && workspaceId && workspaceMemberId);
   const billingScopeKey =
     contextLoading || !hasExactWorkspaceScope
       ? null
-      : `workspace-billing:workspace:${workspaceId}:member:${workspaceMemberId}`;
+      : `workspace-billing:account:${ambient.accountGeneration}:workspace:${workspaceId}:member:${workspaceMemberId}`;
   const billingUrl =
     billingScopeKey
-      ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}${context?.workspaceType === 'personal' ? '&includePreflight=1' : ''}`
+      ? `/api/workspace/billing?scope=workspace&workspaceId=${encodeURIComponent(workspaceId)}`
       : null;
   // The same workspace can be left and selected again while an earlier read is
   // still in flight. The context revision makes A→B→A a new request identity.
@@ -1321,69 +1479,46 @@ export function useWorkspaceBillingResponse(
     force = false,
     invalidationToken?: string,
   ) => {
-    if (!billingScopeKey || !billingRequestKey || !billingUrl) {
+    if (
+      workspaceContextIdentityChangePending
+      || !billingScopeKey || !billingRequestKey || !billingUrl
+    ) {
       if (clearOnFailure && mountedRef.current) setState(null);
       return;
     }
     const scopeKey = billingScopeKey;
     const requestKey = billingRequestKey;
+    const readEpoch = workspaceBillingReadEpoch(requestKey);
+    const readKey = `${requestKey}:read-epoch:${readEpoch}`;
     const fetchKey = invalidationToken
-      ? `${requestKey}:invalidation:${invalidationToken}`
-      : requestKey;
+      ? `${readKey}:invalidation:${invalidationToken}`
+      : readKey;
     const requestEpoch = ++requestEpochRef.current;
     try {
       const fetchBilling = async () => {
-        if (billingInterestScope) {
-          await ensureWorkspaceBillingInterestDeclared();
-        }
-        const runtimeHeaders =
-          billingInterestScope
-            ? workspaceBillingInterestHeaders(billingInterestScope)
-            : undefined;
-        const res = await fetch(billingUrl, {
-          cache: 'no-store',
-          ...(runtimeHeaders ? { headers: runtimeHeaders } : {}),
-        });
-        if (!res.ok) {
-          let errorCode = `workspace_billing_http_${res.status}`;
-          try {
-            const errorBody = (await res.json()) as { error?: unknown };
-            if (typeof errorBody.error === 'string' && errorBody.error.trim()) {
-              errorCode = errorBody.error.trim();
-            }
-          } catch {
-            // The status remains authoritative when an older daemon returns
-            // a non-JSON error page.
-          }
-          throw new WorkspaceBillingHttpError(res.status, errorCode);
-        }
-        const body = (await res.json()) as WorkspaceBillingResponse;
+        const body = await fetchWorkspaceBillingRead(billingUrl, { workspaceId, workspaceMemberId });
         return enforceWorkspaceBillingHardExpiry({
           // Quota and wallet use the same last-good cache and invalidations as
           // the account header. Hovering a presentation component never fetches.
-          ...(body.preflight?.workspaceId === workspaceId
-            && body.preflight.workspaceMemberId === workspaceMemberId
-            && Math.abs(Date.now() - Date.parse(body.preflight.generatedAt)) < 60_000
-            ? { preflight: body.preflight }
-            : {}),
           summary: body.summary ?? null,
           workspaceBalance: body.workspaceBalance ?? null,
           workspaceSnapshot: body.workspaceSnapshot ?? null,
           ...(body.workspaceRuntime
             ? { workspaceRuntime: body.workspaceRuntime }
             : {}),
-          quotaRealtime: { healthy: body.quotaRealtime?.healthy === true },
         });
       };
-      const response = force
+      const snapshot = force
         ? await forceCoalescedGet(fetchKey, fetchBilling)
         : await coalescedGet(fetchKey, fetchBilling);
       if (
         mountedRef.current &&
+        workspaceBillingReadEpoch(requestKey) === readEpoch &&
         requestEpochRef.current === requestEpoch &&
         activeScopeKeyRef.current === scopeKey &&
         activeRequestKeyRef.current === requestKey
       ) {
+        const response = withWorkspaceBillingPreflight(snapshot, requestKey);
         runtimeManagedRef.current = Boolean(response.workspaceRuntime);
         quotaRealtimeHealthyRef.current = response.quotaRealtime?.healthy === true;
         clearWorkspaceBillingRetryFailures(requestKey);
@@ -1393,6 +1528,7 @@ export function useWorkspaceBillingResponse(
     } catch (error) {
       if (
         mountedRef.current &&
+        workspaceBillingReadEpoch(requestKey) === readEpoch &&
         requestEpochRef.current === requestEpoch &&
         activeScopeKeyRef.current === scopeKey &&
         activeRequestKeyRef.current === requestKey
@@ -1403,7 +1539,7 @@ export function useWorkspaceBillingResponse(
           error instanceof WorkspaceBillingHttpError &&
           error.status === 403;
         if (revoked) {
-          cachedWorkspaceBillingResponses.delete(scopeKey);
+          revokeWorkspaceBillingRead(requestKey, scopeKey);
           runtimeManagedRef.current = false;
           setState(null);
         } else if (lastGood) {
@@ -1411,14 +1547,10 @@ export function useWorkspaceBillingResponse(
           setState({ scopeKey, response: lastGood });
         } else if (clearOnFailure) {
           runtimeManagedRef.current = false;
-          setState({
-            scopeKey,
-            response: {
-              summary: null,
-              workspaceBalance: null,
-              workspaceSnapshot: null,
-            },
-          });
+          // Keep an initial failed read unresolved. A real 200 response with
+          // nullable fields is settled and must show unavailable values rather
+          // than sharing the failure skeleton indefinitely.
+          setState(null);
         }
         // A revoked read (403) fails closed and must not retry. Everything
         // else — including the packaged client's synthetic proxy 502s —
@@ -1436,11 +1568,94 @@ export function useWorkspaceBillingResponse(
     workspaceMemberId,
   ]);
 
+  // This advisory read confirms the new-card migration gate. It never owns
+  // display money, plan, runtime or DP windows, and cannot delay their fast read.
+  const loadBillingPreflight = useCallback(async (token: string) => {
+    if (workspaceContextIdentityChangePending || !billingRequestKey || !billingScopeKey || !billingUrl) return;
+    const key = billingRequestKey;
+    const scopeKey = billingScopeKey;
+    const readEpoch = workspaceBillingReadEpoch(key);
+    const preflightEpoch = workspaceBillingPreflightEpochs.get(key) ?? 0;
+    try {
+      const body = await coalescedGet(`${key}:read-epoch:${readEpoch}:preflight-epoch:${preflightEpoch}:${token}`, () =>
+        fetchWorkspaceBillingRead(`${billingUrl}&includePreflight=1`, { workspaceId, workspaceMemberId }));
+      if (!mountedRef.current || activeRequestKeyRef.current !== key
+        || workspaceBillingReadEpoch(key) !== readEpoch
+        || (workspaceBillingPreflightEpochs.get(key) ?? 0) !== preflightEpoch) return;
+      const preflight = body.preflight;
+      workspaceBillingPreflightProjections.set(key, {
+        preflight: preflight?.workspaceId === workspaceId
+          && preflight.workspaceMemberId === workspaceMemberId
+          && Math.abs(Date.now() - Date.parse(preflight.generatedAt)) < 60_000
+          ? preflight : undefined,
+        quotaRealtime: { healthy: body.quotaRealtime?.healthy === true },
+      });
+      quotaRealtimeHealthyRef.current = body.quotaRealtime?.healthy === true;
+      const latest = cachedWorkspaceBillingResponses.get(scopeKey);
+      if (latest) {
+        const merged = withWorkspaceBillingPreflight(latest, key);
+        cachedWorkspaceBillingResponses.set(scopeKey, merged);
+        setState({ scopeKey, response: merged });
+      }
+    } catch (error) {
+      if (!mountedRef.current || activeRequestKeyRef.current !== key
+        || workspaceBillingReadEpoch(key) !== readEpoch
+        || (workspaceBillingPreflightEpochs.get(key) ?? 0) !== preflightEpoch) return;
+      if (error instanceof WorkspaceBillingHttpError && error.status === 403) {
+        revokeWorkspaceBillingRead(key, scopeKey);
+      } else {
+        // An advisory outage preserves a successful snapshot and its still-fresh
+        // gate. Retries use the shared 30s channel, never the fast retry loop.
+        quotaRealtimeHealthyRef.current = false;
+      }
+    }
+  }, [billingRequestKey, billingScopeKey, billingUrl, workspaceId, workspaceMemberId]);
+
+  useEffect(() => {
+    if (!billingRequestKey) return;
+    return workspaceBillingConsumptionRefresh.retain(billingRequestKey, async (token) => {
+      if (!mountedRef.current || activeRequestKeyRef.current !== billingRequestKey) return;
+      await loadBilling(false, false, token);
+    });
+  }, [billingRequestKey, loadBilling]);
+
+  useEffect(() => {
+    if (!billingRequestKey) return;
+    const key = billingRequestKey;
+    const release = workspaceBillingPreflightRefresh.retain(key, loadBillingPreflight);
+    const stopPolling = retainWorkspaceBillingPreflightPoll(key);
+    return () => { stopPolling(); release(); };
+  }, [billingRequestKey, loadBillingPreflight]);
+
+  const refreshAfterConsumption = (event: BillingInvalidation) => {
+    if (!billingRequestKey || activeRequestKeyRef.current !== billingRequestKey
+      || !shouldRefreshWorkspaceBilling(event, context)) return;
+    workspaceBillingConsumptionRefresh.invalidate(billingRequestKey, billingInvalidationToken(event));
+    if (document.visibilityState === 'visible') {
+      workspaceBillingPreflightRefresh.invalidate(billingRequestKey, billingInvalidationToken(event));
+    }
+  };
+
   useEffect(() => {
     runtimeManagedRef.current = false;
     quotaRealtimeHealthyRef.current = false;
-    void loadBilling(true, true);
+    const pendingConsumption = billingRequestKey
+      ? workspaceBillingConsumptionRefresh.activeToken(billingRequestKey) : undefined;
+    void loadBilling(true, !pendingConsumption, pendingConsumption);
   }, [loadBilling]);
+
+  useEffect(() => {
+    const preflight = state?.scopeKey === billingScopeKey ? state.response.preflight : null;
+    if (!preflight || !billingRequestKey) return;
+    const remaining = Date.parse(preflight.generatedAt) + 60_000 - Date.now();
+    const timer = setTimeout(() => {
+      if (activeRequestKeyRef.current !== billingRequestKey || !mountedRef.current) return;
+      setState((previous) => previous?.scopeKey === billingScopeKey
+        ? { ...previous, response: withWorkspaceBillingPreflight(previous.response, billingRequestKey) }
+        : previous);
+    }, Math.max(0, remaining) + 1);
+    return () => clearTimeout(timer);
+  }, [billingRequestKey, billingScopeKey, state?.response.preflight]);
 
   useEffect(() => {
     if (
@@ -1535,25 +1750,23 @@ export function useWorkspaceBillingResponse(
   // and member scopes match the currently selected context.
   const { connected: billingStreamConnected } = useWorkspaceInvalidation({
     'billing-changed': (event) => {
+      if (event.revision?.startsWith('runtime:')) {
+        refreshAfterConsumption(event);
+        return;
+      }
       if (shouldRefreshWorkspaceBilling(event, context)) {
+        if (billingRequestKey) forceWorkspaceBillingPreflight(billingRequestKey, billingInvalidationToken(event));
         void loadBilling(false, true, billingInvalidationToken(event));
       }
     },
     'billing-subscription-changed': (event) => {
       if (shouldRefreshWorkspaceBilling(event, context)) {
+        if (billingRequestKey) forceWorkspaceBillingPreflight(billingRequestKey, billingInvalidationToken(event));
         void loadBilling(false, true, billingInvalidationToken(event));
       }
     },
-    'wallet-balance-changed': (event) => {
-      if (shouldRefreshWorkspaceBilling(event, context)) {
-        void loadBilling(false, true, billingInvalidationToken(event));
-      }
-    },
-    'coding-plan-usage-changed': (event) => {
-      if (shouldRefreshWorkspaceBilling(event, context)) {
-        void loadBilling(false, true, billingInvalidationToken(event));
-      }
-    },
+    'wallet-balance-changed': refreshAfterConsumption,
+    'coding-plan-usage-changed': refreshAfterConsumption,
   }, {
     workspaceContext: context,
     onActive: () => void loadBilling(false, true),
@@ -1584,14 +1797,15 @@ export function useWorkspaceBillingResponse(
     // signal notifyWorkspaceBillingRefresh() fires — it must force past a
     // settled cache entry. Focus/pageshow/visibility are ambient revalidation
     // and stay on the plain cache-tolerant path.
-    const refreshAfterIdentityChange = () => {
+    const refreshAfterIdentityChange = (event: Event) => {
+      if (billingRequestKey) forceWorkspaceBillingPreflight(billingRequestKey, workspaceBillingActionToken(event));
       void loadBilling(true, true);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') refresh();
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === WORKSPACE_BILLING_REFRESH_STORAGE_KEY) refreshAfterIdentityChange();
+      if (event.key === WORKSPACE_BILLING_REFRESH_STORAGE_KEY) refreshAfterIdentityChange(event);
     };
     const onRetry = (event: Event) => {
       const detail = (event as CustomEvent<{ requestKey?: string; force?: boolean }>).detail;
@@ -1604,10 +1818,18 @@ export function useWorkspaceBillingResponse(
       // because its cached answer is void by definition.
       void loadBilling(false, detail?.force === true);
     };
+    const onRevoked = (event: Event) => {
+      if ((event as CustomEvent<{ requestKey: string }>).detail.requestKey !== activeRequestKeyRef.current) return;
+      requestEpochRef.current += 1;
+      runtimeManagedRef.current = false;
+      quotaRealtimeHealthyRef.current = false;
+      setState(null);
+    };
     window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', refresh);
     window.addEventListener(WORKSPACE_BILLING_REFRESH_EVENT, refreshAfterIdentityChange);
     window.addEventListener(WORKSPACE_BILLING_RETRY_EVENT, onRetry);
+    window.addEventListener(WORKSPACE_BILLING_REVOKED_EVENT, onRevoked);
     window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
@@ -1615,6 +1837,7 @@ export function useWorkspaceBillingResponse(
       window.removeEventListener('pageshow', refresh);
       window.removeEventListener(WORKSPACE_BILLING_REFRESH_EVENT, refreshAfterIdentityChange);
       window.removeEventListener(WORKSPACE_BILLING_RETRY_EVENT, onRetry);
+      window.removeEventListener(WORKSPACE_BILLING_REVOKED_EVENT, onRevoked);
       window.removeEventListener('storage', onStorage);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
@@ -1622,7 +1845,8 @@ export function useWorkspaceBillingResponse(
 
   if (!billingScopeKey) return null;
   if (state?.scopeKey === billingScopeKey) return state.response;
-  return cachedWorkspaceBillingResponses.get(billingScopeKey) ?? null;
+  const cached = cachedWorkspaceBillingResponses.get(billingScopeKey);
+  return cached && billingRequestKey ? withWorkspaceBillingPreflight(cached, billingRequestKey) : null;
 }
 
 /**
@@ -1642,10 +1866,11 @@ export function useWorkspaceBillingResponse(
  * Plan and money are partitioned on the same key — `workspaceId` +
  * `workspaceMemberId`:
  *
- *  • personal workspace — the account IS the scope, so the summary passes
- *    through untouched. (A team-namespaced tier is deliberately kept here:
- *    `hasTeamPlan` offers the team surfaces to a personal workspace that holds
- *    a team plan.)
+ *  • every workspace — a positive plan from the context-authorized snapshot
+ *    takes precedence over the account summary, including shared Personal
+ *    workspaces whose directory context conservatively omits their plan.
+ *  • personal workspace without snapshot plan proof — keep the legacy account
+ *    summary fallback untouched, including team-namespaced tiers.
  *  • team workspace — the plan comes from the context-authorized snapshot.
  *    Without one, the account tier may stand in ONLY when it is itself
  *    team-namespaced (`isTeamPlanTier`), because a personal tier
@@ -1671,11 +1896,13 @@ export function workspaceBillingSummaryForContext(
 ): WorkspaceBillingSummary | null {
   if (!response || !context) return null;
   const summary = response.summary;
-  if (context.workspaceType !== 'team') return summary ?? null;
   const snapshot = workspaceBillingSnapshotForContext(response, context);
   const snapshotTier =
     snapshot?.billing.planId?.trim()
     || (snapshot?.billing.billingState === 'free' ? 'free' : '');
+  // Shared Personal workspaces also have an exact workspace/member plan.
+  // Without positive snapshot plan proof, retain the legacy account fallback.
+  if (context.workspaceType !== 'team' && !snapshotTier) return summary ?? null;
   const accountTier = summary?.membershipTier?.trim() ?? '';
   const teamNamespacedAccountTier = isTeamPlanTier(accountTier) ? accountTier : '';
   const scopedTier = snapshotTier || teamNamespacedAccountTier;
@@ -1772,7 +1999,7 @@ export function workspaceBillingSnapshotForContext(
   response: WorkspaceBillingResponse | null | undefined,
   context: WorkspaceCollabContext | null | undefined,
 ): WorkspaceBillingSnapshot | null {
-  if (!response || !context || context.workspaceType !== 'team') return null;
+  if (!response || !context) return null;
   const snapshot = response.workspaceSnapshot;
   if (
     !snapshot ||
@@ -1965,17 +2192,17 @@ export interface TeamProjectsState {
   projects: TeamProject[];
   loading: boolean;
   error?: 'unavailable';
-  /** Re-fetch the team-shared project list (e.g. after a member pulls one). */
+  /** Re-fetch the Workspace-shared project list (e.g. after a member pulls one). */
   reload: () => void;
 }
 
 /**
- * Team-wide shared-project discovery for the "全部项目" view
+ * Workspace-shared project discovery for the "全部项目" view
  * (`GET /api/workspace/projects/team`, resource-hub data behind the daemon).
  * A member's own `/api/projects` list is only their LOCAL projects; the projects
- * the owner shared to the team live on the hub until pulled, and this read
- * surfaces them so a member can discover + open them. Empty off-team or when the
- * hub is not configured — the daemon degrades to `{ projects: [] }` there.
+ * another member shared to the Workspace live on the hub until pulled, and
+ * this read surfaces them so members can discover and open them. The daemon
+ * returns an empty catalog when the hub is not configured.
  */
 // Poll cadence for the team-shared list. Match the foreground collab cadence so
 // a teammate sees a newly shared project within a few seconds, while focus and
@@ -2113,9 +2340,7 @@ export function useTeamProjects(): TeamProjectsState {
       // `fetchTeamProjectsCatalog` owns the endpoint, the coalescing key, and
       // the array guarantee — see team-projects-catalog.ts for why those three
       // must not be split across call sites again.
-      // A Personal workspace has an authoritative empty team catalog. Do not
-      // treat its lack of a Team identity as an outage or cache a failed read.
-      const projects = workspaceContextHasTeamIdentity(read.context)
+      const projects = workspaceContextHasWorkspaceIdentity(read.context)
         ? await fetchTeamProjectsCatalog({
             context: read.context,
             force,

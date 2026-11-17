@@ -120,8 +120,8 @@ afterEach(() => {
 const callsMatching = (fragment: string): string[] =>
   fetchCalls.filter((url) => url.includes(fragment));
 
-describe('team-shared project catalog is not asked for when there is no team', () => {
-  it('issues no request at all for a personal workspace', async () => {
+describe('workspace team project catalog supports both subscription workspace types', () => {
+  it('retains the server authorization check for a personal workspace', async () => {
     await expect(
       fetchTeamProjectsCatalog({ context: PERSONAL }),
     ).rejects.toThrow();
@@ -132,22 +132,20 @@ describe('team-shared project catalog is not asked for when there is no team', (
       fetchTeamProjectsCatalog({ context: PERSONAL, coalesce: false }),
     ).rejects.toThrow();
 
-    expect(callsMatching('/workspace/projects/team')).toHaveLength(0);
+    expect(callsMatching('/workspace/projects/team')).toHaveLength(3);
   });
 
   it('still reads the catalog for a team workspace', async () => {
-    // Reverse control: the guard must key off the workspace TYPE, not simply
-    // suppress the endpoint. A team workspace still goes to the wire.
+    // Both personal and team workspaces use the same authorized catalog.
     teamCatalogStatus = 200;
     await expect(fetchTeamProjectsCatalog({ context: context() })).resolves.toEqual([]);
     expect(callsMatching('/workspace/projects/team')).toHaveLength(1);
   });
 
   it('goes to the wire again as soon as the workspace becomes a team', async () => {
-    // Anti-cache: the refusal is a precondition re-evaluated per call, not a
-    // remembered verdict. A personal→team upgrade must not stay refused.
+    // A server refusal must not be cached across a later successful read.
     await expect(fetchTeamProjectsCatalog({ context: PERSONAL })).rejects.toThrow();
-    expect(callsMatching('/workspace/projects/team')).toHaveLength(0);
+    expect(callsMatching('/workspace/projects/team')).toHaveLength(1);
 
     teamCatalogStatus = 200;
     await expect(
@@ -155,7 +153,7 @@ describe('team-shared project catalog is not asked for when there is no team', (
         context: context({ workspaceId: 'ws-personal', workspaceMemberId: 'wm-1' }),
       }),
     ).resolves.toEqual([]);
-    expect(callsMatching('/workspace/projects/team')).toHaveLength(1);
+    expect(callsMatching('/workspace/projects/team')).toHaveLength(2);
   });
 });
 

@@ -1,0 +1,348 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-motion-flowdrive-motion-reel",
+  "title": "Flowdrive Motion Reel",
+  "title_i18n": {
+    "en": "Flowdrive Motion Reel",
+    "id": "Flowdrive Gulungan Gerak",
+    "de": "Flowdrive Bewegungsrolle",
+    "zh-CN": "Flowdrive 动效展示",
+    "zh-TW": "Flowdrive 運動卷軸",
+    "pt-BR": "Carretel de movimento Flowdrive",
+    "es-ES": "Flowdrive Carrete de movimiento",
+    "ru": "Flowdrive Катушка движения",
+    "fa": "Flowdrive حلقه حرکت",
+    "ar": "Flowdrive بكرة الحركة",
+    "ja": "Flowdrive モーションリール",
+    "ko": "Flowdrive 모션 릴",
+    "pl": "Flowdrive Rolka ruchu",
+    "hu": "Flowdrive animációs bemutató",
+    "fr": "Flowdrive Bobine de mouvement",
+    "uk": "Анімаційна презентація Flowdrive",
+    "tr": "Flowdrive Hareket Makarası",
+    "th": "Flowdrive โมชั่นรีล",
+    "it": "Flowdrive Bobina di movimento"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-10-28T00:00:00Z",
+  "description": "A Flowdrive showcase of uploads, streaming, global delivery and Webflow hosting.",
+  "description_i18n": {
+    "en": "A Flowdrive showcase of uploads, streaming, global delivery and Webflow hosting.",
+    "id": "Pameran Flowdrive unggahan, streaming, pengiriman global, dan hosting Webflow.",
+    "de": "Eine Flowdrive Präsentation von Uploads, Streaming, weltweiter Bereitstellung und Webflow Hosting.",
+    "zh-CN": "Flowdrive 的文件上传、流播、全球交付与 Webflow 托管宣传片。",
+    "zh-TW": "Flowdrive 上傳、流媒體、全球交付和 Webflow 託管展示。",
+    "pt-BR": "Uma vitrine Flowdrive de uploads, streaming, entrega global e hospedagem Webflow.",
+    "es-ES": "Un escaparate Flowdrive de cargas, streaming, entrega global y Webflow alojamiento.",
+    "ru": "Flowdrive Демонстрация загрузок, потоковой передачи, глобальной доставки и хостинга Webflow.",
+    "fa": "الف Flowdrive ویترین آپلود، پخش جریانی، تحویل جهانی و Webflow میزبانی",
+    "ar": "عرض Flowdrive للتحميلات والبث والتسليم العالمي واستضافة Webflow.",
+    "ja": "あFlowdriveアップロード、ストリーミング、グローバル配信などのショーケースWebflowホスティング。",
+    "ko": "업로드, 스트리밍, 글로벌 전송 및 Webflow 호스팅을 보여주는 Flowdrive 쇼케이스입니다.",
+    "pl": "Prezentacja Flowdrive przesyłania, przesyłania strumieniowego, dostawy globalnej i hostingu Webflow.",
+    "hu": "A Flowdrive feltöltések bemutatása, streaming, globális kézbesítés és Webflow hosting.",
+    "fr": "Une vitrine Flowdrive de téléchargements, de streaming, de livraison mondiale et d'hébergement Webflow.",
+    "uk": "Flowdrive демонстрація завантажень, потокового передавання, глобальної доставки та Webflow хостингу.",
+    "tr": "Yüklemeler, akış, küresel teslimat ve Webflow barındırmanın Flowdrive vitrini.",
+    "th": "การแสดง Flowdrive ของการอัปโหลด การสตรีม การจัดส่งทั่วโลก และการโฮสต์ Webflow",
+    "it": "Una vetrina Flowdrive di caricamenti, streaming, consegna globale e hosting Webflow."
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design",
+  "tags": [
+    "example",
+    "first-party",
+    "video",
+    "motion-design",
+    "motion",
+    "hosting",
+    "particles",
+    "product"
+  ],
+  "od": {
+    "inputs": [
+      {
+        "name": "brand",
+        "type": "string",
+        "label": "brand",
+        "default": "Flowdrive",
+        "label_i18n": {
+          "en": "brand",
+          "id": "merek",
+          "de": "Marke",
+          "zh-CN": "品牌",
+          "zh-TW": "品牌",
+          "pt-BR": "marca",
+          "es-ES": "marca",
+          "ru": "бренд",
+          "fa": "نام تجاری",
+          "ar": "العلامة التجارية",
+          "ja": "ブランド",
+          "ko": "브랜드",
+          "pl": "marka",
+          "hu": "márka",
+          "fr": "marque",
+          "uk": "бренд",
+          "tr": "marka",
+          "th": "ยี่ห้อ",
+          "it": "marchio"
+        }
+      },
+      {
+        "name": "tagline",
+        "type": "string",
+        "label": "slogan",
+        "default": "The easiest way to host videos and files on Webflow.",
+        "label_i18n": {
+          "en": "slogan",
+          "id": "slogan",
+          "de": "Motto",
+          "zh-CN": "标语",
+          "zh-TW": "口號",
+          "pt-BR": "lema",
+          "es-ES": "lema",
+          "ru": "лозунг",
+          "fa": "شعار",
+          "ar": "شعار",
+          "ja": "スローガン",
+          "ko": "슬로건",
+          "pl": "slogan",
+          "hu": "szlogen",
+          "fr": "slogan",
+          "uk": "гасло",
+          "tr": "slogan",
+          "th": "สโลแกน",
+          "it": "slogan"
+        }
+      },
+      {
+        "name": "domain",
+        "type": "string",
+        "label": "domain name",
+        "default": "youragency",
+        "label_i18n": {
+          "en": "domain name",
+          "id": "nama domain",
+          "de": "Domainname",
+          "zh-CN": "域名",
+          "zh-TW": "域名",
+          "pt-BR": "nome de domínio",
+          "es-ES": "nombre de dominio",
+          "ru": "доменное имя",
+          "fa": "نام دامنه",
+          "ar": "اسم المجال",
+          "ja": "ドメイン名",
+          "ko": "도메인 이름",
+          "pl": "nazwa domeny",
+          "hu": "domain név",
+          "fr": "nom de domaine",
+          "uk": "доменне ім'я",
+          "tr": "alan adı",
+          "th": "ชื่อโดเมน",
+          "it": "nome di dominio"
+        }
+      },
+      {
+        "name": "headerImage",
+        "type": "string",
+        "label": "Demo header",
+        "default": "assets/showcase-header.png",
+        "label_i18n": {
+          "en": "Demo header",
+          "id": "Tajuk demo",
+          "de": "Demo-Header",
+          "zh-CN": "演示页头",
+          "zh-TW": "演示標題",
+          "pt-BR": "Cabeçalho de demonstração",
+          "es-ES": "Encabezado de demostración",
+          "ru": "Демо-шапка",
+          "fa": "هدر نسخه ی نمایشی",
+          "ar": "رأس العرض التوضيحي",
+          "ja": "デモヘッダー",
+          "ko": "데모 헤더",
+          "pl": "Nagłówek demonstracyjny",
+          "hu": "Demo fejléc",
+          "fr": "En-tête de démonstration",
+          "uk": "Демонстраційний заголовок",
+          "tr": "Demo başlığı",
+          "th": "ส่วนหัวของการสาธิต",
+          "it": "Intestazione dimostrativa"
+        }
+      },
+      {
+        "name": "timelineImage",
+        "type": "string",
+        "label": "Timeline panel",
+        "default": "assets/timeline-panel.png",
+        "label_i18n": {
+          "en": "Timeline panel",
+          "id": "Panel garis waktu",
+          "de": "Zeitleistenfenster",
+          "zh-CN": "时间线面板",
+          "zh-TW": "時間軸面板",
+          "pt-BR": "Painel da linha do tempo",
+          "es-ES": "Panel de línea de tiempo",
+          "ru": "Панель временной шкалы",
+          "fa": "پانل تایم لاین",
+          "ar": "لوحة الجدول الزمني",
+          "ja": "タイムラインパネル",
+          "ko": "타임라인 패널",
+          "pl": "Panel osi czasu",
+          "hu": "Idővonal panel",
+          "fr": "Panneau Chronologie",
+          "uk": "Панель часової шкали",
+          "tr": "Zaman çizelgesi paneli",
+          "th": "แผงไทม์ไลน์",
+          "it": "Pannello sequenza temporale"
+        }
+      },
+      {
+        "name": "logoImage",
+        "type": "string",
+        "label": "brand icon",
+        "default": "assets/flowdrive-logo.png",
+        "label_i18n": {
+          "en": "brand icon",
+          "id": "ikon merek",
+          "de": "Markensymbol",
+          "zh-CN": "品牌图标",
+          "zh-TW": "品牌圖標",
+          "pt-BR": "ícone da marca",
+          "es-ES": "icono de marca",
+          "ru": "значок бренда",
+          "fa": "نماد برند",
+          "ar": "رمز العلامة التجارية",
+          "ja": "ブランドアイコン",
+          "ko": "브랜드 아이콘",
+          "pl": "ikona marki",
+          "hu": "márka ikonra",
+          "fr": "icône de la marque",
+          "uk": "значок бренду",
+          "tr": "marka simgesi",
+          "th": "ไอคอนแบรนด์",
+          "it": "icona del marchio"
+        }
+      },
+      {
+        "name": "siteImage",
+        "type": "string",
+        "label": "Product web page",
+        "default": "assets/agency-site.png",
+        "label_i18n": {
+          "en": "Product web page",
+          "id": "Halaman web produk",
+          "de": "Produkt-Webseite",
+          "zh-CN": "产品网页",
+          "zh-TW": "產品網頁",
+          "pt-BR": "Página do produto",
+          "es-ES": "página web del producto",
+          "ru": "Веб-страница продукта",
+          "fa": "صفحه وب محصول",
+          "ar": "صفحة ويب المنتج",
+          "ja": "製品ウェブページ",
+          "ko": "제품 웹페이지",
+          "pl": "Strona internetowa produktu",
+          "hu": "A termék weboldala",
+          "fr": "Page Web du produit",
+          "uk": "Веб-сторінка продукту",
+          "tr": "Ürün web sayfası",
+          "th": "หน้าเว็บสินค้า",
+          "it": "Pagina web del prodotto"
+        }
+      },
+      {
+        "name": "footerImage",
+        "type": "string",
+        "label": "footer",
+        "default": "assets/footer.png",
+        "label_i18n": {
+          "en": "footer",
+          "id": "catatan kaki",
+          "de": "Fußzeile",
+          "zh-CN": "页脚",
+          "zh-TW": "頁腳",
+          "pt-BR": "rodapé",
+          "es-ES": "pie de página",
+          "ru": "нижний колонтитул",
+          "fa": "پاورقی",
+          "ar": "تذييل",
+          "ja": "フッター",
+          "ko": "바닥글",
+          "pl": "stopka",
+          "hu": "lábléc",
+          "fr": "pied de page",
+          "uk": "колонтитул",
+          "tr": "alt bilgi",
+          "th": "ส่วนท้าย",
+          "it": "piè di pagina"
+        }
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create a hosting promo for {{brand}} with {{tagline}} and domain {{domain}}. Use {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} and {{footerImage}} as the showcase assets.",
+        "id": "Buat promo hosting untuk {{brand}} dengan {{tagline}} dan domain {{domain}}. Gunakan {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} dan {{footerImage}} sebagai aset pajangan.",
+        "de": "Erstellen Sie ein Hosting-Angebot für {{brand}} mit {{tagline}} und der Domain {{domain}}. Verwenden Sie {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} und {{footerImage}} als Präsentations-Assets.",
+        "zh-CN": "为 {{brand}} 制作托管宣传片，使用标语 {{tagline}}、域名 {{domain}}，展示素材为 {{headerImage}}、{{timelineImage}}、{{logoImage}}、{{siteImage}}、{{footerImage}}。",
+        "zh-TW": "使用 {{tagline}} 和域 {{domain}} 爲 {{brand}} 創建託管促銷。使用 {{headerImage}}、{{timelineImage}}、{{logoImage}}、{{siteImage}} 和 {{footerImage}} 作爲展示資產。",
+        "pt-BR": "Crie uma promoção de hospedagem para {{brand}} com {{tagline}} e domínio {{domain}}. Use {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} e {{footerImage}} como ativos de demonstração.",
+        "es-ES": "Cree una promoción de alojamiento para {{brand}} con {{tagline}} y el dominio {{domain}}. Utilice {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} y {{footerImage}} como activos de exhibición.",
+        "ru": "Создайте промо-хостинг для {{brand}} с {{tagline}} и доменом {{domain}}. Используйте {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} и {{footerImage}} в качестве ресурсов-витрины.",
+        "fa": "یک تبلیغ میزبانی برای {{brand}} با {{tagline}} و دامنه {{domain}}. استفاده کنید {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} و {{footerImage}} به عنوان دارایی ویترین",
+        "ar": "قم بإنشاء عرض ترويجي لاستضافة {{brand}} مع {{tagline}} والنطاق {{domain}}. استخدم {{headerImage}} و{{timelineImage}} و{{logoImage}} و{{siteImage}} و{{footerImage}} كأصول العرض.",
+        "ja": "{{tagline}} およびドメイン {{domain}} を使用して {{brand}} のホスティング プロモーションを作成します。ショーケース アセットとして {{headerImage}}、{{timelineImage}}、{{logoImage}}、{{siteImage}}、および {{footerImage}} を使用します。",
+        "ko": "{{tagline}} 및 도메인 {{domain}}를 사용하여 {{brand}}에 대한 호스팅 프로모션을 만듭니다. {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} 및 {{footerImage}}을 쇼케이스 자산으로 사용하세요.",
+        "pl": "Utwórz promocję hostingu dla {{brand}} z {{tagline}} i domeną {{domain}}. Użyj {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} i {{footerImage}} jako zasobów prezentacyjnych.",
+        "hu": "Hozzon létre egy tárhelypromót a számára {{brand}} -val {{tagline}} és domain {{domain}}. Használja {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} és {{footerImage}} mint a kirakat eszközei.",
+        "fr": "Créez une promotion d'hébergement pour {{brand}} avec {{tagline}} et le domaine {{domain}}. Utilisez {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} et {{footerImage}} comme éléments de présentation.",
+        "uk": "Створіть промо хостинг для {{brand}} з {{tagline}} і доменом {{domain}}. Використовуйте {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} і {{footerImage}} як демонстраційні активи.",
+        "tr": "{{tagline}} ve {{domain}} alan adı ile {{brand}} için bir barındırma promosyonu oluşturun. Vitrin varlıkları olarak {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} ve {{footerImage}}'yi kullanın.",
+        "th": "สร้างโปรโมชันโฮสติ้งสำหรับ {{brand}} ด้วย {{tagline}} และโดเมน {{domain}} ใช้ {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} และ {{footerImage}} เป็นเนื้อหาการนำเสนอ",
+        "it": "Crea una promozione di hosting per {{brand}} con {{tagline}} e dominio {{domain}}. Utilizza {{headerImage}}, {{timelineImage}}, {{logoImage}}, {{siteImage}} e {{footerImage}} come risorse in vetrina."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Flowdrive Motion Reel"
+        }
+      ]
+    },
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html",
+      "poster": "./assets/cover.jpg"
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        },
+        {
+          "ref": "motion-design"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  },
+  "credits": [
+    {
+      "name": "@beamnxw",
+      "url": "https://x.com/beamnxw/status/2110039251681218763"
+    }
+  ]
+}

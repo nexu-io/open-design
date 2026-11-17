@@ -100,26 +100,6 @@ afterAll(() => {
 });
 
 describe('OD Next V2 request recipe wiring', () => {
-  it('composes the canonical motion skill with Core and orchestration for the motion route', async () => {
-    const binding = createBundledStrategyBindingV2({ plugin, taskType: 'motion-design' });
-    const motionSnapshot = applyPlugin({
-      plugin, inputs: {}, registry: EMPTY_REGISTRY, internalStrategyBinding: binding,
-    }).result.appliedPlugin;
-    const recipe = await resolveRecipe({ activeSnapshot: { ...motionSnapshot, snapshotId: 'snapshot-motion-recipe' } });
-    if (!recipe) throw new Error('expected motion recipe');
-    const prompt = composeSystemPrompt({ agentId: 'codex', sessionMode: 'design', odNextStrategyRecipe: recipe });
-    const source = await readFile(path.resolve(BUNDLED_ROOT, '../../skills/motion-design/SKILL.md'), 'utf8');
-    expect(prompt).toContain(source);
-    expect(prompt).toContain('OD Next Core Strategy');
-    expect(prompt).toContain('General Orchestration');
-    expect(prompt).not.toContain('# OD Next Task Profile: HyperFrames');
-    expect(prompt).not.toContain('<open-design-plan-contract>');
-    expect(prompt).not.toContain('<open-design-runtime-state>');
-    expect(prompt).not.toContain('planContractHash=');
-    expect(prompt).toContain('keyed');
-    expect(prompt).toContain('selected scenario or a loaded');
-  });
-
   it.each(['prototype', 'ppt', 'marketing', 'hyperframes'] as const)(
     'treats %s as guidance rather than overriding the current requested output', async (taskType) => {
       const binding = createBundledStrategyBindingV2({ plugin, taskType });
@@ -136,10 +116,6 @@ describe('OD Next V2 request recipe wiring', () => {
       expect(prompt).not.toContain('propose a task-type\n   switch and wait for confirmation');
       expect(prompt).not.toContain('is rejected as an invalid\ncanonical deliverable');
       expect(prompt).toContain('Apply this profile only to the parts of the current request');
-      expect(prompt).not.toContain('<open-design-plan-contract>');
-      expect(prompt).not.toContain('planContractHash=');
-      expect(prompt).not.toContain('od-motion-audio');
-      expect(prompt).not.toContain('media generate --project');
     },
   );
 

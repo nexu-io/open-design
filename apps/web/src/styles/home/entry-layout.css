@@ -1583,14 +1583,14 @@
 .entry-nav-rail__search input::placeholder { color: var(--text-faint); }
 
 /* Team switcher row */
-/* Team block: separated from the personal nav above by a very soft divider. */
+/* Separate navigation groups using the same material separator as rail menus. */
 .entry-nav-rail__team-section {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+  border-top: 1px solid var(--material-separator);
 }
 .entry-nav-rail__team {
   position: relative;
@@ -1744,6 +1744,16 @@
      different content heights (e.g. Community categories) can't toggle the
      scrollbar and shift the centered content sideways — that read as a jitter. */
   scrollbar-gutter: stable;
+}
+
+/* Host modals own the root lock; home owns its independent scrolling pane.
+   Keep the stable gutter and scroll position while removing the background bar. */
+body[data-web-modal-scroll-lock] {
+  overflow: hidden !important;
+}
+
+body[data-web-modal-scroll-lock] .entry-main--scroll {
+  overflow-y: hidden;
 }
 
 /* Top-right cluster inside the tabs chrome's dedicated no-drag actions host:
@@ -9384,3 +9394,7 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+.entry-main--registration-entry { animation: registration-workspace-entry 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes registration-workspace-entry { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .entry-main--registration-entry { animation: none; } }

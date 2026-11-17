@@ -1,0 +1,278 @@
+[
+  {
+    "transport": "srcdoc",
+    "case": "unannotated-title",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "dom:body > header:nth-of-type(1) > h1:nth-of-type(1)",
+      "selector": "body > header:nth-of-type(1) > h1:nth-of-type(1)",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 class=\"page-header__title\" data-od-id=\"path-0-0\" data-od-runtime-id=\"path-0-0\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "srcdoc",
+    "case": "authored-title",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "title",
+      "selector": "[data-od-id=\"title\"]",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 data-od-id=\"title\" class=\"page-header__title\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "srcdoc",
+    "case": "comment-identity-title",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "cmt:12345678-1234-4234-8234-123456789abc",
+      "selector": "[data-od-comment-id=\"12345678-1234-4234-8234-123456789abc\"]",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 data-od-comment-id=\"12345678-1234-4234-8234-123456789abc\" class=\"page-header__title\" data-od-id=\"path-0-0\" data-od-runtime-id=\"path-0-0\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "srcdoc",
+    "case": "repeated-class-second",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "dom:body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "selector": "body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "text": "工具与系统使用",
+      "htmlHint": "<p class=\"learning-item__desc\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "srcdoc",
+    "case": "repeated-class-new-version",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "dom:body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "selector": "body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "text": "工具与系统使用",
+      "htmlHint": "<p class=\"learning-item__desc\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 2,
+    "canLocate": false,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": false,
+        "blockedByVersionPolicy": true,
+        "highlight": 0
+      }
+    ]
+  },
+  {
+    "transport": "srcdoc",
+    "case": "authored-title-new-version",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "title",
+      "selector": "[data-od-id=\"title\"]",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 data-od-id=\"title\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 2,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "url-bridge",
+    "case": "unannotated-title",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "dom:body > header:nth-of-type(1) > h1:nth-of-type(1)",
+      "selector": "body > header:nth-of-type(1) > h1:nth-of-type(1)",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 class=\"page-header__title\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "url-bridge",
+    "case": "authored-title",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "title",
+      "selector": "[data-od-id=\"title\"]",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 data-od-id=\"title\" class=\"page-header__title\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "url-bridge",
+    "case": "comment-identity-title",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "cmt:12345678-1234-4234-8234-123456789abc",
+      "selector": "[data-od-comment-id=\"12345678-1234-4234-8234-123456789abc\"]",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 data-od-comment-id=\"12345678-1234-4234-8234-123456789abc\" class=\"page-header__title\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "url-bridge",
+    "case": "repeated-class-second",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "dom:body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "selector": "body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "text": "工具与系统使用",
+      "htmlHint": "<p class=\"learning-item__desc\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 1,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  },
+  {
+    "transport": "url-bridge",
+    "case": "repeated-class-new-version",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "dom:body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "selector": "body > section:nth-of-type(1) > p:nth-of-type(2)",
+      "text": "工具与系统使用",
+      "htmlHint": "<p class=\"learning-item__desc\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 2,
+    "canLocate": false,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": false,
+        "blockedByVersionPolicy": true,
+        "highlight": 0
+      }
+    ]
+  },
+  {
+    "transport": "url-bridge",
+    "case": "authored-title-new-version",
+    "saveValidationPreserved": true,
+    "client": {
+      "elementId": "title",
+      "selector": "[data-od-id=\"title\"]",
+      "text": "新员工入职指南",
+      "htmlHint": "<h1 data-od-id=\"title\">"
+    },
+    "wirePreserved": true,
+    "publicPositionPresent": false,
+    "version": 2,
+    "canLocate": true,
+    "versions": [
+      {
+        "version": "current",
+        "locateSent": true,
+        "found": true,
+        "highlight": 1
+      }
+    ]
+  }
+]

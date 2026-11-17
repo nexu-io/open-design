@@ -1,13 +1,13 @@
-import type { ApiFailureReason, PublicShareProjectRegistration, TeamProject } from '@open-design/contracts';
+import type { ApiFailureDetail, PublicShareProjectRegistration, TeamProject } from '@open-design/contracts';
 import { isUnmaterializedSharedPlaceholder } from './shared-project-placeholder.js';
 import type { runVelaCommand } from '../integrations/vela-command.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
 import { ensurePrivateVelaTeamProject } from './vela-cli-team-projects.js';
-import { classifyVelaCommandFailure, type PublicShareBootstrapStage } from './public-file-failure.js';
+import { classifyVelaCommandFailure, SafeVelaCommandError, type PublicShareBootstrapStage } from './public-file-failure.js';
 
-class PublicShareProjectBootstrapError extends Error {
-  constructor(readonly stage: PublicShareBootstrapStage, readonly failure: { reason: ApiFailureReason; upstreamStatus?: number }) {
-    super('PUBLIC_SHARE_PROJECT_BOOTSTRAP_FAILED');
+class PublicShareProjectBootstrapError extends SafeVelaCommandError {
+  constructor(readonly stage: PublicShareBootstrapStage, failure: Omit<ApiFailureDetail, 'stage'>) {
+    super('PUBLIC_SHARE_PROJECT_BOOTSTRAP_FAILED', failure);
   }
 }
 
@@ -40,7 +40,7 @@ export async function ensurePublicShareProject(input: {
     return { ...registered, createdAt: Date.parse(registered.createdAt), sharedAt: registered.createdAt };
   } catch (error) {
     if (error instanceof PublicShareProjectBootstrapError) throw error;
-    const { reason, upstreamStatus } = classifyVelaCommandFailure('push', error);
-    throw new PublicShareProjectBootstrapError(stage, { reason, ...(upstreamStatus !== undefined ? { upstreamStatus } : {}) });
+    const { stage: _stage, ...failure } = classifyVelaCommandFailure('push', error);
+    throw new PublicShareProjectBootstrapError(stage, failure);
   }
 }

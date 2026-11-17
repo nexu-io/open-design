@@ -146,6 +146,21 @@ describe('owner content overwrite authority', () => {
     } finally { f.close(); }
   });
 
+  it('does not dismiss a newer head using consent for an older offer', async () => {
+    const f = setup();
+    try {
+      const offered = await f.controller.request(scope, { action: 'check', manual: true });
+      expect(offered.latestVersion).toBe(4);
+      f.head(5);
+      expect(await f.controller.request(scope, { action: 'dismiss', version: offered.latestVersion! }))
+        .toMatchObject({ state: 'confirmation_required', latestVersion: 5, promptSuppressedUntil: null });
+      expect((await f.controller.request(scope, { action: 'check' })).state).toBe('confirmation_required');
+      expect(await f.controller.request(scope, { action: 'dismiss', version: 5 }))
+        .toMatchObject({ state: 'ignored', latestVersion: 5 });
+      expect(f.apply).not.toHaveBeenCalled();
+    } finally { f.close(); }
+  });
+
   it.each([false, true])('re-offers a dismissed version when a manual check joins an ordinary check (silenced=%s)', async silenced => {
     const f = setup();
     try {

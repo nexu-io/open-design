@@ -131,8 +131,7 @@ function failedRunWithNothingToSay(): ChatMessage {
 
 /**
  * 交付失败:agent 进程 `succeeded`,却什么都没交出来。
- * `isRetryableAssistantTerminalFailure` 把它和 `runStatus:'failed'` 一视同仁
- * 走同一条重试路,所以兜底卡必须同样覆盖它。
+ * P0-24 起本轮是否失败只看运行记录,产物有没有交出来不改变状态,所以这一轮不再出卡。
  */
 function deliveryFailedRun(
   state: 'no_result' | 'delivery_failed',
@@ -180,18 +179,12 @@ describe('终态失败 + 说不出原因:兜底报错卡', () => {
   });
 
   it.each(['no_result', 'delivery_failed'] as const)(
-    'CLI 交付失败(resultDeliveryState=%s)同样出卡并将原消息交给 Cloud 恢复',
+    'CLI 交付失败(resultDeliveryState=%s)不出卡:运行正常结束就不是失败(P0-24)',
     (state) => {
-      const message = deliveryFailedRun(state);
-      const { onRetry, onSwitchToAmrAndRetry } = renderChat(message);
+      renderChat(deliveryFailedRun(state));
 
-      expect(screen.getByTestId('chat-run-error-description').textContent).toBe(
-        'chat.runError.fallbackMessage',
-      );
-      fireEvent.click(screen.getByTestId('chat-error-switch-to-cloud'));
-      expect(onSwitchToAmrAndRetry).toHaveBeenCalledExactlyOnceWith(message);
-      expect(screen.queryByTestId('chat-error-retry')).toBeNull();
-      expect(onRetry).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+      expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
     },
   );
 
@@ -221,7 +214,9 @@ describe('反向锚点:兜底不许铺到这三档上', () => {
    * 「没有输出」,由 `e2e/ui/api-empty-response.test.ts` 那条 P0 钉死。
    * 那一格自己已经在说话,再压一张白卡就是两块 UI 说同一件事。
    */
-  it('空回复那一档仍然只显示「没有输出」,不出兜底卡', () => {
+  // P0-24 Q6:回合末尾整行删除,旧会话里落库为 failed 的空回复也不再出「任务未能完成」;
+  // 兜底卡照旧不出(新产生的空回复已按正常结束)。
+  it('空回复那一档(旧会话)不出兜底卡,回合末尾也不再出状态词', () => {
     const message = {
       id: 'msg-empty',
       role: 'assistant',
@@ -239,9 +234,7 @@ describe('反向锚点:兜底不许铺到这三档上', () => {
     renderChat(message);
 
     expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
-    expect(screen.getByTestId('assistant-label').textContent).toContain(
-      'assistant.emptyResponseLabel',
-    );
+    expect(screen.queryByTestId('assistant-label')).toBeNull();
   });
 
   /*
@@ -275,6 +268,22 @@ describe('反向锚点:兜底不许铺到这三档上', () => {
 
     // 接手方在场 —— 这一行就是那句话的主人。
     expect(screen.getByTestId('chat-reconnect')).toBeTruthy();
+    expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
+  });
+
+  it('keeps the aggregated process running while a disconnect awaits the Run record', () => {
+    const message: ChatMessage = {
+      ...failedRunWithNothingToSay(),
+      taskDisplay: { id: 'automatic-task', revision: 2, currentRunId: 'run-1',
+        runIds: ['plan-run', 'run-1'], state: 'running',
+        elapsedMs: 2_000, observedAt: Date.now(), ticking: true },
+      events: [{ kind: 'thinking', text: 'Checking layout' },
+        { kind: 'status', label: 'error', code: RECONNECT_OWNED_FAILURE_CODE }],
+    };
+    const view = renderChat(message);
+    const summary = view.container.querySelector('[data-testid="assistant-flow"] > details > summary');
+    expect(summary).toHaveTextContent('chat.record.running');
+    expect(summary).not.toHaveTextContent('chat.record.failed');
     expect(screen.queryByTestId('chat-run-error-card')).toBeNull();
   });
 

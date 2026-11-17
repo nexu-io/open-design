@@ -1,9 +1,7 @@
 import type { ProjectShareHistoryResponse } from '@open-design/contracts';
 import { hasEverShared } from '@open-design/contracts';
-import { ensurePrivateVelaTeamProject } from './vela-cli-team-projects.js';
 import type { PublicFilePublicationScope } from './public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
-import { fetchVelaWorkspaceDirectory } from './vela-workspace-context.js';
 import { runPinnedVelaCommand } from './vela-pinned-command.js';
 import { parseAmrShareLink, type AmrShareLink } from './public-share-viewer-url.js';
 
@@ -18,12 +16,7 @@ export function createVelaProjectShareState(options: {
   dataRoot: string;
   configuredEnv?: Record<string, string> | (() => Record<string, string>);
   readSession?: typeof readVelaControlApiContext;
-  fetchDirectory?: typeof fetchVelaWorkspaceDirectory;
   runCommand?: typeof runPinnedVelaCommand;
-  /** Persisted local authorship, never inferred from the current reader. */
-  resolveLocalProjectOwner?: (projectId: string, workspaceId: string) => string | null;
-  /** Read-only status probes must never create a missing creator catalog row. */
-  registerLocallyOwnedProject?: boolean;
 }): ReadProjectShareState {
   return async scope => {
     const identity = Object.freeze({ ...scope });
@@ -31,25 +24,8 @@ export function createVelaProjectShareState(options: {
     const current = (options.readSession ?? readVelaControlApiContext)(process.env, configuredEnv);
     if (!current?.controlKey || !current.apiUrl || !options.dataRoot) throw new Error('SHARE_STATE_UNAVAILABLE');
     const session = Object.freeze({ ...current });
-    const directory = await (options.fetchDirectory ?? fetchVelaWorkspaceDirectory)({ readSession: () => session });
-    const workspace = directory.ok ? directory.items.find(item => item.workspaceId === identity.resourceTeamId
-      && item.workspaceMemberId === identity.ownerMemberId && item.memberStatus === 'active'
-      && item.lifecycleState === 'active') : undefined;
-    if (!workspace) throw new Error('SHARE_STATE_UNAVAILABLE');
-    // A locally owned project can lack a catalog before its first share in
-    // either workspace type. Register proven authorship, never content or
-    // sharing intent; omitted sync/version/metadata preserve existing state.
-    if (options.registerLocallyOwnedProject !== false
-      && options.resolveLocalProjectOwner?.(identity.projectId, identity.resourceTeamId) === identity.ownerMemberId) {
-      // Ensure returns the retained root, including identities established by
-      // earlier paired clients. Never replace it with a locally derived ID.
-      await ensurePrivateVelaTeamProject(identity.projectId,
-        { teamId: identity.resourceTeamId, memberId: identity.ownerMemberId,
-          role: workspace.role, lifecycleState: workspace.lifecycleState },
-        args => (options.runCommand ?? runPinnedVelaCommand)({
-          args, session, workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,
-        }));
-    }
+    // The cloud status endpoint authenticates the pinned session and enforces
+    // creator ownership. Reading status does not create a project or require write access.
     const output = await (options.runCommand ?? runPinnedVelaCommand)({
       args: ['share', 'project-status', identity.projectId, '--json'], session,
       workspaceId: identity.resourceTeamId, dataRoot: options.dataRoot, configuredEnv,

@@ -39,8 +39,8 @@ it.each(['personal', 'team'] as const)('settles loading after %s catalog is unav
   expect(hook.result.current.context.identityChangePending).toBe(false);
   expect(hook.result.current.catalog.projects).toEqual([]);
   expect(hook.result.current.catalog.loading).toBe(false);
-  expect(hook.result.current.catalog.error).toBe(workspaceType === 'team' ? 'unavailable' : undefined);
-  if (workspaceType === 'personal') expect(catalogRequests).toEqual([]);
+  expect(hook.result.current.catalog.error).toBe('unavailable');
+  expect(catalogRequests).toHaveLength(1);
   denied = false;
   await act(async () => notifyTeamProjectsChanged());
   expect(hook.result.current.catalog.loading).toBe(false);

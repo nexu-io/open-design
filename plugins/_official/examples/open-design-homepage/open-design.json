@@ -66,7 +66,9 @@
     "surface": "web",
     "preview": {
       "type": "html",
-      "entry": "./example.html"
+      "entry": "./example.html",
+      "poster": "./example.webp",
+      "galleryPosterOnly": true
     },
     "useCase": {
       "query": {
@@ -151,7 +153,8 @@
         "./assets/work/vs01.webp",
         "./assets/work/vs02.webp",
         "./assets/work/wasm01.webp",
-        "./assets/work/wasm02.webp"
+        "./assets/work/wasm02.webp",
+        "./example.webp"
       ]
     },
     "pipeline": {

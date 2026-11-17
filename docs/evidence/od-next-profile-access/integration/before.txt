@@ -1,0 +1,50 @@
+Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/od-next-automatic-simple-server.test.ts > OD Next automatic production through the real server > starts a frozen 'opencode' run with bundled task assets 'unavailable' and preserves unrelated config
+ FAIL  tests/od-next-automatic-simple-server.test.ts > OD Next automatic production through the real server > starts a frozen 'byok-opencode' run with bundled task assets 'unavailable' and preserves unrelated config
+AssertionError: expected 'allow' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"allow"
+
+ ❯ tests/od-next-automatic-simple-server.test.ts:723:32
+    721|           expect(invocation.config.permission?.edit?.[entry]).toBe('de…
+    722|         } else {
+    723|           expect(rules[entry]).toBeUndefined();
+       |                                ^
+    724|           expect(invocation.config.permission?.edit?.[entry]).toBeUnde…
+    725|         }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/od-next-automatic-simple-server.test.ts > OD Next automatic production through the real server > starts a frozen 'opencode' run with bundled task assets 'edit-base-unavailable' and preserves unrelated config
+ FAIL  tests/od-next-automatic-simple-server.test.ts > OD Next automatic production through the real server > starts a frozen 'byok-opencode' run with bundled task assets 'edit-base-unavailable' and preserves unrelated config
+AssertionError: expected undefined to deeply equal [ …(2) ]
+
+- Expected:
+[
+  "<node>",
+  "--version",
+]
+
++ Received:
+undefined
+
+ ❯ tests/od-next-automatic-simple-server.test.ts:710:55
+    708|       // Withholding one resource must never discard the project's exi…
+    709|       // access, enabled MCP servers, or the run-scoped BYOK provider.
+    710|       expect(invocation.config.mcp?.fixture?.command).toEqual([process…
+       |                                                       ^
+    711|       if (agentId === 'byok-opencode') {
+    712|         expect(invocation.config.provider?.['open-design-byok']?.optio…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 65 skipped (69)
+   Start at  17:43:39
+   Duration  14.65s (transform 4.30s, setup 27ms, import 5.58s, tests 8.93s, environment 0ms)

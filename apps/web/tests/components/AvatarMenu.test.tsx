@@ -687,7 +687,7 @@ describe('AvatarMenu', () => {
     workspaceId: string;
     personalMembershipTier?: string;
   }) {
-    const billingUrl = `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}${options.personalMembershipTier ? '&includePreflight=1' : ''}`;
+    const billingUrl = `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}`;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -722,7 +722,7 @@ describe('AvatarMenu', () => {
       if (url === '/api/workspace/context') {
         return workspaceContextResponse(options.ambientContext ?? null);
       }
-      if (url === billingUrl) {
+      if (url === billingUrl || url === `${billingUrl}&includePreflight=1`) {
         return new Response(JSON.stringify({
           summary: options.personalMembershipTier
             ? { membershipTier: options.personalMembershipTier }

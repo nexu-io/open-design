@@ -107,6 +107,9 @@ vi.mock('../../src/router', () => ({
 }));
 
 vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   ProjectConversationsHttpError: class ProjectConversationsHttpError extends Error {
     constructor(readonly status: number, message = `conversations ${status}`) {
       super(message);

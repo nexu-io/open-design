@@ -36,9 +36,9 @@ function project(overrides: Partial<Project>): Project {
   };
 }
 
-const OLDEST = project({ id: 'p-oldest', name: 'Alpha oldest', updatedAt: 1 });
-const MIDDLE = project({ id: 'p-middle', name: 'Charlie middle', updatedAt: 2 });
-const NEWEST = project({ id: 'p-newest', name: 'Bravo newest', updatedAt: 3 });
+const OLDEST = project({ id: 'p-oldest', name: 'Alpha oldest', updatedAt: 1, lastUserQueryAt: 1 });
+const MIDDLE = project({ id: 'p-middle', name: 'Charlie middle', updatedAt: 2, lastUserQueryAt: 2 });
+const NEWEST = project({ id: 'p-newest', name: 'Bravo newest', updatedAt: 3, lastUserQueryAt: 3 });
 const PROJECTS = [OLDEST, MIDDLE, NEWEST];
 
 const SORT_LABEL = 'Sort projects';

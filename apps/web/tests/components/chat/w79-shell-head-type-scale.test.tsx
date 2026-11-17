@@ -300,10 +300,12 @@ describe('防真空 —— 量尺读得出非默认值', () => {
 
   it('四态的夹具都真的渲染出了状态词', () => {
     expect(headWord(RUNNING()).textContent).toBe('进行中');
-    expect(headWord(DONE()).textContent).toBe('已完成');
+    // P0-24:正常结束的一轮说「用时」,不替用户宣布「已完成」。
+    expect(headWord(DONE()).textContent).toBe('用时');
     // OPEND-2626:手动停止那一档的词从「进行中」换成「已取消」。
     // 字号那件事没变(仍和另外三态同号),这里只是把夹具的读数对上。
-    expect(headWord(STOPPED()).textContent).toBe('已取消');
+    // P0-24 再把它定为「已停止」。
+    expect(headWord(STOPPED()).textContent).toBe('已停止');
     expect(headWord(FAILED()).textContent).toBe('运行失败');
     // 运行态那三个字确实住在 `.shimmer` 里 —— 「同一个壳头两个字号」的成因就在这
     expect(headWord(RUNNING()).className).toContain(cls('shimmer'));

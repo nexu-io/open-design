@@ -9,7 +9,7 @@ import { renderWinPackagedMainEntry } from "@/win/prebundle.js";
 describe.each([
   ["mac", renderMacPackagedMainEntry], ["win", renderWinPackagedMainEntry],
 ] as const)("%s entry import failure recovery", (_platform, render) => {
-  it.each(["desktop", "headless", "node", "healthy"])("handles %s without application dependencies", async (mode) => {
+  it.each(_platform === "mac" ? ["desktop", "headless", "node", "healthy", "host-missing"] : ["desktop", "headless", "node", "healthy"])("handles %s without application dependencies", async (mode) => {
     const root = await mkdtemp(join(tmpdir(), "od-entry-recovery-"));
     try {
       await mkdir(join(root, "node_modules/electron"), {recursive:true});
@@ -17,6 +17,13 @@ describe.each([
       const record = join(root, "dialog.json");
       await writeFile(join(root, "node_modules/electron/index.js"),
         `exports.dialog={showErrorBox:(...args)=>require('node:fs').writeFileSync(${JSON.stringify(record)},JSON.stringify(args))};`);
+      // The host is a bundled bootstrap file, separate from the application
+      // dependency whose import failure this boundary exercises. Node mode
+      // deliberately has no host file and must bypass Electron hosting.
+      if (_platform === "mac" && mode !== "host-missing" && mode !== "node") {
+        await writeFile(join(root, "launcher-host.cjs"),
+          "exports.selectAppEntry=({bundledEntry})=>({entry:bundledEntry});");
+      }
       if (mode === "healthy") {
         await mkdir(join(root, "prebundled"));
         await writeFile(join(root, "prebundled/packaged-main.mjs"), "export const ready = true;");
@@ -30,12 +37,12 @@ describe.each([
       });
       expect(result.code).toBe(mode === "healthy" ? 0 : 1);
       if (mode !== "healthy") {
-        expect(result.stderr).toContain("ERR_MODULE_NOT_FOUND");
+        expect(result.stderr).toContain(mode === "host-missing" ? "MODULE_NOT_FOUND" : "ERR_MODULE_NOT_FOUND");
         expect(result.stderr).toContain("reinstall");
         expect(result.stderr).toContain("same release channel");
         expect(result.stderr).toContain("node_modules/.ignored");
       } else expect(result.stderr).toBe("");
-      if (mode === "desktop") expect(await readFile(record, "utf8")).toContain("reinstall");
+      if (mode === "desktop" || mode === "host-missing") expect(await readFile(record, "utf8")).toContain("reinstall");
       else await expect(readFile(record)).rejects.toThrow();
     } finally { await rm(root, {recursive:true, force:true}); }
   });

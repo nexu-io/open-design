@@ -13,12 +13,16 @@ od:
 
 A 20-second paper-cutout story for OpenDesign: a girl sends “OpenDesign, what can you design?” on a paper plane. The buddy demonstrates interactive prototypes, websites, PPT, posters and motion films. The works fold into a book and return to her: “It starts with your idea.” She hugs it, waves thanks, then pins “What will you design?” beside her window as an invitation to the viewer. `example.html` is the editable reference — start from it.
 
+The reference timing and beat map describe the demo. Adapt them to the user's
+requested duration and content; do not force the reference duration or music.
+
 ## Source
 A story adaptation of a viral post by @kevin_t_ngo: https://x.com/kevin_t_ngo/status/2102437977435893771 (665K views · 6.2K likes · 3.0K bookmarks on X (as of 2026-10-13)). The composition is
 inspired by the published piece’s paper craft and rebuilt in code; the soundtrack is original. The original is a 28-second square film; this is a 20-second cut framed in 16:9, and its character is the Open Design buddy built from the logo mark.
 
 ## Reference files
-Copy `example.html`, `assets/gsap.min.js`, `assets/short-stack-OFL.txt`, `assets/short-stack-regular.ttf`, `assets/soundtrack.mp3` into the composition, preserving the `assets/` path.
+Copy `example.html`, `assets/gsap.min.js`, `assets/short-stack-OFL.txt`, `assets/short-stack-regular.ttf` into the composition, preserving the `assets/` path.
+Copy the demo soundtrack only if selected under the Sound guidance below.
 Font licenses travel with their fonts. Use these frozen local bytes; no runtime
 script or font CDN is needed.
 
@@ -59,7 +63,7 @@ script or font CDN is needed.
 - Edit `CFG.question` (three lines), `CFG.answer`, `CFG.invitation` (three lines), `LIST` (labels), `S` (the five miniature renderers) and `PALETTE` together. Maintain the handwritten question’s safe margins.
 - Preserve the reference's reaction, thank-you and pinned-note closing gestures. Keep the audience invitation on the physical note instead of a floating town banner.
 - Keep each demonstration’s actual action and the same works in the closing book. A capability should be visible as a designed result.
-- Preserve the original bundled 20-second music; this iteration adds no speech or extra percussion.
+- Choose and time audio for the current brief using the Sound guidance below.
 
 ## How the reference is built
 - One composition root with canvas layers. A single `render(t)` draws the
@@ -90,27 +94,35 @@ frame expensive and slow the MP4 export.
 ## Sound
 `assets/soundtrack.mp3` is an original 20-second score made for this template
 and timed to its beats; no audio from the source video is used.
-The music is part of the look being remade. These rules replace the general
-sound guidance for this remake; apply the first one that matches the brief:
+The bundled track is demo material, not a requirement for generated films.
+The user's current brief takes priority over this reference and its seed prompt,
+including duration, music choice, genre, mood, voiceover and sound effects.
+Follow the general motion-design audio guidance; this template does not disable
+available audio tools or original audio synthesis.
 
-1. The user asks for no music: remove the `<audio>` element, do not copy the
-   file, and freeze `motionDelivery.audio` as `silent`.
-2. The user supplies an audio file and asks to use it: copy it into the film's
-   `assets/` and point `<audio id="soundtrack">` at it.
-3. Otherwise keep this score, including when the brief asks for different
-   music, a genre or a mood. This flow cannot generate music: never generate,
-   download or synthesize audio, and do not add voiceover.
+- If the user requests a silent film, remove all audio. If they request only
+  no background music, remove the music but retain any requested sound effects
+  or voiceover. No voiceover does not mean no music.
+- Use the user's supplied audio when requested. If they request different music,
+  choose or create a suitable real local asset using the available audio tools,
+  licensed sources or original synthesis. Do not silently substitute the demo
+  track for an unmet request; briefly disclose any limitation.
+- Without a specific music request, add appropriate audio when it benefits the
+  film. Reuse the demo track only when it suits the actual story, mood and timing;
+  it is an option, not the default for every adaptation.
+- Fit the visuals and audio to the requested film duration, not to the demo's
+  duration. For example, a 15-second brief stays 15 seconds even when the demo
+  score is 20 seconds. Edit the selected track with a deliberate ending/fade;
+  use the same edited local file in HTML and MP4. For a longer film, arrange or
+  replace the track to cover the intended beats rather than leaving an accidental
+  silent tail. Do not rely on an HTML-only loop or playbackRate for export.
 
-Under rules 2 and 3, freeze `motionDelivery.audio` as `required`.
-
-Keep `id="soundtrack"`, `data-start="0"` and a numeric `data-volume`. Set
-`data-duration` to the shorter of the music and the film (the film's length
-when the music's length is unknown); the export fades the music out there.
-Never use `loop`: in a film longer than the music, the music plays once and the
-rest is silent.
-
-Do not add a music note to the final reply. Only when a music or voiceover
-request could not be met, say so in one short sentence.
+For background music keep `id="soundtrack"`, `data-start="0"` and a numeric
+`data-volume`; update `src` and `data-duration` to the actual edited asset and
+film. Remove unused demo audio from the generated composition. Set the source's
+`od-motion-audio` metadata to `required` when sound is intended, or `silent` for
+an intentionally silent film, using the general motion-design delivery guidance.
+Verify the ending and audio in both HTML playback and the exported MP4.
 
 The `<audio>` element stays inside the composition root; the desktop exporter
 mixes its local file into the MP4. Preview sound starts with the film; when the

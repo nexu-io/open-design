@@ -582,11 +582,18 @@ describe('server.ts wiring (source boundary)', () => {
       readinessStart,
     );
     const readinessBody = source.slice(readinessStart, coordinatorStartAfterReadiness);
-    expect(readinessBody).toContain("if (resourceType === 'design_system')");
-    expect(readinessBody).toContain('ownedDesignSystemSourceIsReady({');
+    expect(readinessBody).toContain('ownedTeamResourceSourceIsReady(resourceType, resource, scope)');
     expect(readinessBody).not.toContain(
       'if (resource.ownerMemberId === scope.principal.memberId) return true;',
     );
+    const ownerSourceStart = source.indexOf('const ownedTeamResourceSourceIsReady = (');
+    const pluginSyncStart = source.indexOf('async function syncSharedTeamPlugin(', ownerSourceStart);
+    expect(ownerSourceStart).toBeGreaterThan(-1);
+    expect(pluginSyncStart).toBeGreaterThan(ownerSourceStart);
+    const ownerSourceBody = source.slice(ownerSourceStart, pluginSyncStart);
+    expect(ownerSourceBody).toContain('ownedWorkspaceResourceSourceIsReady({');
+    expect(ownerSourceBody).toContain('localSourceExists:');
+    expect(ownerSourceBody).toContain('getWorkspaceResourceByResourceId(db, kind, resource.id)');
 
     const designSystemSyncStart = source.indexOf(
       'async function syncSharedTeamDesignSystem(',
@@ -596,7 +603,7 @@ describe('server.ts wiring (source boundary)', () => {
       designSystemSyncStart,
     );
     const designSystemSyncBody = source.slice(designSystemSyncStart, skillSyncStart);
-    expect(designSystemSyncBody).toContain('const ownerLocalSourceReady = ownedDesignSystemSourceIsReady({');
+    expect(designSystemSyncBody).toContain("const ownerLocalSourceReady = ownedTeamResourceSourceIsReady('design_system', resource, scope)");
     expect(designSystemSyncBody).toContain('if (ownerLocalSourceReady) return;');
     expect(designSystemSyncBody).not.toContain('if (isOwnedByCurrentMember) return;');
     const designSystemAdoptionStart = source.indexOf(

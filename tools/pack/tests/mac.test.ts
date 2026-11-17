@@ -365,6 +365,13 @@ describe("runElectronBuilder", () => {
     const cliPath = join(root, "fake-electron-builder.mjs");
 
     const config = makeConfig(root, {
+      amrEndpointBinding: {
+        profile: "test",
+        apiUrl: "https://api.example.invalid",
+        linkUrl: "https://link.example.invalid",
+        webUrl: "https://console.example.invalid",
+        credentialScope: "builder-fixture",
+      },
       appVersion: "1.2.3-prerelease.4",
       electronBuilderCliPath: cliPath,
       signed: true,
@@ -372,6 +379,16 @@ describe("runElectronBuilder", () => {
       ...overrides,
     });
     const paths = resolveMacPaths(config);
+    await mkdir(dirname(paths.packagedConfigPath), { recursive: true });
+    await writeFile(
+      paths.packagedConfigPath,
+      renderMacPackagedConfig({
+        appVersion: config.appVersion ?? "1.2.3-prerelease.4",
+        config,
+        usePrebundledStandaloneWeb: false,
+      }),
+      "utf8",
+    );
     const nodePtyPrebuildRoot = join(
       paths.appPath,
       "Contents",
@@ -385,7 +402,9 @@ describe("runElectronBuilder", () => {
     await writeFile(
       cliPath,
       [
-        'import { chmod, mkdir, writeFile } from "node:fs/promises";',
+        'import { chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";',
+        'const args = process.argv.slice(2);',
+        'const builderConfig = JSON.parse(await readFile(args[args.indexOf("--config") + 1], "utf8"));',
         `const prebuildRoot = ${JSON.stringify(nodePtyPrebuildRoot)};`,
         `const appRoot = ${JSON.stringify(join(paths.appPath, "Contents", "Resources", "app"))};`,
         'for (const name of ["sidecar", "platform"]) {',
@@ -397,6 +416,9 @@ describe("runElectronBuilder", () => {
         '}',
         'await writeFile(appRoot + "/main.cjs", "");',
         'await writeFile(appRoot + "/package.json", "{}");',
+        'const configResource = builderConfig.extraResources.find((entry) => entry.to === "open-design-config.json");',
+        'if (!configResource) throw new Error("packaged config resource missing");',
+        'await copyFile(configResource.from, appRoot + "/../open-design-config.json");',
         "await mkdir(prebuildRoot, { recursive: true });",
         'await writeFile(new URL("pty.node", `file://${prebuildRoot}/`), Buffer.alloc(32 * 1024, 1));',
         'await writeFile(new URL("spawn-helper", `file://${prebuildRoot}/`), "#!/bin/sh\\nexit 0\\n", "utf8");',
@@ -417,13 +439,13 @@ describe("runElectronBuilder", () => {
     };
   }
 
-  it("does not explicitly disable electron-builder notarization for notarized mac builds", async () => {
+  it("notarizes signed mac builds only through the retrying afterSign hook", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
       const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: true });
 
       expect(builderConfig.afterSign).toContain("notarize.cjs");
-      expect(builderConfig.mac).not.toHaveProperty("notarize");
+      expect(builderConfig.mac?.notarize).toBe(false);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -440,10 +462,14 @@ describe("runElectronBuilder", () => {
     }
   });
 
-  it("keeps signed-only mac builds from invoking electron-builder notarization", async () => {
+  it.each([
+    { mode: "signed-only", signed: true, macNotarize: false },
+    { mode: "unsigned", signed: false, macNotarize: false },
+    { mode: "unsigned with notarization requested", signed: false, macNotarize: true },
+  ])("does not invoke either notarization path for $mode mac builds", async ({ signed, macNotarize }) => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+      const builderConfig = await prepareElectronBuilderConfig(root, { signed, macNotarize });
 
       expect(builderConfig.afterSign).toBeUndefined();
       expect(builderConfig.mac?.notarize).toBe(false);

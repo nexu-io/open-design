@@ -1,3 +1,5 @@
+import { openExternalUrl } from "../providers/registry";
+import { withTaskPresentation, newerTaskDisplay, type PresentedChatMessage } from '../runtime/chat/task-presentation';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
@@ -53,6 +55,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { ChatHistoryGlyph } from './chat/ChatHistoryGlyph';
 import historyStyles from './chat/ConversationHistoryDock.module.css';
 import { hasOdCard, OD_NEXT_STRATEGY_ID, type ProjectMediaTask } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
@@ -139,6 +142,7 @@ import {
 import { Reconnect } from './chat/Reconnect';
 import { UserStatusCard } from './chat/UserStatusCard';
 import type { ChatReconnectView } from '../runtime/chat/reconnect-state';
+import { projectTurnAwaitingRunRecord } from '../runtime/chat/pending-disconnect';
 import { TodoCard } from './ToolCard';
 import type { BrandBrowserAssistConfirm } from './OdCard';
 import {
@@ -172,9 +176,11 @@ import {
 import {
   ChatComposer,
   type ChatComposerHandle,
+  type RejectedComposerSend,
   type ChatSendOutcome,
   type ChatSendMeta,
 } from './ChatComposer';
+import { attachmentLocalPreviewUrl } from '../runtime/chat/creation-handoff';
 import type { PendingUpload } from '../runtime/chat/staged-attachment';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
@@ -811,6 +817,12 @@ interface Props {
    * OPEND-2849)。宿主读不出时按 `owner` 说 —— 那是今天的默认身份。
    */
   amrBalanceAudience?: 'owner' | 'member';
+  /** Frozen r506 F12/F15 card for a refused Link request before a run exists. */
+  amrConcurrencyCardAudience?: 'owner' | 'member' | null;
+  /** Owner needs scoped proof of an upgrade path; members can contact the owner. */
+  amrConcurrencyCardEligible?: boolean;
+  /** Opens the matching F04/F06 explanation; it never resends the draft. */
+  onAmrConcurrencyUpgrade?: () => void;
   /**
    * **失败之后的那次钱包补查已经落地,而且没读出数字。**
    *
@@ -890,6 +902,8 @@ interface Props {
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
+  rejectedComposerSend?: RejectedComposerSend;
+  onRejectedComposerSendRestored?: (nonce: string, restored: boolean) => void;
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -979,13 +993,6 @@ interface Props {
   // switcher above the card (OPEND-3128 / OPEND-3258). Otherwise the control
   // renders in a title-less row at the top of the card.
   historyPortalTarget?: HTMLElement | null;
-  /**
-   * The pane is laid out but parked out of sight under the creation hand-off
-   * card (ProjectView `creationHandoff`, OPEND-2170). The composer normally
-   * portals into a body-level fixed layer that `visibility: hidden` on the
-   * pane cannot reach, so the layer hides itself on this flag.
-   */
-  composerLayerHidden?: boolean;
   designSystemPicker?: ReactNode;
   config?: AppConfig;
 }
@@ -1070,15 +1077,25 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): FoldedChatMessag
   }
   const folded: FoldedChatMessage[] = [];
   const turnHeadIndexByTask = new Map<string, number>();
+  /*
+   * Tasks that saw a user message since their last Run — the next Run of such
+   * a task started from the user's reply (a submitted question form), not from
+   * the daemon auto-continuing. See `done_key.afterUserReply`.
+   */
+  const repliedTasks = new Set<string>();
   for (const message of messages) {
     const taskId = message.strategyTaskExecutionId;
     const runIndex = message.strategyTaskRunIndex ?? 0;
+    if (message.role === 'user') {
+      for (const id of turnHeadIndexByTask.keys()) repliedTasks.add(id);
+    }
     if (message.role !== 'assistant' || !taskId) {
       folded.push(message);
       continue;
     }
     if (runIndex === 0 || !turnHeadIndexByTask.has(taskId)) {
       turnHeadIndexByTask.set(taskId, folded.length);
+      repliedTasks.delete(taskId);
       folded.push({ ...message, events: stampRunSpan(message) });
       continue;
     }
@@ -1095,6 +1112,7 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): FoldedChatMessag
       folded.push(message);
       continue;
     }
+    const afterUserReply = repliedTasks.delete(taskId);
     const headIndex = turnHeadIndexByTask.get(taskId)!;
     const head = folded[headIndex]!;
     const headContent = head.content ?? '';
@@ -1106,7 +1124,7 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): FoldedChatMessag
       content: tailContent
         ? `${headContent}${separator}${tailContent}`
         : headContent,
-      events: [...(head.events ?? []), ...stampRunSpan(message)],
+      events: [...(head.events ?? []), ...stampRunSpan(message, afterUserReply)],
       // Preserve the final physical Run's scope for completion checks while
       // retaining the full history for display. Live rows may already contain
       // predecessors, tracked by these same offsets in ProjectView.
@@ -1122,11 +1140,10 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): FoldedChatMessag
       // internal step, not the turn ending.
       runId: message.runId ?? head.runId,
       runStatus: message.runStatus ?? head.runStatus,
-      // Likewise the task verdict: only the final Run of the chain carries it,
-      // and the folded turn is what the pinned todo card reads.
-      ...(message.strategyTaskDelivered
-        ? { strategyTaskDelivered: message.strategyTaskDelivered }
-        : {}),
+      taskDisplay: newerTaskDisplay(head.taskDisplay, message.taskDisplay),
+      // Completion belongs to the final physical Run, including false or
+      // absent legacy values. Never inherit the planning Run's verdict.
+      strategyTaskDelivered: message.strategyTaskDelivered,
       ...(message.endedAt ? { endedAt: message.endedAt } : {}),
       ...(message.resultDeliveryState
         ? { resultDeliveryState: message.resultDeliveryState }
@@ -1148,16 +1165,20 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): FoldedChatMessag
  * existed has no marker to stamp. Both simply keep today's behaviour — the
  * renderer treats an absent span as "unknown" and falls back to the turn's.
  */
-function stampRunSpan(message: ChatMessage): NonNullable<ChatMessage['events']> {
+function stampRunSpan(
+  message: ChatMessage,
+  afterUserReply = false,
+): NonNullable<ChatMessage['events']> {
   const events = message.events ?? [];
   const startedAt = message.startedAt ?? message.createdAt;
-  if (startedAt == null && message.endedAt == null) return events;
+  if (startedAt == null && message.endedAt == null && !afterUserReply) return events;
   return events.map((event) => (
     event.kind === 'done_key'
       ? {
         ...event,
         ...(startedAt != null ? { runStartedAt: startedAt } : {}),
         ...(message.endedAt != null ? { runEndedAt: message.endedAt } : {}),
+        ...(afterUserReply ? { afterUserReply: true } : {}),
       }
       : event
   ));
@@ -1317,15 +1338,6 @@ const HEAD_GLYPH = {
   'aria-hidden': true,
 } as const;
 
-/** Filled discuss-line glyph (Demo #8113), sized like the other head icons. */
-function ChatHistoryGlyph(): ReactElement {
-  return (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
-      <path d="M14 22.5L11.2 19H6C5.44772 19 5 18.5523 5 18V7.10256C5 6.55028 5.44772 6.10256 6 6.10256H22C22.5523 6.10256 23 6.55028 23 7.10256V18C23 18.5523 22.5523 19 22 19H16.8L14 22.5ZM15.8387 17H21V8.10256H7V17H11.2H12.1613L14 19.2984L15.8387 17ZM2 2H19V4H3V15H1V3C1 2.44772 1.44772 2 2 2Z" />
-    </svg>
-  );
-}
-
 /** 描边十字(`src/body-scene.html:8`)—— 一条 path 走两笔,和稿子同形 */
 function NewSessionGlyph(): ReactElement {
   return (
@@ -1413,6 +1425,9 @@ export function ChatPane({
   amrBalanceCardUsd = null,
   amrBalanceCardAnchorMessageId = null,
   amrBalanceAudience = 'owner',
+  amrConcurrencyCardAudience = null,
+  amrConcurrencyCardEligible = true,
+  onAmrConcurrencyUpgrade,
   amrBalanceCardUnavailable = false,
   onAmrBalanceUpgrade,
   onOpenAmrSettings,
@@ -1436,6 +1451,8 @@ export function ChatPane({
   onCreateDesignSystemFromProject,
   createDesignSystemFromProjectBusy,
   composerDraftSignal,
+  rejectedComposerSend,
+  onRejectedComposerSendRestored,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -1474,17 +1491,25 @@ export function ChatPane({
   collapseControlLifted,
   backLabel,
   historyPortalTarget,
-  composerLayerHidden = false,
   designSystemPicker,
   config,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
   const { t, locale } = useI18n();
   const analytics = useAnalytics();
+  const previousTaskPresentation = useRef<PresentedChatMessage[]>([]);
   const displayMessages = useMemo(
-    () => foldStrategyTaskTurns(
-      messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
-    ),
+    () => {
+      const presented = withTaskPresentation(foldStrategyTaskTurns(
+        messages
+          .filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata))
+          // A lost stream has no Run verdict yet. Project it before task
+          // aggregation so the merged process does not freeze as failed.
+          .map(projectTurnAwaitingRunRecord),
+      ), previousTaskPresentation.current);
+      previousTaskPresentation.current = presented;
+      return presented;
+    },
     [messages, projectMetadata],
   );
   /**
@@ -2010,7 +2035,14 @@ export function ChatPane({
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
   // SDF liquid-glass refraction on the jump pill (frosted fallback via CSS).
   const jumpBtnGlassRef = useLiquidGlass<HTMLButtonElement>({ strength: 0.2 });
-  const [composerPortalTarget, setComposerPortalTarget] = useState<HTMLElement | null>(null);
+  // Resolved in the initializer, not in an effect: with the target known at
+  // mount, the layout effects below measure the slot and portal the composer
+  // before the first paint. Resolving it after paint drew the composer in-flow
+  // for one frame first — 12px lower and with the in-flow send button — on
+  // every mount of this pane (OPEND-3334).
+  const [composerPortalTarget] = useState<HTMLElement | null>(() =>
+    typeof document === 'undefined' ? null : document.body,
+  );
   const [composerPortalRect, setComposerPortalRect] = useState<{
     left: number;
     width: number;
@@ -2250,12 +2282,8 @@ export function ChatPane({
     }
     if (onConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation)) {
       amrAuthRetrySignedOutWitnessRef.current = null;
-      onRetry(
-        retryAssistant,
-        retryAssistant.agentId === 'amr'
-          ? 'authorize_and_retry'
-          : 'switch_runtime_retry',
-      );
+      // Authentication restores the conversation, not execution permission.
+      // The user retries explicitly once the account and Workspace are ready.
     }
   }, [
     activeConversationId,
@@ -2442,9 +2470,9 @@ export function ChatPane({
    * 这一轮**确实到了终态失败**。
    *
    * `retryAssistant` 本身就是这个判据:它走
-   * `isRetryableAssistantTerminalFailure`,既认进程级 `runStatus:'failed'`,
-   * 也认「进程成了、东西没交出来」的 `no_result` / `delivery_failed` ——
-   * 恢复入口这一族本来就共用它当锚点,兜底卡没有理由另立一套。
+   * `isRetryableAssistantTerminalFailure`,只认运行记录的 `runStatus:'failed'`
+   * (P0-24:产物有没有交出来不改变本轮状态)—— 恢复入口这一族本来就共用它当锚点,
+   * 兜底卡没有理由另立一套。
    */
   const turnEndedInTerminalFailure = !!retryAssistant && !failedTurnIsAnEmptyResponse;
   const cardDescription = resolveRunErrorCardDescription({
@@ -2493,6 +2521,12 @@ export function ChatPane({
   const displayErrorTitle = accessErrorCopy
     ? t(accessErrorCopy.titleKey)
     : t(runFailureUi?.titleKey ?? 'chat.runError.title.generic', runFailureCopyVars);
+  const frozenConcurrencyCardAudience = amrConcurrencyCardEligible
+    ? (amrConcurrencyCardAudience
+      ?? (!accessErrorCopy && displayError && retryAssistant?.agentId === 'amr'
+        && runFailureUi?.titleKey === 'chat.runError.title.membershipConcurrencyLimit'
+        ? amrBalanceAudience : null))
+    : null;
   /*
    * 这张顶层报错卡代表**哪一轮**。
    *
@@ -2528,11 +2562,8 @@ export function ChatPane({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config?.installationId,
     });
-    window.open(
-      attributedAmrUrl(amrPlansUrlForProfile(amrProfile), attribution, deviceId),
-      '_blank',
-      'noopener,noreferrer',
-    );
+    void openExternalUrl(
+      attributedAmrUrl(amrPlansUrlForProfile(amrProfile), attribution, deviceId));
   }, [amrProfile, analytics.track, config?.installationId, config?.telemetry?.metrics]);
   const visibleRecoveryActionTypes = useMemo(() => {
     const actions: TrackingRunRecoveryActionType[] = [];
@@ -2792,6 +2823,16 @@ export function ChatPane({
     lastDraftSignalNonceRef.current = composerDraftSignal.nonce;
     composerRef.current?.setDraft(composerDraftSignal.text);
   }, [composerDraftSignal]);
+
+  const lastRejectedSendRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!rejectedComposerSend || lastRejectedSendRef.current === rejectedComposerSend.nonce) return;
+    lastRejectedSendRef.current = rejectedComposerSend.nonce;
+    const restored = composerRef.current?.restoreDraft({
+      ...rejectedComposerSend, quotes: rejectedComposerSend.meta?.quotes ?? [], onlyIfEmpty: true,
+    }) === true;
+    onRejectedComposerSendRestored?.(rejectedComposerSend.nonce, restored);
+  }, [rejectedComposerSend, onRejectedComposerSendRestored]);
 
   // Library "optimize design system" hand-off: when the user pushed selected
   // assets into this project's design system from the Library, pre-fill the
@@ -4003,11 +4044,6 @@ export function ChatPane({
     syncFollowState();
   }
 
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    setComposerPortalTarget(document.body);
-  }, []);
-
   useLayoutEffect(() => {
     if (tab !== 'chat') {
       setComposerPortalRect(null);
@@ -4547,7 +4583,10 @@ export function ChatPane({
                   }}
                   highlightedUserMessageId={chatRailHighlightedMessageId}
                 />
-                {displayError ? (
+                {frozenConcurrencyCardAudience ? (
+                  <UpgradeCard balanceUsd={0} concurrencyAudience={frozenConcurrencyCardAudience}
+                    onUpgrade={onAmrConcurrencyUpgrade} />
+                ) : displayError ? (
                   /*
                    * 报错卡(稿子组件 19)。终于接回产品 —— 之前 `RunErrorCard` 抽出来了
                    * 却只有验收陈列页在用,产品这一格仍是 `UserActionCard`:
@@ -4795,7 +4834,6 @@ export function ChatPane({
                    */
                   <div
                     {...chatSeam('chat-composer-fixed-layer')}
-                    data-composer-layer-hidden={composerLayerHidden ? '' : undefined}
                     ref={composerLayerRef}
                     data-chat-panel-top={composerPortalRect.top}
                     style={{
@@ -5411,6 +5449,8 @@ function ChatRows({
     () => previousTodosByAssistantMessageId(messages),
     [messages],
   );
+  const taskRecordContext = useMemo(() => ({mediaTasksByRunId,previousTodosByMessageId}),
+    [mediaTasksByRunId,previousTodosByMessageId]);
   const assistantRoleByMessageId = useMemo(() => {
     const byMessageId = new Map<string, boolean>();
     let previousAssistantIdentity: string | null = null;
@@ -5468,6 +5508,8 @@ function ChatRows({
     const assistantRow = (
       <AssistantMessage
         message={m}
+        taskPresentation={(m as PresentedChatMessage).taskPresentation}
+        taskRecordContext={(m as PresentedChatMessage).taskPresentation?.owner ? taskRecordContext : undefined}
         streaming={messageStreaming}
         projectId={projectId}
         projectKind={projectKindForTracking}
@@ -6963,7 +7005,9 @@ const UserMessage = memo(UserMessageImpl);
           const openable = !!onRequestOpenFile;
           const handleOpen = openable ? () => onRequestOpenFile?.(openName) : undefined;
           const label = openable ? t('chat.openFile', { name: baseName }) : a.path;
-          return a.kind === 'image' && projectId ? (
+          // A staged file that is not in the project yet previews itself.
+          const localPreviewUrl = attachmentLocalPreviewUrl(a);
+          return a.kind === 'image' && (projectId || localPreviewUrl) ? (
             <button
               type="button"
               key={a.path}
@@ -6976,7 +7020,7 @@ const UserMessage = memo(UserMessageImpl);
               <span className="msg-att-ph">
                 <img
                   className="msg-att-mini"
-                  src={projectRawUrl(projectId, a.path, workspaceContext)}
+                  src={localPreviewUrl ?? projectRawUrl(projectId ?? '', a.path, workspaceContext)}
                   alt=""
                 />
               </span>

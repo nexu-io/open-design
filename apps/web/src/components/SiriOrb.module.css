@@ -264,6 +264,29 @@
   animation-iteration-count: infinite;
 }
 
+/* The design draft's failed orb: only the blur on the mesh (P0-24). */
+.isBlurOnly .disc::before {
+  filter: blur(var(--blur));
+}
+
+/* The design draft's sidebar orbs (P0-24): nothing breathes or scales, only
+   the mesh turns. `.orb.` raises it over `.isIdle`'s breathe. */
+.orb.isSteady { animation: none; }
+.orb.isSteady .disc { transform: none; }
+
+/* The design draft's orange orb: a flat disc (`--fill`) with one light/shadow
+   wedge turning over it, no dot texture, its own rim. Values copied from the
+   draft's computed styles. */
+.isWedge .disc::before {
+  background: conic-gradient(from var(--siri-orb-angle) at 45% 45%, transparent 0deg 145deg, rgba(0, 0, 0, 0.48) 220deg, transparent 285deg, rgba(255, 255, 255, 0.3) 325deg, transparent 360deg);
+  filter: none;
+  box-shadow: none;
+}
+.isWedge .disc::after { display: none; }
+.isWedge .rim {
+  box-shadow: inset 0 -1px 1.5px rgba(0, 0, 0, 0.22), inset 0 1px 1px rgba(255, 255, 255, 0.18);
+}
+
 @keyframes siri-orb-breathe {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.035); }

@@ -1,5 +1,5 @@
 import { withCommentFileDeletion, type CommentFileDeletion } from '../../collab/comment-file-deletion.js';
-import { injectMotionSourcePlayer, isMotionVideoComposition, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
+import { injectMotionSourcePlayer, isMotionVideoComposition, markMotionHostedPreview, MOTION_PREVIEW_OUTPUT_HEADER } from '@open-design/contracts/runtime/motion-source-player';
 import { createHash, randomUUID } from 'node:crypto';
 import { trackedCommentFilePaths } from '../../collab/local-comment-files.js';
 import { CommentPreparationError, prepareCommentIdentity } from '../../services/comment-preparation.js';
@@ -28,6 +28,7 @@ import {
 } from '@open-design/contracts/runtime/preview-build-focus';
 import {
   buildPreviewFocusGuard,
+  buildPreviewVisibilityGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
   PREVIEW_URL_GUARD_MAX_HTML_BYTES,
@@ -114,6 +115,9 @@ import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
 import { isSafeId, validateProjectPath } from '../../projects.js';
 import {
+  acceptProjectUserSubmission,
+  getProjectUserSubmission,
+  getConversation,
   ensureTeamProjectCommentConversations,
   getFirstProjectConversation,
   SYNC_KEEPS_UPDATED_AT,
@@ -138,11 +142,7 @@ import {
   type VelaTeamProjectRecord,
 } from '../../integrations/vela-team-projects.js';
 import type { ResourceHubPrincipal } from '../../collab/resource-principal.js';
-import {
-  refuseTeamShareScope,
-  type TeamShareScopeRefusal,
-  type WorkspaceTypeRegistry,
-} from '../../collab/team-share-scope.js';
+import type { WorkspaceTypeRegistry } from '../../collab/team-share-scope.js';
 import {
   headerValue,
   isWorkspaceResourceLocked as isWorkspaceLocked,
@@ -384,8 +384,12 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
   isProjectUnmaterializedPlaceholder?: (projectId: string) => boolean;
   /** Membership directory used by Workspace account and cloud boundaries. */
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  /** Reconcile local private projects against AMR's durable removal facts. */
+  reconcileMemberRemovalProjects?: (workspaceId: string, ownerMemberId: string) => Promise<number>;
   /** Current settings-backed AMR environment for synthesized project contexts. */
   configuredEnv?: () => Record<string, string>;
+  /** Development's explicit static Workspace context has no AMR directory. */
+  allowStaticDevWorkspaceContext?: boolean;
   /** @deprecated Creation is local; retained for compatible route composition. */
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   /**
@@ -464,33 +468,9 @@ type WorkspaceProjectContext = WorkspaceResourceContext;
 type WorkspaceProjectMutationCapability = WorkspaceResourceMutationCapability;
 type WorkspaceProjectAccessInput = WorkspaceResourceAccessInput;
 
-/**
- * Can a team share be RECORDED in the workspace this request is acting in?
- *
- * A team share must live in a team workspace — see `collab/team-share-scope.ts`
- * for why a `visibility: 'team'` row pinned to a personal workspace is a
- * permanently-broken address rather than a scope. Two independent witnesses can
- * refuse it, and either alone is enough: the caller's own `x-od-workspace-type`
- * claim (a client that says "personal" and asks for a team share has stated the
- * contradiction itself), and the workspace directory the daemon has already read
- * (which catches a caller whose headers are simply wrong). With neither, the
- * request is allowed — this guard fires on positive evidence only, so it can
- * never block a legitimate share in a workspace it has not learned about.
- */
-function teamShareRefusalFor(
-  ctx: WorkspaceProjectContext,
-  workspaceTypes?: Pick<WorkspaceTypeRegistry, 'isKnownPersonal'> | null,
-): TeamShareScopeRefusal | null {
-  return refuseTeamShareScope(ctx.workspaceId, {
-    assertedType: ctx.workspaceTypeAsserted,
-    ...(workspaceTypes ? { registry: workspaceTypes } : {}),
-  });
-}
-
 function projectAccess(
   wp: WorkspaceProjectAccessInput,
   ctx: WorkspaceProjectContext,
-  workspaceTypes?: Pick<WorkspaceTypeRegistry, 'isKnownPersonal'> | null,
 ) {
   // frozen/selfCreated/privileged/canMutate/canShareLocal/disabledReason are
   // the resource-agnostic part, computed once in
@@ -522,13 +502,12 @@ function projectAccess(
     canRename: canMutate,
     canDelete: canMutate,
     canDuplicate: canMutate,
-    // Never offer a share the workspace cannot host: the affordance is the
-    // entry point that produced the impossible rows in the first place.
+    // Sharing is available in both Personal and Team workspaces. The verified
+    // workspace/member identity and role permission still gate the mutation.
     canMoveToTeam:
       canShareLocal &&
       ctx.canShareProjects &&
-      wp.visibility === 'personal' &&
-      teamShareRefusalFor(ctx, workspaceTypes) === null,
+      wp.visibility === 'personal',
     canMoveToPersonal: canMutate && ctx.canShareProjects && wp.visibility === 'team',
     canExport: !frozen && ctx.memberStatus === 'active',
     canSendTo: !frozen && ctx.memberStatus === 'active',
@@ -844,6 +823,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  // Hash/history navigation keeps this document; only a new load changes its identity.
+  var commentDocumentVersion = 'url:' + window.location.href;
   function postReady(){
     window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
   }
@@ -986,7 +967,7 @@ ${COMMENT_IDENTITY_HELPERS}
       };
     } catch (_) { return null; }
   }
-  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint, validateForSave){
     var id = annotatedElementIdFor(el);
     var selector = annotatedSelectorFor(el, esc);
     if ((!clickedEl || clickedEl === el) && el && el.hasAttribute('data-od-comment-id')) {
@@ -995,8 +976,8 @@ ${COMMENT_IDENTITY_HELPERS}
       id = identity.elementId;
       selector = identity.selector;
     }
-    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
-    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+    if (!validateForSave && allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    if (!id && allowDomFallback && (validateForSave || meaningfulDomFallbackTarget(el))) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -1015,6 +996,7 @@ ${COMMENT_IDENTITY_HELPERS}
       type: 'od:comment-target',
       elementId: id,
       selector: selector,
+      domSelector: domSelectorFor(el),
       label: tag + cls,
       text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
       position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
@@ -1357,6 +1339,15 @@ ${COMMENT_IDENTITY_HELPERS}
         stroke = [];
         try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
       }
+      return;
+    }
+    if (data.type === 'od:comment-active-target' && data.validateForSave && typeof data.requestId === 'string') {
+      var saveNode = null;
+      try { saveNode = document.querySelector(String(data.selector)); } catch (_) {}
+      var saveTarget = saveNode && targetFrom(saveNode, true, null, null, true);
+      window.parent.postMessage(saveTarget
+        ? Object.assign({}, saveTarget, { type: 'od:comment-active-target-update', documentVersion: commentDocumentVersion, requestId: data.requestId, requestedSelector: data.selector })
+        : { type: 'od:comment-location-missing', documentVersion: commentDocumentVersion, requestId: data.requestId }, '*');
       return;
     }
     if (data.type === 'od:comment-active-target') {
@@ -1862,6 +1853,7 @@ function applyUrlPreviewBridgesToHtml(
   }
 
   let html = Buffer.isBuffer(transformed) ? transformed.toString('utf8') : transformed;
+  html = injectAfterHeadOpen(html, 'data-od-preview-hidden-guard', buildPreviewVisibilityGuard());
   // Sanitize the <title> so Cmd+P -> "Save as PDF" produces a Teams-safe
   // filename. URL-load iframes cannot rely on the host rewriting the document
   // title after load, and powered previews are intentionally cross-origin.
@@ -1882,6 +1874,9 @@ function applyUrlPreviewBridgesToHtml(
     html = injectUrlPreviewBridge(html, 'sandbox');
   }
   if (wantsUrlPreviewBuildFocusBridge(requestedBridge)) {
+    // Only marked video motion waits for the building preview host. Legacy
+    // HyperFrames and ordinary documents retain their authored playback.
+    html = markMotionHostedPreview(html);
     html = injectUrlPreviewBridge(html, 'buildfocus');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
@@ -2223,6 +2218,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       ? ctx.projectCreatePreparationTimeoutMs
       : DEFAULT_PROJECT_CREATE_PREPARATION_TIMEOUT_MS;
   const projectTelemetry = ctx.telemetry;
+  const reconcileMemberRemovalProjects = ctx.reconcileMemberRemovalProjects;
   const { sendApiError, createSseResponse } = ctx.http;
   const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR, BRANDS_DIR, USER_DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
@@ -2260,6 +2256,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   };
   const verifyWorkspaceProjectReadAuthority =
     ctx.verifyWorkspaceReadAuthority ?? ctx.verifyWorkspaceRequestAuthority;
+  const verifyFreshWorkspaceProjectAuthority = ctx.verifyWorkspaceRequestAuthority;
   const authorizeProjectRequest =
     ctx.authorizeProjectRequest ??
     createAuthorizeProjectRequest({
@@ -2295,6 +2292,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
       : {}),
     ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv } : {}),
+    allowStaticDevContext: ctx.allowStaticDevWorkspaceContext === true,
   });
   const resolveCreatedProjectHome: CreatedProjectWorkspaceResolver = async (req) => {
     const home = await resolveCreatedProjectHomeWithLocalAttribution(req);
@@ -2330,28 +2328,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       return null;
     }
     return workspaceResourceContextFromVerified(verified.context);
-  }
-  /**
-   * Refuse — loudly — to record a team share in a workspace that cannot host
-   * one. Loudly is the point: the impossible rows this prevents are invisible
-   * locally and only surface as `403 missing_principal` on every later collab
-   * call, which is how one shipped and survived in a dogfood user's daemon.
-   */
-  function sendTeamShareScopeRefused(
-    res: Response,
-    ctx: WorkspaceProjectContext,
-    reason: TeamShareScopeRefusal,
-  ) {
-    console.warn(
-      `[od] refused a team share into workspace ${ctx.workspaceId} (${reason}): ` +
-        'a team share requires a team workspace; a personal workspace has no team plane.',
-    );
-    return sendApiError(
-      res,
-      409,
-      'WORKSPACE_TEAM_SHARE_REQUIRES_TEAM_WORKSPACE',
-      'a project can only be shared to a team from a team workspace',
-    );
   }
   function pendingSyncIntent(projectId: string, workspaceId: string, visibility: 'personal' | 'team') {
     return {
@@ -2397,6 +2373,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       customInstructions: row.customInstructions ?? undefined,
       createdAt: row.createdAt,
       updatedAt: lastActivityAt,
+      lastUserQueryAt: row.lastUserQueryAt ?? null,
       // Carried on the nested project too, so a client that unwraps the summary
       // into a plain Project keeps the binding instead of dropping it.
       workspaceId: row.workspaceId ?? null,
@@ -2419,7 +2396,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       updatedByWorkspaceMemberId: row.updatedByWorkspaceMemberId ?? null,
       resourceHubResourceId: row.resourceHubResourceId ?? null,
       cloudTombstonedAt: row.cloudTombstonedAt ?? null,
-      currentUserAccess: projectAccess(wp, ctx, workspaceTypes),
+      currentUserAccess: projectAccess(wp, ctx),
       syncState: row.syncState ?? 'local_only',
       ...(row.syncState === 'pending_upload'
         ? { pendingSyncIntent: pendingSyncIntent(project.id, row.workspaceId, row.workspaceVisibility) }
@@ -2863,9 +2840,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
     }
     const matchedByResourceId = new Map(
-      visibleProjects
-        .filter((project) => localRowByExactRemoteIdentity.has(`${project.resourceId}\0${project.projectId}`))
-        .map((project) => [project.resourceId, project] as const),
+      visibleProjects.map((project) => [project.resourceId, project] as const),
     );
     const remoteSummaries = visibleProjects
       .filter((project) => !localResourceIds.has(project.resourceId))
@@ -3064,6 +3039,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (project.createdByWorkspaceMemberId === ctx.workspaceMemberId) return true;
     return (
       ctx.workspaceType === 'personal' &&
+      ctx.role === 'owner' &&
       project.visibility === 'personal' &&
       project.createdByWorkspaceMemberId == null
     );
@@ -3096,7 +3072,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     ctx: WorkspaceProjectContext,
     locations: Array<{ id: string; path: string; builtIn?: boolean }>,
   ) {
-    if (ctx.workspaceType !== 'personal') return;
+    // Legacy unbound projects predate member identities. Only the Owner of
+    // their Personal workspace may adopt them; an invited member must not
+    // make the owner's local drafts visible in a shared workspace.
+    if (ctx.workspaceType !== 'personal' || ctx.role !== 'owner') return;
     for (const project of listProjects(db).filter((item: any) => projectVisibleForLocations(item, locations))) {
       if (getWorkspaceProjectByProjectId(db, project.id)) continue;
       ensureWorkspaceProjection(project, ctx, 'personal');
@@ -3438,13 +3417,27 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.get('/api/workspaces/:workspaceId/projects', async (req, res) => {
     try {
-      const authoritativeCtx = await authoritativeWorkspaceProjectContext(
+      let authoritativeCtx = await authoritativeWorkspaceProjectContext(
         req,
         res,
         req.params.workspaceId,
         verifyWorkspaceProjectReadAuthority,
       );
       if (!authoritativeCtx) return;
+      if (
+        verifyFreshWorkspaceProjectAuthority
+        && verifyWorkspaceProjectReadAuthority !== verifyFreshWorkspaceProjectAuthority
+      ) {
+        // The bounded display cache can outlive a missed removal event. Shared
+        // project names and ownership require live membership in either type.
+        authoritativeCtx = await authoritativeWorkspaceProjectContext(
+          req,
+          res,
+          req.params.workspaceId,
+          verifyFreshWorkspaceProjectAuthority,
+        );
+        if (!authoritativeCtx) return;
+      }
       const assertedCtx = workspaceProjectContextFromRequest(req);
       const ctx = assertedCtx && assertedCtx !== 'missing'
         ? {
@@ -3462,6 +3455,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         const body = { projects: [] };
         return res.json(body);
       }
+      if (ctx.role === 'owner') {
+        // The realtime member event is only a hint. This readback closes a
+        // missed-event or daemon-restart gap before the Owner sees the list.
+        // An upstream outage must not hide projects the Owner already owns.
+        try {
+          await reconcileMemberRemovalProjects?.(ctx.workspaceId, ctx.workspaceMemberId);
+        } catch (error) {
+          console.warn('[od] member removal project transfer readback failed:', String(error));
+        }
+      }
       const locations = await configuredProjectLocations();
       bindUnboundProjectsToPersonalWorkspace(ctx, locations);
       const view = typeof req.query.view === 'string' ? req.query.view : 'all';
@@ -3470,22 +3473,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       const owner = typeof req.query.owner === 'string' ? req.query.owner : 'all';
       const visibility = typeof req.query.visibility === 'string' ? req.query.visibility : 'all';
-      const rows = listWorkspaceProjects(db, ctx.workspaceId)
+      let rows = listWorkspaceProjects(db, ctx.workspaceId)
         .filter((row: any) => workspaceProjectRowBelongsToCurrentWorkspace(row, ctx))
         .filter((row: any) => workspaceProjectRowVisibleForLocations(row, locations));
       const queryCanIncludeTeam =
         view !== 'drafts' &&
         visibility !== 'personal' &&
         (view === 'team' || view === 'recent' || visibility === 'team' || (view === 'all' && visibility === 'all'));
-      // Only a team workspace has a remote team-project catalog. A personal
-      // workspace must never merge the caller's team projects into its list —
-      // the Vela CLI team-projects lister is scoped to the active team, not the
-      // queried workspace, so without this guard team projects leak into (and
-      // duplicate within) a personal workspace's project list.
-      const needsRemoteTeamProjects = queryCanIncludeTeam && ctx.workspaceType === 'team';
+      // The catalog is scoped to this exact verified Workspace/member, so a
+      // Personal workspace reads only its own explicitly shared projects.
+      const needsRemoteTeamProjects = queryCanIncludeTeam;
       const remoteMerge = needsRemoteTeamProjects
         ? await listRemoteTeamProjectSummaries(rows, ctx)
         : null;
+      // A pre-0.25.1 client can locally demote a Personal Workspace's shared
+      // binding. The catalog reconciliation above restores the authoritative
+      // share; read those repaired rows before composing this very response so
+      // the project is not briefly shown twice (private + remote shared).
+      if (remoteMerge) {
+        rows = listWorkspaceProjects(db, ctx.workspaceId)
+          .filter((row: any) => workspaceProjectRowBelongsToCurrentWorkspace(row, ctx))
+          .filter((row: any) => workspaceProjectRowVisibleForLocations(row, locations));
+      }
+      const refreshedResourceIds = new Set(rows.map((row: any) => row.resourceHubResourceId).filter(Boolean));
       const mergedProjects = [
         ...rows.map((row: any) => {
           const summary = normalizeWorkspaceProjectRow(row, ctx);
@@ -3496,7 +3506,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             ? catalogEnrichedLocalTeamProjectSummary(summary, remote, ctx)
             : summary;
         }),
-        ...(remoteMerge?.remoteSummaries ?? []),
+        ...(remoteMerge?.remoteSummaries ?? []).filter(
+          (remote) => !remote.resourceHubResourceId || !refreshedResourceIds.has(remote.resourceHubResourceId),
+        ),
       ];
       const projects = mergedProjects
         .filter((project: any) => {
@@ -3668,7 +3680,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         return sendApiError(res, 400, 'BAD_REQUEST', 'visibility must be personal or team');
       }
       let project = getProject(db, req.params.projectId);
-      if (!project && visibility === 'personal' && ctx.workspaceType === 'team') {
+      if (!project && visibility === 'personal') {
         const materialization = await materializeCatalogOnlyOwnerProject(
           req.params.projectId,
           ctx,
@@ -3691,10 +3703,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       const locations = await configuredProjectLocations();
       if (!project || !projectVisibleForLocations(project, locations)) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
-      if (visibility === 'team') {
-        const refusal = teamShareRefusalFor(ctx, workspaceTypes);
-        if (refusal) return sendTeamShareScopeRefused(res, ctx, refusal);
-      }
       // A "move to personal" request on a project this daemon has never
       // locally bound must not be judged against a 'personal' default this
       // same request is about to invent — see
@@ -3702,7 +3710,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // 'personal' direction only: 'team' already matches the fresh default
       // and must keep behaving exactly as before.
       let orphanRecovery: UnboundProjectMoveReconciliation = 'none';
-      if (visibility === 'personal' && ctx.workspaceType === 'team' && !getWorkspaceProjectByProjectId(db, project.id)) {
+      if (visibility === 'personal' && !getWorkspaceProjectByProjectId(db, project.id)) {
         orphanRecovery = await reconcileUnboundProjectBeforeMove(project.id, ctx);
         if (orphanRecovery === 'denied') {
           return sendApiError(res, 403, 'PROJECT_DELETE_FORBIDDEN', 'project move forbidden');
@@ -3765,10 +3773,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const projectIds = parseProjectIds(req.body?.projectIds);
       if (!validVisibility(visibility) || !projectIds) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'projectIds and visibility are required');
-      }
-      if (visibility === 'team') {
-        const refusal = teamShareRefusalFor(ctx, workspaceTypes);
-        if (refusal) return sendTeamShareScopeRefused(res, ctx, refusal);
       }
       const locations = await configuredProjectLocations();
       const rows = workspaceProjectRowsForIds(projectIds, ctx, locations);
@@ -3936,18 +3940,24 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // sequence of merely slow reads outlive the Web's optimistic route.
       const projectCreatePreparationDeadline =
         Date.now() + projectCreatePreparationTimeoutMs;
-      // Ordinary project creation is local. Capture any complete identity that
-      // the Web already has for local attribution, but do not turn Workspace
-      // directory availability into a Send dependency. Remote share/sync/move
-      // routes retain their authoritative checks.
+      // A complete Workspace attribution must still name a currently active
+      // member before we bind the new private project to that Workspace.
+      // Headerless/partial local creates remain unbound.
       const createWorkspace = {
-        context: localProjectWorkspaceAttribution(req),
+        context: await resolveCreatedProjectHome(req),
       };
       learnAssertedWorkspaceType(createWorkspace.context);
       const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
         req.body || {};
       if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+      }
+      const requestedConversationId = req.body?.conversationId;
+      if (
+        requestedConversationId !== undefined
+        && (typeof requestedConversationId !== 'string' || !isSafeId(requestedConversationId))
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid conversation id');
       }
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
@@ -4198,7 +4208,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                   }
                 : null;
       const now = Date.now();
-      const cid = randomId();
+      const cid = requestedConversationId ?? randomId();
       const initialSessionMode = normalizeChatSessionMode(
         req.body?.conversationMode ?? req.body?.sessionMode,
       );
@@ -4463,6 +4473,24 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           }
           return;
         }
+        if (createWorkspace.context && ctx.fetchProjectCreationWorkspaceDirectory) {
+          // Preparation may have copied files after the first admission read.
+          // Recheck immediately before the SQLite ownership write so an
+          // intervening removal cannot persist a new old-member binding.
+          const renewed = await resolveCreatedProjectHome(req);
+          if (
+            !renewed || renewed.workspaceId !== createWorkspace.context.workspaceId
+            || renewed.workspaceMemberId !== createWorkspace.context.workspaceMemberId
+          ) {
+            throw new CreatedProjectWorkspaceResolutionError({
+              ok: false,
+              status: 403,
+              code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+              message: 'workspace membership changed during project creation',
+            });
+          }
+          createWorkspace.context = renewed;
+        }
         project = db.transaction(() => {
           let createdProject = insertProject(db, {
             id,
@@ -4571,6 +4599,15 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       };
       res.json(body);
     } catch (err: any) {
+      if (err instanceof CreatedProjectWorkspaceResolutionError) {
+        return sendApiError(
+          res,
+          err.status,
+          err.code,
+          err.message,
+          err.retryable ? { retryable: true } : {},
+        );
+      }
       if (err instanceof ProjectCreatePreparationTimeoutError) {
         return sendApiError(
           res,
@@ -5134,9 +5171,23 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     if (!await authorizeProjectRequest(req, res, project.id, { mode: 'read' })) return;
     const claimed = workspaceProjectContextFromRequest(req);
     const assertedType = headerValue(req, 'x-od-workspace-type');
-    const requestWorkspaceType = assertedType === 'team' || assertedType === 'personal'
+    let requestWorkspaceType: 'team' | 'personal' | null = assertedType === 'team' || assertedType === 'personal'
       ? assertedType
       : null;
+    if (binding?.workspaceId && ctx.verifyWorkspaceRequestAuthority) {
+      if (claimed && claimed !== 'missing') {
+        const verified = await authoritativeWorkspaceProjectContext(
+          req,
+          res,
+          binding.workspaceId,
+        );
+        if (!verified) return;
+        requestWorkspaceType = verified.workspaceType;
+      } else {
+        // An unscoped navigation has no verified request type to learn.
+        requestWorkspaceType = null;
+      }
+    }
     if (binding?.workspaceId && requestWorkspaceType) {
       workspaceTypes?.learn({
         workspaceId: binding.workspaceId,
@@ -5157,9 +5208,35 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     res.json(body);
   });
 
+  // Queue ownership stays in the client; only acceptance/recency is registered here.
+  app.post('/api/projects/:id/submissions', async (req, res) => {
+    if (!getProject(db, req.params.id)) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+    if (!await enforceWorkspaceProjectMutation(req, res, sendApiError,
+      getWorkspaceProject, getWorkspaceProjectByProjectId, db, req.params.id, 'writeFiles')) return;
+    const { id, conversationId, submittedAt } = req.body ?? {};
+    if (typeof id !== 'string' || !isSafeId(id) || typeof conversationId !== 'string'
+      || getConversation(db, conversationId)?.projectId !== req.params.id
+      || !Number.isSafeInteger(submittedAt) || submittedAt < 0) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'invalid queued submission');
+    }
+    const existing = getProjectUserSubmission(db, id);
+    if (existing && (existing.projectId !== req.params.id || existing.conversationId !== conversationId)) {
+      return sendApiError(res, 409, 'IDEMPOTENCY_CONFLICT', 'submission belongs to another conversation');
+    }
+    const userSubmission = acceptProjectUserSubmission(db, {
+      // Preserve enqueue time, but never let a fast client clock put activity
+      // in the future. The ledger retains this first receipt on every replay.
+      id, projectId: req.params.id, conversationId, acceptedAt: Math.min(submittedAt, Date.now()),
+    });
+    return res.json({ userSubmission });
+  });
+
   app.patch('/api/projects/:id', async (req, res) => {
     try {
       const patch = req.body || {};
+      if ('lastUserQueryAt' in patch) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'recency is owned by accepted submissions');
+      }
       let patchProject = getProject(db, req.params.id);
       if (
         !patchProject
@@ -6233,6 +6310,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   }
 
   function htmlHasPoweredPreviewSignal(source: string): boolean {
+    if (/\b(?:local|session)Storage\b/.test(source)) return true;
     if (/\bSharedArrayBuffer\b/.test(source)) return true;
     if (/\bnew\s+(?:Worker|SharedWorker)\s*\(/.test(source)) return true;
     if (/\bimportScripts\s*\(/.test(source)) return true;

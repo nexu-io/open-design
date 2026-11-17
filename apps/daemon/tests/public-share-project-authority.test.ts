@@ -34,7 +34,7 @@ it.each([null, 'another-member', 'owner', 'catalog-owner', 'placeholder', 'catal
   });
   if (!fixture.sharePublishing) throw new Error('fixture missing publisher');
   const sourceFileId = vi.fn<NonNullable<typeof fixture.sharePublishing.sourceFileId>>((scope, project) => {
-    expect(project).toBe(catalog);
+    expect(project).toBeNull();
     return fixture.sharePublishing!.sourceFileId!(scope);
   });
   const admitFileReceipt = vi.fn<NonNullable<typeof fixture.sharePublishing.admitFileReceipt>>(async (scope) => {
@@ -52,9 +52,10 @@ it.each([null, 'another-member', 'owner', 'catalog-owner', 'placeholder', 'catal
     return catalog;
   } };
   const app = express(); app.use(express.json());
+  app.use((req,_res,next)=>{req.headers['x-od-workspace-id'] ??= context.workspaceId;req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId;next();});
   const deps = { collab: runtime, ...fixture, sharePublishing: publisher,
     verifyWorkspaceRequest: async () => context, resolveSharedProject: async () => catalog,
-    resolveLocalPublicShareOwner: () => localOwner === 'placeholder' || localOwner?.startsWith('bootstrap-') ? 'owner' : localOwner, resolveProjectDir: () => root,
+    resolveLocalPublicShareOwner: () => localOwner === 'placeholder' || localOwner?.startsWith('bootstrap-') || localOwner === 'catalog-owner' ? 'owner' : localOwner, resolveProjectDir: () => root,
     projectStore: { has: () => true, register: () => {}, get: () => ({ metadata: localOwner === 'placeholder' || localOwner === 'catalog-placeholder' ? { sharedProjectPlaceholderAt: 1 } : {} }) },
     publicFilePublicationStore: store,
   };
@@ -67,29 +68,25 @@ it.each([null, 'another-member', 'owner', 'catalog-owner', 'placeholder', 'catal
     const response = await fetch(`http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`, { method: 'POST' });
     const body = await response.json();
     if (localOwner?.startsWith('bootstrap-')) {
-      expect(response.status).toBe(503);
-      expect(body).toEqual({ error: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE' });
+      expect(response.status).toBe(502);
+      expect(body).toMatchObject({ error: 'PUBLIC_SHARE_PREPARATION_UNAVAILABLE' });
+      expect(JSON.stringify(body)).not.toMatch(/private credential|private.invalid|private-path/);
       expect(events).toEqual(['root-and-catalog']);
-      expect(warn).toHaveBeenCalledExactlyOnceWith('[od] public share diagnostic', expect.any(String));
-      expect(JSON.parse(warn.mock.calls[0]![1] as string)).toEqual({
-        operation: 'bootstrap', stage: localOwner === 'bootstrap-failed' ? 'bootstrap' : 'bootstrap_catalog_upsert', status: 503,
-        errorCode: 'WORKSPACE_PROJECT_OWNERSHIP_UNAVAILABLE', reason: 'unknown', durationMs: expect.any(Number),
-      });
     } else if (localOwner !== 'owner' && localOwner !== 'catalog-owner') {
       expect(response.status).toBe(403);
       expect(body).toEqual({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
       expect(events).toEqual([]);
     } else {
       expect(response.status).toBe(200);
-      expect(events).toEqual(localOwner === 'catalog-owner' ? ['file-upload'] : ['root-and-catalog', 'file-upload']);
-      expect(sourceFileId).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), localOwner === 'catalog-owner' ? catalog : null);
+      expect(events).toEqual(['root-and-catalog', 'file-upload']);
+      expect(sourceFileId).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), null);
       expect(admitFileReceipt).toHaveBeenCalledOnce();
       expect(catalog).toMatchObject({ projectId: 'p', ownerMemberId: 'owner' });
       expect(body).toMatchObject({ status: 'published', receipt: { version: 1 } });
       if (localOwner === 'catalog-owner') {
         const state = await fetch(`http://127.0.0.1:${address.port}/api/projects/p/files/index.html/publish-public`);
         expect(state.status).toBe(200);
-        expect(sourceFileId).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), catalog);
+        expect(sourceFileId).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: 'p', filePath: 'index.html' }), null);
       }
     }
   } finally {

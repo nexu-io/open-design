@@ -8,7 +8,9 @@
 // the ring. runs-durable-replay.test.ts directly asserts that the real service's
 // in-memory ring remains exactly 2000 while replay restores the earlier records.
 //
-// Drive the real daemon HTTP API with a controlled plain-stream DeepSeek CLI.
+// Drive the ordinary Run path through the real daemon HTTP API with a
+// controlled plain-stream DeepSeek CLI. Strategy filtering is a separate
+// boundary and need not preserve one stdout chunk per replay event.
 // It prints a complete artifact first, floods more than 2000 stdout events,
 // and exits successfully. Both complete replay and persisted deliverables must
 // survive; increasing the ring or dropping the artifact assertions is not a fix.
@@ -18,7 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
@@ -31,6 +33,7 @@ type RunStatus = { id: string; status: string; exitCode: number | null };
 
 describe('plain-stream artifact persistence vs run.events ring-buffer truncation (HTTP)', () => {
   const originalEnv = {
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
@@ -40,6 +43,11 @@ describe('plain-stream artifact persistence vs run.events ring-buffer truncation
   };
   let started: StartedServer | null = null;
   let binDir: string | null = null;
+
+  beforeEach(() => {
+    // The retired saved Labs preference no longer selects the ordinary path.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
+  });
 
   afterEach(async () => {
     await Promise.resolve(started?.shutdown?.());
@@ -475,7 +483,8 @@ async function createAndWaitForRun(url: string): Promise<{ run: RunStatus; proje
     }),
   });
   expect(runResponse.status).toBe(202);
-  const body = await runResponse.json() as { runId: string };
+  const body = await runResponse.json() as { runId: string; strategyTask?: unknown };
+  expect(body.strategyTask).toBeUndefined();
   const startedAt = Date.now();
   while (Date.now() - startedAt < 20_000) {
     const response = await fetch(`${url}/api/runs/${encodeURIComponent(body.runId)}`);

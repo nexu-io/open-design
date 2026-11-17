@@ -43,7 +43,7 @@ describe('recvpYC6eTaifb — home hero blank space above the title (empty worksp
     // "hugging the top" layout. `.home-view--centered` (no recent projects)
     // instead vertically centers the column — stacking the fixed offset on
     // top of that centering doubled up the blank space above the logo/title.
-    const centeredHero = cssDeclarations(homeHeroCss, '.home-view--centered .home-hero');
+    const centeredHero = cssDeclarations(homeHeroCss, '.home-view--centered:not(:has([data-home-invite-row])) .home-hero');
     const baseHero = cssDeclarations(homeHeroCss, '.home-hero');
 
     expect(ruleValue(centeredHero, 'padding-top')).toBe('var(--spacing-4)');

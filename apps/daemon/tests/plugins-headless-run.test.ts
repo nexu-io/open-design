@@ -1,3 +1,4 @@
+import type { ConversationsResponse, ConversationResponse, ProjectResponse, ChatRunCreateResponse } from '@open-design/contracts';
 // Plan §3.F4 / spec §8 e2e-3 anchor.
 //
 // Verifies the headless `od plugin install → project create → run start`
@@ -295,6 +296,47 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     };
     expect(body.error?.code).toBe('UNSUPPORTED_DUPLICATE_DEPENDENCIES');
     expect(body.error?.message).toContain('../open-design-landing/assets/hero.png');
+  });
+
+  it('keeps project and conversation plugin bindings unchanged when submission ownership rejects a request', async () => {
+    const post = (route: string, body: object) => fetch(`${baseUrl}${route}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const install = await post('/api/plugins/install', { source: FIXTURE_DIR });
+    expect(install.status).toBe(200);
+    expect((await readSseUntilSuccess(install))?.plugin?.id).toBe('sample-plugin');
+    const projectId = `rejected-binding-${randomUUID()}`;
+    const created = await post('/api/projects', { id: projectId, name: 'Rejected binding' });
+    expect(created.status).toBe(200);
+    const conversations = await (await fetch(`${baseUrl}/api/projects/${projectId}/conversations`)).json() as ConversationsResponse;
+    const conversationId = conversations.conversations[0]!.id;
+    const second = await post(`/api/projects/${projectId}/conversations`, { title: 'Untouched target' });
+    expect(second.status).toBe(200);
+    const targetId = (await second.json() as ConversationResponse).conversation.id;
+    const submission = { id: randomUUID(), source: 'user' };
+    const request = { projectId, conversationId, agentId: `missing-${randomUUID()}`,
+      message: 'Accepted original', clientRequestId: randomUUID(), submission };
+    expect((await post('/api/runs', request)).status).toBe(202);
+    const bindings = async () => {
+      const { project } = await (await fetch(`${baseUrl}/api/projects/${projectId}`)).json() as ProjectResponse;
+      const { conversations: rows } = await (await fetch(`${baseUrl}/api/projects/${projectId}/conversations`)).json() as ConversationsResponse;
+      return { project: { snapshot: project.appliedPluginSnapshotId, metadata: project.metadata },
+        conversations: rows.map((row: { id: string; appliedPluginSnapshotId?: string }) => ({
+          id: row.id, snapshot: row.appliedPluginSnapshotId,
+        })) };
+    };
+    const before = await bindings();
+    const rejected = await post('/api/runs', { ...request, conversationId: targetId,
+      pluginId: 'sample-plugin', pluginInputs: { topic: 'must not bind on rejection' } });
+    expect(rejected.status).toBe(409);
+    expect(await bindings()).toEqual(before);
+    // Positive control: the same plugin request with a fresh submission can bind.
+    const accepted = await post('/api/runs', { ...request, conversationId: targetId,
+      clientRequestId: randomUUID(), submission: { id: randomUUID(), source: 'user' },
+      pluginId: 'sample-plugin', pluginInputs: { topic: 'allowed binding' } });
+    expect(accepted.status).toBe(202);
+    expect((await accepted.json() as ChatRunCreateResponse).appliedPluginSnapshotId).toBeTruthy();
+    expect(await bindings()).not.toEqual(before);
   });
 
   it('walks install → project create → run start → status with snapshot pinned', async () => {

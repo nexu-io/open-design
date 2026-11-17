@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps } from 'react';
+import { createRef, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   ChatComposer,
   STAGE_ATTACHMENT_EVENT,
   type ChatSendOutcome,
+  type ChatComposerHandle,
 } from '../../src/components/ChatComposer';
 import type { ChatQuote } from '../../src/runtime/chat/quote-selection';
 import { composerText, flushMounts, typeAndSettle } from '../helpers/lexical-composer';
@@ -76,6 +77,43 @@ afterEach(() => {
 });
 
 describe('ChatComposer clears on submit (OPEND-3392)', () => {
+  it('late rejection cannot replace a newly uploading attachment', async () => {
+    const composerRef = createRef<ChatComposerHandle>();
+    const originalFetch = globalThis.fetch;
+    let finishUpload!: (response: Response) => void;
+    const upload = vi.fn(() => new Promise<Response>((resolve) => { finishUpload = resolve; }));
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith('/upload') ? upload() : originalFetch(input, init)));
+    renderComposer({ ref: composerRef });
+    await flushMounts();
+    await typeAndSettle('sent input');
+    fireEvent.click(screen.getByTestId('chat-send'));
+    await waitFor(() => expect(composerText().trim()).toBe(''));
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [new File(['new file'], 'new.txt', { type: 'text/plain' })] },
+    });
+    await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+    let restored: boolean | void = undefined;
+    act(() => { restored = composerRef.current?.restoreDraft({ text: 'old rejected input', onlyIfEmpty: true }); });
+    expect(restored).toBe(false);
+    expect(composerText().trim()).toBe('');
+    await act(async () => finishUpload(new Response(JSON.stringify({ files: [{ path: 'new.txt', name: 'new.txt' }] }))));
+    expect(screen.getByTitle('new.txt')).toBeTruthy();
+  });
+
+  it('late rejection cannot replace an externally owned pending attachment', async () => {
+    const composerRef = createRef<ChatComposerHandle>();
+    renderComposer({ ref: composerRef, externalPendingUploads: [{
+      id: 'external-file', name: 'new.txt', kind: 'file', order: 0, state: 'uploading',
+    }] });
+    await flushMounts();
+    let restored: boolean | void = undefined;
+    act(() => { restored = composerRef.current?.restoreDraft({ text: 'old rejected input', onlyIfEmpty: true }); });
+    expect(restored).toBe(false);
+    expect(composerText().trim()).toBe('');
+    expect(screen.getByTitle('new.txt')).toBeTruthy();
+  });
+
   it('empties the composer as soon as the send is submitted, before the host settles', async () => {
     const send = deferredSend();
     renderComposer({ onSend: send.onSend });

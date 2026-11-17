@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { DEFAULT_MODEL_OPTION, execAgentFile, parsePiModels } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
 
@@ -57,7 +56,7 @@ export const piAgentDef = {
     buildArgs: (
       _prompt,
       _imagePaths,
-      extraAllowedDirs = [],
+      _extraAllowedDirs = [],
       options = {},
       runtimeContext = {},
     ) => {
@@ -70,23 +69,9 @@ export const piAgentDef = {
       if (options.reasoning && options.reasoning !== 'default') {
         args.push('--thinking', options.reasoning);
       }
-      // pi supports --append-system-prompt for cwd and extra context.
-      // For now we rely on the composed prompt containing the cwd hint
-      // (same pattern as other agents) rather than using system-prompt flags.
-      //
-      // extraAllowedDirs carries skill seed and design-system directories
-      // that live outside the project cwd. pi doesn't have an --add-dir
-      // sandbox flag (it uses OS cwd), so we use --append-system-prompt to
-      // hint that these directories exist. The agent can then use its Read
-      // tool to access files inside them. Without this, pi runs inside the
-      // project cwd and has no way to discover or reach skill/design-system
-      // assets that live elsewhere.
-      const dirs = (extraAllowedDirs || []).filter(
-        (d) => typeof d === 'string' && path.isAbsolute(d),
-      );
-      for (const d of dirs) {
-        args.push('--append-system-prompt', d);
-      }
+      // Pi has no directory-authorization flag. Resource paths are supplied
+      // in the composed RPC prompt; --append-system-prompt expects text or a
+      // file, so passing resource directories there causes EISDIR warnings.
       return args;
     },
     // Prompt is sent via RPC `prompt` command on stdin, not as a CLI arg.

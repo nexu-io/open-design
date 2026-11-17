@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Real ProjectView, ChatPane, ChatComposer and AMR gate; defer the optional funding HTTP response or the local sign-in read.
+// Real ProjectView, ChatPane, ChatComposer and AMR gate; defer the funding verdict or the local sign-in read.
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   buildWorkspacePermissions,
@@ -166,6 +166,9 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+      id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+    })),
     createConversation: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),
@@ -231,6 +234,7 @@ const project = (): Project => ({
 });
 
 let pendingBilling: Promise<Response> | null = null;
+let releasePendingBilling: (() => void) | null = null;
 
 function stubFetch() {
   vi.stubGlobal(
@@ -283,6 +287,7 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     invalidateAmrFundingFeedback();
     vi.mocked(fetchAmrWalletSnapshot).mockResolvedValue(null);
     pendingBilling = null;
+    releasePendingBilling = null;
     stubFetch();
     mockedListConversations.mockImplementation(async (projectId: string) => [
       conversation(projectId),
@@ -306,8 +311,11 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     mockedLoadTabs.mockResolvedValue({ tabs: [], active: null });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    // A failed assertion must not leave the shared funding cache waiting on
+    // this test-only deferred response in the following sign-in cases.
+    await act(async () => { releasePendingBilling?.(); });
     invalidateAmrFundingFeedback();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
@@ -328,14 +336,16 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
   async function sendWithDelayedBilling() {
     let resolveBilling!: (value: Response) => void;
     pendingBilling = new Promise((resolve) => { resolveBilling = resolve; });
+    releasePendingBilling = () => resolveBilling(new Response(JSON.stringify({ preflight: null }), { status: 503 }));
     await sendPrompt();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(
       ([url]) => String(url).startsWith('/api/workspace/billing/preflight?'),
     )).toBe(true));
     const requests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/workspace/billing/preflight?'));
     expect(new URL(String(requests[0]![0]), 'http://localhost').searchParams.get('workspaceId')).toBe(TEAM_WORKSPACE);
-    // Optional billing must not serialize the send or leave it preparing.
-    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    // Seats phase1 waits for this scoped verdict before provider admission.
+    // An unavailable result may still defer to the backend after it settles.
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
     return (status = 200) => resolveBilling(new Response(JSON.stringify({ preflight: null }), { status }));
   }
 
@@ -351,10 +361,10 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     };
   }
 
-  it('clears the composer and admits the send once while the optional funding request is unresolved', async () => {
+  it('paints one local turn but waits for the scoped funding result before admitting the send once', async () => {
     const releaseBilling = await sendWithDelayedBilling();
     // OPEND-3392: the turn is already painted, so the composer must not keep
-    // showing the sent prompt while the optional funding hint is in flight.
+    // showing the sent prompt while the funding verdict is in flight.
     await waitFor(() => expect(composerText().trim()).toBe(''));
     // Diagnostic repeat-click witness: no second turn is submitted.
     const send = screen.queryByTestId('chat-send');
@@ -393,9 +403,10 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     await releaseSignIn();
   });
 
-  it('keeps the admitted run active when the optional funding endpoint fails', async () => {
+  it('admits the send once when an unavailable funding endpoint defers to the backend', async () => {
     const releaseBilling = await sendWithDelayedBilling();
     await act(async () => releaseBilling(503));
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(composerText().trim()).toBe(''));
     expect(screen.queryByTestId('chat-send-pending')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'chat.stop' })).toBeEnabled();

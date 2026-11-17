@@ -8,6 +8,7 @@ import {
   stableOdNextAssignmentBucket,
 } from '../../../src/strategies/od-next/rollout.js';
 import { odNextRolloutAnalyticsProperties } from '../../../src/strategies/od-next/rollout-analytics.js';
+import { AGENT_DEFS } from '../../../src/runtimes/registry.js';
 
 function syntheticPolicy() {
   return readOdNextRolloutPolicy({
@@ -17,12 +18,12 @@ function syntheticPolicy() {
 }
 
 describe('OD Next controlled rollout', () => {
-  it('owns all five task types by default, and honours a mode that was named', () => {
+  it('owns the legacy profiles and discovery by default, and honours a mode that was named', () => {
     const policy = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' });
     expect(policy).toMatchObject({
       requestedMode: 'active',
       requestedModeSource: 'env',
-      eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes', 'motion-design'],
+      eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes', 'discovery', 'motion-design'],
       productionActiveApproved: true,
       assignmentPercent: 100,
     });
@@ -42,7 +43,7 @@ describe('OD Next controlled rollout', () => {
     ]).toEqual(['prototype', 'ppt', 'marketing', 'hyperframes']);
     expect(odNextTaskTypeForProjectScenarioBinding({ provenance: 'explicit_user', taskProfile: 'prototype' })).toBeNull();
     expect(odNextTaskTypeForProjectScenarioBinding({ provenance: 'legacy_unknown', taskProfile: 'ppt' })).toBeNull();
-    for (const taskType of ['prototype', 'ppt', 'marketing', 'hyperframes'] as const) {
+    for (const taskType of ['prototype', 'ppt', 'marketing', 'hyperframes', 'discovery'] as const) {
       expect(evaluateOdNextRollout({
         policy,
         assignmentIdentity: `default:${taskType}`,
@@ -50,24 +51,17 @@ describe('OD Next controlled rollout', () => {
         agentId: 'opencode',
         agentVersion: '1.18.18',
         sourceKind: 'bundled',
-        runtimeCapabilityVerified: true,
       })).toMatchObject({ requestedMode: 'active', effectiveMode: 'active', eligible: true });
     }
   });
 
   describe('choosing a mode for one installation', () => {
-    it('takes the saved mode when the environment names none', () => {
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'active' })).toMatchObject({
-        requestedMode: 'active',
-        requestedModeSource: 'app_config',
-      });
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'observe' }).requestedMode)
-        .toBe('observe');
-      // An empty variable is not a choice; it is how a shell exports nothing.
-      expect(readOdNextRolloutPolicy(
-        { OD_NEXT_STRATEGY_ROLLOUT: '  ' },
-        { odNextStrategyMode: 'active' },
-      )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'app_config' });
+    it('retires all saved Labs preferences in favor of the rollout default', () => {
+      for (const saved of ['off', 'observe', 'active'] as const) {
+        expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: saved })).toMatchObject({
+          requestedMode: 'active', requestedModeSource: 'default',
+        });
+      }
     });
 
     it('lets the environment pin a mode over the one the installation saved', () => {
@@ -84,7 +78,7 @@ describe('OD Next controlled rollout', () => {
       )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'env' });
     });
 
-    it('treats an absent preference, and only an absent one, as unconfigured', () => {
+    it('ignores absent and invalid retired preferences', () => {
       // `null` and `undefined` are the two shapes of "nobody has chosen", and
       // they reach the default.
       for (const saved of [null, undefined] as unknown[]) {
@@ -94,13 +88,8 @@ describe('OD Next controlled rollout', () => {
         )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
       }
 
-      // A value that is not a mode never arrives here in production: the read
-      // path in `app-config.ts` resolves an unreadable config to `off` before
-      // this function sees it, because unconfigured now means `active` and
-      // "we could not read your choice" must not become "you chose OD Next".
-      // The end-to-end guarantee is asserted across that join in
-      // `tests/app-config.test.ts`; this function stays a pure reader of what
-      // it is handed.
+      // Both raw invalid values and the config reader's normalized off are
+      // retired preferences; neither overrides the new default.
       for (const saved of ['acive', '', 'true', 1, {}] as unknown[]) {
         expect(readOdNextRolloutPolicy(
           {},
@@ -109,33 +98,12 @@ describe('OD Next controlled rollout', () => {
       }
     });
 
-    it('keeps an installation that opted out off, whatever the default becomes', () => {
-      // The one guarantee the default owes users who were here before it
-      // flipped. It holds only because opting out stores `off` rather than
-      // clearing the key: a cleared key reads as unconfigured, and unconfigured
-      // is `active`. If this ever goes red because the switch was "simplified"
-      // into deleting the key, every opted-out installation was just switched
-      // back on without being asked.
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' })).toMatchObject({
-        requestedMode: 'off',
-        requestedModeSource: 'app_config',
-      });
-      expect(readOdNextRolloutPolicy({}, { odNextStrategyMode: 'observe' })).toMatchObject({
-        requestedMode: 'observe',
-        requestedModeSource: 'app_config',
-      });
-      // And the decision that follows has to actually leave the strategy
-      // unused: a preserved `off` that still evaluated to `active` would keep
-      // this guarantee only on paper.
+    it('admits discovery even when the retired Labs preference was off', () => {
       expect(evaluateOdNextRollout({
         policy: readOdNextRolloutPolicy({}, { odNextStrategyMode: 'off' }),
-        assignmentIdentity: 'project:conversation',
-        taskType: 'prototype',
-        agentId: 'codex',
-        agentVersion: 'codex-e2e 0.0.0',
-        sourceKind: 'bundled',
-        runtimeCapabilityVerified: true,
-      })).toMatchObject({ requestedMode: 'off', effectiveMode: 'off', eligible: false });
+        assignmentIdentity: 'project:conversation', taskType: 'discovery', agentId: 'amr',
+        agentVersion: '0.0.38', sourceKind: 'bundled',
+      })).toMatchObject({ requestedMode: 'active', effectiveMode: 'active', eligible: true });
     });
 
     it('admits an eligible task on an installation that stayed on the default', () => {
@@ -167,11 +135,11 @@ describe('OD Next controlled rollout', () => {
           effectiveMode: 'active',
         });
       expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'off' }))
-        .toMatchObject({ requestedMode: 'off', requestedModeSource: 'app_config', effectiveMode: 'off' });
+        .toMatchObject({ requestedMode: 'active', requestedModeSource: 'default', effectiveMode: 'active' });
       expect(readOdNextRolloutControlStatus({}, { odNextStrategyMode: 'active' }))
         .toMatchObject({
           requestedMode: 'active',
-          requestedModeSource: 'app_config',
+          requestedModeSource: 'default',
           effectiveMode: 'active',
         });
       // Status takes no database, because there is no longer any stored state
@@ -222,7 +190,7 @@ describe('OD Next controlled rollout', () => {
     );
   });
 
-  it('requires complete capability evidence without using CLI version as an admission pin', () => {
+  it('does not require capability registration or a CLI version pin', () => {
     const base = {
       assignmentIdentity: 'project:conversation',
       taskType: 'prototype' as const,
@@ -234,15 +202,14 @@ describe('OD Next controlled rollout', () => {
       policy: readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' }),
       agentVersion: 'codex 9.9.9',
     })).toMatchObject({
-      effectiveMode: 'observe',
-      eligible: false,
-      reasonCodes: expect.arrayContaining(['od_next_rollout_x1_capability_fixture_unverified']),
+      effectiveMode: 'active',
+      eligible: true,
+      reasonCodes: [],
     });
     expect(evaluateOdNextRollout({
       ...base,
       policy: readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' }),
       agentVersion: null,
-      runtimeCapabilityVerified: true,
     })).toMatchObject({
       effectiveMode: 'active',
       eligible: true,
@@ -254,7 +221,30 @@ describe('OD Next controlled rollout', () => {
     })).toMatchObject({ effectiveMode: 'active', eligible: true, syntheticCanary: true });
   });
 
-  it('gates task bucket, agent, version, bundled provenance, content, behavior, and assignment', () => {
+  it('uses all registered runtimes by default and preserves explicit agent scope', () => {
+    const added = { ...AGENT_DEFS[0]!, id: 'local-od-next-test-profile' };
+    AGENT_DEFS.push(added);
+    try {
+      const policy = readOdNextRolloutPolicy({});
+      expect(policy.eligibleAgents).toContain(added.id);
+      for (const agent of AGENT_DEFS) {
+        expect(evaluateOdNextRollout({
+          policy, assignmentIdentity: 'registered-runtime', taskType: 'prototype',
+          agentId: agent.id, agentVersion: null, sourceKind: 'bundled',
+        })).toMatchObject({ effectiveMode: 'active', eligible: true });
+      }
+      const pinned = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_AGENTS: 'qoder,byok-opencode' });
+      expect(pinned.eligibleAgents).toEqual(['qoder', 'byok-opencode']);
+      expect(evaluateOdNextRollout({
+        policy: pinned, assignmentIdentity: 'pinned', taskType: 'prototype',
+        agentId: 'hermes', agentVersion: null, sourceKind: 'bundled',
+      }).eligible).toBe(false);
+    } finally {
+      AGENT_DEFS.splice(AGENT_DEFS.indexOf(added), 1);
+    }
+  });
+
+  it('gates task bucket, agent, bundled provenance, content, behavior, and assignment', () => {
     const decision = evaluateOdNextRollout({
       policy: {
         ...syntheticPolicy(),
@@ -312,7 +302,6 @@ describe('OD Next controlled rollout', () => {
       agentId: 'codex',
       agentVersion: 'codex-e2e 0.0.0',
       sourceKind: 'bundled',
-      runtimeCapabilityVerified: true,
     } as const;
     const admitted = evaluateOdNextRollout({ policy: syntheticPolicy(), ...facts });
     expect(admitted).toMatchObject({ effectiveMode: 'active', eligible: true });

@@ -223,6 +223,9 @@ if (args.includes('--version')) {
 } else if (agentId === 'claude' && args[0] === '-p' && args.includes('--help')) {
   process.stdout.write('--add-dir --include-partial-messages\\n');
   process.exitCode = 0;
+} else if (agentId === 'opencode' && args[0] === 'run' && args.includes('--help')) {
+  process.stdout.write('--format --dir --session --dangerously-skip-permissions\\n');
+  process.exitCode = 0;
 } else if ((agentId === 'opencode' || agentId === 'cursor-agent') && args[0] === 'models') {
   process.stdout.write('fake/default\\n');
   process.exitCode = 0;
@@ -581,7 +584,6 @@ function odNextPromptIdentity(promptText) {
     const identity = {
       version: strategy[1],
       snapshotId: promptIdentity(promptText, 'applied snapshot'),
-      packageHash: promptIdentity(promptText, 'strategy package'),
       taskProfileVersion: '2.0.0',
       taskType: 'prototype',
     };
@@ -651,8 +653,8 @@ async function emitOdNextProductionRun(promptText) {
   const homeFirstRun = identity.homeFirstRun === true;
   if (homeFirstRun) await new Promise((resolve) => setTimeout(resolve, 1200));
   await writeFileFs(
-    join(projectDir(), 'od-next-active-canary.html'),
-    homeFirstRun ? '<!doctype html><html><body><h1>Delayed Daemon Smoke</h1></body></html>'
+    join(projectDir(), homeFirstRun ? 'delayed-daemon-smoke.html' : 'od-next-active-canary.html'),
+    homeFirstRun ? '<!doctype html><html><body><h1>Delayed Daemon Smoke</h1><p>Generated after a delayed daemon turn.</p></body></html>'
       : legacyDeck ? legacyTemplateDeckCanaryHtml : protocolDeckCanaryHtml,
     'utf8',
   );

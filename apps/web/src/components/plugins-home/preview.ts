@@ -84,6 +84,7 @@ export type PluginPreviewSpec =
 interface PreviewBlock {
   type?: unknown;
   poster?: unknown;
+  galleryPosterOnly?: unknown;
   video?: unknown;
   gif?: unknown;
   entry?: unknown;
@@ -192,11 +193,12 @@ export function inferPluginPreview(
     workspaceContext?: WorkspaceCollabContext | null;
   },
 ): PluginPreviewSpec {
+  const preview = readPreview(record);
   // Gallery tiles opt in to a pre-baked hover-pan clip (cheap thumbnail) when
   // the daemon has attached one. Everything else — crucially the detail modal —
   // falls through to the real `od.preview`, so opening a plugin still shows the
   // live, interactive page rather than the baked video.
-  if (opts?.preferBaked) {
+  if (opts?.preferBaked && preview?.galleryPosterOnly !== true) {
     const baked = readBakedPreview(record);
     if (baked) {
       return {
@@ -210,7 +212,6 @@ export function inferPluginPreview(
       };
     }
   }
-  const preview = readPreview(record);
   const examples = readExamples(record);
 
   if (preview) {

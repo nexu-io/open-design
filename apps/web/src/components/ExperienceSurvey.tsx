@@ -12,6 +12,7 @@ import type { Variants } from 'motion/react';
 import { Button } from '@open-design/components';
 import { useT } from '../i18n';
 import styles from './ExperienceSurvey.module.css';
+import { WEB_MODAL_SCROLL_LOCK_ATTRIBUTE } from './modal-scroll-lock';
 import {
   SURVEY_DELAY_MS,
   isSurveyRetired,
@@ -52,14 +53,12 @@ interface Props {
 }
 
 /**
- * Modals in this app lock the page by setting `document.body.style.overflow`,
- * so that is the one signal available without a global modal registry. The
- * card must not surface behind an open dialog: it sits below the dialog's
- * layer and gets caught by its backdrop blur, which looks like a rendering
- * bug rather than a deliberate stack.
+ * Wait for both shared modal locks and Dialog's inline overflow lock before
+ * showing the one-shot survey, regardless of which owner releases first.
  */
 function isModalOpen(): boolean {
-  return document.body.style.overflow === 'hidden';
+  return document.body.hasAttribute(WEB_MODAL_SCROLL_LOCK_ATTRIBUTE)
+    || document.body.style.overflow === 'hidden';
 }
 
 // Grounded in what users actually complain about in the per-run feedback
@@ -186,7 +185,7 @@ export function ExperienceSurvey({
         });
         modalWatcher.observe(document.body, {
           attributes: true,
-          attributeFilter: ['style'],
+          attributeFilter: ['style', WEB_MODAL_SCROLL_LOCK_ATTRIBUTE],
         });
         return;
       }

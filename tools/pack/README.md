@@ -182,3 +182,45 @@ Linux desktop apps in this space split across formats: VS Code ships `.deb` + `.
 `--to dmg` is manual-install DMG output only. Any builder-generated updater metadata such as `latest-mac.yml` or
 `.blockmap` files is treated as scratch and cleaned from the builder directory; release-beta generates the authoritative
 `latest-mac.yml` feed during release asset preparation, pointing at the update ZIP.
+
+## Branch build timing experiments
+
+`release-beta.yml` supports branch/SHA builds with `publish=false`. For a full
+macOS arm64, Intel and Windows packaging comparison, dispatch it from the branch
+carrying the workflow and pin `ref` to the commit under test:
+
+```bash
+gh workflow run release-beta.yml --ref <branch> \
+  -f ref=<commit-sha> -f publish=false \
+  -f enable_mac_arm64=true -f enable_mac_x64=true -f enable_win_x64=true \
+  -f enable_linux_x64=false \
+  -f mac_arm64_target=all -f mac_x64_target=all -f win_x64_target=all \
+  -f mac_arm64_sign_mode=notarize -f mac_x64_sign_mode=notarize \
+  -f mac_arm64_smoke_mode=core -f mac_x64_smoke_mode=core -f win_x64_smoke_mode=core
+```
+
+This creates test artifacts and isolated dogfood downloads without changing any
+channel's latest metadata. Windows signing remains off by default. `core`
+checks installation/startup; it does not exercise the full updater lifecycle.
+If the branch's packaged version is behind the current stable/beta feed, add
+`-f force=true` while retaining `-f publish=false` to permit that test build.
+Web source, tests and generated route types are validated in an independent
+same-commit job. Stable retains its existing verification gate; prerelease
+retains its independently dispatched, advisory verification.
+
+Compare build step times separately from queueing, dependency installation,
+Apple notarization/retries, artifact availability, smoke, and cache transfer.
+The Windows outer cache keeps at most the newest complete entry per build layer
+within a 6 GiB payload budget. Final installers, portable ZIPs and unpacked trees
+remain reusable: dropping them made same-source repeat builds slower in the
+timing experiment. Historical copies are discarded. The cache snapshot's `sizes.json` reports
+retained/removed bytes by node. Snapshot compression/upload still costs time
+in the build job; saving the GitHub cache and pruning old outer caches run in
+`cache-maintenance.yml`, outside release concurrency. Cache maintenance failure
+does not change the build's artifact validity.
+
+A changed outer cache prefix starts cold. Measure a second run at the same
+commit to assess the warm-cache tradeoff, and compare equivalent runner images,
+artifact targets and signing modes. A single run is observational evidence,
+not a stable percentage saving. `publish=false` also skips PostHog sourcemap
+upload, so its total duration is not directly comparable with a publishing run.

@@ -283,6 +283,8 @@ interface Props {
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
   previewComments?: PreviewComment[];
+  previewCommentsState?: 'loading' | 'error' | 'success';
+  onRetryPreviewComments?: () => void;
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
   onReorderPreviewComment?: (commentId: string, sortKey: number) => Promise<void>;
@@ -348,6 +350,7 @@ interface Props {
   // launcher affordance to create new side chats — only persisted `chat:` tabs
   // are restored.
   chatConfig?: AppConfig;
+  onTouchProject?: (sentAt: number) => void;
   chatAgentsById?: Map<string, AgentInfo>;
   handoffAgents?: AgentInfo[];
   handoffArtifactId?: string;
@@ -395,6 +398,14 @@ interface Props {
   materializationPending?: boolean;
   /** See DesignFilesPanel's `filesAuthoritative`. */
   filesAuthoritative?: boolean;
+  /**
+   * The project row does not exist on the daemon yet (a Home send whose create
+   * has not answered, OPEND-3334): this workspace reads nothing of its own
+   * (folders, share status) until it does.
+   */
+  projectReadsHeld?: boolean;
+  /** See DesignFilesPanel's `emptyLookBeforeFirstListing`. */
+  emptyLookBeforeFirstListing?: boolean;
   /** Optional override for the read-only notice text. */
   readonlyNotice?: string;
   /**
@@ -1359,6 +1370,8 @@ export function FileWorkspace({
   tabsState,
   onTabsStateChange,
   previewComments = NO_PREVIEW_COMMENTS,
+  previewCommentsState = 'success',
+  onRetryPreviewComments,
   onSavePreviewComment,
   onRemovePreviewComment,
   onReorderPreviewComment,
@@ -1392,6 +1405,7 @@ export function FileWorkspace({
   commentPortalId,
   onCommentModeChange,
   chatConfig,
+  onTouchProject,
   chatAgentsById,
   handoffAgents,
   handoffArtifactId,
@@ -1416,6 +1430,8 @@ export function FileWorkspace({
   viewerOnly = false,
   materializationPending = false,
   filesAuthoritative = true,
+  emptyLookBeforeFirstListing = false,
+  projectReadsHeld = false,
   readonlyNotice,
   fileSyncBadge = null,
 }: Props) {
@@ -1801,6 +1817,7 @@ export function FileWorkspace({
   }, [projectId, workspaceContext]);
 
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     // The synchronous clear happens during render (see projectFoldersProjectIdRef
     // above); here we only fetch the new project's folders.
@@ -1810,7 +1827,7 @@ export function FileWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [projectId, workspaceContext]);
+  }, [projectId, projectReadsHeld, workspaceContext]);
 
   // True when the Design Files tab has nothing to attach: no files, no live
   // artifacts, no folders. Mirrors DesignFilesPanel's own empty-state gate so
@@ -3504,9 +3521,12 @@ export function FileWorkspace({
       filesRefreshKey={filesRefreshKey}
       isDeck={isDeck}
       streaming={streaming}
+      motionPreviewMuted={runInFlight}
       commentQueueOnSend={commentQueueOnSend}
       commentSendDisabled={commentSendDisabled}
       previewComments={previewCommentsByFile.get(file.name) ?? NO_PREVIEW_COMMENTS}
+      previewCommentsState={previewCommentsState}
+      onRetryPreviewComments={onRetryPreviewComments}
       onSavePreviewComment={onSavePreviewComment}
       onRemovePreviewComment={onRemovePreviewComment}
       onReorderPreviewComment={onReorderPreviewComment}
@@ -3941,6 +3961,7 @@ export function FileWorkspace({
   }, [projectShareMenuOpen]);
 
   useEffect(() => {
+    if (projectReadsHeld) return;
     let cancelled = false;
     let refreshSeq = 0;
     const refreshShareAccess = (event?: Event) => {
@@ -3955,7 +3976,7 @@ export function FileWorkspace({
       cancelled = true;
       window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, refreshShareAccess);
     };
-  }, [projectId, projectShareMenuOpen, workspaceContext]);
+  }, [projectId, projectReadsHeld, projectShareMenuOpen, workspaceContext]);
 
   useEffect(() => {
     if (!projectShareMenuOpen) setProjectShareAccessMenuOpen(false);
@@ -4455,6 +4476,7 @@ export function FileWorkspace({
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             filesAuthoritative={filesAuthoritative}
+            emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
             rootDirName={rootDirName}
             reloading={reloading}
             running={runInFlight}
@@ -4626,6 +4648,7 @@ export function FileWorkspace({
             projectId={projectId}
             conversationId={conversationIdFromSideChatTabId(activeTab)}
             config={chatConfig}
+            onTouchProject={onTouchProject}
             agentsById={chatAgentsById}
             locale={chatLocale ?? 'en'}
             workspaceContext={workspaceContext}

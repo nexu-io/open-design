@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from 'node:fs';
+import { webcrypto } from 'node:crypto';
 import { join } from 'node:path';
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -50,6 +51,7 @@ vi.mock('../../src/analytics/provider', async () => {
 
 vi.mock('../../src/analytics/error-tracking', () => ({
   reportSafetyEvent: safetyEventMock,
+  reportClientMetricEvent: vi.fn(() => true),
 }));
 
 vi.mock('../../src/state/projects', async () => {
@@ -739,8 +741,8 @@ describe('FileViewer preview scale', () => {
       expect(document.querySelector('.viewer-loading')).toBeNull();
       expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
     });
-    expect(rawReads[0]?.url).not.toContain('workspaceId=');
-    expect(rawReads[0]?.url).not.toContain('workspaceMemberId=');
+    expect(new URL(rawReads[0]!.url, 'https://od.local').searchParams.get('workspaceId')).toBe('ws-1');
+    expect(new URL(rawReads[0]!.url, 'https://od.local').searchParams.get('workspaceMemberId')).toBe('wm-1');
     expect(rawReads[0]?.init?.headers).toMatchObject({
       'x-od-workspace-id': 'ws-1',
       'x-od-workspace-member-id': 'wm-1',
@@ -2245,7 +2247,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="false"');
     expect(markup).toContain('src="/api/projects/project-1/raw/page.html?v=1710000000&amp;r=0&amp;odPreviewBridge=scroll&amp;odPreviewBridge=selection&amp;odPreviewBridge=snapshot&amp;odPreviewBridge=observability&amp;odPreviewEpoch=preview-document-');
-    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+    expect(markup).toContain('sandbox="allow-scripts allow-forms allow-downloads"');
   });
 
   it('does not mint a second preview capability for Workspace URL-load HTML', () => {
@@ -2287,7 +2289,7 @@ describe('FileViewer SVG artifacts', () => {
     ))).toBe(false);
   });
 
-  it('keeps browser-owned URL preview navigation server-authorized by project id', () => {
+  it('carries verified Team identity on browser-owned URL preview navigation', () => {
     const file = baseFile({
       name: 'team-page.html',
       path: 'team-page.html',
@@ -2316,9 +2318,9 @@ describe('FileViewer SVG artifacts', () => {
 
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
     expect(markup).toContain(
-      'src="/api/projects/project-1/raw/team-page.html?v=1710000000',
+      'src="/api/projects/project-1/raw/team-page.html?workspaceId=ws-1',
     );
-    expect(markup).not.toContain('workspaceMemberId=');
+    expect(markup).toContain('workspaceMemberId=wm-1');
   });
 
   it('routes brand extraction stop requests from the preview iframe', async () => {
@@ -2801,7 +2803,40 @@ describe('FileViewer SVG artifacts', () => {
     expect(analyticsTrackMock).not.toHaveBeenCalled();
   });
 
+  it('keeps the powered origin and permissions when presenting worker-backed HTML', async () => {
+    vi.stubGlobal('crypto', webcrypto);
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/preview/isolation') {
+        return new Response(JSON.stringify({ supported: true, projectOrigins: true, baseOrigin: 'http://127.0.0.1:43111' }));
+      }
+      return new Response('{}', { status: 404 });
+    }));
+    render(<FileViewer
+      projectId="project-1"
+      projectKind="prototype"
+      file={baseFile({ name: 'saved.html', path: 'saved.html', mime: 'text/html', kind: 'html', artifactManifest: {
+        version: 1, kind: 'html', title: 'Saved tasks', entry: 'saved.html', renderer: 'html', exports: ['html'],
+      } })}
+      liveHtml='<html><body><script>new Worker("worker.js")</script><main>Saved tasks</main></body></html>'
+    />);
+    const preview = await waitFor(() => {
+      const frame = screen.getByTestId('artifact-preview-frame');
+      expect(frame.getAttribute('data-od-powered')).toBe('true');
+      return frame;
+    });
+    const src = preview.getAttribute('src');
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+    const presented = await screen.findByTitle('present');
+    expect(presented.getAttribute('src')).toBe(src);
+    expect(presented.getAttribute('sandbox')).toContain('allow-same-origin');
+    expect(presented.getAttribute('allow')).toContain('cross-origin-isolated');
+    expect(presented.getAttribute('data-od-powered')).toBe('true');
+  });
+
   it('keeps powered HTML previews on the powered URL when file-watch refreshes', async () => {
+    vi.stubGlobal('crypto', webcrypto);
     const replaceMock = vi.fn();
     const frameWindows = new WeakMap<HTMLIFrameElement, Window>();
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
@@ -2836,6 +2871,7 @@ describe('FileViewer SVG artifacts', () => {
       if (url === '/api/preview/isolation') {
         return new Response(JSON.stringify({
           supported: true,
+          projectOrigins: true,
           baseOrigin: 'http://127.0.0.1:43111',
         }), {
           headers: { 'Content-Type': 'application/json' },
@@ -2860,7 +2896,7 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
     const workerHtml = '<!doctype html><html><body><script>new Worker("worker.js")</script></body></html>';
-    const poweredSrc = 'http://localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
+    const poweredSrc = 'http://od-a33e35d302125bbd8e647043a4025b29.localhost:43111/api/projects/project-1/powered/worker.html?v=1000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
 
     const { rerender } = render(
       <FileViewer
@@ -2922,7 +2958,7 @@ describe('FileViewer SVG artifacts', () => {
       const nextRevisionFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       const nextRevisionUrl = new URL(nextRevisionFrame.src);
       expect(nextRevisionFrame.getAttribute('data-od-powered')).toBe('true');
-      expect(nextRevisionUrl.origin).toBe('http://localhost:43111');
+      expect(nextRevisionUrl.origin).toBe('http://od-a33e35d302125bbd8e647043a4025b29.localhost:43111');
       expect(nextRevisionUrl.searchParams.get('v')).toBe('2000');
       expect(nextRevisionUrl.searchParams.get('fr')).toBeNull();
     });
@@ -2944,7 +2980,7 @@ describe('FileViewer SVG artifacts', () => {
       const resizedRevisionFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       const resizedRevisionUrl = new URL(resizedRevisionFrame.src);
       expect(resizedRevisionFrame.getAttribute('data-od-powered')).toBe('true');
-      expect(resizedRevisionUrl.origin).toBe('http://localhost:43111');
+      expect(resizedRevisionUrl.origin).toBe('http://od-a33e35d302125bbd8e647043a4025b29.localhost:43111');
       expect(resizedRevisionUrl.searchParams.get('odPreviewEpoch')).not.toBe(nextRevisionEpoch);
     });
   });
@@ -3874,19 +3910,29 @@ describe('FileViewer SVG artifacts', () => {
       projectId: 'project-1',
       projectKind: 'prototype' as const,
       file,
-      // Storage access forces the preview onto the srcDoc transport used by
-      // Manual Edit in the packaged Electron client.
-      liveHtml: '<html><body><script>localStorage.getItem("theme")</script><main>Editable</main></body></html>',
+      // Storage uses the guarded lazy srcDoc transport with host-scoped persistence.
+      liveHtml: '<html><body><script>localStorage.getItem("ready");</script><main>Editable</main></body></html>',
     };
     const { rerender } = render(<FileViewer {...props} filesRefreshKey={1} />);
 
+    const initialFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const previewWindow = installSandboxedPreviewWindow(initialFrame);
+    const post = vi.mocked(previewWindow.postMessage);
+    fireEvent.load(initialFrame);
+    const activations = () => post.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === 'od:srcdoc-transport-activate');
+    await waitFor(() => expect(activations()).toHaveLength(1));
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     const frame = await waitFor(() => {
       const active = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
       return active;
     });
-    const editTransport = frame.srcdoc;
+    expect(frame).toBe(initialFrame);
+    const editActivationCount = activations().length;
+    const editActivation = activations().at(-1)!;
+    expect(editActivation.html).toContain('Editable');
 
     // One persisted save can emit multiple file-list / version watcher
     // refreshes. They update background metadata, but must not replace the
@@ -3895,14 +3941,17 @@ describe('FileViewer SVG artifacts', () => {
     rerender(<FileViewer {...props} filesRefreshKey={7} />);
     rerender(<FileViewer {...props} filesRefreshKey={9} />);
     expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
-    expect(frame.srcdoc).toBe(editTransport);
+    expect(activations()).toHaveLength(editActivationCount);
+    expect(activations().at(-1)!.html).toBe(editActivation.html);
 
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     await waitFor(() => {
       expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('false');
     });
     expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
-    expect(frame.srcdoc).not.toBe(editTransport);
+    await waitFor(() => expect(activations()).toHaveLength(editActivationCount + 1));
+    expect(activations().at(-1)!.html).toContain('Editable');
+    expect(activations().at(-1)!.generation).not.toBe(editActivation.generation);
   });
 
   // #4291 review: if the exit-time text commit fails, the close path must NOT
@@ -4744,7 +4793,19 @@ describe('FileViewer SVG artifacts', () => {
       expect(active.getAttribute('data-od-render-mode')).toBe('srcdoc');
       return active;
     });
-    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const frameWindow = frame.contentWindow!;
+    const nativePostMessage = frameWindow.postMessage;
+    let resolveCapture!: (message: { type: string; requestId: string }) => void;
+    const captureSent = new Promise<{ type: string; requestId: string }>((resolve) => {
+      resolveCapture = resolve;
+    });
+    vi.spyOn(frameWindow, 'postMessage').mockImplementation((...args) => {
+      Reflect.apply(nativePostMessage, frameWindow, args);
+      const message = args[0] as { type?: unknown; requestId?: unknown } | null;
+      if (message?.type === 'od:preview-scroll-capture' && typeof message.requestId === 'string') {
+        resolveCapture({ type: message.type, requestId: message.requestId });
+      }
+    });
     // Packaged srcDoc previews omit allow-same-origin. jsdom does not enforce
     // that boundary, so the host must derive opacity from the iframe sandbox
     // contract instead of assuming its synthetic contentWindow is readable.
@@ -4761,43 +4822,44 @@ describe('FileViewer SVG artifacts', () => {
       }));
     });
 
-    act(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        source: frame.contentWindow,
-        data: { type: 'od-edit-text-commit', id: 'copy', value: 'Edited copy' },
-      }));
-    });
+    // Control only the snapshot deadline. Real-clock polling can consume the
+    // legitimate 120ms fallback before this test gets to send its exact ack.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await act(async () => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: { type: 'od-edit-text-commit', id: 'copy', value: 'Edited copy' },
+        }));
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const capture = await captureSent;
+      expect(capture.requestId).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(119);
+      });
+      // Within the deadline, the exact iframe snapshot must precede the
+      // disk write and its file-watcher-driven preview rebuild.
+      expect(persistedSource).toBe(initialSource);
+      expect(onFileSaved).not.toHaveBeenCalled();
 
-    const capture = await waitFor(() => {
-      const message = postMessage.mock.calls
-        .map(([value]) => value)
-        .find((value) => (
-          typeof value === 'object'
-          && value !== null
-          && (value as { type?: unknown }).type === 'od:preview-scroll-capture'
-        )) as { type: string; requestId: string } | undefined;
-      expect(message?.requestId).toBeTruthy();
-      return message!;
-    });
-    // The exact iframe snapshot must precede the disk write. Otherwise the
-    // file watcher can publish the new source and rebuild the preview before
-    // the host knows which scroll position to restore.
-    expect(persistedSource).toBe(initialSource);
-    expect(onFileSaved).not.toHaveBeenCalled();
-
-    act(() => {
-      window.dispatchEvent(new MessageEvent('message', {
-        source: frame.contentWindow,
-        data: {
-          type: 'od:preview-scroll',
-          requestId: capture.requestId,
-          frameLeft: 0,
-          frameTop: 640,
-          canvasLeft: 0,
-          canvasTop: 640,
-        },
-      }));
-    });
+      await act(async () => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od:preview-scroll',
+            requestId: capture.requestId,
+            frameLeft: 0,
+            frameTop: 640,
+            canvasLeft: 0,
+            canvasTop: 640,
+          },
+        }));
+        await vi.advanceTimersByTimeAsync(1);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
 
     await waitFor(() => {
       expect(persistedSource).toContain('Edited copy');
@@ -4942,6 +5004,31 @@ describe('FileViewer SVG artifacts', () => {
     expect(srcDocFrame?.srcdoc).toContain('data-od-id="results"');
     expect(srcDocFrame?.srcdoc).not.toContain('data-od-lazy-srcdoc-transport');
     expect(srcDocFrame?.srcdoc).toContain('data-od-sandbox-shim');
+  });
+
+  it('retains the opaque storage shim when the isolated preview origin is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={baseFile({ name: 'saved-form.html', path: 'saved-form.html', mime: 'text/html', kind: 'html', artifactManifest: {
+          version: 1, kind: 'html', title: 'Saved tasks', entry: 'saved-form.html', renderer: 'html', exports: ['html'],
+        } })}
+        liveHtml='<html><body><h1>Saved tasks</h1><script>localStorage.getItem("tasks")</script></body></html>'
+      />,
+    );
+    const frame = container.querySelector('iframe[data-od-active="true"]') as HTMLIFrameElement;
+    expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    fireEvent.load(frame);
+    await waitFor(() => {
+      const activation = postMessage.mock.calls.map(([message]) => message)
+        .find(message => message.type === 'od:srcdoc-transport-activate');
+      expect(activation?.html).toContain('data-od-sandbox-shim');
+      expect(activation?.html).toContain('localStorage.getItem');
+    });
   });
 
   it('uses an absolute personal-project base for injected Electron previews', () => {
@@ -5169,7 +5256,7 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       const frame = document.body.querySelector('.present-overlay iframe');
-      expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+      expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-forms allow-downloads');
       expect(frame?.getAttribute('data-od-render-mode')).toBe('url-load');
     });
     expect(container.querySelector('.html-viewer.is-tab-present')).toBeTruthy();
@@ -5261,7 +5348,7 @@ describe('FileViewer SVG artifacts', () => {
     render(<FileViewer projectId="project-1" projectKind="prototype" file={file} />);
 
     const frame = await screen.findByTestId('react-component-preview-frame');
-    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms allow-downloads');
   });
 
   it('disables React component sharing controls for viewer-only shared projects', async () => {
@@ -5473,7 +5560,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('data-od-render-mode="srcdoc" data-od-active="true"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="false"');
     expect(markup).not.toContain('data-od-lazy-srcdoc-transport');
-    expect(markup).toContain('sandbox="allow-scripts allow-downloads"');
+    expect(markup).toContain('sandbox="allow-scripts allow-forms allow-downloads"');
   });
 
   it('falls back to srcDoc when the HTML body looks deck-shaped even without an isDeck hint', () => {
@@ -5583,7 +5670,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByTestId('deck-thumbnail-rail')).toBeNull();
   });
 
-  it('keeps deck thumbnail resource URLs independent of shell Workspace changes', async () => {
+  it('re-scopes deck thumbnail resource URLs when the Workspace identity changes', async () => {
     const file = baseFile({
       name: 'deck.html',
       path: 'deck.html',
@@ -5622,8 +5709,8 @@ describe('FileViewer SVG artifacts', () => {
 
     const thumbnail = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
     expect(thumbnail).toBeTruthy();
-    expect(thumbnail!.srcdoc).not.toContain('workspaceId=');
-    expect(thumbnail!.srcdoc).not.toContain('workspaceMemberId=');
+    expect(thumbnail!.srcdoc).toContain('workspaceId=ws-1');
+    expect(thumbnail!.srcdoc).toContain('workspaceMemberId=wm-1');
     const originalSrcDoc = thumbnail!.srcdoc;
 
     rerender(
@@ -5634,9 +5721,10 @@ describe('FileViewer SVG artifacts', () => {
 
     await waitFor(() => {
       const updated = container.querySelector('.deck-thumbnail-frame iframe') as HTMLIFrameElement | null;
-      expect(updated?.srcdoc).toBe(originalSrcDoc);
-      expect(updated?.srcdoc).not.toContain('workspaceId=');
-      expect(updated?.srcdoc).not.toContain('workspaceMemberId=');
+      expect(updated?.srcdoc).not.toBe(originalSrcDoc);
+      expect(updated?.srcdoc).toContain('workspaceId=ws-2');
+      expect(updated?.srcdoc).toContain('workspaceMemberId=wm-2');
+      expect(updated?.srcdoc).not.toContain('workspaceId=ws-1');
     });
   });
 
@@ -6971,11 +7059,10 @@ describe('FileViewer SVG artifacts', () => {
     // missing — is back for a personal workspace.
     expect(await screen.findByText('Generate and copy link')).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /Generate and copy link/i })).toBeTruthy();
-    // "Share project in workspace" is TEAM project sharing, which a personal
-    // workspace has no team to receive — see the dedicated test below
-    // (recvq5bM78HWCE) for the card's own gating.
+    // The retired section label stays absent; project visibility is available
+    // in a personal workspace through the same selector as a team workspace.
     expect(screen.queryByText('Share project in workspace')).toBeNull();
-    expect(screen.queryByText('Visibility in workspace')).toBeNull();
+    expect(screen.getByText('Visibility in workspace')).toBeVisible();
   });
 
   // recvq56lzckGtE: publishing a file from a real team workspace 403'd against
@@ -7185,8 +7272,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(writes).toEqual([]);
   });
 
-  // Scope help is persistent content in the HTML share panel. It remains
-  // team-gated; unlike provider tooltips it needs no focus or hover.
+  // Scope help is persistent content in the HTML share panel and needs no
+  // focus or hover.
   it('shows workspace-access help inline without a focus or hover prerequisite', async () => {
     const context = teamWorkspaceContext();
     stubFetchWithWorkspaceContext(context);
@@ -7208,13 +7295,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByTestId('workspace-access-help')).toBeNull();
   });
 
-  // recvq5bM78HWCE: the "在工作空间中分享项目" card rendered for a personal
-  // workspace with no gate at all, so clicking its access toggle called
-  // `moveWorkspaceProject({ visibility: 'team' })`, which the daemon's
-  // `teamShareRefusalFor` always refuses outside a team workspace — the click
-  // silently failed. The public single-file publish card right above it is
-  // unaffected (that one IS meant to work for a personal workspace).
-  it('hides the team-only workspace-share card for a personal workspace', async () => {
+  it('offers workspace visibility choices to a personal workspace', async () => {
     const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
       workspaceType: 'personal',
@@ -7233,14 +7314,17 @@ describe('FileViewer SVG artifacts', () => {
     expect(await screen.findByRole('menu')).toBeTruthy();
     await screen.findByText('Generate and copy link');
     expect(screen.queryByText('Share project in workspace')).toBeNull();
-    expect(screen.queryByText('Visibility in workspace')).toBeNull();
+    expect(screen.getByText('Visibility in workspace')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Only me' }));
+    expect(screen.getByRole('option', { name: 'Only me' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Workspace members' })).toBeEnabled();
   });
 
   // recvqgif6Xa7Wb: product ruled the "no team to share with yet" bridge card
   // (added for recvqae3pK5hyx/recvq6W8GX8NaH) out entirely — it was never a
   // designed surface, just a stopgap to avoid a blank tab. A personal
-  // workspace that can already publish must show ONLY the publish card, with
-  // no team-CTA card and no create-team link underneath it.
+  // workspace that can already publish needs no team-CTA card or create-team
+  // link underneath it.
   it('does not show a create-team CTA for a personal workspace that can already publish', async () => {
     const context: WorkspaceCollabContext = {
       ...teamWorkspaceContext(),
@@ -8853,6 +8937,8 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('reports diagnostics only from the active viewer and preview iframe', async () => {
+    // jsdom lays out 0x0; preview diagnostics now require a visible frame.
+    vi.spyOn(HTMLIFrameElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
     const teardownObserver = installPreviewIframeMessageObserver();
     try {
       const { rerender } = render(
@@ -9311,6 +9397,8 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('allows one fresh recovery when an unverified generation is reactivated', () => {
+    // jsdom lays out 0x0; preview diagnostics now require a visible frame.
+    vi.spyOn(HTMLIFrameElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
     vi.useFakeTimers();
     try {
       const renderViewer = (workspaceActive: boolean) => (
@@ -9443,6 +9531,8 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('uses an exact active ERR_ABORTED to probe an unverified generation once', () => {
+    // jsdom lays out 0x0; preview diagnostics now require a visible frame.
+    vi.spyOn(HTMLIFrameElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
     vi.useFakeTimers();
     let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
     const restoreHost = installMockOpenDesignHost({
@@ -9492,6 +9582,8 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('immediately recovers an exact active Open Design blob navigation abort', () => {
+    // jsdom lays out 0x0; preview diagnostics now require a visible frame.
+    vi.spyOn(HTMLIFrameElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
     vi.useFakeTimers();
     let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
     const restoreHost = installMockOpenDesignHost({
@@ -9539,6 +9631,8 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('probes the active unverified frame when Electron loses the aborted frame name', () => {
+    // jsdom lays out 0x0; preview diagnostics now require a visible frame.
+    vi.spyOn(HTMLIFrameElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
     vi.useFakeTimers();
     let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
     const restoreHost = installMockOpenDesignHost({
@@ -10154,7 +10248,7 @@ describe('FileViewer tweaks toolbar', () => {
           projectId="project-1"
           projectKind="prototype"
           file={htmlPreviewFile({ name: 'page.html', path: 'page.html' })}
-          liveHtml={'<html><body><script>localStorage.getItem("theme")</script><img src="assets/hero.png"></body></html>'}
+          liveHtml={'<html><body><script>localStorage.getItem("ready");</script><img src="assets/hero.png"></body></html>'}
         />,
         personalWorkspaceContext(),
       );
@@ -10162,7 +10256,14 @@ describe('FileViewer tweaks toolbar', () => {
       const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
       const initialTransport = frame.srcdoc;
-      expect(initialTransport).toContain('src="assets/hero.png"');
+      const previewWindow = installSandboxedPreviewWindow(frame);
+      const post = vi.mocked(previewWindow.postMessage);
+      fireEvent.load(frame);
+      const activations = () => post.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message.type === 'od:srcdoc-transport-activate');
+      await waitFor(() => expect(activations()).toHaveLength(1));
+      expect(activations()[0].html).toContain('src="assets/hero.png"');
 
       filesResponse.resolve(new Response(JSON.stringify({
         files: [
@@ -10184,6 +10285,7 @@ describe('FileViewer tweaks toolbar', () => {
         String(input).includes('/api/projects/project-1/preview-url')
       ))).toBe(false);
       expect(frame.srcdoc).toBe(initialTransport);
+      expect(activations()).toHaveLength(1);
     } finally {
       filesResponse.resolve(new Response(JSON.stringify({ files: [] }), { status: 200 }));
     }
@@ -10359,13 +10461,8 @@ describe('FileViewer tweaks toolbar', () => {
     });
   });
 
-  // The freeze / deferred-flush logic covers every interactive preview mode
-  // (`annotationFreezeActive` = Draw || Comment || Inspect; the URL freeze also
-  // covers manual Edit). Pin the non-Draw branches so a regression in any one
-  // can't slip through green. Inspect shares the exact `annotationFreezeActive`
-  // path as Comment and has no toggle in this prototype surface, so Comment
-  // stands in for both.
-  it('holds the preview steady while Comment mode is open instead of live-reloading on a file change', async () => {
+  // Comment mode follows live content; manual Edit keeps its existing freeze.
+  it('refreshes the preview while Comment mode stays open on a file change', async () => {
     const { rerender } = render(
       <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile({ mtime: 1000 })}
         liveHtml='<html><body><main data-od-id="hero">Comment V1</main></body></html>'
@@ -10387,8 +10484,8 @@ describe('FileViewer tweaks toolbar', () => {
     await Promise.resolve();
 
     const f = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(f.srcdoc).toContain('Comment V1');
-    expect(f.srcdoc).not.toContain('Comment V2');
+    expect(f.srcdoc).toContain('Comment V2');
+    expect(f.srcdoc).not.toContain('Comment V1');
   });
 
   it('holds the preview steady while manual Edit is open instead of live-reloading on a file change', async () => {
@@ -10703,7 +10800,7 @@ describe('FileViewer tweaks toolbar', () => {
         expect(frame.srcdoc).toContain(
           `/api/projects/${projectId}/raw/${fontPath}`,
         );
-        expect(frame.srcdoc).not.toContain('workspaceMemberId=');
+        expect(frame.srcdoc).toContain('workspaceMemberId=wm-1');
         expect(frame.srcdoc).not.toContain('../../fonts/inter-variable-400.woff2');
       });
     } finally {
@@ -10766,7 +10863,7 @@ describe('FileViewer tweaks toolbar', () => {
         expect(frame.srcdoc).toContain(
           `/api/projects/${projectId}/raw/${imagePath}`,
         );
-        expect(frame.srcdoc).not.toContain('workspaceMemberId=');
+        expect(frame.srcdoc).toContain('workspaceMemberId=wm-1');
         expect(frame.srcdoc).not.toContain('../images/hero.png');
       });
     } finally {
@@ -11045,10 +11142,10 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const comments = [comment('one', 101), comment('two', 102), comment('three', 103)];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/comments/read')) {
+      if (String(input).includes('/comments/read')) {
         return new Response(JSON.stringify(init?.method === 'PUT'
-          ? { projectId: 'project-1', lastReadAt: 103 }
-          : { projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+          ? { projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['one','two','three'] }
+          : { projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
       }
       return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
     });
@@ -11072,9 +11169,9 @@ describe('FileViewer tweaks toolbar', () => {
     });
     const readRequests = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (!String(input).includes('/comments/read')) return new Response('{}');
       if (init?.method === 'PUT') readRequests();
-      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: init?.method === 'PUT' ? 200 : 100 }), {
+      return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: init?.method === 'PUT' ? JSON.parse(String(init.body)).commentIds : [] }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }));
@@ -11132,12 +11229,12 @@ describe('FileViewer tweaks toolbar', () => {
     const own: PreviewComment = {
       id: 'own', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'own', selector: '[data-od-id="own"]', label: 'own', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'own', status: 'open', createdAt: 102, updatedAt: 102, authorMemberId: 'wm-1',
     };
-    const readFetch = vi.fn(async (input: RequestInfo | URL) => String(input).endsWith('/comments/read')
-      ? new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 101 }), { headers: { 'Content-Type': 'application/json' } })
+    const readFetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes('/comments/read')
+      ? new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['boundary'] }), { headers: { 'Content-Type': 'application/json' } })
       : new Response('{}', { headers: { 'Content-Type': 'application/json' } }));
     vi.stubGlobal('fetch', readFetch);
     renderWithProjectWorkspace(<FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} liveHtml="<html><body /></html>" previewComments={[own, { ...own, id: 'boundary', authorMemberId: 'wm-other', createdAt: 101, updatedAt: 101 }]} />, teamWorkspaceContext());
-    await waitFor(() => expect(readFetch.mock.calls.some(([input]) => String(input).endsWith('/comments/read'))).toBe(true));
+    await waitFor(() => expect(readFetch.mock.calls.some(([input]) => String(input).includes('/comments/read'))).toBe(true));
     await act(async () => { await Promise.resolve(); });
     expect(screen.queryByTestId('comment-unread-dot')).toBeNull();
   });
@@ -11146,12 +11243,12 @@ describe('FileViewer tweaks toolbar', () => {
     const firstRead = deferredResponse();
     let readWrites = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(input).endsWith('/comments/read')) return new Response('{}');
+      if (!String(input).includes('/comments/read')) return new Response('{}');
       if (init?.method === 'PUT') {
         readWrites++;
-        return readWrites === 1 ? firstRead.promise : new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 103 }), { headers: { 'Content-Type': 'application/json' } });
+        return readWrites === 1 ? firstRead.promise : new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: ['external'] }), { headers: { 'Content-Type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ projectId: 'project-1', lastReadAt: 100 }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ projectId: 'project-1', filePath: 'preview.html', seenCommentIds: [] }), { headers: { 'Content-Type': 'application/json' } });
     }));
     const external: PreviewComment = {
       id: 'external', projectId: 'project-1', conversationId: 'conversation-1', filePath: 'preview.html', elementId: 'external', selector: '[data-od-id="external"]', label: 'external', text: '', htmlHint: '', position: { x: 0, y: 0, width: 1, height: 1 }, note: 'external', status: 'open', createdAt: 103, updatedAt: 103,
@@ -11391,6 +11488,7 @@ describe('FileViewer tweaks toolbar', () => {
   });
 
   it('requests the content-size bridge for powered desktop previews before auto-fitting', async () => {
+    vi.stubGlobal('crypto', webcrypto);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockImplementation(function getBoundingClientRectMock(this: HTMLElement) {
         if (this.classList.contains('viewer-body')) return testRect(0, 0, 900, 700);
@@ -11404,6 +11502,7 @@ describe('FileViewer tweaks toolbar', () => {
       if (url === '/api/preview/isolation') {
         return new Response(JSON.stringify({
           supported: true,
+          projectOrigins: true,
           baseOrigin: 'http://127.0.0.1:48123',
           pathPrefix: 'powered',
         }), {
@@ -11439,7 +11538,7 @@ describe('FileViewer tweaks toolbar', () => {
       expect(frame.getAttribute('data-od-powered')).toBe('true');
       const src = new URL(frame.getAttribute('src') ?? '');
       expect(`${src.origin}${src.pathname}`).toBe(
-        'http://localhost:48123/api/projects/project-1/powered/powered-wide.html',
+        'http://od-a33e35d302125bbd8e647043a4025b29.localhost:48123/api/projects/project-1/powered/powered-wide.html',
       );
       expect(src.searchParams.get('v')).toBe('1710000000');
       expect(src.searchParams.get('r')).toBe('0');
@@ -12685,6 +12784,17 @@ describe('FileViewer tweaks toolbar', () => {
       },
     }));
 
+    vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((data: unknown) => {
+      const request = data as { validateForSave?: boolean; requestId: string; selector: string };
+      if (!request.validateForSave) return;
+      queueMicrotask(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+        data: { type: 'od:comment-active-target-update', documentVersion: frame.dataset.odRenderMode === 'srcdoc'
+            ? `srcdoc:${new DOMParser().parseFromString(frame.srcdoc, 'text/html').querySelector('template[data-od-srcdoc-transport-body-complete]')?.getAttribute('data-od-srcdoc-transport-body-complete') ?? ''}`
+            : `url:${frame.src}`, requestId: request.requestId,
+          requestedSelector: request.selector, selector: '[data-od-id="hero"]', elementId: 'hero',
+          position: { x: 8, y: 12, width: 120, height: 48 } } })));
+    });
+
     const input = await screen.findByTestId('comment-popover-input');
     expect(screen.queryByTestId('comment-side-panel')).toBeNull();
     fireEvent.change(input, { target: { value: '加大字号' } });
@@ -12791,6 +12901,17 @@ describe('FileViewer tweaks toolbar', () => {
       },
     }));
 
+    vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((data: unknown) => {
+      const request = data as { validateForSave?: boolean; requestId: string; selector: string };
+      if (!request.validateForSave) return;
+      queueMicrotask(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+        data: { type: 'od:comment-active-target-update', documentVersion: frame.dataset.odRenderMode === 'srcdoc'
+            ? `srcdoc:${new DOMParser().parseFromString(frame.srcdoc, 'text/html').querySelector('template[data-od-srcdoc-transport-body-complete]')?.getAttribute('data-od-srcdoc-transport-body-complete') ?? ''}`
+            : `url:${frame.src}`, requestId: request.requestId,
+          requestedSelector: request.selector, selector: '[data-od-id="hero"]', elementId: 'hero',
+          position: { x: 8, y: 12, width: 120, height: 48 } } })));
+    });
+
     const input = await screen.findByTestId('comment-popover-input');
     fireEvent.change(input, { target: { value: 'Third comment' } });
     fireEvent.click(screen.getByTestId('comment-popover-save'));
@@ -12832,6 +12953,17 @@ describe('FileViewer tweaks toolbar', () => {
         htmlHint: '<main data-od-id="hero">Hero</main>',
       },
     }));
+
+    vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((data: unknown) => {
+      const request = data as { validateForSave?: boolean; requestId: string; selector: string };
+      if (!request.validateForSave) return;
+      queueMicrotask(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+        data: { type: 'od:comment-active-target-update', documentVersion: frame.dataset.odRenderMode === 'srcdoc'
+            ? `srcdoc:${new DOMParser().parseFromString(frame.srcdoc, 'text/html').querySelector('template[data-od-srcdoc-transport-body-complete]')?.getAttribute('data-od-srcdoc-transport-body-complete') ?? ''}`
+            : `url:${frame.src}`, requestId: request.requestId,
+          requestedSelector: request.selector, selector: '[data-od-id="hero"]', elementId: 'hero',
+          position: { x: 8, y: 12, width: 120, height: 48 } } })));
+    });
 
     const input = await screen.findByTestId('comment-popover-input');
     fireEvent.change(input, { target: { value: '加大字号' } });
@@ -12879,6 +13011,17 @@ describe('FileViewer tweaks toolbar', () => {
         htmlHint: '<main data-od-id="hero">Hero</main>',
       },
     }));
+
+    vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation((data: unknown) => {
+      const request = data as { validateForSave?: boolean; requestId: string; selector: string };
+      if (!request.validateForSave) return;
+      queueMicrotask(() => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow,
+        data: { type: 'od:comment-active-target-update', documentVersion: frame.dataset.odRenderMode === 'srcdoc'
+            ? `srcdoc:${new DOMParser().parseFromString(frame.srcdoc, 'text/html').querySelector('template[data-od-srcdoc-transport-body-complete]')?.getAttribute('data-od-srcdoc-transport-body-complete') ?? ''}`
+            : `url:${frame.src}`, requestId: request.requestId,
+          requestedSelector: request.selector, selector: '[data-od-id="hero"]', elementId: 'hero',
+          position: { x: 8, y: 12, width: 120, height: 48 } } })));
+    });
 
     const input = await screen.findByTestId('comment-popover-input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '保留这个评论' } });

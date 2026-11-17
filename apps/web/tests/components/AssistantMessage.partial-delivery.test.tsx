@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { ChatMessage } from '../../src/types';
@@ -25,15 +25,14 @@ function reply(withTodos: boolean, withFile: boolean): ChatMessage {
 describe('partial file delivery does not finish declared work', () => {
   afterEach(cleanup);
 
-  it('offers the remaining work but continues only after the user clicks', () => {
+  // P0-24 Q6: the turn end no longer offers a continue button; nothing auto-continues.
+  it('no longer offers a continue button at the turn end and never continues on its own (P0-24)', () => {
     const onContinue = vi.fn();
     render(<AssistantMessage message={reply(true, true)} streaming={false}
       projectId="project-1" conversationId="conv-1" isLast
       onContinueRemainingTasks={onContinue} />);
-    const button = screen.getByTestId('assistant-continue-remaining');
+    expect(screen.queryByTestId('assistant-continue-remaining')).toBeNull();
     expect(onContinue).not.toHaveBeenCalled();
-    fireEvent.click(button);
-    expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
   it.each([false, true])('does not invent remaining work when no todo exists (file: %s)', (withFile) => {

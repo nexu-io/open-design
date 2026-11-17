@@ -54,12 +54,13 @@ function stubFetch(onLogout: () => void) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     if (url.endsWith('/api/integrations/vela/logout') && init?.method === 'POST') {
+      expect(JSON.parse(String(init.body))).toEqual({expectedAppUserId:"u",expectedCredentialRevision:"revision-a"});
       onLogout();
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
     if (url.endsWith('/api/integrations/vela/status')) {
       return new Response(
-        JSON.stringify({ loggedIn: true, profile: 'prod', configPath: '/x', user: { id: 'u', email: 'leaf@example.com' } }),
+        JSON.stringify({ loggedIn: true, credentialRevision:'revision-a', profile: 'prod', configPath: '/x', user: { id: 'u', email: 'leaf@example.com' } }),
         { status: 200 },
       );
     }
@@ -112,6 +113,7 @@ describe('EntryNavRail account menu sign-out confirm (recvqgMWpJZqhL)', () => {
 
     renderRail();
     openAccountMenuAndClickSignOut();
+    await waitFor(() => expect(screen.getByTestId('sign-out-confirm-accept').hasAttribute('disabled')).toBe(false));
     fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     await waitFor(() => {
@@ -128,6 +130,7 @@ describe('EntryNavRail account menu sign-out confirm (recvqgMWpJZqhL)', () => {
     openAccountMenuAndClickSignOut();
     expect(onSignedOut).not.toHaveBeenCalled();
 
+    await waitFor(() => expect(screen.getByTestId('sign-out-confirm-accept').hasAttribute('disabled')).toBe(false));
     fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     await waitFor(() => {
@@ -142,11 +145,13 @@ describe('EntryNavRail account menu sign-out confirm (recvqgMWpJZqhL)', () => {
       if (url.endsWith('/api/integrations/vela/logout') && init?.method === 'POST') {
         return new Response(JSON.stringify({ ok: false }), { status: 500 });
       }
+      if (url.endsWith('/api/integrations/vela/status')) return new Response(JSON.stringify({loggedIn:true,credentialRevision:'revision-a',profile:'prod',user:{id:'u',email:'leaf@example.com'}}),{status:200});
       return new Response(JSON.stringify({ items: [] }), { status: 200 });
     }) as typeof fetch;
 
     renderRail({ onSignedOut });
     openAccountMenuAndClickSignOut();
+    await waitFor(() => expect(screen.getByTestId('sign-out-confirm-accept').hasAttribute('disabled')).toBe(false));
     fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     await waitFor(() => {
@@ -157,4 +162,26 @@ describe('EntryNavRail account menu sign-out confirm (recvqgMWpJZqhL)', () => {
     });
     expect(onSignedOut).not.toHaveBeenCalled();
   });
+});
+
+it('updates the same logout confirmation after credential identity changes, without revoking the new account automatically', async () => {
+  let changed = false;
+  const revoked: unknown[] = [];
+  globalThis.fetch = vi.fn(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith('/api/integrations/vela/status')) return Response.json({loggedIn:true,profile:'prod',credentialRevision:changed?'revision-b':'revision-a',user:{id:changed?'b':'a',email:changed?'b@example.com':'a@example.com'}});
+    if (url.endsWith('/api/integrations/vela/logout')) {
+      const target = JSON.parse(String(init?.body));
+      if (!changed) {changed=true;return Response.json({error:'logout_target_changed'},{status:409});}
+      revoked.push(target);return Response.json({ok:true,revocationPending:true,legacyCredentialNotRevoked:false});
+    }
+    return Response.json({items:[]});
+  });
+  renderRail();openAccountMenuAndClickSignOut();
+  await waitFor(()=>expect(screen.getByTestId('sign-out-confirm-accept').hasAttribute('disabled')).toBe(false));
+  fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
+  await screen.findByText('b@example.com');
+  expect(revoked).toEqual([]);
+  fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
+  await waitFor(()=>expect(revoked).toEqual([{expectedAppUserId:'b',expectedCredentialRevision:'revision-b'}]));
 });

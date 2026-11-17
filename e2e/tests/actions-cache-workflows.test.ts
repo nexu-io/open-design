@@ -167,7 +167,7 @@ describe("GitHub Actions cache workflows", () => {
     const workflow = await readFile(cacheMaintenanceWorkflow, "utf8");
     const windowsSeedJob = sectionBetween(workflow, "  seed-pnpm-windows:", "  seed-pnpm-linux:");
     const linuxSeedJob = sectionBetween(workflow, "  seed-pnpm-linux:", "  clean-closed-pr-buildkit:");
-    const cleanupJob = workflow.slice(workflow.indexOf("  clean-closed-pr-buildkit:"));
+    const cleanupJob = sectionBetween(workflow, "  clean-closed-pr-buildkit:", "  save-windows-pack:");
 
     expect(workflow).toContain("pull_request_target:");
     expect(workflow).toContain("types: [closed]");

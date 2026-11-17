@@ -8,6 +8,7 @@
 // agent-handoff markdown blob in ./use-everywhere/agent-guide.ts so the
 // modal only owns rendering + clipboard interactions.
 
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAnalytics } from '../analytics/provider';
@@ -74,13 +75,7 @@ export function UseEverywhereModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   useEffect(() => {
     closeRef.current?.focus();

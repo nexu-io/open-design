@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.25.1",
+  "version": "0.27.2",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -75,8 +75,9 @@
     "@types/express": "5.0.6",
     "@types/multer": "2.1.0",
     "@types/node": "20.19.39",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "esbuild": "0.28.0",
     "jsdom": "29.1.1",
-    "typescript": "5.9.3",
     "vitest": "4.1.6"
   },
   "engines": {

@@ -60,6 +60,9 @@ vi.mock('../../src/providers/registry', () => ({
 vi.mock('../../src/providers/project-events', () => ({ useProjectFileEvents: vi.fn() }));
 vi.mock('../../src/router', () => ({ navigate: vi.fn() }));
 vi.mock('../../src/state/projects', () => ({
+  registerQueuedSubmission: vi.fn(async (projectId, submission) => ({
+    id: submission.id, projectId, conversationId: submission.conversationId, acceptedAt: submission.submittedAt,
+  })),
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: vi.fn(),
   getTemplate: (...args: unknown[]) => getTemplate(...args),

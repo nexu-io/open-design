@@ -9,8 +9,11 @@ import { dirname } from "node:path";
  */
 export interface DesktopCrashSummary {
   sessionId: string;
+  launchAttemptId?: string | null;
   version: string | null;
   startedAt: string;
+  lastObservedAt?: string | null;
+  exitCode?: number | null;
   /** Host events seen during that run, oldest first (see `recordDesktopHostEvent`). */
   hostEvents?: DesktopHostEventRecord[];
 }
@@ -55,8 +58,11 @@ const MAX_UNREPORTED_CRASHES = 20;
  */
 export interface DesktopSessionState {
   sessionId: string;
+  launchAttemptId?: string | null;
   version: string | null;
   startedAt: string;
+  lastObservedAt?: string | null;
+  exitCode?: number | null;
   reachedRunning: boolean;
   clean: boolean;
   unreportedCrashes: DesktopCrashSummary[];
@@ -88,6 +94,9 @@ function parseCrash(value: unknown): DesktopCrashSummary | null {
   const hostEvents = parseHostEvents(c.hostEvents);
   return {
     sessionId: c.sessionId,
+    launchAttemptId: typeof c.launchAttemptId === "string" ? c.launchAttemptId : null,
+    lastObservedAt: typeof c.lastObservedAt === "string" ? c.lastObservedAt : null,
+    exitCode: typeof c.exitCode === "number" && Number.isInteger(c.exitCode) ? c.exitCode : null,
     version: typeof c.version === "string" ? c.version : null,
     startedAt: typeof c.startedAt === "string" ? c.startedAt : "",
     ...(hostEvents.length > 0 ? { hostEvents } : {}),
@@ -102,6 +111,9 @@ function parseState(raw: string): DesktopSessionState | null {
     : [];
   return {
     sessionId: parsed.sessionId,
+    launchAttemptId: typeof parsed.launchAttemptId === "string" ? parsed.launchAttemptId : null,
+    lastObservedAt: typeof parsed.lastObservedAt === "string" ? parsed.lastObservedAt : null,
+    exitCode: typeof parsed.exitCode === "number" && Number.isInteger(parsed.exitCode) ? parsed.exitCode : null,
     version: typeof parsed.version === "string" ? parsed.version : null,
     startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : "",
     reachedRunning: parsed.reachedRunning === true,
@@ -114,6 +126,7 @@ function parseState(raw: string): DesktopSessionState | null {
 export interface BeginDesktopSessionDeps {
   stateFilePath: string;
   sessionId: string;
+  launchAttemptId?: string | null;
   version: string | null;
   now: () => Date;
   /** Injectable for tests; defaults to fs. */
@@ -144,6 +157,9 @@ export function beginDesktopSession(
       if (prev.reachedRunning && !prev.clean) {
         pending.push({
           sessionId: prev.sessionId,
+          launchAttemptId: prev.launchAttemptId ?? null,
+          lastObservedAt: prev.lastObservedAt ?? null,
+          exitCode: prev.exitCode ?? null,
           version: prev.version,
           startedAt: prev.startedAt,
           ...(prev.hostEvents.length > 0 ? { hostEvents: prev.hostEvents } : {}),
@@ -153,11 +169,14 @@ export function beginDesktopSession(
   } catch {
     // No marker (first run), unreadable, or a run that never reached running.
   }
+  pending = [...new Map(pending.map(crash => [crash.sessionId, crash])).values()];
   // Keep the newest if we somehow exceed the cap.
   if (pending.length > MAX_UNREPORTED_CRASHES) pending = pending.slice(pending.length - MAX_UNREPORTED_CRASHES);
 
   const state: DesktopSessionState = {
     sessionId: deps.sessionId,
+    launchAttemptId: deps.launchAttemptId ?? null,
+    lastObservedAt: null,
     version: deps.version,
     startedAt: deps.now().toISOString(),
     reachedRunning: false,
@@ -197,7 +216,7 @@ export function markDesktopSessionRunning(deps: {
   readFile?: (path: string) => string;
   writeFile?: (path: string, data: string) => void;
 }): void {
-  updateState(deps.stateFilePath, (s) => ({ ...s, reachedRunning: true }), deps.readFile ?? defaultRead, deps.writeFile ?? defaultWrite);
+  updateState(deps.stateFilePath, (s) => ({ ...s, reachedRunning: true, lastObservedAt: new Date().toISOString() }), deps.readFile ?? defaultRead, deps.writeFile ?? defaultWrite);
 }
 
 /**
@@ -261,4 +280,15 @@ export function recordDesktopHostEvent(
     deps.readFile ?? defaultRead,
     deps.writeFile ?? defaultWrite,
   );
+}
+
+/** An observed main exit code is evidence; silent native death remains unknown. */
+export function recordDesktopSessionExit(deps: {
+  stateFilePath: string;
+  readFile?: (path: string) => string;
+  writeFile?: (path: string, data: string) => void;
+}, code: number): void {
+  if (!Number.isInteger(code)) return;
+  updateState(deps.stateFilePath, s => ({ ...s, clean: s.clean || code === 0,
+    exitCode: code, lastObservedAt: new Date().toISOString() }), deps.readFile ?? defaultRead, deps.writeFile ?? defaultWrite);
 }

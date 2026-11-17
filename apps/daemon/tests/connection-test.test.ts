@@ -4519,10 +4519,11 @@ if (process.argv[2] === 'login' && process.argv[3] === 'status') {
   console.log('Logged in using ChatGPT');
   process.exit(0);
 }
-fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.on('SIGTERM', () => {
   fs.writeFileSync(${JSON.stringify(termFile)}, 'term');
 });
+// The pid marker is the readiness signal for signal-handler installation.
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 setInterval(() => {}, 1000);
 `,
         async () => {

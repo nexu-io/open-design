@@ -136,7 +136,8 @@ function canceledClarificationTurn(): ChatMessage {
 describe('a clarification turn the user stopped', () => {
   afterEach(() => cleanup());
 
-  it('still reports that it was stopped, and still offers the remaining work', () => {
+  // P0-24 Q6:回合末尾不再出状态词和〔继续剩余任务〕,停止只由壳头说;这里钉住页脚不改口说「已完成」。
+  it('does not claim it completed; the turn end no longer shows a status word or continue button (P0-24)', () => {
     render(
       <AssistantMessage
         message={canceledClarificationTurn()}
@@ -149,10 +150,8 @@ describe('a clarification turn the user stopped', () => {
       />,
     );
 
-    const label = document.querySelector('[data-testid="assistant-label"]')?.textContent ?? '';
-    expect(label).toContain('Task stopped');
+    expect(document.querySelector('[data-testid="assistant-label"]')).toBeNull();
     expect(screen.queryByText('Completed')).toBeNull();
-    // 这四条活是真的没做,出口必须还在 —— 豁免只针对跑到干净终点的那一轮。
-    expect(document.querySelector('[data-testid="assistant-continue-remaining"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="assistant-continue-remaining"]')).toBeNull();
   });
 });

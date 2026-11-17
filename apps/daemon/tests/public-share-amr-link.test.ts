@@ -187,6 +187,7 @@ async function startShareDaemon(options: { env?: NodeJS.ProcessEnv; amr?: Fixtur
     ...(options.pending ? { pending: true } : {}),
   });
   const app = express(); app.use(express.json());
+  app.use((req,_res,next)=>{req.headers['x-od-workspace-id'] ??= context.workspaceId;req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId;next();});
   registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
     verifyWorkspaceRequest: async () => context,
     resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),

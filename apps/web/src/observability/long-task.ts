@@ -1,78 +1,131 @@
-// Long task observer.
-//
-// Emits `client_long_task` whenever the main thread is blocked for more
-// than `MIN_DURATION_MS`. Long tasks are the single best proxy for
-// perceived UI lag — a 500 ms task drops 30 consecutive frames at 60 fps,
-// which the user reads as "stuck". FPS sampling via requestAnimationFrame
-// is a worse signal: it stops counting in background tabs and the count
-// itself has measurable overhead.
-//
-// Threshold is 100 ms rather than the W3C 50 ms minimum because the
-// browser already filters at 50 ms; bumping to 100 ms here halves the
-// event volume while still catching every task a human notices.
+import {
+  createExposureClock, reportResponsiveness,
+  responsivenessVisible,
+} from './responsiveness';
 
-import { reportSafetyEvent } from '../analytics/error-tracking';
+const WINDOW_MS = 30_000;
+const RECOVERY_KEY = 'open-design:responsiveness-recovery-v1';
+// A single bounded checkpoint. It cannot establish a duration for a process
+// killed before its PerformanceObserver callback runs.
+interface Checkpoint {
+  id: string;
+  at: string;
+  duration: number | null;
+  count: number;
+}
+let installed = false;
 
-const MIN_DURATION_MS = 100;
-
-let observer: PerformanceObserver | null = null;
-
-export function installLongTaskObserver(): () => void {
-  if (typeof PerformanceObserver === 'undefined') return () => undefined;
-  // Some browsers (Safari < 16, Firefox without flag) report `longtask` as
-  // an unsupported entry type. observe() throws or no-ops; either way we
-  // bail silently so the rest of the observability surface still loads.
-  const supported = PerformanceObserver.supportedEntryTypes?.includes?.('longtask');
-  if (supported !== true) return () => undefined;
-  if (observer) return () => observer?.disconnect();
-
-  observer = new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-      if (entry.duration < MIN_DURATION_MS) continue;
-      // The `attribution` array on a PerformanceLongTaskTiming entry
-      // names the script / frame that caused the block (e.g. an iframe
-      // child for file-viewer renders). The Long Tasks API surface is
-      // not fully covered by TypeScript's lib.dom so we read it through
-      // an `unknown` cast rather than a hand-rolled type.
-      const attribution = (entry as unknown as {
-        attribution?: Array<{ containerType?: string; containerName?: string; containerSrc?: string }>;
-      }).attribution?.[0];
-      reportSafetyEvent('client_long_task', {
-        duration_ms: Math.round(entry.duration),
-        start_time_ms: Math.round(entry.startTime),
-        container_type: attribution?.containerType,
-        container_name: attribution?.containerName,
-        // containerSrc can be a full URL that may include query strings.
-        // Trimmed to origin+pathname; full URL scrub lives in error-tracking.
-        container_src_origin: stripUrlQuery(attribution?.containerSrc),
-      });
-    }
-  });
-
+function readCheckpoint(): Checkpoint | null {
   try {
-    observer.observe({ type: 'longtask', buffered: true });
-  } catch {
-    // Older Chrome versions sometimes throw when buffered is requested.
-    try {
-      observer.observe({ type: 'longtask' });
-    } catch {
-      observer = null;
-      return () => undefined;
-    }
-  }
-
-  return () => {
-    observer?.disconnect();
-    observer = null;
-  };
+    const raw = localStorage.getItem(RECOVERY_KEY);
+    if (!raw || raw.length > 512) return null;
+    const p = JSON.parse(raw) as Checkpoint;
+    if (typeof p.id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(p.id)
+      || typeof p.at !== 'string' || !Number.isFinite(Date.parse(p.at))
+      || !(p.duration === null || (Number.isFinite(p.duration) && p.duration >= 5_000))
+      || !Number.isSafeInteger(p.count) || p.count < 0) return null;
+    return p;
+  } catch { return null; }
+}
+function saveCheckpoint(value: Checkpoint | null): void {
+  try {
+    if (value) localStorage.setItem(RECOVERY_KEY, JSON.stringify(value));
+    else localStorage.removeItem(RECOVERY_KEY);
+  } catch { /* Storage denial must never affect interaction. */ }
 }
 
-function stripUrlQuery(value: string | undefined): string | undefined {
-  if (typeof value !== 'string' || value.length === 0) return undefined;
-  try {
-    const parsed = new URL(value);
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return value;
-  }
+export function installLongTaskObserver(): () => void {
+  if (installed || typeof document === 'undefined') return () => undefined;
+  installed = true;
+  let observer: PerformanceObserver | null = null;
+  let supported = false;
+  let eligibleSince = performance.now();
+  let count = 0;
+  let severe = 0;
+  let worst: number | null = null;
+  let checkpoint: Checkpoint | null = null;
+  const clock = createExposureClock();
+  const reset = () => { count = 0; severe = 0; worst = null; clock.reset(); };
+  const startCheckpoint = () => {
+    const previous = readCheckpoint();
+    if (previous) reportResponsiveness('client_responsiveness_recovery', {
+      telemetry_capability: 'unknown', recovery_id: previous.id,
+      previous_occurred_at: previous.at, duration_ms: previous.duration,
+      severe_task_count: previous.count,
+      reason: previous.duration === null ? 'unclean_exit_unknown' : 'observed_severe_task',
+    });
+    checkpoint = { id: globalThis.crypto?.randomUUID?.() ?? `r-${Date.now()}`,
+      at: new Date().toISOString(), duration: null, count: 0 };
+    if (responsivenessVisible()) saveCheckpoint(checkpoint);
+  };
+  const start = () => {
+    reset();
+    eligibleSince = performance.now();
+    if (typeof PerformanceObserver !== 'undefined'
+      && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+      try {
+        observer = new PerformanceObserver((list) => {
+          if (!responsivenessVisible()) return;
+          for (const entry of list.getEntries()) {
+            if (Number.isFinite(entry.startTime) && entry.startTime < eligibleSince) continue;
+            if (!Number.isFinite(entry.duration) || entry.duration < 100) continue;
+            count += 1;
+            worst = Math.max(worst ?? 0, entry.duration);
+            if (entry.duration < 5_000) continue;
+            severe += 1;
+            if (checkpoint) {
+              checkpoint.at = new Date(performance.timeOrigin + entry.startTime).toISOString();
+              checkpoint.duration = Math.max(checkpoint.duration ?? 0, entry.duration);
+              checkpoint.count += 1;
+              saveCheckpoint(checkpoint);
+            }
+            // Preserve the legacy severe event, without attribution names/URLs.
+            reportResponsiveness('client_long_task', {
+              duration_ms: Math.round(entry.duration), start_time_ms: Math.round(entry.startTime),
+              occurred_at: new Date(performance.timeOrigin + entry.startTime).toISOString(),
+            });
+          }
+        });
+        observer.observe({ type: 'longtask' });
+        supported = true;
+      } catch { observer?.disconnect(); observer = null; supported = false; }
+    }
+    startCheckpoint();
+  };
+  const stop = () => {
+    observer?.disconnect(); observer = null; supported = false;
+    if (checkpoint?.count === 0) saveCheckpoint(null);
+    else if (checkpoint) saveCheckpoint(checkpoint);
+    checkpoint = null; reset();
+  };
+  start();
+  const timer = setInterval(() => {
+    const exposure = clock.tick();
+    const qualified = supported && exposure.qualified;
+    reportResponsiveness('client_responsiveness_window', {
+      telemetry_capability: supported ? 'supported' : 'unsupported',
+      measurement: 'long_task', measurable: qualified,
+      unavailable_reason: !supported ? 'unsupported' : qualified ? null : 'background_or_sleep',
+      window_ms: exposure.elapsed, long_task_count: qualified ? count : null,
+      severe_task_count: qualified ? severe : null, max_duration_ms: qualified ? worst : null,
+    });
+    count = 0; severe = 0; worst = null;
+    // One bounded storage write per foreground window; no per-small-task I/O.
+    if (checkpoint && responsivenessVisible()) saveCheckpoint(checkpoint);
+  }, WINDOW_MS);
+  const visibility = () => {
+    eligibleSince = performance.now();
+    // Background termination is not evidence of a foreground hang.
+    if (!responsivenessVisible() && !checkpoint?.count) saveCheckpoint(null);
+    else if (checkpoint) saveCheckpoint(checkpoint);
+  };
+  const pagehide = () => { saveCheckpoint(checkpoint?.count ? checkpoint : null); };
+  document.addEventListener('visibilitychange', visibility);
+  window.addEventListener('pagehide', pagehide);
+  return () => {
+    clearInterval(timer); clock.stop(); stop();
+    document.removeEventListener('visibilitychange', visibility);
+    window.removeEventListener('pagehide', pagehide);
+    installed = false;
+  };
 }

@@ -41,6 +41,20 @@ it('sends new query, key, attachments and runtime context without repeating stab
   expect(text).not.toContain(parseOdNextPromptBundleV2(previous.promptBundle.text).sessionSkills.generalOrchestrationSkill.body);
 });
 
+it('reminds a resumed discovery session to load a newly requested type without replaying its catalog', () => {
+  const discovery = (bundle: ReturnType<typeof parseOdNextPromptBundleV2>) => {
+    bundle.sessionSkills.taskTypeSkill.skillName = 'discovery';
+    bundle.sessionSkills.taskTypeSkill.body = 'Full catalog sentinel.';
+  };
+  const current = task('bbb', bundle => { discovery(bundle); bundle.userFirstPrompt = '现在做一份说明书'; });
+  const text = composeResumedRequest(current, task('aaa', discovery))!;
+  expect(text).toContain('new deliverable type');
+  expect(text).toContain('native file');
+  expect(text).toContain('already in context');
+  expect(text).not.toContain('Full catalog sentinel.');
+  expect(composeResumedRequest(task('bbb'), task('aaa'))).not.toContain('new deliverable type');
+});
+
 it.each(['core', 'skill', 'configuration', 'custom'] as const)('requires full input when %s instructions change', kind => {
   const previous = task('aaa');
   const current = task('bbb', bundle => {
@@ -61,14 +75,10 @@ it('does not reuse a native session carrying the retired output protocol', () =>
 it('omits unchanged context and host-only identity from incremental input', () => {
   const decorate = (bundle: ReturnType<typeof parseOdNextPromptBundleV2>) => {
     bundle.context.runtimeToolEnvironment = 'Stable tool instructions sentinel.';
-    bundle.context.runtimeFacts = 'Capability description.\n' + JSON.stringify({
-      appliedSnapshot: 'host-snapshot', capabilitySnapshotHash: 'host-hash',
-      selectedAgentId: 'codex', nativeChildLifecycleVerified: true,
-    });
     bundle.context.runContext = 'Selected file A.';
   };
   const text = composeResumedRequest(task('bbb', decorate), task('aaa', decorate))!;
-  for (const value of ['Stable tool instructions sentinel.', 'host-snapshot', 'host-hash', 'Selected file A.', 'task-bbb', 'open_design_request_turn']) {
+  for (const value of ['Stable tool instructions sentinel.', 'Selected file A.', 'task-bbb', 'open_design_request_turn']) {
     expect(text).not.toContain(value);
   }
 });
@@ -77,20 +87,6 @@ it('explicitly clears context rather than silently retaining a previous selectio
   const previous = task('aaa', bundle => { bundle.context.runContext = 'Selected file A.'; });
   const current = task('bbb', bundle => { bundle.context.runContext = ''; });
   expect(composeResumedRequest(current, previous)).toContain('Selected run context: cleared');
-});
-
-it('ignores snapshot churn but forwards actual capability changes', () => {
-  const facts = (snapshot: string, supported: boolean) => 'Runtime capabilities.\n' + JSON.stringify({
-    appliedSnapshot: snapshot, capabilitySnapshotHash: snapshot + '-hash',
-    selectedAgentId: 'codex', nativeChildLifecycleVerified: supported,
-  });
-  const previous = task('aaa', bundle => { bundle.context.runtimeFacts = facts('old', true); });
-  const unchanged = task('bbb', bundle => { bundle.context.runtimeFacts = facts('new', true); });
-  expect(composeResumedRequest(unchanged, previous)).not.toContain('nativeChildLifecycleVerified');
-  const changed = task('bbb', bundle => { bundle.context.runtimeFacts = facts('new', false); });
-  const text = composeResumedRequest(changed, previous)!;
-  expect(text).toContain('"nativeChildLifecycleVerified":false');
-  expect(text).not.toContain('new-hash');
 });
 
 it.each(['runtimeToolEnvironment', 'requestInputFacts'] as const)('clears removed %s', field => {

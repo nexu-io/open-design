@@ -1,6 +1,6 @@
 import { isAbsolute, join, resolve, sep } from "node:path";
 
-import { isReleaseChannel, RELEASE_CHANNELS, type ReleaseChannel } from "@open-design/release";
+import { isReleaseChannel, RELEASE_CHANNELS, releaseChannelFromVersion, releaseChannelFromNamespace, type ReleaseChannel } from "@open-design/release";
 import { normalizeNamespace } from "@open-design/sidecar-proto";
 
 export const LAUNCHER_SCHEMA_VERSION = 1 as const;
@@ -18,6 +18,10 @@ export const LAUNCHER_CHANNELS = Object.freeze({
 } as const);
 
 export type LauncherChannel = ReleaseChannel;
+
+export function resolveLauncherChannel(version: string | undefined, namespace: string): LauncherChannel {
+  return releaseChannelFromVersion(version) ?? releaseChannelFromNamespace(namespace) ?? "stable";
+}
 
 export type LauncherRootRequest = {
   channel: string;
@@ -692,3 +696,22 @@ export function selectLauncherRuntimeTarget(input: {
 
   return { pointer: active, reason: "active", selected: true };
 }
+
+export {
+  LAUNCHER_HOST_CONTRACT_VERSION,
+  LAUNCHER_HOST_KEY,
+  readLauncherHost,
+  publishLauncherHost,
+  type LauncherHostIdentity,
+  type LauncherHost,
+  type LauncherLifecycle,
+  type LauncherHostRunningCode,
+  type LauncherHostSelection,
+} from "./host.js";
+
+export { normalizeNamespace } from "@open-design/sidecar-proto";
+
+export {
+  validateLauncherHostEnvironment, validateLauncherApplicationArtifact,
+  type LauncherHostEnvironment, type LauncherApplicationArtifact,
+} from "./artifact.js";

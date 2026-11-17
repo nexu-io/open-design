@@ -804,8 +804,41 @@ describe('listProjects', () => {
 
 describe('createProject', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
+
+  it.each(['personal', 'team', 'local'] as const)(
+    'returns the new project on an immediate Home read in %s scope (OPEND-4687)',
+    async (scope) => {
+      vi.useFakeTimers({ toFake: ['performance', 'setTimeout', 'clearTimeout'] });
+      const contexts = {
+        local: null,
+        personal: personalWorkspaceContext(),
+        team: teamWorkspaceContext(),
+      };
+      const workspaceContext = contexts[scope];
+      const project = { id: 'new-project', name: 'Home task' };
+      let persisted = false;
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_input, init) => {
+        if (init?.method === 'POST') {
+          persisted = true;
+          return Response.json({ project, conversationId: 'conversation-1' });
+        }
+        const row = workspaceContext ? { project, workspaceId: workspaceContext.workspaceId } : project;
+        return Response.json({ projects: persisted ? [row] : [] });
+      }));
+
+      // Home's recent list is still inside the one-second coalescing window
+      // when the project route confirms creation and the user returns Home.
+      await expect(listProjects({ workspaceContext, workspaceView: 'recent' })).resolves.toEqual([]);
+      await createProject({ name: project.name, skillId: null, designSystemId: null, workspaceContext });
+      await expect(listProjects({ workspaceContext, workspaceView: 'all' }))
+        .resolves.toMatchObject([project]);
+      await expect(listProjects({ workspaceContext, workspaceView: 'recent' }))
+        .resolves.toMatchObject([project]);
+    },
+  );
 
   it('preserves daemon validation messages from non-2xx create responses', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(

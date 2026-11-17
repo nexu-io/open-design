@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -7,8 +8,10 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 
 import { T } from "@/timeouts";
 
@@ -410,6 +413,14 @@ async function renderFeishuBuildCard(env: Record<string, string>): Promise<Recor
 }
 
 describe("packaged smoke workflow", () => {
+  it("[P1] uses a supported Apple Silicon runner for release and prerelease smoke", async () => {
+    for (const path of [releaseBetaWorkflowPath, releasePrereleaseWorkflowPath, releasePrereleaseSmokeWorkflowPath, releaseStableWorkflowPath]) {
+      const workflow = await readFile(path, "utf8");
+      expect(workflow, path).not.toMatch(/^\s*runs-on:\s*macos-14\s*$/m);
+      expect(workflow, path).toMatch(/^\s*runs-on:\s*macos-15\s*$/m);
+    }
+  });
+
   it("[P2] keeps packaged smoke outside the main CI gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     expect(workflow).not.toContain("packaged_smoke_");
@@ -957,6 +968,13 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
     expect(workflow).toContain("--squash");
     expect(workflow).toContain("--delete-branch");
 
+    const velaGate = sectionBetween(workflow, "Check stable Vela CLI version before backport auto-merge", "Approve the clean backport");
+    expect(velaGate).toContain('steps.pr.outputs.head_oid == github.event.workflow_run.head_sha');
+    expect(velaGate).toContain('git show "$HEAD_SHA:tools/pack/package.json"');
+    expect(velaGate).toContain('git show "$HEAD_SHA:pnpm-lock.yaml"');
+    expect(velaGate).toContain('.github/scripts/release/vela-version.ts');
+    expect(workflow.indexOf("Check stable Vela CLI version before backport auto-merge")).toBeLessThan(workflow.indexOf("Approve the clean backport"));
+
     // To satisfy release/v*'s one-approval rule, the bot's own clean backport is auto-approved by
     // github-actions[bot] (pull-requests: write) — under the same author==bot gate as the merge.
     expect(workflow).toContain("pull-requests: write");
@@ -978,6 +996,12 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
     expect(feishuStep).toContain(
       "(github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out')",
     );
+    expect(feishuStep).toContain("always()");
+    expect(feishuStep).toContain("steps.vela_guard.outcome == 'failure'");
+    expect(feishuStep).toContain("steps.vela_guard.outputs.reason_b64");
+    expect(feishuStep).toContain("github.event.workflow_run.head_sha");
+    expect(velaGate).toContain('exit 1');
+    expect(velaGate).toContain('reason_b64=$reason');
     expect(feishuStep).not.toContain("'cancelled'");
   });
 
@@ -1017,6 +1041,7 @@ else { process.stderr.write("unexpected gh call: " + args + "\\n"); process.exit
     // cut-release owns); independently-versioned packages are skipped via npm pkg set version.
     expect(workflow).toContain("sort -V");
     expect(workflow).toContain("npm pkg set version");
+    expect(workflow).toContain('[ "$v" = "$current" ] || [ "$f" = "apps/packaged/package.json" ]');
     expect(workflow).toContain("changed=true");
 
     // Approval exemption is only used by trusted version-tree validation, never a direct merge.
@@ -1596,6 +1621,9 @@ process.stdin.on("end", () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const workspaceUnit = sectionBetween(workflow, "  workspace_unit_tests:", "  daemon_unit_tests:");
 
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/launcher-proto test");
+    expect(workspaceUnit).toContain("pnpm --filter @open-design/launcher test");
+
     expect(workspaceUnit).toContain(`if [ "\${{ fromJSON(needs.plan.outputs.scopes).tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/desktop build
             pnpm --filter @open-design/desktop test
@@ -1916,7 +1944,7 @@ process.stdin.on("end", () => {
     expect(uiP0Groups["critical-extras"]).toEqual({
       grep: "@merge-extra",
       workers: 1,
-      files: ["ui/app.test.ts"],
+      files: ["ui/app.test.ts", "ui/settings-amr-models.test.ts"],
     });
     expect(uiP0Groups["workspace-restoration"]).toEqual({
       fullyParallel: true,
@@ -2032,7 +2060,32 @@ process.stdin.on("end", () => {
       .map(([file]) => file)
       .sort();
 
-    expect(playwrightConfig).toContain("testIgnore: 'visual-*.test.ts'");
+    const explicitIgnores = playwrightConfig.match(/testIgnore:\s*\[([^\]]*)\]/)?.[1];
+    expect(explicitIgnores, "Keep visual ownership and private real-service lanes outside the generic UI pool").toBeDefined();
+    expect([...explicitIgnores!.matchAll(/'([^']+)'/g)].map((match) => match[1])).toEqual([
+      "visual-*.test.ts",
+      "workspace-depletion-sandbox.test.ts",
+      "api-security-view016.test.ts",
+      "workspace-free-concurrency-sandbox.test.ts",
+      "workspace-manual-retry-sandbox.test.ts",
+      "workspace-funding-sandbox.test.ts",
+      "qa-bill001.private.test.ts",
+      "workspace-notice-sandbox.test.ts",
+      "workspace-free-wallet-sandbox.test.ts",
+      "workspace-switch-billing-sandbox.test.ts",
+      "workspace-concurrency-sandbox.test.ts",
+      "workspace-concurrency-retry-sandbox.test.ts",
+      "workspace-api-wallet-sandbox.test.ts",
+      "workspace-api-wallet-readback-sandbox.test.ts",
+      "link-closure-sandbox.test.ts",
+      "link-f04-sandbox.test.ts",
+      "link-run013-sandbox.test.ts",
+      "link-run011-matrix-sandbox.test.ts",
+      "link-run003-latency-sandbox.test.ts",
+      "link-run012-checkout-sandbox.test.ts",
+      "link-run010-reconnect-sandbox.test.ts",
+      "link-run012-controlled-sandbox.test.ts",
+    ]);
     expect(benchmarkWorkflow).toContain("  workflow_call:");
     expect(benchmarkWorkflow).toContain('description: "Exact git ref to validate. Prerelease passes its resolved build commit."');
     expect(benchmarkWorkflow).toContain("ref: ${{ inputs.ref || github.sha }}");
@@ -2121,6 +2174,9 @@ process.stdin.on("end", () => {
 
     const e2eVitestGate = sectionBetween(tests, "  e2e_vitest:", "  daemon_unit_tests:");
     expect(e2eVitestGate).toContain("ref: ${{ inputs.commit }}");
+    expect(e2eVitestGate).toContain("uses: ./.github/actions/configure-ci-parallelism");
+    expect(e2eVitestGate.indexOf("uses: ./.github/actions/configure-ci-parallelism"))
+      .toBeLessThan(e2eVitestGate.indexOf("pnpm install --frozen-lockfile"));
     expect(e2eVitestGate).toContain("playwright install --with-deps chromium");
     expect(e2eVitestGate).toContain("Allow Chromium user namespaces on GitHub Ubuntu");
     expect(e2eVitestGate).toContain("kernel.apparmor_restrict_unprivileged_userns=0");
@@ -2441,8 +2497,9 @@ process.stdin.on("end", () => {
     const betaWinJob = sectionBetween(releaseBetaWorkflow, "  build_win_x64:", "  build_linux_x64:");
     expect(betaWinJob).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(betaWinJob).toContain("uses: actions/cache/restore@v5");
-    expect(betaWinJob).toContain("uses: actions/cache/save@v5");
-    expect(betaWinJob).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
+    expect(betaWinJob).not.toContain("uses: actions/cache/save@v5");
+    expect(betaWinJob).toContain("uses: ./.github/actions/defer-pack-cache");
+    expect(betaWinJob).toContain("tools-pack-win-v2-slim-beta-$env:RUNNER_OS-");
     expect(betaWinJob).toContain('"tools-pack", "win", "build"');
     expect(betaWinJob).toContain("tools-pack win validate-payload");
     expect(betaWinJob).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
@@ -2521,17 +2578,17 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("[P2] makes a publish=false beta dispatch retrievable on both platforms without touching a channel", async () => {
+  it("[P2] makes a publish=false beta dispatch retrievable on all enabled desktop platforms without touching a channel", async () => {
     // A publish=false dispatch is the standing shape for dogfood/QA builds: they
-    // must never enter the public beta feed. mac already handed back a DMG, but
-    // the Windows job produced nothing retrievable at all, so a Windows dogfood
-    // build was impossible without also publishing. Both platforms now emit a
-    // GitHub artifact plus an R2 upload under the dogfood prefix.
+    // must never enter the public beta feed. Every enabled desktop platform must
+    // retain its installer even when public publication is disabled: a GitHub
+    // artifact plus an R2 upload under the dogfood prefix.
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  build_linux_x64:");
 
-    for (const [label, job] of [["mac_arm64", macJob], ["win_x64", winJob]] as const) {
+    for (const [label, job] of [["mac_arm64", macJob], ["mac_x64", macX64Job], ["win_x64", winJob]] as const) {
       expect(job, label).toContain("run: pnpm exec tools-release publish-dogfood");
       expect(job, label).toContain("DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}");
       expect(job, label).toContain("DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}");
@@ -2540,6 +2597,11 @@ process.stdin.on("end", () => {
       expect(job, label).toContain("DOGFOOD_BUILD_JSON_PATH:");
       expect(job, label).toContain("DOGFOOD_BUILD_JSON_KEYS:");
     }
+
+    expect(macX64Job).toContain("name: open-design-beta-mac-x64-dmg");
+    expect(macX64Job).toContain("namespaces/release-beta-x64/**/*.dmg");
+    expect(macX64Job).toContain("DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json");
+    expect(macX64Job).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
 
     // The Windows installer is retrievable as a GitHub artifact too, covering
     // every win_x64_target (nsis -> setup exe, zip -> portable zip, all -> both).
@@ -2552,7 +2614,7 @@ process.stdin.on("end", () => {
     const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
       /publish-dogfood|for manual distribution/.test(step)
     );
-    expect(dogfoodSteps).toHaveLength(4);
+    expect(dogfoodSteps).toHaveLength(6);
     for (const step of dogfoodSteps) {
       expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
     }
@@ -3032,6 +3094,18 @@ process.stdin.on("end", () => {
     expect(smoke).toContain("OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.version }}");
     expect(smoke).toContain("OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease");
 
+    // The smoke command, not report persistence, determines whether the
+    // advisory validation passed. GitHub's artifact service can be temporarily
+    // unavailable after all smoke assertions have completed.
+    for (const stepName of [
+      "Upload mac arm64 smoke report",
+      "Upload mac intel smoke report",
+      "Upload windows smoke report",
+    ]) {
+      const step = sectionBetween(smoke, `      - name: ${stepName}`, "        with:");
+      expect(step, stepName).toContain("continue-on-error: true");
+    }
+
     // The staged path must stay in lockstep with resolveMacPaths().dmgPath and
     // resolveWinPaths().setupPath, which is the only file `tools-pack install`
     // reads. A drift here fails as "no mac dmg found at ...".
@@ -3476,6 +3550,216 @@ process.stdin.on("end", () => {
 
     expect(prepareStep).toContain(artifactMode);
     expect(publishStep).toContain(artifactMode);
+  });
+
+  it("[P1] reserves prerelease versions before building and validates ownership before publishing", async () => {
+    const workflow = parseYaml(await readFile(releasePrereleaseWorkflowPath, "utf8"));
+    expect(workflow.env).toMatchObject({
+      RELEASE_REPOSITORY: "${{ github.repository }}",
+      RELEASE_RUN_ID: "${{ github.run_id }}",
+      RELEASE_WORKFLOW: "${{ github.workflow }}",
+    });
+    const metadata = workflow.jobs.metadata;
+    const reservation = metadata.steps.find((step: { id?: string }) => step.id === "reservation");
+    expect(reservation?.run).toBe("pnpm exec tools-release reserve-version prerelease");
+    expect(reservation.env.RELEASE_VERSION_CANDIDATE).toBe("${{ steps.prerelease.outputs.release_version }}");
+    for (const name of ["prerelease_version", "prerelease_number", "release_version", "release_number", "release_name", "state_source", "version_lock_key"]) {
+      expect(metadata.outputs[name]).toBe(`\${{ steps.reservation.outputs.${name} }}`);
+    }
+    for (const job of Object.values(workflow.jobs) as Array<{ steps?: Array<{ run?: string; env?: Record<string, string> }> }>) {
+      for (const step of job.steps ?? []) {
+        if (!/tools-release publish-(platform|metadata)$/.test(step.run ?? "")) continue;
+        expect(step.env?.RELEASE_VERSION_LOCK_REQUIRED).toBe("true");
+        expect(step.env?.RELEASE_VERSION_LOCK_KEY).toBe("${{ needs.metadata.outputs.version_lock_key }}");
+      }
+    }
+  });
+
+  it("[P1] skips legacy prerelease artifacts without locks and reserves separate versions for concurrent runs", async () => {
+    const version = "1.2.3-prerelease.4";
+    const legacyKey = `prerelease/versions/${version}/open-design-${version}-mac-arm64.dmg`;
+    const fixture = await startReleaseMetadataObjectStore({ [legacyKey]: Buffer.from("old signed dmg") });
+    const root = await mkdtemp(join(tmpdir(), "od-prerelease-reservation-"));
+    const reserve = async (runId: string, attempt = "1", overrides: Record<string, string> = {}) => {
+      const metadataDir = join(root, `${runId}-${attempt}`);
+      await mkdir(metadataDir, { recursive: true });
+      const outputsPath = join(metadataDir, "outputs.txt");
+      await execFileAsync(process.execPath, ["--experimental-strip-types", "tools/release/src/index.ts", "reserve-version", "prerelease"], {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          BASE_VERSION: "1.2.3",
+          GITHUB_OUTPUT: outputsPath,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_COMMIT: "abc123",
+          RELEASE_LANE: "release-prerelease",
+          RELEASE_METADATA_DIR: metadataDir,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_REPOSITORY: "nexu-io/open-design",
+          RELEASE_RUN_ID: runId,
+          RELEASE_RUN_ATTEMPT: attempt,
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_VERSION_CANDIDATE: version,
+          RELEASE_VERSION_MANUAL_OVERRIDE: "false",
+          RELEASE_VERSION_RESERVATION_MAX_ATTEMPTS: "10",
+          RELEASE_WORKFLOW: "release-prerelease",
+          ...overrides,
+        },
+      });
+      return Object.fromEntries((await readFile(outputsPath, "utf8")).trim().split("\n").map((line) => {
+        const separator = line.indexOf("=");
+        return [line.slice(0, separator), line.slice(separator + 1)];
+      }));
+    };
+    try {
+      const results = await Promise.all([reserve("101"), reserve("102")]);
+      expect(results.map((result) => result.release_version).sort()).toEqual(["1.2.3-prerelease.5", "1.2.3-prerelease.6"]);
+      expect(fixture.object(legacyKey)).toEqual(Buffer.from("old signed dmg"));
+      expect(fixture.object(`prerelease/versions/${version}/version.lock.json`)).toBeNull();
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index]!;
+        expect(JSON.parse(fixture.object(result.version_lock_key!)!.toString())).toMatchObject({
+          channel: "prerelease", releaseVersion: result.release_version, owner: { runId: index + 101 },
+        });
+      }
+      const retry = await reserve("101");
+      expect(retry.release_version).toBe(results[0]!.release_version);
+      expect(retry.prerelease_version).toBe(retry.release_version);
+      expect(retry.prerelease_number).toBe(retry.release_number);
+      const rerun = await reserve("101", "2");
+      expect(rerun.release_version).toBe("1.2.3-prerelease.7");
+      await expect(reserve("103", "1", { RELEASE_VERSION_MANUAL_OVERRIDE: "true" }))
+        .rejects.toThrow("already occupied");
+      await expect(reserve("104", "1", { RELEASE_VERSION_RESERVATION_MAX_ATTEMPTS: "1" }))
+        .rejects.toThrow("failed to reserve a prerelease version after 1 attempts");
+    } finally {
+      await fixture.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("refuses to replace a versioned release asset with different bytes", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-immutable-assets-"));
+    const assetsDir = join(runnerTemp, "assets");
+    const manifestDir = join(runnerTemp, "manifests");
+    const outputsPath = join(runnerTemp, "outputs.json");
+    const version = "1.2.3-prerelease.4";
+    const assetName = `open-design-${version}-mac-arm64.dmg`;
+    const objectKey = `prerelease/versions/${version}/${assetName}`;
+    const firstBytes = Buffer.from("first signed dmg");
+    const secondBytes = Buffer.from("different signed dmg");
+    const writeAssets = async (bytes: Buffer) => {
+      await writeFile(join(assetsDir, assetName), bytes);
+      await writeFile(
+        join(assetsDir, `${assetName}.sha256`),
+        `${createHash("sha256").update(bytes).digest("hex")}  ${assetName}\n`,
+      );
+    };
+    const publish = () => execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", releaseBetaPlatformPublishScriptPath],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          RELEASE_ARTIFACT_MODE: "dmg-only",
+          RELEASE_ASSETS_DIR: assetsDir,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_MANIFEST_DIR: manifestDir,
+          RELEASE_OUTPUTS_PATH: outputsPath,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_SIGNED: "true",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_TARGET: "mac_arm64",
+          RELEASE_VERSION: version,
+        },
+      },
+    );
+
+    try {
+      await mkdir(assetsDir, { recursive: true });
+      await writeAssets(firstBytes);
+      await publish();
+      await writeAssets(secondBytes);
+
+      await expect(publish()).rejects.toThrow(/immutable release asset already exists with different content/);
+      expect(fixture.object(objectKey)).toEqual(firstBytes);
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
+  });
+
+  it("publishes both macOS architectures while keeping their shared feed replaceable", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
+    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-shared-mac-feed-"));
+    const assetsDir = join(runnerTemp, "assets");
+    const manifestDir = join(runnerTemp, "manifests");
+    const outputsPath = join(runnerTemp, "outputs.json");
+    const version = "1.2.3-prerelease.4";
+    const versionPrefix = `prerelease/versions/${version}`;
+    const writeAsset = async (name: string, bytes: Buffer) => {
+      await writeFile(join(assetsDir, name), bytes);
+      await writeFile(
+        join(assetsDir, `${name}.sha256`),
+        `${createHash("sha256").update(bytes).digest("hex")}  ${name}\n`,
+      );
+    };
+    const writeMacAssets = async (arch: "arm64" | "x64") => {
+      await rm(assetsDir, { force: true, recursive: true });
+      await mkdir(assetsDir, { recursive: true });
+      await writeAsset(`open-design-${version}-mac-${arch}.dmg`, Buffer.from(`${arch} dmg`));
+      await writeAsset(`open-design-${version}-mac-${arch}-payload.zip`, Buffer.from(`${arch} payload`));
+      await writeAsset(`open-design-${version}-mac-${arch}.zip`, Buffer.from(`${arch} zip`));
+      await writeFile(join(assetsDir, "latest-mac.yml"), `arch: ${arch}\n`);
+    };
+    const publish = (target: "mac_arm64" | "mac_x64") => execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", releaseBetaPlatformPublishScriptPath],
+      {
+        cwd: workspaceRoot,
+        env: {
+          ...process.env,
+          RELEASE_ARTIFACT_MODE: "all",
+          RELEASE_ASSETS_DIR: assetsDir,
+          RELEASE_CHANNEL: "prerelease",
+          RELEASE_MANIFEST_DIR: manifestDir,
+          RELEASE_OUTPUTS_PATH: outputsPath,
+          RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
+          RELEASE_SIGNED: "true",
+          RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
+          RELEASE_STORAGE_BUCKET: fixture.bucket,
+          RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
+          RELEASE_STORAGE_REGION: "auto",
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: "test-secret-key",
+          RELEASE_TARGET: target,
+          RELEASE_VERSION: version,
+        },
+      },
+    );
+
+    try {
+      await writeMacAssets("arm64");
+      await publish("mac_arm64");
+      await writeMacAssets("x64");
+      await publish("mac_x64");
+
+      expect(fixture.object(`${versionPrefix}/latest-mac.yml`)).toEqual(Buffer.from("arch: x64\n"));
+      expect(fixture.object(`${versionPrefix}/platforms/mac_arm64.json`)).not.toBeNull();
+      expect(fixture.object(`${versionPrefix}/platforms/mac_x64.json`)).not.toBeNull();
+    } finally {
+      await fixture.close();
+      await rm(runnerTemp, { force: true, recursive: true });
+    }
   });
 
   it("rejects stale latest platform manifests from a previous beta version", async () => {
@@ -4173,6 +4457,7 @@ async function startReleaseMetadataObjectStore(objects: Record<string, unknown>)
   bucket: string;
   close: () => Promise<void>;
   endpointUrl: string;
+  object: (key: string) => Buffer | null;
   uploadedObjectKeys: () => string[];
 }> {
   const bucket = "release-bucket";
@@ -4201,6 +4486,11 @@ async function startReleaseMetadataObjectStore(objects: Record<string, unknown>)
         server.close((error) => (error == null ? resolve() : reject(error)));
       }),
     endpointUrl: `http://127.0.0.1:${address.port}`,
+    object: (key) => {
+      const value = objects[key];
+      if (Buffer.isBuffer(value)) return value;
+      return value == null ? null : Buffer.from(JSON.stringify(value));
+    },
     uploadedObjectKeys: () => [...uploadedObjectKeys],
   };
 }
@@ -4212,7 +4502,15 @@ async function handleReleaseMetadataObjectStoreRequest(
   objects: Record<string, unknown>,
   uploadedObjectKeys: string[],
 ): Promise<void> {
-  const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const path = url.pathname;
+  if (request.method === "GET" && path === `/${bucket}/` && url.searchParams.get("list-type") === "2") {
+    const prefix = url.searchParams.get("prefix") ?? "";
+    const count = Object.keys(objects).some((key) => key.startsWith(prefix)) ? 1 : 0;
+    response.setHeader("content-type", "application/xml");
+    response.end(`<ListBucketResult><KeyCount>${count}</KeyCount></ListBucketResult>`);
+    return;
+  }
   const bucketPrefix = `/${bucket}/`;
   if (!path.startsWith(bucketPrefix)) {
     response.statusCode = 404;
@@ -4227,17 +4525,23 @@ async function handleReleaseMetadataObjectStoreRequest(
       response.end("not found");
       return;
     }
-    const body = JSON.stringify(objects[objectKey]);
+    const value = objects[objectKey];
+    const body = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value));
     response.setHeader("content-type", "application/json; charset=utf-8");
     response.end(body);
     return;
   }
 
   if (request.method === "PUT") {
-    uploadedObjectKeys.push(objectKey);
-    for await (const _chunk of request) {
-      // Drain the request body so the client can complete cleanly.
+    if (request.headers["if-none-match"] === "*" && objectKey in objects) {
+      response.statusCode = 412;
+      response.end("precondition failed");
+      return;
     }
+    uploadedObjectKeys.push(objectKey);
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    objects[objectKey] = Buffer.concat(chunks);
     response.statusCode = 200;
     response.end("ok");
     return;
@@ -4295,3 +4599,97 @@ ZyGlUhPCUbKdTiBJuCGaDKzeEAlC8dsar2zjg9CVue7w3CaamQpjnV0d2IHJiVAH
 QONQvdtLnZ6GeNPe06oBrq7R9SL5/tkqgSq8lCrDE6jFZnfXNMdDmZY3wTcFcdyG
 yW/DsIUs5ZzcHza5rw==
 -----END CERTIFICATE-----`;
+
+
+describe("packaging optimization workflow boundaries", () => {
+  it.each([
+    { name: "same commit", sourceSha: "current", status: "identical", accepted: true },
+    { name: "branch advanced", sourceSha: "previous", status: "ahead", accepted: true },
+    { name: "diverged history", sourceSha: "previous", status: "diverged", accepted: false },
+    { name: "future commit", sourceSha: "previous", status: "behind", accepted: false },
+    { name: "other repository", repository: "other/repo", accepted: false },
+    { name: "other branch", branch: "other", accepted: false },
+    { name: "PR event", event: "pull_request", accepted: false },
+  ])("validates cache provenance when $name", async (scenario) => {
+    const workflow = parseYaml(await readFile(join(workspaceRoot, ".github/workflows/cache-maintenance.yml"), "utf8"));
+    const script = workflow.jobs["save-windows-pack"].steps[0].with.script;
+    const outputs: Record<string, string> = {};
+    const sourceSha = scenario.sourceSha ?? "current";
+    const result = runInNewContext(`(async () => { ${script} })()`, {
+      process: { env: { SOURCE_RUN_ID: "123" } },
+      context: { repo: { owner: "nexu-io", repo: "open-design" }, ref: "refs/heads/test", sha: "current" },
+      core: { setOutput: (key: string, value: string) => { outputs[key] = value; } },
+      github: { rest: {
+        actions: { getWorkflowRun: async () => ({ data: {
+          event: scenario.event ?? "workflow_dispatch", head_repository: { full_name: scenario.repository ?? "nexu-io/open-design" },
+          head_branch: scenario.branch ?? "test", head_sha: sourceSha,
+        } }) },
+        repos: { compareCommitsWithBasehead: async (args: { basehead: string }) => {
+          expect(args.basehead).toBe(`${sourceSha}...current`);
+          return { data: { status: scenario.status } };
+        } },
+      } },
+    });
+    if (scenario.accepted) {
+      await result;
+      expect(outputs.head_sha).toBe(sourceSha);
+      expect(outputs.source_is_current).toBe(sourceSha === "current" ? "true" : "false");
+    } else {
+      await expect(result).rejects.toThrow();
+      expect(outputs).toEqual({});
+    }
+  });
+
+  it("persists Windows caches in an independent workflow after artifacts are published", async () => {
+    for (const [file, job] of [[releaseBetaWorkflowPath, "build_win_x64"], [releasePrereleaseWorkflowPath, "build_win"], [releaseStableWorkflowPath, "build_win"]] as const) {
+      const workflow = parseYaml(await readFile(file, "utf8"));
+      const steps = workflow.jobs[job].steps;
+      expect(steps.some((step: { uses?: string }) => step.uses === "actions/cache/save@v5")).toBe(false);
+      const deferred = steps.findIndex((step: { uses?: string }) => step.uses === "./.github/actions/defer-pack-cache");
+      expect(deferred).toBe(steps.length - 1);
+      expect(steps[deferred]["continue-on-error"]).toBe(true);
+      expect(steps[deferred].if).toContain("success()");
+      // actions/cache hashes the literal path spelling into the cache version.
+      // A Windows backslash/forward-slash mismatch silently misses every cache.
+      const restore = steps.find((step: { name?: string }) => step.name === "Restore Windows tools-pack cache");
+      expect(restore.with.path).toBe("${{ runner.temp }}/tools-pack-cache");
+      expect(JSON.stringify(workflow.jobs.publish.needs)).not.toContain("cache");
+    }
+    const maintenance = parseYaml(await readFile(join(workspaceRoot, ".github/workflows/cache-maintenance.yml"), "utf8"));
+    const saver = maintenance.jobs["save-windows-pack"];
+    expect(saver.steps.find((step: { id?: string }) => step.id === "save").with.path)
+      .toBe("${{ runner.temp }}/tools-pack-cache");
+    expect(saver.concurrency.group).not.toContain("release");
+    expect(saver.steps.findIndex((step: { name: string }) => step.name === "Validate source run"))
+      .toBeLessThan(saver.steps.findIndex((step: { uses?: string }) => step.uses === "actions/download-artifact@v8"));
+    const validate = saver.steps.find((step: { name: string }) => step.name === "Validate source run").with.script;
+    expect(validate).toContain("compareCommitsWithBasehead");
+    expect(validate).toContain("run.head_repository.full_name");
+    expect(validate).toContain("run.head_branch !== context.ref");
+    const extract = saver.steps.find((step: { name: string }) => step.name === "Verify and extract cache snapshot");
+    expect(extract.env.SOURCE_HEAD_SHA).toBe("${{ steps.source.outputs.head_sha }}");
+    expect(extract.run).toContain("$data.head_sha -ne $env:SOURCE_HEAD_SHA");
+    expect(validate).toContain("source_is_current");
+    const retain = saver.steps.find((step: { name: string }) => step.name === "Retain newest cache for this ref and channel");
+    expect(retain.if).toBe("steps.source.outputs.source_is_current == 'true'");
+    expect(retain.run).toContain("--sort created_at");
+    const composite = await readFile(join(workspaceRoot, ".github/actions/defer-pack-cache/action.yml"), "utf8");
+    expect(composite).toContain("handoff.py artifact-name pack-cache windows");
+    expect(composite).toContain("gh workflow run cache-maintenance.yml");
+    expect(composite).toContain("compression-level: 0");
+    expect(composite).toContain("gzip:compression-level=1");
+  });
+
+  it("checks the exact beta build commit independently without changing prerelease delivery gates", async () => {
+    const beta = parseYaml(await readFile(releaseBetaWorkflowPath, "utf8"));
+    expect(beta.jobs.typecheck.steps[0].with.ref).toBe("${{ needs.metadata.outputs.commit }}");
+    expect(beta.jobs.typecheck.steps.some((step: { run?: string }) => step.run === "pnpm --filter @open-design/web typecheck")).toBe(true);
+    for (const id of ["build_mac_arm64", "build_mac_x64", "build_win_x64", "publish"]) {
+      expect(JSON.stringify(beta.jobs[id].needs)).not.toContain("typecheck");
+    }
+    const prerelease = parseYaml(await readFile(releasePrereleaseWorkflowPath, "utf8"));
+    expect(prerelease.jobs.build_win.needs).toBe("metadata");
+    expect(prerelease.jobs.build_mac.needs).toBe("metadata");
+    expect(Object.keys(prerelease.jobs).some((id) => id.includes("cache"))).toBe(false);
+  });
+});

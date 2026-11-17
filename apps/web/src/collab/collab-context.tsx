@@ -16,6 +16,8 @@ export interface CollabContextValue extends ProjectCollab {
   /** Whether project-owned resources may use local or exact Workspace reads.
    * Optional only for standalone consumers; ProjectView always supplies it. */
   projectResourceAuthority?: ProjectResourceAuthority;
+  /** The project's explicit shared state, independent of Workspace type. */
+  projectVisibility?: 'personal' | 'team';
   /** Persist a drifted-to-`lost` comment's last-good position (needs the active
    * conversation id, which only ProjectView has). Absent when unavailable. */
   onLostAnchors?: (writeBacks: AnchorWriteBack[]) => void;

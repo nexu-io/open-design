@@ -73,7 +73,10 @@
     "preview": {
       "type": "html",
       "entry": "./example.html",
-      "poster": "./assets/cover.jpg"
+      "poster": "./assets/cover.jpg",
+      "motion": "static",
+      "galleryPosterOnly": true,
+      "bakeStillAtSec": 17.2
     },
     "useCase": {
       "query": {

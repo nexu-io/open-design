@@ -44,3 +44,12 @@ it('does not trust arbitrary diagnostic-shaped errors', () => {
   expect(publicShareProjectBootstrapDiagnostic({ stage: 'credential-secret', failure: { reason: 'credential-secret' } }))
     .toEqual({ stage: 'bootstrap', failure: { reason: 'unknown' } });
 });
+it('preserves a server refusal through bootstrap without exposing diagnostic text', async () => {
+  const { classifyVelaCommandFailure } = await import('../src/collab/public-file-failure.js');
+  const run = vi.fn(async () => { throw safeVelaCommandError('VELA_PINNED_COMMAND_FAILED', Object.assign(new Error('secret'), { stderr: 'API request failed with status 403: team_project_frozen' })); });
+  let caught: unknown;
+  try { await ensurePublicShareProject({ projectId: 'p', principal, run, describeProject: () => ({ metadata: {} }) }); }
+  catch (error) { caught = error; }
+  expect(classifyVelaCommandFailure('push', caught)).toEqual({ stage: 'push', reason: 'upstream_http', upstreamStatus: 403, upstreamCode: 'team_project_frozen' });
+  expect(String(caught)).not.toContain('secret');
+});

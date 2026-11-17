@@ -15,6 +15,8 @@ import {
   getProject,
   getWorkspaceProjectByProjectId,
   getProjectCommentReadState,
+  getFileCommentReadState,
+  markFileCommentsSeen,
   isProjectCommentAnchorConversationId,
   markProjectCommentsRead,
 } from '../../db.js';
@@ -497,6 +499,8 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     if (!getProject(db, req.params.id)) return res.status(404).json({ error: 'project not found' });
     const resolution = await resolveReadRequestWorkspaceContext(req, req.params.id);
     if (!resolution.ok) return sendWorkspaceResolutionError(res, resolution);
+    const filePath = typeof req.query.filePath === 'string' ? req.query.filePath : null;
+    if (filePath) return res.json(getFileCommentReadState(db, req.params.id, viewerScopeFor(resolution.context), filePath));
     return res.json(getProjectCommentReadState(db, req.params.id, viewerScopeFor(resolution.context)));
   });
 
@@ -505,6 +509,13 @@ export function registerProjectCommentRoutes(app: Express, ctx: RegisterProjectC
     const resolution = await resolveRequestWorkspaceContext(req, req.params.id);
     if (!resolution.ok) return sendWorkspaceResolutionError(res, resolution);
     const body = req.body as Partial<ProjectCommentReadRequest> | undefined;
+    if (body?.filePath !== undefined || body?.commentIds !== undefined) {
+      if (typeof body.filePath !== 'string' || !body.filePath.trim() || !Array.isArray(body.commentIds)
+        || body.commentIds.length > 500 || body.commentIds.some(id => typeof id !== 'string' || !id || id.length > 256)) {
+        return res.status(400).json({ error: 'filePath and up to 500 commentIds are required' });
+      }
+      return res.json(markFileCommentsSeen(db, req.params.id, viewerScopeFor(resolution.context), body.filePath, body.commentIds));
+    }
     if (!Number.isFinite(body?.readAt)) {
       return res.status(400).json({ error: 'readAt must be a finite number' });
     }

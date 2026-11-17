@@ -74,13 +74,13 @@ function objectUrl(config: StorageConfig, objectKey: string): { canonicalUri: st
   return { canonicalUri, url };
 }
 
-function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string): string {
+function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string, canonicalQuery = ""): string {
   const signedHeaders = Object.keys(headers).sort().join(";");
   const canonicalHeaders = Object.keys(headers)
     .sort()
     .map((name) => `${name}:${headers[name]}\n`)
     .join("");
-  const canonicalRequest = [method, canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
+  const canonicalRequest = [method, canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, payloadHash].join("\n");
   const credentialScope = `${dateStamp}/${config.region}/s3/aws4_request`;
   const stringToSign = ["AWS4-HMAC-SHA256", headers["x-amz-date"], credentialScope, hash(canonicalRequest)].join("\n");
   const signingKey = hmac(hmac(hmac(hmac(`AWS4${config.secretAccessKey}`, dateStamp), config.region), "s3"), "aws4_request");
@@ -236,4 +236,40 @@ export async function getStorageObject(options: GetObjectOptions): Promise<{ byt
 export async function getStorageObjectText(options: GetObjectOptions): Promise<string | null> {
   const object = await getStorageObject(options);
   return object?.text ?? null;
+}
+
+/** Check the origin bucket for any object under a prefix without downloading release artifacts. */
+export async function storagePrefixHasObjects(options: StorageConfig & { prefix: string }): Promise<boolean> {
+  const { canonicalUri, url } = objectUrl(options, "");
+  const canonicalQuery = `list-type=2&max-keys=1&prefix=${encodePathSegment(options.prefix)}`;
+  url.search = canonicalQuery;
+  const payloadHash = hash("");
+  const response = await signedFetchWithRetry(`LIST ${url}`, () => {
+    const { amzDate, dateStamp } = amzTimestamp(new Date());
+    const headers: Record<string, string> = {
+      host: url.host,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate,
+    };
+    if (options.sessionToken != null && options.sessionToken.length > 0) {
+      headers["x-amz-security-token"] = options.sessionToken;
+    }
+    return {
+      init: {
+        method: "GET",
+        headers: {
+          ...headers,
+          Authorization: authorizationHeader(options, "GET", canonicalUri, headers, payloadHash, dateStamp, canonicalQuery),
+        },
+      },
+      url,
+    };
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`LIST ${url} failed with HTTP ${response.status}: ${body}`);
+  const count = /<KeyCount>\s*([01])\s*<\/KeyCount>/.exec(body);
+  if (count == null || !body.includes("</ListBucketResult>")) {
+    throw new Error(`invalid ListObjectsV2 response for ${options.prefix}`);
+  }
+  return count[1] === "1";
 }

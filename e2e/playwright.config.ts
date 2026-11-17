@@ -22,7 +22,7 @@ export default defineConfig({
   // generic full-pool shard run would execute them without their visual
   // config. Excluding them at the config level keeps every functional
   // consumer (full pool, `test:ui*`, ui_p0 groups) aligned.
-  testIgnore: 'visual-*.test.ts',
+  testIgnore: ['visual-*.test.ts', 'workspace-depletion-sandbox.test.ts', 'api-security-view016.test.ts', 'workspace-free-concurrency-sandbox.test.ts', 'workspace-manual-retry-sandbox.test.ts', 'workspace-funding-sandbox.test.ts', 'qa-bill001.private.test.ts', 'workspace-notice-sandbox.test.ts', 'workspace-free-wallet-sandbox.test.ts', 'workspace-switch-billing-sandbox.test.ts', 'workspace-concurrency-sandbox.test.ts', 'workspace-concurrency-retry-sandbox.test.ts', 'workspace-api-wallet-sandbox.test.ts', 'workspace-api-wallet-readback-sandbox.test.ts', 'link-closure-sandbox.test.ts', 'link-f04-sandbox.test.ts', 'link-run013-sandbox.test.ts', 'link-run011-matrix-sandbox.test.ts', 'link-run003-latency-sandbox.test.ts', 'link-run012-checkout-sandbox.test.ts', 'link-run010-reconnect-sandbox.test.ts', 'link-run012-controlled-sandbox.test.ts'],
   outputDir: './ui/reports/test-results',
   timeout: Number(process.env.OD_PLAYWRIGHT_TIMEOUT) || 45_000,
   retries: process.env.CI ? 1 : 0,

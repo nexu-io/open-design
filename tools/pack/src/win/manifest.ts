@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { packagedAmrConfigFields, writePackagedConfigWithBinding } from "../config/amr-endpoint-binding.js";
 import type { ToolPackConfig } from "../config/index.js";
 import { readRuntimeAppVersion } from "../versioning/index.js";
 import { pathExists } from "./fs.js";
@@ -22,7 +23,7 @@ function createPackagedConfig(
   entrypoints: PackagedConfigEntrypoints = {},
 ): Record<string, unknown> {
   return {
-    ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
+    ...packagedAmrConfigFields(config),
     appVersion: packagedVersion,
     ...entrypoints,
     namespace: config.namespace,
@@ -30,8 +31,6 @@ function createPackagedConfig(
     ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),
     ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
     ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
-    ...(config.velaWebUrl == null ? {} : { velaWebUrl: config.velaWebUrl }),
-    ...(config.velaWebUrls == null ? {} : { velaWebUrls: config.velaWebUrls }),
     webOutputMode: config.webOutputMode,
     ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
   };
@@ -44,10 +43,9 @@ export async function writePackagedConfigFile(
   entrypoints: PackagedConfigEntrypoints = {},
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(
+  await writePackagedConfigWithBinding(
     filePath,
-      `${JSON.stringify(createPackagedConfig(config, packagedVersion, entrypoints), null, 2)}\n`,
-    "utf8",
+    `${JSON.stringify(createPackagedConfig(config, packagedVersion, entrypoints), null, 2)}\n`,
   );
 }
 

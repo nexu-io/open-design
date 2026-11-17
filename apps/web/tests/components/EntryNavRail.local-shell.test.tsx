@@ -2,8 +2,8 @@
 //
 // OPEND-3140 — the signed-out (local CLI / BYOK) shell gets the same entry
 // rail layout the cloud shell has: the 最近项目 section fed from the local
-// project list with live run status, the 项目 destination, and the message
-// centre riding the rail's foot dock instead of being a bare rail item.
+// project list with live run status and the 项目 destination. A01 keeps the
+// sign-in footer without the former local identity/notification row.
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -172,28 +172,16 @@ describe('EntryNavRail local (signed-out) shell', () => {
     expect(screen.queryByTestId('entry-nav-all-projects')).toBeNull();
   });
 
-  it('docks the message centre beside a local identity row at the rail foot, like the cloud shell', async () => {
-    renderLocalRail();
-    const dock = document.querySelector('.entry-nav-rail__account-dock') as HTMLElement | null;
-    expect(dock).not.toBeNull();
-    const bell = within(dock!).getByTestId('entry-nav-message-center');
-    expect(bell.classList.contains('entry-nav-rail__account-bell')).toBe(true);
-    expect(bell.getAttribute('aria-haspopup')).toBe('dialog');
-    // Not a plain rail destination any more.
-    expect(bell.classList.contains('entry-nav-rail__btn')).toBe(false);
-    expect(document.querySelector('.entry-nav-rail__group [data-testid="entry-nav-message-center"]')).toBeNull();
-    // The social links ride the dock, above the identity row, as they do signed in.
-    expect(within(dock!).getByTestId('entry-nav-rail-social')).toBeTruthy();
-    // The sign-in card keeps its slot in the footer.
+  it.each([true, false])('keeps the A01 sign-in footer without a local identity or notification row (open=%s)', (open) => {
+    const { onOpenSettings } = renderLocalRail({ open });
+    expect(screen.queryByTestId('entry-nav-local-account')).toBeNull();
+    expect(screen.queryByTestId('entry-nav-message-center')).toBeNull();
     expect(screen.getByTestId('local-sign-in-card')).toBeTruthy();
-    fireEvent.click(bell);
-    await waitFor(() => expect(screen.getByTestId('message-center-dialog')).toBeTruthy());
-    expect(bell.getAttribute('aria-expanded')).toBe('true');
-  });
-
-  it('opens Settings from the local identity row', () => {
-    const { onOpenSettings } = renderLocalRail();
-    fireEvent.click(screen.getByTestId('entry-nav-local-account'));
+    // Existing community links are outside this local-row correction.
+    expect(screen.getByTestId('entry-nav-rail-social')).toBeTruthy();
+    // Settings remains a single navigation destination after removing the
+    // duplicate local identity trigger.
+    fireEvent.click(screen.getByTestId('entry-settings-button'));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 });

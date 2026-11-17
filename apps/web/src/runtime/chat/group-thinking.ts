@@ -96,6 +96,8 @@ export function groupThinking(
   for (const item of items) {
     if (isThinking(item)) {
       // 空白段落不占一格,但也不该把前后两段推理**切断**,所以过滤在 isThinking 里
+      // 合并标题后,两段自动续跑的推理各成一格(见 `ShellText.segment`)
+      if (run && (run[0]!.segment ?? 0) !== ((item as ShellText).segment ?? 0)) flush();
       (run ??= []).push(item as ShellText);
       continue;
     }

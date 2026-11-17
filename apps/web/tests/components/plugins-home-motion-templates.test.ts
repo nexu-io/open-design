@@ -14,6 +14,7 @@ import { CURATED_MOTION_DESIGN_PLUGIN_IDS } from '../../src/components/plugins-h
 import { examplePresetSeedPrompt } from '../../src/components/plugins-home/presetSeedPrompt';
 import { homePresetCopy } from '../../src/components/plugins-home/homePresetCopy';
 import { localizePluginTitle } from '../../src/components/plugins-home/localization';
+import { inferPluginPreview } from '../../src/components/plugins-home/preview';
 import { LOCALES } from '../../src/i18n/types';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
@@ -55,6 +56,26 @@ describe('curated motion design templates', () => {
       expect(seed.text, locale).toBe(manifest.od.useCase.query[locale]);
       expect(seed.text, locale).toMatch(/15|۱۵/);
     }
+  });
+
+  it('uses the chosen Future cover even when an older baked clip is attached', () => {
+    const id = 'example-motion-future';
+    const manifest = JSON.parse(readFileSync(path.join(dirs.get(id)!, 'open-design.json'), 'utf8'));
+    manifest.od.bakedPreview = {
+      poster: 'https://cdn.example.com/black-poster.jpg',
+      video: 'https://cdn.example.com/black-preview.mp4',
+      holdMs: 2500,
+    };
+    const record = { id, manifest } as InstalledPluginRecord;
+
+    expect(inferPluginPreview(record, { preferBaked: true })).toMatchObject({
+      kind: 'media',
+      mediaType: 'image',
+      poster: `/api/plugins/${id}/asset/assets/cover.jpg`,
+      videoUrl: null,
+      imageOnly: true,
+    });
+    expect(inferPluginPreview(record).kind).toBe('html');
   });
 
   it('uses the renamed paper story consistently across Home and Community in all supported locales', () => {

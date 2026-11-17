@@ -115,32 +115,6 @@ describe('plan continuation marker', () => {
     expect(parsed.visibleText.trim()).toBe('Done.');
     expect(parsed.productionReady).toBe(false);
   });
-  it.each(['identical', 'conflicting', 'malformed'] as const)(
-    'ignores %s repeated legacy states and uses only the current production marker', mode => {
-      const state = {
-        schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
-        outcome: 'plan_ready', executionMode: 'simple', executionIntent: 'produce', reasonCodes: [],
-      };
-      const bodies = mode === 'malformed'
-        ? ['{broken}', '{also broken}']
-        : [JSON.stringify(state), JSON.stringify(mode === 'conflicting'
-          ? { ...state, executionMode: null, executionIntent: 'plan_only' }
-          : state)];
-      const legacy = bodies.map(body => `<open-design-runtime-state>\n${body}\n</open-design-runtime-state>`).join('\n');
-      for (const ready of [false, true]) {
-        const text = `Plan: create a blue landing page.\n${legacy}\n${ready ? marker : ''}`;
-        // Streaming chunk boundaries must not turn retired metadata into a
-        // completion gate or let it supply production intent.
-        const stream = createOdNextRunProtocol(null, key);
-        let visible = '';
-        for (const char of text) visible += stream.push(char);
-        const result = stream.finish();
-        expect(result.parsed.productionReady).toBe(ready);
-        expect((visible + result.visibleTail).trim()).toBe('Plan: create a blue landing page.');
-        expect(result.parsed.visibleText).toBe(visible + result.visibleTail);
-      }
-    },
-  );
   it('bounds a very long line without treating its suffix as a new control line', () => {
     const stream = createOdNextRunProtocol(null, key);
     const text = 'x'.repeat(5000) + marker;

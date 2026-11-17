@@ -51,3 +51,38 @@ describe('Owner saved-comment DOM location (OPEND-3516)', () => {
     } finally { dom.window.close(); }
   });
 });
+
+describe('OPEND-3887 published-source comment identities', () => {
+  it.each([undefined, 'authored-title', 'path-0-0'])('does not persist preview-generated IDs (authored=%s)', authored => {
+    const parser = new JSDOM('');
+    vi.stubGlobal('DOMParser', parser.window.DOMParser);
+    const source = `<html><body><header><h1${authored ? ` data-od-id="${authored}"` : ''}>Published title</h1></header></body></html>`;
+    const srcdoc = buildSrcdoc(source, { commentBridge: true });
+    vi.unstubAllGlobals();
+    const dom = new JSDOM(srcdoc, { runScripts: 'outside-only', pretendToBeVisual: true });
+    try {
+      const win = dom.window;
+      const postMessage = vi.fn();
+      Object.defineProperty(win, 'parent', { value: { postMessage }, configurable: true });
+      const target = win.document.querySelector('h1')!;
+      Object.defineProperty(target, 'getBoundingClientRect', { value: () =>
+        ({ x: 20, y: 80, top: 80, left: 20, right: 220, bottom: 120, width: 200, height: 40 }) });
+      const script = srcdoc.match(/<script data-od-selection-bridge>([\s\S]*?)<\/script>/)?.[1];
+      if (!script) throw new Error('Missing selection bridge');
+      new win.Function(script).call(win);
+      win.dispatchEvent(new win.MessageEvent('message', { data: { type: 'od:comment-mode', enabled: true } }));
+      target.dispatchEvent(new win.MouseEvent('click', { bubbles: true, clientX: 30, clientY: 90 }));
+      const picked = postMessage.mock.calls.map(call => call[0]).filter(message => message.type === 'od:comment-target').at(-1);
+      expect(picked).toBeDefined();
+      expect(picked.elementId).toBe(authored ?? `dom:${picked.selector}`);
+      const published = new JSDOM(source);
+      expect(published.window.document.querySelector(picked.selector)?.textContent).toBe('Published title');
+      published.window.close();
+      win.dispatchEvent(new win.MessageEvent('message', { data: { type: 'od:comment-active-target',
+        elementId: picked.elementId, selector: picked.selector, validateForSave: true, requestId: 'save' } }));
+      expect(postMessage.mock.calls.map(call => call[0])).toContainEqual(expect.objectContaining({
+        type: 'od:comment-active-target-update', requestId: 'save', elementId: picked.elementId, selector: picked.selector,
+      }));
+    } finally { dom.window.close(); parser.window.close(); vi.unstubAllGlobals(); }
+  });
+});

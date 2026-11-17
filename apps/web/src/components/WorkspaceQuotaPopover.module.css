@@ -1,0 +1,212 @@
+/* Inherit current OD PersonalPlanCard / CodingPlanUsage tokens and layout. */
+:global(.entry-top-right-credits-anchor):has(.card) { position: static; }
+:global(.entry-top-right-credits-panel):has(.card) {
+  width: min(320px, calc(100vw - 24px));
+  top: 100%;
+  right: 12px;
+  padding-top: 0;
+}
+.card:global(.entry-nav-rail__menu-credits) {
+  padding-bottom: 0;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 22px;
+}
+.sectionHead h3 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+  color: #f5f5f5;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.helpTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #999;
+  box-shadow: none;
+  cursor: default;
+}
+.helpTrigger:hover,
+.helpTrigger:focus-visible {
+  color: #fafafa;
+}
+.helpTrigger:focus-visible {
+  outline: 1px solid #b1f38b;
+  outline-offset: 2px;
+}
+.tooltip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #333;
+  box-shadow: none;
+  filter: drop-shadow(0 4px 10px #0002);
+  font: 400 11px/1.5 Arial, sans-serif;
+  font-synthesis: initial;
+  -webkit-font-smoothing: antialiased;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: calc(100% - 1px);
+  left: var(--arrow-left, 50%);
+  width: 12px;
+  height: 7px;
+  background: #fafafa;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transform: translateX(-50%);
+}
+.tooltip::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5px;
+  height: 5px;
+}
+.tooltip[data-below='true']::before {
+  bottom: auto;
+  top: -5px;
+}
+.tooltip[data-below='true']::after {
+  top: auto;
+  bottom: calc(100% - 1px);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.tooltip:popover-open { animation: quota-help-enter 180ms cubic-bezier(.2,.7,.3,1); }
+@keyframes quota-help-enter {
+  from { opacity: 0; translate: 0 4px; }
+  to { opacity: 1; translate: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tooltip:popover-open { animation: none; translate: none; }
+}
+.sectionHead + .planBlock { margin-top: 8px; }
+.planBlock + .planBlock { margin-top: 14px; }
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 18px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.row > :first-child { color: #ccc; }
+.row > :last-child { color: #f5f5f5; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.freeRow {
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.freeRow > .availability {
+  flex: 1;
+  min-width: 0;
+  color: #999;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+.freeSkeleton .walletSkeleton { margin: 0; padding-top: 0; border: 0; }
+.track {
+  height: 4px;
+  margin-top: 6px;
+  background: #ffffff1c;
+}
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 6px 0;
+  color: #ddd;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.placeholder small {
+  color: #999;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+}
+section + .metered { margin-top: 16px; }
+.footer {
+  margin-top: 16px;
+  padding: 12px 0;
+  border-top: 1px solid #ffffff14;
+  color: #999;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+}
+.details {
+  display: block;
+  margin-top: 4px;
+  color: #999;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.balance {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: auto;
+  flex: none;
+  height: auto;
+  min-height: 22px;
+  box-sizing: border-box;
+  padding: 2px 0 2px 4px;
+  margin: -2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.balance:hover { color: #b1f38b; }
+.balance:focus-visible {
+  outline: 2px solid #83df62;
+  outline-offset: 3px;
+}

@@ -56,10 +56,15 @@ export function commentRelayScope(input: {
   const memberId = context?.workspaceMemberId?.trim() ?? '';
   if (!context || !workspaceId || !memberId || binding?.resourceState === 'deleted') return null;
   if (context.workspaceId !== workspaceId || context.memberStatus !== 'active' || context.lifecycleState === 'deleted') return null;
-  if (binding?.visibility === 'team' && context.workspaceType === 'team') {
+  if (binding?.visibility === 'team') {
     // Pulled team mirrors have no persisted creator: the authenticated member
     // is the relay principal, while creator identity is personal-only.
-    return { workspaceId, teamId: context.teamId?.trim() || workspaceId, ownerMemberId: memberId, relayScope: 'team' };
+    return {
+      workspaceId,
+      teamId: context.workspaceType === 'team' ? context.teamId?.trim() || workspaceId : workspaceId,
+      ownerMemberId: memberId,
+      relayScope: 'team',
+    };
   }
   if (!ownerMemberId || !personalCommentRelayFilePaths(input).has(input.filePath)) return null;
   return { workspaceId, teamId: workspaceId, ownerMemberId, relayScope: 'personal' };

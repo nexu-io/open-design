@@ -61,10 +61,12 @@ export function activeTeamWorkspaceIdentity(context: {
   workspaceMemberId: string;
 } | null {
   const workspaceId = context?.workspaceId?.trim() ?? '';
-  const resourceTeamId = context?.teamId?.trim() ?? '';
+  const resourceTeamId = context?.workspaceType === 'team'
+    ? context.teamId?.trim() ?? ''
+    : workspaceId;
   const workspaceMemberId = context?.workspaceMemberId?.trim() ?? '';
   if (
-    context?.workspaceType !== 'team' ||
+    (context?.workspaceType !== 'team' && context?.workspaceType !== 'personal') ||
     context.memberStatus !== 'active' ||
     context.lifecycleState !== 'active' ||
     !workspaceId ||

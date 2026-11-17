@@ -93,7 +93,7 @@ describe('packaged Codex fixture transport', () => {
     // Match the identity envelope the production prompt composer supplies;
     // capability admission remains the daemon's responsibility, not this fake's.
     const prompts = [
-      `${PACKAGED_HOME_FIRST_RUN_PROMPT}\n<recipe_identity strategy_version="2.0.0" applied_snapshot="smoke-snapshot" task_profile_version="2.0.0" />\n<od-production-ready key="abcd1234" />`,
+      `${PACKAGED_HOME_FIRST_RUN_PROMPT}\n<recipe_identity strategy_version="2.0.0" applied_snapshot="smoke-snapshot" task_profile_version="2.0.0" />\n"packageHash": "${'a'.repeat(64)}"\n<od-production-ready key="abcd1234" />`,
       composeOdNextMarkerProductionTurn({
         taskExecutionId: 'smoke-task', taskRunIndex: 1,
         hostProtocolText: renderChatTurnHostProtocolInstructions('cdef5678', 'od_next_production').text,
@@ -119,7 +119,7 @@ describe('packaged Codex fixture transport', () => {
           } else {
             expect(text).toContain(PACKAGED_HOME_FIRST_RUN_OUTPUT);
             expect(text).not.toContain('open-design-runtime-state');
-            expect(await readFile(join(root, 'od-next-active-canary.html'), 'utf8')).toContain('Delayed Daemon Smoke');
+            expect(await readFile(join(root, 'delayed-daemon-smoke.html'), 'utf8')).toContain('Delayed Daemon Smoke');
           }
         } finally {
           if (child.exitCode == null && child.signalCode == null) child.kill();

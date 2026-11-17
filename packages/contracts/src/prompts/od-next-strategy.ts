@@ -32,20 +32,6 @@ export interface OdNextStrategyRequestRecipeV2 {
   taskProfileDigest: string;
   taskProfileVersion: string;
   taskType: Exclude<StrategyTaskTypeV2, 'generic'>;
-  planningFacts?: {
-    capabilitySnapshotHash: string;
-    inputRefs: ReadonlyArray<string>;
-    productionRoutes: ReadonlyArray<string>;
-    outputKinds: ReadonlyArray<string>;
-    /**
-     * Does the selected runtime have the verified structured native Child
-     * lifecycle that complex mode requires? The core strategy makes this a
-     * precondition for locking complex, so the Agent has to be told the answer
-     * — asked to judge a capability it cannot observe, it can only guess, and
-     * the safe guess is always simple.
-     */
-    nativeChildLifecycleVerified: boolean;
-  } | undefined;
   executionProfile: 'filesystem' | 'text_artifact';
   coreStrategy: string;
   generalOrchestration: string;
@@ -178,6 +164,10 @@ export function resolveOdNextDeckFrameworkMode(input: {
   hasSelectedDeckSeed?: boolean | undefined;
   hasExistingDeckArtifact?: boolean | undefined;
 }): DeckFrameworkMode | undefined {
+  // Discovery exposes a small catalog. The selected PPT Skill reads the staged
+  // shared framework on demand, including its existing-deck compatibility rules.
+  // Eagerly injecting it here bypasses that load and affects companion outputs.
+  if (input.taskType === 'discovery') return undefined;
   if (input.taskType === 'ppt') {
     return input.hasSelectedDeckSeed || input.hasExistingDeckArtifact
       ? 'legacy_compatible'
@@ -414,7 +404,12 @@ This execution profile has no project-file tools. Produce only the complete decl
 const DISCOVERY_AND_PLANNING_SECTION = `## Discovery, planning, and Build surface
 
 You decide from the actual request whether to answer, directly edit, or plan before producing.
-A new design deliverable needs a separate planning turn. Write an actionable plan in prose,
+Separate the user's eventual goal from the action requested in this turn. Describing
+something they want to make and asking you to plan it requests the plan itself, not
+production. Return the plan without creating files or emitting a production-ready marker;
+the user need not add "only" or "do not build". A request to create the artifact now,
+or to plan and then build it, authorizes production.
+An authorized new design deliverable needs a separate planning turn. Write an actionable plan in prose,
 then the current keyed production-ready marker, and stop. Open Design starts production
 in the same session after the planning turn succeeds. Do not create or dispatch deliverables
 in the planning turn. A bounded direct edit may finish within the current turn without a marker.
@@ -632,38 +627,13 @@ export function renderOdNextOutputContractV2(
   return OD_NEXT_PLAN_OUTPUT_INSTRUCTIONS;
 }
 
-/** Per-task host facts stay outside the cache-stable prefix. */
-export function renderOdNextRuntimeFactsV2(
-  input: OdNextStrategyRequestRecipeV2,
-  context: OdNextStrategyStableRequestContextV2 = {},
-): string {
-  const planningFacts = input.planningFacts;
-  if (!planningFacts) return '';
-  if (!SHA256_HEX.test(planningFacts.capabilitySnapshotHash)) {
-    throw new TypeError('OD Next planning capabilitySnapshotHash must be 64 lowercase hex characters.');
-  }
-  return `Runtime facts describe available capabilities, not restrictions on requested output.
-Use the actual tool interfaces for the user-requested format. Never serialize these facts into a contract.
-
-${stableJson({
-    taskProfileVersion: input.taskProfileVersion,
-    appliedSnapshot: input.snapshotId,
-    selectedAgentId: context.agentId?.trim() || 'selected-agent-id-from-runtime',
-    capabilitySnapshotHash: planningFacts.capabilitySnapshotHash,
-    inputRefs: planningFacts.inputRefs.length ? [...planningFacts.inputRefs] : ['user-request'],
-    nativeChildLifecycleVerified: planningFacts.nativeChildLifecycleVerified,
-  })}`;
-}
-
-/** Legacy markdown wrapper around the output contract and its runtime facts. */
+/** Legacy markdown wrapper around the Plan and delivery instructions. */
 function renderMachineOutputSection(
   input: OdNextStrategyRequestRecipeV2,
-  context: OdNextStrategyStableRequestContextV2,
 ): string {
-  const runtimeFacts = renderOdNextRuntimeFactsV2(input, context);
   return `## Plan and delivery output
 
-${renderOdNextOutputContractV2(input)}${runtimeFacts ? `\n\n${runtimeFacts}` : ''}`;
+${renderOdNextOutputContractV2(input)}`;
 }
 
 /** Compose the request-stage, cache-stable OD Next planning/Build recipe. */
@@ -715,7 +685,7 @@ export function composeOdNextStrategyRequestPromptV2(
     `## OD Next general orchestration\n\n${generalOrchestration}`,
     `## Task Skill — ${input.taskType}\n\nThis Task Skill provides scenario defaults. Apply only its relevant requirements; the user's explicit requested output takes precedence.\n\n${taskSkill}`,
     ...stageBlocks,
-    renderMachineOutputSection(input, context),
+    renderMachineOutputSection(input),
   ].filter((section) => section.length > 0);
   return sections.join('\n\n---\n\n');
 }

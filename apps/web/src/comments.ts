@@ -160,6 +160,7 @@ export function commentSnapshotEqual(
   if (!commentSnapshotOverlayEqual(a, b)) return false;
   return (
     a.selector === b.selector
+    && a.domSelector === b.domSelector
     && a.label === b.label
     && trimContextText(a.text) === trimContextText(b.text)
     && trimHtmlHint(a.htmlHint) === trimHtmlHint(b.htmlHint)

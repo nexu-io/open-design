@@ -1352,6 +1352,13 @@ async function wireTeamRunBalanceFixtures(
       models: [{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }],
     },
   ]);
+  await page.route('**/api/amr/models', (route) => route.fulfill({
+    json: {
+      source: 'remote',
+      models: [{ id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' }],
+      refreshing: false,
+    },
+  }));
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       json: {
@@ -1877,6 +1884,35 @@ test('[P1] project detail composer keeps design mode across consecutive turns wi
   await sendTurn('Design the second iteration without touching any mode control.');
 
   expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'design']);
+});
+
+test('[P1] OPEND-4606 keeps the Italian model menu settings label inside the menu', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('open-design:locale', 'it');
+    localStorage.setItem('open-design:locale-source', 'manual');
+  });
+  await createProject(page, 'Italian model menu');
+  await expectWorkspaceReady(page);
+
+  const { menu } = await openComposerAgentMenu(page);
+  const settingsButton = menu.getByTestId('avatar-open-execution-settings');
+  await expect(settingsButton).toHaveText('Apri impostazioni di esecuzione');
+  await testInfo.attach('italian-model-menu', { body: await menu.screenshot(), contentType: 'image/png' });
+  await expect.poll(() => menu.evaluate((element) => element.scrollWidth - element.clientWidth))
+    .toBe(0);
+  await expect.poll(() => settingsButton.evaluate((button) => {
+    const label = button.lastElementChild!;
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const bounds = button.getBoundingClientRect();
+    return Array.from(range.getClientRects()).every((line) =>
+      line.left >= bounds.left && line.right <= bounds.right
+      && line.top >= bounds.top && line.bottom <= bounds.bottom,
+    );
+  })).toBe(true);
+
+  await settingsButton.click();
+  await expect(settingsSurface(page).getByTestId('settings-nav-execution')).toBeVisible();
 });
 
 test('[P0] @critical project detail composer opens Execution settings where BYOK model choice persists', async ({ page }) => {

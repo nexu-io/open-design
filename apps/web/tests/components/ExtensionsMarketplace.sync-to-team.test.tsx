@@ -189,6 +189,31 @@ async function showPersonalSkills(container: HTMLElement) {
 }
 
 describe('ExtensionsMarketplace — repeat share reads as "sync" once already team-shared', () => {
+  it('keeps another resource share disabled until the pending mutation finishes', async () => {
+    workspaceContext = { ...TEAM_CONTEXT, workspaceType: 'personal', teamId: null };
+    mockFetch({ plugins: [OWNED_PLUGIN], skills: [USER_SKILL] });
+    const originalFetch = globalThis.fetch;
+    let finishShare!: (response: Response) => void;
+    const pendingShare = new Promise<Response>((resolve) => { finishShare = resolve; });
+    globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/workspace/plugins/my-plugin/share' && init?.method === 'POST') {
+        return pendingShare;
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+    const { container } = renderMarketplace();
+    await showPersonalScope(container);
+    fireEvent.click(await screen.findByText('Share with team'));
+    await showPersonalSkills(container);
+    const nextShare = await screen.findByText('Share with team');
+    expect((nextShare as HTMLButtonElement).disabled).toBe(true);
+    finishShare(jsonResponse({ shared: true, version: 1 }));
+    await waitFor(() => expect((nextShare as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(nextShare);
+    await waitFor(() => expect(shareCalls).toHaveLength(1));
+    expect(shareCalls[0]?.url).toBe('/api/workspace/skills/my-skill/share');
+  });
+
   it('plugin: keeps the row action visible (relabeled "Sync to team") for the owner, and re-POSTs /share on click', async () => {
     mockFetch({ plugins: [OWNED_PLUGIN], sharedPluginIds: ['my-plugin'], sharedPluginCanUnshare: true });
     const { container } = renderMarketplace();

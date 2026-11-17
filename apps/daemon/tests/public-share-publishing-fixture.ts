@@ -23,8 +23,8 @@ export function createPublicSharePublishingFixture(
   store: PublicFilePublicationStore,
   resource: (args: string[], workspace: string) => Promise<string>,
   enqueue: Parameters<typeof createPublicFilePublicationRecorder>[2] = () => ({ enqueued: 0, skippedInbound: 0 }),
-  options: { teamProject?: (args: string[]) => Promise<string>; env?: NodeJS.ProcessEnv; configuredEnv?: Record<string, string>; amr?: FixtureAmrShareFields; failShareState?: () => boolean; pending?: boolean; failUpload?: boolean; failStop?: boolean; failResume?: boolean; failResumeAfterActivation?: boolean; failComplete?: boolean; beforeStop?: () => Promise<void>; commands?: string[][]; cloud?: FixtureShareCloud } = {},
-): Pick<RegisterCollabSyncRoutesDeps, 'sharePublishing' | 'readProjectShareState' | 'resolvePublicShareLink'> {
+  options: { denyAuthority?: boolean; teamProject?: (args: string[]) => Promise<string>; env?: NodeJS.ProcessEnv; configuredEnv?: Record<string, string>; amr?: FixtureAmrShareFields; failShareState?: () => boolean; pending?: boolean; failUpload?: boolean; failStop?: boolean; failResume?: boolean; failResumeAfterActivation?: boolean; failComplete?: boolean; beforeStop?: () => Promise<void>; commands?: string[][]; cloud?: FixtureShareCloud } = {},
+): Pick<RegisterCollabSyncRoutesDeps, 'sharePublishing' | 'readProjectShareState' | 'resolvePublicShareLink' | 'resolveLocalPublicShareOwner'> {
   const outbox = createShareBindingOutbox(db);
   let ids = 0;
   const cloud: FixtureShareCloud = options.cloud ?? new Map();
@@ -32,13 +32,14 @@ export function createPublicSharePublishingFixture(
   const viewerEnv = options.env ?? { OD_SHARE_VIEWER_URL: 'https://viewer.example.test' };
   const amrFields = (projectId: string, slug: string) => options.amr?.(projectId, slug) ?? {};
   // Publish and read share one resolver, as in server.ts.
-  return { resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, viewerEnv, options.configuredEnv), readProjectShareState: async scope => {
+  return { resolveLocalPublicShareOwner: () => 'owner', resolvePublicShareLink: (projectId, slug, amr) => resolvePublicShareLink(projectId, slug, amr, viewerEnv, options.configuredEnv), readProjectShareState: async scope => {
     if (options.failShareState?.()) throw new Error('SHARE_STATE_UNAVAILABLE');
     const publications = [...cloud.values()].filter(item => item.projectId === scope.projectId).map(({ projectId, ...item }) =>
       ({ ...item, ...(item.status === 'active' ? amrFields(projectId, item.slug) : {}) }));
     // The raw `vela share project-status --json` body, through the real parser.
     return parseProjectShareState(JSON.stringify({ projectId: scope.projectId, bindingExists: publications.length > 0, publications }), scope.projectId);
   }, sharePublishing: {
+    ensureProject: async (scope) => ({projectId:scope.projectId,ownerMemberId:scope.ownerMemberId,sharedAt:new Date(1).toISOString()}),
     // Synthetic creator artifact pointer for this transport fixture only;
     // production resolves workspace_artifacts, never an alias/path election.
     sourceFileId: scope => {
@@ -59,6 +60,8 @@ export function createPublicSharePublishingFixture(
     },
     prepare: async (scope, slug) => ({
       run: async args => {
+        if (options.denyAuthority) throw Object.assign(new Error('API denied'),{stderr:'{"error":"denied","status":403,"errorCode":"forbidden"}'});
+        const targetSlug = args[0] === 'share' && args[1] === 'publish' ? args[args.indexOf('--slug')+1]! : args[0] === 'share' ? args[2]! : slug;
         options.commands?.push([...args]);
         if (args[0] === 'team-projects') {
           if (options.teamProject) return options.teamProject(args);
@@ -74,8 +77,8 @@ export function createPublicSharePublishingFixture(
         if (args[1] === 'stop') {
           await options.beforeStop?.();
           if (options.failStop) throw new Error('remote stop unavailable');
-          cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, ...((scope.sourceFileId ?? cloud.get(scope.projectId + ':' + scope.filePath)?.sourceFileId) ? { sourceFileId: scope.sourceFileId ?? cloud.get(scope.projectId + ':' + scope.filePath)?.sourceFileId as string } : {}), slug, status: 'stopped' });
-          return JSON.stringify({ status: 'stopped', projectId: scope.projectId, slug });
+          cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, ...((scope.sourceFileId ?? cloud.get(scope.projectId + ':' + scope.filePath)?.sourceFileId) ? { sourceFileId: scope.sourceFileId ?? cloud.get(scope.projectId + ':' + scope.filePath)?.sourceFileId as string } : {}), slug: targetSlug, status: 'stopped' });
+          return JSON.stringify({ status: 'stopped', projectId: scope.projectId, slug: targetSlug });
         }
         if (args[1] === 'resume-existing') {
           const prior = cloud.get(scope.projectId + ':' + scope.filePath);
@@ -90,20 +93,20 @@ export function createPublicSharePublishingFixture(
         if (args[1] === 'bind' || args[1] === 'resume') {
           if (args[1] === 'resume' && options.failResume) throw new Error('resume unavailable');
           if (args[1] === 'bind' && cloud.get(scope.projectId + ':' + scope.filePath)?.status === 'stopped') throw new Error('SHARE_BINDING_STOPPED');
-          cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, ...(scope.sourceFileId ? { sourceFileId: scope.sourceFileId } : {}), slug, status: 'active' });
-          return JSON.stringify({ status: 'active', projectId: scope.projectId, slug, ...amrFields(scope.projectId, slug),
+          cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, ...(scope.sourceFileId ? { sourceFileId: scope.sourceFileId } : {}), slug: targetSlug, status: 'active' });
+          return JSON.stringify({ status: 'active', projectId: scope.projectId, slug: targetSlug, ...amrFields(scope.projectId, targetSlug),
             verifiedVersion: Number(args[args.indexOf('--version') + 1]), verifiedVersionId: args[args.indexOf('--version-id') + 1] });
         }
         if (args[1] !== 'publish') throw new Error('unexpected share operation');
         const versionId = args[args.indexOf('--version-id') + 1];
         const entryPath = args[args.indexOf('--entry-path') + 1];
         if (!versionId || !entryPath) throw new Error('missing publication identity');
-        const receipt = { slug, versionId, version: 1, publishedAt: 1, entryPath };
+        const receipt = { slug: targetSlug, versionId, version: 1, publishedAt: 1, entryPath };
         lastReceipt = receipt;
         const pending = options.pending || cloud.get(scope.projectId + ':' + scope.filePath)?.status === 'stopped';
-        if (!pending) cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, ...(scope.sourceFileId ? { sourceFileId: scope.sourceFileId } : {}), slug, status: 'active' });
+        if (!pending) cloud.set(scope.projectId + ':' + scope.filePath, { projectId: scope.projectId, sourceFilePath: scope.filePath, ...(scope.sourceFileId ? { sourceFileId: scope.sourceFileId } : {}), slug: targetSlug, status: 'active' });
         return JSON.stringify({ status: pending ? 'binding_pending' : 'published', ...receipt, receipt, snapshot: { versionId },
-          ...(pending ? { binding: { code: 'SHARE_BINDING_UNAVAILABLE' } } : amrFields(scope.projectId, slug)) });
+          ...(pending ? { binding: { code: 'SHARE_BINDING_UNAVAILABLE' } } : amrFields(scope.projectId, targetSlug)) });
       },
     }),
     retry: () => {},

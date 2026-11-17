@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "背景配乐，保持轻快流动的产品演示气氛；具体音色未经可靠听辨。",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "hook",
+        "energy": "mid"
+      },
+      {
+        "scene": "problem",
+        "energy": "mid"
+      },
+      {
+        "scene": "meet",
+        "energy": "mid"
+      },
+      {
+        "scene": "pricing",
+        "energy": "mid"
+      },
+      {
+        "scene": "make",
+        "energy": "mid"
+      },
+      {
+        "scene": "checkout",
+        "energy": "mid"
+      },
+      {
+        "scene": "paid",
+        "energy": "mid"
+      },
+      {
+        "scene": "scan",
+        "energy": "mid"
+      },
+      {
+        "scene": "close",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [],
+  "effectsPer10s": 0,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

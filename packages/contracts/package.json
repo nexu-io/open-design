@@ -1,6 +1,6 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.25.1",
+  "version": "0.27.2",
   "private": true,
   "type": "module",
   "description": "Shared pure TypeScript contracts for the OpenDesign web/daemon boundary.",
@@ -121,8 +121,8 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@typescript/native": "npm:typescript@7.0.2",
     "esbuild": "0.28.0",
-    "typescript": "5.9.3",
     "vitest": "4.1.6"
   }
 }

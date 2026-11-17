@@ -58,6 +58,8 @@ export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'upl
   publicFileMutations?: PublicFileMutations;
   stopPublicFilesBeforeDelete?: CommentFileDeletion;
   fetchProjectCreationWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  /** Same explicit local/dev compatibility policy as ordinary project creation. */
+  allowStaticDevWorkspaceContext?: boolean;
   enforceWorkspaceProjectMutation?: BoundWorkspaceResourceMutationGate;
 }
 
@@ -123,6 +125,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         const createWorkspace = await authorizeCreatedProjectWorkspace(
           req,
           ctx.fetchProjectCreationWorkspaceDirectory,
+          {},
+          ctx.allowStaticDevWorkspaceContext === true,
         );
         if (!createWorkspace.ok) {
           fs.promises.unlink(req.file.path).catch(() => {});
@@ -369,6 +373,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const createWorkspace = await authorizeCreatedProjectWorkspace(
         req,
         ctx.fetchProjectCreationWorkspaceDirectory,
+        {},
+        ctx.allowStaticDevWorkspaceContext === true,
       );
       if (!createWorkspace.ok) {
         return sendCreatedProjectWorkspaceError(res, createWorkspace);
@@ -637,6 +643,7 @@ type ScreenshotExportRequest = {
 export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'node' | 'ids' | 'projectStore' | 'exports' | 'projectFiles' | 'validation' | 'auth' | 'projectPreviewScopes'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
   authorizeProjectToolRequest: AuthorizeProjectToolRequest;
+  resolveAccountScopedTeamExportMember?: (workspaceId: string) => Promise<string | null>;
   isApiTokenAuthorization: (authorization: string | undefined) => boolean;
 }
 
@@ -711,16 +718,47 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         res,
         grant.projectId,
         { mode: 'read' },
+        grant.runId,
       );
       return authority ? { previewWorkspace: authority.workspace } : null;
     }
     if (options.deriveWorkspaceFromProject) {
-      const authority = await ctx.authorizeProjectToolRequest(
-        res,
-        req.params.id,
-        { mode: 'read' },
-      );
-      return authority ? { previewWorkspace: authority.workspace } : null;
+      const binding = ctx.projectStore.getWorkspaceProjectByProjectId(db, req.params.id);
+      let actorRequest = req;
+      let memberId: string | null = null;
+      const hasExplicitWorkspaceHeader = Object.keys(req.headers).some((name) =>
+        name.toLowerCase().startsWith('x-od-workspace-'));
+      if (
+        binding?.workspaceId && binding.visibility === 'team'
+        && ctx.resolveAccountScopedTeamExportMember && !hasExplicitWorkspaceHeader
+      ) {
+        // The project-id-only CLI is authenticated by the current Vela control
+        // account, not by stale workspace flags. Only this export entrypoint
+        // may derive an exact Team member, and only from a fresh unique row.
+        memberId = await ctx.resolveAccountScopedTeamExportMember(binding.workspaceId);
+        if (!memberId) {
+          sendApiError(res, 403, 'WORKSPACE_ACCESS_DENIED', 'a unique active Team member could not be verified');
+          return null;
+        }
+        actorRequest = Object.create(req) as typeof req;
+        actorRequest.get = (name: string) => {
+          if (name.toLowerCase() === 'x-od-workspace-id') return binding.workspaceId;
+          if (name.toLowerCase() === 'x-od-workspace-member-id') return memberId ?? undefined;
+          return req.get(name);
+        };
+      }
+      if (!await ctx.authorizeProjectRequest(actorRequest, res, req.params.id, { mode: 'read' })) return null;
+      const claimed = workspaceResourceContextFromRequest(actorRequest);
+      return {
+        previewWorkspace: binding?.workspaceId
+          ? {
+              workspaceId: binding.workspaceId,
+              workspaceMemberId: claimed && claimed !== 'missing'
+                ? claimed.workspaceMemberId
+                : binding.createdByWorkspaceMemberId ?? 'local-user',
+            }
+          : null,
+      };
     }
     const authorized = await ctx.authorizeProjectRequest(
       req,

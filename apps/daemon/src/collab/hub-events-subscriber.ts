@@ -39,6 +39,7 @@ export interface HubListenerStatus {
 
 export interface HubReadyFrame {
   workspaceId: string;
+  workspaceMemberId?: string;
   capabilities: string[];
   listenerStatus: HubListenerStatus | null;
 }
@@ -220,6 +221,8 @@ export function parseHubReadyFrame(data: string): HubReadyFrame | null {
     : [];
   return {
     workspaceId,
+    ...(typeof parsed?.workspaceMemberId === 'string' && parsed.workspaceMemberId.trim()
+      ? { workspaceMemberId: parsed.workspaceMemberId.trim() } : {}),
     capabilities,
     listenerStatus: parseHubListenerStatusRecord(parsed),
   };
@@ -307,6 +310,7 @@ export interface HubEventsSubscriberOptions {
    * revoked member's verified stream. */
   onAccessRevoked?: (revocation: {
     workspaceId?: string;
+    workspaceMemberId?: string;
     identityKey?: string;
     reason?: string;
   }) => void;
@@ -422,6 +426,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
     let watchdog: NodeJS.Timeout | null = null;
     let scopeVerified = false;
     let verifiedWorkspaceId: string | undefined;
+    let verifiedWorkspaceMemberId: string | undefined;
     let verifiedCapabilities: readonly string[] = [];
     let lastListenerStatus: HubListenerStatus | null = null;
     let lastAuthorityHealthy: boolean | null = null;
@@ -579,6 +584,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
             }
             scopeVerified = true;
             verifiedWorkspaceId = actualWorkspaceId;
+            verifiedWorkspaceMemberId = ready.workspaceMemberId;
             verifiedCapabilities = [...ready.capabilities];
             // A verified connection has recovered from prior transport
             // failures. Terminal revocation below deliberately overrides this
@@ -635,6 +641,10 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
                   ? { identityKey: endpoint.identityKey }
                   : {}),
                 ...(reason ? { reason } : {}),
+                ...(reason === 'member-removed' && verifiedWorkspaceMemberId
+                  && parsed?.workspaceId === verifiedWorkspaceId
+                  && parsed?.workspaceMemberId === verifiedWorkspaceMemberId
+                  ? { workspaceMemberId: verifiedWorkspaceMemberId } : {}),
               });
             } catch (error) {
               options.onError?.(error);

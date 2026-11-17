@@ -3,7 +3,7 @@
   "specVersion": "1.0.0",
   "name": "od-next-strategy",
   "title": "OD Next Strategy V2",
-  "version": "2.0.12",
+  "version": "3.3.8",
   "publishedAt": "2026-08-14T10:44:00Z",
   "description": "Bundled, inactive OD Next planning and Build strategy content.",
   "license": "MIT",
@@ -37,22 +37,116 @@
       "assets": {
         "core": {
           "path": "./assets/core-system-prompt.md",
-          "version": "2.3.2"
+          "version": "3.2.0"
         },
         "orchestration": {
           "path": "./assets/general-orchestration.md",
-          "version": "2.3.2"
+          "version": "3.2.0"
         },
         "taskProfiles": [
           {
             "taskType": "prototype",
             "path": "./assets/task-profiles/prototype.md",
-            "version": "2.3.2",
+            "version": "3.1.10",
             "rollout": "active",
             "projectKinds": [
               "prototype"
             ],
             "resources": [
+              {
+                "path": "./assets/task-profiles/prototype/device-frames/iphone.html",
+                "version": "1.0.1"
+              },
+              {
+                "path": "./assets/task-profiles/prototype/device-frames/android.html",
+                "version": "1.0.1"
+              },
+              {
+                "path": "./assets/task-profiles/prototype/device-frames/neutral.html",
+                "version": "1.0.1"
+              },
+              {
+                "path": "./assets/task-profiles/prototype/layout.css",
+                "version": "1.1.2"
+              }
+            ]
+          },
+          {
+            "taskType": "ppt",
+            "path": "./assets/task-profiles/ppt.md",
+            "version": "3.1.0",
+            "rollout": "active",
+            "projectKinds": [
+              "deck"
+            ]
+          },
+          {
+            "taskType": "marketing",
+            "path": "./assets/task-profiles/marketing.md",
+            "version": "2.0.4",
+            "rollout": "active",
+            "projectKinds": [
+              "image"
+            ]
+          },
+          {
+            "taskType": "hyperframes",
+            "path": "./assets/task-profiles/hyperframes.md",
+            "version": "3.1.0",
+            "rollout": "active",
+            "projectKinds": [
+              "video"
+            ]
+          },
+          {
+            "taskType": "discovery",
+            "path": "./assets/task-profiles/discovery.md",
+            "version": "3.2.3",
+            "rollout": "active",
+            "projectKinds": [
+              "generic"
+            ],
+            "resources": [
+              {
+                "path": "./assets/task-profiles/prototype.md",
+                "version": "3.1.9"
+              },
+              {
+                "path": "./assets/task-profiles/ppt.md",
+                "version": "3.1.0"
+              },
+              {
+                "path": "./assets/task-profiles/document.md",
+                "version": "3.1.1"
+              },
+              {
+                "path": "./assets/task-profiles/image.md",
+                "version": "3.1.1"
+              },
+              {
+                "path": "./assets/task-profiles/web-clone.md",
+                "version": "3.1.1"
+              },
+              {
+                "path": "./assets/task-profiles/hyperframes.md",
+                "version": "3.1.0"
+              },
+              {
+                "path": "./assets/task-profiles/webgl.md",
+                "version": "3.1.1"
+              },
+              {
+                "path": "./assets/task-profiles/live-artifact.md",
+                "version": "3.1.5"
+              },
+              {
+                "path": "./assets/task-profiles/video.md",
+                "version": "3.1.6"
+              },
+              {
+                "path": "./assets/task-profiles/audio.md",
+                "version": "3.1.3"
+              },
               {
                 "path": "./assets/task-profiles/prototype/device-frames/iphone.html",
                 "version": "1.0.0"
@@ -67,35 +161,12 @@
               },
               {
                 "path": "./assets/task-profiles/prototype/layout.css",
-                "version": "1.1.0"
+                "version": "1.1.2"
+              },
+              {
+                "path": "./assets/task-profiles/motion-design.md",
+                "version": "1.3.2"
               }
-            ]
-          },
-          {
-            "taskType": "ppt",
-            "path": "./assets/task-profiles/ppt.md",
-            "version": "2.0.2",
-            "rollout": "active",
-            "projectKinds": [
-              "deck"
-            ]
-          },
-          {
-            "taskType": "marketing",
-            "path": "./assets/task-profiles/marketing.md",
-            "version": "2.0.2",
-            "rollout": "active",
-            "projectKinds": [
-              "image"
-            ]
-          },
-          {
-            "taskType": "hyperframes",
-            "path": "./assets/task-profiles/hyperframes.md",
-            "version": "2.0.2",
-            "rollout": "active",
-            "projectKinds": [
-              "video"
             ]
           },
           {
@@ -128,7 +199,14 @@
         "./assets/task-profiles/marketing.md",
         "./assets/task-profiles/hyperframes.md",
         "./references/task-profile-mapping.md",
-        "./assets/task-profiles/motion-design.md"
+        "./assets/task-profiles/document.md",
+        "./assets/task-profiles/image.md",
+        "./assets/task-profiles/web-clone.md",
+        "./assets/task-profiles/webgl.md",
+        "./assets/task-profiles/live-artifact.md",
+        "./assets/task-profiles/video.md",
+        "./assets/task-profiles/audio.md",
+        "./assets/task-profiles/discovery.md"
       ]
     },
     "pipeline": {

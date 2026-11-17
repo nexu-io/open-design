@@ -7,6 +7,7 @@ import {
   type PreviewSection,
 } from '@open-design/contracts/runtime/preview-build-focus';
 
+import { bindMotionPreviewActivity, unbindMotionPreviewActivity } from '../../runtime/motion-preview-activity';
 import { useT } from '../../i18n';
 import { appendResourceQuery } from '../../collab/workspace-identity';
 import { projectRawUrl } from '../../providers/registry';
@@ -84,6 +85,11 @@ export function DesignFilesBuildingState({
 }: Props) {
   const t = useT();
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const setFrame = useCallback((frame: HTMLIFrameElement | null) => {
+    if (frameRef.current) unbindMotionPreviewActivity(frameRef.current);
+    frameRef.current = frame;
+    if (frame) bindMotionPreviewActivity(frame);
+  }, []);
   const [focus, setFocus] = useState<FocusRect | null>(null);
   const requestIdRef = useRef<string | null>(null);
   // The parts this preview has already shown. Everything the frame reports that
@@ -201,7 +207,9 @@ export function DesignFilesBuildingState({
   return (
     <div className={styles.stage} data-testid="design-files-building">
       <iframe
-        ref={frameRef}
+        ref={setFrame}
+        data-od-motion-active="true"
+        data-od-motion-muted="true"
         key={`${projectId}:${file.name}`}
         className={styles.frame}
         src={src}

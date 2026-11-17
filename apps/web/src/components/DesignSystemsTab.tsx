@@ -31,7 +31,7 @@ import {
 } from '../collab/workspace-events';
 import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
 import {
-  workspaceContextHasTeamIdentity,
+  workspaceContextHasWorkspaceIdentity,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { Locale } from '../i18n/types';
@@ -228,17 +228,12 @@ export function DesignSystemsTab({
   isActiveRef.current = isActive;
   const teamSharedStaleRef = useRef(false);
   const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
-  // Gate on TEAM IDENTITY — the same predicate the daemon uses to accept a hub
-  // share (workspaceContextHasTeamIdentity; see team-resource-share.ts) — NOT on
-  // the billing plan. A team on a free/unpaid tier (trial, lapsed, or billing not
-  // yet resolved) still has a real team resource plane with shared design
-  // systems; gating on the plan hid the collection from those teams even though
-  // the daemon serves and shares their resources. Personal / signed-out sessions
-  // have no team plane and correctly get no team tab.
-  const hasTeamWorkspace = workspaceContextHasTeamIdentity(workspaceContext);
+  // Personal and Team workspaces both have member-shared resources.
+  // Only an exact workspace/member identity can expose this collection.
+  const hasSharedWorkspace = workspaceContextHasWorkspaceIdentity(workspaceContext);
   useEffect(() => {
-    if (designSystemCollection === 'team' && !hasTeamWorkspace) setDesignSystemCollection('mine');
-  }, [designSystemCollection, hasTeamWorkspace]);
+    if (designSystemCollection === 'team' && !hasSharedWorkspace) setDesignSystemCollection('mine');
+  }, [designSystemCollection, hasSharedWorkspace]);
   // Ids of the caller's design systems shared into the team scope. The daemon is
   // the source of truth (it publishes them to the resource hub); we mirror the
   // list here so the "team" collection and the per-system share action stay in
@@ -444,7 +439,7 @@ export function DesignSystemsTab({
   ) => {
     const requestGeneration = ++teamSharedRequestGenerationRef.current;
     const read = beginWorkspaceScopedRead(workspaceContextRef.current);
-    if (!read.context || !workspaceContextHasTeamIdentity(read.context)) {
+    if (!read.context || !workspaceContextHasWorkspaceIdentity(read.context)) {
       setTeamSharedState({
         workspaceIdentity: workspaceIdentityCacheKey(read.context),
         ids: new Set(),
@@ -527,7 +522,7 @@ export function DesignSystemsTab({
   }, [isActive, refreshTeamShared]);
 
   const handleTeamIndexStreamActive = useWorkspaceSnapshotActivation({
-    enabled: isActive && hasTeamWorkspace,
+    enabled: isActive && hasSharedWorkspace,
     identity: workspaceIdentity,
     // The active-mount read above is the initial exact-scope snapshot. Join it
     // when stream activation lands concurrently; real change events still use
@@ -547,8 +542,8 @@ export function DesignSystemsTab({
       },
     },
     {
-      workspaceContext: hasTeamWorkspace ? workspaceContext : null,
-      enabled: hasTeamWorkspace,
+      workspaceContext: hasSharedWorkspace ? workspaceContext : null,
+      enabled: hasSharedWorkspace,
       onActive: () => {
         if (!isActiveRef.current) {
           teamSharedStaleRef.current = true;
@@ -579,7 +574,7 @@ export function DesignSystemsTab({
   async function handleShareToTeam(system: DesignSystemSummary) {
     if (sharingId) return;
     const context = workspaceContextRef.current;
-    if (!context || !workspaceContextHasTeamIdentity(context)) {
+    if (!context || !workspaceContextHasWorkspaceIdentity(context)) {
       notifyAction('error', t('dsManager.shareToTeamFailed'));
       return;
     }
@@ -647,7 +642,7 @@ export function DesignSystemsTab({
   async function handleUnshareFromTeam(system: DesignSystemSummary) {
     if (unsharingId) return;
     const context = workspaceContextRef.current;
-    if (!context || !workspaceContextHasTeamIdentity(context)) {
+    if (!context || !workspaceContextHasWorkspaceIdentity(context)) {
       notifyAction('error', t('dsManager.unshareFromTeamFailed'));
       return;
     }
@@ -904,7 +899,7 @@ export function DesignSystemsTab({
 
   const scopeTabs = [
     { value: 'mine' as const, label: t('dsManager.yourSystems'), count: userSearched.length },
-    ...(hasTeamWorkspace
+    ...(hasSharedWorkspace
       ? [{ value: 'team' as const, label: t('pluginsView.tab.team'), count: teamSearched.length }]
       : []),
     // #5517 ships three scopes only. The enterprise placeholder tab advertised a

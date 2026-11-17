@@ -3,9 +3,13 @@ import { dirname, join } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
+  validateLauncherApplicationArtifact,
+  type LauncherApplicationArtifact,
   resolveLauncherVersionPaths,
 } from "@open-design/launcher-proto";
 
+import { buildLauncherHostEnvironment } from "../launcher/artifacts.js";
+import { shouldUseMacStandalonePrebundle } from "./prebundle.js";
 import type { ToolPackConfig } from "../config/index.js";
 import {
   resolveToolPackLauncherChannel,
@@ -28,6 +32,7 @@ export type MacLauncherPayloadManifest = {
   platform: "darwin";
   schemaVersion: typeof LAUNCHER_SCHEMA_VERSION;
   version: string;
+  host?: LauncherApplicationArtifact;
 };
 
 export function buildMacLauncherPayloadManifest(input: {
@@ -36,9 +41,20 @@ export function buildMacLauncherPayloadManifest(input: {
   namespace: string;
   publicAppBundleName: string;
   version: string;
+  electronVersion?: string;
+  arch?: string;
+  prebundled?: boolean;
 }): MacLauncherPayloadManifest {
-  return {
+  const appRoot = `payload/${input.publicAppBundleName}/Contents/Resources/app`;
+  const manifest: MacLauncherPayloadManifest = {
     appBundleName: input.publicAppBundleName,
+    ...(input.electronVersion == null ? {} : {
+      host: {
+        ...buildLauncherHostEnvironment({ platform: "darwin", arch: input.arch ?? process.arch, electronVersion: input.electronVersion }),
+        appRoot, resourcesPath: `payload/${input.publicAppBundleName}/Contents/Resources`,
+        entry: input.prebundled === false ? `${appRoot}/node_modules/@open-design/packaged/dist/index.mjs` : `${appRoot}/prebundled/packaged-main.mjs`,
+      } satisfies LauncherApplicationArtifact,
+    }),
     channel: input.channel,
     entry: {
       cwd: `payload/${input.publicAppBundleName}`,
@@ -50,6 +66,8 @@ export function buildMacLauncherPayloadManifest(input: {
     schemaVersion: LAUNCHER_SCHEMA_VERSION,
     version: input.version,
   };
+  if (manifest.host != null) validateLauncherApplicationArtifact(manifest.host, manifest.host);
+  return manifest;
 }
 
 export async function createMacLauncherPayloadArchive(
@@ -76,6 +94,9 @@ export async function createMacLauncherPayloadArchive(
     namespace: config.namespace,
     publicAppBundleName: identity.publicAppBundleName,
     version: packagedVersion,
+    electronVersion: config.electronVersion,
+    arch: process.arch,
+    prebundled: shouldUseMacStandalonePrebundle(config.webOutputMode),
   });
 
   await rm(stageRoot, { force: true, recursive: true });

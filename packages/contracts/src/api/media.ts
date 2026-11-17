@@ -13,6 +13,12 @@ export const MEDIA_SURFACES = [
 
 export type MediaSurface = (typeof MEDIA_SURFACES)[number];
 
+/** Available supported Cloud video models for the authenticated project workspace. */
+export interface CloudVideoModelsResponse {
+  source: 'account_workspace_catalogue';
+  video: Array<{ id: string; label: string; hint: string; provider: string; caps: string[]; default?: boolean }>;
+}
+
 export const MEDIA_TASK_STATUSES = [
   'queued',
   'running',
@@ -150,6 +156,7 @@ const MEDIA_FAILURE_NEXT_STEP_BY_CODE: Readonly<Record<string, MediaFailureNextS
   MEDIA_SURFACE_DENIED: 'unsupported',
   // The run allows media but not THIS model — another allowed one exists.
   MEDIA_MODEL_DENIED: 'switch-model',
+  MEDIA_MODEL_UNAVAILABLE: 'switch-model',
   // No renderer is wired for the selected model: a Settings problem, whether
   // the fix is a key or a different provider entry.
   STUB_PROVIDER_DISABLED: 'open-settings',

@@ -35,6 +35,7 @@ import { FileViewer } from '../../src/components/FileViewer';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
 import type { ProjectFile } from '../../src/types';
 import { workspaceContextFixture } from '../helpers/workspace-context';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 const WORKSPACE_CONTEXT = workspaceContextFixture({
   workspaceId: 'ws-deck-blank',
@@ -44,9 +45,13 @@ const WORKSPACE_CONTEXT = workspaceContextFixture({
 // Full context value: a team-workspace project that is not live-shared.
 // `workspaceContext` + `projectResourceAuthority: 'workspace'` is what arms
 // the scoped-asset preview hold in FileViewer.
-function collabValue(): CollabContextValue {
+function collabValue(
+  workspaceContext: WorkspaceCollabContext = WORKSPACE_CONTEXT,
+  projectVisibility?: 'personal' | 'team',
+): CollabContextValue {
   return {
-    workspaceContext: WORKSPACE_CONTEXT,
+    workspaceContext,
+    ...(projectVisibility ? { projectVisibility } : {}),
     workspaceContextLoading: false,
     projectResourceAuthority: 'workspace',
     enabled: false,
@@ -69,8 +74,12 @@ function collabValue(): CollabContextValue {
   };
 }
 
-function Wrap({ children }: { children: ReactNode }) {
-  return <CollabProvider value={collabValue()}>{children}</CollabProvider>;
+function Wrap({ children, context, visibility }: {
+  children: ReactNode;
+  context?: WorkspaceCollabContext;
+  visibility?: 'personal' | 'team';
+}) {
+  return <CollabProvider value={collabValue(context, visibility)}>{children}</CollabProvider>;
 }
 
 function deckFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
@@ -204,6 +213,20 @@ afterEach(() => {
 });
 
 describe('deck preview blank after leaving and returning to the project', () => {
+  it('holds relative assets for an explicitly shared Personal project', async () => {
+    const projectId = 'proj-personal-shared-assets';
+    const filesRequests: FilesRequestLog = [];
+    installFetchMock(projectId, filesRequests);
+    const personal = { ...WORKSPACE_CONTEXT, workspaceType: 'personal' as const };
+    delete personal.teamId;
+    render(
+      <Wrap context={personal} visibility="team">
+        <FileViewer projectId={projectId} projectKind="prototype" file={deckFile()} isDeck />
+      </Wrap>,
+    );
+    await waitFor(() => expect(filesRequests).toHaveLength(1));
+    expect(srcDocFrame().getAttribute('srcdoc') ?? '').toBe('');
+  });
   it('re-issues the project-files read on remount instead of rejoining a stalled shared read, releasing the preview hold', async () => {
     const projectId = 'proj-deck-blank-return';
     const filesRequests: FilesRequestLog = [];

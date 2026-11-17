@@ -217,8 +217,8 @@ describe('od export run-scoped project authority', () => {
     expect(body).toEqual(png);
   });
 
-  it('exports the exact token-bound project without explicit workspace flags', async () => {
-    // Given: a run-scoped token for a project bound to the second directory workspace.
+  it('rejects a tool token with no real Run or pinned actor for a Team project', async () => {
+    // A registry grant alone does not prove the Run's launch member.
     const token = toolTokenRegistry.mint({
       projectId,
       runId: `run_${randomUUID()}`,
@@ -228,9 +228,9 @@ describe('od export run-scoped project authority', () => {
     // When: the documented spawned-agent wrapper command runs without workspace flags.
     const result = await runExportCli(projectId, outputPath, token);
 
-    // Then: the exact project exports through its token authority.
-    expect(result.code, result.stderr).toBe(0);
-    expect(existsSync(outputPath)).toBe(true);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('WORKSPACE_PROJECT_PERMISSION_DENIED');
+    expect(existsSync(outputPath)).toBe(false);
   });
 
   it('derives a bound project workspace without a tool token or workspace flags', async () => {
@@ -244,6 +244,21 @@ describe('od export run-scoped project authority', () => {
     // requiring the caller to know an active/default Workspace.
     expect(result.code, result.stderr).toBe(0);
     expect(existsSync(outputPath)).toBe(true);
+  });
+
+  it('never replaces an explicit removed member with the current account for Team export', async () => {
+    const response = await fetch(`${daemonUrl}/api/projects/${projectId}/export/image`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${daemonApiToken}`,
+        'content-type': 'application/json',
+        'x-od-workspace-id': workspaceId,
+        'x-od-workspace-member-id': 'removed-old-member',
+        'x-od-workspace-type': 'team',
+      },
+      body: JSON.stringify({ fileName: 'index.html' }),
+    });
+    expect(response.status).toBe(403);
   });
 
   it('accepts legacy workspace flags as ignored compatibility inputs', async () => {
@@ -265,19 +280,15 @@ describe('od export run-scoped project authority', () => {
   });
 
   it('loads relative renderer assets for a bound project whose HTML already declares a base', async () => {
-    // Given: a valid run token bound to a Workspace project whose renderer needs relative assets
+    // Given: the authenticated account can export a Workspace project whose renderer needs relative assets
     // and whose source HTML already declares an unrelated external base.
-    const token = toolTokenRegistry.mint({
-      projectId,
-      runId: `run_${randomUUID()}`,
-    }).token;
     lastRendererAssetUrl = '';
 
     // When: the screenshot POST renders the project without forwarding its bearer to asset GETs.
     const response = await fetch(`${daemonUrl}/api/projects/${projectId}/export/image`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${daemonApiToken}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify({ fileName: 'index.html' }),
@@ -296,10 +307,6 @@ describe('od export run-scoped project authority', () => {
 
   it('revokes renderer asset capability as soon as the renderer promise settles', async () => {
     // Given: rendering can settle while downstream file validation/read and the HTTP response remain pending.
-    const token = toolTokenRegistry.mint({
-      projectId,
-      runId: `run_${randomUUID()}`,
-    }).token;
     let signalInvocation: (() => void) | null = null;
     const invoked = new Promise<void>((resolve) => {
       signalInvocation = resolve;
@@ -321,7 +328,7 @@ describe('od export run-scoped project authority', () => {
     const responsePromise = fetch(`${daemonUrl}/api/projects/${projectId}/export/image`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${token}`,
+        authorization: `Bearer ${daemonApiToken}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify({ fileName: 'index.html' }),
@@ -352,12 +359,8 @@ describe('od export run-scoped project authority', () => {
     expect(body).toEqual(png);
   }, 30_000);
 
-  it('loads relative assets through the desktopArtifactExporter fallback for an exact-project run token', async () => {
+  it('loads relative assets through the desktopArtifactExporter fallback for an authenticated Team export', async () => {
     // Given: a bound Workspace project and a daemon with only the supported image exporter fallback.
-    const token = toolTokenRegistry.mint({
-      projectId,
-      runId: `run_${randomUUID()}`,
-    }).token;
     const fallbackArtifact = path.join(outputDir, `fallback-${randomUUID()}.png`);
     let fallbackAssetUrl = '';
     let wroteArtifactAfterAssets = false;
@@ -390,7 +393,7 @@ describe('od export run-scoped project authority', () => {
       const response = await fetch(`${fallbackDaemon.url}/api/projects/${projectId}/export/image`, {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${token}`,
+          authorization: 'Bearer changed-after-server-start',
           'content-type': 'application/json',
         },
         body: JSON.stringify({ fileName: 'index.html' }),

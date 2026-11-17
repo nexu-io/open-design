@@ -60,6 +60,15 @@ describe('run deliverable validation', () => {
     expect((await validateRunDeliverable(input)).valid).toBe(false);
   });
 
+  it('accepts multiple Discovery outputs only when each touched candidate is readable', async () => {
+    const fixture = await projectFixture({ 'slides.html': '<main>Deck</main>', 'manual.html': '<main>Manual</main>' });
+    const input = { ...fixture, runStatus: 'succeeded' as const, artifactCount: 2,
+      touchedPaths: ['slides.html', 'manual.html'], allowIndependentOutput: true, allowMultipleOutputCandidates: true };
+    expect(await validateRunDeliverable(input)).toMatchObject({ valid: true, entryFile: 'manual.html' });
+    expect((await validateRunDeliverable({ ...input, touchedPaths: ['slides.html', 'missing.html'] })).valid).toBe(false);
+    expect((await validateRunDeliverable({ ...input, touchedPaths: ['slides.html', '../outside.html'] })).valid).toBe(false);
+  });
+
   it('keeps HTML as the entry when the current run integrates an image into a page', async () => {
     const fixture = await projectFixture({ 'index.html': '<img src="dog.png">', 'dog.png': 'image' });
     expect(await validateRunDeliverable({ ...fixture, runStatus: 'succeeded', artifactCount: 2,
@@ -462,6 +471,20 @@ describe('project deliverable validation', () => {
 
 
 describe('motion output facts without a planning-contract gate', () => {
+  it('accepts Query-selected Motion output in a project entered through generic Video', async () => {
+    const fixture = await projectFixture({
+      'motion-source/film/index.html': '<main>Editable film source</main>',
+      'film.mp4': 'video',
+    });
+    // Export bytes are checked by the exporter; completion must not demand a
+    // Motion planning contract or rewrite the original project type.
+    expect(await validateRunDeliverable({ ...fixture,
+      projectMetadata: { kind: 'video' }, runStatus: 'succeeded', artifactCount: 2,
+      allowIndependentOutput: true,
+      touchedPaths: ['motion-source/film/index.html', 'film.mp4'],
+    })).toMatchObject({ valid: true });
+  });
+
   it('recognizes nested editable source without requiring model-authored plan fields', async () => {
     const fixture = await projectFixture({ 'motion-source/film/index.html': '<main>Editable film source</main>', 'film.mp4': 'video' });
     expect(await validateRunDeliverable({ ...fixture, projectMetadata: { kind: 'video', intent: 'motion-design', videoModel: 'hyperframes-html' }, runStatus: 'succeeded', artifactCount: 2 })).toMatchObject({ valid: true, entryFile: 'motion-source/film/index.html' });

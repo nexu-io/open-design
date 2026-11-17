@@ -15,7 +15,7 @@ import {
   parsePreviewObservabilityMessage,
   type PreviewObservabilityMessage,
 } from '@open-design/contracts/runtime/preview-observability';
-import { reportSafetyEvent } from '../analytics/error-tracking';
+import { reportClientMetricEvent, reportSafetyEvent } from '../analytics/error-tracking';
 import { scrubFilePath } from '../analytics/scrub';
 
 const LOAD_TIMEOUT_MS = 15000;
@@ -420,5 +420,155 @@ export function trackIframeLoad(options: TrackIframeOptions): () => void {
     clearTimeout(timer);
     iframe.removeEventListener('load', onLoad);
     iframe.removeEventListener('error', onError);
+  };
+}
+
+
+export type PreviewRenderMode = 'srcdoc' | 'url_load' | 'live_artifact';
+type PreviewResult = 'success' | 'white_screen' | 'error' | 'cancelled';
+
+/** One visible activation, exactly one terminal event. Rejected starts cannot
+ * manufacture numerator-only events. Delivery itself remains best effort. */
+export function createPreviewAttempt(deps: {
+  renderMode: PreviewRenderMode; artifactKind: string | null;
+  now: () => number; id: () => string;
+  emit: (event: string, props: Record<string, unknown>) => boolean;
+}) {
+  let state: 'idle' | 'started' | 'finished' = 'idle';
+  let started = 0;
+  let fields: Record<string, unknown> = {};
+  return {
+    start(eligible: boolean): string | null {
+      if (!eligible || state !== 'idle') return null;
+      state = 'finished';
+      started = deps.now();
+      const id = deps.id();
+      fields = { preview_attempt_id: id, render_mode: deps.renderMode,
+        artifact_kind: deps.artifactKind, started_at: new Date().toISOString(),
+        metric_schema_version: 1, telemetry_capability: 'supported' };
+      if (!deps.emit('client_preview_attempt', fields)) return null;
+      state = 'started';
+      return id;
+    },
+    finish(result: PreviewResult, monitoringKind?: string): void {
+      if (state !== 'started') return;
+      state = 'finished';
+      deps.emit('client_preview_result', { ...fields, result,
+        duration_ms: Math.max(0, Math.round(deps.now() - started)),
+        monitoring_kind: monitoringKind ?? ({ success: 'visible_content', white_screen: 'no_visible_paint_after_timeout',
+          error: 'preview_error', cancelled: 'left_or_hidden' } as const)[result] });
+    },
+  };
+}
+
+export function isPreviewFrameVisible(iframe: HTMLIFrameElement): boolean {
+  if (document.visibilityState !== 'visible' || !iframe.isConnected) return false;
+  for (let node: HTMLElement | null = iframe; node; node = node.parentElement) {
+    if (node.hidden || node.getAttribute('aria-hidden') === 'true'
+      || node.dataset.odActive === 'false' || node.dataset.odMotionActive === 'false') return false;
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+  }
+  const rect = iframe.getBoundingClientRect();
+  return rect.width > 1 && rect.height > 1 && rect.bottom > 0 && rect.right > 0
+    && rect.top < window.innerHeight && rect.left < window.innerWidth;
+}
+
+
+/** Render modes whose frames carry the observability bridge and can answer
+ * `od:preview-metric-probe`. URL-loaded artifacts never receive that bridge, so
+ * an unanswered probe there is not evidence of failure; counting them would
+ * turn every visible, successful URL preview into an `error` result. */
+export function previewModeAnswersProbe(renderMode: PreviewRenderMode): boolean {
+  return renderMode !== 'url_load';
+}
+
+/** Bounded probes; no authored text/URL/DOM enters the metric transport.
+ * Retained frames are cancelled by activity attributes, even without unmount.
+ * Frames that cannot answer the probe are excluded from the denominator. */
+export function trackVisiblePreview(options: {
+  iframe: HTMLIFrameElement; renderMode: PreviewRenderMode; artifactKind: string | null;
+}): () => void {
+  if (!previewModeAnswersProbe(options.renderMode)) return () => {};
+  const { iframe } = options;
+  let current: ReturnType<typeof createPreviewAttempt> | null = null;
+  let attemptId: string | null = null;
+  let timers: ReturnType<typeof setTimeout>[] = [];
+  let intersectionVisible = typeof IntersectionObserver === 'undefined';
+  let settled = false;
+  let probes = 0;
+  const eligible = () => intersectionVisible && isPreviewFrameVisible(iframe);
+  const clear = () => { for (const timer of timers) clearTimeout(timer); timers = []; };
+  const finish = (result: PreviewResult, kind?: string) => { current?.finish(result, kind); settled = true; clear(); };
+  const probe = () => {
+    if (!eligible()) { update(); return; }
+    if (!attemptId || settled || probes >= 8) return;
+    probes++;
+    if (options.renderMode === 'live_artifact') iframe.contentWindow?.postMessage({ type: 'od:preview-observability-host-state', active: true }, '*');
+    iframe.contentWindow?.postMessage({ type: 'od:preview-metric-probe', attemptId }, '*');
+  };
+  const update = () => {
+    if (!eligible()) {
+      if (attemptId && options.renderMode === 'live_artifact') iframe.contentWindow?.postMessage({ type: 'od:preview-observability-host-state', active: false }, '*');
+      finish('cancelled'); current = null; attemptId = null;
+      return;
+    }
+    if (current) return;
+    settled = false; probes = 0;
+    current = createPreviewAttempt({ ...options, now: () => performance.now(),
+      id: () => globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      emit: reportClientMetricEvent });
+    attemptId = current.start(true);
+    if (!attemptId) { current = null; return; }
+    for (const delay of [0, 500, 1500, 5000, 6500, 10000, 14000]) timers.push(setTimeout(probe, delay));
+    timers.push(setTimeout(() => {
+      if (!eligible()) update();
+      else finish('error', options.renderMode === 'srcdoc' ? 'srcdoc_transport_unverified' : 'probe_unverified');
+    }, LOAD_TIMEOUT_MS));
+  };
+  const onMessage = (event: MessageEvent) => {
+    if (event.source !== iframe.contentWindow || settled) return;
+    if (!attemptId || !eligible()) { update(); return; }
+    const data = event.data;
+    if (data?.type === 'od:preview-metric-result' && data.attemptId === attemptId
+      && ['success', 'white_screen', 'error'].includes(data.result)) {
+      finish(data.result);
+    }
+  };
+  const onTransportRecovery = () => { if (eligible()) finish('error', 'srcdoc_transport_unverified'); };
+  const onError = () => { if (eligible()) finish('error'); else update(); };
+  const onPageHide = () => { finish('cancelled'); current = null; attemptId = null; };
+  let activityTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleActivityUpdate = () => {
+    if (activityTimer !== null) return;
+    activityTimer = setTimeout(() => { activityTimer = null; update(); }, 100);
+  };
+  const observer = new MutationObserver(scheduleActivityUpdate);
+  for (let node: HTMLElement | null = iframe; node; node = node.parentElement) {
+    observer.observe(node, { attributes: true, attributeFilter: ['hidden', 'aria-hidden', 'data-od-active', 'data-od-motion-active', 'style', 'class'] });
+  }
+  const intersection = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(entries => {
+    const entry = entries[0];
+    intersectionVisible = !!entry?.isIntersecting && entry.intersectionRect.width > 1 && entry.intersectionRect.height > 1;
+    update();
+  });
+  intersection?.observe(iframe);
+  document.addEventListener('visibilitychange', update);
+  window.addEventListener('pagehide', onPageHide);
+  iframe.addEventListener('od:preview-transport-recovery', onTransportRecovery);
+  window.addEventListener('message', onMessage);
+  iframe.addEventListener('load', probe);
+  iframe.addEventListener('error', onError);
+  update();
+  return () => {
+    finish('cancelled');
+    if (options.renderMode === 'live_artifact') iframe.contentWindow?.postMessage({ type: 'od:preview-observability-host-state', active: false }, '*');
+    observer.disconnect(); intersection?.disconnect();
+    if (activityTimer !== null) clearTimeout(activityTimer);
+    document.removeEventListener('visibilitychange', update);
+    window.removeEventListener('pagehide', onPageHide);
+    iframe.removeEventListener('od:preview-transport-recovery', onTransportRecovery);
+    window.removeEventListener('message', onMessage);
+    iframe.removeEventListener('load', probe); iframe.removeEventListener('error', onError);
   };
 }

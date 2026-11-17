@@ -484,13 +484,15 @@ export function createCollabCloudService(
 		displayName: string;
 	} | null {
 		if (
-			context.workspaceType !== "team" ||
+			(context.workspaceType !== "team" && context.workspaceType !== "personal") ||
 			context.memberStatus !== "active" ||
 			context.lifecycleState === "deleted"
 		) {
 			return null;
 		}
-		const teamId = context.teamId?.trim() || context.workspaceId.trim();
+		const teamId = context.workspaceType === "team"
+			? context.teamId?.trim() || context.workspaceId.trim()
+			: context.workspaceId.trim();
 		const memberId = context.workspaceMemberId.trim();
 		if (!teamId || !memberId) return null;
 		return {
@@ -559,7 +561,7 @@ export function createCollabCloudService(
 		const shared = deps.isMemberSyncProjectShared?.(projectId)
 			?? (deps.commentRelayScope
 				? deps.commentRelayScope(projectId, "", context)?.relayScope === "team"
-				: true); // Legacy isolated callers have no local binding seam.
+				: context.workspaceType === "team"); // Legacy Team callers have no local binding seam.
 		return team && shared
 			? { teamId: team.teamId, memberId: team.memberId, relayScope: "team" }
 			: null;

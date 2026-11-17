@@ -52,9 +52,11 @@ import {
   updateProject,
   upsertPreviewComment,
 } from '../src/db.js';
-import { createLocalCommentFiles } from '../src/collab/local-comment-files.js';
+import { createLocalCommentFiles, prepareLocalProjectCommentFile } from '../src/collab/local-comment-files.js';
+import { createAuthorizeProjectRequest } from '../src/collab/project-request-authority.js';
 import { resolveLocalProjectCommentWorkspaceContext } from '../src/collab/project-comment-workspace-context.js';
-import { enforceWorkspaceResourceMutation, resolveOptionalLocalWorkspaceRequestAuthority } from '../src/collab/workspace-resource-mutation.js';
+import { createEnforceWorkspaceProjectMutation } from '../src/routes/project/index.js';
+import { resolveOptionalLocalWorkspaceRequestAuthority, enforceWorkspaceResourceMutation } from '../src/collab/workspace-resource-mutation.js';
 import { verifyWorkspaceRequestContext } from '../src/collab/request-workspace-context.js';
 import { createCachedWorkspaceDirectoryFetcher } from '../src/collab/vela-workspace-context.js';
 import { registerProjectCommentRoutes } from '../src/routes/project/comments.js';
@@ -135,6 +137,7 @@ const COMMENT_TARGET = {
 
 async function startServer(
   routeOverrides: Record<string, unknown> = {},
+  centralAuthority = false,
 ) {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-comment-ws-gate-'));
   const db = openDatabase(tempDir);
@@ -207,6 +210,26 @@ async function startServer(
         capability,
       ),
     resolveAuthorMemberId: async () => undefined,
+    ...(centralAuthority ? {
+      prepareCommentFile: async (projectId, filePath, context) => prepareLocalProjectCommentFile({
+        db, projectId, filePath, context, requireWorkspaceAuthority: true,
+      }),
+      enforceWorkspaceProjectMutation: createEnforceWorkspaceProjectMutation(
+        undefined, undefined, createAuthorizeProjectRequest({
+          db,
+          getWorkspaceProject: (_db, workspaceId, projectId) => getWorkspaceProject(db, workspaceId, projectId),
+          getWorkspaceProjectByProjectId: (_db, projectId) => getWorkspaceProjectByProjectId(db, projectId),
+          sendApiError,
+        }),
+      ),
+      resolveWorkspaceContext: async (req: any, projectId: string) => {
+        const binding = getWorkspaceProjectByProjectId(db, projectId);
+        return resolveLocalProjectCommentWorkspaceContext({
+          binding, revoked: false,
+          local: resolveOptionalLocalWorkspaceRequestAuthority(req),
+        });
+      },
+    } : {}),
     ...routeOverrides,
   });
   const created = http.createServer(app);
@@ -750,7 +773,7 @@ describe('project comments — workspace mutation gate', () => {
     const baseUrl = await startServer({
       resolveWorkspaceContext: (req: unknown, projectId: string) => resolveLocalProjectCommentWorkspaceContext({
         binding: getWorkspaceProjectByProjectId(database!, projectId), revoked: false,
-        local: resolveOptionalLocalWorkspaceRequestAuthority(req), fallbackContext: () => activeTeamContext(),
+        local: resolveOptionalLocalWorkspaceRequestAuthority(req),
       }),
       resolveFreshWorkspaceContext: (req: unknown) => verifyWorkspaceRequestContext({ req, fetchWorkspaceDirectory: directory }),
       prepareCommentFile: (projectId: string, filePath: string) => createLocalCommentFiles(database!).identity(projectId, filePath),
@@ -1287,3 +1310,117 @@ describe('project comments — workspace mutation gate', () => {
     expect(del.status).toBe(200);
   });
 });
+
+
+describe('MEM-5276CF5002 production local comment authority', () => {
+  it.each([TEAM_PROJECT, TEAM_MIRROR_PROJECT])('rejects headerless creation and mutation on %s', async (projectId) => {
+    const base = await startServer({}, true);
+    const conversation = projectId === TEAM_PROJECT ? 'conv-team' : 'conv-team-mirror';
+    const url = `${base}/api/projects/${projectId}/conversations/${conversation}/comments`;
+    const create = await fetch(url, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...workspaceHeaders(OTHER_MEMBER_ID, 'member') },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'original', authorMemberId: OWNER_MEMBER_ID }),
+    });
+    expect(create.status).toBe(200);
+    const { comment } = await create.json() as { comment: { id: string; authorMemberId: string } };
+    expect(comment.authorMemberId).toBe(OTHER_MEMBER_ID);
+    for (const request of [
+      { method: 'POST', url, body: { target: COMMENT_TARGET, note: 'anonymous' } },
+      { method: 'POST', url, body: { id: comment.id, target: COMMENT_TARGET, note: 'forged edit' } },
+      { method: 'PATCH', url: `${url}/${comment.id}`, body: { status: 'resolved' } },
+      { method: 'DELETE', url: `${url}/${comment.id}`, body: undefined },
+    ]) {
+      const result = await fetch(request.url, {
+        method: request.method, headers: { 'content-type': 'application/json' },
+        ...(request.body ? { body: JSON.stringify(request.body) } : {}),
+      });
+      expect(result.status).toBe(400);
+    }
+    expect(listProjectPreviewComments(database!, projectId)).toMatchObject([{ id: comment.id, note: 'original', authorMemberId: OTHER_MEMBER_ID }]);
+  });
+
+  it.each(['owner', 'admin', 'member'] as const)('attributes %s comments to the caller and preserves author-only editing', async (role) => {
+    const base = await startServer({}, true);
+    const url = `${base}/api/projects/${TEAM_MIRROR_PROJECT}/conversations/conv-team-mirror/comments`;
+    const headers = { 'content-type': 'application/json', ...workspaceHeaders(OTHER_MEMBER_ID, role) };
+    const post = await fetch(url, { method: 'POST', headers,
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'by caller', authorMemberId: OWNER_MEMBER_ID }),
+    });
+    expect(post.status).toBe(200);
+    const { comment } = await post.json() as { comment: { id: string; authorMemberId: string } };
+    expect(comment.authorMemberId).toBe(OTHER_MEMBER_ID);
+    const edit = await fetch(url, { method: 'POST', headers,
+      body: JSON.stringify({ id: comment.id, target: COMMENT_TARGET, note: 'own edit' }),
+    });
+    expect(edit.status).toBe(200);
+    const forged = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...workspaceHeaders(OWNER_MEMBER_ID, 'owner') },
+      body: JSON.stringify({ id: comment.id, target: COMMENT_TARGET, note: 'other edit' }),
+    });
+    expect(forged.status).toBe(403);
+    const deleted = await fetch(`${url}/${comment.id}`, { method: 'DELETE', headers });
+    expect(deleted.status).toBe(200);
+  });
+});
+
+it('keeps local-only comments usable through the production central gate without workspace login', async () => {
+  const base = await startServer({}, true);
+  const url = `${base}/api/projects/${UNBOUND_PROJECT}/conversations/conv-unbound/comments`;
+  const created = await fetch(url, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ target: COMMENT_TARGET, note: 'offline local' }),
+  });
+  expect(created.status).toBe(200);
+  const { comment } = await created.json() as { comment: { id: string; authorMemberId?: string } };
+  expect(comment.authorMemberId).toBeUndefined();
+  const status = await fetch(`${url}/${comment.id}`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'resolved' }),
+  });
+  expect(status.status).toBe(200);
+  expect((await fetch(`${url}/${comment.id}`, { method: 'DELETE' })).status).toBe(200);
+});
+
+it('requires the bound private-project caller and rejects body-only or partial identity', async () => {
+  const base = await startServer({}, true);
+  const url = `${base}/api/projects/${PERSONAL_PROJECT}/conversations/conv-personal/comments`;
+  for (const request of [
+    { headers: {}, status: 400 },
+    { headers: { 'x-od-workspace-id': WORKSPACE_ID }, status: 400 },
+    { headers: workspaceHeaders(OTHER_MEMBER_ID, 'member'), status: 403 },
+    { headers: { ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'), 'x-od-workspace-id': 'foreign-space' }, status: 403 },
+    { headers: workspaceHeaders(OWNER_MEMBER_ID, 'owner'), status: 200 },
+  ]) {
+    const result = await fetch(url, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...request.headers } as Record<string, string>,
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'private', workspaceId: WORKSPACE_ID,
+        workspaceMemberId: OWNER_MEMBER_ID, authorMemberId: OTHER_MEMBER_ID }),
+    });
+    expect(result.status).toBe(request.status);
+    if (result.ok) {
+      const { comment } = await result.json() as { comment: { authorMemberId: string } };
+      expect(comment.authorMemberId).toBe(OWNER_MEMBER_ID);
+    }
+  }
+});
+
+// Exercise the exact production preparer, including a missing catalog receipt.
+it.each([['p-team', 'conv-team'], ['p-team-mirror', 'conv-team-mirror']])(
+  'MEM-9286 creates a durable local file identity for a member on %s without publishing',
+  async (projectId, conversationId) => {
+    const base = await startServer({}, true);
+    const response = await fetch(`${base}/api/projects/${projectId}/conversations/${conversationId}/comments`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json',
+        'x-od-workspace-id': WORKSPACE_ID, 'x-od-workspace-member-id': OTHER_MEMBER_ID },
+      body: JSON.stringify({ target: COMMENT_TARGET, note: 'first member annotation' }),
+    });
+    expect(response.status).toBe(200);
+    const comments = listProjectPreviewComments(database!, projectId);
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toMatchObject({ authorMemberId: OTHER_MEMBER_ID });
+    expect(comments[0]?.sourceFileId).toBeTruthy();
+    expect(prepareLocalProjectCommentFile({ db: database!, projectId, filePath: 'index.html',
+      context: { workspaceId: WORKSPACE_ID, workspaceMemberId: OTHER_MEMBER_ID }, requireWorkspaceAuthority: true }))
+      .toBe(comments[0]?.sourceFileId);
+    expect(getProject(database!, projectId)?.metadata?._commentFiles).toBeUndefined();
+  },
+);

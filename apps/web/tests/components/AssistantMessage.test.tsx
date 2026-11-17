@@ -1803,7 +1803,7 @@ describe('AssistantMessage recovered produced files', () => {
     const download = produced?.querySelector('a[download]');
     expect(download).toBeTruthy();
     expect(download?.getAttribute('href')).toBe(
-      '/api/projects/proj-1/raw/browser-war-deck-outline.md',
+      '/api/projects/proj-1/raw/browser-war-deck-outline.md?workspaceId=workspace-a&workspaceMemberId=member-a',
     );
     /*
      * 「不折进工具摘要」现在断言的是**没有那份文本清单**,不是「没有

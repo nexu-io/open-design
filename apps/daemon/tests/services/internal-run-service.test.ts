@@ -8,6 +8,7 @@ import {
 
 interface TestRun extends InternalPhysicalRun {
   assistantMessageId: string | null;
+  manualResumeAttemptCount?: number;
 }
 
 function createHarness(initial: {
@@ -123,6 +124,28 @@ describe('internal run creation service', () => {
     expect(harness.install).toHaveBeenCalledWith({ ...facts, run: harness.run });
     expect(harness.install.mock.invocationCallOrder[0]!)
       .toBeLessThan(harness.start.mock.invocationCallOrder[0]!);
+  });
+
+  it('starts and observes the same physical attempt once when the caller retries start', () => {
+    const harness = createHarness();
+    const starter = vi.fn(async () => undefined);
+    const facts = { body: {}, requestAnalyticsContext: null };
+    expect(harness.service.start(harness.run, facts, starter)).toBe(harness.run);
+    expect(harness.service.start(harness.run, facts, starter)).toBe(harness.run);
+    expect(harness.install).toHaveBeenCalledOnce();
+    expect(harness.start).toHaveBeenCalledOnce();
+    expect(starter).toHaveBeenCalledOnce();
+  });
+
+  it('arms a new lifecycle and starts a genuinely resumed physical attempt', () => {
+    const harness = createHarness();
+    const starter = vi.fn(async () => undefined);
+    const facts = { body: {}, requestAnalyticsContext: null };
+    harness.service.start(harness.run, facts, starter);
+    harness.run.manualResumeAttemptCount = 1;
+    harness.service.start(harness.run, facts, starter);
+    expect(harness.install).toHaveBeenCalledTimes(2);
+    expect(starter).toHaveBeenCalledTimes(2);
   });
 
   it('starts the run even when no caller identity is available', async () => {

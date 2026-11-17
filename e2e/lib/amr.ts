@@ -9,7 +9,7 @@ export type FakeVelaOptions = {
   failBalanceAtPrompt?: boolean;
   failBalanceAtPromptOnce?: boolean;
   failModelListInvalidApiKey?: boolean;
-  fundingCheck?: { status: 'available' | 'insufficient' | 'unknown'; workspaceMemberId: string };
+  fundingCheck?: { status: 'available' | 'insufficient' | 'unknown'; workspaceMemberId: string; balanceUsd?: string };
   requireLoginConfig?: boolean;
   requireSetModel?: boolean;
   sessionId?: string;
@@ -224,7 +224,7 @@ if (argv[2] === 'billing' && ['preflight', 'funding-check'].includes(argv[3])) {
   const generatedAt = new Date().toISOString();
   stdout.write(JSON.stringify({
     schemaVersion: 1, workspaceId, workspaceMemberId: check.workspaceMemberId,
-    modelId, generatedAt, balanceUsd: '0', modelCovered: false,
+    modelId, generatedAt, balanceUsd: check.balanceUsd ?? '0', modelCovered: false,
     funding: 'gateway', fundingCheck: argv[3] === 'funding-check' ? check.status : undefined,
     codingPlan: { workspaceId, generatedAt, eligible: false, tier: null, windows: [] },
   }));

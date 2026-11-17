@@ -193,7 +193,7 @@ describe('FileViewer markdown code block copy', () => {
 
     await waitFor(() => {
       expect(container.querySelector('img[alt="Team image"]')?.getAttribute('src')).toBe(
-        '/api/projects/project-1/raw/relative.png',
+        '/api/projects/project-1/raw/relative.png?workspaceId=workspace-team&workspaceMemberId=member-1',
       );
     });
   });

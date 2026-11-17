@@ -1,3 +1,4 @@
+import { workspaceContextHasWorkspaceIdentity } from '@open-design/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Button } from '@open-design/components';
@@ -216,12 +217,12 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
   }, [workspaceCatalogIdentity, workspaceContext, workspaceReadMode]);
 
   useEffect(() => {
-    if (workspaceContext?.workspaceType === 'team') return;
+    if (workspaceContextHasWorkspaceIdentity(workspaceContext)) return;
     void refresh();
   }, [refresh, workspaceContext?.workspaceType]);
 
   const handleSkillStreamActive = useWorkspaceSnapshotActivation({
-    enabled: workspaceReadMode === 'scoped' && workspaceContext?.workspaceType === 'team',
+    enabled: workspaceReadMode === 'scoped' && workspaceContextHasWorkspaceIdentity(workspaceContext),
     identity: workspaceCatalogIdentity,
     refresh: () => { void refresh(); },
   });
@@ -229,7 +230,7 @@ export function SkillsSection({ cfg, setCfg, onSkillsRefresh, onSkillsChanged }:
   useWorkspaceInvalidation(
     {
       'team-resources-changed': (payload) => {
-        if (payload.resourceKind === 'skill') void refresh();
+        if (!payload.resourceKind || payload.resourceKind === 'skill') void refresh();
       },
     },
     {

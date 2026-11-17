@@ -248,6 +248,32 @@ describe('RecentProjectsStrip thumbnail request budget (Batch A §4.2)', () => {
     expect(seenSrcs.size).toBe(10);
   });
 
+  it('loads every visible HTML cover in muted motion-thumbnail mode', async () => {
+    // Several visible motion cards must not overlap their soundtracks.
+    renderStrip([makeProject('motion-cover-a'), makeProject('motion-cover-b')]);
+    await flush();
+    intersectAll();
+    await flush(30);
+    intersectAll();
+    await flush(30);
+
+    const frames = mountedCoverIframes();
+    expect(frames).toHaveLength(2);
+    const paths = frames.map((frame) => {
+      const src = new URL(frame.getAttribute('src') ?? '', 'http://localhost');
+      expect(src.searchParams.get('odMotionThumbnail')).toBe('1');
+      // Hosted mode would wait for a host activity binding the grid never
+      // sends, freezing the cover; the grid only needs the audio forced off.
+      expect(src.searchParams.has('odMotionPreview')).toBe(false);
+      return src.pathname;
+    });
+    expect(paths.sort()).toEqual([
+      '/api/projects/motion-cover-a/files/index.html',
+      '/api/projects/motion-cover-b/files/index.html',
+    ]);
+    for (const probe of headCalls) expect(probe).not.toContain('odMotionThumbnail');
+  });
+
   it('reuses the last successful cover decision on remount instead of re-probing', async () => {
     const projects = range(4).map((i) => makeProject(`lru-${i}`));
     const first = renderStrip(projects);

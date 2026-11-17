@@ -124,6 +124,11 @@ describe('codex buildArgs session resume', () => {
     expect(includeOnly).toContain('"OD_WORKSPACE_MEMBER_ID"');
     expect(includeOnly).toContain('"OD_PROJECT_DIR"');
     expect(includeOnly).toContain('"OD_TASK_INPUT_DIR"');
+    expect(includeOnly).toContain('"OD_STOCK_RUN_ID"');
+    expect(includeOnly).toContain('"OD_STOCK_ANALYTICS_DEVICE_ID"');
+    expect(includeOnly).toContain('"OD_STOCK_ANALYTICS_SESSION_ID"');
+    expect(includeOnly).toContain('"OD_STOCK_SOURCE_COMMIT"');
+    expect(includeOnly).toContain('"OD_STOCK_EVALUATION_RUN_ID"');
     expect(includeOnly).not.toContain('OPENAI_API_KEY');
     expect(includeOnly).not.toContain('OD_API_TOKEN');
   });

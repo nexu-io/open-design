@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "music": {
+    "role": "bed",
+    "description": "轻快电子氛围，合成器脉冲与短促打击，配合界面操作",
+    "bpm": null,
+    "beatConfidence": "none",
+    "cutOnBeat": false,
+    "sections": [
+      {
+        "scene": "introducing",
+        "energy": "mid"
+      },
+      {
+        "scene": "cursor",
+        "energy": "mid"
+      },
+      {
+        "scene": "title",
+        "energy": "high"
+      },
+      {
+        "scene": "prompt",
+        "energy": "mid"
+      },
+      {
+        "scene": "tasks",
+        "energy": "mid"
+      },
+      {
+        "scene": "claim",
+        "energy": "mid"
+      },
+      {
+        "scene": "preview",
+        "energy": "mid"
+      },
+      {
+        "scene": "palette",
+        "energy": "high"
+      },
+      {
+        "scene": "completed",
+        "energy": "mid"
+      },
+      {
+        "scene": "close",
+        "energy": "mid"
+      }
+    ]
+  },
+  "effects": [
+    {
+      "cue": "cursor-in",
+      "kind": "typing",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "title-in",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "prompt-in",
+      "kind": "typing",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "tasks-in",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "claim-in",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "preview-in",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "palette-in",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    },
+    {
+      "cue": "completed-in",
+      "kind": "whoosh",
+      "sync": "motion-peak"
+    }
+  ],
+  "effectsPer10s": 3.54,
+  "voice": {
+    "present": false
+  },
+  "demoTrack": {
+    "file": "assets/soundtrack.mp3",
+    "origin": "reference"
+  }
+}

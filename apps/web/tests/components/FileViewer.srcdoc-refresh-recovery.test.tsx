@@ -32,9 +32,9 @@ function htmlFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
 }
 
 function srcDocHtml(label: string): string {
-  // localStorage forces the same sandbox-shim/srcDoc transport used by the
+  // sessionStorage forces the same non-persistent sandbox-shim/srcDoc transport used by the
   // artifact in the reported diagnostics bundle.
-  return `<html><body><main>${label}</main><script>localStorage.setItem('deepflow', 'monthly')</script></body></html>`;
+  return `<html><body><main>${label}</main><script>sessionStorage.setItem('deepflow', 'monthly')</script></body></html>`;
 }
 
 function transportGeneration(frame: HTMLIFrameElement): string {
@@ -46,6 +46,7 @@ function transportGeneration(frame: HTMLIFrameElement): string {
 }
 
 beforeEach(() => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 800, height: 600, top: 0, left: 0, bottom: 600, right: 800 } as DOMRect);
   setExceptionTrackingContext({
     apiKey: 'phc_preview_test',
     host: 'https://posthog.test',
@@ -64,6 +65,55 @@ afterEach(() => {
 });
 
 describe('FileViewer srcDoc file-watch refresh recovery', () => {
+  it('seeds fresh local progress on reload without navigating the current document on writes', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+    const view = () => <FileViewer projectId="persistent-checklist" projectKind="prototype"
+      file={htmlFile()} liveHtml="<html><body>Checklist<script>localStorage.getItem('progress')</script></body></html>" />;
+    const first = render(view());
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    expect(frame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
+    const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+    fireEvent.load(frame);
+    const activation = post.mock.calls.find(([msg]) => msg.type === 'od:srcdoc-transport-activate')![0];
+    expect(activation.html).toContain('data-od-preview-storage');
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow, data: {type:'od:preview-local-storage', generation:activation.generation, values:{progress:'2/15'}},
+    })));
+    expect(post.mock.calls.filter(([msg]) => msg.type === 'od:srcdoc-transport-activate')).toHaveLength(1);
+    first.unmount();
+    render(view());
+    const reopened = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const next = vi.spyOn(reopened.contentWindow!, 'postMessage');
+    fireEvent.load(reopened);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      type:'od:srcdoc-transport-activate', previewStorage:{progress:'2/15'},
+    }), '*');
+  });
+
+  it('activates an Electron shell only once when ready arrives before its first load', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('OpenDesign Electron/41.3.0');
+    const original = URL.createObjectURL;
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true, value: vi.fn(() => 'blob:http://localhost/ready-before-load'),
+    });
+    try {
+      render(<FileViewer projectId="ready-project" projectKind="prototype"
+        file={htmlFile()} liveHtml={srcDocHtml('ready-first')} />);
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const post = vi.spyOn(frame.contentWindow!, 'postMessage');
+      act(() => window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow, data: { type: 'od:srcdoc-transport-ready' },
+      })));
+      const activations = () => post.mock.calls.filter(([msg]) => msg.type === 'od:srcdoc-transport-activate');
+      expect(activations()).toHaveLength(1);
+      fireEvent.load(frame);
+      expect(activations()).toHaveLength(1);
+    } finally {
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: original });
+    }
+  });
+
   it('remounts once when a refreshed srcDoc revision never acknowledges activation', () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
@@ -297,8 +347,8 @@ describe('FileViewer srcDoc file-watch refresh recovery', () => {
     expect(recoveredFrame).not.toBe(partialFrame);
     expect(recoveredFrame.srcdoc).toContain('data-od-lazy-srcdoc-transport');
 
-    const postHogCalls = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes('/i/v0/e/'));
+    const postHogCalls = fetchMock.mock.calls.filter(([input, init]) =>
+      String(input).includes('/i/v0/e/') && JSON.parse(String(init?.body ?? '{}')).event === 'client_preview_white_screen');
     expect(postHogCalls).toHaveLength(1);
     const [, postHogInit] = postHogCalls[0]!;
     expect(postHogInit).toBeDefined();
@@ -391,7 +441,8 @@ describe('FileViewer srcDoc file-watch refresh recovery', () => {
     });
 
     expect(screen.getByTestId('artifact-preview-frame')).toBe(parsingFrame);
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/i/v0/e/'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).includes('/i/v0/e/')
+      && JSON.parse(String(init?.body ?? '{}')).event === 'client_preview_white_screen')).toBe(false);
   });
 
   it('recovers when a truncated document stays loading through the parsing grace period', () => {

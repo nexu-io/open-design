@@ -251,7 +251,7 @@ export class SidecarClient<TRuntime> {
   }
 
   async #start(): Promise<void> {
-    if (isCurrentSidecarLauncher()) {
+    if (isCurrentSidecarLauncher() && readSupervisedSidecarContext()?.adoptedPid !== process.pid) {
       throw new Error("a sidecar launcher must bootstrap a generation before starting server lifecycle");
     }
     let runtime!: TRuntime;

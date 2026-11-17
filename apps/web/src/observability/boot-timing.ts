@@ -1,14 +1,15 @@
 // Boot timing observer.
 //
-// Captures `client_boot_timing` once, after the app's first page becomes
-// fully rendered. Buckets:
+// Captures `client_boot_timing` once after browser load. This is page-load
+// timing, not business Ready or native icon-click → Ready. Project navigation
+// intent → actionable Ready is measured separately by navigation-timing.ts.
+// Buckets:
 //
 //   - navigation_start_offset_ms: navigationStart → loadEvent.start
 //     (the standard "page load" metric — how long the daemon's static
 //     SPA fallback + initial bundle download took).
 //   - dom_interactive_ms:  navigationStart → domInteractive
 //   - dom_content_loaded_ms: navigationStart → domContentLoadedEventStart
-//   - app_mount_ms:  navigationStart → first `home_view`-like DOM marker
 //
 // Why we don't reuse posthog-js's `$performance` events: those are
 // stripped for users who opted out of analytics. Boot timing is a

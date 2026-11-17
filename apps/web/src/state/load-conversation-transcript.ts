@@ -3,7 +3,7 @@ import type { ChatMessage } from '../types';
 import { listMessages, ProjectMessageListError } from './projects';
 
 const RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
-const LOAD_BUDGET_MS = 15_000;
+const LOAD_IDLE_TIMEOUT_MS = 15_000;
 
 function canRetry(error: unknown): boolean {
   if (!(error instanceof ProjectMessageListError) || !error.retryable) return false;
@@ -36,7 +36,8 @@ function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
 /**
  * One authoritative transcript read, including bounded recovery from a
  * transient failure. The original project/conversation/authority lifetime owns
- * every attempt. Neither a retry nor a hanging request may extend its budget.
+ * every attempt. Only received body bytes renew the inactivity deadline;
+ * retries and response headers cannot keep a stalled read alive.
  */
 export async function loadConversationTranscript(
   projectId: string,
@@ -50,9 +51,15 @@ export async function loadConversationTranscript(
   signal.addEventListener('abort', cancel, { once: true });
   // An empty error selects ProjectView's existing failed-read fallback. This
   // internal timeout policy does not introduce another user-facing sentence.
-  const timer = setTimeout(() => {
-    controller.abort(new ProjectMessageListError('', null, null, true));
-  }, LOAD_BUDGET_MS);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const renewIdleDeadline = () => {
+    if (controller.signal.aborted) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      controller.abort(new ProjectMessageListError('', null, null, true));
+    }, LOAD_IDLE_TIMEOUT_MS);
+  };
+  renewIdleDeadline();
   let rejectAborted!: (reason: unknown) => void;
   const aborted = new Promise<never>((_resolve, reject) => { rejectAborted = reject; });
   const onAbort = () => rejectAborted(controller.signal.reason);
@@ -63,7 +70,9 @@ export async function loadConversationTranscript(
     for (;;) {
       controller.signal.throwIfAborted();
       try {
-        return await listMessages(projectId, conversationId, workspaceContext, controller.signal);
+        return await listMessages(
+          projectId, conversationId, workspaceContext, controller.signal, renewIdleDeadline,
+        );
       } catch (error) {
         controller.signal.throwIfAborted();
         const delay = RETRY_DELAYS_MS[attempt];

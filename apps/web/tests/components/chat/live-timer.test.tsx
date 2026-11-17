@@ -42,11 +42,11 @@ describe('执行记录的活计时器', () => {
     const { container } = render(
       <I18nProvider initial="zh-CN"><AssistantMessage message={message} streaming /></I18nProvider>,
     );
-    expect(head(container)).toContain('3.0s');
+    expect(head(container)).toContain('3.0 秒');
 
     // 假时钟推进时 Date.now() 会跟着走,所以只推时钟就够了(再 setSystemTime 会推两次)
     act(() => { vi.advanceTimersByTime(6_000); });
-    expect(head(container)).toContain('9.0s');
+    expect(head(container)).toContain('9.0 秒');
   });
 
   it('轮次结束后停住 —— 不再挂定时器,秒数锁在最后一次结束时间上', () => {
@@ -59,9 +59,9 @@ describe('执行记录的活计时器', () => {
         <AssistantMessage message={{ ...message, runStatus: 'succeeded', events: done } as ChatMessage} streaming={false} />
       </I18nProvider>,
     );
-    expect(head(container)).toContain('4.0s');
+    expect(head(container)).toContain('4.0 秒');
 
     act(() => { vi.advanceTimersByTime(56_000); });
-    expect(head(container)).toContain('4.0s');
+    expect(head(container)).toContain('4.0 秒');
   });
 });

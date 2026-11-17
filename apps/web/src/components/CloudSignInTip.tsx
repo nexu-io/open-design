@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { VisuallyHidden } from '@open-design/components';
 import { Icon } from './Icon';
 import { useI18n } from '../i18n';
 import { useCloudSignIn } from './use-cloud-sign-in';
 import { AmrActivationHintText } from './AmrActivationHintText';
+import styles from './CloudSignInTip.module.css';
 
 const DISMISSED_KEY = 'od.entry.cloudSignInTip.dismissed';
 
@@ -103,8 +105,17 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
   // Login flow extracted to `useCloudSignIn` (2026 refactor: item 1/OD-2) so
   // `ShareSignInButton` can drive the same flow through a real button; this
   // component's own rendering/behavior below is unchanged.
-  const { state, status, begin, cancel } = useCloudSignIn({ onLoginSuccess });
+  const { state, status, begin, cancel, reopen } = useCloudSignIn({ onLoginSuccess });
   const signing = state === 'signing';
+  const [compactEntry, setCompactEntry] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1100px)');
+    const update = () => setCompactEntry(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
 
   // The "sign-in page didn't open?" line is a fallback: it waits a few
   // seconds into the attempt (the browser usually opens on its own), unless
@@ -126,20 +137,17 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
   const pitch = (
     <div className="entry-local-mode-tip__pitch">
       <strong className="entry-local-mode-tip__title">
-        <span className="entry-local-mode-tip__title-icon" aria-hidden>
-          <Icon name="sparkles" size={12} />
-        </span>
-        {t('entry.cloudCreditsTitle')}
+        <span className="entry-local-mode-tip__title-icon" aria-hidden><Icon name="sparkles" size={14} /></span>{t('entry.cloudCreditsTitle')}
       </strong>
       <p>{t('entry.cloudCreditsBody')}</p>
     </div>
   );
 
-  return (
+  const card = (
     <section
       role="button"
       tabIndex={signing ? -1 : 0}
-      className={`${sharePrompt ? className ?? '' : 'entry-local-mode-tip'}${signing ? ' is-signing' : ''}`}
+      className={`${sharePrompt ? className ?? '' : `entry-local-mode-tip ${styles.card}`}${signing ? ' is-signing' : ''}`}
       onClick={() => {
         if (!signing) void begin();
       }}
@@ -181,7 +189,7 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
                 href={status.activationUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
+                onClick={(event) => { event.preventDefault(); event.stopPropagation(); void reopen(); }}
               >
                 {status.browserOpenFailed
                   ? t('settings.amrActivationOpen')
@@ -204,4 +212,6 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
       ) : null}
     </section>
   );
+  // The compact source design keeps this entry reachable while the rail is hidden.
+  return compactEntry && !sharePrompt ? createPortal(card, document.body) : card;
 }

@@ -1,10 +1,11 @@
 import { taskObjectMetadata } from '../observability/task-object-summary.js';
+import { taskUpdateSink } from '../observability/task-telemetry-receipt.js';
 import { createHash } from 'node:crypto';
 import { mkdir, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { TelemetryOutbox, type DeliveryAttempt, type OutboxJob } from '../storage/telemetry-outbox.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
-import { buildFeedbackPayload, postLegacyTelemetryBatch, readTaskTelemetrySinkConfig, readFeedbackTelemetrySinkConfig, readRunTelemetrySinkConfig, reportRunCompleted, type FeedbackReportContext, type ReportContext, type LangfuseDeliveryState } from '../langfuse-trace.js';
+import { buildFeedbackPayload, postLegacyTelemetryBatch, readFeedbackTelemetrySinkConfig, readRunTelemetrySinkConfig, reportRunCompleted, type FeedbackReportContext, type ReportContext, type LangfuseDeliveryState } from '../langfuse-trace.js';
 import { buildTraceObjectManifests, type TraceObjectSource, type TraceObjectUploadManifests } from '../trace-object-manifest.js';
 import { readTelemetryEnvironment } from '../telemetry-environment.js';
 import { type AttachmentContextEntry, evidenceMode } from '../observability/eval-context.js';
@@ -115,7 +116,10 @@ export function reconcileTaskObjectReasons(store: TelemetryOutbox, taskTraceId: 
 }
 
 async function publishTaskObjectManifests(store: TelemetryOutbox, payload: ObjectJob, dataDir: string, fetchImpl?: typeof fetch): Promise<DeliveryAttempt> {
-  const sink = readTaskTelemetrySinkConfig(process.env);
+  const cfg = await readAppConfig(dataDir);
+  const sink = payload.taskTraceId
+    ? taskUpdateSink(dataDir, payload.taskTraceId, process.env, agentCliEnvForAgent(cfg.agentCliEnv, 'amr'))
+    : null;
   if (!sink || !payload.taskTraceId) return { status: 'retry', reason: 'task_sink_unavailable' };
   const manifests: TraceObjectUploadManifests[] = [];
   const runObjectMetadata: Record<string, unknown>[] = [];
@@ -139,6 +143,7 @@ async function publishTaskObjectManifests(store: TelemetryOutbox, payload: Objec
   const objectMetadata = taskObjectMetadata(runObjectMetadata);
   reconcileTaskObjectReasons(store, payload.taskTraceId, objectMetadata);
   const metadata = {
+    schema: 'open-design.strategy-task-observation/v1',
     artifact_manifest: manifests.flatMap(m => m.artifactManifest ?? []),
     attachment_manifest: manifests.flatMap(m => m.attachmentManifest ?? []),
     input_text_snapshot_manifest: manifests.flatMap(m => m.inputTextSnapshotManifest ?? []),
@@ -148,8 +153,8 @@ async function publishTaskObjectManifests(store: TelemetryOutbox, payload: Objec
   const key = `task-objects:${sha(JSON.stringify([payload.taskTraceId, metadata]))}`;
   const result = await postLegacyTelemetryBatch(sink, [{
     id: key, type: 'trace-create', timestamp: new Date().toISOString(),
-    body: { id: payload.taskTraceId, environment: payload.environment ?? readTelemetryEnvironment(), metadata },
-  }], { deliveryIdempotencyKey: key, ...(payload.context.installationId ? { installationId: payload.context.installationId } : {}), ...(fetchImpl ? { fetchImpl } : {}) });
+    body: { id: payload.taskTraceId, name: 'open-design-strategy-task', environment: payload.environment ?? readTelemetryEnvironment(), metadata },
+  }], { allowAnonymousAuthFallback: false, allowTaskSchemaFallback: false, deliveryIdempotencyKey: key, ...(payload.context.installationId ? { installationId: payload.context.installationId } : {}), ...(fetchImpl ? { fetchImpl } : {}) });
   return result.langfuse_delivery_status === 'accepted'
     ? { status: 'uploaded', reason: 'consumer_readback_pending' }
     : { status: 'retry', reason: result.langfuse_drop_reason ?? 'task_manifest_update_failed' };
@@ -191,10 +196,12 @@ export async function drainEvidence(dataDir: string, fetchImpl?: typeof fetch): 
     if (job.kind === 'feedback') {
       const payload = JSON.parse(job.payload) as FeedbackJob;
       const feedbackSink = payload.context.traceId
-        ? readTaskTelemetrySinkConfig(process.env)
+        ? taskUpdateSink(dataDir, payload.context.traceId, process.env, agentCliEnvForAgent(cfg.agentCliEnv, 'amr'))
         : readFeedbackTelemetrySinkConfig(process.env, agentCliEnvForAgent(cfg.agentCliEnv, 'amr'));
       if (!feedbackSink) return { status: 'retry', reason: 'feedback_sink_unavailable' };
       const result = await postLegacyTelemetryBatch(feedbackSink, payload.batch, {
+        allowAnonymousAuthFallback: false,
+        allowTaskSchemaFallback: false,
         ...(payload.context.installationId ? { installationId: payload.context.installationId } : {}),
         deliveryIdempotencyKey: job.key, ...(fetchImpl ? { fetchImpl } : {}),
       });

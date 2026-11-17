@@ -89,7 +89,8 @@ describe('OPEND-2548 折叠头的三个槽位', () => {
     expect(elapsed).not.toBeNull();
     expect(chev).not.toBeNull();
     // 正向对照:耗时真的画出来了,而且是完整的一段(「1m 59s」不是「1m」)
-    expect(elapsed!.textContent).toBe('1m 59s');
+    // P0-24 设计答复(2026-10-26):中文界面写「1 分 59 秒」
+    expect(elapsed!.textContent).toBe('1 分 59 秒');
     // 反向对照:它们没有被裹进标题槽
     expect(slot!.querySelector('[data-testid="chat-foldable-elapsed"]')).toBeNull();
     expect(slot!.querySelector('[data-testid="chat-foldable-toggle"]')).toBeNull();

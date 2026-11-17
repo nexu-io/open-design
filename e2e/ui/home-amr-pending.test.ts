@@ -17,10 +17,10 @@ import { mockSignedInVelaAccount } from '@/playwright/visual';
 import { T } from '@/timeouts';
 
 /*
- * Home opens the project frame on the click tick. Workspace billing is display
- * data, so project creation and run admission must not wait for its response.
- * A fresh cached backend funding rejection holds Home for confirmation; a
- * bare wallet amount cannot do so. Link owns final admission.
+ * VIEW-015 / RUN-003: every scoped AMR Home send needs fresh member/model
+ * funding evidence before project creation. Display billing and warmed hints
+ * cannot authorize a send. Local-agent handoff keeps its one-frame contract;
+ * Link still owns final run admission.
  */
 
 declare global {
@@ -91,11 +91,11 @@ async function installHandoffProbe(page: Page): Promise<void> {
     new MutationObserver(() => {
       if (
         probe.pendingFrame == null
-        && document.querySelector('[data-testid="project-creation-pending-view"]')
+        && document.querySelector('[data-creation-phase="pending"]')
       ) {
         probe.pendingFrame = probe.frame;
       }
-    }).observe(document, { childList: true, subtree: true });
+    }).observe(document, { childList: true, subtree: true, attributes: true });
   });
 }
 
@@ -110,16 +110,18 @@ async function readHandoffFrames(page: Page): Promise<number> {
 async function holdProjectCreate(page: Page) {
   const release = deferred();
   let requested = false;
+  let requestCount = 0;
   await page.route('**/api/projects', async (route) => {
     if (route.request().method() !== 'POST') {
       await route.fallback();
       return;
     }
     requested = true;
+    requestCount += 1;
     await release.promise;
     await route.continue();
   });
-  return { release: release.resolve, requested: () => requested };
+  return { release: release.resolve, requested: () => requested, requestCount: () => requestCount };
 }
 
 /** Hold any attempted authoritative billing read to expose send serialization. */
@@ -154,11 +156,15 @@ async function wireSignedInAmrHome(
     await route.fulfill({ json: { config: AMR_CONFIG } });
   });
   await routeAgents(page, [AMR_AGENT]);
+  await page.route('**/api/amr/models', (route) => route.fulfill({
+    json: { source: 'remote', models: AMR_AGENT.models, refreshing: false },
+  }));
   await mockSignedInVelaAccount(page, { balanceUsd: options.accountBalanceUsd ?? '20.00' });
   await mockAmrPersonalWorkspace(page, undefined, {
     accountBalanceUsd: options.accountBalanceUsd ?? '20.00',
     accountCredits: 2_000,
     accountPlan: 'free',
+    fundingCheck: 'available',
   });
 }
 
@@ -178,36 +184,182 @@ test.beforeEach(async ({ page }) => {
   await installHandoffProbe(page);
 });
 
-test('[P0] AMR Home send creates the project without waiting for workspace billing', async ({ page }) => {
+test('[P0] a confirmed same-member Home shortfall shows the block while send-time proof is slow', async ({ page }) => {
+  await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
+  const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
+  const fresh = deferred();
+  let sending = false;
+  let sendPreflightHeld = false;
+  let verdict: 'insufficient' | 'available' = 'insufficient';
+  let projectPosts = 0;
+  await page.route('**/api/workspace/billing/request-concurrency?**', route => route.fulfill({ json: {
+    requestConcurrencyHint: { workspaceId, workspaceMemberId, status: 'available', running: 0, limit: 10,
+      observedAt: new Date().toISOString() },
+  } }));
+  await page.route('**/api/workspace/billing/preflight?**', async route => {
+    if (sending) {
+      sendPreflightHeld = true;
+      await fresh.promise;
+    }
+    await route.fulfill({ json: { preflight: {
+      schemaVersion: 1, workspaceId, workspaceMemberId,
+      modelId: new URL(route.request().url()).searchParams.get('modelId'),
+      generatedAt: new Date().toISOString(), balanceUsd: verdict === 'available' ? '20' : '0', fundingCheck: verdict,
+    } } });
+  });
+  await page.route('**/api/projects', route => {
+    if (route.request().method() === 'POST') { projectPosts++; return route.abort(); }
+    return route.fallback();
+  });
+  const warmed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspace/billing/preflight'
+    && new URL(response.url()).searchParams.get('modelId') === 'glm-5');
+  try {
+    await gotoEntryHome(page);
+    await (await warmed).finished();
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+    sending = true;
+    const prompt = 'Keep this draft until I retry after funding recovers.';
+    const input = page.getByTestId('home-hero-input');
+    await input.fill(prompt);
+    await page.getByTestId('home-hero-submit').click();
+    // The contract is causal, not a wall-clock budget: the remembered
+    // shortfall paints while this click's fresh proof is still held (it is
+    // only released below). Home first waits for Link's advisory hint, up to
+    // its own 450ms budget, so a click-to-paint bound measured runner CPU.
+    await expect.poll(() => sendPreflightHeld, { message: 'send-time proof is in flight' }).toBe(true);
+    const dialog = page.getByTestId('amr-balance-dialog');
+    await expect(dialog).toBeVisible({ timeout: T.medium });
+    expect(projectPosts).toBe(0);
+    verdict = 'available';
+    fresh.resolve();
+    await expect(dialog).toBeVisible();
+    expect(projectPosts, 'a late recharge cannot send without a new click').toBe(0);
+    await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
+    await expect(page.getByTestId('home-hero-input')).toContainText(prompt);
+    expect(projectPosts).toBe(0);
+    await page.getByTestId('home-hero-submit').click();
+    await expect.poll(() => projectPosts).toBe(1);
+  } finally {
+    fresh.resolve();
+  }
+});
+
+test('[P0] a full Link counter takes over a remembered Home shortfall without sending the draft', async ({ page }) => {
+  await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
+  const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
+  const fresh = deferred();
+  let sending = false;
+  let projectPosts = 0;
+  // The full counter is answered at once. Holding it only measured the
+  // product's 450ms advisory-read budget against runner speed: past that
+  // budget the hint is unknown and the remembered shortfall may paint.
+  await page.route('**/api/workspace/billing/request-concurrency?**', async route => {
+    await route.fulfill({ json: {
+      requestConcurrencyHint: { workspaceId, workspaceMemberId, status: 'full', running: 10, limit: 10,
+        observedAt: new Date().toISOString() },
+    } });
+  });
+  await page.route('**/api/workspace/billing/preflight?**', async route => {
+    if (sending) await fresh.promise;
+    await route.fulfill({ json: { preflight: {
+      schemaVersion: 1, workspaceId, workspaceMemberId,
+      modelId: new URL(route.request().url()).searchParams.get('modelId'),
+      generatedAt: new Date().toISOString(), balanceUsd: '0', fundingCheck: 'insufficient',
+    } } });
+  });
+  await page.route('**/api/projects', route => {
+    if (route.request().method() === 'POST') { projectPosts++; return route.abort(); }
+    return route.fallback();
+  });
+  const warmed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspace/billing/preflight'
+    && new URL(response.url()).searchParams.get('modelId') === 'glm-5');
+  try {
+    await gotoEntryHome(page);
+    await (await warmed).finished();
+    sending = true;
+    // Record any balance block that paints before the concurrency block, so
+    // "the remembered shortfall never preempts" is checked over the whole
+    // pending window rather than at sampled instants.
+    await page.evaluate(() => {
+      const state = { balanceBeforeConcurrency: false };
+      (window as typeof window & { __run003Preempt?: typeof state }).__run003Preempt = state;
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('[data-testid="amr-concurrency-dialog"]')) {
+          observer.disconnect();
+          return;
+        }
+        if (document.querySelector('[data-testid="amr-balance-dialog"]')) state.balanceBeforeConcurrency = true;
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    const prompt = 'Keep this draft while Link is full.';
+    await sendFromHome(page, prompt);
+    await expect(page.getByTestId('amr-concurrency-dialog')).toBeVisible({ timeout: T.medium });
+    await expect(page.getByTestId('amr-balance-dialog')).toBeHidden();
+    expect(await page.evaluate(() => (window as typeof window & {
+      __run003Preempt?: { balanceBeforeConcurrency: boolean };
+    }).__run003Preempt?.balanceBeforeConcurrency), 'balance block never painted before the full counter').toBe(false);
+    expect(projectPosts).toBe(0);
+    fresh.resolve();
+    await page.getByTestId('amr-concurrency-close').click();
+    await expect(page.getByTestId('home-hero-input')).toContainText(prompt);
+    expect(projectPosts).toBe(0);
+  } finally {
+    fresh.resolve();
+  }
+});
+
+test('[P0] AMR Home confirms fresh funding before creating without waiting for display billing', async ({ page }) => {
   await wireSignedInAmrHome(page);
+  const funding = deferred();
+  let fundingRequested = false;
+  let sending = false;
+  let sendFundingReads = 0;
+  await page.route('**/api/workspace/billing/preflight?**', async (route) => {
+    if (sending) {
+      fundingRequested = true;
+      sendFundingReads++;
+      await funding.promise;
+      // Publish while every same-click response is in flight. The old cache
+      // fence exhausts all three retries even though each response is valid.
+      await page.evaluate(() => {
+        for (let i = 0; i < 99; i++) window.dispatchEvent(new Event('od:workspace-billing-refresh'));
+      });
+    }
+    await route.fallback();
+  });
   const billing = await holdAmrBillingGate(page);
   const create = await holdProjectCreate(page);
   const runBodies: Array<Record<string, unknown>> = [];
-  const runRequests = await routeSuccessfulRuns(page, {
-    bodies: runBodies,
-    runId: 'home-amr-pending-run',
-  });
-
-  await gotoEntryHome(page);
-  await sendFromHome(page, 'Draft a landing page for a coffee subscription.');
-
-  const pending = page.getByTestId('project-creation-pending-view');
-  // The project frame is immediate; its create request can proceed even if
-  // an authoritative billing read would never answer.
-  await expect(pending).toBeVisible({ timeout: T.short });
-  await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
-  await expect(page.getByTestId('project-creation-pending-chat')).toBeVisible();
-  expect(await readHandoffFrames(page)).toBeLessThanOrEqual(1);
-
-  // Releasing project creation starts the run without releasing billing.
-  await expect(pending).toBeVisible();
-  create.release();
-  await runRequests.expectCount(1);
-  expect(runBodies[0]).toMatchObject({ agentId: 'amr' });
-  expect(billing.held()).toBe(false);
-  billing.release();
-  await expect(pending).toBeHidden({ timeout: T.medium });
-  await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
+  const runRequests = await routeSuccessfulRuns(page, { bodies: runBodies, runId: 'home-amr-pending-run' });
+  try {
+    const warmed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspace/billing/preflight'
+      && new URL(response.url()).searchParams.get('modelId') === 'glm-5');
+    await gotoEntryHome(page);
+    await (await warmed).finished();
+    sending = true;
+    await sendFromHome(page, 'Draft a landing page for a coffee subscription.');
+    await expect.poll(() => fundingRequested).toBe(true);
+    const pending = page.locator('[data-creation-phase="pending"]');
+    await expect(pending).toHaveCount(0);
+    expect(create.requested()).toBe(false);
+    expect(sendFundingReads, 'this click starts its own fresh proof before creating').toBe(1);
+    funding.resolve();
+    await expect(pending).toBeVisible({ timeout: T.medium });
+    await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
+    await expect(pending.locator('[data-testid="chat-log"] .msg.user')).toBeVisible();
+    create.release();
+    await runRequests.expectCount(1);
+    expect(runBodies[0]).toMatchObject({ agentId: 'amr' });
+    expect(billing.held()).toBe(false);
+    expect(create.requestCount()).toBe(1);
+    await expect(pending).toBeHidden({ timeout: T.medium });
+    await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
+  } finally {
+    funding.resolve();
+    billing.release();
+    create.release();
+  }
 });
 
 test('[P0] an empty wallet the shell already shows does not block Home: no dialog, frame opens, create proceeds', async ({ page }) => {
@@ -220,7 +372,7 @@ test('[P0] an empty wallet the shell already shows does not block Home: no dialo
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await sendFromHome(page, prompt);
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   await expect(pending).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
   await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
@@ -280,7 +432,7 @@ test('[P0] a stale $0 projection does not force a recharge confirmation before s
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await sendFromHome(page, 'Draft a landing page after a recharge.');
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   // A stale zero cannot open a funding dialog or prevent project creation.
   await expect(pending).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
@@ -297,7 +449,7 @@ test('[P1] local-agent send from Home still enters the pending frame within a fr
   await gotoEntryHome(page);
   await sendFromHome(page, 'Draft a landing page with the local agent.');
 
-  const pending = page.getByTestId('project-creation-pending-view');
+  const pending = page.locator('[data-creation-phase="pending"]');
   await expect(pending).toBeVisible({ timeout: T.short });
   expect(await readHandoffFrames(page)).toBeLessThanOrEqual(1);
   create.release();
@@ -342,12 +494,15 @@ test('[P0] funding confirmation only updates the cache and billing events expire
   });
   let hintReads = 0;
   let sending = false;
+  let sendReads = 0;
   const warmed = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?') && new URL(response.url()).searchParams.get('modelId') === 'glm-5' && response.ok());
   await page.route('**/api/workspace/billing/preflight?**', async (route) => {
-    hintReads++;
-    const confirming = sending;
-    if (confirming) await confirmation.promise;
     const url = new URL(route.request().url());
+    expect(url.searchParams.get('workspaceId')).toBe(workspaceId);
+    const modelSpecific = url.searchParams.get('modelId') === 'glm-5';
+    if (modelSpecific) hintReads++;
+    const confirming = sending && modelSpecific && ++sendReads > 1;
+    if (confirming) await confirmation.promise;
     await route.fulfill({ json: { preflight: {
       schemaVersion: 1, workspaceId: url.searchParams.get('workspaceId'),
       workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
@@ -365,9 +520,9 @@ test('[P0] funding confirmation only updates the cache and billing events expire
     const dialog = page.getByTestId('amr-balance-dialog');
     await expect(dialog).toBeVisible();
     await expect(page.getByTestId('home-hero-input')).toBeVisible();
-    await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+    await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
     expect(create.requested()).toBe(false);
-    await expect.poll(() => hintReads).toBe(warmReads + 1);
+    await expect.poll(() => hintReads).toBe(warmReads + 2);
     await testInfo.attach('home-cached-funding-block', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
     const confirmed = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?'));
     confirmation.resolve();
@@ -377,26 +532,23 @@ test('[P0] funding confirmation only updates the cache and billing events expire
     expect(create.requested()).toBe(false);
     await testInfo.attach('home-available-confirmation-stays-blocked', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
 
-    // The existing SSE billing subscriber reads the projection after the event;
-    // the Home hint subscriber only expires memory, with no extra funding read.
+    // The matching wallet events now coalesce an exact-model warm preflight.
+    // They may refresh the reason, but cannot release this parked draft.
     const billingRefreshed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing');
     billingEvent.resolve();
     await (await billingRefreshed).finished();
-    expect(hintReads).toBe(warmReads + 1);
+    await expect.poll(() => hintReads).toBeGreaterThan(warmReads + 2);
+    expect(hintReads).toBeLessThanOrEqual(warmReads + 4);
+    const afterEventReads = hintReads;
     await expect(dialog).toBeVisible();
+    expect(create.requested()).toBe(false);
     await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
     await expect(page.getByTestId('home-hero-input')).toHaveText(prompt);
-    // The event invalidated the positive hint, so this explicit send rechecks.
+    // Every explicit send rechecks fresh funding, even after a positive hint.
     const rechecked = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?'));
     await sendFromHome(page, prompt);
     await (await rechecked).finished();
-    await expect(dialog).toBeVisible();
-    expect(hintReads).toBe(warmReads + 2);
-    expect(create.requested()).toBe(false);
-    await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
-    await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-    // The new positive hint is consumed only by a new user send.
-    await sendFromHome(page, prompt);
+    expect(hintReads).toBe(afterEventReads + 1);
     await expect.poll(() => create.requested(), { timeout: T.medium }).toBe(true);
   } finally {
     confirmation.resolve();
@@ -465,7 +617,7 @@ test('[P0] a billing refresh recovers blocked Home funding without another send'
   }
 });
 
-test('[P0] twenty Home sends stay blocked across expiry, billing events and failed confirmation', async ({ page }, testInfo) => {
+test('[P0] twenty Home sends preserve the draft across insufficient, unknown and unavailable funding', async ({ page }, testInfo) => {
   const start = Date.now();
   await page.clock.setFixedTime(start);
   await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
@@ -475,8 +627,8 @@ test('[P0] twenty Home sends stay blocked across expiry, billing events and fail
   let now = start;
   let verdict: 'insufficient' | 'unknown' | 'available' = 'insufficient';
   let unavailable = false;
-  // The display projection is unavailable throughout; only confirmed funding
-  // evidence can keep the draft here after its old 30-second TTL.
+  // Display billing is unavailable throughout. Every send must still obtain
+  // fresh funding evidence; unknown or failed reads preserve the draft.
   await page.route('**/api/workspace/billing?**', (route) => route.fulfill({ json: { summary: null, workspaceBalance: null } }));
   await page.route('**/api/workspace/billing/preflight?**', (route) => route.fulfill(unavailable
     ? { status: 503, json: { error: 'unavailable' } }
@@ -500,10 +652,16 @@ test('[P0] twenty Home sends stay blocked across expiry, billing events and fail
       await sendFromHome(page, 'Keep this insufficient draft on Home.');
       await (await checked).finished();
       const dialog = page.getByTestId('amr-balance-dialog');
-      await expect(dialog).toBeVisible();
-      await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+      if (verdict === 'insufficient' && !unavailable) {
+        await expect(dialog).toBeVisible();
+        await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
+      } else {
+        await expect(dialog).toHaveCount(0);
+        await expect(page.getByText(/couldn.t confirm.*balance/i)).toBeVisible();
+      }
+      await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
       expect(create.requested(), `attempt ${attempt} must not create a project`).toBe(false);
-      await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
+      await expect(page.getByTestId('home-hero-input')).toHaveText('Keep this insufficient draft on Home.');
       await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
     }
     await testInfo.attach('twenty-blocked-sends-preserve-draft', { body: await page.screenshot(), contentType: 'image/png' });
@@ -512,11 +670,7 @@ test('[P0] twenty Home sends stay blocked across expiry, billing events and fail
     const recovered = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?'));
     await sendFromHome(page, 'Keep this insufficient draft on Home.');
     await (await recovered).finished();
-    const dialog = page.getByTestId('amr-balance-dialog');
-    await expect(dialog).toBeVisible();
-    expect(create.requested()).toBe(false);
-    await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
-    await sendFromHome(page, 'Keep this insufficient draft on Home.');
+    await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
     await expect.poll(() => create.requested()).toBe(true);
   } finally {
     create.release();
@@ -524,17 +678,18 @@ test('[P0] twenty Home sends stay blocked across expiry, billing events and fail
 });
 
 for (const planAvailable of [false, true]) {
-  test(`[P0] Home restores the wallet memory gate with Coding Plan available=${planAvailable}`, async ({ page }, testInfo) => {
+  test(`[P0] Home waits for fresh funding despite displayed Coding Plan available=${planAvailable}`, async ({ page }, testInfo) => {
     await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
     const create = await holdProjectCreate(page);
     const confirmation = deferred();
+    const sendPreflightHeld = deferred();
     let sending = false;
     const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
     const displayed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing'
       && new URL(response.url()).searchParams.get('scope') === 'workspace' && response.ok());
     await page.route('**/api/workspace/billing?**', async (route) => {
-      // Older than the independent hint TTL; the Home gate must consume the
-      // billing projection already maintained for the rail, not a warmed hint.
+      // A stale displayed wallet/plan cannot authorize or reject the send;
+      // the fresh member/model verdict remains pending below.
       const generatedAt = new Date(Date.now() - 31_000).toISOString();
       await route.fulfill({ json: {
         summary: null,
@@ -548,43 +703,74 @@ for (const planAvailable of [false, true]) {
         },
       } });
     });
+    const warmed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing/preflight'
+      && new URL(response.url()).searchParams.get('modelId') === 'glm-5');
     await page.route('**/api/workspace/billing/preflight?**', async (route) => {
-      if (sending) await confirmation.promise;
-      await route.fulfill({ json: { preflight: null } });
+      // Warm-up must not seed a confirmed shortfall: that independent fast-block
+      // behavior is covered above. This case isolates stale display billing.
+      const sendTime = sending;
+      if (sendTime) {
+        sendPreflightHeld.resolve();
+        await confirmation.promise;
+      }
+      const url = new URL(route.request().url());
+      await route.fulfill({ json: { preflight: { schemaVersion: 1, workspaceId, workspaceMemberId,
+        modelId: url.searchParams.get('modelId'), generatedAt: new Date().toISOString(),
+        balanceUsd: sendTime && planAvailable ? '10' : '0',
+        fundingCheck: sendTime ? (planAvailable ? 'available' : 'insufficient') : 'unknown' } } });
     });
     try {
       await gotoEntryHome(page);
-      await displayed;
-      const prompt = 'Use the displayed wallet and plan before entering a project.';
+      await (await displayed).finished();
+      await (await warmed).finished();
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+      const prompt = 'Wait for fresh funding before entering a project.';
       sending = true;
       await sendFromHome(page, prompt);
+      await sendPreflightHeld.promise;
+      const submit = page.getByTestId('home-hero-submit');
+      // Neither stale display projection can decide this send while its
+      // authoritative preflight is held, including the insufficient outcome.
+      await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
+      await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
+      expect(create.requested()).toBe(false);
+      await expect(submit).toHaveAttribute('aria-busy', 'true');
+      await expect(submit).toHaveAccessibleName('Sending…');
+      await expect(submit).toBeDisabled();
+      await expect(submit.locator('.icon-spin')).toBeVisible();
+      await page.getByTestId('home-hero-input').press('Enter');
+      await testInfo.attach('home-sending-while-funding-pending', {
+        body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png',
+      });
+      await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
+      expect(create.requestCount()).toBe(0);
+      const confirmed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing/preflight');
+      confirmation.resolve();
+      await (await confirmed).finished();
       if (planAvailable) {
-        await expect(page.getByTestId('project-creation-pending-view')).toBeVisible();
+        await expect(page.locator('[data-creation-phase="pending"]')).toBeVisible();
         await expect(page.getByTestId('amr-balance-dialog')).toHaveCount(0);
         await expect.poll(() => create.requested()).toBe(true);
+        expect(create.requestCount()).toBe(1);
+        await expect(page.getByTestId('home-hero-submit')).toHaveCount(0);
       } else {
         const dialog = page.getByTestId('amr-balance-dialog');
         await expect(dialog).toBeVisible();
         await expect(page.getByTestId('home-hero-input')).toBeVisible();
-        await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
+        await expect(page.locator('[data-creation-phase="pending"]')).toHaveCount(0);
         expect(create.requested()).toBe(false);
-        await testInfo.attach('restored-home-memory-gate', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
-        const checked = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/workspace/billing/preflight');
-        confirmation.resolve();
-        await (await checked).finished();
-        // Let the completed response settle through the renderer before checking
-        // that unknown funding did not turn into an automatic project handoff.
-        await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-        await expect(dialog).toBeVisible();
-        await expect(page.getByTestId('project-creation-pending-view')).toHaveCount(0);
-        expect(create.requested()).toBe(false);
-        await testInfo.attach('home-unknown-funding-stays-blocked', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
+        await testInfo.attach('fresh-home-funding-rejection', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
         await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
         await expect(dialog).toBeHidden();
         await expect(page.getByTestId('home-hero-input')).toContainText(prompt);
-        await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+        await expect(submit).toBeEnabled();
+        await expect(submit).toHaveAttribute('aria-busy', 'false');
+        await expect(submit).toHaveAccessibleName('Run');
+        await expect(submit.locator('.icon-spin')).toHaveCount(0);
+        await expect(submit.locator('svg')).toHaveAttribute('width', '36');
+        expect(create.requestCount()).toBe(0);
         expect(create.requested()).toBe(false);
-        await testInfo.attach('home-preserved-draft-after-unknown', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
+        await testInfo.attach('home-preserved-draft-after-funding-rejection', { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
       }
     } finally {
       confirmation.resolve();

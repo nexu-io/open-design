@@ -67,6 +67,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 const args = process.argv.slice(2);
 const stateFile = ${JSON.stringify(path + '.catalog.json')};
 const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : {};
+const catalogWorkspaceId = process.env.FAKE_CATALOG_WORKSPACE_ID ?? 'ws-team-catalog';
 const value = name => { const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1]; };
 const saveState = () => writeFileSync(stateFile, JSON.stringify(state));
 const ownedRecord = id => ({ id: 'catalog-' + id, projectId: id, workspaceId: 'ws-team-catalog',
@@ -211,8 +212,8 @@ if (args[1] === 'list' || args[1] === undefined) {
       updatedAt: '2026-07-31T00:01:00Z',
     });
   }
-  process.stdout.write(JSON.stringify({ workspaceId: 'ws-team-catalog', projects: projects.map(project => ({
-    id: 'catalog-' + project.projectId, workspaceId: 'ws-team-catalog', visibility: 'team',
+  process.stdout.write(JSON.stringify({ workspaceId: catalogWorkspaceId, projects: projects.map(project => ({
+    id: 'catalog-' + project.projectId, workspaceId: catalogWorkspaceId, visibility: 'team',
     access: { canView: true, canComment: true, canEdit: project.ownerMemberId === 'mem-team-catalog', frozen: false },
     ...project,
   })) }) + '\\n');
@@ -277,7 +278,7 @@ describe('team shared-project catalog', () => {
   );
 
   test(
-    'does not expose team shared projects while the active workspace is personal',
+    'reads explicitly shared projects from the active Personal workspace',
     { timeout: 240_000 },
     async () => {
       const suite = await createSmokeSuite('collab-personal-project-catalog');
@@ -297,9 +298,11 @@ describe('team shared-project catalog', () => {
             new URL('/api/workspace/projects/team', webUrl),
             { headers: workspaceHeaders(PERSONAL) },
           );
-          expect(catalog.status).toBe(403);
+          expect(catalog.status).toBe(200);
           expect(await catalog.json()).toMatchObject({
-            error: 'WORKSPACE_ACCESS_DENIED',
+            projects: [expect.objectContaining({
+              projectId: 'shared-project-1', name: 'Shared durable project',
+            })],
           });
         },
         {
@@ -307,6 +310,7 @@ describe('team shared-project catalog', () => {
             AMR_HOME: join(suite.scratchDir, 'empty-amr-home'),
             OD_WORKSPACE_CONTEXT_SOURCE: 'vela',
             OD_TEAM_PROJECTS_TRANSPORT: 'vela-cli',
+            FAKE_CATALOG_WORKSPACE_ID: PERSONAL.workspaceId,
             VELA_API_URL: authorityUrl,
             VELA_CONTROL_KEY: 'e2e-personal-catalog-control-key',
             VELA_BIN: velaBin,

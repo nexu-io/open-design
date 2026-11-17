@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "caseKey": "server:VIEW-016",
+  "containingGitCommit": "The Git commit containing this binding is delivery metadata, not an execution HEAD.",
+  "qualification": {
+    "candidate": 65,
+    "nativeUI": "passed_9_of_9",
+    "wholeCase": "partial",
+    "modelRequests": 0,
+    "uncovered": [
+      "funding source order",
+      "debit replay idempotency",
+      "negative balance",
+      "cache/transaction fault recovery"
+    ],
+    "trueIndependentReviewSha256": "07c5e8a353fcf79d0d97a7618d709ad199f8035d5881eeefdb77c46f3c4e0938",
+    "rawManifestSha256": "88c7be4f105c6036223220f44344def21354ed88c5f3b721290ab80a03ad7b17",
+    "rawObjectCount": 69,
+    "safeResultSha256": "e1b18d408a2f99c738f3530507f08eb400347aa026980480baae616429dfe559"
+  },
+  "sourceTuple": {
+    "amr": "789c75341710453f31bad491a4085abe2ecb5d6b",
+    "open-design": "c237b9355b791da32be37bbc674f781a7fb91fec",
+    "od-landing": "ece32876b6b0fcf317151f6746ca4075e94940e3"
+  },
+  "actualSourceBinding": {
+    "amr": "510f704068adfde3fa8845542dfe4eaa35d17be8",
+    "od": "c237b9355b791da32be37bbc674f781a7fb91fec"
+  },
+  "sourceRoles": {
+    "amr": {
+      "productionBase": "789c75341710453f31bad491a4085abe2ecb5d6b",
+      "testHead": "510f704068adfde3fa8845542dfe4eaa35d17be8"
+    },
+    "od": {
+      "productionBase": "c237b9355b791da32be37bbc674f781a7fb91fec",
+      "testHead": "c237b9355b791da32be37bbc674f781a7fb91fec"
+    },
+    "landing": {
+      "productionBase": "ece32876b6b0fcf317151f6746ca4075e94940e3",
+      "execution": "metadata_only"
+    }
+  },
+  "actualSources": {
+    "UI": "95ef78db039af9d68be212745af0c453376c9c0cc6038d0d1439ac870724fcb3",
+    "launcher": "dc7c15e3fc2bd19e3583820af3ac65f0ef7cbf7f5e60420436103b1c90eefd73",
+    "runtimeExplicitLane": "f2866314933412c079b47e54534390e28ea287a1b09c69570310b3b2f9aa0f0a",
+    "fixture": "32fb527234f3dfd17cadd0c9cfd3314435b73ecfba4eb4a18289264f60514dc3",
+    "ownedGuard": "5f629b81eca7e81213568149084e187dc6d01e323602d18194f47f64d89015c6"
+  },
+  "deliveryScope": "Only this binding and README. Existing remote UI source95ef remains byte-exact. Historical Yang PR lane is not relabeled as the newer product-c237 runtime lane; reproduction pins the actual runtime product.",
+  "authority": {
+    "requirementsRevision": 271,
+    "designRevision": 134,
+    "effectiveCutsRevision": 518,
+    "QAAtPreparation": 1177,
+    "definitionSha256": "0ba2e288ccaf91d80f479f36fdae6d76c9dd7e55dcc11543b0b25665007a1787",
+    "executionMetadataUpdates": "Later QA metadata writes are not new definition/business evidence."
+  },
+  "execution": {
+    "fixtureOriginalHandle": 73992,
+    "fixtureExitCode": 0,
+    "actualUIOriginalHandle": 36252,
+    "actualUIExitCode": 0,
+    "testDurationSeconds": 56.3,
+    "suiteDurationSeconds": 57.7,
+    "nativeViewport": {
+      "width": 1280,
+      "height": 720,
+      "deviceScaleFactor": 1
+    },
+    "workers": 1,
+    "retries": 0,
+    "matrix": {
+      "FreeAFirst": [
+        false,
+        true,
+        true
+      ],
+      "PaidGoB": [
+        false,
+        false,
+        false
+      ],
+      "FreeAReturn": [
+        false,
+        true,
+        true
+      ]
+    },
+    "matrixMeaning": "aria-disabled by Flash/value/top category; false represents missing aria-disabled and enabled selection",
+    "nativeActions": {
+      "clicks": 5,
+      "keyboardEnterOnDisabled": 4
+    },
+    "promptFill": false,
+    "forceClick": false,
+    "addedPreclickWait": false,
+    "modelsGenerated": 0,
+    "cleanup": "own OD namespace stopped; all apps idle/pid null; cleanupErrors empty; parent canonical left to root",
+    "ownerPrePostExitCode": 0,
+    "sourceInputsStable": 16
+  },
+  "fixtureContinuity": {
+    "freshFixtureSHA": "f9ba1d19731e3c3912863b6005e87f11725cb84c381bee7da99f6ad5b019c7f4",
+    "executedFixtureSHA": "ccda6fa2ae8e2e58cb90a0ea2a9a868f6d3a95c7de73439b20770edfeeeae936",
+    "deviceReceiptSHA": "1625af8ee85fff4b25c02ced05475c0b84df2cd337acd64d587138e8e4fd834e",
+    "meaning": "Original fixture succeeded once. Owner later expired before browser; rejected UI attempt preserved with0browser/0actions. Root authorized new owner binding in new directory; parsed cfg identical, only JSON serialization changed; all actor/key/funds/device values unchanged. No second fixture or payment."
+  },
+  "CLI": {
+    "actualBuildCandidate": 43,
+    "binarySha256": "6c8411c8cc439bc4c88d4e3cf58858687deb530b278841c0e4711421738d727a",
+    "neutralActual65SourceEquivalenceSHA": "c87893371b628416bae67e20bbac279631955f96cdc18bb29574fab37364af64",
+    "trackedCLIByteEqualFiles": 157,
+    "new65BuildClaimed": false
+  },
+  "history": {
+    "fixed44": "Four Free value/top native failures remain preserved; new65 result does not rewrite historical source/raw.",
+    "issues": [
+      "APISEC-C20-002",
+      "LINK-C21-VIEW-016-001",
+      "LINK-C21-VIEW-016-002"
+    ],
+    "issueClosure": "Only this65 native sample is qualified; no universal root-cause or whole-case closure."
+  },
+  "privacy": "Raw traces/cookies/keys/actor/workspace identifiers/runtime connection URLs remain in private archive0600. This binding includes only nonsecret provenance hashes.",
+  "delivery": {
+    "PR": 8924,
+    "base": "feat/coding-plan-billing-preflight",
+    "remoteBranch": "qa/link-security-regressions-yang-20261021",
+    "merged": false,
+    "integrationAcceptance": false,
+    "rootOwnsFeishuWrite": true
+  }
+}

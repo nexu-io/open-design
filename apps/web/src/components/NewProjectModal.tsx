@@ -7,6 +7,7 @@
 // when the panel calls onCreate and it completes (success path) or when the user
 // clicks the backdrop / Esc.
 
+import { lockWebModalScroll } from './modal-scroll-lock';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ConnectorDetail } from '@open-design/contracts';
@@ -101,13 +102,7 @@ function NewProjectModalBody({
     return () => document.removeEventListener('keydown', onKey);
   }, [creating, onClose]);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
+  useEffect(() => lockWebModalScroll(), []);
 
   useEffect(() => {
     closeRef.current?.focus();

@@ -10,6 +10,7 @@ import {
 } from '../src/langfuse-bridge.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
 import { readObjectEvidence } from '../src/services/evidence-delivery.js';
+import { taskTraceReceipts } from '../src/observability/task-telemetry-receipt.js';
 
 interface FakeMessage {
   id: string;
@@ -1455,11 +1456,23 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     });
   });
 
-  it.each([false, true])('Task takeover freezes and retries without rereading live files (offline=%s)', async (offline) => {
+  it.each([
+    { offline: false, transport: 'relay' as const },
+    { offline: true, transport: 'relay' as const },
+    { offline: false, transport: 'vela' as const },
+    { offline: true, transport: 'vela' as const },
+  ])('Task takeover freezes and retries without rereading live files (offline=$offline, transport=$transport)', async ({ offline, transport }) => {
     await writeAppCfg({ installationId: 'install-uuid-1', telemetry: { metrics: true, content: true, artifactManifest: true } });
     enableTestVelaTelemetry();
     vi.stubEnv('OPEN_DESIGN_OBJECT_OUTBOX_MODE', 'send');
     vi.stubEnv('OPEN_DESIGN_TELEMETRY_RELAY_URL', 'https://telemetry.open-design.ai/api/langfuse');
+    // Manifest updates require an accepted root and must keep its transport,
+    // even when the current configuration prefers authenticated Vela.
+    taskTraceReceipts(dataDir).write({
+      taskExecutionId: 'test', idempotencyKey: 'accepted-root',
+      traceId: transport === 'vela' ? 'a'.repeat(64) : 'strategy-task:test',
+      protocol: 'legacy-v1', transport,
+    });
     const projectDir = path.join(dataDir, 'projects', 'proj-1');
     await mkdir(projectDir, { recursive: true });
     const original = '<!doctype html><h1>frozen original</h1>';
@@ -1499,6 +1512,15 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(first?.manifests?.artifacts?.[0]).toMatchObject({ status: 'ok', stored_in_open_design: true, size_bytes: original.length });
     expect(fetchSpy).toHaveBeenCalledTimes(offline ? 7 : 4);
     expect(velaTraceBody(fetchSpy.mock.calls[0] as [string, RequestInit]).metadata.registration_only).toBe(true);
+    const manifestCall = fetchSpy.mock.calls.at(-1)!;
+    expect(manifestCall[0]).toBe(transport === 'vela' ? TEST_VELA_TELEMETRY_URL : 'https://telemetry.open-design.ai/api/langfuse');
+    const manifestTrace = transport === 'vela'
+      ? velaTraceBody(manifestCall as [string, RequestInit])
+      : JSON.parse(manifestCall[1].body as string).batch[0].body;
+    expect(manifestTrace).toMatchObject({
+      id: 'strategy-task:test', name: 'open-design-strategy-task',
+      metadata: { schema: 'open-design.strategy-task-observation/v1', manifest_completeness: 'complete' },
+    });
     await writeFile(path.join(projectDir, 'index.html'), 'a later turn changed this file');
     const second = await buildSafeRunQualityProjectionFromDaemon(options);
     expect(second?.manifests).toEqual(first?.manifests);

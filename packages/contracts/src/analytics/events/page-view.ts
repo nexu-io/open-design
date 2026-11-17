@@ -1,3 +1,4 @@
+import type { WorkspaceInvitePageViewProps } from './workspace.js';
 /**
  * @module analytics/events/page-view
  * page_view event prop types and their union.
@@ -22,6 +23,7 @@ export interface GenericPageViewProps {
 // `DesignSystemsPageViewProps` (DS module / picker exposure on those
 // pages); call sites that pass `area` get narrowed to the DS shape.
 export type PageViewProps =
+  | WorkspaceInvitePageViewProps
   | GenericPageViewProps
   | OnboardingPageViewProps
   | DesignSystemsPageViewProps;

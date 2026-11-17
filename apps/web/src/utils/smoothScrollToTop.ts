@@ -69,21 +69,26 @@ function prefersReducedMotion(): boolean {
 }
 
 export function smoothScrollToTop(container: HTMLElement): void {
-  inFlight.get(container)?.();
-
   container.scrollLeft = 0;
-  const from = container.scrollTop;
-  if (from <= 0) return;
-
-  if (prefersReducedMotion() || typeof requestAnimationFrame !== 'function') {
-    container.scrollTop = 0;
-    return;
-  }
-
   const duration = Math.min(
     MAX_DURATION_MS,
-    MIN_DURATION_MS + from / DISTANCE_PER_MS,
+    MIN_DURATION_MS + container.scrollTop / DISTANCE_PER_MS,
   );
+  smoothScrollTo(container, 0, duration);
+}
+
+// A bounded-duration scroll for keyboard navigation. Returns a cancellation
+// handle so closing the owning menu cannot leave a detached element animating.
+export function smoothScrollTo(container: HTMLElement, top: number, duration: number): () => void {
+  inFlight.get(container)?.();
+
+  const from = container.scrollTop;
+  if (from === top) return () => {};
+
+  if (prefersReducedMotion() || typeof requestAnimationFrame !== 'function') {
+    container.scrollTop = top;
+    return () => {};
+  }
 
   let frame = 0;
   let start: number | null = null;
@@ -100,7 +105,7 @@ export function smoothScrollToTop(container: HTMLElement): void {
   const step = (now: number) => {
     if (start === null) start = now;
     const t = Math.min(1, (now - start) / duration);
-    container.scrollTop = from * (1 - EASE_OUT(t));
+    container.scrollTop = from + (top - from) * EASE_OUT(t);
     if (t < 1) {
       frame = requestAnimationFrame(step);
     } else {
@@ -112,4 +117,5 @@ export function smoothScrollToTop(container: HTMLElement): void {
   container.addEventListener('touchstart', cancel, { passive: true });
   inFlight.set(container, cancel);
   frame = requestAnimationFrame(step);
+  return cancel;
 }

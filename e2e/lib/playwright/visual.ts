@@ -112,7 +112,7 @@ export const VISUAL_AMR_AGENT = {
   ],
 } as const;
 
-const VISUAL_PROJECTS = [
+export const VISUAL_PROJECTS = [
   {
     id: 'visual-project-launchpad',
     name: 'Launchpad dashboard',

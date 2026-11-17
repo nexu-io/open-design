@@ -80,8 +80,10 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 // Types are a horizontal pill row under the working-directory row (product,
 // 2026-08-21); anything that does not fit folds into its 全部 popover.
 function typePill(chipId: string): HTMLElement | null {
-  if (!screen.queryByTestId('home-hero-template-menu')) fireEvent.click(homeTemplateTrigger());
-  return screen.getByTestId('home-hero-template-menu').querySelector(`[data-chip="${chipId}"]`);
+  const inline = screen.queryByTestId(`home-hero-type-pill-${chipId}`);
+  if (inline) return inline;
+  if (!screen.queryByTestId('home-hero-type-pills-popover')) fireEvent.click(homeTemplateTrigger());
+  return screen.getByTestId('home-hero-type-pills-popover').querySelector(`[data-chip="${chipId}"]`);
 }
 
 describe('HomeHero scenario cards', () => {

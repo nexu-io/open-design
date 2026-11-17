@@ -532,6 +532,27 @@ describe('startHubEventsSubscriber', () => {
     await vi.waitFor(() => expect(subscriber?.connected()).toBe(false));
   });
 
+  it.each([
+    ['member-removed', 'w1', 'm1', true],
+    ['member-removed', 'wrong', 'm1', false],
+    ['member-removed', 'w1', 'wrong', false],
+    ['authorization-unavailable', 'w1', 'm1', false],
+  ])('forwards an exact removal member only for matching verified terminal scope (%s/%s/%s)', async (reason, workspaceId, workspaceMemberId, exact) => {
+    const onAccessRevoked = vi.fn();
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {}, workspaceId: 'w1' }),
+      onEvent: () => undefined, onAccessRevoked, backoffMinMs: 1_000_000,
+      fetchImpl: async () => sseResponse([
+        'event: ready\ndata: {"workspaceId":"w1","workspaceMemberId":"m1","capabilities":[]}\n\n',
+        `event: access-revoked\ndata: ${JSON.stringify({ reason, workspaceId, workspaceMemberId })}\n\n`,
+      ], { holdOpen: true }),
+    });
+    await vi.waitFor(() => expect(onAccessRevoked).toHaveBeenCalledTimes(1));
+    const payload = onAccessRevoked.mock.calls[0]![0];
+    if (exact) expect(payload.workspaceMemberId).toBe('m1');
+    else expect(payload).not.toHaveProperty('workspaceMemberId');
+  });
+
   it('backs terminal revocation reconnects off to the maximum interval', async () => {
     let fetches = 0;
     let resolveRevoked!: () => void;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createAmrEnvironmentProfileMenuItems,
@@ -6,6 +6,7 @@ import {
   normalizeAmrEnvironmentProfile,
   resolveAboutPanelVersion,
   resolveFirstAvailableBaseUrl,
+  writeAmrEnvironmentProfile,
 } from "../../src/main/index.js";
 
 describe("AMR Environment Profile desktop menu helpers", () => {
@@ -180,6 +181,61 @@ describe("AMR Environment Profile desktop menu helpers", () => {
       : null;
     localItem?.click?.(undefined as never, undefined as never, undefined as never);
     expect(selected).toEqual(["local"]);
+  });
+
+  it("shows the fixed endpoint without offering misleading profile switches", () => {
+    const onSelect = vi.fn();
+    const binding = {
+      profile: "test" as const,
+      apiUrl: "https://amr-feature-api.powerformer.net",
+      linkUrl: "https://amr-feature-link.powerformer.net",
+      webUrl: "https://amr-feature.powerformer.net",
+      credentialScope: "referral-feature-test",
+    };
+    const [menu] = createAmrEnvironmentProfileMenuItems("test", onSelect, binding);
+    expect(menu.submenu).toEqual([{ label: binding.webUrl, enabled: false }]);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("blocks fixed-binding switches before discovery or any app-config request", async () => {
+    const discoverDaemonUrl = vi.fn();
+    const discoverWebUrl = vi.fn();
+    const amrEndpointBinding = {
+      profile: "test" as const,
+      apiUrl: "https://amr-feature-api.powerformer.net",
+      linkUrl: "https://amr-feature-link.powerformer.net",
+      webUrl: "https://amr-feature.powerformer.net",
+      credentialScope: "referral-feature-test",
+    };
+    for (const profile of ["prod", "test", "feature-test", "local"] as const) {
+      await expect(writeAmrEnvironmentProfile({ discoverDaemonUrl, discoverWebUrl, amrEndpointBinding }, profile)).resolves.toBe("test");
+    }
+    expect(discoverDaemonUrl).not.toHaveBeenCalled();
+    expect(discoverWebUrl).not.toHaveBeenCalled();
+  });
+
+  it("does not write the new environment when the renderer cannot leave the project", async () => {
+    const current = { agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: "prod" } } };
+    const updated = { agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: "test" } } };
+    const fetchConfig = vi.fn<typeof fetch>()
+      .mockImplementation(async (_url, init) => Response.json({
+        config: init?.method === "PUT" ? updated : current,
+      }));
+    vi.stubGlobal("fetch", fetchConfig);
+    try {
+      const options = { discoverDaemonUrl: async () => "http://127.0.0.1:17456", discoverWebUrl: async () => null };
+      const prepareSwitch = vi.fn<() => Promise<boolean>>()
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+
+      await expect(writeAmrEnvironmentProfile(options, "test", prepareSwitch)).resolves.toBe("prod");
+      expect(fetchConfig).toHaveBeenCalledTimes(1);
+
+      await expect(writeAmrEnvironmentProfile(options, "test", prepareSwitch)).resolves.toBe("test");
+      expect(fetchConfig).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ method: "PUT" }));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("uses the active packaged runtime version for the native About panel", () => {

@@ -97,6 +97,25 @@ async function verifyWorkspaceRequestAuthority(req: express.Request) {
   };
 }
 
+async function verifiedCreationDirectory() {
+  return {
+    ok: true as const,
+    items: [
+      ['workspace-plugin-a', 'member-plugin-a'],
+      ['workspace-bind-failure', 'member-bind-failure'],
+      ['workspace-sqlite', 'member-sqlite'],
+    ].map(([workspaceId, workspaceMemberId]) => ({
+      workspaceId: workspaceId!,
+      workspaceName: workspaceId!,
+      workspaceMemberId: workspaceMemberId!,
+      workspaceType: 'team' as const,
+      role: 'member' as const,
+      memberStatus: 'active' as const,
+      lifecycleState: 'active' as const,
+    })),
+  };
+}
+
 describe('plugin project duplication', () => {
   it.skipIf(process.platform === 'win32')(
     'rejects duplicates that would skip a required symlinked file',
@@ -122,7 +141,7 @@ describe('plugin project duplication', () => {
     },
   );
 
-  it('duplicates locally without querying the remote Workspace directory', async () => {
+  it('rejects a Team claim before creating data when membership authority is unavailable', async () => {
     const root = await makeTempRoot('od-plugin-duplicate-authority-');
     const projectsRoot = path.join(root, 'projects');
     const plugin = await makePreviewPlugin(root, 'authority-plugin-fixture');
@@ -205,17 +224,12 @@ describe('plugin project duplication', () => {
         },
       );
 
-      expect(resp.status).toBe(201);
-      expect(randomId).toHaveBeenCalledTimes(2);
-      expect(fetchProjectCreationWorkspaceDirectory).not.toHaveBeenCalled();
-      expect(ensureWorkspaceProject).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          projectId,
-          workspaceId: 'workspace-authority',
-          createdByWorkspaceMemberId: 'member-authority',
-        }),
-      );
+      expect(resp.status).toBe(503);
+      expect(await resp.json()).toMatchObject({ error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' } });
+      expect(randomId).not.toHaveBeenCalled();
+      expect(fetchProjectCreationWorkspaceDirectory).toHaveBeenCalledOnce();
+      expect(ensureWorkspaceProject).not.toHaveBeenCalled();
+      await expectMissing(path.join(projectsRoot, projectId));
     } finally {
       await close(server.server);
     }
@@ -292,6 +306,7 @@ describe('plugin project duplication', () => {
         listInstalledPlugins: vi.fn(() => []),
       },
       verifyWorkspaceRequestAuthority,
+      fetchProjectCreationWorkspaceDirectory: verifiedCreationDirectory,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,
@@ -416,6 +431,7 @@ describe('plugin project duplication', () => {
         listInstalledPlugins: vi.fn(() => []),
       },
       verifyWorkspaceRequestAuthority,
+      fetchProjectCreationWorkspaceDirectory: verifiedCreationDirectory,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,
@@ -492,6 +508,7 @@ describe('plugin project duplication', () => {
         listInstalledPlugins: vi.fn(() => []),
       },
       verifyWorkspaceRequestAuthority,
+      fetchProjectCreationWorkspaceDirectory: verifiedCreationDirectory,
       helpers: {
         requireLocalDaemonRequest: ((_req, _res, next) => next()) as express.RequestHandler,
         assembleExample: (templateHtml: string) => templateHtml,

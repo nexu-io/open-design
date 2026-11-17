@@ -9,6 +9,7 @@ import {
 } from '@open-design/contracts';
 
 import { workspaceIdentityCacheKey } from '../../src/collab/workspace-identity';
+import { workspaceContextFromDirectoryItem } from '../../src/collab/useWorkspaceContext';
 
 /**
  * One member of one workspace, resolved the way production resolves it.
@@ -56,6 +57,20 @@ const SHELL_CONTEXT = contextForRole('owner');
 const SHELL_CONTEXT_PLAIN_MEMBER = contextForRole('member');
 
 describe('workspace principal identity', () => {
+  it('keeps the member count when a Personal directory item becomes a client context', () => {
+    const projected = workspaceContextFromDirectoryItem({
+      workspaceId: 'personal-a',
+      workspaceType: 'personal',
+      workspaceMemberId: 'invited-member',
+      workspaceName: 'Owner workspace',
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      memberCount: 2,
+    });
+    expect(projected.memberCount).toBe(2);
+  });
+
   // The premise. If this ever stops holding, the defect class below has changed
   // shape and every fix built on it needs re-reading.
   it('forks the two sources on role and on nothing else', () => {

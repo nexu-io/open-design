@@ -115,6 +115,7 @@ export function AnchoredMenuShell({
   portalRef,
   onAnchorHidden,
   onConversationScroll,
+  stablePlacement = false,
   children,
 }: {
   /** 锚点 ID = body portal；null = 原地渲染，供未锚定的其他调用方使用。 */
@@ -133,6 +134,8 @@ export function AnchoredMenuShell({
   onAnchorHidden?: () => void;
   /** Opt-in dismissal for card sharing; other menus keep their existing behavior. */
   onConversationScroll?: () => void;
+  /** Keep changing share content on one side while this menu remains open. */
+  stablePlacement?: boolean;
   children: ReactNode;
 }) {
   /*
@@ -217,6 +220,7 @@ export function AnchoredMenuShell({
        * 它连 `data-placement` 都不写 —— 给它算 `above` 只会让竖向预算配错方向。
        */
       flipEnabled: Boolean(anchorId),
+      stablePlacement,
       anchorElement: anchorId ? anchor : undefined,
     },
   );

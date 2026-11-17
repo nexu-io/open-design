@@ -8,7 +8,7 @@ import {
 import { velaCommandStderr } from '../integrations/vela-command.js';
 
 type VelaFailure = Omit<ApiFailureDetail, 'stage'>;
-class SafeVelaCommandError extends Error {
+export class SafeVelaCommandError extends Error {
   constructor(message: string, readonly failure: VelaFailure) { super(message); }
 }
 

@@ -65,3 +65,17 @@ it.each([false, true])('pins CLI session until settlement and cleans its private
     expect(await readdir(root)).toEqual([]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+it('allows ten minutes for uploads and retains short control deadlines', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'od-pinned-upload-'));
+  try {
+    const session: VelaControlApiContext = { profile: 'test', apiUrl: 'https://example.test', controlKey: 'synthetic-key', user: null, configMtimeMs: null };
+    const run = vi.fn<typeof runVelaCommand>().mockResolvedValue('{}');
+    for (const args of [['resource', 'push', 'file', 'resource', '/fixture'], ['resource', 'versions', 'resource'], ['share', 'publish', 'resource']]) {
+      await runPinnedVelaCommand({ args, session, dataRoot: root, workspaceId: 'workspace' }, run);
+    }
+    expect(run.mock.calls.map(call => call[1]?.timeoutMs)).toEqual([600_000, 30_000, 30_000]);
+    expect(await readdir(root)).toEqual([]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

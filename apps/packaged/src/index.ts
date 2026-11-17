@@ -6,11 +6,13 @@ import {
   type SidecarSource,
 } from "@open-design/sidecar-proto";
 import {
+  readLauncherHost,
   parseLauncherAfterQuitArgs,
   parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
 } from "@open-design/launcher-proto";
 import {
+  adoptSidecarProcess,
   bootstrapSidecarProcess,
   isCurrentSidecarLauncher,
   readCurrentSidecarStamp,
@@ -23,10 +25,13 @@ import {
 } from "@open-design/sidecar";
 import {
   recordIncomingUpdateLifecycle,
+  registerDesktopAuthWithDaemon,
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
   createSplashWindow,
   setSplashStage,
+  createDesktopStartupTiming,
+  type StartupTiming,
   type DesktopMainHandle,
 } from "@open-design/desktop/main";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
@@ -61,6 +66,7 @@ import {
 import {
   attachPackagedDesktopProcessLogging,
   createPackagedDesktopLogger,
+  markPackagedShutdownInProgress,
   type PackagedDesktopLogger,
 } from "./logging.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
@@ -75,12 +81,13 @@ import {
 } from "./managed-headless.js";
 import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload-desktop-launch.js";
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
-import { startPackagedSidecars } from "./sidecars.js";
-import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
+import { resolvePackagedElectronNodeCommand, startPackagedSidecars } from "./sidecars.js";
+import { classifyStartupFailure, reportLaunchEvent, reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
 let packagedLogger: PackagedDesktopLogger | null = null;
+let packagedStartupTiming: StartupTiming | null = null;
 const secondInstanceHandoff = createPackagedSecondInstanceHandoff();
 
 // Telemetry context for the fatal-exit path. Populated once config + launcher
@@ -97,8 +104,14 @@ let startupTelemetryContext:
       source: string;
       installationRoot: string;
       nativeModulePath: string | null;
+      channel: string;
+      dataRoot: string;
     }
   | null = null;
+
+async function reportPackagedLaunch(event: Parameters<typeof reportLaunchEvent>[0]["event"], properties: Record<string, unknown>) {
+  if (startupTelemetryContext) await reportLaunchEvent({ ...startupTelemetryContext, event, properties });
+}
 
 function applyPackagedUpdaterEnv(updateMetadataUrl: string | null): void {
   if (updateMetadataUrl == null) return;
@@ -216,12 +229,22 @@ async function main(): Promise<void> {
   if (exitPackagedLauncherForExistingDesktop(oppositeDesktop, (code) => app.exit(code))) {
     return;
   }
-  if (await bootstrapSidecarProcess(launchStamp, {
+  const launcherHost = readLauncherHost();
+  const generationResources = {
     dataRoot: initialPaths.dataRoot,
     ownerPid: null,
     port: 0,
     runtimeRoot: initialPaths.runtimeRoot,
-  })) {
+  };
+  // A launcher-hosted process IS the app for the whole session: adopt it
+  // as the generation target instead of spawning a second process. A deferred
+  // headless (MCP) runtime is adopted too, so restoring its window later happens
+  // in this same LaunchServices process.
+  if (launcherHost != null && (!headlessRequest.headless || supportsDeferredHeadlessDesktop(headlessRequest))) {
+    const command = await resolvePackagedElectronNodeCommand();
+    if (command === process.execPath) throw new Error("hosted launcher requires a background Electron helper");
+    await adoptSidecarProcess(launchStamp, generationResources, { command });
+  } else if (await bootstrapSidecarProcess(launchStamp, generationResources)) {
     app.exit(0);
     return;
   }
@@ -244,6 +267,8 @@ async function main(): Promise<void> {
     return;
   }
   const launcherRuntime = await resolvePackagedLauncherRuntime(namespaceConfig, initialPaths, {
+    // A hosting launcher's selection is authoritative for this process.
+    host: launcherHost,
     delegated,
     resume: handoffResume,
   });
@@ -256,13 +281,15 @@ async function main(): Promise<void> {
   const paths = launcherRuntime.paths;
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: launcherRuntime.installedLaunchPath,
-    managed: isPackagedManagedLaunch(launcherRuntime),
+    managed: launcherHost != null || isPackagedManagedLaunch(launcherRuntime),
   });
 
   // Arm fatal-exit telemetry now that we know the channel key/version. The
   // startPackagedSidecars call below is THE failure this covers (daemon/web
   // dying before reporting status, e.g. issue #4638's missing better-sqlite3).
   startupTelemetryContext = {
+    dataRoot: paths.dataRoot,
+    channel: launchStamp.channel,
     posthogKey: activeConfig.posthogKey,
     posthogHost: activeConfig.posthogHost,
     appVersion: activeConfig.appVersion,
@@ -284,6 +311,14 @@ async function main(): Promise<void> {
       "better_sqlite3.node",
     ),
   };
+
+  // Helper/delegating/headless-only processes are excluded. Node's origin
+  // includes ESM/config work in this process, but not an earlier OS click or
+  // a separate installed launcher process. Early events wait for identity.
+  if (!deferredHeadless) {
+    packagedStartupTiming = createDesktopStartupTiming({ appVersion: activeConfig.appVersion, startupType: "cold" });
+    packagedStartupTiming.mark("runtime_resolved");
+  }
 
   await ensurePackagedNamespacePaths(paths);
   const convergedStamp = launchStamp;
@@ -310,13 +345,31 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
+  // The shared beta feed can replace the entire outer with an unbound build.
+  // Use the existing updater gate for this fixed-environment dogfood package.
+  if (activeConfig.amrEndpointBinding) process.env.OD_UPDATE_ENABLED = "0";
   applyPackagedUpdaterEnv(activeConfig.updateMetadataUrl);
-  if (!claimPackagedSingleInstanceLock(app, (argv) => {
+  let pendingDesktopIntent = false;
+  let restoreDeferredDesktop: (() => void) | null = null;
+  const requestDeferredDesktop = () => {
+    if (restoreDeferredDesktop == null) pendingDesktopIntent = true;
+    else restoreDeferredDesktop();
+  };
+  if (launcherHost != null) {
+    launcherHost.onSecondInstance(argv => {
+      secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
+      if (deferredHeadless && !argv.includes("--headless")) requestDeferredDesktop();
+    });
+  } else if (!claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
   })) {
     return;
   }
   await app.whenReady();
+const electronReadyAtMs = performance.now();
+  packagedStartupTiming?.mark("electron_ready");
+  // Preserve a user's Dock/Finder open while daemon/web startup is pending.
+  if (deferredHeadless && launcherHost != null) watchUserDesktopIntent(app, requestDeferredDesktop);
 
   // Show the brand splash IMMEDIATELY, before we await the daemon/web sidecars
   // below. Cold boot otherwise leaves the user staring at no window at all for
@@ -341,8 +394,10 @@ async function main(): Promise<void> {
   const sidecarRuntime: SidecarRuntimeContext<SidecarStamp> = { ...runtime, mode: convergedStamp.mode };
 
   const sidecars = await startPackagedSidecars(sidecarRuntime, paths, {
+    launchContext: packagedStartupTiming?.context(),
     appVersion: activeConfig.appVersion,
     amrProfile: activeConfig.amrProfile,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
     daemonCliEntry: activeConfig.daemonCliEntry,
     daemonSidecarEntry: activeConfig.daemonSidecarEntry,
     electronNodeCommand: launcherRuntime.electronNodeCommand,
@@ -369,6 +424,12 @@ async function main(): Promise<void> {
     // Both the "spawning" and "ready" edges are mapped so the step counter
     // advances the instant each long native wait clears.
     onPhase(phase) {
+      // Launch events stay buffered on the tracker until desktop main arms the
+      // daemon-backed reporter, so attempt/ready/result share one delivery path
+      // and one installation identity (OPEND-4220). The direct packaged
+      // reporter is reserved for the fatal path below, where no daemon exists.
+      packagedStartupTiming?.mark(phase === "daemon-spawning" ? "daemon_spawning"
+        : phase === "daemon-ready" ? "daemon_ready" : phase === "web-spawning" ? "web_spawning" : "web_ready");
       const stage =
         phase === "daemon-spawning"
           ? "engine"
@@ -404,6 +465,9 @@ async function main(): Promise<void> {
     return await desktopHandle.invoke(action, input);
   };
   const launchDesktop = async (): Promise<DesktopMainHandle> => await runDesktopMain(runtime, {
+    electronReadyAtMs,
+    amrEndpointBinding: activeConfig.amrEndpointBinding,
+    startupTiming: deferredHeadless ? null : packagedStartupTiming ?? undefined,
     splashWindow: splash?.window,
     splashStartedAt: splash?.startedAt,
     async beforeShutdown(record) {
@@ -413,6 +477,10 @@ async function main(): Promise<void> {
         await sidecars.close(record);
       }
     },
+    // Armed at the very start of shutdown: closing the window cancels in-flight
+    // od:// requests and quiesce() aborts the rest; their AbortError
+    // rejections are expected teardown, not fatal main-process errors.
+    onShutdownStarted: markPackagedShutdownInProgress,
     quiesceRendererTransport() {
       odProtocol.quiesce();
     },
@@ -426,19 +494,8 @@ async function main(): Promise<void> {
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
     },
-    registerDesktopAuth: async (secret) => {
-      try {
-        const result = await client.invoke<{ accepted: true }>(
-          APP_KEYS.DAEMON,
-          "register-desktop-auth",
-          { secret: secret.toString("base64") },
-          { timeoutMs: 800 },
-        );
-        return result.accepted === true;
-      } catch {
-        return false;
-      }
-    },
+    registerDesktopAuth: (secret, authOptions) =>
+      registerDesktopAuthWithDaemon(client, secret, { ...authOptions, logger: packagedLogger }),
     windowTitle: resolvePackagedWindowTitle(activeConfig),
     inviteProtocolClientPath:
       process.platform === "win32" ? launcherRuntime.installedLaunchPath : null,
@@ -523,19 +580,30 @@ async function main(): Promise<void> {
     },
   });
   await client.start();
+
   if (deferredDesktop != null) {
+    restoreDeferredDesktop = () => { void deferredDesktop.restore().catch(() => undefined); };
+    launcherHost?.onSecondInstance(argv => {
+      if (argv.includes("--headless")) return;
+      secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
+      void deferredDesktop.restore().catch(() => undefined);
+    });
     // A deferred headless runtime is a successful launch of this generation.
     void confirmPackagedLauncherRuntime(launcherRuntime).catch((error: unknown) => {
       packagedLogger?.warn("failed to confirm packaged launcher runtime", { error });
     });
-    watchUserDesktopIntent(app, () => {
-      void deferredDesktop.restore().catch(() => undefined);
-    });
+    if (launcherHost == null) {
+      watchUserDesktopIntent(app, restoreDeferredDesktop);
+    } else if (pendingDesktopIntent) restoreDeferredDesktop();
   }
 }
 
 void main().catch(async (error: unknown) => {
   const isPathAccess = error instanceof PackagedPathAccessError;
+  if (packagedStartupTiming != null) {
+    packagedStartupTiming.setReporter(reportPackagedLaunch);
+    packagedStartupTiming.finish("failed", classifyStartupFailure(error, isPathAccess).failureKind);
+  }
   if (isPathAccess) {
     try {
       dialog.showErrorBox(error.title, error.message);
@@ -554,6 +622,8 @@ void main().catch(async (error: unknown) => {
     await reportStartupFailure({
       error,
       isPathAccess,
+      dataRoot: startupTelemetryContext.dataRoot,
+      launchContext: packagedStartupTiming?.context(),
       posthogKey: startupTelemetryContext.posthogKey,
       posthogHost: startupTelemetryContext.posthogHost,
       distinctId: resolveStartupDistinctId(

@@ -26,7 +26,7 @@ export function ShareSignInButton({ variant, actionLabel, onLoginSuccess }: {
   onLoginSuccess?: () => void;
 }) {
   const t = useT();
-  const { state, status, begin, cancel } = useCloudSignIn({ onLoginSuccess });
+  const { state, status, begin, cancel, reopen } = useCloudSignIn({ onLoginSuccess });
   const signing = state === 'signing';
 
   return (
@@ -56,6 +56,7 @@ export function ShareSignInButton({ variant, actionLabel, onLoginSuccess }: {
                 <a
                   className="amr-login-activation__open"
                   href={status.activationUrl}
+                  onClick={(event) => { event.preventDefault(); void reopen(); }}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

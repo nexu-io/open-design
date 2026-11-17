@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.3.2
+# OD Next Prototype Task Profile v3.1.9
 
 > Rollout: active
 
@@ -47,6 +47,27 @@ than acting as decoration.
 The default delivery is a prototype that opens, runs, and remains editable:
 core flows genuinely work end-to-end from the entry point, and buttons,
 navigation, and key controls are never mere decoration.
+
+While composing source, keep DOM lookup cardinality explicit: `querySelector`
+returns one element or null; `querySelectorAll` returns a collection. Do not
+iterate a single-element lookup or mix the return types of selector helpers.
+An initialization error must not leave seeded content and controls unbound.
+When toggling `hidden`, preserve the native hidden-state rule shipped in
+`layout.css`, including its `until-found` exception. Component flex/grid display
+rules must not reveal hidden dialogs, validation messages, or empty states.
+Keep native dialogs without `open` invisible even when their component class
+uses flex or grid; opening and closing must preserve the native dialog state.
+Keep untouched and successfully reset forms free of error messages; show a
+field error only after the user validates an invalid value. Results and their
+empty state must never appear at the same time.
+Keep handler, label, and validation-feedback selectors consistent with the IDs
+actually rendered in the markup. Do not derive feedback IDs by mixing input
+and field naming schemes. Optional feedback nodes must be null-safe; a missing
+message element must not throw or block an otherwise valid state update.
+For controls inserted or replaced by a renderer, delegate events from a stable
+ancestor or bind after insertion. An initialization-time lookup cannot bind a
+detail or cart action that does not exist yet. Reopening a view must retain a
+working handler without accumulating duplicate actions.
 
 Writing the primary HTML deliverable to disk IS the delivery: no opening, no
 previewing, no walkthroughs, no second pass of any kind after the write. Meet
@@ -115,6 +136,40 @@ record them in the Design Spec:
   and disabled states wherever the declared flow needs them.
 - Modals, menus, drawers, and page transitions have explicit enter, exit, and
   return paths.
+- Prefer a native `<dialog>` with `showModal()` for modal forms. Place initial
+  focus after the dialog is visible, not while an entrance animation hides it.
+  On every close path, return focus to a live control: after rebuilding a list,
+  find the new trigger by its stable item ID; if that item is no longer visible,
+  focus the primary action rather than a detached node.
+- Inline actions that rebuild or move an item also restore focus to the newly
+  rendered equivalent control, with a visible fallback if a filter removes it.
+- Drive button-based view changes and success redirects from local state and
+  invoke the view renderer directly. Do not depend on assigning `location.hash`
+  or native document navigation to update the view in a sandbox. URL metadata
+  is optional; a rejected URL update must not block navigation, committed
+  results, or a return path that preserves the user's filters.
+- Commit each local mutation to the same state that renders the interface;
+  derive lists, filtered results, totals, availability, and chart labels from
+  that committed state before showing success. Saving a copied list alone
+  must not leave the visible list or its summary stale.
+  Refresh every mounted view of changed values, including a review page behind
+  a drawer or editor, and invalidate confirmations based on older values.
+  Closing an editor must not reveal a stale review; final confirmation uses
+  the same current values that the user sees in that review.
+- Derive status wording from the same values as the displayed totals. Distinguish
+  no records, zero net, positive net, and negative net; zero must not be called
+  a positive balance or growth. Empty periods show an honest empty state,
+  without stale chart segments or invented percentages.
+- Hot-search suggestions and typed searches use the same matching rules.
+  A visible suggestion must find its intended existing content, including
+  when the suggestion abbreviates a longer title. Clearing search restores
+  the applicable list and filters.
+- Prototype actions must work inside the product's sandboxed preview without
+  native form submission or navigation. For local add/save actions use a
+  `type="button"` click handler and an Enter key handler that invoke the same
+  local update; do not depend only on a form submit event. Keep an in-memory
+  fallback when localStorage is unavailable, and do not promise persistence
+  in a preview that blocks storage. Do not weaken the host sandbox.
 - Use semantic controls, visible keyboard focus, accessible names, useful alt
   text, non-color status cues, and reduced-motion behavior.
 - Motion exists only to explain state change, hierarchy, or the result of an
@@ -156,6 +211,16 @@ fact and quotes its source in `device-frame-shell`.
 - Use the selected shell's markup and CSS as the document skeleton and put
   the product inside the `APP CONTENT START` / `APP CONTENT END` slot; the
   app mounts in `.phone-content` and nowhere else.
+- Keep the shell's `--phone-*` declarations in a separate `:root` block from
+  product tokens. Preserve the bundled `var(--phone-*, fallback)` values in
+  the shell CSS: replacing product tokens must never collapse the handset's
+  width, height, bezel, or safe areas. Do not depend on the preview host to
+  supply these values.
+- Start a new handheld output by copying the entire selected shell file to the
+  requested HTML entry, then replace its APP CONTENT slot and add scoped product
+  styles and behavior. Do not reconstruct the shell from memory or copy only
+  its body: its head styles, safe-area variables, system chrome, and responsive
+  fallback are required together. Keep them intact when adding layout.css.
 - One handset persists across the whole prototype. Screen navigation and hash
   routes swap the content inside the screen; a new handset per route appears
   only when the user asks for a side-by-side board.
@@ -184,9 +249,18 @@ quotes it in the `layout-primitives` context fact. It is structure only —
 display, flex/grid, overflow, wrapping, ratio, and opt-in icon geometry — and
 sets no palette, type, spacing scale, or component look. Put the whole block
 into the document's own `<style>` as its first rule set (`@layer od-layout`
-must come first so the product's CSS always wins), keep the
+must come first so the product's ordinary layout CSS wins). Its native hidden
+and closed-dialog rules deliberately take precedence over component display
+declarations; keep those rules intact along with the
 `OD-LAYOUT-PRIMITIVES v1` marker comments, and compose the shapes below from it
 instead of re-deriving them per card, row, tile, or chip.
+
+Preserve `[hidden]:not([hidden="until-found" i]) { display: none !important; }`
+from the bundled block. Use `hidden` for inactive screens, empty states,
+dialogs, and scrims; remove it only when showing that element. Component
+`display: flex/grid` must not make a hidden element visible. For exit
+animations, animate with a state class before setting `hidden`; do not override
+the hidden rule. Keep `hidden="until-found"` available for browser find-in-page.
 
 Two kinds of text, two treatments:
 
@@ -226,6 +300,11 @@ never a CSS height on the image. A card, tile, or row built on `<a>` sets its
 own `color` and `text-decoration: none`; browser-default link styling never
 reaches product UI.
 
+### Render charts as real graphics
+
+- Keep SVG drawing elements inside an actual `<svg viewBox="...">` root. When constructing them from JavaScript, use `document.createElementNS('http://www.w3.org/2000/svg', ...)` or insert SVG markup into an existing SVG root; never inject bare `path`, `line`, or `text` elements into an HTML `div`.
+- Give the chart a visible viewport and explicit dimensions. Keep plotted marks, axes, and labels within that viewport at the intended screen sizes; an empty chart container is not a rendered chart.
+
 ### Bound functional icon geometry
 
 A `viewBox` defines internal coordinates; it does not set rendered size.
@@ -246,6 +325,16 @@ Treat functional inline SVGs as one component contract before writing markup:
   not by whether it carries a `viewBox`. A logo stays a content SVG even
   inside a button or a nav bar; a deliberately large UI glyph stays functional
   and takes its size from `--od-icon-size`.
+
+### Keep dynamic structure and data separate
+
+For dynamic UI, prefer separating DOM structure from data. Use `textContent`
+for plain text and DOM properties or `setAttribute` for attributes. When
+generating HTML, prefer template literals with `${...}` for complex fragments
+instead of long concatenation chains with nested quote delimiters; escape data
+for its insertion context. Reuse a render function for repeated fragments only
+when their structure and meaning match. Keep simple code simple; do not add
+abstractions solely to follow this guidance.
 
 ### Design usable forms and feedback
 
@@ -296,21 +385,19 @@ Treat functional inline SVGs as one component contract before writing markup:
   and states consistent.
 - Images, icons, and illustrations match the content's meaning and keep a
   unified style.
+- Match localized images to their visible subjects: do not relabel an unrelated image as the requested place or object. If an exact image is unavailable, use a clearly disclosed neutral placeholder rather than a misleading photograph. User-approved placeholders still distinguish the kinds of objects shown.
 - Never fabricate brand facts, feature promises, or business data the user
   has not provided or confirmed.
-- **Imagery:** real entities appearing in the interface (book covers,
-  products, brand marks, real places) use real images obtained via
-  search/fetch and localized into the project; never fabricate them with
-  image generation. For illustrative and atmospheric imagery, prefer fetched
-  real photography; image generation is the fallback, spent only on the key
-  visual surfaces.
+- **Imagery:** follow the Core imagery-by-type rule for every image in the
+  interface, localized into the project.
 - **Demo content defaults to real referents:** sample data in a prototype
   defaults to real, well-known entities with their real fetched images — a
   bookshelf shows real books with real covers; a music app shows real albums
   with real art. Fictional stand-ins are the exception: use them only when
   the user asks for fictional content or licensing forbids real assets, and
   disclose the substitution in the delivery notes. Do not de-realize demo
-  content to avoid the fetch.
+  content to avoid the fetch. How generic categories such as dishes are
+  sourced is decided by the Core imagery rule, not by this default.
 
 ### Quality floor
 
@@ -337,6 +424,9 @@ Meet the following in one pass, while writing the source:
   scrolling; fixed bars reserve padding for the content they cover.
 - Pick colors for ≥4.5:1 body-text-to-background contrast; pick dark-mode
   colors independently.
+- Set both foreground and background on primary controls, including hover,
+  focus, and disabled states; inherited body text must not disappear into a
+  dark action fill. Keep supporting text readable in inverse-color sections.
 - Primary interactions are keyboard-reachable, with focus styles and focus
   order explicitly defined in the source.
 - Locked content, user-specified assets, and non-target regions stay
@@ -349,3 +439,9 @@ mode may split only when the general orchestration Skill's independent-output
 conditions are met, and only along independently deliverable feature loops,
 roles, or device surfaces after navigation, content locks, and the Design
 Spec are frozen. Do not split one interaction loop across Children.
+
+## Discovery scope
+
+Apply these requirements only to this output. Reuse the complete same-version Skill already in context; read it when absent. Companion deliverables follow their own Skills. Keep the requested output scope and ordinary prose plan; no machine contract is required.
+
+For handheld prototypes, use the appropriate existing shell in .od-frames/ (iphone.html, android.html, neutral.html) and read .od-frames/layout.css for layout primitives. Preserve existing artifacts and user-edited shells.

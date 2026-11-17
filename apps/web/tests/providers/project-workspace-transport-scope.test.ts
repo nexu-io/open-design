@@ -189,18 +189,20 @@ describe('persisted project Workspace transport scope', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps raw project URLs server-authoritative while scoped streams retain captured A', () => {
+  it('carries the captured Workspace identity on browser-owned raw and stream navigation', () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const workspaceB = teamContext('workspace-b', 'member-b');
     const capturedRawUrl = projectRawUrl('project-1', 'index.html', workspaceA);
     const capturedTerminalUrl = terminalStreamUrl('project-1', 'terminal-1', workspaceA);
     const capturedEventsUrl = projectEventsUrl('project-1', workspaceA);
 
-    projectRawUrl('project-1', 'index.html', workspaceB);
+    const otherRawUrl = projectRawUrl('project-1', 'index.html', workspaceB);
 
     const parsedRaw = new URL(capturedRawUrl, 'https://od.local');
-    expect(parsedRaw.searchParams.has('workspaceId')).toBe(false);
-    expect(parsedRaw.searchParams.has('workspaceMemberId')).toBe(false);
+    expect(parsedRaw.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(parsedRaw.searchParams.get('workspaceMemberId')).toBe('member-a');
+    expect(new URL(otherRawUrl, 'https://od.local').searchParams.get('workspaceId')).toBe('workspace-b');
+    expect(projectRawUrl('project-1', 'index.html')).toBe('/api/projects/project-1/raw/index.html');
 
     for (const url of [capturedTerminalUrl, capturedEventsUrl]) {
       const parsed = new URL(url, 'https://od.local');

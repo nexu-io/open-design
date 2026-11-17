@@ -46,6 +46,7 @@ export interface InternalPhysicalRun {
   id: string;
   status: string;
   cancelRequested?: boolean;
+  manualResumeAttemptCount?: number;
 }
 
 export interface InternalRunAnalyticsLifecycle<TRun> {
@@ -192,9 +193,14 @@ export function createInternalRunCreationService<
     return { kind: 'ready', run, creationKind: 'created', resumed: false };
   };
 
+  const startedAttempts = new WeakMap<TRun, number>();
   return {
     prepare,
     start(run, analytics, starter) {
+      const attempt = run.manualResumeAttemptCount ?? 0;
+      if (startedAttempts.get(run) === attempt) return run;
+      startedAttempts.set(run, attempt);
+
       // Before the child is spawned: `run_created` describes a Run that has
       // been accepted, and the terminal half must already be attached when the
       // Run settles — including a Run that fails on its first tick.

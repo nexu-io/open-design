@@ -41,6 +41,31 @@ const WORKSPACE = 'ac43mfba3blvfvfmeie1euti';
 const MEMBER = 'dn87ohicuyq4o839pgi37op4';
 const SETTINGS_URL = `https://open-design.ai/amr/settings?workspaceId=${WORKSPACE}`;
 
+describe('personal workspace billing entrance', () => {
+  it('keeps the Owner entrance but denies invited Admin and Member in a shared Personal workspace', () => {
+    expect(canReachWorkspaceBillingEntrance({ ...context({ role: 'owner', workspaceType: 'personal' }), memberCount: 3 })).toBe(true);
+    for (const role of ['admin', 'member'] as const) {
+      expect(canReachWorkspaceBillingEntrance({ ...context({ role, workspaceType: 'personal' }), memberCount: 3 })).toBe(false);
+    }
+  });
+
+  it('preserves the legacy single-member Personal placeholder fallback', () => {
+    expect(canReachWorkspaceBillingEntrance(context({ role: 'member', workspaceType: 'personal' }))).toBe(true);
+    expect(canReachWorkspaceBillingEntrance({ ...context({ role: 'member', workspaceType: 'personal' }), memberCount: 1 })).toBe(true);
+  });
+
+  it('uses the authoritative member count for a Personal project scope with the same Member role', () => {
+    const scoped = context({ role: 'member', workspaceType: 'personal' });
+    const authoritative = { ...scoped, memberCount: 2 };
+
+    const billing = workspaceBillingAuthorityContext(scoped, authoritative);
+
+    expect(scoped.memberCount).toBeUndefined();
+    expect(billing?.memberCount).toBe(2);
+    expect(canReachWorkspaceBillingEntrance(billing!)).toBe(false);
+  });
+});
+
 function context(overrides: {
   workspaceId?: string;
   workspaceType?: WorkspaceType;

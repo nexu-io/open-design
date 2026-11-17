@@ -1104,6 +1104,7 @@ describe('task observation OTLP exporter', () => {
 
   it('reads an explicit mode while reusing existing Langfuse auth and transport defaults', () => {
     const env = {
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
       LANGFUSE_PUBLIC_KEY: 'pk-fixture',
       LANGFUSE_SECRET_KEY: 'sk-fixture',
       LANGFUSE_BASE_URL: 'https://self-host.example.test/',
@@ -1126,6 +1127,7 @@ describe('task observation OTLP exporter', () => {
     );
     expect(readTaskObservationExporterConfig(null, {})).toBeNull();
     const relayAndDirect = {
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
       LANGFUSE_PUBLIC_KEY: 'pk-fixture',
       LANGFUSE_SECRET_KEY: 'sk-fixture',
       OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://relay.example.test',
@@ -1143,8 +1145,9 @@ describe('task observation OTLP exporter', () => {
     });
   });
 
-  it('selects a Task-capable sink independently from Vela and exposes a versioned schema capability', () => {
+  it('preserves anonymous exporters and exposes the versioned schema used by Vela', () => {
     const env = {
+      OPEN_DESIGN_VELA_TELEMETRY: 'off',
       LANGFUSE_PUBLIC_KEY: 'pk-fixture',
       LANGFUSE_SECRET_KEY: 'sk-fixture',
       LANGFUSE_BASE_URL: 'https://self-host.example.test',
@@ -1165,7 +1168,10 @@ describe('task observation OTLP exporter', () => {
       ...configuredVela,
       LANGFUSE_EXPORTER_MODE: 'otlp',
     })).toMatchObject({ mode: 'otlp', baseUrl: 'https://self-host.example.test' });
-    expect(readTaskTelemetrySinkConfig({})).toBeNull();
+    expect(readTaskTelemetrySinkConfig({ OPEN_DESIGN_VELA_TELEMETRY: 'off' })).toBeNull();
+    const authenticated = readTaskTelemetrySinkConfig({ ...env, OPEN_DESIGN_VELA_TELEMETRY: 'on' }, configuredVela);
+    expect(authenticated?.kind).toBe('vela');
+    expect(readTaskObservationExporterConfig(authenticated, { LANGFUSE_EXPORTER_MODE: 'otlp' })).toBeNull();
     expect(TASK_OBSERVATION_SCHEMA_CAPABILITY_V1).toMatchObject({
       schema: 'open-design.task-observation-schema-capability/v1',
       aggregateSchema: 'open-design.strategy-task-observation/v1',

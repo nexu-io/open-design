@@ -1,11 +1,3 @@
-// An unreadable app config must not be reported as an unconfigured one.
-//
-// `odNextStrategyMode` decides whether OD Next runs. `readAppConfig` already
-// answers `{}` for the two states that legitimately mean "nothing configured"
-// — no file, unparseable file — and throws only when the daemon genuinely
-// cannot read its own config. Substituting `{}` for that throw would tell an
-// operator the installation was never opted in, which is a claim about their
-// choice rather than about this daemon's disk.
 import type { Server } from 'node:http';
 
 import express from 'express';
@@ -34,8 +26,7 @@ describe('GET /api/strategies/od-next/rollout', () => {
   };
 
   beforeEach(() => {
-    // Env must not decide the mode for these cases; the saved preference is
-    // the thing under test.
+    // Historical preferences must not decide the new default.
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
   });
 
@@ -44,13 +35,13 @@ describe('GET /api/strategies/od-next/rollout', () => {
     server = null;
   });
 
-  it('reports the saved mode and the authority that set it', async () => {
-    await start(async () => ({ odNextStrategyMode: 'active' }));
+  it.each(['off', 'observe', 'active'] as const)('ignores historical %s preference', async (mode) => {
+    await start(async () => ({ odNextStrategyMode: mode }));
     const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout`);
     expect(response.status).toBe(200);
     expect((await response.json() as { status: unknown }).status).toMatchObject({
       requestedMode: 'active',
-      requestedModeSource: 'app_config',
+      requestedModeSource: 'default',
       effectiveMode: 'active',
     });
   });
@@ -65,25 +56,9 @@ describe('GET /api/strategies/od-next/rollout', () => {
     });
   });
 
-  it('reports the saved off an installation opted into, not the default', async () => {
-    // `default` and a saved `off` now resolve to opposite modes, so the source
-    // is what tells an operator whether this daemon is on OD Next because
-    // nobody touched it or off it because somebody asked.
-    await start(async () => ({ odNextStrategyMode: 'off' }));
-    const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout`);
-    expect(response.status).toBe(200);
-    expect((await response.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
-      requestedModeSource: 'app_config',
-      effectiveMode: 'off',
-    });
-  });
-
   it('offers no way to change the mode from here', async () => {
     // The reset this route used to expose existed only to lift a stop latch.
-    // With the latch gone there is nothing here to write, and the one way to
-    // turn OD Next off is `PUT /api/app-config` — which is also the one place
-    // a typo is refused rather than absorbed.
+    // This endpoint remains read-only. Engineering env overrides own rollback.
     await start(async () => ({}));
     const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout/reset`, {
       method: 'POST',

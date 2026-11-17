@@ -1,4 +1,6 @@
+/** Historical persisted-turn identity reader only; current runs use production markers. */
 import { z } from 'zod';
+
 
 import {
   indexCanonicalXmlChildren,

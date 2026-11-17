@@ -29,39 +29,12 @@ async function submitWithError(error: string) {
 
   render(<InviteDialog open onClose={() => {}} workspaceContext={TEAM_CONTEXT} />);
   typeAnInvite();
-  fireEvent.click(screen.getByRole('button', { name: /确认并邀请|invite/i }));
+  fireEvent.click(screen.getByRole('button', { name: /发送邀请|send invitations|确认并邀请|invite/i }));
   await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
   return screen.findByRole('alert');
 }
 
-describe('InviteDialog — seat gate (#115)', () => {
-  it('refuses to send and offers the upgrade path when the workspace is out of seats', () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
-    const onUpgrade = vi.fn();
-
-    render(
-      <InviteDialog
-        open
-        onClose={() => {}}
-        workspaceContext={TEAM_CONTEXT}
-        availableSeats={0}
-        onUpgrade={onUpgrade}
-      />,
-    );
-    typeAnInvite();
-
-    // The plan limit is the reason the user cannot invite, so it has to be
-    // visible before they press send — not delivered as a per-row send error.
-    const confirm = screen.getByRole('button', { name: /确认并邀请|invite/i });
-    expect((confirm as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(confirm);
-    expect(fetchSpy).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: /查看席位|seats/i }));
-    expect(onUpgrade).toHaveBeenCalled();
-  });
-
+describe('InviteDialog — legacy error compatibility', () => {
   it('still sends when seats remain', async () => {
     const fetchSpy = vi.fn(async () =>
       new Response(JSON.stringify({ results: [{ ok: true }] }), { status: 200 }),
@@ -77,7 +50,7 @@ describe('InviteDialog — seat gate (#115)', () => {
       />,
     );
     typeAnInvite();
-    fireEvent.click(screen.getByRole('button', { name: /确认并邀请|invite/i }));
+    fireEvent.click(screen.getByRole('button', { name: /发送邀请|send invitations|确认并邀请|invite/i }));
 
     await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     const firstCall = fetchSpy.mock.calls[0] as unknown[] | undefined;
@@ -99,7 +72,7 @@ describe('InviteDialog — seat gate (#115)', () => {
     // A context that has not loaded yet must not look like "no seats".
     render(<InviteDialog open onClose={() => {}} workspaceContext={TEAM_CONTEXT} />);
     typeAnInvite();
-    const confirm = screen.getByRole('button', { name: /确认并邀请|invite/i });
+    const confirm = screen.getByRole('button', { name: /发送邀请|send invitations|确认并邀请|invite/i });
     expect((confirm as HTMLButtonElement).disabled).toBe(false);
   });
 

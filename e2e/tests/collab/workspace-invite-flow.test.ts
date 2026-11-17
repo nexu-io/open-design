@@ -65,7 +65,7 @@ beforeAll(async () => {
         return;
       }
       res.writeHead(201);
-      res.end(JSON.stringify({ inviteId: `invite-${body.role}-${body.invitedEmail}` }));
+      res.end(JSON.stringify({ inviteId: `invite-${body.role}-${body.invitedEmail}`, deliveryStatus: 'sent' }));
       return;
     }
 

@@ -177,6 +177,26 @@ describe('od comment CLI HTTP/SQLite route integration', () => {
     expect(getPreviewComment(db!, PROJECT, CONVERSATION, created.id)).toBeNull();
   });
 
+  it('acknowledges only displayed file rows through CLI, HTTP and SQLite', async () => {
+    const base = await startRouteServer();
+    const common = [...headers(OWNER), '--daemon-url', base, '--json'];
+    const ids: string[] = [];
+    for (const filePath of ['index.html', 'other.html']) {
+      const created = await runCli(['comment', 'create', PROJECT, CONVERSATION,
+        '--target', JSON.stringify({ ...target, filePath }), '--prompt', 'Review', ...common]);
+      expect(created.code).toBe(0);
+      ids.push(JSON.parse(created.stdout).comment.id);
+    }
+    const read = await runCli(['comment', 'read', PROJECT, '--file', 'index.html', '--comment-ids', ids.join(','), ...common]);
+    expect(read.code).toBe(0);
+    expect(JSON.parse(read.stdout)).toEqual({ projectId: PROJECT, filePath: 'index.html', seenCommentIds: [ids[0]] });
+    const other = await runCli(['comment', 'read', PROJECT, '--file', 'index.html', '--comment-ids', '', ...headers(OTHER), '--daemon-url', base, '--json']);
+    expect(other.code).toBe(0);
+    expect(JSON.parse(other.stdout).seenCommentIds).toEqual([]);
+    const invalid = await runCli(['comment', 'read', PROJECT, '--file', 'index.html', '--comment-ids', ids[0]!, '--workspace', WORKSPACE, '--workspace-member', 'unknown', '--daemon-url', base, '--json']);
+    expect(invalid.code).not.toBe(0);
+  });
+
   it('persists CLI read markers through the production route with clamp, isolation, and reopen durability', async () => {
     const base = await startRouteServer();
     const common = ['--daemon-url', base, '--json'];

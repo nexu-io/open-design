@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAuthorizeProjectRequest } from '../../src/collab/project-request-authority.js';
+import { createAuthorizeProjectRequest, createVerifiedProjectRequestAuthority, pinProjectToolActor, projectToolActorMember, projectToolActorPinIsCurrent } from '../../src/collab/project-request-authority.js';
 import { verifyWorkspaceRequestContext } from '../../src/collab/request-workspace-context.js';
 import { createCachedWorkspaceDirectoryFetcher } from '../../src/collab/vela-workspace-context.js';
+import { createChatRunService } from '../../src/runtimes/runs.js';
+import { ToolTokenRegistry, PROJECT_EXPORT_TOOL_ENDPOINT } from '../../src/tool-tokens.js';
 
 function response() {
   return {} as any;
@@ -778,5 +780,212 @@ describe('createAuthorizeProjectRequest', () => {
     )).resolves.toBe(true);
     expect(verify).not.toHaveBeenCalled();
     expect(sendApiError).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('MEM-5276CF5002 comment identity', () => {
+  it.each(['team', 'personal'])('rejects a headerless %s comment write rather than impersonating its creator', async (visibility) => {
+    const row = { workspaceId: 'workspace-a', visibility, resourceState: 'active', createdByWorkspaceMemberId: 'owner' };
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {}, getWorkspaceProject: () => row, getWorkspaceProjectByProjectId: () => row, sendApiError,
+    });
+    expect(await authorize(request({}), response(), 'project-a', { mode: 'write', capability: 'comment' })).toBe(false);
+    expect(sendApiError).toHaveBeenLastCalledWith(expect.anything(), 400, 'WORKSPACE_CONTEXT_REQUIRED', expect.any(String));
+  });
+});
+
+describe('MEM-009 Vela-bound project data plane', () => {
+  it('authorizes a real Run token only with its frozen live Team actor', async () => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: () => true, end: () => {}, cleanup: () => {} }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+    });
+    const frozenScope = {
+      schemaVersion: 1, projectId: 'team-project', workspaceId: 'workspace-a',
+      workspaceMemberId: 'active-member', source: 'persisted_project_binding',
+    } as const;
+    const run = runs.create({
+      projectId: 'team-project', agentId: 'codex',
+      workspaceScope: frozenScope,
+    });
+    const directory = [{
+      workspaceId: 'workspace-a', workspaceMemberId: 'active-member',
+      memberStatus: 'active', lifecycleState: 'active',
+    }];
+    const pin = pinProjectToolActor({
+      workspaceId: 'workspace-a',
+      runWorkspaceMemberId: frozenScope.workspaceMemberId,
+      directoryIdentityBefore: 'active-account', directoryIdentityAfter: 'active-account',
+      directory,
+    });
+    expect(pin?.workspaceMemberId).toBe('active-member');
+    const registry = new ToolTokenRegistry();
+    const grant = registry.mint({
+      runId: run.id, projectId: 'team-project',
+      allowedEndpoints: [PROJECT_EXPORT_TOOL_ENDPOINT], allowedOperations: ['project:export'],
+    });
+    expect(registry.validate(grant.token, {
+      endpoint: PROJECT_EXPORT_TOOL_ENDPOINT, operation: 'project:export',
+    }).ok).toBe(true);
+    expect(runs.get(grant.runId)?.projectId).toBe(grant.projectId);
+    expect(projectToolActorPinIsCurrent({
+      pin, workspaceId: 'workspace-a', currentDirectoryIdentity: 'active-account',
+    })).toBe(true);
+    registry.clear();
+  });
+
+  it('never gives a non-AMR Run an Owner tool identity after its creator is removed or the account switches', () => {
+    const ownerDirectory = [{
+      workspaceId: 'workspace-a', workspaceMemberId: 'owner',
+      memberStatus: 'active', lifecycleState: 'active',
+    }];
+    const oldRun = {
+      workspaceId: 'workspace-a', runWorkspaceMemberId: 'removed-creator',
+      directoryIdentityBefore: 'creator-account',
+      directoryIdentityAfter: 'owner-account',
+      directory: ownerDirectory,
+    };
+    expect(pinProjectToolActor(oldRun)).toBeNull();
+    expect(pinProjectToolActor({ ...oldRun, directoryIdentityAfter: 'creator-account' })).toBeNull();
+    const creatorPin = pinProjectToolActor({
+      ...oldRun,
+      directoryIdentityAfter: 'creator-account',
+      directory: [{ workspaceId: 'workspace-a', workspaceMemberId: 'removed-creator', memberStatus: 'active', lifecycleState: 'active' }],
+    });
+    expect(creatorPin?.workspaceMemberId).toBe('removed-creator');
+    expect(projectToolActorPinIsCurrent({
+      pin: creatorPin,
+      workspaceId: 'workspace-a',
+      currentDirectoryIdentity: 'owner-account',
+    })).toBe(false);
+  });
+
+  it('uses the live tool Run member for a shared project created by the removed member', async () => {
+    const row = {
+      workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active',
+      createdByWorkspaceMemberId: 'removed-creator',
+    };
+    const directory = [{
+      workspaceId: 'workspace-a', workspaceMemberId: 'active-other',
+      memberStatus: 'active', lifecycleState: 'active',
+    }];
+    const memberId = projectToolActorMember({
+      workspaceId: row.workspaceId,
+      pinnedMemberId: 'active-other', requirePinnedMember: true, directory,
+    });
+    expect(memberId).toBe('active-other');
+    const sendApiError = vi.fn();
+    const localAuthority = createAuthorizeProjectRequest({
+      db: {}, getWorkspaceProject: () => row, getWorkspaceProjectByProjectId: () => row,
+      sendApiError,
+    });
+    const req = request({ workspaceId: row.workspaceId, memberId: memberId! });
+    const authorize = createVerifiedProjectRequestAuthority({
+      localAuthority, getBinding: () => row,
+      verifyWorkspaceRequestAuthority: async () => ({ ok: true, context: context({ workspaceMemberId: 'active-other' }) }),
+      isPersonalWorkspaceForAccount: async () => false,
+      reconcileMemberRemovalProjects: async () => 0,
+      sendApiError,
+    });
+    expect(await authorize(req, response(), 'shared-project', { mode: 'read' })).toBe(true);
+    expect(projectToolActorMember({
+      workspaceId: row.workspaceId,
+      pinnedMemberId: 'removed-creator', requirePinnedMember: true, directory,
+    })).toBeNull();
+    expect(projectToolActorMember({
+      workspaceId: row.workspaceId,
+      pinnedMemberId: null, requirePinnedMember: true, directory,
+    })).toBeNull();
+  });
+
+  it('rejects stale active headers for direct reads and writes after a missed removal event, even with a forged Personal type', async () => {
+    const row = {
+      workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active',
+      createdByWorkspaceMemberId: 'member-a',
+    };
+    const sendApiError = vi.fn();
+    const localAuthority = createAuthorizeProjectRequest({
+      db: {}, getWorkspaceProject: () => row, getWorkspaceProjectByProjectId: () => row,
+      sendApiError,
+    });
+    let removed = false;
+    const verifyWorkspaceRequestAuthority = vi.fn(async () => removed
+      ? { ok: false as const, status: 403 as const, code: 'WORKSPACE_ACCESS_DENIED', message: 'removed' }
+      : { ok: true as const, context: context() });
+    const authorize = createVerifiedProjectRequestAuthority({
+      localAuthority, getBinding: () => row, verifyWorkspaceRequestAuthority,
+      isPersonalWorkspaceForAccount: async () => false,
+      reconcileMemberRemovalProjects: async () => 0,
+      sendApiError,
+    });
+    const req = request({ workspaceId: 'workspace-a', memberId: 'member-a' });
+    const originalGet = req.get;
+    req.get = (name: string) => name.toLowerCase() === 'x-od-workspace-type'
+      ? 'personal' : originalGet(name);
+    expect(await authorize(req, response(), 'project-a', { mode: 'read' })).toBe(true);
+    removed = true;
+    expect(await authorize(req, response(), 'project-a', { mode: 'read' })).toBe(false);
+    expect(await authorize(req, response(), 'project-a', { mode: 'write', capability: 'writeFiles' })).toBe(false);
+    expect(sendApiError).toHaveBeenLastCalledWith(expect.anything(), 403, 'WORKSPACE_ACCESS_DENIED', 'removed');
+    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps headerless Personal access only with a fresh positive account witness', async () => {
+    const row = {
+      workspaceId: 'personal-a', visibility: 'personal', resourceState: 'active',
+      createdByWorkspaceMemberId: 'personal-member',
+    };
+    const sendApiError = vi.fn();
+    const localAuthority = createAuthorizeProjectRequest({
+      db: {}, getWorkspaceProject: () => row, getWorkspaceProjectByProjectId: () => row,
+      sendApiError,
+    });
+    const isPersonalWorkspaceForAccount = vi.fn(async () => true);
+    const authorize = createVerifiedProjectRequestAuthority({
+      localAuthority, getBinding: () => row,
+      verifyWorkspaceRequestAuthority: vi.fn(),
+      isPersonalWorkspaceForAccount,
+      reconcileMemberRemovalProjects: async () => 0,
+      sendApiError,
+    });
+    expect(await authorize(request({}), response(), 'project-a', { mode: 'read' })).toBe(true);
+    isPersonalWorkspaceForAccount.mockResolvedValue(false);
+    expect(await authorize(request({}), response(), 'project-a', { mode: 'read' })).toBe(false);
+    expect(sendApiError).toHaveBeenLastCalledWith(expect.anything(), 400, 'WORKSPACE_CONTEXT_REQUIRED', expect.any(String));
+  });
+
+  it('keeps an unattributed legacy Personal draft private to its verified workspace Owner', async () => {
+    const row = {
+      workspaceId: 'workspace-a', visibility: 'personal', resourceState: 'active',
+      createdByWorkspaceMemberId: null,
+    };
+    const sendApiError = vi.fn();
+    const localAuthority = vi.fn(async () => true);
+    let role: 'owner' | 'member' = 'member';
+    const isPersonalWorkspaceForAccount = vi.fn(async () => false);
+    const authorize = createVerifiedProjectRequestAuthority({
+      localAuthority,
+      getBinding: () => row,
+      verifyWorkspaceRequestAuthority: async () => ({
+        ok: true,
+        context: context({ workspaceType: 'personal', role }),
+      }),
+      isPersonalWorkspaceForAccount,
+      reconcileMemberRemovalProjects: async () => 0,
+      sendApiError,
+    });
+    const claimed = request({ workspaceId: 'workspace-a', memberId: 'member-a' });
+    expect(await authorize(claimed, response(), 'legacy-draft', { mode: 'read' })).toBe(false);
+    expect(await authorize(claimed, response(), 'legacy-draft', { mode: 'write', capability: 'writeFiles' })).toBe(false);
+    expect(localAuthority).not.toHaveBeenCalled();
+    expect(sendApiError).toHaveBeenLastCalledWith(expect.anything(), 403, 'WORKSPACE_PROJECT_PERMISSION_DENIED', expect.any(String));
+
+    role = 'owner';
+    expect(await authorize(claimed, response(), 'legacy-draft', { mode: 'read' })).toBe(true);
+    expect(localAuthority).toHaveBeenCalledTimes(1);
+    expect(await authorize(request({}), response(), 'legacy-draft', { mode: 'read' })).toBe(false);
+    expect(isPersonalWorkspaceForAccount).toHaveBeenCalledWith('workspace-a', null);
   });
 });

@@ -1,3 +1,4 @@
+import { usePageNavigationReady } from '../observability/navigation-timing';
 // External MCP servers panel.
 //
 // OpenDesign connects to the configured servers as a CLIENT and surfaces
@@ -42,6 +43,7 @@ import { useT } from '../i18n';
 type Translate = ReturnType<typeof useT>;
 
 interface Props {
+  navigationPage?: string;
   // Receive a notification when servers list changes so the parent can
   // re-render dependent affordances (e.g. composer chip count). Optional.
   onServersChanged?: (servers: McpServerConfig[]) => void;
@@ -312,7 +314,7 @@ function signature(rows: DraftRow[]): string {
 }
 
 export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
-  function McpClientSection({ onServersChanged, onDirtyChange, surface = 'integrations' }, ref) {
+  function McpClientSection({ onServersChanged, onDirtyChange, surface = 'integrations', navigationPage }, ref) {
   const t = useT();
   const analytics = useAnalytics();
   // Single dispatch point for every click in this section: routes to the
@@ -349,6 +351,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   // picker preserves the user's last query while they scan through it.
   const [pickerQuery, setPickerQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  usePageNavigationReady({ page: navigationPage ?? '', visible: loaded, ready: loaded && !error, failure: !!error });
   // Cached agent list so the support banner can tell the user which of the
   // installed CLI agents will actually receive the MCP servers below.
   // Without this, OpenCode / Codex / Gemini users save a server and have

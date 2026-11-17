@@ -13,12 +13,16 @@ od:
 
 A 15-second motion designer showreel at 128 BPM, rebuilt from the viral original: an Open Design mark opener, a stretching wordmark, six easing curves, a morphing shape, a truchet field, a 3D point cloud, kinetic type and an end card. `example.html` is the finished reference — start from it.
 
+The reference timing and beat map describe the demo. Adapt them to the user's
+requested duration and content; do not force the reference duration or music.
+
 ## Source
 A remake of a viral post by @stephanlivera: https://x.com/stephanlivera/status/2103315922098470926 (2.25M views · 17K likes · 13K bookmarks on X (as of 2026-10-05)). The composition is
 rebuilt in code from the published piece; the soundtrack is original.
 
 ## Reference files
-Copy `example.html`, `assets/archivo-OFL.txt`, `assets/archivo-condensed-black.ttf`, `assets/archivo-expanded-black.ttf`, `assets/archivo-extrabold.ttf`, `assets/gsap.min.js`, `assets/instrument-serif-OFL.txt`, `assets/instrument-serif-italic.ttf`, `assets/jetbrains-mono-OFL.txt`, `assets/jetbrains-mono-bold.ttf`, `assets/jetbrains-mono-medium.ttf`, `assets/soundtrack.mp3` into the composition, preserving the `assets/` path.
+Copy `example.html`, `assets/archivo-OFL.txt`, `assets/archivo-condensed-black.ttf`, `assets/archivo-expanded-black.ttf`, `assets/archivo-extrabold.ttf`, `assets/gsap.min.js`, `assets/instrument-serif-OFL.txt`, `assets/instrument-serif-italic.ttf`, `assets/jetbrains-mono-OFL.txt`, `assets/jetbrains-mono-bold.ttf`, `assets/jetbrains-mono-medium.ttf` into the composition, preserving the `assets/` path.
+Copy the demo soundtrack only if selected under the Sound guidance below.
 Font licenses travel with their fonts. Use these frozen local bytes; no runtime
 script or font CDN is needed.
 
@@ -66,27 +70,35 @@ frame expensive and slow the MP4 export.
 ## Sound
 `assets/soundtrack.mp3` is an original 15-second score made for this template
 and timed to its beats; no audio from the source video is used.
-The music is part of the look being remade. These rules replace the general
-sound guidance for this remake; apply the first one that matches the brief:
+The bundled track is demo material, not a requirement for generated films.
+The user's current brief takes priority over this reference and its seed prompt,
+including duration, music choice, genre, mood, voiceover and sound effects.
+Follow the general motion-design audio guidance; this template does not disable
+available audio tools or original audio synthesis.
 
-1. The user asks for no music: remove the `<audio>` element, do not copy the
-   file, and freeze `motionDelivery.audio` as `silent`.
-2. The user supplies an audio file and asks to use it: copy it into the film's
-   `assets/` and point `<audio id="soundtrack">` at it.
-3. Otherwise keep this score, including when the brief asks for different
-   music, a genre or a mood. This flow cannot generate music: never generate,
-   download or synthesize audio, and do not add voiceover.
+- If the user requests a silent film, remove all audio. If they request only
+  no background music, remove the music but retain any requested sound effects
+  or voiceover. No voiceover does not mean no music.
+- Use the user's supplied audio when requested. If they request different music,
+  choose or create a suitable real local asset using the available audio tools,
+  licensed sources or original synthesis. Do not silently substitute the demo
+  track for an unmet request; briefly disclose any limitation.
+- Without a specific music request, add appropriate audio when it benefits the
+  film. Reuse the demo track only when it suits the actual story, mood and timing;
+  it is an option, not the default for every adaptation.
+- Fit the visuals and audio to the requested film duration, not to the demo's
+  duration. For example, a 15-second brief stays 15 seconds even when the demo
+  score is 20 seconds. Edit the selected track with a deliberate ending/fade;
+  use the same edited local file in HTML and MP4. For a longer film, arrange or
+  replace the track to cover the intended beats rather than leaving an accidental
+  silent tail. Do not rely on an HTML-only loop or playbackRate for export.
 
-Under rules 2 and 3, freeze `motionDelivery.audio` as `required`.
-
-Keep `id="soundtrack"`, `data-start="0"` and a numeric `data-volume`. Set
-`data-duration` to the shorter of the music and the film (the film's length
-when the music's length is unknown); the export fades the music out there.
-Never use `loop`: in a film longer than the music, the music plays once and the
-rest is silent.
-
-Do not add a music note to the final reply. Only when a music or voiceover
-request could not be met, say so in one short sentence.
+For background music keep `id="soundtrack"`, `data-start="0"` and a numeric
+`data-volume`; update `src` and `data-duration` to the actual edited asset and
+film. Remove unused demo audio from the generated composition. Set the source's
+`od-motion-audio` metadata to `required` when sound is intended, or `silent` for
+an intentionally silent film, using the general motion-design delivery guidance.
+Verify the ending and audio in both HTML playback and the exported MP4.
 
 The `<audio>` element stays inside the composition root; the desktop exporter
 mixes its local file into the MP4. Preview sound starts with the film; when the

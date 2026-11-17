@@ -143,7 +143,7 @@ describe('FileViewer Comment-mode freeze vs settled content updates', () => {
     expect(srcDocFrame().getAttribute('srcDoc')).not.toContain('BOARD-FREEZE-V1');
   });
 
-  it('keeps streaming (liveHtml) updates frozen while Comment mode is open', async () => {
+  it('applies streaming (liveHtml) updates while Comment mode stays open', async () => {
     const bytes = { current: deckHtml('STREAM-FREEZE-BASE') };
     vi.stubGlobal('fetch', fetchServing(bytes));
 
@@ -164,8 +164,7 @@ describe('FileViewer Comment-mode freeze vs settled content updates', () => {
     await enterCommentMode();
     expect(srcDocFrame().getAttribute('srcDoc')).toContain('STREAM-FREEZE-T1');
 
-    // A later streaming chunk repaints the artifact. The freeze must hold —
-    // this is the anti-thrash behavior the snapshot exists for.
+    // Comment mode must follow later streaming chunks.
     view.rerender(
       <FileViewer
         projectId="project-1"
@@ -177,11 +176,9 @@ describe('FileViewer Comment-mode freeze vs settled content updates', () => {
       />,
     );
 
-    // Give any (incorrect) swap a chance to happen, then assert it did not.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitFor(() => {
+      expect(srcDocFrame().getAttribute('srcDoc')).toContain('STREAM-FREEZE-T2');
     });
-    expect(srcDocFrame().getAttribute('srcDoc')).toContain('STREAM-FREEZE-T1');
-    expect(srcDocFrame().getAttribute('srcDoc')).not.toContain('STREAM-FREEZE-T2');
+    expect(srcDocFrame().getAttribute('srcDoc')).not.toContain('STREAM-FREEZE-T1');
   });
 });

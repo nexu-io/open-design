@@ -1021,12 +1021,13 @@ export function TestCampaignModal({
 		 * must not be compared. The account boundary is the selection fence:
 		 * `owner` is part of the scope, so an account switch discards this
 		 * adapter and its late responses. Within one selection the first acquired
-		 * tester is pinned, and a context for any other tester is rejected.
+		 * tester is pinned for the selection's lifetime, independent of `context`
+		 * (which a drift repair clears before re-acquiring), and a context for any
+		 * other tester is rejected.
 		 */
-		const keepsTester = (next: TestContext): boolean => {
-			const pinned = context?.testerMemberId ?? inherited?.context.testerMemberId;
-			return pinned === undefined || next.testerMemberId === pinned;
-		};
+		let pinnedTester: string | undefined = inherited?.context.testerMemberId;
+		const keepsTester = (next: TestContext): boolean =>
+			pinnedTester === undefined || next.testerMemberId === pinnedTester;
 		/** Acquires a validated context only while this request owns the selection. */
 		const fetchContext = async (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			const response = await fetch("/api/touchpoints/test-runtime/context", {
@@ -1069,7 +1070,10 @@ export function TestCampaignModal({
 				const request: Promise<TestContext | null> = fetchContext(signal, ownsRequest)
 					.then((next) => {
 						if (contextRequest !== request || !ownsRequest()) return null;
-						if (next) negotiatedMode ??= testContextMode(next);
+						if (next) {
+							negotiatedMode ??= testContextMode(next);
+							pinnedTester ??= next.testerMemberId;
+						}
 						context = next;
 						return next;
 					})

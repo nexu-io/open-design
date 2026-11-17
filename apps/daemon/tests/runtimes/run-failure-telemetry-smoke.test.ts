@@ -34,6 +34,7 @@ type RunStatus = {
   failureCategory: string | null;
   failureDetail: string | null;
   eventsLogPath: string;
+  strategyTask?: unknown;
 };
 
 type RunEvent = {
@@ -186,10 +187,8 @@ describe('run failure telemetry smoke', () => {
         expectRedactedStderrPath: true,
       },
       {
-        // deepseek is outside OD_NEXT_RUNTIME_PATH_DESCRIPTORS, so the rollout
-        // reports `od_next_rollout_agent_ineligible` and this Run keeps the
-        // compatibility single-Run trace. The same diagnostics must show up
-        // there.
+        // Explicitly exercise the ordinary reporter's compatibility trace;
+        // registered agent membership no longer selects this representation.
         id: 'context_window',
         representation: 'single_run',
         // Rejected during prompt assembly, before the runtime finish path that
@@ -219,20 +218,12 @@ describe('run failure telemetry smoke', () => {
     ] as const;
 
     for (const item of cases) {
-      // Every case needs its own daemon and data root. The OD Next rollout
-      // stop latch lives in SQLite and fires for the whole daemon instance
-      // once a task continuation is blocked, so a shared daemon would push
-      // every case after the first back onto the legacy single-Run reporter.
+      // Each case owns its daemon, data root and reporter selection.
+      process.env.OD_NEXT_STRATEGY_ROLLOUT = item.representation === 'single_run' ? 'off' : 'active';
       started = await startIsolatedServer();
       await putConfig(started.url, {
         telemetry: { metrics: true, content: true, artifactManifest: false },
         privacyDecisionAt: Date.now(),
-        // The task-hierarchy cases are about how an ADMITTED Run reports, so
-        // the installation has to be opted into OD Next. The single-Run case
-        // stays single-Run on top of the same opt-in, because deepseek sits
-        // outside the capability gate — which is the contrast this table is
-        // drawing in the first place.
-        odNextStrategyMode: 'active',
       });
       await putConfig(started.url, { agentId: item.agentId, ...item.config });
       const run = await createAndWaitForRun(started.url, {
@@ -255,6 +246,8 @@ describe('run failure telemetry smoke', () => {
         signal: run.signal,
       });
 
+      if (item.representation === 'task_hierarchy') expect(run.strategyTask, item.id).toBeDefined();
+      else expect(run.strategyTask, item.id).toBeUndefined();
       expect(run.status, item.id).toBe('failed');
       expect('expectedCodes' in item ? item.expectedCodes : [item.expectedCode])
         .toContain(errorCode);
@@ -442,6 +435,7 @@ describe('run failure telemetry smoke', () => {
   }, 60_000);
 
   it('keeps streamed Antigravity output admitted before a non-zero policy failure', async () => {
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-antigravity-admission-bin-'));
     await writeFakeAntigravity(binDir);
     process.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ''}`;
@@ -461,6 +455,7 @@ describe('run failure telemetry smoke', () => {
       agentId: 'antigravity',
       message: 'od-antigravity-buffered-policy-failure',
     });
+    expect(run.strategyTask).toBeUndefined();
     const events = await readCompletedRunEvents(run.eventsLogPath);
     const outputIndex = events.findIndex((event) => (
       event.event === 'agent'
@@ -593,6 +588,7 @@ async function removeDataDir(root: string): Promise<void> {
 
 function snapshotEnv(): Record<string, string | undefined> {
   return {
+    OD_NEXT_STRATEGY_ROLLOUT: process.env.OD_NEXT_STRATEGY_ROLLOUT,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
@@ -781,8 +777,7 @@ async function startLangfuseIngestion(): Promise<{
         + `ingestion received ${describeReceived()}`,
       );
     },
-    // Compatibility single-Run trace, still used by Runs the OD Next rollout
-    // does not own (for example a runtime outside its capability gate).
+    // Compatibility single-Run trace, still used when OD Next is disabled.
     waitForSingleRunTrace: async (runId: string) => {
       const started = Date.now();
       while (Date.now() - started < 3000) {

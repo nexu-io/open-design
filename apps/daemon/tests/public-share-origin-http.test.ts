@@ -44,13 +44,14 @@ for (const scenario of cases) it.each([false, true])(`${scenario.name}: HTTP pub
   const scope = { resourceTeamId: 'w', ownerMemberId: 'owner', projectId: 'p', filePath: 'index.html' };
   const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
   const app = express(); app.use(express.json());
+  app.use((req, _res, next) => { req.headers['x-od-workspace-id'] ??= context.workspaceId; req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId; next(); });
   let uploads = 0;
   const commands: string[][] = [];
   let recoveredUrl: string | null = null;
   const fixture = createPublicSharePublishingFixture(db, store, async args => {
     expect(args[0]).toBe('push'); uploads++; return JSON.stringify({ id: 'version-1', version: 1 });
   }, undefined, { ...scenario, pending, commands });
-  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+  registerCollabSyncRoutes(app, { collab: runtime, resolveLocalPublicShareOwner: () => context.workspaceMemberId, publicFilePublicationStore: store, ...fixture,
     verifyWorkspaceRequest: async () => context, resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
     resolveProjectDir: () => root,
     // Production wiring: the resolver reads current configuration on every GET.
@@ -139,7 +140,8 @@ it('HTTP owner plain republish of a stopped link is refused before uploading (OP
   let uploads = 0;
   const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: `version-${++uploads}`, version: uploads }), undefined, options);
   const app = express(); app.use(express.json());
-  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+  app.use((req, _res, next) => { req.headers['x-od-workspace-id'] ??= context.workspaceId; req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId; next(); });
+  registerCollabSyncRoutes(app, { collab: runtime, resolveLocalPublicShareOwner: () => context.workspaceMemberId, publicFilePublicationStore: store, ...fixture,
     verifyWorkspaceRequest: async () => context, resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }), resolveProjectDir: () => root,
   });
   const server = createServer(app);
@@ -189,7 +191,8 @@ it.each([
   store.set(scope, { slug: fixtureShareSlug, fileName: 'index.html', url: legacyUrl });
   const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
   const app = express(); app.use(express.json());
-  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store,
+  app.use((req, _res, next) => { req.headers['x-od-workspace-id'] ??= context.workspaceId; req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId; next(); });
+  registerCollabSyncRoutes(app, { collab: runtime, resolveLocalPublicShareOwner: () => context.workspaceMemberId, publicFilePublicationStore: store,
     verifyWorkspaceRequest: async () => context, resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
     resolveProjectDir: () => root,
     ...(wired ? { resolvePublicShareLink: (projectId: string, slug: string, amr: Parameters<typeof resolvePublicShareLink>[2]) => resolvePublicShareLink(projectId, slug, amr, env) } : {}),
@@ -237,11 +240,12 @@ it('S9-R: explicit stopped-link resume returns the original receipt without uplo
   const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
   const commands: string[][] = [];
   let uploads = 0;
-  const fixtureOptions = { commands, failResume: false, failResumeAfterActivation: false, failComplete: false, failStop: false };
+  const fixtureOptions = { commands, failResume: false, failResumeAfterActivation: false, failComplete: false, failStop: false, denyAuthority: false };
   let catalogOwner: string | null = 'owner';
   const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: `version-${++uploads}`, version: uploads }), undefined, fixtureOptions);
   const app = express(); app.use(express.json());
-  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+  app.use((req, _res, next) => { req.headers['x-od-workspace-id'] ??= context.workspaceId; req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId; next(); });
+  registerCollabSyncRoutes(app, { collab: runtime, resolveLocalPublicShareOwner: () => context.workspaceMemberId, publicFilePublicationStore: store, ...fixture,
     verifyWorkspaceRequest: async () => context,
     resolveSharedProject: async projectId => catalogOwner ? ({ projectId, ownerMemberId: catalogOwner, sharedAt: new Date(1).toISOString() }) : null,
     resolveProjectDir: () => root,
@@ -293,11 +297,13 @@ it('S9-R: explicit stopped-link resume returns the original receipt without uplo
     expect((await fetch(stopUrl, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(404);
     expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: 'different-alias' }) })).status).toBe(404);
     catalogOwner = null;
+    fixtureOptions.denyAuthority = true;
     expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(403);
     catalogOwner = 'other-member';
     expect((await fetch(url, { method: 'DELETE', headers: stopHeaders, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(403);
     expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('active');
     catalogOwner = 'owner';
+    fixtureOptions.denyAuthority = false;
     fixtureOptions.failStop = false;
     expect((await fetch(url, { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ slug: fixtureShareSlug }) })).status).toBe(200);
     expect((await fixture.readProjectShareState!(scope)).publications[0]?.status).toBe('stopped');
@@ -372,12 +378,15 @@ it('OPEND-3517: a resumed link still detects later file edits instead of reporti
   };
   const runtime = createCollabRuntime({ workspaceContext: { current: async () => context } });
   let uploads = 0;
+  const commands: string[][] = [];
   const fixture = createPublicSharePublishingFixture(db, store, async () => JSON.stringify({ id: `version-${++uploads}`, version: uploads }), undefined,
-    { commands: [], failResume: false, failResumeAfterActivation: false, failComplete: false, failStop: false });
+    { commands, failResume: false, failResumeAfterActivation: false, failComplete: false, failStop: false, denyAuthority: false });
+  const verifyWorkspaceRequest = vi.fn(async () => context);
   const app = express(); app.use(express.json());
-  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+  app.use((req, _res, next) => { req.headers['x-od-workspace-id'] ??= context.workspaceId; req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId; next(); });
+  registerCollabSyncRoutes(app, { collab: runtime, resolveLocalPublicShareOwner: () => context.workspaceMemberId, publicFilePublicationStore: store, ...fixture,
     shareContentFingerprints: fingerprints,
-    verifyWorkspaceRequest: async () => context,
+    verifyWorkspaceRequest,
     resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
     resolveProjectDir: () => root,
   });
@@ -397,6 +406,21 @@ it('OPEND-3517: a resumed link still detects later file edits instead of reporti
     expect(await freshness()).toBe('current');
     await writeFile(join(root, 'index.html'), '<h1>Edited after resume</h1>');
     expect(await freshness()).toBe('outdated');
+    expect(uploads).toBe(1);
+    const headers = { 'x-od-workspace-id': 'w', 'x-od-workspace-member-id': 'owner', 'x-od-workspace-type': 'personal' };
+    const verificationCount = verifyWorkspaceRequest.mock.calls.length;
+    const commandCount = commands.length;
+    const localFreshness = async (member = 'owner') => {
+      const response = await fetch(`${url}?localOnly=true`, { headers: { ...headers, 'x-od-workspace-member-id': member } });
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    expect(await localFreshness()).toEqual({ freshness: 'outdated' });
+    await writeFile(join(root, 'index.html'), '<h1>Original version</h1>');
+    expect(await localFreshness()).toEqual({ freshness: 'current' });
+    expect(await localFreshness('other-member')).toEqual({ freshness: 'unknown' });
+    expect(commands).toHaveLength(commandCount);
+    expect(verifyWorkspaceRequest).toHaveBeenCalledTimes(verificationCount);
     expect(uploads).toBe(1);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); runtime.dispose(); db.close(); await rm(root, { recursive: true, force: true }); }
 });
@@ -437,7 +461,8 @@ it('repeating the existing publish POST pushes a new version even with unchanged
     return JSON.stringify({ id, version: pushedVersionIds.length });
   }, undefined, { commands });
   const app = express(); app.use(express.json());
-  registerCollabSyncRoutes(app, { collab: runtime, publicFilePublicationStore: store, ...fixture,
+  app.use((req, _res, next) => { req.headers['x-od-workspace-id'] ??= context.workspaceId; req.headers['x-od-workspace-member-id'] ??= context.workspaceMemberId; next(); });
+  registerCollabSyncRoutes(app, { collab: runtime, resolveLocalPublicShareOwner: () => context.workspaceMemberId, publicFilePublicationStore: store, ...fixture,
     verifyWorkspaceRequest: async () => context,
     resolveSharedProject: async projectId => ({ projectId, ownerMemberId: 'owner', sharedAt: new Date(1).toISOString() }),
     resolveProjectDir: () => root,

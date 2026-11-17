@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "caseKey": "server:VIEW-016",
+  "sampleId": "fixed44_view016_native_ui02",
+  "assetCommit": "Containing Git commit (metadata only; not an execution HEAD)",
+  "assetBaseHead": "d9035c825c8a2fab9a58c59c27b6eaced503ceff",
+  "deliveryBoundary": {
+    "targetPR": "https://github.com/nexu-io/open-design/pull/8924",
+    "targetBase": "feat/coding-plan-billing-preflight",
+    "testOnly": true,
+    "merged": false,
+    "integrationAcceptance": false,
+    "historicalExecutionNotRerunForDelivery": true
+  },
+  "verdict": {
+    "caseStatus": "failed",
+    "coverageComplete": false,
+    "wholeCasePassed": false,
+    "completedNativeCells": 9,
+    "correctCells": 5,
+    "failedFreeACells": 4,
+    "paidBThreeCorrect": true,
+    "modelRequests": 0,
+    "actualExitCode": 1,
+    "genericRawStatusPreserved": "product_failure_paid_B_locked",
+    "genericStatusIsNotActualFailureAttribution": true
+  },
+  "testSourcesSha256": {
+    "e2e/ui/api-security-view016.test.ts": "95ef78db039af9d68be212745af0c453376c9c0cc6038d0d1439ac870724fcb3",
+    "e2e/lib/playwright/api-security.config.ts": "8a88d2b4043bed269bcbe7d2ec346e7ff7733d9a2893b1110f6057422dc19757",
+    "e2e/playwright.config.ts": "af1089ee7a8272a54bf3cd903e837c25c3fb2ad1bac83f94292cf3a2bb7094f8"
+  },
+  "actualTestHeads": {
+    "amr": "5962f48ec599839895b2822b7fea75916c90ade4",
+    "od": "798c86cb131f995c75e104307b0d28d0e368ae42"
+  },
+  "productionTuple": {
+    "amr": "8327366ccacffe245c4cbafe6a9a6056b4d644f7",
+    "open-design": "95dca24b2fd851a6944e519e7697992fc0e6517b",
+    "od-landing": "f92405581a01a6844470e21f6a872488a75116b5"
+  },
+  "sourceRoles": {
+    "amr": "executed API/Link/CLI production base with test-only descendant",
+    "open-design": "executed daemon/web product base with test-only descendant",
+    "od-landing": "metadata_only"
+  },
+  "QA": {
+    "definitionSha256": "0ba2e288ccaf91d80f479f36fdae6d76c9dd7e55dcc11543b0b25665007a1787",
+    "fullQaSha256": "82001a830973d6da3606bfc9e51b0b0ba5b6717d9ce0e6b00fb844ec176b9902",
+    "fullSectionSha256": "645944c7b88ac9efc70d5b94d29492ccc541661f3c896e04d3adf79ff79bc082",
+    "preconditionsQualified": "Same actual owner, FreeA and productionverified paidGoB, loadedremote catalog, same native pageA→B→A; fresh fixture independently qualified0c52, device issued through201/approve/consume unchanged.",
+    "step1Verdict": "failed",
+    "step1Actual": "AtA-first andA-return, DeepSeek-v4-pro andGPT5.6Sol each present1/ariaDisablednull and nativeclick changed persisted model. All3paidB choices and FreeFlash choices correct.",
+    "wholeEvidenceNotClaimed": [
+      "No actual model generation or debit was invoked by the nine UI selections.",
+      "Fund-source ordering/debit replay idempotency/negativebalance/cachetransaction faultrecovery for this44 VIEW sample are not supplied by this run."
+    ],
+    "actualRevision": 1115,
+    "catalogCaseVersion": "acf2ce52b1b0d231e8aa61f6da4f330e8a2a29c3fe4cd328ad71e9d163f32f9e",
+    "catalogSourceRevision": 970,
+    "caseVersionIsNotDefinitionOrSectionHash": true
+  },
+  "nativeContract": {
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "deviceScaleFactor": 1,
+    "workers": 1,
+    "retries": 0,
+    "stages": [
+      "A-first",
+      "B",
+      "A-return"
+    ],
+    "models": [
+      "deepseek-v4.1-flash",
+      "deepseek-v4-pro",
+      "gpt-5.6-sol"
+    ],
+    "entry": "homepage -> model chip -> first Flash, then same-tab A/B/A",
+    "addedPreclickWait": false,
+    "forceClick": false,
+    "promptFill": false,
+    "modelGeneration": false,
+    "independentNamespaceAndContextPerAttempt": true
+  },
+  "cells": [
+    {
+      "stage": "A-first",
+      "model": "deepseek-v4.1-flash",
+      "expectedAriaDisabled": null,
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4.1-flash",
+      "selectedAfter": "deepseek-v4.1-flash",
+      "passed": true
+    },
+    {
+      "stage": "A-first",
+      "model": "deepseek-v4-pro",
+      "expectedAriaDisabled": "true",
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4.1-flash",
+      "selectedAfter": "deepseek-v4-pro",
+      "passed": false
+    },
+    {
+      "stage": "A-first",
+      "model": "gpt-5.6-sol",
+      "expectedAriaDisabled": "true",
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4-pro",
+      "selectedAfter": "gpt-5.6-sol",
+      "passed": false
+    },
+    {
+      "stage": "B",
+      "model": "deepseek-v4.1-flash",
+      "expectedAriaDisabled": null,
+      "actualAriaDisabled": null,
+      "selectedBefore": "gpt-5.6-sol",
+      "selectedAfter": "deepseek-v4.1-flash",
+      "passed": true
+    },
+    {
+      "stage": "B",
+      "model": "deepseek-v4-pro",
+      "expectedAriaDisabled": null,
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4.1-flash",
+      "selectedAfter": "deepseek-v4-pro",
+      "passed": true
+    },
+    {
+      "stage": "B",
+      "model": "gpt-5.6-sol",
+      "expectedAriaDisabled": null,
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4-pro",
+      "selectedAfter": "gpt-5.6-sol",
+      "passed": true
+    },
+    {
+      "stage": "A-return",
+      "model": "deepseek-v4.1-flash",
+      "expectedAriaDisabled": null,
+      "actualAriaDisabled": null,
+      "selectedBefore": "gpt-5.6-sol",
+      "selectedAfter": "deepseek-v4.1-flash",
+      "passed": true
+    },
+    {
+      "stage": "A-return",
+      "model": "deepseek-v4-pro",
+      "expectedAriaDisabled": "true",
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4.1-flash",
+      "selectedAfter": "deepseek-v4-pro",
+      "passed": false
+    },
+    {
+      "stage": "A-return",
+      "model": "gpt-5.6-sol",
+      "expectedAriaDisabled": "true",
+      "actualAriaDisabled": null,
+      "selectedBefore": "deepseek-v4-pro",
+      "selectedAfter": "gpt-5.6-sol",
+      "passed": false
+    }
+  ],
+  "evidence": {
+    "completeManifest": {
+      "archivePath": "agents/run008-view/fix-replay44-ui-execution02/complete-manifest.private.json",
+      "sha256": "74e914c3dad9a4cdeb219a463c867181d67b0a1d76527a39bdcd840c55a4b799",
+      "objectCount": 589,
+      "visibility": "private0600; no trace/cookie/credential upload"
+    },
+    "operatorResultSha256": "6b7a2bd8ec8b7b44e005a4afd816aabe9a304bb7777ea4f59141982449514300",
+    "browserEvidenceSha256": "8e6dcdd618109c0459814bf129d5fcda96afbef164b057f237e0b60fad332ecf",
+    "traceZipSha256": "410bb92ba3aa412c8b65abbc8d1f81280c6362cf18ce51f10a7050532539201f",
+    "pngSha256": [
+      "ea62d6762ab737261b1e4180263eb9396e92034ca3119b76474b39efa8674f78",
+      "40ad9dff2128a6b8b15fd86e51f9da32c482e2f91edeff34a70a6a617f4db497",
+      "5ea80614ff8001a06f1426827ae0c99aedd1a228a21ff919c62aed414c455c4c",
+      "f30c322e9d03460419aeeaf62fcd02b25fcf7d4da56d1c6ea7e7694cac022690"
+    ],
+    "actualNonAuthorReview": {
+      "archivePath": "agents/api004/view44-ui02-independent-review01/review.safe.json",
+      "sha256": "a1e72a81c8a91a962a7d6e0a126659425cf95887ce401a6482639a0939210a73",
+      "reviewer": "api004_audit; neither UI author nor executor",
+      "offlineChecks": 2472,
+      "auditExitCode": 0
+    },
+    "fixtureNonAuthorReviewSha256": "0c52c85992ab13043ff578539b06d75cb2064de1fb574e0307e12a27af715e5d",
+    "owner": {
+      "outerPreExit": 0,
+      "outerPostExit": 0,
+      "sourceInputHashesStable": true,
+      "cleanup": "exact own OD namespace stopped; parent AMR/controller not stopped by test"
+    },
+    "priorAttempts": {
+      "UI01": "startup failure, 0 matrix actions, 261 private objects retained",
+      "toolsOnly": "321 private objects; readiness/cleanup diagnostic only, no browser and root cause unproven"
+    }
+  },
+  "privateInputProvenance": {
+    "fixtureSha256": "0dd43b57ccbbe71a8be0c991849aecd4c5fd9f49efddc88aef0f2c1c15cf000f",
+    "deviceSha256": "0303dcd5ae246858f65eb4a2ae8cb601d8eb0321031598033913b3b9ddccbbd7",
+    "launcherSha256": "dc7c15e3fc2bd19e3583820af3ac65f0ef7cbf7f5e60420436103b1c90eefd73",
+    "commandSha256": "bf3bccb025f59e0dda98f3a53a46d2b5f8be07115609f2ac97b68434475d88d8",
+    "executionContractSha256": "cce50948ecb4e2491ed7aec168f1dbe5de483a988f53e897d743c9ae3743315f",
+    "CLIBinarySha256": "6c8411c8cc439bc4c88d4e3cf58858687deb530b278841c0e4711421738d727a",
+    "CLIBuiltCandidate": 43,
+    "CLISourceEquivalentCandidate": 44,
+    "CLISourceEquivalentFileCount": 157,
+    "CLIEquivalenceProofSha256": "29a888cccc07084dc0a30994157794102c11272a67dedc3ee72a7f855b23c96b",
+    "freshReplayRequiresNewInputs": true
+  },
+  "issue": {
+    "key": "LINK-C21-VIEW-016-002",
+    "url": "https://powerformer.feishu.cn/docx/D0kEdS6yTov7vfxzru7crkZSnrf#doxcnj9ru1R1P4andXUlqa9z6Rd",
+    "evidenceUrl": "https://powerformer.feishu.cn/docx/R3cFdbR73oXL1IxuiRlcQLTHn0f#doxcndfEY5MAPjlQJceMAVm2h3f",
+    "parentWriteReadbackReceiptSha256": "241711a5067287433e6a8d0d987a4cc8ba9d22da35896f6e36af51baa063c5bd",
+    "oldRelatedIssues": [
+      "APISEC-C20-002",
+      "LINK-C21-VIEW-016-001"
+    ],
+    "sameRootCauseProven": false
+  },
+  "uncovered": [
+    "fund-source expiry/order",
+    "same debit replay idempotency",
+    "negative balance in this VIEW sample",
+    "cache loss and database transaction fault recovery",
+    "actual model billing from the UI",
+    "latest-version or integration replay"
+  ],
+  "diagnosticBoundary": {
+    "ODContextActiveNullVersusCanonicalBillingObserved": true,
+    "cacheCLIMapperCausalProof": false,
+    "noExplicitWorkspaceArgvDoesNotProveInheritedEnvAbsent": true,
+    "actualLinkPrincipalNotCaptured": true,
+    "diagnosticReviewSha256": "011fe82c4fa882d30fc388b1129739924200365d8f8e20ef3bfb24ec12f423e4"
+  },
+  "replayRequirements": [
+    "fresh canonical owned sandbox and exact source/DB binding",
+    "fresh production actor, Free A, verified Go B, funds, and cli_device",
+    "explicit private source/CLI/full catalog/category proof and wrapper command",
+    "source-preserving native lane; record failures without retry or oracle changes",
+    "private evidence freeze and independent review before any qualification"
+  ]
+}

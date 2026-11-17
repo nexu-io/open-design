@@ -233,6 +233,10 @@ export class StrategyTaskTransitionConflictError extends Error {
 }
 
 export function migrateStrategyTaskStore(db: SqliteDb): void {
+  db.exec(`CREATE TABLE IF NOT EXISTS strategy_motion_deliveries (
+    task_execution_id TEXT PRIMARY KEY, declarations_json TEXT NOT NULL,
+    frozen INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0,1))
+  )`);
   db.exec(`
     CREATE TABLE IF NOT EXISTS strategy_task_executions (
       task_execution_id TEXT PRIMARY KEY,
@@ -305,6 +309,7 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   addColumnIfMissing(db, 'strategy_task_executions', 'intent_resolution_version INTEGER');
   addColumnIfMissing(db, 'strategy_task_executions', 'deliverable_valid INTEGER');
   addColumnIfMissing(db, 'strategy_task_executions', 'continued_from_task_execution_id TEXT');
+  addColumnIfMissing(db, 'strategy_task_runs', 'display_timing_json TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'settlement_reason TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'settlement_facts_json TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'cold_start_final_text_json TEXT');
@@ -364,7 +369,6 @@ export function createStrategyTaskExecution(
         throw new InvalidStrategyTaskRecordError('Task handoff must stay in its project and conversation.');
       }
     }
-
     const snapshot = getSnapshot(db, snapshotId);
     const binding = AppliedStrategyBindingV2Schema.safeParse(snapshot?.strategy);
     if (!snapshot || !binding.success || snapshot.pluginId !== OD_NEXT_STRATEGY_ID) {

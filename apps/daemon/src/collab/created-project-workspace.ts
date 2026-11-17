@@ -2,9 +2,13 @@ import type { ApiErrorResponse } from '@open-design/contracts';
 import type { Response } from 'express';
 import {
   workspaceResourceContextFromRequest,
+  workspaceResourceContextFromVerified,
   type WorkspaceResourceContext,
 } from './workspace-resource-mutation.js';
-import type { WorkspaceDirectoryFetchResult } from './vela-workspace-context.js';
+import {
+  workspaceContextFromDirectoryItem,
+  type WorkspaceDirectoryFetchResult,
+} from './vela-workspace-context.js';
 import { sendApiError } from '../http/api-errors.js';
 
 export type CreatedProjectWorkspaceResolution =
@@ -43,12 +47,11 @@ export function sendCreatedProjectWorkspaceError(
  * Capture optional local attribution for an ordinary local project create.
  *
  * PRODUCT INVARIANT: `POST /api/projects` creates local data first. Workspace
- * identity on that request is metadata for `personal` + `local_only` routing;
- * it is not permission to publish and must not trigger a directory/network
- * lookup or block creation. A complete request snapshot is retained as local
- * attribution even if its remote state may have changed; missing or partial
- * identity produces an unbound local project. Later share/sync/move-to-Team
- * operations perform fresh authority checks at their actual remote boundary.
+ * identity on that request is metadata for `personal` + `local_only` routing.
+ * Headerless and partial identities produce unbound local projects. A
+ * production Workspace-bound create must still verify that its claimed member
+ * remains active; otherwise a removed member could create a private Team row
+ * after removal and have it misidentified as a project to transfer to Owner.
  */
 export function localProjectWorkspaceAttribution(
   req: unknown,
@@ -60,10 +63,68 @@ export function localProjectWorkspaceAttribution(
 /** Capture local attribution for project creation without a network gate. */
 export async function authorizeCreatedProjectWorkspace(
   req: unknown,
-  _fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
-  _configuredEnv?: Record<string, string>,
+  fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
+  configuredEnv: Record<string, string> = {},
+  allowStaticDevContext = false,
 ): Promise<CreatedProjectWorkspaceResolution> {
-  return { ok: true, context: localProjectWorkspaceAttribution(req) };
+  const context = localProjectWorkspaceAttribution(req);
+  if (!context) return { ok: true, context: null };
+  if (context.workspaceType === 'team' && context.memberStatus === 'removed') {
+    return {
+      ok: false,
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace membership is inactive',
+    };
+  }
+  if (!fetchWorkspaceDirectory) {
+    if (allowStaticDevContext || context.workspaceTypeAsserted !== 'team') {
+      return { ok: true, context };
+    }
+    return {
+      ok: false,
+      status: 503,
+      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      message: 'workspace membership authority is temporarily unavailable',
+      retryable: true,
+    };
+  }
+  const directory = await fetchWorkspaceDirectory().catch(() => null);
+  if (!directory?.ok) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      message: 'workspace membership authority is temporarily unavailable',
+      retryable: true,
+    };
+  }
+  const member = directory.items.find((item) =>
+    item.workspaceId === context.workspaceId
+    && item.workspaceMemberId === context.workspaceMemberId);
+  if (
+    !member || member.memberStatus !== 'active'
+    || member.lifecycleState !== 'active'
+    || (context.workspaceTypeAsserted && member.workspaceType !== context.workspaceTypeAsserted)
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace membership is inactive',
+    };
+  }
+  const verified = workspaceResourceContextFromVerified(
+    workspaceContextFromDirectoryItem(member, configuredEnv),
+  );
+  return {
+    ok: true,
+    context: {
+      ...verified,
+      appUserId: context.appUserId,
+      workspaceTypeAsserted: context.workspaceTypeAsserted,
+    },
+  };
 }
 
 /**
@@ -90,11 +151,13 @@ export async function createdProjectWorkspaceHome(
   req: unknown,
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
   configuredEnv?: Record<string, string>,
+  allowStaticDevContext = false,
 ): Promise<WorkspaceResourceContext | null> {
   const authorized = await authorizeCreatedProjectWorkspace(
     req,
     fetchWorkspaceDirectory,
     configuredEnv,
+    allowStaticDevContext,
   );
   if (!authorized.ok) throw new CreatedProjectWorkspaceResolutionError(authorized);
   return authorized.context;
@@ -111,12 +174,14 @@ export type CreatedProjectWorkspaceResolver = (
 export function createCreatedProjectWorkspaceResolver(deps: {
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   configuredEnv?: () => Record<string, string>;
+  allowStaticDevContext?: boolean;
 }): CreatedProjectWorkspaceResolver {
   return (req) =>
     createdProjectWorkspaceHome(
       req,
       deps.fetchWorkspaceDirectory,
       deps.configuredEnv?.(),
+      deps.allowStaticDevContext,
     );
 }
 
