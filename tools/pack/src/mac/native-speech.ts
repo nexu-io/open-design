@@ -10,6 +10,20 @@ const MIN_MACOS = "13.0";
 
 export const MAC_SPEECH_HELPER_RELATIVE_PATH = join("bin", "od-speech");
 
+/**
+ * `xcrun --find swiftc` fails with this message when the Swift compiler is simply
+ * not installed. Every other probe failure (an invalid selected developer
+ * directory, an xcrun configuration or permission problem, ...) is a broken
+ * environment, not an absent toolchain.
+ */
+const SWIFTC_ABSENT_PATTERN = /unable to find utility "swiftc"/i;
+
+function isSwiftcAbsent(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const { message, stderr } = error as { message?: unknown; stderr?: unknown };
+  return [message, stderr].some((text) => typeof text === "string" && SWIFTC_ABSENT_PATTERN.test(text));
+}
+
 export type NativeSpeechExec = (
   file: string,
   args: readonly string[],
@@ -21,11 +35,13 @@ export type NativeSpeechExec = (
  * packaged resource tree. The desktop main process spawns it for voice
  * dictation (apps/desktop/src/main/speech-recognition.ts).
  *
- * Only an **unavailable Swift toolchain** skips the helper: the app still
- * builds, dictation falls back to the browser / Whisper engines, and a warning
- * is printed. Once a toolchain is present, any other failure (compiler, SDK or
- * source error) is a real build failure and is rethrown, so a release cannot
- * silently lose Apple-native dictation.
+ * Only a Swift toolchain that is **known to be absent** ("unable to find utility
+ * swiftc") skips the helper: the app still builds, dictation falls back to the
+ * browser / Whisper engines, and a warning is printed. Any other failure, from
+ * probing the toolchain (an invalid developer directory, xcrun configuration or
+ * permission problems) or from compiling (compiler, SDK or source errors), is a
+ * real build failure and is rethrown, so a release cannot silently lose
+ * Apple-native dictation.
  */
 export async function buildMacSpeechHelper(options: {
   resourceRoot: string;
@@ -44,6 +60,12 @@ export async function buildMacSpeechHelper(options: {
   try {
     await exec("xcrun", ["--find", "swiftc"]);
   } catch (error) {
+    if (!isSwiftcAbsent(error)) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`[tools-pack mac] could not probe the Swift toolchain with xcrun: ${detail}`, {
+        cause: error,
+      });
+    }
     console.warn(
       `[tools-pack mac] Swift toolchain not found; od-speech helper not built (Apple-native dictation disabled in this package): ${
         error instanceof Error ? error.message.split("\n")[0] : String(error)
