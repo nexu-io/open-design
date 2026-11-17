@@ -55,6 +55,7 @@
 
 /* Hero — large centered prompt input */
 .home-hero {
+  --home-hero-composer-width: 728px;
   /* One attachment chip's height: 36px thumb + 4px padding and 1px border a
      side. The chip's own floor derives from this, so resizing the thumb keeps
      the single-row attachment band in step. */
@@ -283,9 +284,8 @@
 }
 
 /* ---- Capsule type row (replaces the fanned carousel) ------------------- */
-/* ONE line exactly as wide as the composer card below (728px — keep in sync
-   with .home-hero__composer-card), EVERY gap the same 8px (keep in sync
-   with the component's PILL_GAP): fitting pills inline, then the pinned
+/* ONE line exactly as wide as the composer card below, EVERY gap the same 8px
+   (keep in sync with the component's PILL_GAP): fitting pills inline, then the pinned
    视频 pill + 全部 button; the remainder lives in the 全部 popover. */
 .home-hero__type-pills-wrap {
   position: relative;
@@ -299,7 +299,7 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  max-width: 728px;
+  max-width: var(--home-hero-composer-width);
   /* 24px between the composer card above and the pills' own edge (per
      product): .home-hero's 6px flex gap and this row's 2px top padding both
      count toward it, so 16px lives here. */
@@ -527,11 +527,8 @@
   z-index: 2;
   box-sizing: border-box;
   width: 100%;
-  /* The type-pill row above carries the same number by hand — its own comment
-     says to keep the two in sync, so a change here is always a change in both
-     places. (The DOCKED bar is deliberately narrower; it sets its own cap at
-     the foot of this file.) */
-  max-width: 728px;
+  /* Home pills and example rows share this cap. The dock sets its own below. */
+  max-width: var(--home-hero-composer-width);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
@@ -3077,21 +3074,11 @@
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
-/* The strip breaks out of the hero's 960px column — five 248px cards are wider
-   than the composer — but it is sized to its cards, not to the column, so the
-   whole module (title + row) stays centered on the composer's axis. */
-/* This used to size itself to the sub-type chip rail above it, via two numbers
-   that rail measured and published on the hero root. The rail is gone (the
-   sub-types moved into the template menu, 2026-08-21), so the module falls
-   back to the composer column's own width — which is what those fallbacks
-   already resolved to for every type that rendered no rail. */
+/* Keep the example list's outer edges aligned with the composer. */
 .home-hero__plugin-presets-wrap {
   position: relative;
   width: 100%;
-  /* The sub-type chip cluster that used to publish a measured width here is
-     gone (2026-08-25), so the list falls back to the composer column's own
-     820px — what every type without a rail already resolved to. */
-  max-width: min(820px, 100%);
+  max-width: var(--home-hero-composer-width);
   margin-inline: auto;
 }
 
