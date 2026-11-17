@@ -1014,11 +1014,24 @@ function inspectProviderCompletion(
     // treat this signature as an upstream failure rather than reporting a
     // false green here.
     if (Array.isArray(content) && !hasRenderableAnthropicBlock(content)) {
+      // Only assert a charge when the response carries billing evidence.
+      // A 200 with no `usage` field (or no positive `output_tokens`) is still
+      // the empty-turn defect, but claiming output tokens were billed without
+      // the provider reporting any would be unfounded (#9470 QA).
+      const usage = (obj as { usage?: unknown }).usage;
+      const billedOutputTokens =
+        usage && typeof usage === 'object'
+          ? (usage as { output_tokens?: unknown }).output_tokens
+          : undefined;
+      const hasBillingEvidence =
+        typeof billedOutputTokens === 'number' && billedOutputTokens > 0;
+      const detail = hasBillingEvidence
+        ? `Provider returned HTTP 200 with an empty content array (no text) — the upstream produced a contentless turn while billing ${billedOutputTokens} output tokens. Treating as an upstream failure; retry or switch models.`
+        : 'Provider returned HTTP 200 with an empty content array (no usable content) — the upstream produced a contentless turn. Treating as an upstream failure; retry or switch models.';
       return {
         valid: false,
         kind: 'upstream_unavailable',
-        detail:
-          'Provider returned HTTP 200 with an empty content array (no text) — the upstream produced a contentless turn while billing output tokens. Treating as an upstream failure; retry or switch models.',
+        detail,
       };
     }
     return {
