@@ -222,7 +222,12 @@ export function useBrandFonts(
         if (cancelled || files.length === 0) return;
         const fontFileUrl = (file: string): string =>
           bundleManifestUrl
-            ? new URL(`fonts/${file}`, bundleManifestUrl).toString()
+            // The manifest URL carries ?path=fonts%2Fmanifest.json — swap the
+            // path segment for the font file, preserving any workspace query.
+            ? bundleManifestUrl.replace(
+                /(path=)(?:fonts%2F)?manifest\.json/,
+                `$1${encodeURIComponent(`fonts/${file}`)}`,
+              )
             : projectRawUrl(activeProjectId ?? projectId ?? '', `fonts/${file}`, workspaceContext);
         const css = files
           .map((f) => {
