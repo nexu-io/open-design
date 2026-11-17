@@ -7425,6 +7425,16 @@ function safeReadJsonFile(p) {
   }
 }
 
+function readMetadataJson(p) {
+  try {
+    if (p === '-') return JSON.parse(readFileSync(0, 'utf8'));
+    return JSON.parse(readFileSync(p, 'utf8'));
+  } catch (err) {
+    console.error(`--metadata-json must be valid JSON: ${err.message}`);
+    process.exit(2);
+  }
+}
+
 function collectCliPositionals(argv, stringFlags = new Set()) {
   const out = [];
   for (let i = 0; i < argv.length; i++) {
@@ -7905,7 +7915,7 @@ Common options:
       if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
       if (flags['metadata-json']) {
-        const mj = safeReadJsonFile(flags['metadata-json']);
+        const mj = readMetadataJson(flags['metadata-json']);
         if (mj && typeof mj === 'object') body.metadata = mj;
       }
       const prompt = await readPromptFromFlags(flags);
