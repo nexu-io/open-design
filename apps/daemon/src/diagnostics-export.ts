@@ -77,6 +77,10 @@ async function resolveDiagnosticsAgentEnvironment(
         agentId,
         { ...process.env, OD_DATA_DIR: dataDir },
         agentCliEnvForAgent(appConfig.agentCliEnv, agentId),
+        // Log-home resolution needs agent settings, not OS proxy discovery.
+        // The default shells out synchronously and can stall the daemon while
+        // it is collecting evidence of an unrelated request timeout.
+        {},
       );
     const clean = (value: string | undefined): string | null => {
       const trimmed = value?.trim();

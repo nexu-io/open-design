@@ -22,6 +22,26 @@ exports include `summary/automatic-log-upload.json` with queue states and loss r
 All daemon-owned paths derive from the resolved data root; see the root `AGENTS.md`
 **Daemon data directory contract** for ownership and launch propagation.
 
+## Workspace request timing
+
+The existing `summary/environment-evidence.json` export and bounded checkpoint
+retain the most recent 50 workspace-directory request attempts in
+`directoryRequests`. These are passive observations of the actual fetch, not
+additional probes. Native Node/Undici events distinguish request creation,
+DNS, TCP, TLS, sending headers and waiting for response headers. The fetch
+caller records response-body, JSON and validation outcomes. Unobserved timings
+remain null; a reused connection need not emit DNS/TCP/TLS events.
+
+Timing fields are milliseconds from the attempt's monotonic start, not durations
+to add together. `elapsedMs` is the observed attempt duration; `timeoutMs` is the
+configured deadline. `deadlineOverrunMs` and the attempt-local
+`eventLoopDelayMaxMs` help distinguish delayed timer execution from a normally
+serviced network timeout. Neither alone identifies which code or OS condition
+blocked the process. Successes, HTTP errors, transport errors and timeouts stay
+separate. Only bounded known network error codes and validated request IDs /
+Cloudflare rays are retained; URLs, IP addresses, credentials, messages and
+bodies are excluded. Export/recording failures do not change the business result.
+
 ## Delivery and privacy
 
 `storage/diagnostic-outbox.ts` owns an independent SQLite incident queue with leases

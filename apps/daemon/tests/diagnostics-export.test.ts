@@ -1,5 +1,6 @@
 import { createDiagnosticsEvidence, createEvidenceCheckpointWriter } from '../src/services/diagnostics-evidence.js';
 import { collectSystemEnvironment } from '../src/services/diagnostics-environment.js';
+import { beginWorkspaceRequestEvidence } from '../src/services/workspace-request-evidence.js';
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -59,6 +60,12 @@ describe('diagnostics export handler — non-sidecar launch', () => {
       await prior(JSON.stringify({ marker: 'prior-process-evidence' }));
       evidence.observeContext({ workspaceId: 'team-1', memberId: 'member-1', workspaceType: 'team' });
       evidence.record({ source: 'team-projects', timedOut: true, workspaceId: 'team-1', env: { HTTPS_PROXY: 'http://user:private-password@localhost:7890' } });
+      const request = beginWorkspaceRequestEvidence({
+        apiUrl: 'https://private-host.example', timeoutMs: 8_000,
+        record: value => evidence.recordDirectoryRequest(value),
+      });
+      request.failed(Object.assign(new Error('private-error'), { code: 'ECONNRESET' }), false);
+      request.finish();
       await evidence.refresh();
       await evidence.flush();
       const handler = createDiagnosticsExportHandler({ runtime: null, projectRoot: root, dataDir: root, evidence });
@@ -69,7 +76,12 @@ describe('diagnostics export handler — non-sidecar launch', () => {
       const current = await zip.file('summary/environment-evidence.json')!.async('string');
       expect(JSON.parse(current).context).toMatchObject({ workspaceId: 'team-1', memberId: 'member-1', workspaceType: 'team' });
       expect(JSON.parse(current).failures[0]).toMatchObject({ source: 'team-projects', code: 'timeout', count: 1 });
+      expect(JSON.parse(current).directoryRequests[0]).toMatchObject({ outcome: 'network_error', timeoutMs: 8_000, errorCodes: ['ECONNRESET'] });
       expect(current).not.toContain('private-password');
+      expect(current).not.toContain('private-host');
+      expect(current).not.toContain('private-error');
+      const checkpoint = await zip.file('logs/diagnostics/environment-evidence.latest.json')!.async('string');
+      expect(JSON.parse(checkpoint).directoryRequests[0]).toMatchObject({ outcome: 'network_error', errorCodes: ['ECONNRESET'] });
       const previous = await zip.file('logs/diagnostics/environment-evidence.previous.json')!.async('string');
       expect(previous).toContain('prior-process-evidence');
     } finally { evidence.close(); await rm(root, { recursive: true, force: true }); }

@@ -1,4 +1,5 @@
 import { getDiagnosticsEvidence, recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
+import { beginWorkspaceRequestEvidence } from '../services/workspace-request-evidence.js';
 import { createHash } from 'node:crypto';
 import {
   buildWorkspacePermissions,
@@ -41,6 +42,7 @@ import {
 // single-player, never throws.
 
 const DEFAULT_TIMEOUT_MS = 8_000;
+const DIRECTORY_RETRY_TIMEOUT_MS = 5_000;
 // Read authorization is display-only and is polled every 5s by an open shared
 // project. Keep the successful lease comfortably wider than that cadence so a
 // poll cannot expire the lease at the exact instant it is meant to reuse it.
@@ -908,57 +910,88 @@ export async function fetchVelaWorkspaceDirectory(
   // authority outage. Returning a successful empty directory lets clients
   // clear a previously cached Team selection instead of preserving it forever.
   if (!session || !session.controlKey || !session.apiUrl) return { ok: true, items: [] };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetchImpl(new URL('/api/v1/workspaces', session.apiUrl), {
-      method: 'GET',
-      headers: { authorization: `Bearer ${session.controlKey}` },
-      signal: controller.signal,
+  const identity = velaWorkspaceDirectoryIdentityForSession(session);
+  // Only this idempotent authority GET is retried, so a transient timeout does
+  // not immediately fail every waiting operation. The deadline stays bounded
+  // at 8s + 5s by default, within the transcript reader's 15s inactivity
+  // deadline; membership is still verified live.
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    const attemptTimeoutMs = attempt === 0 ? timeoutMs : Math.min(timeoutMs, DIRECTORY_RETRY_TIMEOUT_MS);
+    const trace = beginWorkspaceRequestEvidence({
+      apiUrl: session.apiUrl,
+      timeoutMs: attemptTimeoutMs,
+      record: evidence => getDiagnosticsEvidence()?.recordDirectoryRequest(evidence),
     });
-    if (!response.ok) {
-      recordDiagnosticFailure({ source: 'workspace-directory', status: response.status, env: process.env });
-      if (response.status === 401 || response.status === 403) {
-        if (!options.readSession) {
-          const currentEnv = typeof options.configuredEnv === 'function'
-            ? options.configuredEnv()
-            : configuredEnv;
-          const current = readVelaControlApiContext(process.env, currentEnv);
-          // A response from before re-login must not expire the new credentials.
-          if (current?.profile === session.profile
-            && current.apiUrl === session.apiUrl
-            && current.controlKey === session.controlKey) {
-            markVelaAuthorizationExpired(process.env, currentEnv);
+    const timeout = setTimeout(() => { trace.deadline(); controller.abort(); }, attemptTimeoutMs);
+    try {
+      const response = await trace.run(() => fetchImpl(new URL('/api/v1/workspaces', session.apiUrl), {
+        method: 'GET',
+        headers: { authorization: `Bearer ${session.controlKey}` },
+        signal: controller.signal,
+      }));
+      trace.headers(response);
+      if (!response.ok) {
+        trace.outcome('http_error');
+        recordDiagnosticFailure({ source: 'workspace-directory', status: response.status, env: process.env });
+        if (response.status === 401 || response.status === 403) {
+          if (!options.readSession) {
+            const currentEnv = typeof options.configuredEnv === 'function'
+              ? options.configuredEnv()
+              : configuredEnv;
+            const current = readVelaControlApiContext(process.env, currentEnv);
+            // A response from before re-login must not expire the new credentials.
+            if (current?.profile === session.profile
+              && current.apiUrl === session.apiUrl
+              && current.controlKey === session.controlKey) {
+              markVelaAuthorizationExpired(process.env, currentEnv);
+            }
           }
+          return {
+            ok: false,
+            items: [],
+            reason: 'unauthorized',
+            status: response.status,
+          };
         }
         return {
           ok: false,
           items: [],
-          reason: 'unauthorized',
+          reason: 'upstream',
           status: response.status,
         };
       }
-      return {
-        ok: false,
-        items: [],
-        reason: 'upstream',
-        status: response.status,
-      };
+      const body = await response.json() as { items?: unknown } | null;
+      trace.parsed();
+      const items = mapVelaWorkspaceDirectory(body);
+      // A directory is an authority snapshot, not a best-effort display list.
+      // Dropping malformed rows would falsely revoke previously active members.
+      if (!Array.isArray(body?.items) || items.length !== body.items.length) {
+        trace.outcome('invalid_payload');
+        return { ok: false, items: [], reason: 'upstream', status: 502 };
+      }
+      getDiagnosticsEvidence()?.observeDirectory(items);
+      trace.outcome('success');
+      return { ok: true, items };
+    } catch (error) {
+      trace.failed(error, controller.signal.aborted);
+      recordDiagnosticFailure({ source: 'workspace-directory', error, timedOut: controller.signal.aborted, env: process.env });
+      // Retry only a transport failure, never an HTTP rejection or malformed
+      // JSON. Both attempts use one captured principal; account/credential
+      // changes must end this probe rather than resend the old credential.
+      if (attempt === 0 && (controller.signal.aborted || error instanceof TypeError)) {
+        const currentEnv = typeof options.configuredEnv === 'function'
+          ? options.configuredEnv()
+          : configuredEnv;
+        if (velaWorkspaceDirectoryIdentityForSession(readSession(process.env, currentEnv)) === identity) {
+          continue;
+        }
+      }
+      return { ok: false, items: [], reason: 'network' };
+    } finally {
+      clearTimeout(timeout);
+      trace.finish();
     }
-    const body = await response.json() as { items?: unknown } | null;
-    const items = mapVelaWorkspaceDirectory(body);
-    // A directory is an authority snapshot, not a best-effort display list.
-    // Dropping malformed rows would falsely revoke previously active members.
-    if (!Array.isArray(body?.items) || items.length !== body.items.length) {
-      return { ok: false, items: [], reason: 'upstream', status: 502 };
-    }
-    getDiagnosticsEvidence()?.observeDirectory(items);
-    return { ok: true, items };
-  } catch (error) {
-    recordDiagnosticFailure({ source: 'workspace-directory', error, timedOut: controller.signal.aborted, env: process.env });
-    return { ok: false, items: [], reason: 'network' };
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
