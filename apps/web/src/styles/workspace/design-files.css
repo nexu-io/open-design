@@ -1401,14 +1401,16 @@ button.df-card-thumb:focus:not(:disabled) {
     linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--accent)) 0%, var(--bg-panel) 100%);
 }
 
-/* Row context menu */
+/* Row context menu (file rows and plugin-folder rows). Opaque, like the
+   panel's project menu: the menu opens over the next row, and a translucent
+   glass surface let that row's buttons and text show through the items.
+   --bg-elevated is the same surface the glass falls back to under
+   prefers-reduced-transparency. */
 .df-row-popover {
   position: fixed;
   z-index: 200;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--material-separator);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   padding: 4px;
