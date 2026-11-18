@@ -14,6 +14,7 @@ import {
   sharedProjectPullProfileEnabled,
 } from './pull-profile.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
+import { assertNoEmptyFiles } from './empty-file-preflight.js';
 import { assertNoEmptyFiles } from './share-alias-recovery.js';
 
 // `vela resource push` answers a 0-byte file with an opaque 501
