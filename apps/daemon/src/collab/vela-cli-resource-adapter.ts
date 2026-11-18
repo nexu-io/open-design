@@ -166,6 +166,23 @@ export type RunVelaResource = (
   workspaceId?: string,
 ) => Promise<string>;
 
+/**
+ * Wrap a resource runner so the resolved source directory is validated for
+ * 0-byte placeholder files exactly once before vela runs. The directory is
+ * resolved by the caller instead of being read from `args`, because the token
+ * after `push` is the resource kind, not the source directory.
+ */
+export function withEmptyFilePreflight(
+  run: RunVelaResource,
+  resolveDir: (args: string[]) => string,
+): RunVelaResource {
+  return async (args, workspaceId) => {
+    const { assertNoEmptyFiles } = await import('./share-alias-recovery.js');
+    await assertNoEmptyFiles(resolveDir(args));
+    return run(args, workspaceId);
+  };
+}
+
 export interface VelaResourcePullBatchRequest {
   key: string;
   kind: 'design_system' | 'plugin' | 'skill';
