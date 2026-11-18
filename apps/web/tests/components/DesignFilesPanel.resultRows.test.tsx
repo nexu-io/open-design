@@ -11,9 +11,10 @@ import {
   type ProjectFile,
 } from "../../src/types";
 
-// Plugin-folder and live-artifact rows are "result rows": they share the file
-// row's leading columns (check, icon, name) and end in
-// status · time · one action · ⋯ (#4056).
+// Plugin-folder and live-artifact rows are "result rows" (#4056): file-row
+// height and icon→name gap, no check column (they never mix with file rows),
+// status in the meta line under the name, and a trailing cluster of
+// time · one action · ⋯ (plugin) or time · Refresh (live).
 
 afterEach(() => {
   cleanup();
@@ -84,7 +85,7 @@ function columnClasses(row: Element): string[] {
 }
 
 describe("DesignFilesPanel live-artifact rows", () => {
-  it("renders a div row aligned with file rows, with status, time, Refresh and ⋯ columns", () => {
+  it("renders a div row: icon, name with status in the meta line, time, Refresh", () => {
     renderPanel({ liveArtifacts: [liveArtifact()] });
     fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
 
@@ -93,20 +94,24 @@ describe("DesignFilesPanel live-artifact rows", () => {
     expect(row.tagName).toBe("DIV");
     expect(row.closest("button")).toBeNull();
     expect(row.classList.contains("df-row-result")).toBe(true);
+    // No check column, no floating status column, no ⋯ (live rows have no
+    // menu items): Refresh is the trailing element.
     expect(columnClasses(row)).toEqual([
-      "df-row-check",
       "df-row-icon",
       "df-row-name-wrap",
-      "df-row-status",
       "df-row-time",
       expect.any(String), // Refresh (Button primitive)
-      "df-row-menu",
     ]);
-    // The Live badge moved out of the subtitle into the status column.
+    expect(row.lastElementChild?.textContent).toBe("Refresh");
+    expect(row.querySelector(".df-row-menu")).toBeNull();
+    // Status reads "Live artifact · Live" in the meta line, sentence case,
+    // with a dot glyph; the old uppercase pill is gone.
     const status = screen.getByTestId(`design-file-status-${liveArtifactTabId("la-1")}`);
-    expect(status.textContent).toContain("Live");
-    expect(row.querySelector(".df-row-sub")?.textContent).toBe("Live artifact");
-    expect(row.querySelector(".df-row-sub .live-artifact-badges")).toBeNull();
+    expect(status.closest(".df-row-sub")).toBeTruthy();
+    expect(status.getAttribute("data-tone")).toBe("live");
+    expect(status.querySelector(".df-row-meta-dot")).toBeTruthy();
+    expect(row.querySelector(".df-row-sub")?.textContent).toBe("Live artifact·Live");
+    expect(row.querySelector(".live-artifact-badge")).toBeNull();
   });
 
   it("opens from a row click and from the name button without opening twice", () => {
@@ -125,12 +130,23 @@ describe("DesignFilesPanel live-artifact rows", () => {
     expect(onOpenLiveArtifact).toHaveBeenLastCalledWith(liveArtifactTabId("la-1"));
   });
 
-  it("shows Refresh failed in the status column", () => {
-    renderPanel({ liveArtifacts: [liveArtifact({ refreshStatus: "failed" })] });
-    fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
-    const status = screen.getByTestId(`design-file-status-${liveArtifactTabId("la-1")}`);
-    expect(status.textContent).toContain("Refresh failed");
-  });
+  it.each([
+    ["running", "active", "running", "Refreshing…", true],
+    ["failed", "active", "failed", "Refresh failed", true],
+    ["idle", "archived", "archived", "Archived", false],
+    ["succeeded", "active", "live", "Live", false],
+  ] as const)(
+    "shows refreshStatus=%s status=%s as one %s meta-line state",
+    (refreshStatus, status, tone, label, hasGlyph) => {
+      renderPanel({ liveArtifacts: [liveArtifact({ refreshStatus, status })] });
+      fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
+      const el = screen.getByTestId(`design-file-status-${liveArtifactTabId("la-1")}`);
+      expect(el.getAttribute("data-tone")).toBe(tone);
+      expect(el.textContent).toBe(label);
+      // Spinner / alert glyph so the state never relies on colour alone.
+      expect(Boolean(el.querySelector("svg"))).toBe(hasGlyph);
+    },
+  );
 
   it("refreshes from the row action without opening the artifact", async () => {
     const fetchMock = vi.fn(async () =>
@@ -177,7 +193,8 @@ describe("DesignFilesPanel live-artifact refresh outcomes", () => {
       screen.queryByTestId(`design-live-artifact-refresh-${liveArtifactTabId("la-1")}`),
     ).toBeNull();
     const row = screen.getByTestId(`design-file-row-${liveArtifactTabId("la-1")}`);
-    expect(row.children).toHaveLength(7);
+    // No empty placeholder: time is the trailing element.
+    expect(columnClasses(row)).toEqual(["df-row-icon", "df-row-name-wrap", "df-row-time"]);
   });
 
   it("says when a refresh had no source instead of looking like success", async () => {
@@ -233,7 +250,7 @@ describe("DesignFilesPanel live-artifact refresh outcomes", () => {
     });
     expect(first.disabled).toBe(true);
     expect(second.disabled).toBe(true);
-    // The row being refreshed shows Refreshing… in its status column.
+    // The row being refreshed shows Refreshing… in its meta line.
     expect(
       screen.getByTestId(`design-file-status-${liveArtifactTabId("la-1")}`).textContent,
     ).toContain("Refreshing");
@@ -256,10 +273,8 @@ describe("DesignFilesPanel plugin-folder rows", () => {
     const row = screen.getByTestId("design-plugin-folder-generated-plugin");
     expect(row.classList.contains("df-row-result")).toBe(true);
     expect(columnClasses(row)).toEqual([
-      "df-row-check",
       "df-row-icon",
       "df-row-name-wrap",
-      "df-row-status",
       "df-row-time",
       expect.any(String), // Add to My plugins (Button primitive)
       "df-row-menu",
@@ -268,8 +283,9 @@ describe("DesignFilesPanel plugin-folder rows", () => {
       .toBe("Add to My plugins");
     expect(screen.queryByTestId("design-plugin-folder-publish-generated-plugin")).toBeNull();
     expect(screen.queryByTestId("design-plugin-folder-contribute-generated-plugin")).toBeNull();
-    // Idle rows show no status chip.
-    expect(screen.getByTestId("design-plugin-folder-status-generated-plugin").textContent).toBe("");
+    // Idle rows keep the file count in the meta line.
+    expect(screen.getByTestId("design-plugin-folder-status-generated-plugin").textContent)
+      .toBe("2 files · ready to add to My plugins");
 
     const trigger = screen.getByTestId("design-plugin-folder-menu-generated-plugin");
     expect(trigger.tagName).toBe("BUTTON");
@@ -353,7 +369,7 @@ describe("DesignFilesPanel plugin-folder rows", () => {
     expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
   });
 
-  it("shows Sending… in the status column while an action is in flight", async () => {
+  it("shows Sending… in the meta line while an action is in flight", async () => {
     let resolveAction: () => void = () => {};
     const onPluginFolderAgentAction = vi.fn(
       () => new Promise<void>((resolve) => { resolveAction = resolve; }),
@@ -374,7 +390,7 @@ describe("DesignFilesPanel plugin-folder rows", () => {
     await act(async () => {
       resolveAction();
     });
-    expect(status.textContent).toBe("");
+    expect(status.textContent).toBe("2 files · ready to add to My plugins");
   });
 
   it("opens the plugin manifest from a row click", () => {

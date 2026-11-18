@@ -26,7 +26,6 @@ import type { PluginFolderAgentAction } from './design-files/pluginFolderActions
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
-import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { refreshErrorMessage } from './live-artifact-refresh-message';
 import { RemixIcon } from './RemixIcon';
 import { Button } from '@open-design/components';
@@ -1840,16 +1839,15 @@ export function DesignFilesPanel({
                     // second click), so every row's Refresh reads as disabled.
                     const refreshDisabled = refreshing || refreshingArtifactId !== null;
                     return (
-                    // A div row (not a <button>) so the name button, Refresh
-                    // and ⋯ can sit inside it, and so the global 36px button
-                    // height no longer clips the row. Row click opens.
+                    // A div row (not a <button>) so the name button and Refresh
+                    // can sit inside it, and so the global 36px button height
+                    // no longer clips the row. Row click opens.
                     <div
                       key={artifact.artifactId}
                       data-testid={`design-file-row-${artifact.tabId}`}
                       className="df-row df-row-result df-row-live-artifact df-row-openable"
                       onClick={() => onOpenLiveArtifact(artifact.tabId)}
                     >
-                      <span className="df-row-check" aria-hidden />
                       <span className="df-row-icon" data-kind="live-artifact" aria-hidden>
                         ◉
                       </span>
@@ -1859,24 +1857,22 @@ export function DesignFilesPanel({
                             <span className="df-row-name" title={artifact.title}>
                               {artifact.title}
                             </span>
-                            <span className="df-row-sub">{t('designFiles.kindLiveArtifact')}</span>
+                            <span className="df-row-sub">
+                              <span>{t('designFiles.kindLiveArtifact')}</span>
+                              <span aria-hidden>·</span>
+                              <LiveArtifactRowStatus
+                                testId={`design-file-status-${artifact.tabId}`}
+                                status={artifact.status}
+                                refreshStatus={refreshing ? 'running' : artifact.refreshStatus}
+                              />
+                            </span>
                           </span>
                         </button>
                       </div>
-                      <span className="df-row-status" data-testid={`design-file-status-${artifact.tabId}`}>
-                        <LiveArtifactBadges
-                          compact
-                          status={artifact.status}
-                          refreshStatus={refreshing ? 'running' : artifact.refreshStatus}
-                        />
-                      </span>
                       <span className="df-row-time">
                         {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
                       </span>
-                      {viewerOnly ? (
-                        // Read-only viewers cannot refresh; keep the column.
-                        <span aria-hidden />
-                      ) : (
+                      {viewerOnly ? null : (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -1893,9 +1889,6 @@ export function DesignFilesPanel({
                           {t('liveArtifact.refresh.button')}
                         </Button>
                       )}
-                      {/* Live rows have no row-menu items today; the inert
-                          placeholder keeps the ⋯ column aligned with file rows. */}
-                      <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
                     </div>
                   );})}
                 </div>
@@ -1921,7 +1914,6 @@ export function DesignFilesPanel({
                       data-testid={`design-plugin-folder-${folder.path}`}
                       onClick={() => onOpenFile(folder.manifestPath)}
                     >
-                      <span className="df-row-check" aria-hidden />
                       <span className="df-row-icon" data-kind="folder" aria-hidden>
                         DIR
                       </span>
@@ -1929,15 +1921,22 @@ export function DesignFilesPanel({
                         <button type="button" className="df-row-name-btn">
                           <span className="df-row-name-wrap">
                             <span className="df-row-name" title={folder.path}>{folder.path}</span>
-                            <span className="df-row-sub">
-                              {folder.fileCount} files · ready to add to My plugins
+                            <span
+                              className="df-row-sub"
+                              data-testid={`design-plugin-folder-status-${folder.path}`}
+                            >
+                              {sending ? (
+                                <span className="df-row-meta-status" data-tone="running">
+                                  <Icon name="spinner" size={11} />
+                                  <span>Sending…</span>
+                                </span>
+                              ) : (
+                                <span>{folder.fileCount} files · ready to add to My plugins</span>
+                              )}
                             </span>
                           </span>
                         </button>
                       </div>
-                      <span className="df-row-status" data-testid={`design-plugin-folder-status-${folder.path}`}>
-                        {sending ? <span className="df-row-status-chip">Sending…</span> : null}
-                      </span>
                       <span className="df-row-time">{relativeTime(folder.updatedAt, t)}</span>
                       {onPluginFolderAgentAction ? (
                         <>
@@ -1974,12 +1973,7 @@ export function DesignFilesPanel({
                             ⋯
                           </button>
                         </>
-                      ) : (
-                        <>
-                          <span aria-hidden />
-                          <span className="df-row-menu df-row-menu-placeholder" aria-hidden />
-                        </>
-                      )}
+                      ) : null}
                     </div>
                   )})}
                 </div>
@@ -2166,6 +2160,50 @@ export function DesignFilesPanel({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// Live-artifact status for the Design Files meta line: one state, sentence
+// case, a glyph plus text so it never relies on colour alone. A specific
+// state (refreshing, failed, archived) replaces the generic "Live".
+function LiveArtifactRowStatus({
+  status,
+  refreshStatus,
+  testId,
+}: {
+  status: LiveArtifactWorkspaceEntry['status'];
+  refreshStatus: LiveArtifactWorkspaceEntry['refreshStatus'];
+  testId: string;
+}) {
+  const t = useT();
+  if (refreshStatus === 'running') {
+    return (
+      <span className="df-row-meta-status" data-tone="running" data-testid={testId}>
+        <Icon name="spinner" size={11} />
+        <span>{t('designs.statusRefreshing')}</span>
+      </span>
+    );
+  }
+  if (refreshStatus === 'failed') {
+    return (
+      <span className="df-row-meta-status" data-tone="failed" data-testid={testId}>
+        <Icon name="alert-triangle" size={11} />
+        <span>{t('designs.statusRefreshFailed')}</span>
+      </span>
+    );
+  }
+  if (status === 'archived') {
+    return (
+      <span className="df-row-meta-status" data-tone="archived" data-testid={testId}>
+        <span>{t('designs.statusArchived')}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="df-row-meta-status" data-tone="live" data-testid={testId}>
+      <span className="df-row-meta-dot" aria-hidden />
+      <span>{t('designs.badgeLive')}</span>
+    </span>
   );
 }
 
