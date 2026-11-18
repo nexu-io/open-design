@@ -88,6 +88,18 @@ That workflow is open and extensible. OpenDesign is licensed under Apache 2.0 an
 
 ---
 
+<!-- motion-template-library:start -->
+## Product videos with OpenMotion
+
+Find a visual starting point for a product launch, feature demo, brand story, or milestone. Browse selected motion references and adaptation guides, copy a brief into your agent, and bring your own message, brand, and assets.
+
+Review and refine the generated project, then reuse it for your next release, campaign, or update.
+
+[Explore motion references and start creating →](docs/motion-templates/README.md)
+<!-- motion-template-library:end -->
+
+---
+
 ## Platform Compatibility
 
 > OpenDesign connects to mainstream coding agents in two ways: **skills, CLI, and MCP** for agents that consume OD, plus **native runtime adapters** for agents that OD launches directly. DeepSeek Harness is a first-class native runtime through the official `dsh` CLI, with structured streaming, model discovery, cancellation, and session resume.

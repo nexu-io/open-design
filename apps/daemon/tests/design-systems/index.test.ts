@@ -374,6 +374,52 @@ describe('design systems registry', () => {
       });
   });
 
+  it('does not add UI-kit components to an agent-managed app kit', async () => {
+    await mkdir(path.join(root, 'installed', 'ui_kits', 'app'), { recursive: true });
+    await writeFile(
+      path.join(root, 'installed', 'DESIGN.md'),
+      '---\nname: "Installed"\n---\n\n# Installed\n\nPackage body.\n',
+    );
+    await writeFile(path.join(root, 'installed', 'README.md'), '# Installed\n');
+    await writeFile(
+      path.join(root, 'installed', 'metadata.json'),
+      JSON.stringify({ title: 'Installed', status: 'published', artifactMode: 'agent-managed' }),
+    );
+    await writeFile(path.join(root, 'installed', 'ui_kits', 'app', 'index.html'), '<!doctype html><html><body>app kit</body></html>');
+
+    const files = await listUserDesignSystemFiles(root, 'user:installed');
+
+    expect(files?.map((file) => file.path)).toContain('ui_kits/app/index.html');
+    expect(files?.map((file) => file.path).filter((filePath) => filePath.startsWith('ui_kits/app/components/'))).toEqual([]);
+  });
+
+  it('still migrates legacy artifact names of an agent-managed package without adding placeholders', async () => {
+    await mkdir(path.join(root, 'legacy-managed', 'preview'), { recursive: true });
+    await mkdir(path.join(root, 'legacy-managed', 'ui_kits', 'app'), { recursive: true });
+    await writeFile(
+      path.join(root, 'legacy-managed', 'DESIGN.md'),
+      '# Legacy Managed\n\nSee preview/colors-ui-palette.html.\n',
+    );
+    await writeFile(
+      path.join(root, 'legacy-managed', 'metadata.json'),
+      JSON.stringify({ title: 'Legacy Managed', status: 'draft', artifactMode: 'agent-managed' }),
+    );
+    await writeFile(path.join(root, 'legacy-managed', 'preview', 'colors-ui-palette.html'), '<!doctype html><html><body>palette</body></html>');
+    await writeFile(path.join(root, 'legacy-managed', 'ui_kits', 'app', 'index.html'), '<!doctype html><html><body>app kit</body></html>');
+
+    const paths = (await listUserDesignSystemFiles(root, 'user:legacy-managed'))?.map((file) => file.path) ?? [];
+
+    expect(paths).toContain('preview/colors-primary.html');
+    expect(paths).not.toContain('preview/colors-ui-palette.html');
+    expect(paths).not.toContain('preview/components-buttons.html');
+    expect(paths).not.toContain('preview/components-inputs.html');
+    expect(paths).not.toContain('ui_kits/app/README.md');
+    expect(paths.filter((filePath) => filePath.startsWith('ui_kits/app/components/'))).toEqual([]);
+    await expect(readFile(path.join(root, 'legacy-managed', 'DESIGN.md'), 'utf8'))
+      .resolves
+      .toContain('preview/colors-primary.html');
+  });
+
   it('does not backfill agent-managed review artifacts before the agent writes them', async () => {
     const created = await createUserDesignSystem(root, {
       title: 'Agent Managed',

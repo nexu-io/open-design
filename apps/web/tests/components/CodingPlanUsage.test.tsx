@@ -121,7 +121,7 @@ describe('personal plan presentation from the shared billing snapshot', () => {
   });
   it('renders the English allowance and period', () => {
     render(panel({ locale: 'en' }));
-    expect(screen.getByText('Design Plan')).toBeTruthy();
+    expect(screen.getByText('Coding Plan')).toBeTruthy();
     expect(screen.getByText('7 days')).toBeTruthy();
     expect(screen.getByText('75% left')).toBeTruthy();
     expect(screen.getByText('US$0.00')).toBeTruthy();

@@ -94,6 +94,26 @@ describe('validatePluginFolder', () => {
     expect(diagnostics.some((d) => d.severity === 'error' && d.code.includes('until'))).toBe(true);
   });
 
+  it.each([
+    ['a trailing ||', 'iterations >= 3 ||'],
+    ['a leading &&', '&& iterations >= 3'],
+    ['a repeated &&', 'iterations >= 3 && && preview.ok == true'],
+  ])('flags %s until operand as pipeline.until-invalid', async (_label, until) => {
+    await writeManifest({
+      name: 'pipe',
+      version: '0.1.0',
+      od: {
+        taskKind: 'new-generation',
+        pipeline: {
+          stages: [{ id: 'critique', atoms: ['critique-theater'], repeat: true, until }],
+        },
+      },
+    });
+    const result = await validatePluginFolder({ folder });
+    const diagnostics = flattenValidationDiagnostics(result);
+    expect(diagnostics.some((d) => d.code === 'pipeline.until-invalid')).toBe(true);
+  });
+
   it('emits warnings (not errors) for unresolved skill refs when no registry is supplied', async () => {
     await writeManifest({
       name: 'with-skill',

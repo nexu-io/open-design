@@ -81,7 +81,7 @@ it.each(['owner', 'admin', 'member'] as const)('%s keeps zero wallet while share
   expect(screen.getByText('未订阅')).toBeTruthy();
   expect(screen.getByText('$0.00')).toBeTruthy();
   mounted.rerender(panel(response('shared'), role));
-  expect(screen.getByRole('region', { name: 'Design Plan 额度' })).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Coding Plan 额度' })).toBeTruthy();
   expect(screen.getByText('订阅套餐后可用')).toBeTruthy();
   expect(screen.queryByText('未订阅')).toBeNull();
   expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0');
