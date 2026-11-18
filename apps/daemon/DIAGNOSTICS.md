@@ -22,6 +22,12 @@ exports include `summary/automatic-log-upload.json` with queue states and loss r
 All daemon-owned paths derive from the resolved data root; see the root `AGENTS.md`
 **Daemon data directory contract** for ownership and launch propagation.
 
+Resolving agent log directories skips system-proxy discovery: those paths still
+use the configured agent homes and sandbox settings. Proxy evidence remains in
+`summary/environment-evidence.json`, collected separately with asynchronous
+`execFile` queries and a 1.5-second command timeout. Failed queries are marked
+`unavailable`. Agent launches continue to inherit proxy configuration as before.
+
 ## Delivery and privacy
 
 `storage/diagnostic-outbox.ts` owns an independent SQLite incident queue with leases
