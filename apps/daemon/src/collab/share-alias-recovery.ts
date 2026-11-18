@@ -1,5 +1,8 @@
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import path from 'node:path';
+
 import { ShareAliasIdentityMismatchError, type createShareAliasReservations } from './share-alias-reservation.js';
 import { currentFileSharePublication, type ProjectShareState } from './vela-project-share-state.js';
 import type { PublicFilePublicationScope, PublicFilePublicationStore } from './public-file-publication-store.js';
@@ -72,4 +75,35 @@ export function reserveFileShareAlias(input: {
     throw new ShareAliasIdentityMismatchError();
   }
   return reservations.restore(scope, cloud);
+}
+
+const EMPTY_FILE_PREFLIGHT_IGNORED_ENTRIES = new Set(['.git', 'node_modules']);
+
+/** Recursively lists 0-byte regular files under `dir`, relative to it. */
+export async function findEmptyFiles(dir: string): Promise<string[]> {
+  const empty: string[] = [];
+  async function walk(current: string): Promise<void> {
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (EMPTY_FILE_PREFLIGHT_IGNORED_ENTRIES.has(entry.name)) continue;
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(absolute);
+      } else if (entry.isFile()) {
+        const info = await stat(absolute);
+        if (info.size === 0) empty.push(path.relative(dir, absolute));
+      }
+    }
+  }
+  await walk(dir);
+  return empty.sort();
+}
+
+/** Rejects a share directory containing 0-byte placeholders, naming each path. */
+export async function assertNoEmptyFiles(dir: string): Promise<void> {
+  const empty = await findEmptyFiles(dir);
+  if (empty.length === 0) return;
+  throw new Error(
+    `Cannot share ${dir}: vela resource push does not accept 0-byte files: ${empty.join(', ')}`,
+  );
 }
