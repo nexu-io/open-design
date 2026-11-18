@@ -24,14 +24,18 @@ describe('independent AMR funding feedback', () => {
     const { scope } = fixture(result);
     expect(await checkAmrFundingFeedback(scope, 'model')).toBe('unknown');
   });
-  it.each(['member', 'workspace', 'model', 'stale', 'future'] as const)('rejects %s evidence', async (change) => {
+  it.each(['member', 'workspace', 'model', 'invalid-timestamp'] as const)('rejects %s evidence', async (change) => {
     const { scope, preflight } = fixture('insufficient');
     if (change === 'member') preflight.workspaceMemberId = 'other';
     if (change === 'workspace') preflight.workspaceId = 'other';
     if (change === 'model') preflight.modelId = 'other';
-    if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 60_000).toISOString();
-    if (change === 'future') preflight.generatedAt = new Date(Date.now() + 60_000).toISOString();
+    if (change === 'invalid-timestamp') preflight.generatedAt = 'not-a-date';
     expect(await checkAmrFundingFeedback(scope, 'model')).toBe('unknown');
+  });
+  it.each([-60_000, 60_000])('accepts live server responses despite %ims client clock skew', async (offsetMs) => {
+    const { scope, preflight } = fixture('insufficient');
+    preflight.generatedAt = new Date(Date.now() + offsetMs).toISOString();
+    expect(await checkAmrFundingFeedback(scope, 'model')).toBe('insufficient');
   });
   it('deduplicates concurrent reads but never reuses a negative result for a new send', async () => {
     const { scope, fetchMock } = fixture('insufficient');
@@ -133,7 +137,7 @@ describe('Home cached funding gate', () => {
       ...recovered, workspaceMemberId: 'other',
     })).toBe(false);
     expect(retireHomeAmrFundingBlock(scope, 'model', {
-      ...recovered, generatedAt: new Date(Date.now() - 60_000).toISOString(),
+      ...recovered, generatedAt: 'not-a-date',
     })).toBe(false);
     expect(retireHomeAmrFundingBlock(scope, 'model', recovered)).toBe(true);
     expect(takeHomeAmrFundingFastBlock(scope, 'model')).toBeNull();
@@ -221,14 +225,14 @@ describe('Home cached funding gate', () => {
     vi.advanceTimersByTime(5_001);
     expect(cachedHomeAmrFundingBlock(scope, 'model')).toBeNull();
   });
-  it.each(['unknown', 'stale-available', 'wrong-model', 'unavailable', 'timeout'] as const)(
+  it.each(['unknown', 'invalid-timestamp', 'wrong-model', 'unavailable', 'timeout'] as const)(
     'retains a confirmed block after invalidation and %s, then recovers on fresh available', async (result) => {
       const { scope, preflight, fetchMock } = fixture('insufficient');
       await checkAmrFundingFeedback(scope, 'model');
       invalidateAmrFundingFeedback();
       const confirmation = { ...preflight, fundingCheck: 'available' };
       if (result === 'unknown') confirmation.fundingCheck = 'unknown';
-      if (result === 'stale-available') confirmation.generatedAt = new Date(Date.now() - 31_000).toISOString();
+      if (result === 'invalid-timestamp') confirmation.generatedAt = 'not-a-date';
       if (result === 'wrong-model') confirmation.modelId = 'other';
       if (result === 'timeout') fetchMock.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
       else fetchMock.mockResolvedValueOnce(result === 'unavailable'
@@ -289,12 +293,12 @@ describe('Home uncached funding evidence before handoff', () => {
     expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'insufficient', preflight });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
-  it.each(['workspace', 'member', 'model', 'stale', 'missing', 'offline'] as const)('cannot authorize Home using %s evidence', async (change) => {
+  it.each(['workspace', 'member', 'model', 'invalid-timestamp', 'missing', 'offline'] as const)('cannot authorize Home using %s evidence', async (change) => {
     const { scope, preflight, fetchMock } = fixture('available');
     if (change === 'workspace') preflight.workspaceId = 'previous-space';
     if (change === 'member') preflight.workspaceMemberId = 'previous-member';
     if (change === 'model') preflight.modelId = 'previous-model';
-    if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 31_000).toISOString();
+    if (change === 'invalid-timestamp') preflight.generatedAt = 'not-a-date';
     if (change === 'missing') fetchMock.mockResolvedValue(new Response('{}'));
     if (change === 'offline') fetchMock.mockRejectedValue(new Error('offline'));
     expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'unknown', preflight: null });
@@ -337,13 +341,12 @@ describe('same funding observation also explains the plan', () => {
     expect(await checkAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'insufficient', preflight });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
-  it.each(['workspace', 'member', 'model', 'stale', 'future'] as const)('does not expose untrusted %s tier evidence', async (change) => {
+  it.each(['workspace', 'member', 'model', 'invalid-timestamp'] as const)('does not expose untrusted %s tier evidence', async (change) => {
     const { scope, preflight } = fixture('insufficient');
     if (change === 'workspace') preflight.workspaceId = 'other-workspace';
     if (change === 'member') preflight.workspaceMemberId = 'other-member';
     if (change === 'model') preflight.modelId = 'other-model';
-    if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 31_000).toISOString();
-    if (change === 'future') preflight.generatedAt = new Date(Date.now() + 6_000).toISOString();
+    if (change === 'invalid-timestamp') preflight.generatedAt = 'not-a-date';
     expect(await checkAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'unknown', preflight: null });
   });
   it('does not expose a late old-account preflight or reuse its positive tier', async () => {
@@ -379,14 +382,13 @@ describe('explicit Send funding observations', () => {
     expect(await readSendTimeAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'insufficient', preflight });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
-  it.each(['workspace', 'member', 'model', 'stale', 'future', 'missing', 'forbidden', 'timeout', 'offline', 'unknown'] as const)(
+  it.each(['workspace', 'member', 'model', 'invalid-timestamp', 'missing', 'forbidden', 'timeout', 'offline', 'unknown'] as const)(
     'cannot authorize Send using %s evidence despite display invalidation', async (change) => {
       const { scope, preflight, fetchMock } = fixture('available');
       if (change === 'workspace') preflight.workspaceId = 'other-space';
       if (change === 'member') preflight.workspaceMemberId = 'other-member';
       if (change === 'model') preflight.modelId = 'other-model';
-      if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 31_000).toISOString();
-      if (change === 'future') preflight.generatedAt = new Date(Date.now() + 6_000).toISOString();
+      if (change === 'invalid-timestamp') preflight.generatedAt = 'not-a-date';
       if (change === 'missing') fetchMock.mockResolvedValue(new Response('{}'));
       if (change === 'forbidden') fetchMock.mockResolvedValue(new Response(null, { status: 403 }));
       if (change === 'timeout') fetchMock.mockRejectedValue(new DOMException('timeout', 'TimeoutError'));

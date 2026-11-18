@@ -56,8 +56,7 @@ export function recentHomeAmrFundingInsufficiency(
   const key = fundingKey(scope, modelId);
   const recent = recentHomeInsufficiency.get(key);
   if (!recent || positive?.key === key && positive.expiresAt > Date.now()) return null;
-  const age = Date.now() - Date.parse(recent.preflight.generatedAt);
-  return Date.now() - recent.observedAt <= 5_000 && Number.isFinite(age) && age >= -5_000 && age <= 5_000
+  return Date.now() - recent.observedAt <= 5_000 && Number.isFinite(Date.parse(recent.preflight.generatedAt))
     ? recent.preflight : null;
 }
 
@@ -92,10 +91,9 @@ export function retireHomeAmrFundingBlock(
   modelId: string | null,
   preflight: WorkspaceBillingPreflight,
 ): boolean {
-  const age = Date.now() - Date.parse(preflight.generatedAt);
   if (preflight.schemaVersion !== 1 || preflight.workspaceId !== scope.workspaceId
     || preflight.workspaceMemberId !== scope.workspaceMemberId || preflight.modelId !== modelId
-    || preflight.fundingCheck !== 'available' || !Number.isFinite(age) || age < -5_000 || age > 30_000) return false;
+    || preflight.fundingCheck !== 'available' || !Number.isFinite(Date.parse(preflight.generatedAt))) return false;
   const key = fundingKey(scope, modelId);
   homeBlocks.delete(key);
   recentHomeInsufficiency.delete(key);
@@ -163,12 +161,11 @@ async function readAmrFundingObservation(
     if (!response.ok) return response.status === 401 || response.status === 403
       ? { ...unknown, authorizationDenied: true } : unknown;
     const { preflight } = await response.json() as WorkspaceBillingPreflightResponse;
-    const age = Date.now() - Date.parse(preflight?.generatedAt);
     if (!isCurrent() || generation !== currentWorkspaceAccountGeneration()
       || !preflight
       || preflight.schemaVersion !== 1 || preflight.workspaceId !== scope.workspaceId
       || preflight.workspaceMemberId !== scope.workspaceMemberId || preflight.modelId !== modelId
-      || !Number.isFinite(age) || age < -5_000 || age > 30_000) return unknown;
+      || !Number.isFinite(Date.parse(preflight.generatedAt))) return unknown;
     if (preflight.fundingCheck === 'available' || preflight.fundingCheck === 'insufficient') {
       return { kind: preflight.fundingCheck, preflight };
     }
