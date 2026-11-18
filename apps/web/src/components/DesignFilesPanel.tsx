@@ -1948,7 +1948,8 @@ export function DesignFilesPanel({
                       </div>
                       <span className="df-row-time">{relativeTime(folder.updatedAt, t)}</span>
                       {onPluginFolderAgentAction ? (
-                        <>
+                        // One group so ⋯ can take the button's exact height.
+                        <div className="df-row-actions">
                           <Button
                             size="sm"
                             variant="secondary"
@@ -1988,7 +1989,7 @@ export function DesignFilesPanel({
                           >
                             ⋯
                           </button>
-                        </>
+                        </div>
                       ) : null}
                     </div>
                   )})}

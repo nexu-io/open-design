@@ -276,9 +276,12 @@ describe("DesignFilesPanel plugin-folder rows", () => {
       "df-row-icon",
       "df-row-name-wrap",
       "df-row-time",
-      expect.any(String), // Add to My plugins (Button primitive)
-      "df-row-menu",
+      "df-row-actions",
     ]);
+    // Add to My plugins, then ⋯, in one group so ⋯ matches the button height.
+    const actions = row.querySelector(".df-row-actions")!;
+    expect(actions.children).toHaveLength(2);
+    expect(actions.lastElementChild?.classList.contains("df-row-menu")).toBe(true);
     expect(screen.getByTestId("design-plugin-folder-install-generated-plugin").textContent)
       .toBe("Add to My plugins");
     expect(screen.queryByTestId("design-plugin-folder-publish-generated-plugin")).toBeNull();

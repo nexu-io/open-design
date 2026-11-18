@@ -435,12 +435,13 @@
 }
 /* Result rows (plugin folders, live artifacts) live in their own tabs and
    never mix with file rows, so they drop the check column: the icon starts at
-   the row padding, in line with the tab bar. Height and the icon→name gap
-   match file rows. Status sits in the meta line under the name; the trailing
+   the row padding, in line with the tab bar. Height matches file rows. Status sits in the meta line under the name; the trailing
    cluster is time · one action · ⋯ (plugin) or time · Refresh (live), each
    column only as wide as its content and ending at the row's right padding. */
 .df-row-result {
-  grid-template-columns: 30px minmax(0, 1fr);
+  /* 36px holds the 32px icon with 4px to spare, so with the 8px gap the
+     name sits 12px from the icon instead of touching it. */
+  grid-template-columns: 36px minmax(0, 1fr);
   grid-auto-flow: column;
   grid-auto-columns: auto;
 }
@@ -492,6 +493,23 @@
 /* The plugin row menu holds real actions (Publish repo, OpenDesign PR), so
    its trigger is visible at rest rather than on hover. */
 .df-row-plugin-folder .df-row-menu { opacity: 1; }
+/* The action and ⋯ share one grid row: ⋯ stretches to the button's own
+   height (whatever the font makes it) and aspect-ratio keeps it round, so
+   the hover / pressed circle is exactly as tall as the button. Grid, not
+   flex: Chromium ignores aspect-ratio on a stretched flex item. */
+.df-row-actions {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.df-row-actions .df-row-menu {
+  align-self: stretch;
+  justify-self: start;
+  width: auto;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
 @container (max-width: 470px) {
   /* Narrow panes keep the name readable by dropping the time column. */
   .df-row-result .df-row-time { display: none; }
