@@ -141,6 +141,17 @@ export const PERMANENT_TELEMETRY_DROP_REASONS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Drop reasons that cover both permanent rejections and temporary failures.
+ * `ingestionDropReasonFromStatus` records a direct Langfuse HTTP 429 (and a
+ * relay's uncategorised 4xx) as `langfuse_4xx`, so a startup replay cannot
+ * tell a rate limit from a rejection. These stay retryable under the attempt
+ * cap instead of being dropped at once.
+ */
+const AMBIGUOUS_TELEMETRY_DROP_REASONS: ReadonlySet<string> = new Set([
+  'langfuse_4xx',
+]);
+
+/**
  * Startup replays stop once a run's telemetry has spent this many transport
  * requests, counting the live delivery and every earlier replay. The check runs
  * before a replay, so the final replay may overshoot by its own in-call retry.
@@ -155,14 +166,20 @@ export const MAX_RUN_TELEMETRY_DELIVERY_ATTEMPTS = 8;
  * Without this, a run whose telemetry can never be delivered (offline,
  * blocked relay, permanent rejection) was replayed on every boot for as long
  * as it stayed in `data/runs`, and each replay re-read its whole event log
- * (issue #9411). A never-attempted delivery stays eligible.
+ * (issue #9411). A never-attempted delivery stays eligible, and a reason that
+ * may be temporary (a rate limit recorded as `langfuse_4xx`) is bounded by the
+ * attempt cap rather than dropped.
  */
 export function canRetryRunTelemetryDelivery(
   state: RunTelemetryDeliveryStateV1 | null | undefined,
 ): boolean {
   if (!state) return true;
   if (typeof state.finalizedAt === 'number') return false;
-  if (typeof state.dropReason === 'string' && PERMANENT_TELEMETRY_DROP_REASONS.has(state.dropReason)) {
+  if (
+    typeof state.dropReason === 'string'
+    && PERMANENT_TELEMETRY_DROP_REASONS.has(state.dropReason)
+    && !AMBIGUOUS_TELEMETRY_DROP_REASONS.has(state.dropReason)
+  ) {
     return false;
   }
   return previousAttemptCount(state) < MAX_RUN_TELEMETRY_DELIVERY_ATTEMPTS;

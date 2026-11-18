@@ -893,6 +893,30 @@ describe('durable run terminal reconciliation', () => {
     expect(readFile).not.toHaveBeenCalledWith(path.join(runDir, 'events.jsonl'), 'utf8');
   });
 
+  it('keeps retrying a rate-limited direct Langfuse delivery on later boots', async () => {
+    // ingestionDropReasonFromStatus records a direct Langfuse HTTP 429 as
+    // `langfuse_4xx`, the same reason as a real rejection, so that reason is
+    // ambiguous and must stay retryable while attempts remain.
+    const runDir = writeFailedDelivery('run-langfuse-429', { attemptCount: 0 });
+    const reportLangfuse = vi.fn(async (args: Record<string, unknown>) => {
+      (args.onDeliveryAttempt as (() => void) | undefined)?.();
+      return {
+        langfuse_expected: true,
+        langfuse_delivery_status: 'failed' as const,
+        langfuse_drop_reason: 'langfuse_4xx' as const,
+        langfuse_attempt_count: 1,
+      };
+    });
+    const options = { analytics: { capture: vi.fn() }, appVersion: '0.15.1', db, reportLangfuse, runsLogDir: tmpDir };
+
+    await reconcileDurableRunTerminals(options);
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, 'state.json'), 'utf8')).telemetryDelivery)
+      .toMatchObject({ status: 'failed', attemptCount: 1, dropReason: 'langfuse_4xx' });
+    await reconcileDurableRunTerminals(options);
+
+    expect(reportLangfuse).toHaveBeenCalledTimes(2);
+  });
+
   it('still retries a transient failure that has attempts left', async () => {
     writeFailedDelivery('run-langfuse-transient', { attemptCount: 6, dropReason: 'relay_5xx' });
     const reportLangfuse = failingReport();
