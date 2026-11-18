@@ -114,6 +114,20 @@ describe("five-field argv identity", () => {
     expect(waitUntilReady).toHaveBeenCalledWith(stamp, 4321, 90_000);
   });
 
+  it("forwards inherited descriptors to the detached supervisor launch", async () => {
+    delete process.env.OD_SIDECAR_SUPERVISED_CONTEXT;
+    process.argv = [process.execPath, "/tmp/packaged-entry.js"];
+    const launch = vi.fn(async () => ({ pid: 4321 }));
+    const waitUntilReady = vi.fn(async () => undefined);
+    const resources = { dataRoot: "/tmp/data", ownerPid: null, port: 0, runtimeRoot: "/tmp/runtime" };
+    await expect(bootstrapSidecarProcess(stamp, resources, {
+      inheritFds: [8],
+      launch,
+      waitUntilReady,
+    })).resolves.toBe(true);
+    expect(launch).toHaveBeenCalledWith(expect.objectContaining({ inheritFds: [8] }));
+  });
+
   it("enters server lifecycle from supervisor context without relaunching", async () => {
     installCurrentProcess(stamp);
     const launch = vi.fn(async () => ({ pid: 4321 }));

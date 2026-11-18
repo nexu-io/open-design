@@ -85,6 +85,16 @@ describe("resolveToolPackConfig win build target", () => {
   });
 });
 
+describe("resolveToolPackConfig linux build target", () => {
+  it("accepts the native rpm target and rejects other platforms' values", () => {
+    expect(resolveToolPackConfig("linux", { to: "appimage" }).to).toBe("appimage");
+    expect(resolveToolPackConfig("linux", { to: "rpm" }).to).toBe("rpm");
+    expect(resolveToolPackConfig("linux", { to: "dir" }).to).toBe("dir");
+    expect(resolveToolPackConfig("linux", { to: "all" }).to).toBe("all");
+    expect(() => resolveToolPackConfig("linux", { to: "dmg" })).toThrow(/unsupported linux --to target: dmg/);
+  });
+});
+
 describe("resolveToolPackConfig cache root", () => {
   it("keeps the default cache outside custom tools-pack roots", () => {
     const config = resolveToolPackConfig("win", {

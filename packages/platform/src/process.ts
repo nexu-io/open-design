@@ -44,6 +44,12 @@ export type ProcessStampContract<
 export type SpawnProcessRequest = CommandInvocationRequest & {
   cwd?: string;
   detached?: boolean;
+  /**
+   * Parent descriptors to pass through to the same descriptor number in the
+   * child. POSIX only. Used to keep a launch lock owned by a detached sidecar
+   * supervisor alive across the bootstrap handoff.
+   */
+  inheritFds?: readonly number[];
   logFd?: number | null;
 };
 
@@ -258,8 +264,18 @@ export function matchesStampedProcess<TStamp extends ProcessStampShape, TCriteri
 }
 
 /** @internal Build the stdio triple for a spawned process, routing stdout/stderr to a log fd when provided. */
-function createLoggedStdio(logFd?: number | null): StdioOptions {
-  return logFd == null ? ["ignore", "ignore", "ignore"] : ["ignore", logFd, logFd];
+function createLoggedStdio(logFd?: number | null, inheritFds?: readonly number[]): StdioOptions {
+  const stdio: Array<"ignore" | number> = logFd == null
+    ? ["ignore", "ignore", "ignore"]
+    : ["ignore", logFd, logFd];
+  for (const fd of inheritFds ?? []) {
+    if (!Number.isSafeInteger(fd) || fd < 3) {
+      throw new RangeError(`inheritFds entries must be integers >= 3 (received ${String(fd)})`);
+    }
+    while (stdio.length <= fd) stdio.push("ignore");
+    stdio[fd] = fd;
+  }
+  return stdio;
 }
 
 /** @internal Resolve once the child emits `spawn`, or reject on the child's `error` event. */
@@ -274,7 +290,8 @@ async function waitForChildSpawn(child: ChildProcess): Promise<void> {
  * Spawn a detached background process, wait for it to actually start, then
  * `unref` it so the parent can exit independently.
  *
- * @param request - The command/args/env plus cwd, detached, and log-fd options.
+ * @param request - The command/args/env plus cwd, detached, log-fd, and
+ *   inherited-fd options.
  * @returns The spawned child's `{ pid }`.
  * @throws If the child fails to spawn or reports no pid.
  */
@@ -284,7 +301,7 @@ export async function spawnBackgroundProcess(request: SpawnProcessRequest): Prom
     cwd: request.cwd,
     detached: request.detached ?? true,
     env: request.env,
-    stdio: createLoggedStdio(request.logFd),
+    stdio: createLoggedStdio(request.logFd, request.inheritFds),
     windowsHide: process.platform === "win32",
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
@@ -298,7 +315,8 @@ export async function spawnBackgroundProcess(request: SpawnProcessRequest): Prom
  * Spawn a (by default non-detached) child process with stdout/stderr routed to
  * an optional log fd, waiting for it to start before returning the handle.
  *
- * @param request - The command/args/env plus cwd, detached, and log-fd options.
+ * @param request - The command/args/env plus cwd, detached, log-fd, and
+ *   inherited-fd options.
  * @returns The live `ChildProcess` handle.
  * @throws If the child fails to spawn or reports no pid.
  */
@@ -308,7 +326,7 @@ export async function spawnLoggedProcess(request: SpawnProcessRequest): Promise<
     cwd: request.cwd,
     detached: request.detached ?? false,
     env: request.env,
-    stdio: createLoggedStdio(request.logFd),
+    stdio: createLoggedStdio(request.logFd, request.inheritFds),
     windowsHide: process.platform === "win32",
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });

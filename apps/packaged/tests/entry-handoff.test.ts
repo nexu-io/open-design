@@ -91,6 +91,7 @@ async function scenario(platform: "darwin" | "win32", channel: "stable" | "prere
     },
     "electron": { app: { commandLine: { appendSwitch() {} }, exit: (code: number) => trace.push(`exit:${code}`) } },
     "@open-design/desktop/main": { async recordIncomingUpdateLifecycle() {}, applyOsLocaleSwitch() {}, applyLoopbackConnectionLimitSwitch() {} },
+    "./appimage-lock.js": { inheritedAppImageLockFds: () => [] },
     "./config.js": { readPackagedConfig: async () => ({ namespace, appVersion: version }) },
     "./headless-runtime.js": { parsePackagedHeadlessRequest: () => ({ headless: false }), runPackagedMcpActionAgainstExistingDaemon: async () => false },
     "./paths.js": { resolvePackagedNamespacePaths: () => paths },
