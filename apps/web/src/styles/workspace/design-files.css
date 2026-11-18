@@ -476,6 +476,12 @@
   top: -1px;
   flex-shrink: 0;
 }
+/* Let a long (translated) label ellipsize: the inline-flex wrapper cannot. */
+.df-row-meta-status > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* --red is under 4.5:1 as text on the light panel, so the label uses the
    strong text token and the tone stays in the glyph. */
 .df-row-meta-status[data-tone="failed"] { color: var(--text-strong); }
@@ -485,8 +491,7 @@
 }
 /* The plugin row menu holds real actions (Publish repo, OpenDesign PR), so
    its trigger is visible at rest rather than on hover. */
-.df-row-plugin-folder .df-row-menu,
-.df-row-menu[aria-expanded="true"] { opacity: 1; }
+.df-row-plugin-folder .df-row-menu { opacity: 1; }
 @container (max-width: 470px) {
   /* Narrow panes keep the name readable by dropping the time column. */
   .df-row-result .df-row-time { display: none; }

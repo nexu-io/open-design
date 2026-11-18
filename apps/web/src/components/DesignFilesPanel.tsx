@@ -1436,6 +1436,9 @@ export function DesignFilesPanel({
       // Pull the new refresh status (Refresh failed / updated time) into the
       // row before dropping the local Refreshing state.
       await onRefreshFiles();
+    } catch {
+      // The refresh itself finished; a failed list reload is not worth a
+      // second notice, and the next reload will pick the state up.
     } finally {
       setRefreshingArtifactId(null);
     }
@@ -1845,7 +1848,7 @@ export function DesignFilesPanel({
                     <div
                       key={artifact.artifactId}
                       data-testid={`design-file-row-${artifact.tabId}`}
-                      className="df-row df-row-result df-row-live-artifact df-row-openable"
+                      className="df-row df-row-result df-row-openable"
                       onClick={() => onOpenLiveArtifact(artifact.tabId)}
                     >
                       <span className="df-row-icon" data-kind="live-artifact" aria-hidden>
@@ -1902,8 +1905,12 @@ export function DesignFilesPanel({
                   ) : null}
                   {pluginFolders.filter((folder) => !hiddenPluginActionPaths.has(folder.path)).map((folder) => {
                     const actionBusy = activePluginActionPaths.has(folder.path);
+                    // Publish / contribute keep running as an agent task after
+                    // the handler resolves; the parent tracks those paths in
+                    // activePluginActionPaths, so they count as sending too.
                     const sending =
-                      installingFolder === folder.path
+                      actionBusy
+                      || installingFolder === folder.path
                       || sharingFolder === `publish:${folder.path}`
                       || sharingFolder === `contribute:${folder.path}`;
                     const menuOpen = menuPos?.kind === 'plugin-folder' && menuPos.name === folder.path;
@@ -1928,10 +1935,12 @@ export function DesignFilesPanel({
                               {sending ? (
                                 <span className="df-row-meta-status" data-tone="running">
                                   <Icon name="spinner" size={11} />
-                                  <span>Sending…</span>
+                                  <span>{t('designFiles.pluginFolder.sending')}</span>
                                 </span>
                               ) : (
-                                <span>{folder.fileCount} files · ready to add to My plugins</span>
+                                <span>
+                                  {t('designFiles.pluginFolder.readyToAdd', { count: folder.fileCount })}
+                                </span>
                               )}
                             </span>
                           </span>
@@ -1951,7 +1960,7 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'install');
                             }}
                           >
-                            Add to My plugins
+                            {t('designFiles.pluginFolder.addToMyPlugins')}
                           </Button>
                           <button
                             type="button"
@@ -1960,7 +1969,14 @@ export function DesignFilesPanel({
                             aria-label={t('designFiles.rowMenuFor', { name: folder.path })}
                             aria-haspopup="menu"
                             aria-expanded={menuOpen}
-                            onMouseDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => {
+                              // Keep focus where it is: in Safari / Firefox on
+                              // macOS a button press does not focus the button,
+                              // so blurring the open menu would close it and
+                              // this click would reopen it.
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (menuOpen) {
@@ -2040,6 +2056,7 @@ export function DesignFilesPanel({
           }}
           role={menuPos.kind === 'plugin-folder' ? 'menu' : undefined}
           onKeyDown={(e) => {
+            if (menuPos.kind !== 'plugin-folder') return;
             if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
             e.preventDefault();
             const items = Array.from(
@@ -2069,7 +2086,7 @@ export function DesignFilesPanel({
                   void handlePluginFolderAgentAction(name, 'publish');
                 }}
               >
-                Publish repo
+                {t('designFiles.pluginFolder.publishRepo')}
               </button>
               <button
                 type="button"
@@ -2087,7 +2104,7 @@ export function DesignFilesPanel({
                   void handlePluginFolderAgentAction(name, 'contribute');
                 }}
               >
-                OpenDesign PR
+                {t('designFiles.pluginFolder.openDesignPr')}
               </button>
             </>
           ) : (

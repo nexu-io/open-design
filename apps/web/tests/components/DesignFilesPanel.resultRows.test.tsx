@@ -186,7 +186,7 @@ describe("DesignFilesPanel live-artifact refresh outcomes", () => {
     );
   }
 
-  it("hides Refresh from read-only viewers but keeps the column", () => {
+  it("hides Refresh from read-only viewers without leaving a placeholder", () => {
     renderPanel({ liveArtifacts: [liveArtifact()], viewerOnly: true });
     fireEvent.click(screen.getByTestId("design-files-tab-live-artifacts"));
     expect(
@@ -358,6 +358,31 @@ describe("DesignFilesPanel plugin-folder rows", () => {
       fireEvent.click(screen.getByTestId("design-plugin-folder-publish-generated-plugin"));
     });
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("keeps focus in the open menu when ⋯ is pressed, so the press toggles it closed", () => {
+    renderPanel({ files: pluginFiles, onPluginFolderAgentAction: vi.fn() });
+    fireEvent.click(screen.getByTestId("design-files-tab-plugin-folders"));
+    const trigger = screen.getByTestId("design-plugin-folder-menu-generated-plugin");
+    fireEvent.click(trigger);
+    // Without preventDefault, Safari / Firefox on macOS blur the menu on
+    // mousedown (closing it) and the click then reopens it.
+    const notCancelled = fireEvent.mouseDown(trigger);
+    expect(notCancelled).toBe(false);
+  });
+
+  it("shows Sending… while the parent still tracks an agent task for the folder", () => {
+    renderPanel({
+      files: pluginFiles,
+      onPluginFolderAgentAction: vi.fn(),
+      activePluginActionPaths: new Set(["generated-plugin"]),
+    });
+    fireEvent.click(screen.getByTestId("design-files-tab-plugin-folders"));
+    expect(screen.getByTestId("design-plugin-folder-status-generated-plugin").textContent)
+      .toBe("Sending…");
+    expect(
+      screen.getByTestId<HTMLButtonElement>("design-plugin-folder-install-generated-plugin").disabled,
+    ).toBe(true);
   });
 
   it("closes the menu when focus leaves it", () => {

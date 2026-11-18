@@ -180,7 +180,6 @@ import {
   renewProjectPreviewBaseScope,
   publishProjectFilePublic,
   unpublishProjectFilePublic,
-  LiveArtifactRefreshError,
   refreshLiveArtifact,
   restoreProjectFileVersion,
   updateDeployConfig,
