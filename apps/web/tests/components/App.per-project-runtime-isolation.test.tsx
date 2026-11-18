@@ -520,7 +520,9 @@ describe('App per-project provider and model isolation', () => {
           expect.anything(),
           null,
         );
-        expect(errorSpy).toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          "Couldn't update default runtime settings because an existing project's preferences could not be saved. Retry your selection.",
+        );
       });
 
       // Global AppConfig must NOT be saved or switched to pi when legacy snapshot PATCH failed
@@ -529,15 +531,49 @@ describe('App per-project provider and model isolation', () => {
         'daemon:codex:gpt-5.4',
       );
 
-      // Simulate reload: legacy Project A still has no runtimePrefs, and stays on codex:gpt-5.4
+      // Once the daemon PATCH recovers, retrying the Home selection clears the alert and saves cleanly
+      vi.mocked(patchProject).mockImplementation(async (id, patch) => {
+        const current = persistedProjects.get(id) ?? (id === 'project-a' ? projectA : projectB);
+        const updated: Project = {
+          ...current,
+          ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
+        };
+        persistedProjects.set(id, structuredClone(updated));
+        return structuredClone(updated);
+      });
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Switch entry default to pi glm-flash' }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('entry-config')).toHaveTextContent(
+          'daemon:pi:zai/glm-5.3-flash',
+        );
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(saveConfig).toHaveBeenCalled();
+      });
+
+      // Simulate reload: legacy Project A keeps its persisted codex snapshot while Home keeps pi
       view.unmount();
       useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
-      render(<App />);
+      const reloadedView = render(<App />);
 
       await waitFor(() => {
         expect(screen.getByTestId('project-id')).toHaveTextContent('project-a');
         expect(screen.getByTestId('project-runtime')).toHaveTextContent(
           'daemon:codex:gpt-5.4',
+        );
+      });
+
+      useRouteMock.mockReturnValue(HOME_ROUTE);
+      reloadedView.rerender(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('entry-config')).toHaveTextContent(
+          'daemon:pi:zai/glm-5.3-flash',
         );
       });
     } finally {

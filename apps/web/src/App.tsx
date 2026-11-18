@@ -1154,6 +1154,7 @@ function AppInner() {
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [projectCreateError, setProjectCreateError] = useState<string | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  const [runtimePrefsError, setRuntimePrefsError] = useState<string | null>(null);
   const [deepLinkResolutionFailure, setDeepLinkResolutionFailure] = useState<{
     projectId: string;
     failure: 'missing' | 'materialization-failed';
@@ -3451,6 +3452,7 @@ function AppInner() {
         latestPersistedConfigRef.current = next;
         saveConfig(next);
         setConfig(next);
+        setRuntimePrefsError(null);
         if (options.syncDaemon) {
           void syncConfigToDaemon(next);
         }
@@ -3458,6 +3460,9 @@ function AppInner() {
       globalRuntimeChangeChainRef.current = globalRuntimeChangeChainRef.current
         .then(runGlobalStep, runGlobalStep)
         .catch((err) => {
+          setRuntimePrefsError(
+            "Couldn't update default runtime settings because an existing project's preferences could not be saved. Retry your selection.",
+          );
           console.error('Failed to update global runtime defaults:', err);
         });
     },
@@ -6749,6 +6754,14 @@ function AppInner() {
           role="alert"
           tone="error"
           onDismiss={() => setProjectOpenError(null)}
+        />
+      ) : null}
+      {runtimePrefsError ? (
+        <Toast
+          message={runtimePrefsError}
+          role="alert"
+          tone="error"
+          onDismiss={() => setRuntimePrefsError(null)}
         />
       ) : null}
       {/* First-run privacy consent banner. It waits for daemon config
