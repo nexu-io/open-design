@@ -1136,6 +1136,37 @@ describe("server-side atomic operations", () => {
     }
   }, process.platform === "win32" ? 30_000 : 15_000);
 
+  it("terminates MCP-like descendants after a graceful root exit without waiting for force escalation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-graceful-descendant-"));
+    const readyPath = join(root, "ready.json");
+    const childStamp = { ...stamp, namespace: `graceful-descendant-${process.pid}` };
+    const spawned = await spawnSidecar({
+      args: ["--import", "tsx", fileURLToPath(new URL("./fixtures/managed-child.ts", import.meta.url))],
+      command: process.execPath,
+      env: { ...process.env, OD_TEST_GRACEFUL_DESCENDANT: readyPath },
+      resources: { dataRoot: join(root, "data"), runtimeRoot: join(root, "runtime"), ownerPid: null, port: 0 },
+      stamp: childStamp,
+    });
+    let descendantPid: number | undefined;
+    try {
+      await vi.waitFor(async () => {
+        const status = await getSidecarStatus(childStamp);
+        expect(status).not.toBeNull();
+        descendantPid = JSON.parse(await readFile(readyPath, "utf8")).pid;
+        expect(descendantPid).toBeGreaterThan(0);
+      }, { timeout: FIXTURE_READY_TIMEOUT_MS, interval: 100 });
+      const stopped = await spawned.stop({ termGraceMs: 5_000, killGraceMs: 1_000 });
+      expect(stopped.gracefulAccepted).toBe(true);
+      expect(stopped.forcedPids).toEqual([]);
+      expect(stopped.remainingPids).toEqual([]);
+      expect(isProcessAlive(descendantPid!)).toBe(false);
+    } finally {
+      if (descendantPid != null) { try { process.kill(descendantPid, "SIGKILL"); } catch {} }
+      await spawned.stop({ termGraceMs: 0, killGraceMs: 1_000 }).catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it("force-stops fenced descendants when the supervisor root exits during retirement", async () => {
     const fixture = fileURLToPath(new URL("./fixtures/stamped-child.ts", import.meta.url));
     const orphanStamp = { ...stamp, namespace: `orphan-retirement-${process.pid}` };
