@@ -3149,6 +3149,7 @@ export const ar: Dict = {
   'designFiles.usefulInfoTip18': 'اشترك في OpenDesign على YouTube لمشاهدة الشروحات والعروض.',
   'designFiles.usefulInfoTip19': 'تابع OpenDesign على LinkedIn لأخبار المنتج.',
   'designFiles.usefulInfoTip20': 'تابع OpenDesign على Xiaohongshu للحصول على نصائح وإلهام.',
+  'designFiles.hiddenPanelText': 'Design Files tab is hidden. Click the Design Files button to reopen.',
   'quickSwitcher.placeholder': 'فتح ملف…',
   'quickSwitcher.empty': 'لا توجد ملفات في هذا المشروع',
   'quickSwitcher.noMatches': 'لا توجد نتائج',

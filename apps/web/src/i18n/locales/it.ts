@@ -3138,6 +3138,7 @@ export const it: Dict = {
   'designFiles.usefulInfoTip18': 'Iscriviti a OpenDesign su YouTube per tutorial e demo.',
   'designFiles.usefulInfoTip19': 'Segui OpenDesign su LinkedIn per le novità sul prodotto.',
   'designFiles.usefulInfoTip20': 'Segui OpenDesign su Xiaohongshu per consigli e ispirazione.',
+  'designFiles.hiddenPanelText': 'La scheda Design Files è nascosta. Clicca sul pulsante Design Files per riaprirla.',
   'quickSwitcher.placeholder': 'Apri un file…',
   'quickSwitcher.empty': 'Nessun file in questo progetto',
   'quickSwitcher.noMatches': 'Nessun risultato',

@@ -4044,6 +4044,7 @@ export interface Dict {
   'designFiles.usefulInfoTip18': string;
   'designFiles.usefulInfoTip19': string;
   'designFiles.usefulInfoTip20': string;
+  'designFiles.hiddenPanelText': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;

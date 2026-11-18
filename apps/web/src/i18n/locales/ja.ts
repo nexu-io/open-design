@@ -3138,6 +3138,7 @@ export const ja: Dict = {
   'designFiles.usefulInfoTip18': 'YouTube で OpenDesign を登録して、チュートリアルやデモを視聴。',
   'designFiles.usefulInfoTip19': 'LinkedIn で OpenDesign をフォローして、製品ニュースをチェック。',
   'designFiles.usefulInfoTip20': 'Xiaohongshu で OpenDesign をフォローして、ヒントとインスピレーションを。',
+  'designFiles.hiddenPanelText': 'Design Files タブは非表示になっています。Design Files ボタンをクリックして再度開いてください。',
   'quickSwitcher.placeholder': 'ファイルを開く…',
   'quickSwitcher.empty': 'このプロジェクトにファイルがありません',
   'quickSwitcher.noMatches': '一致なし',

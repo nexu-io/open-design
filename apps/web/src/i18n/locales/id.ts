@@ -3138,6 +3138,7 @@ export const id: Dict = {
   'designFiles.usefulInfoTip18': 'Berlangganan OpenDesign di YouTube untuk tutorial dan demo.',
   'designFiles.usefulInfoTip19': 'Ikuti OpenDesign di LinkedIn untuk kabar produk.',
   'designFiles.usefulInfoTip20': 'Ikuti OpenDesign di Xiaohongshu untuk tips dan inspirasi.',
+  'designFiles.hiddenPanelText': 'Tab Design Files disembunyikan. Klik tomb Design Files untuk membuka kembali.',
   'quickSwitcher.placeholder': 'Buka file...',
   'quickSwitcher.empty': 'Tidak ada file di proyek ini',
   'quickSwitcher.noMatches': 'Tidak ada yang cocok',

@@ -3138,6 +3138,7 @@ export const uk: Dict = {
   'designFiles.usefulInfoTip18': 'Підпишіться на OpenDesign на YouTube заради туторіалів і демо.',
   'designFiles.usefulInfoTip19': 'Стежте за OpenDesign у LinkedIn заради новин продукту.',
   'designFiles.usefulInfoTip20': 'Стежте за OpenDesign у Xiaohongshu заради порад і натхнення.',
+  'designFiles.hiddenPanelText': 'Вкладку Design Files приховано. Натисніть кнопку Design Files, щоб відкрити її знову.',
   'quickSwitcher.placeholder': 'Відкрити файл…',
   'quickSwitcher.empty': 'У цьому проєкті немає файлів',
   'quickSwitcher.noMatches': 'Немає збігів',

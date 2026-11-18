@@ -3149,6 +3149,7 @@ export const fa: Dict = {
   'designFiles.usefulInfoTip18': 'برای آموزش‌ها و دموها، OpenDesign را در YouTube دنبال کنید.',
   'designFiles.usefulInfoTip19': 'برای اخبار محصول، OpenDesign را در LinkedIn دنبال کنید.',
   'designFiles.usefulInfoTip20': 'برای نکته‌ها و الهام، OpenDesign را در Xiaohongshu دنبال کنید.',
+  'designFiles.hiddenPanelText': 'بخش Design Files مخفی است. روی دکمه Design Files کلیک کنید تا باز شود.',
   'quickSwitcher.placeholder': 'باز کردن فایل…',
   'quickSwitcher.empty': 'هیچ فایلی در این پروژه نیست',
   'quickSwitcher.noMatches': 'بدون نتیجه',

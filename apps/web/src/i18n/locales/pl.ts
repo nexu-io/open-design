@@ -3138,6 +3138,7 @@ export const pl: Dict = {
   'designFiles.usefulInfoTip18': 'Subskrybuj OpenDesign na YouTube, aby oglądać poradniki i dema.',
   'designFiles.usefulInfoTip19': 'Obserwuj OpenDesign na LinkedIn, aby śledzić nowości produktowe.',
   'designFiles.usefulInfoTip20': 'Obserwuj OpenDesign na Xiaohongshu po porady i inspiracje.',
+  'designFiles.hiddenPanelText': 'Zakładka Design Files jest ukryta. Kliknij przycisk Design Files, aby ją ponownie otworzyć.',
   'quickSwitcher.placeholder': 'Otwórz plik…',
   'quickSwitcher.empty': 'Brak plików w tym projekcie',
   'quickSwitcher.noMatches': 'Brak wyników',

@@ -3376,7 +3376,9 @@ export const zhTW: Dict = {
   "designFiles.usefulInfoTip19":
     "在 LinkedIn 上追蹤 OpenDesign，了解產品動態。",
   "designFiles.usefulInfoTip20":
-    "在小紅書上追蹤 OpenDesign，獲取技巧和靈感。",
+  "在小紅書上追蹤 OpenDesign，獲取技巧和靈感。",
+  "designFiles.hiddenPanelText":
+    "設計文件標籤頁已隱藏。點擊設計文件按鈕重新打開。",
   "quickSwitcher.placeholder": "開啟分頁或檔案…",
   "quickSwitcher.empty": "此專案中沒有檔案",
   "quickSwitcher.noMatches": "無符合項目",

@@ -3138,6 +3138,7 @@ export const ko: Dict = {
   'designFiles.usefulInfoTip18': 'YouTube에서 OpenDesign을 구독하고 튜토리얼과 데모를 만나보세요.',
   'designFiles.usefulInfoTip19': 'LinkedIn에서 OpenDesign을 팔로우하고 제품 소식을 받아보세요.',
   'designFiles.usefulInfoTip20': 'Xiaohongshu에서 OpenDesign을 팔로우하고 팁과 영감을 얻으세요.',
+  'designFiles.hiddenPanelText': 'Design Files 탭이 숨겨져 있습니다. Design Files 버튼을 클릭하여 다시 열어 주세요.',
   'quickSwitcher.placeholder': '파일 열기…',
   'quickSwitcher.empty': '이 프로젝트에 파일이 없습니다',
   'quickSwitcher.noMatches': '일치 항목 없음',

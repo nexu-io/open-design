@@ -3366,6 +3366,8 @@ export const zhCN: Dict = {
     "在 LinkedIn 上关注 OpenDesign，了解产品动态。",
   "designFiles.usefulInfoTip20":
     "在小红书上关注 OpenDesign，获取技巧和灵感。",
+  "designFiles.hiddenPanelText":
+    "设计文件标签页已隐藏。点击设计文件按钮重新打开。",
   "quickSwitcher.placeholder": "打开标签页或文件…",
   "quickSwitcher.empty": "此项目中没有文件",
   "quickSwitcher.noMatches": "无匹配项",

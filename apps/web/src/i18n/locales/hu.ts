@@ -3138,6 +3138,7 @@ export const hu: Dict = {
   'designFiles.usefulInfoTip18': 'Iratkozz fel az OpenDesignra a YouTube-on oktatóanyagokért és demókért.',
   'designFiles.usefulInfoTip19': 'Kövesd az OpenDesignt a LinkedInen a termékhírekért.',
   'designFiles.usefulInfoTip20': 'Kövesd az OpenDesignt a Xiaohongshun tippekért és inspirációért.',
+  'designFiles.hiddenPanelText': 'A Design Files lap elrejtve van. Kattintson a Design Files gombra a megnyitáshoz.',
   'quickSwitcher.placeholder': 'Fájl megnyitása…',
   'quickSwitcher.empty': 'Nincsenek fájlok ebben a projektben',
   'quickSwitcher.noMatches': 'Nincs találat',

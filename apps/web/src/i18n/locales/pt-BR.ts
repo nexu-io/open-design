@@ -3138,6 +3138,7 @@ export const ptBR: Dict = {
   'designFiles.usefulInfoTip18': 'Inscreva-se na OpenDesign no YouTube para tutoriais e demos.',
   'designFiles.usefulInfoTip19': 'Siga a OpenDesign no LinkedIn para novidades do produto.',
   'designFiles.usefulInfoTip20': 'Siga a OpenDesign no Xiaohongshu para dicas e inspiração.',
+  'designFiles.hiddenPanelText': 'A guia Design Files está oculta. Clique no botão Design Files para reabri-la.',
   'quickSwitcher.placeholder': 'Abrir arquivo…',
   'quickSwitcher.empty': 'Nenhum arquivo neste projeto',
   'quickSwitcher.noMatches': 'Sem resultados',

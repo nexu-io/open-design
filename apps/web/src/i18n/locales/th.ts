@@ -3138,6 +3138,7 @@ export const th: Dict = {
   'designFiles.usefulInfoTip18': 'สมัครติดตาม OpenDesign บน YouTube เพื่อดูบทเรียนและเดโม',
   'designFiles.usefulInfoTip19': 'ติดตาม OpenDesign บน LinkedIn เพื่อรับข่าวสารผลิตภัณฑ์',
   'designFiles.usefulInfoTip20': 'ติดตาม OpenDesign บน Xiaohongshu เพื่อรับเคล็ดลับและแรงบันดาลใจ',
+  'designFiles.hiddenPanelText': 'แท็บ Design Files ถูกซ่อนอยู่ คลิกปุ่ม Design Files เพื่อเปิดใหม่อีกครั้ง',
   'quickSwitcher.placeholder': 'ค้นหาและเปิด…',
   'quickSwitcher.empty': 'ไร้ไฟล์ที่หาได้',
   'quickSwitcher.noMatches': 'ไม่เจอรายการที่ตรง',

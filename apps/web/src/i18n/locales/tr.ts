@@ -3138,6 +3138,7 @@ export const tr: Dict = {
   'designFiles.usefulInfoTip18': 'Eğitimler ve demolar için YouTube\'da OpenDesign\'a abone olun.',
   'designFiles.usefulInfoTip19': 'Ürün haberleri için LinkedIn\'de OpenDesign\'ı takip edin.',
   'designFiles.usefulInfoTip20': 'İpuçları ve ilham için Xiaohongshu\'da OpenDesign\'ı takip edin.',
+  'designFiles.hiddenPanelText': 'Design Files sekmesi gizli. Tekrar açmak için Design Files düğmesine tıklayın.',
   'quickSwitcher.placeholder': 'Dosya aç…',
   'quickSwitcher.empty': 'Bu projede dosya yok',
   'quickSwitcher.noMatches': 'Eşleşme yok',
