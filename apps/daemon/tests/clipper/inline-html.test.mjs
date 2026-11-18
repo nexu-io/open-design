@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest'
-import inlineModule from '../../../../clipper/inline.js'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const inlineModule = require('../../../../clipper/inline.js')
 
 const { inlineHtml } = inlineModule
 
