@@ -1305,6 +1305,7 @@ function AppInner() {
   const projectRuntimePrefsRef = useRef<Map<string, ProjectRuntimePrefs>>(new Map());
   const legacyRuntimeSnapshotInFlightRef = useRef<Promise<void>>(Promise.resolve());
   const globalRuntimeChangeChainRef = useRef<Promise<void>>(Promise.resolve());
+  const globalRuntimeChangePendingCountRef = useRef(0);
   const [projectRuntimePrefsRevision, setProjectRuntimePrefsRevision] = useState(0);
   const routeProjectSnapshotRef = useRef<{
     project: Project;
@@ -3138,58 +3139,65 @@ function AppInner() {
     await silentUpdatePreferenceWriterRef.current.write(allowSilentUpdates);
   }, []);
 
+  const collectLegacySnapshotTargets = useCallback(
+    (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null) => {
+      const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
+      const targets: Array<{
+        project: Project;
+        nextMetadata: ProjectMetadata;
+        projectContext: WorkspaceCollabContext | null;
+      }> = [];
+      const seenIds = new Set<string>();
+      const candidates: Project[] = [...projectsRef.current];
+      const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
+      if (routeSnapshotProject) {
+        candidates.push(routeSnapshotProject);
+      }
+
+      for (const project of candidates) {
+        if (seenIds.has(project.id)) continue;
+        seenIds.add(project.id);
+        if (excludeProjectId && project.id === excludeProjectId) continue;
+        if (project.metadata?.runtimePrefs) {
+          if (!projectRuntimePrefsRef.current.has(project.id)) {
+            projectRuntimePrefsRef.current.set(
+              project.id,
+              project.metadata.runtimePrefs,
+            );
+          }
+          continue;
+        }
+
+        const pendingCreation =
+          pendingProjectCreation?.projectId === project.id
+            ? pendingProjectCreation
+            : null;
+        if (pendingCreation && !pendingCreation.created) {
+          if (!projectRuntimePrefsRef.current.has(project.id)) {
+            projectRuntimePrefsRef.current.set(project.id, fallbackPrefs);
+          }
+          continue;
+        }
+
+        const nextMetadata: ProjectMetadata = {
+          ...(project.metadata ?? { kind: 'prototype' }),
+          runtimePrefs: fallbackPrefs,
+        };
+        const projectContext =
+          routeRef.current.kind === 'project' && routeRef.current.projectId === project.id
+            ? projectRouteWorkspaceContextRef.current
+            : workspaceContextRef.current;
+        targets.push({ project, nextMetadata, projectContext });
+      }
+      return targets;
+    },
+    [pendingProjectCreation],
+  );
+
   const preserveExistingProjectsRuntimePrefs = useCallback(
     (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null): Promise<void> => {
       const run = async () => {
-        const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
-        const targets: Array<{
-          project: Project;
-          nextMetadata: ProjectMetadata;
-          projectContext: WorkspaceCollabContext | null;
-        }> = [];
-        const seenIds = new Set<string>();
-        const candidates: Project[] = [...projectsRef.current];
-        const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
-        if (routeSnapshotProject) {
-          candidates.push(routeSnapshotProject);
-        }
-
-        for (const project of candidates) {
-          if (seenIds.has(project.id)) continue;
-          seenIds.add(project.id);
-          if (excludeProjectId && project.id === excludeProjectId) continue;
-          if (project.metadata?.runtimePrefs) {
-            if (!projectRuntimePrefsRef.current.has(project.id)) {
-              projectRuntimePrefsRef.current.set(
-                project.id,
-                project.metadata.runtimePrefs,
-              );
-            }
-            continue;
-          }
-
-          const pendingCreation =
-            pendingProjectCreation?.projectId === project.id
-              ? pendingProjectCreation
-              : null;
-          if (pendingCreation && !pendingCreation.created) {
-            if (!projectRuntimePrefsRef.current.has(project.id)) {
-              projectRuntimePrefsRef.current.set(project.id, fallbackPrefs);
-            }
-            continue;
-          }
-
-          const nextMetadata: ProjectMetadata = {
-            ...(project.metadata ?? { kind: 'prototype' }),
-            runtimePrefs: fallbackPrefs,
-          };
-          const projectContext =
-            routeRef.current.kind === 'project' && routeRef.current.projectId === project.id
-              ? projectRouteWorkspaceContextRef.current
-              : workspaceContextRef.current;
-          targets.push({ project, nextMetadata, projectContext });
-        }
-
+        const targets = collectLegacySnapshotTargets(baseConfigSnapshot, excludeProjectId);
         if (targets.length === 0) return;
 
         const results = await Promise.allSettled(
@@ -3213,6 +3221,7 @@ function AppInner() {
           }
         });
 
+        const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
         if (persistedById.size > 0) {
           for (const [projectId, persistedMetadata] of persistedById.entries()) {
             if (persistedMetadata.runtimePrefs) {
@@ -3259,111 +3268,7 @@ function AppInner() {
       legacyRuntimeSnapshotInFlightRef.current = promise.catch(() => undefined);
       return promise;
     },
-    [pendingProjectCreation],
-  );
-
-  /**
-   * Autosave-driven persistence path. The settings dialog calls this on
-   * every committed edit (via a debounced effect) so localStorage and
-   * the daemon stay in lock-step with the user's draft. We deliberately
-   * do NOT touch the Composio secret here — it has its own gesture
-   * (handleConfigPersistComposioKey) so partial keys never leave the
-   * browser. Onboarding is also left alone; the dialog's close path
-   * is the canonical "I'm done" signal.
-   */
-  const handleConfigPersist = useCallback(async (
-    next: AppConfig,
-    options?: { forceMediaProviderSync?: boolean },
-  ) => {
-    // Strip the in-flight Composio secret before anything hits disk so
-    // a half-typed key can't survive in localStorage. If the dialog is
-    // closing, preserve any onboarding completion that the close gesture
-    // already committed so an unmount autosave cannot re-open the welcome flow.
-    // allowSilentUpdates is daemon-owned and must not be applied optimistically:
-    // keep the previous value in memory until the daemon write succeeds.
-    const prevConfig = latestPersistedConfigRef.current;
-    const prevSilent = prevConfig.allowSilentUpdates;
-    const nextSilent = next.allowSilentUpdates;
-    const silentChanged = nextSilent !== prevSilent;
-    const nextForOptimistic = silentChanged
-      ? { ...next, allowSilentUpdates: prevSilent }
-      : next;
-    const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
-    const runtimeSnapshotChanged =
-      JSON.stringify(snapshotProjectRuntimePrefs(prevConfig))
-      !== JSON.stringify(snapshotProjectRuntimePrefs(persisted));
-    if (runtimeSnapshotChanged) {
-      await preserveExistingProjectsRuntimePrefs(prevConfig, null);
-    }
-    latestPersistedConfigRef.current = persisted;
-    setConfig(persisted);
-    saveConfig(persisted);
-    const shouldSyncMediaProviders =
-      daemonMediaProvidersFetchState === 'ok'
-      && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
-        force: options?.forceMediaProviderSync,
-      });
-    const daemonPayload = silentChanged
-      ? { ...persisted, allowSilentUpdates: nextSilent }
-      : persisted;
-    await Promise.all([
-      shouldSyncMediaProviders
-        ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
-            force: options?.forceMediaProviderSync,
-            daemonProviders: daemonMediaProviders,
-            throwOnError: options?.forceMediaProviderSync,
-          })
-        : Promise.resolve(),
-      syncConfigToDaemon(daemonPayload, { throwOnError: true }),
-    ]);
-    if (silentChanged) {
-      latestPersistedConfigRef.current = {
-        ...latestPersistedConfigRef.current,
-        allowSilentUpdates: nextSilent,
-      };
-      setConfig((curr) => ({ ...curr, allowSilentUpdates: nextSilent }));
-    }
-  }, [daemonMediaProviders, daemonMediaProvidersFetchState, preserveExistingProjectsRuntimePrefs]);
-
-  const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
-    settingsDraftConfigRef.current = draft;
-  }, []);
-
-  const handlePrivacyConsentChoice = useCallback((share: boolean) => {
-    const base = settingsDraftConfigRef.current ?? latestPersistedConfigRef.current;
-    const installationId = share
-      ? base.installationId ?? generateInstallationIdSafe()
-      : null;
-    void handleConfigPersist({
-      ...base,
-      installationId,
-      privacyDecisionAt: Date.now(),
-      telemetry: {
-        ...(base.telemetry ?? {}),
-        metrics: share,
-        content: share,
-      },
-    });
-  }, [handleConfigPersist]);
-
-  /**
-   * Explicit Composio API-key save. Called from the section-local
-   * "Save key" button so secrets never ride the autosave keystroke
-   * loop. Once the daemon confirms, we normalize the saved config
-   * (strip the secret, store apiKeyConfigured + apiKeyTail) and feed
-   * it back into local state so the saved-key badge appears.
-   */
-  const handleConfigPersistComposioKey = useCallback(
-    async (composio: AppConfig['composio']) => {
-      const next = await persistComposioConfigChange(
-        latestPersistedConfigRef.current,
-        composio,
-      );
-      latestPersistedConfigRef.current = next;
-      saveConfig(next);
-      setConfig(next);
-    },
-    [],
+    [collectLegacySnapshotTargets],
   );
 
   const updateProjectRuntimePrefsById = useCallback(
@@ -3426,6 +3331,145 @@ function AppInner() {
     [pendingProjectCreation],
   );
 
+  /**
+   * Autosave-driven persistence path. The settings dialog calls this on
+   * every committed edit (via a debounced effect) so localStorage and
+   * the daemon stay in lock-step with the user's draft. We deliberately
+   * do NOT touch the Composio secret here — it has its own gesture
+   * (handleConfigPersistComposioKey) so partial keys never leave the
+   * browser. Onboarding is also left alone; the dialog's close path
+   * is the canonical "I'm done" signal.
+   */
+  const handleConfigPersist = useCallback(async (
+    next: AppConfig,
+    options?: { forceMediaProviderSync?: boolean },
+  ) => {
+    // Strip the in-flight Composio secret before anything hits disk so
+    // a half-typed key can't survive in localStorage. If the dialog is
+    // closing, preserve any onboarding completion that the close gesture
+    // already committed so an unmount autosave cannot re-open the welcome flow.
+    // allowSilentUpdates is daemon-owned and must not be applied optimistically:
+    // keep the previous value in memory until the daemon write succeeds.
+    const prevConfig = latestPersistedConfigRef.current;
+    const prevSilent = prevConfig.allowSilentUpdates;
+    const nextSilent = next.allowSilentUpdates;
+    const silentChanged = nextSilent !== prevSilent;
+    const nextForOptimistic = silentChanged
+      ? { ...next, allowSilentUpdates: prevSilent }
+      : next;
+    const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
+    const targetProjectId =
+      routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
+    const nextRuntimePrefs = snapshotProjectRuntimePrefs(persisted);
+    const runtimeSnapshotChanged =
+      JSON.stringify(snapshotProjectRuntimePrefs(prevConfig))
+      !== JSON.stringify(nextRuntimePrefs);
+    const activeProjectExisting = targetProjectId
+      ? (projectsRef.current.find((candidate) => candidate.id === targetProjectId)
+        ?? (routeProjectSnapshotRef.current?.project.id === targetProjectId
+          ? routeProjectSnapshotRef.current.project
+          : null))
+      : null;
+    const activeProjectCurrentPrefs = targetProjectId
+      ? (projectRuntimePrefsRef.current.get(targetProjectId)
+        ?? activeProjectExisting?.metadata?.runtimePrefs)
+      : undefined;
+    const activeProjectPrefsChanged = Boolean(
+      targetProjectId
+      && (
+        runtimeSnapshotChanged
+        || (
+          activeProjectCurrentPrefs !== undefined
+          && JSON.stringify(activeProjectCurrentPrefs) !== JSON.stringify(nextRuntimePrefs)
+        )
+      ),
+    );
+    if (runtimeSnapshotChanged) {
+      await preserveExistingProjectsRuntimePrefs(prevConfig, targetProjectId);
+    }
+    latestPersistedConfigRef.current = persisted;
+    setConfig(persisted);
+    saveConfig(persisted);
+    if (targetProjectId && activeProjectPrefsChanged) {
+      updateProjectRuntimePrefsById(
+        targetProjectId,
+        () => nextRuntimePrefs,
+        prevConfig,
+      );
+    }
+    const shouldSyncMediaProviders =
+      daemonMediaProvidersFetchState === 'ok'
+      && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
+        force: options?.forceMediaProviderSync,
+      });
+    const daemonPayload = silentChanged
+      ? { ...persisted, allowSilentUpdates: nextSilent }
+      : persisted;
+    await Promise.all([
+      shouldSyncMediaProviders
+        ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
+            force: options?.forceMediaProviderSync,
+            daemonProviders: daemonMediaProviders,
+            throwOnError: options?.forceMediaProviderSync,
+          })
+        : Promise.resolve(),
+      syncConfigToDaemon(daemonPayload, { throwOnError: true }),
+    ]);
+    if (silentChanged) {
+      latestPersistedConfigRef.current = {
+        ...latestPersistedConfigRef.current,
+        allowSilentUpdates: nextSilent,
+      };
+      setConfig((curr) => ({ ...curr, allowSilentUpdates: nextSilent }));
+    }
+  }, [
+    daemonMediaProviders,
+    daemonMediaProvidersFetchState,
+    preserveExistingProjectsRuntimePrefs,
+    updateProjectRuntimePrefsById,
+  ]);
+
+  const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
+    settingsDraftConfigRef.current = draft;
+  }, []);
+
+  const handlePrivacyConsentChoice = useCallback((share: boolean) => {
+    const base = settingsDraftConfigRef.current ?? latestPersistedConfigRef.current;
+    const installationId = share
+      ? base.installationId ?? generateInstallationIdSafe()
+      : null;
+    void handleConfigPersist({
+      ...base,
+      installationId,
+      privacyDecisionAt: Date.now(),
+      telemetry: {
+        ...(base.telemetry ?? {}),
+        metrics: share,
+        content: share,
+      },
+    });
+  }, [handleConfigPersist]);
+
+  /**
+   * Explicit Composio API-key save. Called from the section-local
+   * "Save key" button so secrets never ride the autosave keystroke
+   * loop. Once the daemon confirms, we normalize the saved config
+   * (strip the secret, store apiKeyConfigured + apiKeyTail) and feed
+   * it back into local state so the saved-key badge appears.
+   */
+  const handleConfigPersistComposioKey = useCallback(
+    async (composio: AppConfig['composio']) => {
+      const next = await persistComposioConfigChange(
+        latestPersistedConfigRef.current,
+        composio,
+      );
+      latestPersistedConfigRef.current = next;
+      saveConfig(next);
+      setConfig(next);
+    },
+    [],
+  );
+
   const applyScopedRuntimeChange = useCallback(
     (
       computeGlobalNext: (previous: AppConfig) => AppConfig,
@@ -3435,20 +3479,31 @@ function AppInner() {
       ) => ProjectRuntimePrefs,
       options: { syncDaemon?: boolean } = {},
     ) => {
+      const previous = latestPersistedConfigRef.current;
       const targetProjectId =
         routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
       if (targetProjectId) {
-        updateProjectRuntimePrefsById(
-          targetProjectId,
-          projectUpdater,
-          latestPersistedConfigRef.current,
-        );
+        updateProjectRuntimePrefsById(targetProjectId, projectUpdater, previous);
+      }
+
+      const targets = collectLegacySnapshotTargets(previous, targetProjectId);
+      if (targets.length === 0 && globalRuntimeChangePendingCountRef.current === 0) {
+        const next = computeGlobalNext(previous);
+        latestPersistedConfigRef.current = next;
+        saveConfig(next);
+        setConfig(next);
+        setRuntimePrefsError(null);
+        if (options.syncDaemon) {
+          void syncConfigToDaemon(next);
+        }
         return;
       }
+
+      globalRuntimeChangePendingCountRef.current += 1;
       const runGlobalStep = async () => {
-        const previous = latestPersistedConfigRef.current;
-        const next = computeGlobalNext(previous);
-        await preserveExistingProjectsRuntimePrefs(previous, null);
+        const currentPrev = latestPersistedConfigRef.current;
+        const next = computeGlobalNext(currentPrev);
+        await preserveExistingProjectsRuntimePrefs(currentPrev, targetProjectId);
         latestPersistedConfigRef.current = next;
         saveConfig(next);
         setConfig(next);
@@ -3464,9 +3519,19 @@ function AppInner() {
             "Couldn't update default runtime settings because an existing project's preferences could not be saved. Retry your selection.",
           );
           console.error('Failed to update global runtime defaults:', err);
+        })
+        .finally(() => {
+          globalRuntimeChangePendingCountRef.current = Math.max(
+            0,
+            globalRuntimeChangePendingCountRef.current - 1,
+          );
         });
     },
-    [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
+    [
+      collectLegacySnapshotTargets,
+      preserveExistingProjectsRuntimePrefs,
+      updateProjectRuntimePrefsById,
+    ],
   );
 
   const handleModeChange = useCallback(
@@ -6057,7 +6122,7 @@ function AppInner() {
   const renderSettingsSurface = (presentation: 'modal' | 'page') => (
     <SettingsDialog
       presentation={presentation}
-      initial={config}
+      initial={route.kind === 'project' ? activeProjectConfig : config}
       agents={agents}
       agentsLoading={agentsLoading}
       daemonLive={daemonLive}

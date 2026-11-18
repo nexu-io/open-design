@@ -363,7 +363,27 @@ describe('App per-project provider and model isolation', () => {
       );
     });
 
-    // Project B persisted its runtimePrefs via patchProject, while Project A and global AppConfig stayed untouched
+    // Project B persisted pi:zai/glm-5.3-flash, and legacy Project A persisted its codex snapshot before global saveConfig
+    await waitFor(() => {
+      expect(patchProject).toHaveBeenCalledWith(
+        'project-a',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            runtimePrefs: expect.objectContaining({
+              mode: 'daemon',
+              agentId: 'codex',
+              agentModels: expect.objectContaining({
+                codex: expect.objectContaining({
+                  model: 'gpt-5.4',
+                }),
+              }),
+            }),
+          }),
+        }),
+        null,
+      );
+      expect(saveConfig).toHaveBeenCalled();
+    });
     expect(patchProject).toHaveBeenCalledWith(
       'project-b',
       expect.objectContaining({
@@ -381,12 +401,12 @@ describe('App per-project provider and model isolation', () => {
       }),
       null,
     );
-    expect(patchProject).not.toHaveBeenCalledWith(
-      'project-a',
-      expect.anything(),
-      expect.anything(),
+    const projectAPatchIdx = persistenceOrder.indexOf('patchProject:project-a');
+    const firstSaveIdx = persistenceOrder.findIndex((entry) =>
+      entry.startsWith('saveConfig:'),
     );
-    expect(saveConfig).not.toHaveBeenCalled();
+    expect(projectAPatchIdx).toBeGreaterThanOrEqual(0);
+    expect(firstSaveIdx).toBeGreaterThan(projectAPatchIdx);
 
     // Simulate a full page reload on Project A: in-memory state is gone, so Project A resolves from persisted state
     view.unmount();
