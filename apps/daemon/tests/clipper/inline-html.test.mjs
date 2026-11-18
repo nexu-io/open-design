@@ -1,10 +1,15 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
-import { createRequire } from 'node:module'
+import vm from 'node:vm'
 
-const require = createRequire(import.meta.url)
-const inlineModule = require('../../../../clipper/inline.js')
+// `clipper/inline.js` is a classic worker script (loaded with importScripts),
+// not a module. The repository root is `type: module`, so requiring it returns
+// an empty namespace. Evaluate it in a vm context and read its CommonJS export.
+const source = readFileSync(new URL('../../../../clipper/inline.js', import.meta.url), 'utf8')
+const sandbox = { module: { exports: {} } }
+vm.runInNewContext(source, sandbox)
 
-const { inlineHtml } = inlineModule
+const { inlineHtml } = sandbox.module.exports
 
 // #9265 regression coverage for the extracted clipper inliner. The old
 // per-URL split/join pass let a shorter mapped URL shadow a longer one that
