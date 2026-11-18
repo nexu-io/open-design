@@ -45,10 +45,11 @@ describe('workspace directory transport recovery', () => {
       req: request,
       fetchWorkspaceDirectory: () => fetchVelaWorkspaceDirectory({ readSession: () => SESSION, fetch }),
     }).then(value => { settled = true; return value; });
-    await vi.advanceTimersByTimeAsync(15_999);
+    await vi.advanceTimersByTimeAsync(12_999);
     expect(settled).toBe(false);
     expect(fetch).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
+    expect(settled).toBe(true);
     expect(await result).toMatchObject({ ok: false, status: 503, code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);

@@ -41,6 +41,7 @@ import {
 // single-player, never throws.
 
 const DEFAULT_TIMEOUT_MS = 8_000;
+const DIRECTORY_RETRY_TIMEOUT_MS = 5_000;
 // Read authorization is display-only and is polled every 5s by an open shared
 // project. Keep the successful lease comfortably wider than that cadence so a
 // poll cannot expire the lease at the exact instant it is meant to reuse it.
@@ -911,10 +912,12 @@ export async function fetchVelaWorkspaceDirectory(
   const identity = velaWorkspaceDirectoryIdentityForSession(session);
   // Only this idempotent authority GET is retried, so a transient timeout does
   // not immediately fail every waiting operation. The deadline stays bounded
-  // at two attempts (16s by default); membership is still verified live.
+  // at 8s + 5s by default, within the transcript reader's 15s inactivity
+  // deadline; membership is still verified live.
   for (let attempt = 0; ; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const attemptTimeoutMs = attempt === 0 ? timeoutMs : Math.min(timeoutMs, DIRECTORY_RETRY_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
     try {
       const response = await fetchImpl(new URL('/api/v1/workspaces', session.apiUrl), {
         method: 'GET',
