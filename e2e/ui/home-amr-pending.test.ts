@@ -184,7 +184,7 @@ test.beforeEach(async ({ page }) => {
   await installHandoffProbe(page);
 });
 
-test('[P0] a confirmed same-member Home shortfall shows the block while send-time proof is slow', async ({ page }) => {
+test('[P0] a remembered Home shortfall waits for slow send-time proof before blocking', async ({ page }) => {
   await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
   const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
   const fresh = deferred();
@@ -222,21 +222,19 @@ test('[P0] a confirmed same-member Home shortfall shows the block while send-tim
     const input = page.getByTestId('home-hero-input');
     await input.fill(prompt);
     await page.getByTestId('home-hero-submit').click();
-    // The contract is causal, not a wall-clock budget: the remembered
-    // shortfall paints while this click's fresh proof is still held (it is
-    // only released below). Home first waits for Link's advisory hint, up to
-    // its own 450ms budget, so a click-to-paint bound measured runner CPU.
+    // An older cached shortfall cannot preempt while this click's fresh proof
+    // is still in flight; Home waits for the fresh verdict before blocking.
     await expect.poll(() => sendPreflightHeld, { message: 'send-time proof is in flight' }).toBe(true);
     const dialog = page.getByTestId('amr-balance-dialog');
+    await expect(dialog).toHaveCount(0);
+    expect(projectPosts).toBe(0);
+    fresh.resolve();
     await expect(dialog).toBeVisible({ timeout: T.medium });
     expect(projectPosts).toBe(0);
-    verdict = 'available';
-    fresh.resolve();
-    await expect(dialog).toBeVisible();
-    expect(projectPosts, 'a late recharge cannot send without a new click').toBe(0);
     await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
     await expect(page.getByTestId('home-hero-input')).toContainText(prompt);
     expect(projectPosts).toBe(0);
+    verdict = 'available';
     await page.getByTestId('home-hero-submit').click();
     await expect.poll(() => projectPosts).toBe(1);
   } finally {
@@ -617,7 +615,7 @@ test('[P0] a billing refresh recovers blocked Home funding without another send'
   }
 });
 
-test('[P0] twenty Home sends preserve the draft across insufficient, unknown and unavailable funding', async ({ page }, testInfo) => {
+test('[P0] twenty Home sends preserve the draft across insufficient and denied funding, then defer unknown to Link', async ({ page }, testInfo) => {
   const start = Date.now();
   await page.clock.setFixedTime(start);
   await wireSignedInAmrHome(page, { accountBalanceUsd: '0.00' });
@@ -626,12 +624,13 @@ test('[P0] twenty Home sends preserve the draft across insufficient, unknown and
   const { workspaceId, workspaceMemberId } = AMR_PERSONAL_WORKSPACE_CONTEXT;
   let now = start;
   let verdict: 'insufficient' | 'unknown' | 'available' = 'insufficient';
-  let unavailable = false;
-  // Display billing is unavailable throughout. Every send must still obtain
-  // fresh funding evidence; unknown or failed reads preserve the draft.
+  let deniedStatus: 401 | 403 | null = null;
+  // Display billing is unavailable throughout. Confirmed insufficient and
+  // 401/403 authorization rejections preserve the draft on Home; an unknown
+  // funding hint defers to Link rather than blocking on Home.
   await page.route('**/api/workspace/billing?**', (route) => route.fulfill({ json: { summary: null, workspaceBalance: null } }));
-  await page.route('**/api/workspace/billing/preflight?**', (route) => route.fulfill(unavailable
-    ? { status: 503, json: { error: 'unavailable' } }
+  await page.route('**/api/workspace/billing/preflight?**', (route) => route.fulfill(deniedStatus !== null
+    ? { status: deniedStatus, json: { error: 'denied' } }
     : { json: { preflight: { schemaVersion: 1, workspaceId, workspaceMemberId, modelId: 'glm-5',
       generatedAt: new Date(now).toISOString(), balanceUsd: '0', fundingCheck: verdict } } }));
   const warmed = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?')
@@ -643,16 +642,15 @@ test('[P0] twenty Home sends preserve the draft across insufficient, unknown and
       if (attempt === 9) {
         now += 31_000;
         await page.clock.setFixedTime(now);
-        verdict = 'unknown';
         // Same window event dispatched by the existing billing recovery path.
         await page.evaluate(() => window.dispatchEvent(new Event('od:workspace-billing-refresh')));
       }
-      unavailable = attempt >= 15;
+      deniedStatus = attempt >= 15 ? 403 : attempt >= 9 ? 401 : null;
       const checked = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?'));
       await sendFromHome(page, 'Keep this insufficient draft on Home.');
       await (await checked).finished();
       const dialog = page.getByTestId('amr-balance-dialog');
-      if (verdict === 'insufficient' && !unavailable) {
+      if (verdict === 'insufficient' && deniedStatus === null) {
         await expect(dialog).toBeVisible();
         await dialog.getByRole('button', { name: /not now|later|暂不|稍后/i }).click();
       } else {
@@ -665,8 +663,8 @@ test('[P0] twenty Home sends preserve the draft across insufficient, unknown and
       await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
     }
     await testInfo.attach('twenty-blocked-sends-preserve-draft', { body: await page.screenshot(), contentType: 'image/png' });
-    unavailable = false;
-    verdict = 'available';
+    deniedStatus = null;
+    verdict = 'unknown';
     const recovered = page.waitForResponse((response) => response.url().includes('/api/workspace/billing/preflight?'));
     await sendFromHome(page, 'Keep this insufficient draft on Home.');
     await (await recovered).finished();
