@@ -3,7 +3,7 @@ import {
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
 import {
-  runVelaCommand,
+  runVelaCommand as runVelaCommandRaw,
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
 import { projectResourceIdFor } from '../integrations/vela-team-projects.js';
@@ -14,6 +14,25 @@ import {
   sharedProjectPullProfileEnabled,
 } from './pull-profile.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
+import { assertNoEmptyFiles } from './empty-file-preflight.js';
+import { assertNoEmptyFiles } from './share-alias-recovery.js';
+
+// `vela resource push` answers a 0-byte file with an opaque 501
+// blob_upload_failed, so scan the pushed directory first and name the
+// offending paths before shelling out.
+async function runVelaCommand(
+  ...args: Parameters<typeof runVelaCommandRaw>
+): ReturnType<typeof runVelaCommandRaw> {
+  const [commandArgs] = args;
+  if (Array.isArray(commandArgs)) {
+    const pushIndex = commandArgs.indexOf('push');
+    if (pushIndex > 0 && commandArgs[pushIndex - 1] === 'resource') {
+      const sourceDir = commandArgs[pushIndex + 1];
+      if (typeof sourceDir === 'string') await assertNoEmptyFiles(sourceDir);
+    }
+  }
+  return runVelaCommandRaw(...args);
+}
 
 // The `vela resource` transport for the publish/pull machinery (T7c). Instead of
 // the daemon holding an internal token and driving the hub over HTTP itself, it
@@ -147,6 +166,23 @@ export type RunVelaResource = (
   workspaceId?: string,
 ) => Promise<string>;
 
+/**
+ * Wrap a resource runner so the resolved source directory is validated for
+ * 0-byte placeholder files exactly once before vela runs. The directory is
+ * resolved by the caller instead of being read from `args`, because the token
+ * after `push` is the resource kind, not the source directory.
+ */
+export function withEmptyFilePreflight(
+  run: RunVelaResource,
+  resolveDir: (args: string[]) => string,
+): RunVelaResource {
+  return async (args, workspaceId) => {
+    const { assertNoEmptyFiles } = await import('./share-alias-recovery.js');
+    await assertNoEmptyFiles(resolveDir(args));
+    return run(args, workspaceId);
+  };
+}
+
 export interface VelaResourcePullBatchRequest {
   key: string;
   kind: 'design_system' | 'plugin' | 'skill';
@@ -225,6 +261,10 @@ export function createVelaCliResourceAdapter(
     publish({ projectId, principal }) {
       return gated(principal, async () => {
         const dir = await options.resolveProjectDir(projectId);
+        const { assertNoEmptyFiles } = await import('./share-alias-recovery.js');
+        await assertNoEmptyFiles(dir);
+        const { assertNoEmptyFiles } = await import('./empty-file-preflight.js');
+        await assertNoEmptyFiles(dir);
         const args = ['push', kind, await exactResourceId(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json'];
         for (const name of MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES) {
           args.push('--exclude', name);

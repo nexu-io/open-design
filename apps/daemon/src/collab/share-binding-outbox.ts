@@ -1,5 +1,23 @@
 import type Database from 'better-sqlite3';
 import type { SharePublishReceipt, SharePublishResult } from '@open-design/contracts';
+import { readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
+
+/**
+ * Collect zero-byte files under `root` so the share/push path can reject the
+ * tree client-side and name the offending path instead of surfacing a bare
+ * `blob_upload_failed` from `vela resource push`.
+ */
+export async function findEmptyFiles(root: string, rel = ""): Promise<string[]> {
+  const entries = await readdir(join(root, rel), { withFileTypes: true });
+  const found: string[] = [];
+  for (const entry of entries) {
+    const next = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) found.push(...(await findEmptyFiles(root, next)));
+    else if (entry.isFile() && (await stat(join(root, next))).size === 0) found.push(next);
+  }
+  return found;
+}
 
 export interface ShareBindingIntent {
   resourceTeamId: string;
