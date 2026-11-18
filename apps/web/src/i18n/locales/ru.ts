@@ -2979,6 +2979,8 @@ export const ru: Dict = {
   'workspace.noFilesMatch': 'Нет подходящих файлов',
   'workspace.allFiles': 'Все',
   'workspace.createNew': 'Создать',
+  'workspace.reopenDesignFiles': 'Открыть файлы дизайна снова',
+  'workspace.reopenDesignFilesLabel': 'Файлы дизайна',
   'workspace.tabOpen': 'Открыт',
   'workspace.sideChatContextBanner': 'Контекст текущего разговора интегрирован',
   'workspace.sideChatDefaultTitle': 'Боковой чат',

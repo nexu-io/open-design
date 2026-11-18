@@ -2979,6 +2979,8 @@ export const fr: Dict = {
   'workspace.noFilesMatch': 'Aucun fichier correspondant',
   'workspace.allFiles': 'Tous',
   'workspace.createNew': 'Créer',
+  'workspace.reopenDesignFiles': 'Rouvrir les fichiers de design',
+  'workspace.reopenDesignFilesLabel': 'Fichiers de design',
   'workspace.tabOpen': 'Ouvert',
   'workspace.sideChatContextBanner': 'Contexte de la conversation actuelle intégré',
   'workspace.sideChatDefaultTitle': 'Chat latéral',

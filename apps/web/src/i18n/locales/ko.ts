@@ -2979,6 +2979,8 @@ export const ko: Dict = {
   'workspace.noFilesMatch': '일치하는 파일 없음',
   'workspace.allFiles': '전체',
   'workspace.createNew': '새로 만들기',
+  'workspace.reopenDesignFiles': '디자인 파일 다시 열기',
+  'workspace.reopenDesignFilesLabel': '디자인 파일',
   'workspace.tabOpen': '열림',
   'workspace.sideChatContextBanner': '현재 대화의 컨텍스트를 통합했습니다',
   'workspace.sideChatDefaultTitle': '사이드 채팅',

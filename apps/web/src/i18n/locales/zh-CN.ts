@@ -3180,6 +3180,8 @@ export const zhCN: Dict = {
   "workspace.noFilesMatch": "没有匹配的文件",
   "workspace.allFiles": "全部",
   "workspace.createNew": "新建",
+  "workspace.reopenDesignFiles": "重新打开设计文件",
+  "workspace.reopenDesignFilesLabel": "设计文件",
   "workspace.tabOpen": "已打开",
   "workspace.sideChatContextBanner": "已集成当前会话上下文",
   "workspace.sideChatDefaultTitle": "侧边对话",

@@ -2979,6 +2979,8 @@ export const th: Dict = {
   'workspace.noFilesMatch': 'No files match',
   'workspace.allFiles': 'All',
   'workspace.createNew': 'Create new',
+  'workspace.reopenDesignFiles': 'เปิด Design Files อีกครั้ง',
+  'workspace.reopenDesignFilesLabel': 'Design Files',
   'workspace.tabOpen': 'Open',
   'workspace.sideChatContextBanner': 'Integrated context from the current conversation',
   'workspace.sideChatDefaultTitle': 'Side chat',

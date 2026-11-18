@@ -3001,6 +3001,8 @@ export const en: Dict = {
   'workspace.noFilesMatch': 'No files match',
   'workspace.allFiles': 'All',
   'workspace.createNew': 'Create new',
+  'workspace.reopenDesignFiles': 'Reopen Design Files',
+  'workspace.reopenDesignFilesLabel': 'Design Files',
   'workspace.tabOpen': 'Open',
   'workspace.sideChatContextBanner': 'Integrated context from the current conversation',
   'workspace.sideChatDefaultTitle': 'Side chat',

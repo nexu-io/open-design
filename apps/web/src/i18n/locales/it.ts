@@ -2979,6 +2979,8 @@ export const it: Dict = {
   'workspace.noFilesMatch': 'Nessun file corrispondente',
   'workspace.allFiles': 'Tutti',
   'workspace.createNew': 'Crea nuovo',
+  'workspace.reopenDesignFiles': 'Riapri Design Files',
+  'workspace.reopenDesignFilesLabel': 'Design Files',
   'workspace.tabOpen': 'Aperto',
   'workspace.sideChatContextBanner': 'Contesto integrato dalla conversazione corrente',
   'workspace.sideChatDefaultTitle': 'Chat laterale',
