@@ -1303,7 +1303,7 @@ function AppInner() {
   }, [projects]);
   const projectRuntimePrefsRef = useRef<Map<string, ProjectRuntimePrefs>>(new Map());
   const legacyRuntimeSnapshotInFlightRef = useRef<Promise<void>>(Promise.resolve());
-  const legacyRuntimeSnapshotPendingCountRef = useRef(0);
+  const globalRuntimeChangeChainRef = useRef<Promise<void>>(Promise.resolve());
   const [projectRuntimePrefsRevision, setProjectRuntimePrefsRevision] = useState(0);
   const routeProjectSnapshotRef = useRef<{
     project: Project;
@@ -3139,92 +3139,124 @@ function AppInner() {
 
   const preserveExistingProjectsRuntimePrefs = useCallback(
     (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null): Promise<void> => {
-      const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
-      const patchedById = new Map<string, ProjectMetadata>();
-      const patchPromises: Promise<unknown>[] = [];
-      const seenIds = new Set<string>();
-      const candidates: Project[] = [...projectsRef.current];
-      const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
-      if (routeSnapshotProject) {
-        candidates.push(routeSnapshotProject);
-      }
-
-      for (const project of candidates) {
-        if (seenIds.has(project.id)) continue;
-        seenIds.add(project.id);
-        if (excludeProjectId && project.id === excludeProjectId) continue;
-        if (!projectRuntimePrefsRef.current.has(project.id)) {
-          projectRuntimePrefsRef.current.set(
-            project.id,
-            project.metadata?.runtimePrefs ?? fallbackPrefs,
-          );
+      const run = async () => {
+        const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
+        const targets: Array<{
+          project: Project;
+          nextMetadata: ProjectMetadata;
+          projectContext: WorkspaceCollabContext | null;
+        }> = [];
+        const seenIds = new Set<string>();
+        const candidates: Project[] = [...projectsRef.current];
+        const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
+        if (routeSnapshotProject) {
+          candidates.push(routeSnapshotProject);
         }
-        if (project.metadata?.runtimePrefs) continue;
 
-        const nextMetadata: ProjectMetadata = {
-          ...(project.metadata ?? { kind: 'prototype' }),
-          runtimePrefs: fallbackPrefs,
-        };
-        patchedById.set(project.id, nextMetadata);
-        const pendingCreation =
-          pendingProjectCreation?.projectId === project.id
-            ? pendingProjectCreation
-            : null;
-        if (!pendingCreation || pendingCreation.created) {
+        for (const project of candidates) {
+          if (seenIds.has(project.id)) continue;
+          seenIds.add(project.id);
+          if (excludeProjectId && project.id === excludeProjectId) continue;
+          if (project.metadata?.runtimePrefs) {
+            if (!projectRuntimePrefsRef.current.has(project.id)) {
+              projectRuntimePrefsRef.current.set(
+                project.id,
+                project.metadata.runtimePrefs,
+              );
+            }
+            continue;
+          }
+
+          const pendingCreation =
+            pendingProjectCreation?.projectId === project.id
+              ? pendingProjectCreation
+              : null;
+          if (pendingCreation && !pendingCreation.created) {
+            if (!projectRuntimePrefsRef.current.has(project.id)) {
+              projectRuntimePrefsRef.current.set(project.id, fallbackPrefs);
+            }
+            continue;
+          }
+
+          const nextMetadata: ProjectMetadata = {
+            ...(project.metadata ?? { kind: 'prototype' }),
+            runtimePrefs: fallbackPrefs,
+          };
           const projectContext =
             routeRef.current.kind === 'project' && routeRef.current.projectId === project.id
               ? projectRouteWorkspaceContextRef.current
               : workspaceContextRef.current;
-          patchPromises.push(
-            Promise.resolve(
-              patchProject(project.id, { metadata: nextMetadata }, projectContext),
-            ).catch(() => null),
+          targets.push({ project, nextMetadata, projectContext });
+        }
+
+        if (targets.length === 0) return;
+
+        const results = await Promise.allSettled(
+          targets.map(({ project, nextMetadata, projectContext }) =>
+            patchProject(project.id, { metadata: nextMetadata }, projectContext),
+          ),
+        );
+
+        const persistedById = new Map<string, ProjectMetadata>();
+        const failedIds: string[] = [];
+        results.forEach((result, index) => {
+          const target = targets[index]!;
+          if (result.status === 'fulfilled' && result.value != null) {
+            const persistedMetadata =
+              result.value.metadata?.runtimePrefs
+                ? result.value.metadata
+                : target.nextMetadata;
+            persistedById.set(target.project.id, persistedMetadata);
+          } else {
+            failedIds.push(target.project.id);
+          }
+        });
+
+        if (persistedById.size > 0) {
+          for (const [projectId, persistedMetadata] of persistedById.entries()) {
+            if (persistedMetadata.runtimePrefs) {
+              projectRuntimePrefsRef.current.set(
+                projectId,
+                persistedMetadata.runtimePrefs,
+              );
+            }
+          }
+          projectsRef.current = projectsRef.current.map((project) => {
+            const nextMetadata = persistedById.get(project.id);
+            return nextMetadata ? { ...project, metadata: nextMetadata } : project;
+          });
+          setProjects((curr) =>
+            curr.map((project) => {
+              const nextMetadata = persistedById.get(project.id);
+              return nextMetadata ? { ...project, metadata: nextMetadata } : project;
+            }),
+          );
+          const snapshotMetadata = routeSnapshotProject
+            ? persistedById.get(routeSnapshotProject.id)
+            : undefined;
+          if (routeProjectSnapshotRef.current && snapshotMetadata) {
+            routeProjectSnapshotRef.current = {
+              ...routeProjectSnapshotRef.current,
+              project: {
+                ...routeProjectSnapshotRef.current.project,
+                metadata: snapshotMetadata,
+              },
+            };
+            setRouteProjectSnapshotRevision((current) => current + 1);
+          }
+          setProjectRuntimePrefsRevision((current) => current + 1);
+        }
+
+        if (failedIds.length > 0) {
+          throw new Error(
+            `Failed to persist runtime preferences for existing projects: ${failedIds.join(', ')}`,
           );
         }
-      }
+      };
 
-      if (patchedById.size > 0) {
-        const nextProjects = projectsRef.current.map((project) => {
-          const nextMetadata = patchedById.get(project.id);
-          return nextMetadata ? { ...project, metadata: nextMetadata } : project;
-        });
-        projectsRef.current = nextProjects;
-        setProjects((curr) =>
-          curr.map((project) => {
-            const nextMetadata = patchedById.get(project.id);
-            return nextMetadata ? { ...project, metadata: nextMetadata } : project;
-          }),
-        );
-        const snapshotMetadata = routeSnapshotProject
-          ? patchedById.get(routeSnapshotProject.id)
-          : undefined;
-        if (routeProjectSnapshotRef.current && snapshotMetadata) {
-          routeProjectSnapshotRef.current = {
-            ...routeProjectSnapshotRef.current,
-            project: {
-              ...routeProjectSnapshotRef.current.project,
-              metadata: snapshotMetadata,
-            },
-          };
-          setRouteProjectSnapshotRevision((current) => current + 1);
-        }
-        setProjectRuntimePrefsRevision((current) => current + 1);
-      }
-
-      if (patchPromises.length > 0) {
-        legacyRuntimeSnapshotPendingCountRef.current += 1;
-        legacyRuntimeSnapshotInFlightRef.current = legacyRuntimeSnapshotInFlightRef.current
-          .then(() => Promise.all(patchPromises))
-          .catch(() => null)
-          .finally(() => {
-            legacyRuntimeSnapshotPendingCountRef.current = Math.max(
-              0,
-              legacyRuntimeSnapshotPendingCountRef.current - 1,
-            );
-          })
-          .then(() => undefined);
-      }
-      return legacyRuntimeSnapshotInFlightRef.current;
+      const promise = legacyRuntimeSnapshotInFlightRef.current.then(run, run);
+      legacyRuntimeSnapshotInFlightRef.current = promise.catch(() => undefined);
+      return promise;
     },
     [pendingProjectCreation],
   );
@@ -3259,12 +3291,11 @@ function AppInner() {
     const runtimeSnapshotChanged =
       JSON.stringify(snapshotProjectRuntimePrefs(prevConfig))
       !== JSON.stringify(snapshotProjectRuntimePrefs(persisted));
-    const legacyPersistPromise = runtimeSnapshotChanged
-      ? preserveExistingProjectsRuntimePrefs(prevConfig, null)
-      : Promise.resolve();
+    if (runtimeSnapshotChanged) {
+      await preserveExistingProjectsRuntimePrefs(prevConfig, null);
+    }
     latestPersistedConfigRef.current = persisted;
     setConfig(persisted);
-    await legacyPersistPromise;
     saveConfig(persisted);
     const shouldSyncMediaProviders =
       daemonMediaProvidersFetchState === 'ok'
@@ -3403,28 +3434,32 @@ function AppInner() {
       ) => ProjectRuntimePrefs,
       options: { syncDaemon?: boolean } = {},
     ) => {
-      const previous = latestPersistedConfigRef.current;
       const targetProjectId =
         routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
       if (targetProjectId) {
-        updateProjectRuntimePrefsById(targetProjectId, projectUpdater, previous);
+        updateProjectRuntimePrefsById(
+          targetProjectId,
+          projectUpdater,
+          latestPersistedConfigRef.current,
+        );
         return;
       }
-      const next = computeGlobalNext(previous);
-      const legacyPersistPromise = preserveExistingProjectsRuntimePrefs(previous, null);
-      latestPersistedConfigRef.current = next;
-      setConfig(next);
-      const commitGlobalConfig = () => {
+      const runGlobalStep = async () => {
+        const previous = latestPersistedConfigRef.current;
+        const next = computeGlobalNext(previous);
+        await preserveExistingProjectsRuntimePrefs(previous, null);
+        latestPersistedConfigRef.current = next;
         saveConfig(next);
+        setConfig(next);
         if (options.syncDaemon) {
           void syncConfigToDaemon(next);
         }
       };
-      if (legacyRuntimeSnapshotPendingCountRef.current > 0) {
-        void legacyPersistPromise.then(commitGlobalConfig);
-      } else {
-        commitGlobalConfig();
-      }
+      globalRuntimeChangeChainRef.current = globalRuntimeChangeChainRef.current
+        .then(runGlobalStep, runGlobalStep)
+        .catch((err) => {
+          console.error('Failed to update global runtime defaults:', err);
+        });
     },
     [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
   );
@@ -3457,7 +3492,18 @@ function AppInner() {
     const issuedAccount = currentWorkspaceAccountGeneration();
     const issuedIdentity = workspaceIdentityCacheKey(workspaceContextRef.current);
     const issuedRoute = JSON.stringify(routeRef.current);
+    const targetProjectId =
+      routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
     const next: AppConfig = { ...previous, mode: 'daemon', agentId: 'amr' };
+    await preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
+    if (
+      latestPersistedConfigRef.current !== previous
+      || currentWorkspaceAccountGeneration() !== issuedAccount
+      || workspaceIdentityCacheKey(workspaceContextRef.current) !== issuedIdentity
+      || JSON.stringify(routeRef.current) !== issuedRoute
+    ) {
+      throw new Error('Cloud configuration acknowledgement no longer owns the active selection');
+    }
     await syncConfigToDaemon(next, { throwOnError: true });
     if (
       latestPersistedConfigRef.current !== previous
@@ -3469,9 +3515,6 @@ function AppInner() {
       // local selection or acknowledge the action in another route/identity.
       throw new Error('Cloud configuration acknowledgement no longer owns the active selection');
     }
-    const targetProjectId =
-      routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-    await preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
     saveConfig(next);
     latestPersistedConfigRef.current = next;
     setConfig(next);

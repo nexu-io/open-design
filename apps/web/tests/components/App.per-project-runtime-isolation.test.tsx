@@ -475,4 +475,73 @@ describe('App per-project provider and model isolation', () => {
       );
     });
   });
+
+  it('aborts saving a new global default when persisting a legacy project snapshot returns null', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const view = render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+          'daemon:codex:gpt-5.4',
+        );
+      });
+
+      useRouteMock.mockReturnValue(HOME_ROUTE);
+      view.rerender(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('entry-config')).toHaveTextContent(
+          'daemon:codex:gpt-5.4',
+        );
+      });
+
+      vi.mocked(saveConfig).mockClear();
+      vi.mocked(patchProject).mockImplementation(async (id, patch) => {
+        if (id === 'project-a') return null;
+        const current = persistedProjects.get(id) ?? projectB;
+        const updated: Project = {
+          ...current,
+          ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
+        };
+        persistedProjects.set(id, structuredClone(updated));
+        return structuredClone(updated);
+      });
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Switch entry default to pi glm-flash' }),
+        );
+      });
+
+      await waitFor(() => {
+        expect(patchProject).toHaveBeenCalledWith(
+          'project-a',
+          expect.anything(),
+          null,
+        );
+        expect(errorSpy).toHaveBeenCalled();
+      });
+
+      // Global AppConfig must NOT be saved or switched to pi when legacy snapshot PATCH failed
+      expect(saveConfig).not.toHaveBeenCalled();
+      expect(screen.getByTestId('entry-config')).toHaveTextContent(
+        'daemon:codex:gpt-5.4',
+      );
+
+      // Simulate reload: legacy Project A still has no runtimePrefs, and stays on codex:gpt-5.4
+      view.unmount();
+      useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('project-id')).toHaveTextContent('project-a');
+        expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+          'daemon:codex:gpt-5.4',
+        );
+      });
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
