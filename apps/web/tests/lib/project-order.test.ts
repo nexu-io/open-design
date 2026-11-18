@@ -18,12 +18,12 @@ describe('project recency', () => {
     expect(items.sort(compareRecentProjects).map(p => p.id)).toEqual(['a', 'b', 'd', 'z']);
   });
 
-  it('pins only the current project and restores the old project to its base position', () => {
+  it('keeps the same recent order regardless of the active project', () => {
     const tabs = projects.map(p => ({ id: p.id, projectId: p.id }));
     const lookup = new Map(projects.map(p => [p.id, p]));
     const projectFor = (tab: typeof tabs[number]) => lookup.get(tab.projectId);
-    expect(orderProjectItems(tabs, projectFor, 'c').map(t => t.id)).toEqual(['c', 'b', 'a', 'd']);
-    expect(orderProjectItems(tabs, projectFor, 'a').map(t => t.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(orderProjectItems(tabs, projectFor).map(t => t.id)).toEqual(['b', 'a', 'c', 'd']);
+    expect(orderProjectItems([...tabs].reverse(), projectFor).map(t => t.id)).toEqual(['b', 'a', 'c', 'd']);
     expect(tabs.map(t => t.id)).toEqual(['a', 'b', 'c', 'd']);
   });
 

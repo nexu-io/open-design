@@ -2146,7 +2146,6 @@ export function WorkspaceTabsBar({
       (tab) => tab.kind === 'project'
         ? projectById.get(tab.projectId) ?? { id: tab.projectId }
         : undefined,
-      activeTab.kind === 'project' ? activeTab.projectId : undefined,
     );
     // The hovered row's project, if the ambient list actually carries it. A tab
     // can name a project this list has not loaded (deep link, other workspace);
