@@ -244,6 +244,8 @@ export function createVelaCliResourceAdapter(
     publish({ projectId, principal }) {
       return gated(principal, async () => {
         const dir = await options.resolveProjectDir(projectId);
+        const { assertNoEmptyFiles } = await import('./share-alias-recovery.js');
+        await assertNoEmptyFiles(dir);
         const { assertNoEmptyFiles } = await import('./empty-file-preflight.js');
         await assertNoEmptyFiles(dir);
         const args = ['push', kind, await exactResourceId(projectId, principal), dir, '--ref', PUBLISHED_REF, '--json'];
