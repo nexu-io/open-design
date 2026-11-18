@@ -57,6 +57,8 @@ interface ResolvedDiagnosticsAgentEnvironment {
 // Resolve agent diagnostics inputs through the same Settings → spawn-environment
 // helpers used by the daemon's process launcher. This keeps login status and log
 // discovery aligned with the environment that the daemon passes to each agent.
+// OS proxy settings do not locate logs; collectSystemEnvironment records them
+// separately with an asynchronous, bounded query.
 // Returns empty values on failure so collectors can fall back to their defaults.
 async function resolveDiagnosticsAgentEnvironment(
   dataDir: string | null | undefined,
@@ -77,6 +79,8 @@ async function resolveDiagnosticsAgentEnvironment(
         agentId,
         { ...process.env, OD_DATA_DIR: dataDir },
         agentCliEnvForAgent(appConfig.agentCliEnv, agentId),
+        // Avoid repeated synchronous OS queries while resolving log homes.
+        {},
       );
     const clean = (value: string | undefined): string | null => {
       const trimmed = value?.trim();
