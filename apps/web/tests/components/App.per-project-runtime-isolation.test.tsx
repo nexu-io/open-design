@@ -11,6 +11,7 @@ import {
   fetchMediaProvidersFromDaemon,
   loadConfig,
   mergeDaemonConfig,
+  saveConfig,
 } from '../../src/state/config';
 import {
   daemonIsLive,
@@ -200,6 +201,7 @@ vi.mock('../../src/state/config', async () => {
     fetchMediaProvidersFromDaemon: vi.fn(),
     loadConfig: vi.fn(),
     mergeDaemonConfig: vi.fn(),
+    saveConfig: vi.fn(),
     syncComposioConfigToDaemon: vi.fn().mockResolvedValue(true),
   };
 });
@@ -249,6 +251,10 @@ const projectB: Project = {
 };
 
 describe('App per-project provider and model isolation', () => {
+  let persistedGlobalConfig: AppConfig;
+  let persistedProjects: Map<string, Project>;
+  let persistenceOrder: string[];
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -257,12 +263,23 @@ describe('App per-project provider and model isolation', () => {
     resetWorkspaceBillingCache();
     useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
 
+    persistedGlobalConfig = structuredClone(baseConfig);
+    persistedProjects = new Map([
+      [projectA.id, structuredClone(projectA)],
+      [projectB.id, structuredClone(projectB)],
+    ]);
+    persistenceOrder = [];
+
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })),
     );
 
-    vi.mocked(loadConfig).mockReturnValue(baseConfig);
+    vi.mocked(loadConfig).mockImplementation(() => structuredClone(persistedGlobalConfig));
+    vi.mocked(saveConfig).mockImplementation((next) => {
+      persistenceOrder.push(`saveConfig:${next.agentId ?? ''}`);
+      persistedGlobalConfig = structuredClone(next);
+    });
     vi.mocked(mergeDaemonConfig).mockImplementation((local) => local);
     vi.mocked(fetchDaemonConfig).mockResolvedValue(null);
     vi.mocked(fetchMediaProvidersFromDaemon).mockResolvedValue({
@@ -292,12 +309,20 @@ describe('App per-project provider and model isolation', () => {
     vi.mocked(fetchDesignSystems).mockResolvedValue([]);
     vi.mocked(fetchDesignTemplates).mockResolvedValue([]);
     vi.mocked(fetchPromptTemplates).mockResolvedValue([]);
-    vi.mocked(listProjects).mockResolvedValue([projectA, projectB]);
+    vi.mocked(listProjects).mockImplementation(async () =>
+      Array.from(persistedProjects.values()).map((project) => structuredClone(project)),
+    );
     vi.mocked(listTemplates).mockResolvedValue([]);
-    vi.mocked(patchProject).mockImplementation(async (id, patch) => ({
-      ...(id === 'project-a' ? projectA : projectB),
-      ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
-    }));
+    vi.mocked(patchProject).mockImplementation(async (id, patch) => {
+      persistenceOrder.push(`patchProject:${id}`);
+      const current = persistedProjects.get(id) ?? (id === 'project-a' ? projectA : projectB);
+      const updated: Project = {
+        ...current,
+        ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
+      };
+      persistedProjects.set(id, structuredClone(updated));
+      return structuredClone(updated);
+    });
   });
 
   afterEach(() => {
@@ -305,7 +330,7 @@ describe('App per-project provider and model isolation', () => {
     vi.unstubAllGlobals();
   });
 
-  it('keeps Project A on codex when Project B switches to pi (zai/glm-5.3-flash)', async () => {
+  it('keeps Project A on codex when Project B switches to pi (zai/glm-5.3-flash), including across reload', async () => {
     const view = render(<App />);
 
     await waitFor(() => {
@@ -324,6 +349,8 @@ describe('App per-project provider and model isolation', () => {
     });
 
     // In Project B, switch agent to pi + zai/glm-5.3-flash
+    vi.mocked(saveConfig).mockClear();
+    persistenceOrder.length = 0;
     await act(async () => {
       fireEvent.click(
         screen.getByRole('button', { name: 'Switch current project to pi glm-flash' }),
@@ -336,7 +363,7 @@ describe('App per-project provider and model isolation', () => {
       );
     });
 
-    // Verify Project B persisted its runtimePrefs via patchProject, and Project A was not overwritten
+    // Project B persisted its runtimePrefs via patchProject, while Project A and global AppConfig stayed untouched
     expect(patchProject).toHaveBeenCalledWith(
       'project-b',
       expect.objectContaining({
@@ -359,10 +386,12 @@ describe('App per-project provider and model isolation', () => {
       expect.anything(),
       expect.anything(),
     );
+    expect(saveConfig).not.toHaveBeenCalled();
 
-    // Switch back to Project A: it MUST still be on codex:gpt-5.4!
+    // Simulate a full page reload on Project A: in-memory state is gone, so Project A resolves from persisted state
+    view.unmount();
     useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
-    view.rerender(<App />);
+    const reloadedView = render(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('project-id')).toHaveTextContent('project-a');
@@ -370,9 +399,20 @@ describe('App per-project provider and model isolation', () => {
         'daemon:codex:gpt-5.4',
       );
     });
+
+    // Project B also keeps pi:zai/glm-5.3-flash after reload
+    useRouteMock.mockReturnValue(PROJECT_B_ROUTE);
+    reloadedView.rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-id')).toHaveTextContent('project-b');
+      expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+        'daemon:pi:zai/glm-5.3-flash',
+      );
+    });
   });
 
-  it('preserves existing project runtime when changing default provider on the Home entry view', async () => {
+  it('persists legacy project snapshots before saving a new global Home default so reload preserves existing projects', async () => {
     const view = render(<App />);
 
     await waitFor(() => {
@@ -391,6 +431,8 @@ describe('App per-project provider and model isolation', () => {
       );
     });
 
+    vi.mocked(saveConfig).mockClear();
+    persistenceOrder.length = 0;
     await act(async () => {
       fireEvent.click(
         screen.getByRole('button', { name: 'Switch entry default to pi glm-flash' }),
@@ -401,16 +443,35 @@ describe('App per-project provider and model isolation', () => {
       expect(screen.getByTestId('entry-config')).toHaveTextContent(
         'daemon:pi:zai/glm-5.3-flash',
       );
+      expect(saveConfig).toHaveBeenCalled();
     });
 
-    // Return to Project A: it keeps its original codex runtime
+    // Legacy project snapshots must persist before global AppConfig is saved
+    const firstSaveIdx = persistenceOrder.findIndex((entry) =>
+      entry.startsWith('saveConfig:'),
+    );
+    const projectAPatchIdx = persistenceOrder.indexOf('patchProject:project-a');
+    expect(projectAPatchIdx).toBeGreaterThanOrEqual(0);
+    expect(firstSaveIdx).toBeGreaterThan(projectAPatchIdx);
+
+    // Simulate a full page reload and verify Project A still resolves codex while Home stays on pi
+    view.unmount();
     useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
-    view.rerender(<App />);
+    const reloadedView = render(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('project-id')).toHaveTextContent('project-a');
       expect(screen.getByTestId('project-runtime')).toHaveTextContent(
         'daemon:codex:gpt-5.4',
+      );
+    });
+
+    useRouteMock.mockReturnValue(HOME_ROUTE);
+    reloadedView.rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('entry-config')).toHaveTextContent(
+        'daemon:pi:zai/glm-5.3-flash',
       );
     });
   });

@@ -1302,6 +1302,8 @@ function AppInner() {
     projectsRef.current = projects;
   }, [projects]);
   const projectRuntimePrefsRef = useRef<Map<string, ProjectRuntimePrefs>>(new Map());
+  const legacyRuntimeSnapshotInFlightRef = useRef<Promise<void>>(Promise.resolve());
+  const legacyRuntimeSnapshotPendingCountRef = useRef(0);
   const [projectRuntimePrefsRevision, setProjectRuntimePrefsRevision] = useState(0);
   const routeProjectSnapshotRef = useRef<{
     project: Project;
@@ -3135,6 +3137,98 @@ function AppInner() {
     await silentUpdatePreferenceWriterRef.current.write(allowSilentUpdates);
   }, []);
 
+  const preserveExistingProjectsRuntimePrefs = useCallback(
+    (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null): Promise<void> => {
+      const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
+      const patchedById = new Map<string, ProjectMetadata>();
+      const patchPromises: Promise<unknown>[] = [];
+      const seenIds = new Set<string>();
+      const candidates: Project[] = [...projectsRef.current];
+      const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
+      if (routeSnapshotProject) {
+        candidates.push(routeSnapshotProject);
+      }
+
+      for (const project of candidates) {
+        if (seenIds.has(project.id)) continue;
+        seenIds.add(project.id);
+        if (excludeProjectId && project.id === excludeProjectId) continue;
+        if (!projectRuntimePrefsRef.current.has(project.id)) {
+          projectRuntimePrefsRef.current.set(
+            project.id,
+            project.metadata?.runtimePrefs ?? fallbackPrefs,
+          );
+        }
+        if (project.metadata?.runtimePrefs) continue;
+
+        const nextMetadata: ProjectMetadata = {
+          ...(project.metadata ?? { kind: 'prototype' }),
+          runtimePrefs: fallbackPrefs,
+        };
+        patchedById.set(project.id, nextMetadata);
+        const pendingCreation =
+          pendingProjectCreation?.projectId === project.id
+            ? pendingProjectCreation
+            : null;
+        if (!pendingCreation || pendingCreation.created) {
+          const projectContext =
+            routeRef.current.kind === 'project' && routeRef.current.projectId === project.id
+              ? projectRouteWorkspaceContextRef.current
+              : workspaceContextRef.current;
+          patchPromises.push(
+            Promise.resolve(
+              patchProject(project.id, { metadata: nextMetadata }, projectContext),
+            ).catch(() => null),
+          );
+        }
+      }
+
+      if (patchedById.size > 0) {
+        const nextProjects = projectsRef.current.map((project) => {
+          const nextMetadata = patchedById.get(project.id);
+          return nextMetadata ? { ...project, metadata: nextMetadata } : project;
+        });
+        projectsRef.current = nextProjects;
+        setProjects((curr) =>
+          curr.map((project) => {
+            const nextMetadata = patchedById.get(project.id);
+            return nextMetadata ? { ...project, metadata: nextMetadata } : project;
+          }),
+        );
+        const snapshotMetadata = routeSnapshotProject
+          ? patchedById.get(routeSnapshotProject.id)
+          : undefined;
+        if (routeProjectSnapshotRef.current && snapshotMetadata) {
+          routeProjectSnapshotRef.current = {
+            ...routeProjectSnapshotRef.current,
+            project: {
+              ...routeProjectSnapshotRef.current.project,
+              metadata: snapshotMetadata,
+            },
+          };
+          setRouteProjectSnapshotRevision((current) => current + 1);
+        }
+        setProjectRuntimePrefsRevision((current) => current + 1);
+      }
+
+      if (patchPromises.length > 0) {
+        legacyRuntimeSnapshotPendingCountRef.current += 1;
+        legacyRuntimeSnapshotInFlightRef.current = legacyRuntimeSnapshotInFlightRef.current
+          .then(() => Promise.all(patchPromises))
+          .catch(() => null)
+          .finally(() => {
+            legacyRuntimeSnapshotPendingCountRef.current = Math.max(
+              0,
+              legacyRuntimeSnapshotPendingCountRef.current - 1,
+            );
+          })
+          .then(() => undefined);
+      }
+      return legacyRuntimeSnapshotInFlightRef.current;
+    },
+    [pendingProjectCreation],
+  );
+
   /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
@@ -3154,16 +3248,24 @@ function AppInner() {
     // already committed so an unmount autosave cannot re-open the welcome flow.
     // allowSilentUpdates is daemon-owned and must not be applied optimistically:
     // keep the previous value in memory until the daemon write succeeds.
-    const prevSilent = latestPersistedConfigRef.current.allowSilentUpdates;
+    const prevConfig = latestPersistedConfigRef.current;
+    const prevSilent = prevConfig.allowSilentUpdates;
     const nextSilent = next.allowSilentUpdates;
     const silentChanged = nextSilent !== prevSilent;
     const nextForOptimistic = silentChanged
       ? { ...next, allowSilentUpdates: prevSilent }
       : next;
     const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
+    const runtimeSnapshotChanged =
+      JSON.stringify(snapshotProjectRuntimePrefs(prevConfig))
+      !== JSON.stringify(snapshotProjectRuntimePrefs(persisted));
+    const legacyPersistPromise = runtimeSnapshotChanged
+      ? preserveExistingProjectsRuntimePrefs(prevConfig, null)
+      : Promise.resolve();
     latestPersistedConfigRef.current = persisted;
-    saveConfig(persisted);
     setConfig(persisted);
+    await legacyPersistPromise;
+    saveConfig(persisted);
     const shouldSyncMediaProviders =
       daemonMediaProvidersFetchState === 'ok'
       && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
@@ -3189,7 +3291,7 @@ function AppInner() {
       };
       setConfig((curr) => ({ ...curr, allowSilentUpdates: nextSilent }));
     }
-  }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
+  }, [daemonMediaProviders, daemonMediaProvidersFetchState, preserveExistingProjectsRuntimePrefs]);
 
   const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
     settingsDraftConfigRef.current = draft;
@@ -3232,32 +3334,6 @@ function AppInner() {
     [],
   );
 
-  const preserveExistingProjectsRuntimePrefs = useCallback(
-    (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null) => {
-      const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
-      for (const project of projectsRef.current) {
-        if (excludeProjectId && project.id === excludeProjectId) continue;
-        if (projectRuntimePrefsRef.current.has(project.id)) continue;
-        projectRuntimePrefsRef.current.set(
-          project.id,
-          project.metadata?.runtimePrefs ?? fallbackPrefs,
-        );
-      }
-      const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
-      if (
-        routeSnapshotProject
-        && (!excludeProjectId || routeSnapshotProject.id !== excludeProjectId)
-        && !projectRuntimePrefsRef.current.has(routeSnapshotProject.id)
-      ) {
-        projectRuntimePrefsRef.current.set(
-          routeSnapshotProject.id,
-          routeSnapshotProject.metadata?.runtimePrefs ?? fallbackPrefs,
-        );
-      }
-    },
-    [],
-  );
-
   const updateProjectRuntimePrefsById = useCallback(
     (
       projectId: string,
@@ -3293,6 +3369,9 @@ function AppInner() {
         };
         setRouteProjectSnapshotRevision((current) => current + 1);
       }
+      projectsRef.current = projectsRef.current.map((p) =>
+        p.id === projectId ? { ...p, metadata: nextMetadata } : p,
+      );
       setProjects((curr) =>
         curr.map((p) => (p.id === projectId ? { ...p, metadata: nextMetadata } : p)),
       );
@@ -3315,47 +3394,60 @@ function AppInner() {
     [pendingProjectCreation],
   );
 
-  const handleModeChange = useCallback(
-    (mode: AppConfig['mode']) => {
+  const applyScopedRuntimeChange = useCallback(
+    (
+      computeGlobalNext: (previous: AppConfig) => AppConfig,
+      projectUpdater: (
+        current: ProjectRuntimePrefs | undefined,
+        baseConfig: AppConfig,
+      ) => ProjectRuntimePrefs,
+      options: { syncDaemon?: boolean } = {},
+    ) => {
       const previous = latestPersistedConfigRef.current;
       const targetProjectId =
         routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-      preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
-      const next = { ...previous, mode };
-      saveConfig(next);
+      if (targetProjectId) {
+        updateProjectRuntimePrefsById(targetProjectId, projectUpdater, previous);
+        return;
+      }
+      const next = computeGlobalNext(previous);
+      const legacyPersistPromise = preserveExistingProjectsRuntimePrefs(previous, null);
       latestPersistedConfigRef.current = next;
       setConfig(next);
-      if (targetProjectId) {
-        updateProjectRuntimePrefsById(
-          targetProjectId,
-          (current, base) => applyProjectModeChange(current, base, mode),
-          previous,
-        );
+      const commitGlobalConfig = () => {
+        saveConfig(next);
+        if (options.syncDaemon) {
+          void syncConfigToDaemon(next);
+        }
+      };
+      if (legacyRuntimeSnapshotPendingCountRef.current > 0) {
+        void legacyPersistPromise.then(commitGlobalConfig);
+      } else {
+        commitGlobalConfig();
       }
     },
     [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
   );
 
+  const handleModeChange = useCallback(
+    (mode: AppConfig['mode']) => {
+      applyScopedRuntimeChange(
+        (previous) => ({ ...previous, mode }),
+        (current, base) => applyProjectModeChange(current, base, mode),
+      );
+    },
+    [applyScopedRuntimeChange],
+  );
+
   const handleAgentChange = useCallback(
     (agentId: string) => {
-      const previous = latestPersistedConfigRef.current;
-      const targetProjectId =
-        routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-      preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
-      const next = { ...previous, agentId };
-      saveConfig(next);
-      latestPersistedConfigRef.current = next;
-      void syncConfigToDaemon(next);
-      setConfig(next);
-      if (targetProjectId) {
-        updateProjectRuntimePrefsById(
-          targetProjectId,
-          (current, base) => applyProjectAgentChange(current, base, agentId),
-          previous,
-        );
-      }
+      applyScopedRuntimeChange(
+        (previous) => ({ ...previous, agentId }),
+        (current, base) => applyProjectAgentChange(current, base, agentId),
+        { syncDaemon: true },
+      );
     },
-    [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
+    [applyScopedRuntimeChange],
   );
 
   // OPEND-3205: this action changes the runtime in the current project. Do not
@@ -3379,7 +3471,7 @@ function AppInner() {
     }
     const targetProjectId =
       routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-    preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
+    await preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
     saveConfig(next);
     latestPersistedConfigRef.current = next;
     setConfig(next);
@@ -3394,30 +3486,23 @@ function AppInner() {
 
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string; serviceTier?: string }) => {
-      const current = latestPersistedConfigRef.current;
-      const targetProjectId =
-        routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-      preserveExistingProjectsRuntimePrefs(current, targetProjectId);
-      const prev = current.agentModels?.[agentId] ?? {};
-      const merged = mergeAgentModelChoice(prev, choice);
-      const nextAgentModels = {
-        ...(current.agentModels ?? {}),
-        [agentId]: merged,
-      };
-      const next = { ...current, agentModels: nextAgentModels };
-      saveConfig(next);
-      latestPersistedConfigRef.current = next;
-      void syncConfigToDaemon(next);
-      setConfig(next);
-      if (targetProjectId) {
-        updateProjectRuntimePrefsById(
-          targetProjectId,
-          (prefs, base) => applyProjectAgentModelChange(prefs, base, agentId, choice),
-          current,
-        );
-      }
+      applyScopedRuntimeChange(
+        (current) => {
+          const prev = current.agentModels?.[agentId] ?? {};
+          const merged = mergeAgentModelChoice(prev, choice);
+          return {
+            ...current,
+            agentModels: {
+              ...(current.agentModels ?? {}),
+              [agentId]: merged,
+            },
+          };
+        },
+        (prefs, base) => applyProjectAgentModelChange(prefs, base, agentId, choice),
+        { syncDaemon: true },
+      );
     },
-    [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
+    [applyScopedRuntimeChange],
   );
 
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
@@ -3426,27 +3511,13 @@ function AppInner() {
   // user had previously configured for the target protocol.
   const handleApiProtocolChange = useCallback(
     (protocol: ApiProtocol) => {
-      const previous = latestPersistedConfigRef.current;
-      const targetProjectId =
-        routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-      preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
-      const next = switchApiProtocolConfig(
-        previous,
-        protocol,
+      applyScopedRuntimeChange(
+        (previous) => switchApiProtocolConfig(previous, protocol),
+        (prefs, base) => applyProjectApiProtocolChange(prefs, base, protocol),
+        { syncDaemon: true },
       );
-      saveConfig(next);
-      latestPersistedConfigRef.current = next;
-      void syncConfigToDaemon(next);
-      setConfig(next);
-      if (targetProjectId) {
-        updateProjectRuntimePrefsById(
-          targetProjectId,
-          (prefs, base) => applyProjectApiProtocolChange(prefs, base, protocol),
-          previous,
-        );
-      }
     },
-    [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
+    [applyScopedRuntimeChange],
   );
 
   // BYOK model picker — patches `model` (and the per-protocol shadow
@@ -3454,27 +3525,13 @@ function AppInner() {
   // mid-session without retyping their key.
   const handleApiModelChange = useCallback(
     (model: string) => {
-      const previous = latestPersistedConfigRef.current;
-      const targetProjectId =
-        routeRef.current.kind === 'project' ? routeRef.current.projectId : null;
-      preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
-      const next = updateCurrentApiProtocolConfig(
-        previous,
-        { model },
+      applyScopedRuntimeChange(
+        (previous) => updateCurrentApiProtocolConfig(previous, { model }),
+        (prefs, base) => applyProjectApiModelChange(prefs, base, model),
+        { syncDaemon: true },
       );
-      saveConfig(next);
-      latestPersistedConfigRef.current = next;
-      void syncConfigToDaemon(next);
-      setConfig(next);
-      if (targetProjectId) {
-        updateProjectRuntimePrefsById(
-          targetProjectId,
-          (prefs, base) => applyProjectApiModelChange(prefs, base, model),
-          previous,
-        );
-      }
     },
-    [preserveExistingProjectsRuntimePrefs, updateProjectRuntimePrefsById],
+    [applyScopedRuntimeChange],
   );
 
   const handleChangeDefaultDesignSystem = useCallback(
