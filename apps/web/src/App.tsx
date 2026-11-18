@@ -1,3 +1,5 @@
+import { clearAmrSendPreflightHandoffs, discardAmrSendPreflightHandoff, handoffAmrSendPreflight, type SendAttempt } from './runtime/amr-send-preflight';
+import { currentWorkspaceSendTarget } from './collab/useWorkspaceContext';
 import { ReferralEntryProvider } from './components/ReferralEntry';
 import { WorkspaceRemovalBoundary } from './components/WorkspaceRemovalBoundary';
 import { homeAutoSendIdentity, type HomeRequestConcurrencyRejection } from './runtime/home-auto-send-identity';
@@ -202,7 +204,6 @@ import { armCompletionFeedbackOnFirstGesture } from './utils/notifications';
 import { useGlobalRunNotices } from './hooks/useGlobalRunNotices';
 import {
   amrBalanceGateScopeForWorkspaceContext,
-  amrBalanceGateScopesMatch,
   type AmrBalanceGateScope,
 } from './runtime/amr-balance-gate';
 import {
@@ -301,6 +302,8 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   autoSendFirstMessage?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
+  amrSendAttempt?: SendAttempt;
+  workspaceTarget?: { workspaceId: string };
   /**
    * The optimistic project `beginOptimisticProjectCreation` already flushed
    * for this send (Home hands off before its admission check). The create
@@ -1005,6 +1008,7 @@ function AppInner() {
   const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
   useModalWindowDragGuard();
   const workspaceContextState = useWorkspaceContext();
+  useEffect(() => { clearAmrSendPreflightHandoffs(); }, [workspaceContextState.accountGeneration]);
   const {
     context: workspaceContext,
     loading: workspaceContextLoading,
@@ -1594,6 +1598,10 @@ function AppInner() {
   const loginReturnRouteRef = useRef<Route | null>(null);
   const routeRef = useRef(route);
   routeRef.current = route;
+  const preflightHandoffProjectId = route.kind === 'project' ? route.projectId : null;
+  useEffect(() => () => {
+    if (preflightHandoffProjectId) discardAmrSendPreflightHandoff(preflightHandoffProjectId);
+  }, [preflightHandoffProjectId]);
   const settingsReturnTargetRef = useRef<SettingsReturnTarget | null>(null);
   const workspaceProjectView = workspaceProjectListViewForRoute(route);
   // Read-only mirror for the boot effect. The boot pass needs to know which
@@ -3472,6 +3480,7 @@ function AppInner() {
    */
   const rollbackOptimisticProjectCreation = useCallback(
     (projectId: string, stagedFiles: readonly File[], notice: string | null) => {
+      discardAmrSendPreflightHandoff(projectId);
       clearLocalProject(projectId);
       releaseProjectRunStatusReads(projectId);
       pendingProjectConversationIdsRef.current.delete(projectId);
@@ -3609,14 +3618,14 @@ function AppInner() {
         createWorkspaceContext = createWorkspaceState.failure === 'unsupported'
           ? null
           : workspaceResourceReadContext(createWorkspaceState);
-        if (
-          input.amrGatePrecheckWitness &&
-          !amrBalanceGateScopesMatch(
-            input.amrGatePrecheckWitness,
-            amrBalanceGateScopeForWorkspaceContext(createWorkspaceContext),
-          )
-        ) {
-          throw new Error('AMR_WORKSPACE_GATE_STALE');
+        if (input.amrSendAttempt) {
+          const target = currentWorkspaceSendTarget();
+          if (target?.workspaceId !== input.amrSendAttempt.workspaceId || target.selectionRevision !== input.amrSendAttempt.targetRevision
+            || currentWorkspaceAccountGeneration() !== input.amrSendAttempt.accountGeneration) throw new ProjectCreateError(t('home.createFailed'), 409, null, false, null);
+        }
+        if (input.workspaceTarget && createWorkspaceContext?.workspaceId !== input.workspaceTarget.workspaceId) createWorkspaceContext = null;
+        if (input.workspaceTarget && !createWorkspaceContext && appVersionInfo?.capabilities?.workspaceTargetCreate !== true) {
+          throw new ProjectCreateError(t('home.daemonRecovering'), 409, null, false, null);
         }
         // An auto-send create that did not come through Home's composer opens
         // its frame here; Home's own sends arrive with the frame already up.
@@ -3654,6 +3663,7 @@ function AppInner() {
             ? { exampleReference: input.exampleReference }
             : {}),
           workspaceContext: createWorkspaceContext,
+          ...(input.workspaceTarget ? { workspaceTarget: input.workspaceTarget } : {}),
         });
       } catch (err) {
         const errorCode =
@@ -3882,19 +3892,10 @@ function AppInner() {
                 `od:auto-send-prompt:${result.project.id}`,
               );
             }
-            if (input.amrGatePrecheckWitness) {
-              window.sessionStorage.setItem(
-                `od:auto-send-amr-gate-witness:${result.project.id}`,
-                JSON.stringify(input.amrGatePrecheckWitness),
-              );
-            } else {
-              window.sessionStorage.removeItem(
-                `od:auto-send-amr-gate-witness:${result.project.id}`,
-              );
+            if (input.amrSendAttempt && routeRef.current.kind === 'project'
+              && routeRef.current.projectId === result.project.id) {
+              handoffAmrSendPreflight(result.project.id, input.amrSendAttempt);
             }
-            window.sessionStorage.removeItem(
-              `od:auto-send-amr-gate-ok:${result.project.id}`,
-            );
             if (firstMessageAttachments.length > 0) {
               window.sessionStorage.setItem(
                 `od:auto-send-attachments:${result.project.id}`,
@@ -3980,6 +3981,7 @@ function AppInner() {
     },
     [
       analytics.track,
+      appVersionInfo,
       beginOptimisticProjectCreation,
       rememberLocalProject,
       rollbackOptimisticProjectCreation,

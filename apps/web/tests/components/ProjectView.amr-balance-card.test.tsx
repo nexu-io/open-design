@@ -35,11 +35,11 @@ import { ProjectView } from '../../src/components/ProjectView';
 import { ChatComposer, STAGE_ATTACHMENT_EVENT } from '../../src/components/ChatComposer';
 import { composerText, flushMounts, typeAndSettle } from '../helpers/lexical-composer';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
-import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
-import { streamViaDaemon } from '../../src/providers/daemon';
+import { currentWorkspaceSendTarget, notifyWorkspaceContextRefresh, resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
+import { handoffAmrSendPreflight } from '../../src/runtime/amr-send-preflight';
+import { fetchVelaLoginStatus, streamViaDaemon } from '../../src/providers/daemon';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
 import { advanceWorkspaceAccountGeneration, resetWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
-import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import {
   createConversation,
   listConversations,
@@ -462,7 +462,7 @@ const snapshot = (balanceUsd: string): AmrWalletSnapshot => ({
   source: 'vela_api',
 });
 
-describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
+describe('server send preflight preserves composer and target', () => {
   beforeEach(() => {
     resourceContextObservations.length = 0;
     useRealComposer.value = false;
@@ -470,7 +470,7 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     window.localStorage.clear();
     resetWorkspaceContextCache();
     resetWorkspaceAccountGeneration();
-    invalidateAmrFundingFeedback();
+
     stubFetch();
     mockedListConversations.mockImplementation(async (projectId: string) => [
       conversation(projectId),
@@ -499,37 +499,18 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     resetWorkspaceContextCache();
   });
 
-  /** 项目页发一条,不走 Home 的自动发送。 */
-  async function sendOnce(
-    gate: Awaited<ReturnType<typeof checkAmrBalanceGate>>,
-  ) {
-    mockedCheckAmrBalanceGate.mockResolvedValue(gate as never);
-    renderProjectView({ project: { ...project(), pendingPrompt: null } as never });
-    // 按钮一渲染就在,但流水还在加载 —— 那段时间 `sendDisabled` 是真的,按下去
-    // 什么都不会发生,后面每一条断言都只是赢在「什么都还没发生」上。CI 上慢过
-    // 几毫秒就整条判定路都走不到(实测阈值在 1ms 和 5ms 之间)。先等它可用。
-    await screen.findByTestId('normal-send');
-    await waitFor(() =>
-      expect((screen.getByTestId('normal-send') as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(screen.getByTestId('normal-send'));
-  }
-
   it.each(['owner', 'admin', 'member'] as const)('authoritative insufficient blocks %s before run transport and returns the original composer payload for manual retry', async (role) => {
     const context = { ...CALLER_CONTEXT, role, permissions: buildWorkspacePermissions({ role, lifecycleState: 'active' }) };
     workspaceScopeMocks.ambientContext = context;
     workspaceScopeMocks.projectScope = resolvedTeamScope(context);
     let funding = 'insufficient';
     const preflights: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
+      if (url.includes('/api/workspace/billing/send-preflight')) {
         preflights.push(url);
-        const query = new URL(url, 'http://localhost').searchParams;
-        return new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          modelId: query.get('modelId'), generatedAt: new Date().toISOString(), fundingCheck: funding, balanceUsd: '0',
-        } }));
+        const request = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ schemaVersion: 1, requestId: 'server', ...request, decision: funding === 'insufficient' ? 'reject' : 'proceed', ...(funding === 'insufficient' ? { reason: 'insufficient_funds' } : {}) }));
       }
       return new Response('{}');
     }));
@@ -550,7 +531,7 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     expect(outcome).toBe('restore-draft');
     expect(preflights).toHaveLength(2);
     funding = 'available';
-    invalidateAmrFundingFeedback();
+
     await act(async () => { await Promise.resolve(); });
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
     await act(async () => { outcome = await send()('keep my exact draft', attachments, []); });
@@ -559,209 +540,15 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     expect(mockedStreamViaDaemon.mock.calls[0]![0]).toMatchObject({ attachments: attachments.map((attachment) => attachment.path) });
   });
 
-  it.each([
-    { title: 'independent 300ms billing reads', hintDelayMs: 300, hintStatus: 'available' as const, fundingDelayMs: 300, early: false },
-    { title: 'RUN-003 fresh insufficiency before a late full hint', hintDelayMs: 450, hintStatus: 'full' as const, fundingDelayMs: 200, early: true },
-  ])('returns a funding refusal within 500ms with $title', async ({ hintDelayMs, hintStatus, fundingDelayMs, early }) => {
-    workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
-    renderProjectView({ project: { ...project(), pendingPrompt: undefined } });
-    await waitFor(() => expect(screen.getByTestId('normal-send')).not.toBeDisabled());
-    await flushMounts();
-    vi.useFakeTimers();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/billing/request-concurrency?')) {
-        await new Promise((resolve) => setTimeout(resolve, hintDelayMs));
-        return new Response(JSON.stringify({ requestConcurrencyHint: {
-          workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          status: hintStatus, running: hintStatus === 'full' ? 10 : 0, limit: 10, observedAt: new Date().toISOString(),
-        } }));
-      }
-      if (url.includes('/billing/preflight?')) {
-        await new Promise((resolve) => setTimeout(resolve, fundingDelayMs));
-        return new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          modelId: new URL(url, 'http://localhost').searchParams.get('modelId'),
-          generatedAt: new Date().toISOString(), fundingCheck: 'insufficient', balanceUsd: '0',
-        } }));
-      }
-      return new Response('{}');
-    }));
-    const attachments = [{ path: 'attachments/held.txt', name: 'held.txt', kind: 'file' }];
-    let outcome: unknown;
-    let finishedAt: number | undefined;
-    const startedAt = Date.now();
-    let pending!: Promise<unknown>;
-    act(() => {
-      pending = chatPaneSpy.mock.calls.at(-1)![0].onSend('keep my timed draft', attachments, [])
-        .then((result: unknown) => { outcome = result; finishedAt = Date.now() - startedAt; });
-    });
-    await act(async () => { await vi.advanceTimersByTimeAsync(299); });
-    if (early) {
-      expect(finishedAt).toBeDefined();
-      expect(screen.queryByRole('alertdialog')).not.toBeNull();
-    } else {
-      expect(finishedAt).toBeUndefined();
-    }
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    await act(async () => { await vi.advanceTimersByTimeAsync(201); });
-    const finishedWithinDeadline = finishedAt;
-    const dialogWithinDeadline = screen.queryByRole('alertdialog') !== null;
-    // Drain even the old serial implementation so a baseline failure leaves
-    // no pending request or React work behind for the next test.
-    await act(async () => { await vi.advanceTimersByTimeAsync(300); await pending; });
-    expect(finishedWithinDeadline).toBeDefined();
-    expect(finishedWithinDeadline).toBeLessThanOrEqual(500);
-    expect(dialogWithinDeadline).toBe(true);
-    expect(outcome).toBe('restore-draft');
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    expect(vi.mocked(saveMessage)).not.toHaveBeenCalled();
-    expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems ?? []).toHaveLength(0);
-    expect(chatPaneSpy.mock.calls.at(-1)![0].messages.some((m: ChatMessage) => m.content === 'keep my timed draft')).toBe(false);
-    expect(screen.queryByRole('alertdialog')).not.toBeNull();
-  });
-
-  it.each(['owner', 'admin', 'member'] as const)('keeps an earlier temporarily parked input manual after %s gets a hard funding refusal and remounts with funds', async (role) => {
-    workspaceScopeMocks.ambientContext = {
-      ...CALLER_CONTEXT,
-      role,
-      permissions: buildWorkspacePermissions({ role, lifecycleState: 'active' }),
-    };
-    const currentProject = { ...project(), pendingPrompt: undefined };
-    const attachments = [{ path: 'attachments/held.txt', name: 'held.txt', kind: 'file' }];
-    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'unavailable' });
-    const first = renderProjectView({ project: currentProject });
-    await waitFor(() => expect(screen.getByTestId('normal-send')).not.toBeDisabled());
-    await act(async () => {
-      await chatPaneSpy.mock.calls.at(-1)![0].onSend('earlier temporarily parked input', attachments, []);
-    });
-    await waitFor(() => expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(1));
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-
-    // The next explicit Send confirms an exhausted wallet. It returns this
-    // new draft to its composer without turning the older parked submission
-    // into permission to run after payment or reload.
-    mockedCheckAmrBalanceGate.mockResolvedValue({
-      kind: 'hard', reason: 'insufficient', snapshot: snapshot('0'),
-    });
-    let outcome: unknown;
-    await act(async () => {
-      outcome = await chatPaneSpy.mock.calls.at(-1)![0].onSend('new blocked draft', [], []);
-    });
-    expect(outcome).toBe('restore-draft');
-    expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(1);
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-
-    first.unmount();
-    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
-    invalidateAmrFundingFeedback();
-    renderProjectView({ project: currentProject });
-    await waitFor(() => expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(1));
-    await flushMounts();
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    expect(mockedCheckAmrBalanceGate).toHaveBeenCalledTimes(2);
-
-    const props = chatPaneSpy.mock.calls.at(-1)![0];
-    const held = props.queuedItems[0];
-    expect(held.prompt).toBe('earlier temporarily parked input');
-    await act(async () => { props.onSendQueuedNow(held.id); });
-    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
-    expect(mockedCheckAmrBalanceGate).toHaveBeenCalledTimes(3);
-    expect(mockedStreamViaDaemon.mock.calls[0]![0]).toMatchObject({
-      attachments: ['attachments/held.txt'],
-      history: expect.arrayContaining([
-        expect.objectContaining({ role: 'user', content: 'earlier temporarily parked input' }),
-      ]),
-    });
-  });
-
-  it('keeps a funding-refused input manual across agent and workspace changes, then rechecks A on explicit send', async () => {
-    workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
-    const currentProject = { ...project(), pendingPrompt: undefined };
-    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'unavailable' });
-    const first = renderProjectView({ project: currentProject });
-    await waitFor(() => expect(screen.getByTestId('normal-send')).not.toBeDisabled());
-    await act(async () => {
-      await chatPaneSpy.mock.calls.at(-1)![0].onSend('held after funding refusal', [], []);
-    });
-    await waitFor(() => expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(1));
-
-    mockedCheckAmrBalanceGate.mockResolvedValue({
-      kind: 'hard', reason: 'insufficient', snapshot: snapshot('0'),
-    });
-    await act(async () => {
-      await chatPaneSpy.mock.calls.at(-1)![0].onSend('blocked draft', [], []);
-    });
-    first.unmount();
-
-    const agents = [
-      { id: 'amr', name: 'amr', available: true },
-      { id: 'claude', name: 'claude', available: true },
-    ] as unknown as AgentInfo[];
-    const view = renderProjectView({
-      project: currentProject,
-      config: { ...config, agentId: 'claude' },
-      agents,
-    });
-    await waitFor(() => expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(1));
-    await flushMounts();
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-
-    // The browser's ambient selection is B, but this project and its queued
-    // request still belong to A. B having funds cannot admit A's request.
-    workspaceScopeMocks.ambientContext = {
-      ...CALLER_CONTEXT, workspaceId: 'funded-workspace-b', workspaceMemberId: 'member-b',
-    };
-    let aFunding: 'insufficient' | 'available' = 'insufficient';
-    const checkedWorkspaceIds: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
-        const query = new URL(url, 'http://localhost').searchParams;
-        const workspaceId = query.get('workspaceId') ?? '';
-        checkedWorkspaceIds.push(workspaceId);
-        return new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1, workspaceId,
-          workspaceMemberId: workspaceId === TEAM_WORKSPACE ? TEAM_MEMBER : 'member-b',
-          modelId: query.get('modelId'), generatedAt: new Date().toISOString(),
-          fundingCheck: workspaceId === TEAM_WORKSPACE ? aFunding : 'available',
-          balanceUsd: workspaceId === TEAM_WORKSPACE && aFunding === 'insufficient' ? '0' : '10',
-        } }));
-      }
-      return new Response('{}');
-    }));
-    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
-    view.rerender(projectViewElement({ project: currentProject, config, agents }));
-    await flushMounts();
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-
-    let held = chatPaneSpy.mock.calls.at(-1)![0].queuedItems[0];
-    await act(async () => { chatPaneSpy.mock.calls.at(-1)![0].onSendQueuedNow(held.id); });
-    await waitFor(() => expect(checkedWorkspaceIds).toHaveLength(1));
-    expect(checkedWorkspaceIds).toEqual([TEAM_WORKSPACE]);
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(1);
-
-    aFunding = 'available';
-    invalidateAmrFundingFeedback();
-    held = chatPaneSpy.mock.calls.at(-1)![0].queuedItems[0];
-    await act(async () => { chatPaneSpy.mock.calls.at(-1)![0].onSendQueuedNow(held.id); });
-    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
-    expect(checkedWorkspaceIds).toEqual([TEAM_WORKSPACE, TEAM_WORKSPACE]);
-    expect(mockedStreamViaDaemon.mock.calls[0]![0].workspaceContext?.workspaceId).toBe(TEAM_WORKSPACE);
-  });
 
   it.each(['text and attachment', 'attachment only'] as const)('restores real composer %s after a refusal and does not duplicate a rapid Send', async (payload) => {
     useRealComposer.value = true;
     workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
-        const query = new URL(url, 'http://localhost').searchParams;
-        return new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          modelId: query.get('modelId'), generatedAt: new Date().toISOString(), fundingCheck: 'insufficient', balanceUsd: '0',
-        } }));
+      if (url.includes('/api/workspace/billing/send-preflight')) {
+        const request = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ schemaVersion: 1, requestId: 'server', ...request, decision: 'reject', reason: 'insufficient_funds' }));
       }
       return new Response('{}');
     }));
@@ -781,18 +568,19 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     expect(screen.getByRole('button', { name: 'chat.attachments.preview' })).toBeTruthy();
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
     expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems ?? []).toHaveLength(0);
-    expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('/api/workspace/billing/preflight?'))).toHaveLength(1);
+    expect(vi.mocked(fetch).mock.calls.filter(([input]) => String(input).includes('/api/workspace/billing/send-preflight'))).toHaveLength(1);
   });
+
 
   it.each(['model', 'workspace', 'account', 'stop', 'unmount'] as const)('never starts a run when %s changes while the exact funding check is pending', async (change) => {
     workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
     let resolve!: (value: Response) => void;
-    let requestModel: string | null = null;
+    let request: Record<string, unknown> = {};
     const fetchFunding = vi.fn();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
-        requestModel = new URL(url, 'http://localhost').searchParams.get('modelId');
+      if (url.includes('/api/workspace/billing/send-preflight')) {
+        request = JSON.parse(String(init?.body));
         fetchFunding();
         return new Promise<Response>((settle) => { resolve = settle; });
       }
@@ -815,20 +603,18 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     if (change === 'stop') act(() => chatPaneSpy.mock.calls.at(-1)![0].onStop());
     if (change === 'unmount') view.unmount();
     await act(async () => {
-      resolve(new Response(JSON.stringify({ preflight: {
-        schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-        modelId: requestModel, generatedAt: new Date().toISOString(), fundingCheck: 'available', balanceUsd: '10',
-      } })));
+      resolve(new Response(JSON.stringify({ schemaVersion: 1, requestId: 'server', ...request, decision: 'proceed' })));
       await pending;
     });
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
   });
 
+
   it.each(['unknown', 'unavailable'] as const)('keeps backend admission when preflight is %s rather than inventing a financial refusal', async (funding) => {
     workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
+      if (url.includes('/api/workspace/billing/send-preflight')) {
         return new Response(JSON.stringify({ preflight: {
           schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
           modelId: null, generatedAt: new Date().toISOString(), fundingCheck: 'unknown',
@@ -842,171 +628,76 @@ describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
     expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1);
   });
 
-  it('does not POST /api/runs on a real transport path until a fresh manual retry is funded; backend rejection remains authoritative', async () => {
-    workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
-    const actualDaemon = await vi.importActual<typeof import('../../src/providers/daemon')>('../../src/providers/daemon');
-    const backendRejections = vi.fn();
-    mockedStreamViaDaemon.mockImplementation((options) => actualDaemon.streamViaDaemon({
-      ...options,
-      handlers: { ...options.handlers, onError: (error) => {
-        backendRejections(error);
-        return options.handlers.onError(error);
-      } },
-    }));
-    const posts: Array<{ body: Record<string, unknown>; headers: Headers }> = [];
-    let funding = 'insufficient';
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
-        return new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          modelId: null, generatedAt: new Date().toISOString(), fundingCheck: funding, balanceUsd: funding === 'available' ? '10' : '0',
-        } }));
-      }
-      if (url === '/api/runs' && init?.method === 'POST') {
-        posts.push({ body: JSON.parse(String(init.body)), headers: new Headers(init.headers) });
-        return new Response(JSON.stringify({ error: { code: 'AMR_INSUFFICIENT_BALANCE', message: 'authoritative backend refusal' } }), { status: 409 });
-      }
-      return new Response('{}');
-    }));
+
+  it('confirmed unauthenticated uses the existing sign-in dialog without a wallet prerequisite', async () => {
+    vi.mocked(fetchVelaLoginStatus).mockResolvedValue({ loggedIn: false } as never);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/billing/send-preflight') ? Response.json({ error: 'unauthenticated' }, { status: 401 }) : Response.json({})));
     renderProjectView({ project: { ...project(), pendingPrompt: null } as never });
-    await waitFor(() => expect(screen.getByTestId('normal-send')).not.toBeDisabled());
-    let outcome: unknown;
-    await act(async () => { outcome = await chatPaneSpy.mock.calls.at(-1)![0].onSend('HTTP draft', [{ path: 'design.png', name: 'design.png', kind: 'image' }], []); });
-    expect(outcome).toBe('restore-draft');
-    expect(posts).toHaveLength(0);
-    funding = 'available';
-    invalidateAmrFundingFeedback();
-    await act(async () => { await Promise.resolve(); });
-    expect(posts).toHaveLength(0);
-    await act(async () => { await chatPaneSpy.mock.calls.at(-1)![0].onSend('HTTP draft', [{ path: 'design.png', name: 'design.png', kind: 'image' }], []); });
-    await waitFor(() => expect(posts).toHaveLength(1));
-    expect(posts[0]!.body).toMatchObject({ currentPrompt: 'HTTP draft', attachments: ['design.png'], projectId: PROJECT_ID });
-    expect(posts[0]!.headers.get('x-od-workspace-id')).toBe(TEAM_WORKSPACE);
-    expect(posts[0]!.headers.get('x-od-workspace-member-id')).toBe(TEAM_MEMBER);
-    await waitFor(() => expect(backendRejections).toHaveBeenCalledWith(expect.objectContaining({ code: 'AMR_INSUFFICIENT_BALANCE' })));
-    mockedStreamViaDaemon.mockImplementation(async () => undefined);
-  });
-
-  it('a Home sign-in witness cannot bypass funding; the existing held payload requires manual retry after recovery', async () => {
-    workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
-    window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
-    window.sessionStorage.setItem(`od:auto-send-amr-gate-witness:${PROJECT_ID}`, JSON.stringify({
-      workspaceType: 'team', workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-    }));
-    const reads = vi.fn();
-    let funding = 'insufficient';
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes('/api/workspace/billing/preflight?')) {
-        reads();
-        return new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1, workspaceId: TEAM_WORKSPACE, workspaceMemberId: TEAM_MEMBER,
-          modelId: null, generatedAt: new Date().toISOString(), fundingCheck: funding, balanceUsd: '0',
-        } }));
-      }
-      return new Response('{}');
-    }));
-    renderProjectView();
-    await waitFor(() => expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toEqual([expect.objectContaining({ prompt: SEED_PROMPT })]));
-    expect(reads).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByTestId('normal-send')).toBeEnabled());
+    await act(async () => { await chatPaneSpy.mock.calls.at(-1)![0].onSend('keep auth draft', [], []); });
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    await screen.findByTestId('amr-balance-dialog');
     expect(mockedCheckAmrBalanceGate).not.toHaveBeenCalled();
+  });
+  it('uses the persisted bound target even when display scope is unavailable', async () => {
+    const requests: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => { requests.push(JSON.parse(String(init?.body))); return new Response('{}', { status: 503 }); }));
+    workspaceScopeMocks.projectScope = { loading: false, scope: { kind: 'unavailable', projectId: PROJECT_ID, workspaceId: TEAM_WORKSPACE, context: null } } as never;
+    workspaceScopeMocks.ambientContext = { ...CALLER_CONTEXT, workspaceId: 'navbar-other' };
+    renderProjectView({ project: { ...project(), pendingPrompt: null } as never });
+    await waitFor(() => expect(screen.getByTestId('normal-send')).toBeEnabled());
+    await act(async () => { await chatPaneSpy.mock.calls.at(-1)![0].onSend('bound task', [], []); });
+    expect(requests).toEqual([expect.objectContaining({ workspaceId: TEAM_WORKSPACE })]);
+    expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['model', 'account'] as const)('consumes stale Home %s intent without automatic replay or cross-account draft exposure', async change => {
+    workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
+    const attachment = { path: 'original-home.txt', name: 'original-home.txt', kind: 'file' };
+    window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
+    window.sessionStorage.setItem(`od:auto-send-attachments:${PROJECT_ID}`, JSON.stringify([attachment]));
+    let finish!: (value: Response) => void;
+    let request: Record<string, unknown> = {};
+    const previews = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/billing/send-preflight')) {
+        request = JSON.parse(String(init?.body)); previews();
+        return new Promise<Response>(resolve => { finish = resolve; });
+      }
+      return Response.json({});
+    }));
+    const view = renderProjectView();
+    await waitFor(() => expect(previews).toHaveBeenCalledTimes(1));
+    if (change === 'model') view.rerender(projectViewElement({ config: { ...config, agentModels: { amr: { model: 'new-model' } } } }));
+    else advanceWorkspaceAccountGeneration('new-home-principal');
+    await act(async () => { finish(Response.json({ schemaVersion: 1, requestId: 'server', ...request, decision: 'proceed' })); });
+    await waitFor(() => expect(window.sessionStorage.getItem(`od:auto-send-first:${PROJECT_ID}`)).toBeNull());
+    await waitFor(() => expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toHaveLength(change === 'model' ? 1 : 0));
+    const manual = JSON.parse(window.localStorage.getItem(`od:chat-queued-sends:${PROJECT_ID}:v1`) ?? '[]');
+    expect(manual).toEqual(change === 'model' ? [expect.objectContaining({ prompt: SEED_PROMPT, attachments: [attachment], manualStartOnly: true })] : []);
+    await flushMounts();
+    expect(previews).toHaveBeenCalledTimes(1);
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    funding = 'available';
-    invalidateAmrFundingFeedback();
-    await act(async () => { await Promise.resolve(); });
+  });
+
+  it.each(['model', 'account'] as const)('rejects a Home stage already stale before the first Project attempt (%s)', async change => {
+    workspaceScopeMocks.projectScope = resolvedTeamScope(CALLER_CONTEXT);
+    notifyWorkspaceContextRefresh({ context: CALLER_CONTEXT });
+    const target = currentWorkspaceSendTarget()!;
+    const attachment = { path: 'before-first.txt', name: 'before-first.txt', kind: 'file' };
+    window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
+    window.sessionStorage.setItem(`od:auto-send-attachments:${PROJECT_ID}`, JSON.stringify([attachment]));
+    handoffAmrSendPreflight(PROJECT_ID, { clientRequestId: 'original-home-attempt', workspaceId: target.workspaceId,
+      accountGeneration: target.accountGeneration, targetRevision: target.selectionRevision, modelId: change === 'model' ? 'previous-model' : null });
+    if (change === 'account') advanceWorkspaceAccountGeneration('changed-before-first-project-attempt');
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({})); vi.stubGlobal('fetch', fetch);
+    renderProjectView();
+    await waitFor(() => expect(window.sessionStorage.getItem(`od:auto-send-first:${PROJECT_ID}`)).toBeNull());
+    await flushMounts();
+    expect(fetch.mock.calls.filter(([input]) => String(input).includes('/billing/send-preflight'))).toHaveLength(0);
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-    expect(chatPaneSpy.mock.calls.at(-1)![0].queuedItems).toEqual([expect.objectContaining({ prompt: SEED_PROMPT })]);
+    const queued = JSON.parse(window.localStorage.getItem(`od:chat-queued-sends:${PROJECT_ID}:v1`) ?? '[]');
+    expect(queued).toEqual(change === 'model' ? [expect.objectContaining({ prompt: SEED_PROMPT, attachments: [attachment], manualStartOnly: true })] : []);
   });
 
-  // 空钱包但硬拦让了位(T55:档次读不出来,由 Vela 入场兜底)。让位只说「不拦」,
-  // 余额确实是 $0,卡照出;弹窗不出,因为这一次发送并没有被挡住。
-  //
-  // ⚠️ 这一条**不是**原来那条「告警档」。告警档(余额 > 0 但低于某条线)已由产品
-  // 2026-09-07 整档撤掉(T66),判定层不再产生它 —— 那一档的呈现红测在
-  // `tests/components/t66-low-balance-tier-retired.test.tsx`。
-  it('空钱包让位:不弹窗,出卡片,而且这一次发送照常跑完', async () => {
-    await sendOnce({ kind: 'empty_not_blocked', snapshot: snapshot('0') });
-
-    await waitFor(() =>
-      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0'),
-    );
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
-    // D4 不阻塞:让位那一档不该把这次发送吊在半空。
-    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
-  });
-
-  // 拦截档:弹窗保留,同时也要出卡片。这里的身份是**非 Max · owner**,
-  // 那一组的弹窗正是 `AmrBalanceDialog`(规格 §6.V 第一行)。
-  it('拦截档:弹窗和卡片同时出', async () => {
-    await sendOnce({
-      kind: 'hard',
-      reason: 'insufficient',
-      snapshot: snapshot('0'),
-    });
-
-    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
-    expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0');
-    // 拦截就是拦截 —— 这一次发送不该跑起来。
-    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
-  });
-
-  it('放行时既不弹窗也不出卡', async () => {
-    await sendOnce({ kind: 'allow' });
-
-    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
-    expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('none');
-    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
-  });
-
-  // 已定口径「付费档余额 0 = 不限量,不拦」(#7190)属于**判定**那一层。
-  // 这次只改呈现,所以这里钉的是:新加的卡**自己不拦人** —— 判定放行的时候,
-  // 卡不出现、发送也不被它挡住。
-  it('新加的卡不会把判定放行的付费用户重新拦回去', async () => {
-    await sendOnce({ kind: 'allow' });
-
-    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
-    expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('none');
-  });
-
-  /*
-   * 红测(T61 · 接线那一半):**这份读数是替哪一轮取的。**
-   *
-   * `ChatPane` 那一页(`tests/components/chat/t61-balance-card-turn-archive.test.tsx`)
-   * 断言的是「有主的读数怎么画」。这一页断言的是它的上游:`ProjectView` 要把
-   * **主是谁**一起交出去,否则卡就退回流水末尾,T61 ②「不随新一轮移动」失效。
-   */
-  it('空钱包让位:读数锚在这一次要跑的那一轮上', async () => {
-    await sendOnce({ kind: 'empty_not_blocked', snapshot: snapshot('0') });
-
-    await waitFor(() =>
-      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0'),
-    );
-    const anchor = screen.getByTestId('amr-balance-anchor-prop').textContent;
-    expect(anchor).not.toBe('none');
-    // 指的就是这一轮那条助手消息,不是别的哪一条。
-    expect(anchor).toBe(screen.getByTestId('last-assistant-id').textContent);
-  });
-
-  it('拦截档:没有轮次可锚 —— 那一轮已经被收回了', async () => {
-    await sendOnce({
-      kind: 'hard',
-      reason: 'insufficient',
-      snapshot: snapshot('0'),
-    });
-
-    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
-    expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0');
-    // 收回之后流水里根本没有这一轮 —— 锚点必须是空的,读数才落得回流水末尾。
-    expect(screen.getByTestId('amr-balance-anchor-prop').textContent).toBe('none');
-  });
-
-  /*
-   * 「放行时锚点也一起撤掉」**故意没有单独的用例**:读数和锚点装在同一条 state
-   * 里(`ProjectView.amrBalanceCard`),放行那一档只有一句 `setAmrBalanceCard(null)`,
-   * 没有「只撤一半」这种写法可写。写一条只能写成永远绿的断言,那不是证据。
-   * 上面「放行时既不弹窗也不出卡」已经覆盖放行那一档的可见行为。
-   */
 });

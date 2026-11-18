@@ -67,7 +67,21 @@ export async function authorizeCreatedProjectWorkspace(
   configuredEnv: Record<string, string> = {},
   allowStaticDevContext = false,
 ): Promise<CreatedProjectWorkspaceResolution> {
-  const context = localProjectWorkspaceAttribution(req);
+  const target = (req as { body?: { workspaceTarget?: unknown } })?.body?.workspaceTarget;
+  let context = localProjectWorkspaceAttribution(req);
+  if (target !== undefined) {
+    const workspaceId = target && typeof target === 'object' && 'workspaceId' in target ? target.workspaceId : null;
+    if (typeof workspaceId !== 'string' || !workspaceId.trim() || (context && context.workspaceId !== workspaceId)) {
+      return { ok: false, status: 400, code: 'WORKSPACE_CONTEXT_INCOMPLETE', message: 'invalid or conflicting workspace target' };
+    }
+    // Explicit target is addressing, never a membership assertion. Resolve the
+    // current canonical member even when compatibility headers carry old ids.
+    const directory = await fetchWorkspaceDirectory?.().catch(() => null);
+    if (!directory?.ok) return { ok: false, status: 503, code: 'WORKSPACE_AUTHORITY_UNAVAILABLE', message: 'workspace membership authority is temporarily unavailable', retryable: true };
+    const member = directory.items.find(item => item.workspaceId === workspaceId && item.memberStatus === 'active' && item.lifecycleState === 'active');
+    if (!member) return { ok: false, status: 403, code: 'WORKSPACE_PROJECT_PERMISSION_DENIED', message: 'workspace membership is inactive' };
+    return { ok: true, context: workspaceResourceContextFromVerified(workspaceContextFromDirectoryItem(member, configuredEnv)) };
+  }
   if (!context) return { ok: true, context: null };
   if (context.workspaceType === 'team' && context.memberStatus === 'removed') {
     return {

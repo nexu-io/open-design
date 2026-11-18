@@ -14,7 +14,6 @@ import type { SettingsSection } from '../../src/components/SettingsDialog';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { AmrAuthRetryContinuation } from '../../src/runtime/amr-auth-retry-continuation';
-import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import type {
   AgentInfo,
   AppConfig,
@@ -3069,26 +3068,20 @@ describe('ProjectView conversation run isolation', () => {
     const originalFetch = globalThis.fetch;
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), 'http://localhost');
-      if (url.pathname === '/api/workspace/billing/preflight') {
-        return Promise.resolve(new Response(JSON.stringify({ preflight: {
-          schemaVersion: 1,
-          workspaceId: 'workspace-personal',
-          workspaceMemberId: 'member-personal',
-          modelId: url.searchParams.get('modelId'),
-          generatedAt: new Date().toISOString(),
-          fundingCheck: freshFunding,
-          balanceUsd: freshFunding === 'available' ? '10.00' : '0',
-        } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      if (url.pathname === '/api/workspace/billing/send-preflight') {
+        const request = JSON.parse(String(init?.body));
+        return Promise.resolve(Response.json({ schemaVersion: 1, requestId: 'server', ...request,
+          decision: freshFunding === 'insufficient' ? 'reject' : 'proceed', ...(freshFunding === 'insufficient' ? { reason: 'insufficient_funds' } : {}) }));
       }
       return originalFetch(input, init);
     }));
     fireEvent.click(screen.getByTestId('send-queued-0'));
     if (freshFunding === 'insufficient') {
       await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/workspace/billing/preflight?'),
+        expect.stringContaining('/api/workspace/billing/send-preflight'),
         expect.anything(),
       ));
-      await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('chat-error').textContent).toBe('chat.runError.workspaceCreditsMessage'));
       // RUN-003: rejecting the replacement must not cancel the task that was
       // already running when the user requested this queued send.
       expect(screen.getByTestId('streaming-state').textContent).toBe('streaming');
@@ -3115,7 +3108,7 @@ describe('ProjectView conversation run isolation', () => {
   });
 
   it.each(['available', 'insufficient'] as const)(
-    'hides only the manually selected drain when the old run ends during its funding check, then settles %s', async (result) => {
+    'reuses the Send now preview once if the old run ends while it is pending (%s)', async result => {
       const firstPrompt = 'explicitly selected manual item';
       const secondPrompt = 'unselected manual item must stay queued';
       window.localStorage.setItem('od:chat-queued-sends:project-1:v1', JSON.stringify([
@@ -3128,69 +3121,39 @@ describe('ProjectView conversation run isolation', () => {
         runHandlers = (input as { handlers: { onDone: () => void } }).handlers;
         return new Promise<void>(resolve => { finishRun = resolve; });
       });
-      const amrAgents: AgentInfo[] = [{ id: 'amr', name: 'AMR', bin: 'amr', available: true,
-        models: [{ id: 'glm-5', label: 'GLM 5' }] }];
+      const amrAgents: AgentInfo[] = [{ id: 'amr', name: 'AMR', bin: 'amr', available: true, models: [{ id: 'glm-5', label: 'GLM 5' }] }];
       renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
       await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
       await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt));
       const originalFetch = globalThis.fetch;
-      let finishFunding!: (response: Response) => void;
-      let finishDrainFunding!: () => void;
-      let requestedModelId: string | null = null;
-      let fundingReads = 0;
-      invalidateAmrFundingFeedback();
+      let finishPreview!: (response: Response) => void;
+      let request: Record<string, unknown> = {};
+      let previewReads = 0;
       vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = new URL(String(input), 'http://localhost');
-        if (url.pathname === '/api/workspace/billing/preflight') {
-          fundingReads++;
-          requestedModelId = url.searchParams.get('modelId');
-          if (fundingReads === 1) return new Promise<Response>(resolve => { finishFunding = resolve; });
-          return new Promise<Response>(resolve => {
-            finishDrainFunding = () => resolve(new Response(JSON.stringify({ preflight: {
-              schemaVersion: 1, workspaceId: 'workspace-personal', workspaceMemberId: 'member-personal',
-              modelId: url.searchParams.get('modelId'), generatedAt: new Date().toISOString(),
-              fundingCheck: result, balanceUsd: result === 'available' ? '10.00' : '0',
-            } })));
-          });
+        if (String(input).includes('/billing/send-preflight')) {
+          previewReads++; request = JSON.parse(String(init?.body));
+          return new Promise<Response>(resolve => { finishPreview = resolve; });
         }
         return originalFetch(input, init);
       }));
       fireEvent.click(screen.getByTestId('send-queued-0'));
-      await waitFor(() => expect(finishFunding).toBeTypeOf('function'));
+      await waitFor(() => expect(finishPreview).toBeTypeOf('function'));
       expect(streamViaDaemon).not.toHaveBeenCalled();
       await act(async () => { runHandlers.onDone(); finishRun(); });
       await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('idle'));
       expect(streamViaDaemon).not.toHaveBeenCalled();
-      expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt);
-      await act(async () => finishFunding(new Response(JSON.stringify({ preflight: {
-        schemaVersion: 1, workspaceId: 'workspace-personal', workspaceMemberId: 'member-personal', modelId: requestedModelId,
-        generatedAt: new Date().toISOString(), fundingCheck: 'available', balanceUsd: '10.00',
-      } }))));
-      await waitFor(() => expect(finishDrainFunding, JSON.stringify({ fundingReads, requestedModelId, posts: streamViaDaemon.mock.calls.length, error: screen.getByTestId('chat-error').textContent })).toBeTypeOf('function'));
-      expect(screen.getByTestId('user-messages').textContent).toContain(firstPrompt);
-      // The actual drain started after the old run ended. Hide its card while
-      // keeping the durable payload; the unselected manual item never starts.
-      expect(screen.getByTestId('send-queued-0').textContent).toBe(secondPrompt);
-      expect(screen.queryByTestId('send-queued-1')).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]')).toHaveLength(2);
-      await act(async () => finishDrainFunding());
+      await act(async () => finishPreview(Response.json({ schemaVersion: 1, requestId: 'server', ...request,
+        decision: result === 'available' ? 'proceed' : 'reject', ...(result === 'insufficient' ? { reason: 'insufficient_funds' } : {}) })));
       if (result === 'available') {
         await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-        expect(streamViaDaemon.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
-          history: expect.arrayContaining([expect.objectContaining({ role: 'user', content: firstPrompt })]),
-        }));
-        await waitFor(() => expect(JSON.parse(window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]'))
-          .toEqual([expect.objectContaining({ id: 'unselected-manual', prompt: secondPrompt, manualStartOnly: true })]));
-        expect(screen.getByTestId('send-queued-0').textContent).toBe(secondPrompt);
+        expect(streamViaDaemon.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ history: expect.arrayContaining([expect.objectContaining({ role: 'user', content: firstPrompt })]) }));
+        await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe(secondPrompt));
       } else {
-        await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt));
-        expect(screen.getByTestId('send-queued-1').textContent).toBe(secondPrompt);
         expect(streamViaDaemon).not.toHaveBeenCalled();
-        expect(JSON.parse(window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]')).toEqual([
-          expect.objectContaining({ id: 'selected-manual', manualStartOnly: true }),
-          expect.objectContaining({ id: 'unselected-manual', manualStartOnly: true }),
-        ]);
+        expect(screen.getByTestId('send-queued-0').textContent).toBe(firstPrompt);
+        expect(screen.getByTestId('send-queued-1').textContent).toBe(secondPrompt);
       }
+      expect(previewReads).toBe(1);
     },
   );
 

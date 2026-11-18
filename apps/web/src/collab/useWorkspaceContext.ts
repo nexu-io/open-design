@@ -59,6 +59,7 @@ import {
 // `packages/contracts/src/api/collab.ts` for the shape.
 export interface WorkspaceContextState {
   context: WorkspaceCollabContext | null;
+  sendTarget?: { workspaceId: string; accountGeneration: number; selectionRevision: string };
   /** Monotonic browser boundary for sign-in/sign-out account changes. */
   accountGeneration?: number;
   /**
@@ -454,8 +455,9 @@ interface WorkspaceSelection {
   workspaceMemberId: string;
 }
 
-// `undefined` means storage is authoritative. A value (including null) means
-// the latest write failed and this tab's in-memory choice is authoritative.
+// Storage seeds a newly loaded tab. Once selected, the in-memory address
+// remains authoritative even if a later storage read or write fails.
+let workspaceSendSelectionRevision = 0;
 let inMemoryWorkspaceSelection: WorkspaceSelection | null | undefined;
 
 type WorkspaceSelectionRead =
@@ -497,8 +499,15 @@ function readWorkspaceSelection(): WorkspaceSelection | null {
   return readWorkspaceSelectionResult().selection;
 }
 
+/** Address independent of directory/display readiness; account changes clear selection. */
+export function currentWorkspaceSendTarget(): WorkspaceContextState['sendTarget'] {
+  const selection = readWorkspaceSelection();
+  return selection ? { workspaceId: selection.workspaceId, accountGeneration: currentWorkspaceAccountGeneration(), selectionRevision: `${currentWorkspaceAccountGeneration()}:${workspaceSendSelectionRevision}:${selection.workspaceId}` } : undefined;
+}
+
 function writeWorkspaceSelection(selection: WorkspaceSelection | null): void {
   if (typeof window === 'undefined') return;
+  if (readWorkspaceSelection()?.workspaceId !== selection?.workspaceId) workspaceSendSelectionRevision++;
   inMemoryWorkspaceSelection = selection ? { ...selection } : null;
   try {
     if (selection) {
@@ -506,7 +515,6 @@ function writeWorkspaceSelection(selection: WorkspaceSelection | null): void {
     } else {
       window.sessionStorage.removeItem(WORKSPACE_SELECTION_SESSION_KEY);
     }
-    inMemoryWorkspaceSelection = undefined;
   } catch {
     // A tab with unavailable sessionStorage still remains isolated in memory.
   }
@@ -531,6 +539,7 @@ function chooseWorkspaceForTab(
           && item.workspaceMemberId === selected.workspaceMemberId,
       )
     : undefined;
+  if (selected && !exact) return null; // Preserve the explicit target through directory failures/removal.
   const restartDefault = restartWorkspaceId
     ? visible.find((item) => item.workspaceId === restartWorkspaceId)
     : undefined;
@@ -596,6 +605,7 @@ export function resetWorkspaceContextCache(): void {
   resetWorkspaceContextRetrySchedules();
   inMemoryWorkspaceSelection = undefined;
   writeWorkspaceSelection(null);
+  inMemoryWorkspaceSelection = undefined;
 }
 
 /**
@@ -1005,6 +1015,7 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // change still costs one request.
       advanceWorkspaceContextRequestToken(event.newValue);
       advanceWorkspaceAccountGeneration(event.newValue ?? 'storage');
+      writeWorkspaceSelection(null);
       refreshAfterIdentityChange();
     };
     // A scheduled failure-retry (see `scheduleWorkspaceContextRetry`) fires this
@@ -1040,10 +1051,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
   }, [loadContext, sseConnected]);
 
   const accountGeneration = currentWorkspaceAccountGeneration();
-  return useMemo(
-    () => ({ ...state, accountGeneration }),
-    [accountGeneration, state],
-  );
+  const sendTarget = currentWorkspaceSendTarget();
+  return useMemo(() => ({ ...state, accountGeneration, ...(sendTarget ? { sendTarget } : {}) }),
+    [state, accountGeneration, sendTarget?.workspaceId, sendTarget?.selectionRevision]);
 }
 
 const WORKSPACE_CONTEXT_POLL_MS = 30_000;
@@ -1146,6 +1156,7 @@ export function notifyWorkspaceContextRefresh(
     cachedWorkspaceContextGeneration = workspaceContextRequestToken;
   } else {
     advanceWorkspaceAccountGeneration(stamp);
+    writeWorkspaceSelection(null);
     workspaceContextIdentityChangePending = true;
     seededWorkspaceContext = null;
   }

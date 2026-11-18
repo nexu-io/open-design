@@ -8827,7 +8827,7 @@ export async function startServer({
     res.json({
       version: {
         ...version,
-        capabilities: { slideRenderer: typeof desktopSlideRenderer === 'function' },
+        capabilities: { slideRenderer: typeof desktopSlideRenderer === 'function', workspaceTargetCreate: true },
       },
     });
   });

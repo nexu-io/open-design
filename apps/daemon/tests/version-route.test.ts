@@ -39,7 +39,7 @@ describe('/api/version', () => {
         packaged: expect.any(Boolean),
         platform: expect.any(String),
         arch: expect.any(String),
-        capabilities: { slideRenderer: expect.any(Boolean) },
+        capabilities: { slideRenderer: expect.any(Boolean), workspaceTargetCreate: true },
       },
     });
   });
