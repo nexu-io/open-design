@@ -1,5 +1,6 @@
 import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { WorkspaceRequestEvidence } from './workspace-request-evidence.js';
 
 import {
   collectSystemEnvironment,
@@ -16,6 +17,7 @@ const MAX_BYTES = 256 * 1024;
 const SAMPLE_INTERVAL_MS = 60_000;
 const FLUSH_INTERVAL_MS = 60_000;
 const MAX_WORKSPACES = 50;
+const MAX_DIRECTORY_REQUESTS = 50;
 
 type Source = 'workspace-directory' | 'workspace-context' | 'team-projects' | 'shared-resources' | 'local-api';
 type Workspace = { workspaceId: string | null; memberId: string | null; workspaceType: 'team' | 'personal' | null };
@@ -88,6 +90,7 @@ export function createDiagnosticsEvidence(options: {
   const now = options.now ?? Date.now;
   const failures = new Map<string, Failure>();
   const environments: SystemEnvironmentSnapshot[] = [];
+  const directoryRequests: WorkspaceRequestEvidence[] = [];
   let directory: { observedAt: string; truncated: boolean; items: Workspace[] } | null = null;
   let context: (Workspace & { observedAt: string }) | null = null;
   let lastSample = -Infinity;
@@ -104,7 +107,7 @@ export function createDiagnosticsEvidence(options: {
     return {
       schemaVersion: 1,
       exportedAt: new Date(now()).toISOString(),
-      limits: { failures: MAX_FAILURES, bytes: MAX_BYTES, sampleIntervalMs: SAMPLE_INTERVAL_MS, flushIntervalMs: FLUSH_INTERVAL_MS },
+      limits: { failures: MAX_FAILURES, directoryRequests: MAX_DIRECTORY_REQUESTS, bytes: MAX_BYTES, sampleIntervalMs: SAMPLE_INTERVAL_MS, flushIntervalMs: FLUSH_INTERVAL_MS },
       coverage: {
         actualNetworkRoute: 'not-observed', vpn: 'not-determined',
         workspaceContext: 'last-daemon-response-not-browser-selection',
@@ -114,6 +117,7 @@ export function createDiagnosticsEvidence(options: {
         environmentCollection: collectionState,
       },
       directory,
+      directoryRequests: [...directoryRequests],
       context,
       environments: [...environments],
       failures: Array.from(failures.values(), (entry) => ({ ...entry })),
@@ -122,6 +126,10 @@ export function createDiagnosticsEvidence(options: {
 
   function serialize(): string {
     let content = JSON.stringify(snapshot());
+    while (Buffer.byteLength(content) > MAX_BYTES && directoryRequests.length > 0) {
+      directoryRequests.shift();
+      content = JSON.stringify(snapshot());
+    }
     while (Buffer.byteLength(content) > MAX_BYTES && failures.size > 0) {
       failures.delete(failures.keys().next().value!);
       droppedGroups += 1;
@@ -232,6 +240,12 @@ export function createDiagnosticsEvidence(options: {
       if (closed) return;
       directory = { observedAt: new Date(now()).toISOString(), truncated: items.length > MAX_WORKSPACES,
         items: items.slice(0, MAX_WORKSPACES).map((item) => workspace({ ...item, memberId: item.memberId ?? item.workspaceMemberId })) };
+    },
+    recordDirectoryRequest(request: WorkspaceRequestEvidence): void {
+      if (closed) return;
+      directoryRequests.push(request);
+      if (directoryRequests.length > MAX_DIRECTORY_REQUESTS) directoryRequests.shift();
+      scheduleWrite();
     },
     observeContext(value: { workspaceId?: unknown; memberId?: unknown; workspaceType?: unknown } | null): void {
       if (closed) return;

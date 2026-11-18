@@ -1,4 +1,5 @@
 import { getDiagnosticsEvidence, recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
+import { beginWorkspaceRequestEvidence } from '../services/workspace-request-evidence.js';
 import { createHash } from 'node:crypto';
 import {
   buildWorkspacePermissions,
@@ -917,14 +918,21 @@ export async function fetchVelaWorkspaceDirectory(
   for (let attempt = 0; ; attempt += 1) {
     const controller = new AbortController();
     const attemptTimeoutMs = attempt === 0 ? timeoutMs : Math.min(timeoutMs, DIRECTORY_RETRY_TIMEOUT_MS);
-    const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
+    const trace = beginWorkspaceRequestEvidence({
+      apiUrl: session.apiUrl,
+      timeoutMs: attemptTimeoutMs,
+      record: evidence => getDiagnosticsEvidence()?.recordDirectoryRequest(evidence),
+    });
+    const timeout = setTimeout(() => { trace.deadline(); controller.abort(); }, attemptTimeoutMs);
     try {
-      const response = await fetchImpl(new URL('/api/v1/workspaces', session.apiUrl), {
+      const response = await trace.run(() => fetchImpl(new URL('/api/v1/workspaces', session.apiUrl), {
         method: 'GET',
         headers: { authorization: `Bearer ${session.controlKey}` },
         signal: controller.signal,
-      });
+      }));
+      trace.headers(response);
       if (!response.ok) {
+        trace.outcome('http_error');
         recordDiagnosticFailure({ source: 'workspace-directory', status: response.status, env: process.env });
         if (response.status === 401 || response.status === 403) {
           if (!options.readSession) {
@@ -954,15 +962,19 @@ export async function fetchVelaWorkspaceDirectory(
         };
       }
       const body = await response.json() as { items?: unknown } | null;
+      trace.parsed();
       const items = mapVelaWorkspaceDirectory(body);
       // A directory is an authority snapshot, not a best-effort display list.
       // Dropping malformed rows would falsely revoke previously active members.
       if (!Array.isArray(body?.items) || items.length !== body.items.length) {
+        trace.outcome('invalid_payload');
         return { ok: false, items: [], reason: 'upstream', status: 502 };
       }
       getDiagnosticsEvidence()?.observeDirectory(items);
+      trace.outcome('success');
       return { ok: true, items };
     } catch (error) {
+      trace.failed(error, controller.signal.aborted);
       recordDiagnosticFailure({ source: 'workspace-directory', error, timedOut: controller.signal.aborted, env: process.env });
       // Retry only a transport failure, never an HTTP rejection or malformed
       // JSON. Both attempts use one captured principal; account/credential
@@ -978,6 +990,7 @@ export async function fetchVelaWorkspaceDirectory(
       return { ok: false, items: [], reason: 'network' };
     } finally {
       clearTimeout(timeout);
+      trace.finish();
     }
   }
 }
