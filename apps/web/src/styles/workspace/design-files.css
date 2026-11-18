@@ -1418,7 +1418,8 @@ button.df-card-thumb:focus:not(:disabled) {
   display: flex;
   flex-direction: column;
 }
-.df-row-popover button {
+.df-row-popover button,
+.df-row-popover .df-row-popover-link {
   width: 100%;
   display: flex;
   justify-content: flex-start;
@@ -1430,10 +1431,27 @@ button.df-card-thumb:focus:not(:disabled) {
   border-radius: var(--radius-xs);
   color: var(--text);
 }
-.df-row-popover a {
-  display: block;
-  width: 100%;
+/* The Download item is a plain anchor; give it what the other items get
+   from the global `button` rule so it looks and focuses the same. */
+.df-row-popover .df-row-popover-link {
+  box-sizing: border-box;
+  align-items: center;
+  gap: var(--spacing-8, 8px);
+  height: 36px;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
-.df-row-popover button:hover { background: var(--bg-subtle); }
+.df-row-popover .df-row-popover-link:active { transform: translateY(1px); }
+.df-row-popover .df-row-popover-link:focus-visible {
+  outline: var(--stroke-thin, 1px) solid var(--blue);
+  outline-offset: 2px;
+}
+.df-row-popover button:hover,
+.df-row-popover .df-row-popover-link:hover { background: var(--bg-subtle); }
 .df-row-popover button.danger { color: var(--red); }
 .df-row-popover button.danger:hover { background: var(--red-bg); }

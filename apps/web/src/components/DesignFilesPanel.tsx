@@ -2144,20 +2144,27 @@ export function DesignFilesPanel({
                 ? t('designFiles.copiedLocalPath')
                 : t('designFiles.copyLocalPath')}
             </button>
+            {/* The anchor itself is the menu item: one interactive element,
+                not a <button> nested inside an <a>. */}
             <a
+              className="df-row-popover-link"
+              data-testid={`design-file-download-${menuPos.name}`}
               href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
               download={menuPos.name}
-              style={{ textDecoration: 'none' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuPos(null);
+              }}
+              onKeyDown={(e) => {
+                // Space runs the neighbouring button items; give the link the
+                // same key instead of scrolling the page.
+                if (e.key === ' ') {
+                  e.preventDefault();
+                  e.currentTarget.click();
+                }
+              }}
             >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuPos(null);
-                }}
-              >
-                {t('designFiles.download')}
-              </button>
+              {t('designFiles.download')}
             </a>
             <button
               type="button"
