@@ -652,6 +652,8 @@ const CATALOGUE: CuratedSkill[] = [
     category: 'design-systems',
     upstream: 'https://github.com/oil-oil/oil-ui',
     attribution: 'Curated from @oil-oil.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. The upstream Oil UI reference guides, style-explorer comparison generator, and browser screenshot scripts are not bundled here; install the upstream bundle (`npx skills add oil-oil/oil-ui`) for the full workflow, or disclose the limitation before falling back to OpenDesign defaults.',
   },
   {
     id: 'ui-ux-pro-max',
