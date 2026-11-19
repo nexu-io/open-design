@@ -75,8 +75,8 @@ describe('parsedToKit package static assets', () => {
   });
 
   it('exposes kit, token, manifest, and preview URLs for editable local imports without projectId', () => {
-    const kit = parsedToKit(parseDesignMd('# Webomage'), {
-      designSystemId: 'user:webomage',
+    const kit = parsedToKit(parseDesignMd('# Acme'), {
+      designSystemId: 'user:acme',
       editable: true,
       packageInfo: {
         availableFiles: [
@@ -90,8 +90,8 @@ describe('parsedToKit package static assets', () => {
         ],
         manifest: {
           schemaVersion: 'od-design-system-project/v1',
-          id: 'webomage',
-          name: 'Webomage',
+          id: 'acme',
+          name: 'Acme',
           category: 'Imported',
           files: {
             design: 'DESIGN.md',
@@ -112,21 +112,21 @@ describe('parsedToKit package static assets', () => {
     });
 
     expect(kit.system).toMatchObject({
-      kitUrl: '/api/design-systems/user%3Awebomage/static?path=components.html',
-      designTokensUrl: '/api/design-systems/user%3Awebomage/static?path=design-tokens.json',
-      componentsManifestUrl: '/api/design-systems/user%3Awebomage/static?path=components.manifest.json',
+      kitUrl: '/api/design-systems/user%3Aacme/static?path=components.html',
+      designTokensUrl: '/api/design-systems/user%3Aacme/static?path=design-tokens.json',
+      componentsManifestUrl: '/api/design-systems/user%3Aacme/static?path=components.manifest.json',
       kitLabel: 'components.html',
     });
     expect(kit.assets).toEqual([
       {
         kind: 'colors',
         label: 'Colors',
-        url: '/api/design-systems/user%3Awebomage/static?path=preview%2Fcolors.html',
+        url: '/api/design-systems/user%3Aacme/static?path=preview%2Fcolors.html',
       },
       {
         kind: 'app',
         label: 'App Preview',
-        url: '/api/design-systems/user%3Awebomage/static?path=preview%2Fapp.html',
+        url: '/api/design-systems/user%3Aacme/static?path=preview%2Fapp.html',
       },
     ]);
   });

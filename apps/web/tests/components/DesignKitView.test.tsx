@@ -525,9 +525,9 @@ describe('DesignKitView iframe sandboxing', () => {
     const kitWithManifest: DesignKit = {
       ...previewKit(),
       system: {
-        kitUrl: '/api/design-systems/user%3Awebomage/static?path=components.html',
-        designTokensUrl: '/api/design-systems/user%3Awebomage/static?path=design-tokens.json',
-        componentsManifestUrl: '/api/design-systems/user%3Awebomage/static?path=components.manifest.json',
+        kitUrl: '/api/design-systems/user%3Aacme/static?path=components.html',
+        designTokensUrl: '/api/design-systems/user%3Aacme/static?path=design-tokens.json',
+        componentsManifestUrl: '/api/design-systems/user%3Aacme/static?path=components.manifest.json',
         kitLabel: 'components.html',
       },
     };
@@ -536,7 +536,7 @@ describe('DesignKitView iframe sandboxing', () => {
       if (url.includes('components.manifest.json')) {
         return Response.json({
           schemaVersion: 1,
-          brandId: 'webomage',
+          brandId: 'acme',
           tokens: {
             declared: ['--accent', '--bg', '--radius-md', '--space-4'],
             referenced: ['--accent', '--radius-md'],
@@ -598,7 +598,7 @@ describe('DesignKitView iframe sandboxing', () => {
       const openTabButton = screen.getByRole('button', { name: 'Open in new tab' });
       fireEvent.click(openTabButton);
       expect(openSpy).toHaveBeenCalledWith(
-        '/api/design-systems/user%3Awebomage/static?path=components.html',
+        '/api/design-systems/user%3Aacme/static?path=components.html',
         '_blank',
         'noopener,noreferrer',
       );
