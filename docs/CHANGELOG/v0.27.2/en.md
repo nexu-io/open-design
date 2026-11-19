@@ -1,5 +1,5 @@
 ---
-title: "Open Design 0.27.2 — Clearer Quotas"
+title: "Open Design 0.27.2 — Clearer Quotas, Sharper Displays"
 description: "A focused reliability patch that keeps quota reset times precise, makes project-menu failures easier to read, restores crisp macOS rendering after display changes, and strengthens installed-app update recovery."
 ---
 
