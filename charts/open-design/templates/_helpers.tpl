@@ -68,3 +68,12 @@ when the proxy is disabled, so an external proxy or ingress can reach the pod.
 {{- ternary "127.0.0.1" "0.0.0.0" .Values.authProxy.enabled -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Host the exec probes connect to. Follows a custom bind host so the probe and
+OD_BIND_HOST cannot drift, but never dials the 0.0.0.0 wildcard.
+*/}}
+{{- define "open-design.probeHost" -}}
+{{- $host := include "open-design.bindHost" . -}}
+{{- ternary "127.0.0.1" $host (eq $host "0.0.0.0") -}}
+{{- end -}}

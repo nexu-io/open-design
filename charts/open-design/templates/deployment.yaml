@@ -90,7 +90,7 @@ spec:
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:
-              command: ["wget", "-qO-", "http://127.0.0.1:{{ .Values.config.webPort }}/api/health"]
+              command: ["wget", "-qO-", "http://{{ include "open-design.probeHost" . }}:{{ .Values.config.webPort }}/api/health"]
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
@@ -99,7 +99,7 @@ spec:
           {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
             exec:
-              command: ["wget", "-qO-", "http://127.0.0.1:{{ .Values.config.webPort }}/api/health"]
+              command: ["wget", "-qO-", "http://{{ include "open-design.probeHost" . }}:{{ .Values.config.webPort }}/api/health"]
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
