@@ -50,3 +50,21 @@ Selector labels used by Services and HPAs.
 app.kubernetes.io/name: {{ include "open-design.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+{{/*
+Secret holding OD_API_TOKEN. Defaults to the chart-managed Secret.
+*/}}
+{{- define "open-design.secretName" -}}
+{{- default (include "open-design.fullname" .) .Values.existingSecret -}}
+{{- end -}}
+
+{{/*
+Host the app binds to. Auto-selects loopback behind the auth proxy and 0.0.0.0
+when the proxy is disabled, so an external proxy or ingress can reach the pod.
+*/}}
+{{- define "open-design.bindHost" -}}
+{{- if .Values.config.bindHost -}}
+{{- .Values.config.bindHost -}}
+{{- else -}}
+{{- ternary "127.0.0.1" "0.0.0.0" .Values.authProxy.enabled -}}
+{{- end -}}
+{{- end -}}

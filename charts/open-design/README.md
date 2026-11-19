@@ -42,7 +42,9 @@ nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 **Path Constraints**: Non-root ingress path prefixes (sub-paths) are explicitly **unsupported** by the proxy routing stack. Ingress paths must be configured as `/`.
 
 #### Authentication Proxy
-An authentication proxy (NGINX) is introduced to front the application. This proxy runs as a mandatory sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
+An authentication proxy (NGINX) is introduced to front the application. By default this proxy runs as a sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
+
+Set `authProxy.enabled=false` when authentication terminates outside the pod - an ingress controller with auth, a service mesh, Cloudflare Access, or an organizational SSO gateway. The chart then drops the proxy container, its ConfigMap and its init container, the application binds `0.0.0.0`, and the Service targets the application port directly. Add `config.disableApiAuth=true` when that external layer authenticates callers without forwarding the API token; otherwise pass `OD_API_TOKEN` through as usual.
 
 #### Security Context
 This chart adheres to strict security defaults:
@@ -71,13 +73,25 @@ This chart adheres to strict security defaults:
 | `config.publicBaseUrl` | Public base URL used by the application (derived dynamically if empty)                                        | `""`                                 |
 | `config.nodeOptions`   | V8 engine memory optimizations                                                                                | `--max-old-space-size=192`           |
 | `config.webPort`       | Web server listening port                                                                                     | `7456`                               |
-| `config.bindHost`      | Host to bind the web server to                                                                                | `"127.0.0.1"`                        |
+| `config.bindHost`      | Host to bind the web server to. Empty auto-selects `127.0.0.1` behind the auth proxy, `0.0.0.0` without it     | `""`                                 |
 | `config.apiToken`      | API authentication token (must be changed from default)                                                       | `"secure-default-token-change-me"`   |
+| `config.disableApiAuth`| Trust an upstream layer that authenticated the caller without forwarding the token                            | `false`                              |
+
+### Secrets & Extra Configuration
+
+| Name                 | Description                                                                                  | Value  |
+| -------------------- | -------------------------------------------------------------------------------------------- | ------ |
+| `existingSecret`     | Existing Secret holding `OD_API_TOKEN` (External Secrets, sealed-secrets). Skips the chart Secret | `""`   |
+| `extraEnv`           | Extra environment variables for the application container                                     | `[]`   |
+| `extraEnvFrom`       | Extra `secretRef` / `configMapRef` sources for the application container                      | `[]`   |
+| `extraVolumes`       | Extra volumes for the pod                                                                     | `[]`   |
+| `extraVolumeMounts`  | Extra mounts for the application container (skill bundles, agent credentials, config files)    | `[]`   |
 
 ### Auth Proxy Parameters
 
 | Name                                   | Description                                       | Value                                            |
 | -------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
+| `authProxy.enabled`                    | Run the proxy sidecar. Disable for external auth (ingress, mesh, Cloudflare Access) | `true`                                           |
 | `authProxy.image`                      | NGINX proxy image                                 | `nginxinc/nginx-unprivileged:1.25-alpine-slim`   |
 | `authProxy.port`                       | Proxy server port inside the container            | `8080`                                           |
 | `authProxy.securityContext`            | Security context for the proxy container          | `{...}`                                          |
