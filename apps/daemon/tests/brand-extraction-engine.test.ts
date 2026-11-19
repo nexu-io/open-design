@@ -296,6 +296,24 @@ describe('agent-driven brand extraction engine', () => {
     }
   });
 
+  it('keeps semantic alert tints light while darkening only the readable base', () => {
+    const tokens = deriveTokens(defaultSeed, 'default');
+
+    // The readable base sits further down each ladder than the bright seed...
+    expect(tokens.colorSuccess).not.toBe(defaultSeed.colorSuccess);
+    expect(tokens.colorWarning).not.toBe(defaultSeed.colorWarning);
+    expect(tokens.colorError).not.toBe(defaultSeed.colorError);
+    // ...but the alert surfaces still come from the bright seeds, so they stay
+    // near-white instead of turning muddy behind dark text.
+    for (const bg of [tokens.colorSuccessBg, tokens.colorWarningBg, tokens.colorErrorBg]) {
+      expect(contrastRatio(bg, '#ffffff')).toBeLessThan(1.1);
+    }
+    // And each base stays readable on its own alert surface.
+    expect(contrastRatio(tokens.colorSuccess, tokens.colorSuccessBg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(tokens.colorWarning, tokens.colorWarningBg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(tokens.colorError, tokens.colorErrorBg)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('renders kit avatars on the AA-readable primary surface', () => {
     const tokens = deriveTokens({ ...defaultSeed, colorPrimary: '#072c50' }, 'default');
     const markup = avatar({ name: 'Open Design' });

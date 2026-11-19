@@ -104,6 +104,21 @@ function readableTextOn(background: string, preferred: string): string {
     : white;
 }
 
+/**
+ * The first step at or below the base (indices 5..9 of a light 10-step ladder,
+ * each darker than the last) that reaches WCAG AA 4.5:1 on every background it
+ * is drawn on — white containers and the color's own alert tint.
+ * Falls back to the darkest step when none does.
+ */
+function readableLadderStep(palette: string[], base: string, backgrounds: string[]): string {
+  const backgroundRgbs = backgrounds.map(parseHex);
+  for (const step of [base, ...palette.slice(6, 10)]) {
+    const stepRgb = parseHex(step);
+    if (backgroundRgbs.every((bg) => contrastRatio(stepRgb, bg) >= 4.5)) return step;
+  }
+  return palette[9] ?? base;
+}
+
 function lightThemeBgBase(input: string | undefined): string {
   const hex = input || "#ffffff";
   return luminance(parseHex(hex)) >= 0.72 ? hex : "#ffffff";
@@ -314,9 +329,20 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   const primaryPalette = generate(seed.colorPrimary, paletteOpts);
   const primary = statesFromPalette(primaryPalette, stateAlgorithm);
 
-  const successStates = statesFromPalette(generate(seed.colorSuccess, paletteOpts), stateAlgorithm);
-  const warningStates = statesFromPalette(generate(seed.colorWarning, paletteOpts), stateAlgorithm);
-  const errorStates = statesFromPalette(generate(seed.colorError, paletteOpts), stateAlgorithm);
+  // Semantic tints (bg / border / hover) come from the seed's own ladder, so a
+  // bright seed keeps light alert surfaces. Only the base step is pushed down
+  // the ladder until it reads as text on a light container (WCAG AA 4.5:1).
+  const successPalette = generate(seed.colorSuccess, paletteOpts);
+  const warningPalette = generate(seed.colorWarning, paletteOpts);
+  const errorPalette = generate(seed.colorError, paletteOpts);
+  const successStates = statesFromPalette(successPalette, stateAlgorithm);
+  const warningStates = statesFromPalette(warningPalette, stateAlgorithm);
+  const errorStates = statesFromPalette(errorPalette, stateAlgorithm);
+  if (!canvasDark) {
+    successStates.base = readableLadderStep(successPalette, successStates.base, ["#ffffff", successStates.bg]);
+    warningStates.base = readableLadderStep(warningPalette, warningStates.base, ["#ffffff", warningStates.bg]);
+    errorStates.base = readableLadderStep(errorPalette, errorStates.base, ["#ffffff", errorStates.bg]);
+  }
   const infoStates = statesFromPalette(generate(seed.colorInfo, paletteOpts), stateAlgorithm);
 
   // colorLink falls back to colorInfo when empty (per SeedToken contract).
