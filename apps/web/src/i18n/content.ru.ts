@@ -68,7 +68,7 @@ export const RU_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Спроектируйте геймифицированное приложение для управления жизнью — мобильный мультиэкранный прототип: постер-обложка, сегодняшние квесты с XP и детализация квеста. "Daily quests for becoming a better human."',
   },
-  'magazine-web-ppt': {
+  'guizang-ppt': {
     examplePrompt:
       'Сделайте для меня журнальную презентацию о теме "компании из одного человека · организации, сжатые ИИ", выступление на 25 минут, аудитория — дизайнеры и фаундеры. Сначала предложите направление (Monocle / WIRED / Kinfolk / Domus / Lab), чтобы я мог выбрать.',
   },

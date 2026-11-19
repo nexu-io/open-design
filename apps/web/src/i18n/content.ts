@@ -220,7 +220,7 @@ const DE_SKILL_COPY: Record<string, LocalizedSkillCopy> = {
     examplePrompt:
       'Entwerfen Sie eine gamifizierte Life-Management-App — mobiler Multi-Screen-Prototyp: Cover-Poster, heutige Quests mit XP und Quest-Detail. ‚Daily quests for becoming a better human.‘',
   },
-  'magazine-web-ppt': {
+  'guizang-ppt': {
     examplePrompt:
       'Erstellen Sie mir ein Magazin-PPT über ‚Ein-Personen-Unternehmen · von AI gefaltete Organisationen‘, 25-minütiger Vortrag, Zielgruppe Designer + Gründer. Empfehlen Sie zuerst eine Richtung (Monocle / WIRED / Kinfolk / Domus / Lab), damit ich wählen kann.',
   },
