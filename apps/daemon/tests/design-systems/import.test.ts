@@ -369,4 +369,40 @@ describe('importLocalDesignSystemProject', () => {
     expect(colorsPreview).toContain('--accent: #ff3366;');
     expect(colorsPreview).toContain('<link rel="stylesheet" href="../tokens.css" />');
   });
+
+  it('prioritizes concrete tokens.css declarations over large tailwind @theme alias files', async () => {
+    const tailwindThemeLines = Array.from({ length: 65 }, (_, i) => `  --scale-${i}: var(--scale-${i});`);
+    tailwindThemeLines.push('  --radius-md: var(--radius-md);', '  --container-max: var(--container-max);');
+    fs.writeFileSync(
+      path.join(sourceRoot, 'tailwind-v4.css'),
+      `@theme {\n${tailwindThemeLines.join('\n')}\n}\n`,
+    );
+    fs.writeFileSync(
+      path.join(sourceRoot, 'tokens.css'),
+      [
+        ':root {',
+        '  --bg: #020617;',
+        '  --surface: #0f172a;',
+        '  --fg: #f1f5f9;',
+        '  --muted: #94a3b8;',
+        '  --border: rgba(255, 255, 255, 0.1);',
+        '  --accent: #38bdf8;',
+        '  --radius-md: 12px;',
+        '  --section-y-desktop: 64px;',
+        '  --container-max: 1200px;',
+        '  --elev-raised: 0 10px 30px rgba(2, 6, 23, 0.55);',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+    const tokensCss = fs.readFileSync(path.join(result.dir, 'tokens.css'), 'utf8');
+    expect(tokensCss).toContain('--radius-md: 12px;');
+    expect(tokensCss).toContain('--section-y-desktop: 64px;');
+    expect(tokensCss).toContain('--container-max: 1200px;');
+    expect(tokensCss).toContain('--elev-raised: 0 10px 30px rgba(2, 6, 23, 0.55);');
+    expect(tokensCss).not.toContain('--radius-md: var(--radius-md);');
+  });
 });

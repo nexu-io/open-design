@@ -212,6 +212,32 @@ export class LocalDesignSystemImportError extends Error {
   }
 }
 
+function styleFilePriority(relPath: string): number {
+  const base = path.basename(relPath).toLowerCase();
+  if (base === 'tokens.css') return 0;
+  if (relPath.toLowerCase().includes('token')) return 1;
+  if (base.includes('tailwind')) return 3;
+  return 2;
+}
+
+function isSelfReferentialCssVar(variable: CssVariable): boolean {
+  for (const match of variable.value.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)) {
+    if (match[1] === variable.name) return true;
+  }
+  return false;
+}
+
+function prioritizeCssVariables(variables: readonly CssVariable[]): CssVariable[] {
+  const concrete: CssVariable[] = [];
+  const aliased: CssVariable[] = [];
+  for (const variable of variables) {
+    if (isSelfReferentialCssVar(variable)) continue;
+    if (/\bvar\(/.test(variable.value)) aliased.push(variable);
+    else concrete.push(variable);
+  }
+  return [...concrete, ...aliased];
+}
+
 async function scanProject(sourceRoot: string): Promise<ProjectScan> {
   const [packageJson, readmeExcerpt, sourceComponentsHtml, sourceSections, files] = await Promise.all([
     readPackageJson(sourceRoot),
@@ -222,10 +248,11 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
   ]);
   const styleFiles = files
     .filter((file) => STYLE_EXTENSIONS.has(path.extname(file.absPath).toLowerCase()))
+    .sort((a, b) => styleFilePriority(a.relPath) - styleFilePriority(b.relPath) || a.relPath.localeCompare(b.relPath))
     .slice(0, 80);
-  const cssVariables = (await Promise.all(styleFiles.map((file) => readCssVariables(file.absPath, file.relPath))))
-    .flat()
-    .slice(0, 80);
+  const rawCssVariables = (await Promise.all(styleFiles.map((file) => readCssVariables(file.absPath, file.relPath))))
+    .flat();
+  const cssVariables = prioritizeCssVariables(rawCssVariables).slice(0, 240);
   return {
     sourceRoot,
     packageName: packageJson.name,
