@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_SLUGS,
   applyJsonInstall,
+  applyYamlInstall,
   isAgentSlug,
   planAgentInstall,
   removeJsonInstall,
+  removeYamlInstall,
   type JsonInstallPlan,
   type McpLaunchSpec,
+  type YamlInstallPlan,
 } from '../src/mcp-agent-install.js';
 
 const SPEC: McpLaunchSpec = {
@@ -202,8 +205,8 @@ describe('JSON-config agents', () => {
 });
 
 describe('manual (unverified) agents', () => {
-  it('pi / vibe / hermes never produce a writable plan', () => {
-    for (const slug of ['pi', 'vibe', 'hermes'] as const) {
+  it('pi / vibe never produce a writable plan', () => {
+    for (const slug of ['pi', 'vibe'] as const) {
       const plan = planAgentInstall(slug, SPEC, ctx());
       expect(plan.kind).toBe('manual');
       if (plan.kind !== 'manual') throw new Error('expected manual');
@@ -270,5 +273,93 @@ describe('removeJsonInstall', () => {
     expect(removeJsonInstall(null, plan)).toBeNull();
     expect(removeJsonInstall('{}', plan)).toBeNull();
     expect(removeJsonInstall(JSON.stringify({ mcpServers: {} }), plan)).toBeNull();
+  });
+});
+
+describe('YAML-config agents (hermes)', () => {
+  it('hermes plans a merge under mcp_servers in ~/.hermes/config.yaml', () => {
+    const plan = planAgentInstall('hermes', SPEC, ctx());
+    expect(plan.kind).toBe('yaml');
+    if (plan.kind !== 'yaml') throw new Error('expected yaml');
+    expect(plan.configPath).toBe('/home/u/.hermes/config.yaml');
+    expect(plan.keyPath).toEqual(['mcp_servers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      env: SPEC.env,
+    });
+  });
+
+  it('omits env entirely when the launch spec has no env', () => {
+    const plan = planAgentInstall('hermes', SPEC_NO_ENV, ctx());
+    if (plan.kind !== 'yaml') throw new Error('expected yaml');
+    expect(plan.entry).not.toHaveProperty('env');
+  });
+});
+
+describe('applyYamlInstall', () => {
+  const plan = planAgentInstall('hermes', SPEC, ctx()) as YamlInstallPlan;
+
+  it('creates the file structure from empty input', () => {
+    const out = applyYamlInstall(null, plan);
+    expect(out).toContain('mcp_servers:');
+    expect(out).toContain('open-design:');
+    expect(out).toContain(SPEC.command);
+  });
+
+  it('preserves comments, unrelated keys and sibling servers', () => {
+    const existing = [
+      '# Hermes configuration',
+      'model: gpt-5',
+      'mcp_servers:',
+      '  # my other server',
+      '  other:',
+      '    command: foo',
+      'theme: dark # inline comment',
+      '',
+    ].join('\n');
+    const out = applyYamlInstall(existing, plan);
+    expect(out).toContain('# Hermes configuration');
+    expect(out).toContain('# my other server');
+    expect(out).toContain('# inline comment');
+    expect(out).toContain('model: gpt-5');
+    expect(out).toContain('theme: dark');
+    expect(out).toContain('other:');
+    expect(out).toContain('open-design:');
+  });
+
+  it('is idempotent — re-applying yields the same content', () => {
+    const once = applyYamlInstall(null, plan);
+    expect(applyYamlInstall(once, plan)).toBe(once);
+  });
+
+  it('throws on unparseable YAML rather than clobbering it', () => {
+    expect(() => applyYamlInstall('key: [unclosed', plan)).toThrow(/not valid YAML/);
+  });
+
+  it('throws when the existing root is not a mapping', () => {
+    expect(() => applyYamlInstall('- a\n- b\n', plan)).toThrow(/not a YAML mapping/);
+  });
+});
+
+describe('removeYamlInstall', () => {
+  const plan = planAgentInstall('hermes', SPEC, ctx()) as YamlInstallPlan;
+
+  it('removes only the open-design entry and keeps comments', () => {
+    const existing = applyYamlInstall(
+      '# top comment\nmcp_servers:\n  other:\n    command: x\n',
+      plan,
+    );
+    const out = removeYamlInstall(existing, plan)!;
+    expect(out).not.toContain('open-design');
+    expect(out).toContain('other:');
+    expect(out).toContain('# top comment');
+  });
+
+  it('returns null when there is nothing to remove', () => {
+    expect(removeYamlInstall(null, plan)).toBeNull();
+    expect(removeYamlInstall('', plan)).toBeNull();
+    expect(removeYamlInstall('mcp_servers: {}\n', plan)).toBeNull();
   });
 });

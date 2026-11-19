@@ -5,7 +5,7 @@
 // coding agent's own configuration. Each agent stores MCP servers
 // differently, so this module maps a single resolved launch spec
 // (command/args/env — the same shape buildMcpInstallPayload produces and
-// the Settings → MCP panel pastes) onto one of three registration
+// the Settings → MCP panel pastes) onto one of four registration
 // strategies:
 //
 //   - 'cli'    : the agent ships its own `<bin> mcp add/remove/get`. We
@@ -17,8 +17,13 @@
 //                rest of the file. Used for cursor / copilot / cline /
 //                opencode / openclaw / antigravity / kiro / raven / trae /
 //                claude-desktop.
+//   - 'yaml'   : the agent reads a YAML config file with a known schema.
+//                We merge one server entry through the yaml Document API,
+//                preserving comments and unrelated keys. Used for hermes
+//                (mcp_servers.<name> in ~/.hermes/config.yaml, verified
+//                against the official Hermes MCP documentation).
 //   - 'manual' : we could not verify the agent's config path/format
-//                authoritatively (pi / hermes / vibe). We refuse to write
+//                authoritatively (pi / vibe). We refuse to write
 //                a guessed path and instead print a ready-to-paste
 //                snippet plus the best-known location. Writing a wrong
 //                path risks corrupting a user-owned config, so this stays
@@ -29,6 +34,7 @@
 // performs the IO.
 
 import path from 'node:path';
+import { isMap, parseDocument } from 'yaml';
 
 export const AGENT_SLUGS = [
   'claude',
@@ -84,9 +90,8 @@ export interface CliInstallPlan {
   getArgv: string[];
 }
 
-/** Agent reads a JSON config file with a known schema. */
-export interface JsonInstallPlan {
-  kind: 'json';
+/** Shared shape for config-file merge plans ('json' / 'yaml'). */
+export interface FileInstallPlan {
   slug: AgentSlug;
   /** Absolute path to the config file we merge into. */
   configPath: string;
@@ -96,6 +101,16 @@ export interface JsonInstallPlan {
   serverKey: string;
   /** Value stored under keyPath → serverKey. */
   entry: unknown;
+}
+
+/** Agent reads a JSON config file with a known schema. */
+export interface JsonInstallPlan extends FileInstallPlan {
+  kind: 'json';
+}
+
+/** Agent reads a YAML config file with a known schema (hermes). */
+export interface YamlInstallPlan extends FileInstallPlan {
+  kind: 'yaml';
 }
 
 /** Unverified format — print a snippet, never write. */
@@ -109,7 +124,11 @@ export interface ManualInstallPlan {
   reason: string;
 }
 
-export type InstallPlan = CliInstallPlan | JsonInstallPlan | ManualInstallPlan;
+export type InstallPlan =
+  | CliInstallPlan
+  | JsonInstallPlan
+  | YamlInstallPlan
+  | ManualInstallPlan;
 
 function envFlags(env: Record<string, string>, flag: string): string[] {
   const out: string[] = [];
@@ -322,6 +341,19 @@ export function planAgentInstall(
         entry: jsonEntry(spec, { type: 'stdio' }),
       };
 
+    case 'hermes':
+      // Verified against the official Hermes MCP documentation:
+      // https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp
+      // mcp_servers.<name>.command/args/env in ~/.hermes/config.yaml.
+      return {
+        kind: 'yaml',
+        slug,
+        configPath: path.join(home, '.hermes', 'config.yaml'),
+        keyPath: ['mcp_servers'],
+        serverKey: serverName,
+        entry: jsonEntry(spec),
+      };
+
     // ----- Unverified formats: print-only, never write -----
     case 'vibe':
       return {
@@ -346,17 +378,6 @@ export function planAgentInstall(
           'The pi coding agent exposes MCP, but its config path/schema is ' +
           'not authoritatively documented. Paste this into pi’s MCP ' +
           'config (check `pi --help` for the exact location).',
-      };
-    case 'hermes':
-      return {
-        kind: 'manual',
-        slug,
-        format: 'yaml',
-        configPath: path.join(home, '.hermes', 'config.yaml'),
-        snippet: hermesYamlSnippet(spec, serverName),
-        reason:
-          'Hermes config format is unverified. Add this under your Hermes ' +
-          'MCP server configuration by hand.',
       };
     default: {
       const exhaustive: never = slug;
@@ -411,7 +432,7 @@ function claudeDesktopConfigPath(home: string, platform: NodeJS.Platform): strin
  * a trailing newline. Throws if existing text is non-empty but unparseable
  * (caller decides whether to bail or back up).
  */
-export function applyJsonInstall(existingText: string | null, plan: JsonInstallPlan): string {
+export function applyJsonInstall(existingText: string | null, plan: FileInstallPlan): string {
   const root = parseJsonObject(existingText, plan.configPath);
   let cursor: Record<string, unknown> = root;
   for (const key of plan.keyPath) {
@@ -429,7 +450,7 @@ export function applyJsonInstall(existingText: string | null, plan: JsonInstallP
  * Remove the server entry. Returns the new text, or null when the file did
  * not exist / had nothing to remove (caller treats null as a no-op).
  */
-export function removeJsonInstall(existingText: string | null, plan: JsonInstallPlan): string | null {
+export function removeJsonInstall(existingText: string | null, plan: FileInstallPlan): string | null {
   if (existingText == null || existingText.trim() === '') return null;
   const root = parseJsonObject(existingText, plan.configPath);
   let cursor: Record<string, unknown> = root;
@@ -461,6 +482,50 @@ function parseJsonObject(text: string | null, where: string): Record<string, unk
   return parsed as Record<string, unknown>;
 }
 
+// --- YAML merge / removal (the 'yaml' strategy, comment-preserving) -----
+
+/**
+ * Merge one server entry into existing YAML text without disturbing the
+ * rest. Uses the yaml Document API so comments and unrelated keys survive
+ * (the JSON strategy's parse/stringify round-trip would drop them). Throws
+ * if existing text is non-empty but unparseable or not a mapping (caller
+ * decides whether to bail or back up).
+ */
+export function applyYamlInstall(existingText: string | null, plan: FileInstallPlan): string {
+  const doc = parseDocument(existingText ?? '');
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `existing config at ${plan.configPath} is not valid YAML: ${doc.errors[0]?.message ?? 'unknown parse error'}`,
+    );
+  }
+  if (doc.contents != null && !isMap(doc.contents)) {
+    throw new Error(`existing config at ${plan.configPath} is not a YAML mapping`);
+  }
+  doc.setIn([...plan.keyPath, plan.serverKey], plan.entry);
+  return doc.toString();
+}
+
+/**
+ * Remove the server entry. Returns the new text, or null when the file did
+ * not exist / had nothing to remove (caller treats null as a no-op).
+ */
+export function removeYamlInstall(
+  existingText: string | null,
+  plan: FileInstallPlan,
+): string | null {
+  if (existingText == null || existingText.trim() === '') return null;
+  const doc = parseDocument(existingText);
+  if (doc.errors.length > 0) {
+    throw new Error(
+      `existing config at ${plan.configPath} is not valid YAML: ${doc.errors[0]?.message ?? 'unknown parse error'}`,
+    );
+  }
+  const entryPath = [...plan.keyPath, plan.serverKey];
+  if (!doc.hasIn(entryPath)) return null;
+  doc.deleteIn(entryPath);
+  return doc.toString();
+}
+
 // --- Snippets for the manual (print-only) strategy ----------------------
 
 function genericMcpServersSnippet(spec: McpLaunchSpec, name: string): string {
@@ -470,22 +535,6 @@ function genericMcpServersSnippet(spec: McpLaunchSpec, name: string): string {
   };
   if (Object.keys(spec.env).length > 0) server.env = spec.env;
   return JSON.stringify({ mcpServers: { [name]: server } }, null, 2);
-}
-
-function hermesYamlSnippet(spec: McpLaunchSpec, name: string): string {
-  const lines = [
-    'mcp_servers:',
-    `  ${name}:`,
-    `    command: ${JSON.stringify(spec.command)}`,
-    `    args: ${JSON.stringify(spec.args)}`,
-  ];
-  if (Object.keys(spec.env).length > 0) {
-    lines.push('    env:');
-    for (const [k, v] of Object.entries(spec.env)) {
-      lines.push(`      ${k}: ${JSON.stringify(v)}`);
-    }
-  }
-  return lines.join('\n');
 }
 
 function vibeTomlSnippet(spec: McpLaunchSpec, name: string): string {
