@@ -20,7 +20,7 @@
   border-radius: 7px;
   color: var(--text);
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .item:hover:not(:disabled),
