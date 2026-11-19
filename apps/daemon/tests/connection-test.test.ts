@@ -804,6 +804,10 @@ describe('POST /api/test/connection provider mode', () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.ok).toBe(false);
     expect(body.kind).toBe('upstream_unavailable');
+    // The array is not empty, so the detail must not say it is.
+    expect(body.detail).toContain('only blank content blocks');
+    expect(body.detail).not.toContain('empty content array');
+    expect(body.detail).not.toContain('billing');
   });
 
   it('redacts submitted keys from success samples', async () => {

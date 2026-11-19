@@ -1025,9 +1025,15 @@ function inspectProviderCompletion(
           : undefined;
       const hasBillingEvidence =
         typeof billedOutputTokens === 'number' && billedOutputTokens > 0;
+      // Describe what the provider actually sent: an empty array, or blocks
+      // that carry nothing renderable (e.g. a single blank text block).
+      const received =
+        content.length === 0
+          ? 'an empty content array'
+          : 'only blank content blocks (no usable content)';
       const detail = hasBillingEvidence
-        ? `Provider returned HTTP 200 with an empty content array (no text) — the upstream produced a contentless turn while billing ${billedOutputTokens} output tokens. Treating as an upstream failure; retry or switch models.`
-        : 'Provider returned HTTP 200 with an empty content array (no usable content) — the upstream produced a contentless turn. Treating as an upstream failure; retry or switch models.';
+        ? `Provider returned HTTP 200 with ${received} — the upstream produced a contentless turn while billing ${billedOutputTokens} output tokens. Treating as an upstream failure; retry or switch models.`
+        : `Provider returned HTTP 200 with ${received} — the upstream produced a contentless turn. Treating as an upstream failure; retry or switch models.`;
       return {
         valid: false,
         kind: 'upstream_unavailable',
