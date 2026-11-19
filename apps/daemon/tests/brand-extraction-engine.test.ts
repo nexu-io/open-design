@@ -34,6 +34,7 @@ import {
   defaultSeed,
   defaultThemeAlgorithm,
   deriveTokens,
+  seedFromBrand,
   seedFromMaterial,
   tokensToThemeJson,
 } from '../src/brands/engine/index.js';
@@ -312,6 +313,26 @@ describe('agent-driven brand extraction engine', () => {
     expect(contrastRatio(tokens.colorSuccess, tokens.colorSuccessBg)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(tokens.colorWarning, tokens.colorWarningBg)).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(tokens.colorError, tokens.colorErrorBg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps a dark-green brand secondary readable on white and on its own alert surface', () => {
+    // A dark seed generates a dark ladder, so its own bg tint would be muddy
+    // (#656b65 for #0d2b12) and no shared foreground could pass on both it and
+    // white. The alert surface must stay light and the foreground must pass.
+    const darkGreenBrand: Brand = {
+      ...VALID_BRAND,
+      name: 'Dark Green Secondary',
+      colors: VALID_BRAND.colors.map((color) =>
+        color.role === 'accent-secondary' ? { ...color, hex: '#0d2b12' } : color,
+      ),
+    };
+    const seed = seedFromBrand(darkGreenBrand);
+    expect(seed.colorSuccess).toBe('#0d2b12');
+
+    const tokens = deriveTokens(seed, 'default');
+    expect(contrastRatio(tokens.colorSuccess, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(tokens.colorSuccess, tokens.colorSuccessBg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(tokens.colorSuccessBg, '#ffffff')).toBeLessThan(1.2);
   });
 
   it('renders kit avatars on the AA-readable primary surface', () => {

@@ -107,16 +107,39 @@ function readableTextOn(background: string, preferred: string): string {
 /**
  * The first step at or below the base (indices 5..9 of a light 10-step ladder,
  * each darker than the last) that reaches WCAG AA 4.5:1 on every background it
- * is drawn on — white containers and the color's own alert tint.
- * Falls back to the darkest step when none does.
+ * is drawn on — white containers and the color's own alert tint — then black.
+ * Never returns an unchecked color: if nothing passes, it returns the candidate
+ * with the best worst-case contrast.
  */
 function readableLadderStep(palette: string[], base: string, backgrounds: string[]): string {
   const backgroundRgbs = backgrounds.map(parseHex);
-  for (const step of [base, ...palette.slice(6, 10)]) {
+  const worstContrast = (step: string) => {
     const stepRgb = parseHex(step);
-    if (backgroundRgbs.every((bg) => contrastRatio(stepRgb, bg) >= 4.5)) return step;
-  }
-  return palette[9] ?? base;
+    return Math.min(...backgroundRgbs.map((bg) => contrastRatio(stepRgb, bg)));
+  };
+  const candidates = [base, ...palette.slice(6, 10), "#000000"];
+  const passing = candidates.find((step) => worstContrast(step) >= 4.5);
+  if (passing) return passing;
+  return candidates.reduce((best, step) => (worstContrast(step) > worstContrast(best) ? step : best));
+}
+
+/** Alert surfaces must stay near-white; above this they read as muddy fills. */
+const MAX_ALERT_SURFACE_CONTRAST_ON_WHITE = 1.15;
+
+/**
+ * A dark seed generates a dark ladder, so its own bg/border tints are dark
+ * (e.g. #656b65 for #0d2b12) and no foreground can pass on both them and
+ * white. Rebuild those surfaces as light washes of the seed over white so the
+ * hue survives and a readable foreground always exists.
+ */
+function keepAlertSurfacesLight(states: ColorStates, seedHex: string): void {
+  const white = parseHex("#ffffff");
+  if (contrastRatio(parseHex(states.bg), white) <= MAX_ALERT_SURFACE_CONTRAST_ON_WHITE) return;
+  const seedRgb = parseHex(seedHex);
+  states.bg = alphaOver(seedRgb, white, 0.06);
+  states.bgHover = alphaOver(seedRgb, white, 0.1);
+  states.border = alphaOver(seedRgb, white, 0.25);
+  states.borderHover = alphaOver(seedRgb, white, 0.35);
 }
 
 function lightThemeBgBase(input: string | undefined): string {
@@ -339,6 +362,9 @@ export function deriveTokens(seed: SeedToken, algorithm: ThemeAlgorithm = "defau
   const warningStates = statesFromPalette(warningPalette, stateAlgorithm);
   const errorStates = statesFromPalette(errorPalette, stateAlgorithm);
   if (!canvasDark) {
+    keepAlertSurfacesLight(successStates, seed.colorSuccess);
+    keepAlertSurfacesLight(warningStates, seed.colorWarning);
+    keepAlertSurfacesLight(errorStates, seed.colorError);
     successStates.base = readableLadderStep(successPalette, successStates.base, ["#ffffff", successStates.bg]);
     warningStates.base = readableLadderStep(warningPalette, warningStates.base, ["#ffffff", warningStates.bg]);
     errorStates.base = readableLadderStep(errorPalette, errorStates.base, ["#ffffff", errorStates.bg]);
