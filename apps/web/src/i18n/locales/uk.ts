@@ -4576,6 +4576,8 @@ export const uk: Dict = {
   'dsManager.createTitle': 'Створити нову дизайн-систему',
   'dsManager.createBody': 'Навчіть OpenDesign свого бренду, продукту, коду, ресурсів і дизайн-референсів.',
   'dsManager.createAction': 'Створити',
+  'dsManager.importFolderAction': 'Імпортувати теку',
+  'dsManager.importingFolder': 'Імпорт теки...',
   'dsManager.emptyMine': 'Дизайн-систем ще немає. Створіть її на основі реального контексту продукту, перегляньте чернетку, а потім опублікуйте для майбутніх проєктів.',
   'dsManager.badgeDefault': 'За замовчуванням',
   'dsManager.rowMetaUpdated': 'Ви · оновлено {date}',

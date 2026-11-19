@@ -4576,6 +4576,8 @@ export const it: Dict = {
   'dsManager.createTitle': 'Crea nuovo design system',
   'dsManager.createBody': 'Insegna a OpenDesign il tuo brand, prodotto, codice, asset e riferimenti di design.',
   'dsManager.createAction': 'Crea',
+  'dsManager.importFolderAction': 'Importa cartella',
+  'dsManager.importingFolder': 'Importazione della cartella...',
   'dsManager.emptyMine': 'Nessun design system. Creane uno dal contesto reale del prodotto, esamina la bozza e poi pubblicalo per i progetti futuri.',
   'dsManager.badgeDefault': 'Predefinito',
   'dsManager.rowMetaUpdated': 'Tu · aggiornato {date}',

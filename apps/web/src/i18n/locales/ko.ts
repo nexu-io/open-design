@@ -4576,6 +4576,8 @@ export const ko: Dict = {
   'dsManager.createTitle': '새 디자인 시스템 만들기',
   'dsManager.createBody': 'OpenDesign에 브랜드, 제품, 코드, 에셋, 디자인 레퍼런스를 학습시키세요.',
   'dsManager.createAction': '만들기',
+  'dsManager.importFolderAction': '폴더 가져오기',
+  'dsManager.importingFolder': '폴더 가져오는 중...',
   'dsManager.emptyMine': '아직 디자인 시스템이 없습니다. 실제 제품 컨텍스트로 하나 만들어 초안을 검토한 뒤, 이후 프로젝트를 위해 게시하세요.',
   'dsManager.badgeDefault': '기본값',
   'dsManager.rowMetaUpdated': '나 · {date} 업데이트됨',

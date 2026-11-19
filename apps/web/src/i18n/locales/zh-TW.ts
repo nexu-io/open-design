@@ -4961,6 +4961,8 @@ export const zhTW: Dict = {
   "dsManager.createBody":
     "把你的品牌、產品、程式碼、素材與設計參考教給 OpenDesign。",
   "dsManager.createAction": "建立",
+  "dsManager.importFolderAction": "匯入資料夾",
+  "dsManager.importingFolder": "正在匯入資料夾...",
   "dsManager.emptyMine":
     "還沒有設計體系。從真實的產品脈絡建立一個，審閱草稿後再發佈，供日後的專案使用。",
   "dsManager.badgeDefault": "對話預設",

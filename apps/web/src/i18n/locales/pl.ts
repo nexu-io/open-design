@@ -4576,6 +4576,8 @@ export const pl: Dict = {
   'dsManager.createTitle': 'Utwórz nowy system projektowy',
   'dsManager.createBody': 'Naucz OpenDesign swojej marki, produktu, kodu, zasobów i odniesień projektowych.',
   'dsManager.createAction': 'Utwórz',
+  'dsManager.importFolderAction': 'Importuj folder',
+  'dsManager.importingFolder': 'Importowanie folderu...',
   'dsManager.emptyMine': 'Brak systemów projektowych. Utwórz jeden na podstawie rzeczywistego kontekstu produktu, przejrzyj wersję roboczą, a następnie opublikuj go do przyszłych projektów.',
   'dsManager.badgeDefault': 'Domyślny',
   'dsManager.rowMetaUpdated': 'Ty · zaktualizowano {date}',

@@ -89,6 +89,11 @@
   padding-inline: 18px;
 }
 
+.headerImport {
+  width: auto;
+  padding-inline: 14px;
+}
+
 /* Search */
 .searchWrap {
   position: relative;
@@ -1800,7 +1805,8 @@
   .headerSearch {
     width: 100%;
   }
-  .headerCreate {
+  .headerCreate,
+  .headerImport {
     flex: 0 0 auto;
   }
   .root {
