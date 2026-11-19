@@ -1164,11 +1164,12 @@ async function validateLocalOpenAiModel(
 
   const url = appendVersionedApiPath(String(input.baseUrl), '/models');
   let response: Response;
+  const trimmedApiKey = String(input.apiKey ?? '').trim();
   try {
     response = await fetch(url, {
       ...requestInit,
       method: 'GET',
-      headers: { authorization: `Bearer ${String(input.apiKey)}` },
+      headers: trimmedApiKey ? { authorization: `Bearer ${trimmedApiKey}` } : {},
       signal,
       redirect: 'error',
     });
@@ -1223,11 +1224,12 @@ async function validateSenseAudioNonChatModel(
 
   const url = appendVersionedApiPath(String(input.baseUrl), '/models');
   let response: Response;
+  const trimmedApiKey = String(input.apiKey ?? '').trim();
   try {
     response = await fetch(url, {
       ...requestInit,
       method: 'GET',
-      headers: { authorization: `Bearer ${String(input.apiKey)}` },
+      headers: trimmedApiKey ? { authorization: `Bearer ${trimmedApiKey}` } : {},
       signal,
       redirect: 'error',
     });
@@ -1318,7 +1320,7 @@ interface ProviderCallShape {
 }
 
 export function resolveOpenAIConnectionTestRunProviderPackage(
-  input: Pick<ProviderTestRequest, 'protocol' | 'baseUrl' | 'apiKey' | 'apiVersion' | 'model'>,
+  input: Pick<ProviderTestRequest, 'protocol' | 'baseUrl' | 'apiKey' | 'apiVersion' | 'model' | 'requiresApiKey'>,
 ): string | null {
   if (input.protocol !== 'openai') return null;
   const providerConfig = {
@@ -1326,6 +1328,7 @@ export function resolveOpenAIConnectionTestRunProviderPackage(
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
     ...(input.apiVersion !== undefined ? { apiVersion: input.apiVersion } : {}),
+    ...(input.requiresApiKey !== undefined ? { requiresApiKey: input.requiresApiKey } : {}),
   };
   const byokConfig = buildOpenCodeByokProviderConfig(
     providerConfig,
@@ -1346,11 +1349,12 @@ function openAIChatCompletionsProviderCall(
 ): ProviderCallShape {
   const messages = [{ role: 'user', content: SMOKE_PROMPT }];
   const isAzureHosted = isAzureOpenAIHostname(new URL(baseUrl).hostname);
+  const trimmedApiKey = apiKey.trim();
   return {
     url: appendVersionedApiPath(baseUrl, '/chat/completions'),
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
+      ...(trimmedApiKey ? { authorization: `Bearer ${trimmedApiKey}` } : {}),
       ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
         'HTTP-Referer': 'https://opendesign.dev',
         'X-Title': 'OpenDesign',
@@ -1379,11 +1383,12 @@ function openAIResponsesProviderCall(
   apiKey: string,
   model: string,
 ): ProviderCallShape {
+  const trimmedApiKey = apiKey.trim();
   return {
     url: appendVersionedApiPath(baseUrl, '/responses'),
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
+      ...(trimmedApiKey ? { authorization: `Bearer ${trimmedApiKey}` } : {}),
     },
     body: {
       model,
@@ -1534,11 +1539,12 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
     }
     case 'ollama': {
       const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+      const trimmedApiKey = apiKey.trim();
       return {
         url: `${trimmedBase}/api/chat`,
         headers: {
           'content-type': 'application/json',
-          authorization: `Bearer ${apiKey}`,
+          ...(trimmedApiKey ? { authorization: `Bearer ${trimmedApiKey}` } : {}),
         },
         body: {
           model,

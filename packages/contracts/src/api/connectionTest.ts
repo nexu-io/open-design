@@ -265,6 +265,8 @@ export interface ProviderTestRequest extends ReasoningExecutionRequestFields {
   model: string;
   // Azure only. When omitted, the daemon falls back to its default api-version.
   apiVersion?: string;
+  // Set false for keyless local endpoints (e.g. oMLX, vLLM, local Ollama).
+  requiresApiKey?: boolean;
 }
 
 export interface AgentTestRequest {

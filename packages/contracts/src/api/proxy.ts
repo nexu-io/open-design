@@ -36,6 +36,8 @@ export interface ProxyStreamRequest extends ReasoningExecutionRequestFields {
   maxTokens?: number;
   // Azure OpenAI only. Defaults at the daemon when omitted.
   apiVersion?: string;
+  // Set false for keyless local OpenAI-compatible endpoints (e.g. oMLX, vLLM).
+  requiresApiKey?: boolean;
 }
 
 export interface ProxyStreamStartPayload {

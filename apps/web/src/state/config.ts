@@ -373,6 +373,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     requiresApiKey: false,
   },
   {
+    label: 'oMLX',
+    protocol: 'openai',
+    baseUrl: 'http://localhost:8000/v1',
+    preferredModels: ['model', 'qwen3', 'gemma4', 'llama3'],
+    requiresApiKey: false,
+  },
+  {
     label: 'MiniMax — OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.minimax.io/v1',
@@ -550,6 +557,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'volcengine', title: 'Volcengine Ark', providerLabel: 'Volcengine Ark' },
   { id: 'qianfan', title: 'Baidu Qianfan', providerLabel: 'Baidu Qianfan' },
   { id: 'vllm', title: 'vLLM', providerLabel: 'vLLM' },
+  { id: 'omlx', title: 'oMLX', providerLabel: 'oMLX' },
   { id: 'mimo', title: 'Xiaomi MiMo', providerLabel: 'MiMo (Xiaomi) — OpenAI' },
   { id: 'minimax', title: 'MiniMax', providerLabel: 'MiniMax — Anthropic (CN)' },
   { id: 'moonshot', title: 'Moonshot', providerLabel: 'Moonshot' },

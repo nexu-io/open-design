@@ -58,7 +58,8 @@ export function buildOpenCodeByokProviderConfig(
       : defaultBaseUrl,
   );
   const needsApiKey = requiresApiKey(provider, baseUrl);
-  if (needsApiKey && !apiKey) return null;
+  const hasApiKey = apiKey.length > 0;
+  if (needsApiKey && !hasApiKey) return null;
   if (!rawModel || rawModel.toLowerCase() === 'default') return null;
   if (!baseUrl) return null;
 
@@ -69,7 +70,7 @@ export function buildOpenCodeByokProviderConfig(
     protocol,
     baseUrl,
     provider.apiVersion,
-    needsApiKey,
+    needsApiKey || hasApiKey,
   );
   const config = {
     provider: {
@@ -97,7 +98,7 @@ export function buildOpenCodeByokProviderConfig(
   return {
     providerId: BYOK_OPENCODE_PROVIDER_ID,
     modelId,
-    env: needsApiKey ? { [BYOK_OPENCODE_API_KEY_ENV]: apiKey } : {},
+    env: needsApiKey || hasApiKey ? { [BYOK_OPENCODE_API_KEY_ENV]: apiKey } : {},
     config,
   };
 }
@@ -131,7 +132,10 @@ function requiresApiKey(
 ): boolean {
   const protocol = provider.protocol;
   if (provider.requiresApiKey === false) return false;
-  return protocol !== 'ollama' || !isLocalOllamaBaseUrl(baseUrl);
+  if ((protocol === 'ollama' || protocol === 'openai') && isLocalOllamaBaseUrl(baseUrl)) {
+    return false;
+  }
+  return true;
 }
 
 function isLocalOllamaBaseUrl(value: string): boolean {

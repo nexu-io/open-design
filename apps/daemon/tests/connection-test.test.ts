@@ -834,6 +834,103 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('allows keyless local OpenAI-compatible (oMLX) model discovery, connection test, and proxy stream without blank auth headers', async () => {
+    const seenHeaders: Array<{ url: string; auth: string | null }> = [];
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const headers = new Headers(init?.headers);
+      seenHeaders.push({ url, auth: headers.get('authorization') });
+      if (url === 'http://127.0.0.1:8888/v1/models') {
+        return Promise.resolve(jsonResponse({ data: [{ id: 'qwen3-coder' }] }));
+      }
+      if (url === 'http://127.0.0.1:8888/v1/chat/completions') {
+        const parsedBody = JSON.parse(String(init?.body ?? '{}')) as { stream?: boolean };
+        if (parsedBody.stream) {
+          return Promise.resolve(
+            new Response(
+              'data: {"choices":[{"delta":{"content":"hello"}}]}\n\ndata: [DONE]\n\n',
+              { status: 200, headers: { 'content-type': 'text/event-stream' } },
+            ),
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({
+            model: 'qwen3-coder',
+            choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ error: 'unexpected url' }, { status: 500 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const modelsRes = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'http://127.0.0.1:8888/v1',
+        apiKey: '',
+      }),
+    });
+    expect(modelsRes.status).toBe(200);
+    expect(await modelsRes.json()).toMatchObject({
+      ok: true,
+      models: [expect.objectContaining({ id: 'qwen3-coder' })],
+    });
+
+    const testRes = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://127.0.0.1:8888/v1',
+        apiKey: '',
+        model: 'qwen3-coder',
+        requiresApiKey: false,
+      }),
+    });
+    expect(testRes.status).toBe(200);
+    expect(await testRes.json()).toMatchObject({
+      ok: true,
+      kind: 'success',
+    });
+
+    const proxyRes = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'http://127.0.0.1:8888/v1',
+        apiKey: '',
+        model: 'qwen3-coder',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    expect(proxyRes.status).toBe(200);
+    const streamText = await proxyRes.text();
+    expect(streamText).toContain('hello');
+
+    expect(seenHeaders.length).toBeGreaterThanOrEqual(3);
+    for (const entry of seenHeaders) {
+      expect(entry.auth).toBeNull();
+    }
+
+    const remoteRes = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4o',
+      }),
+    });
+    expect(remoteRes.status).toBe(400);
+  });
+
   it('returns static AWS Bedrock model seeds without calling upstream fetch', async () => {
     const fetchMock = passThroughOrUpstream(() => jsonResponse({ error: 'unexpected upstream call' }, { status: 500 }));
     vi.stubGlobal('fetch', fetchMock);

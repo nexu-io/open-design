@@ -36,6 +36,33 @@ describe('BYOK draft validation', () => {
     })).toBe('api_key_required');
   });
 
+  it.each([
+    'http://localhost:8000/v1',
+    'http://127.0.0.1:8888/v1',
+    'http://[::1]:8000/v1',
+  ])('allows a keyless local OpenAI-compatible run (e.g. oMLX) at %s', (baseUrl) => {
+    expect(byokPreflightBlockReason({
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl,
+      apiProviderBaseUrl: null,
+      model: 'qwen3',
+    })).toBeNull();
+  });
+
+  it.each([
+    'https://api.openai.com/v1',
+    'https://proxy.example.com/v1',
+  ])('still requires an API key for remote OpenAI-compatible URL %s', (baseUrl) => {
+    expect(byokPreflightBlockReason({
+      apiProtocol: 'openai',
+      apiKey: '',
+      baseUrl,
+      apiProviderBaseUrl: null,
+      model: 'gpt-4o',
+    })).toBe('api_key_required');
+  });
+
   it('cleans pasted API keys without changing the stored value itself', () => {
     expect(cleanByokApiKey(' \u200Bsk-ant-test\n\t')).toBe('sk-ant-test');
   });

@@ -226,6 +226,7 @@ import {
 } from '../state/apiProtocols';
 import { defaultKnownProviderModel, KNOWN_PROVIDERS } from '../state/config';
 import type { KnownProvider } from '../state/config';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import { invalidateProjectFilesCache } from '../providers/registry';
@@ -2727,14 +2728,27 @@ function OnboardingView({
     runtime,
     step,
   };
+  const selectedProvider = KNOWN_PROVIDERS.find(
+    (provider) =>
+      provider.protocol === apiProtocol &&
+      (
+        provider.baseUrl === (config.apiProviderBaseUrl ?? config.baseUrl) ||
+        (apiProtocol === 'azure' && provider.baseUrl === '' && Boolean(config.baseUrl?.trim()))
+      ),
+  ) ?? null;
+  const byokRequiresApiKey = byokProviderRequiresApiKey(
+    apiProtocol,
+    selectedProvider ?? undefined,
+    config.baseUrl,
+  );
   const canTestProvider =
-    Boolean(config.apiKey.trim()) &&
+    (!byokRequiresApiKey || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim());
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
+    (!byokRequiresApiKey || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isLikelyHttpUrl(config.baseUrl);
   const visibleProviderTestState =
@@ -2747,14 +2761,6 @@ function OnboardingView({
     providerModelsState.inputKey === providerModelsInputKey
       ? providerModelsState
       : { status: 'idle' as const };
-  const selectedProvider = KNOWN_PROVIDERS.find(
-    (provider) =>
-      provider.protocol === apiProtocol &&
-      (
-        provider.baseUrl === (config.apiProviderBaseUrl ?? config.baseUrl) ||
-        (apiProtocol === 'azure' && provider.baseUrl === '' && Boolean(config.baseUrl?.trim()))
-      ),
-  ) ?? null;
   const candidateCliAgents = agents.filter(
     (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
   );
@@ -2834,7 +2840,7 @@ function OnboardingView({
 
   const hasRestorableModelSourceConfig =
     config.mode === 'api'
-      ? Boolean(config.apiKey.trim() && config.baseUrl.trim() && config.model.trim())
+      ? Boolean((!byokRequiresApiKey || config.apiKey.trim()) && config.baseUrl.trim() && config.model.trim())
       : config.agentId === 'amr'
         || Boolean(
           config.agentId
@@ -3798,7 +3804,14 @@ function OnboardingView({
       setProviderTestState({ status: 'running', inputKey });
       try {
         const result = await testApiProvider(
-          { protocol, baseUrl, apiKey, model, apiVersion },
+          {
+            protocol,
+            baseUrl,
+            apiKey,
+            model,
+            apiVersion,
+            ...(byokRequiresApiKey ? {} : { requiresApiKey: false }),
+          },
           signal,
         );
         setProviderTestState({ status: 'done', inputKey, result });
@@ -3942,6 +3955,7 @@ function OnboardingView({
         protocol: apiProtocol,
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
+        ...(byokRequiresApiKey ? {} : { requiresApiKey: false }),
       });
       if (result.ok && result.models?.length) {
         selectPreferredProviderModelWhenEmpty(result.models, inputKey);

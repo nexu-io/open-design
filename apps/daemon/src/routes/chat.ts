@@ -33,6 +33,7 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { isKnownReasoningEffort, resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
@@ -62,6 +63,21 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
+}
+
+function isKeylessLocalProviderRequest(
+  protocol: string,
+  baseUrl: unknown,
+  requiresApiKey: unknown,
+): boolean {
+  if (protocol !== 'openai' && protocol !== 'ollama') return false;
+  if (requiresApiKey === false) return true;
+  if (typeof baseUrl !== 'string' || !baseUrl.trim()) return false;
+  try {
+    return isLoopbackApiHost(new URL(baseUrl.trim()).hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
@@ -219,15 +235,22 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
       );
     }
-    // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
-    // model list loads without a key. Every other protocol needs the key to
-    // hit its /v1/models endpoint.
-    const apiKeyRequired = protocol !== 'aihubmix' && protocol !== 'bedrock';
+    // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, and local
+    // OpenAI-compatible/Ollama endpoints (oMLX, vLLM, local Ollama) can run
+    // without an API key.
+    const apiKeyRequired =
+      protocol !== 'aihubmix'
+      && protocol !== 'bedrock'
+      && !isKeylessLocalProviderRequest(protocol, body.baseUrl, body.requiresApiKey);
+    const apiKey =
+      typeof body.apiKey === 'string'
+        ? body.apiKey
+        : (!apiKeyRequired && body.apiKey == null ? '' : null);
     if (
       typeof body.baseUrl !== 'string' ||
-      typeof body.apiKey !== 'string' ||
+      apiKey === null ||
       !body.baseUrl.trim() ||
-      (apiKeyRequired && !body.apiKey.trim())
+      (apiKeyRequired && !apiKey.trim())
     ) {
       return sendApiError(
         res,
@@ -249,9 +272,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const result = await listProviderModels({
           protocol,
           baseUrl: body.baseUrl,
-          apiKey: body.apiKey,
+          apiKey,
           apiVersion:
             typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+          ...(typeof body.requiresApiKey === 'boolean'
+            ? { requiresApiKey: body.requiresApiKey }
+            : {}),
           signal: controller.signal,
           requestInit: proxyDispatcher.requestInit,
         });
@@ -297,13 +323,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
-        const apiKeyRequired = protocol !== 'bedrock';
+        const apiKeyRequired =
+          protocol !== 'bedrock'
+          && !isKeylessLocalProviderRequest(protocol, body.baseUrl, body.requiresApiKey);
+        const apiKey =
+          typeof body.apiKey === 'string'
+            ? body.apiKey
+            : (!apiKeyRequired && body.apiKey == null ? '' : null);
         if (
           typeof body.baseUrl !== 'string' ||
-          typeof body.apiKey !== 'string' ||
+          apiKey === null ||
           typeof body.model !== 'string' ||
           !body.baseUrl.trim() ||
-          (apiKeyRequired && !body.apiKey.trim()) ||
+          (apiKeyRequired && !apiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
@@ -327,10 +359,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           const result = await testProviderConnection({
             protocol,
             baseUrl: body.baseUrl,
-            apiKey: body.apiKey,
+            apiKey,
             model: body.model,
             apiVersion:
               typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            ...(typeof body.requiresApiKey === 'boolean'
+              ? { requiresApiKey: body.requiresApiKey }
+              : {}),
             signal: controller.signal,
           });
           return res.json(result);
@@ -1035,12 +1070,20 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
-    if (!baseUrl || !apiKey || !model) {
+    const apiKeyRequired = !isKeylessLocalProviderRequest(
+      'openai',
+      baseUrl,
+      proxyBody.requiresApiKey,
+    );
+    const trimmedApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (!baseUrl || (apiKeyRequired && !trimmedApiKey) || !model) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'baseUrl, apiKey, and model are required',
+        apiKeyRequired
+          ? 'baseUrl, apiKey, and model are required'
+          : 'baseUrl and model are required',
       );
     }
 
@@ -1102,7 +1145,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          ...(trimmedApiKey ? { Authorization: `Bearer ${trimmedApiKey}` } : {}),
           ...(validated.parsed!.hostname === 'openrouter.ai' ? {
             'HTTP-Referer': 'https://opendesign.dev',
             'X-Title': 'OpenDesign',
