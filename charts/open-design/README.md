@@ -9,11 +9,23 @@ This chart bootstraps an [OpenDesign](https://github.com/nexu-io/open-design) de
 - PV provisioner support in the underlying infrastructure (if persistence is enabled)
 
 ## Installing the Chart
-To install the chart with the release name `my-release`:
+The chart is published to GHCR as an OCI artifact. To install it with the release
+name `my-release`:
+
+```console
+helm install my-release oci://ghcr.io/nexu-io/charts/open-design --version <chart-version>
+```
+
+`<chart-version>` is the `version` field in [Chart.yaml](Chart.yaml).
+
+From a checkout of this repository, install it from the chart directory instead:
 
 ```console
 helm install my-release ./charts/open-design
 ```
+
+Older `helm` versions need `--untar` against the local path; OCI installs require
+Helm 3.8 or newer.
 
 These commands deploy an OpenDesign application on the Kubernetes cluster in the default configuration.
 

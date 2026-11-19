@@ -1,0 +1,110 @@
+name: release-chart
+
+# Standalone Helm packaging line (not part of core merge validation in ci.yml).
+# Publishes charts/open-design to GHCR as an OCI artifact so downstream clusters
+# install it with
+#   helm install <release> oci://ghcr.io/nexu-io/charts/open-design --version <version>
+# instead of vendoring the chart. Idempotent: re-running for an already
+# published version is a no-op.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Chart version to publish. Must match charts/open-design/Chart.yaml, for example 0.2.0."
+        required: true
+        type: string
+      ref:
+        description: "Git ref to package. Empty uses the default branch."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: open-design-release-chart
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Package and push chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.ref || github.event.repository.default_branch }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Verify chart version
+        env:
+          CHART_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          actual="$(helm show chart charts/open-design | awk '$1 == "version:" { print $2 }')"
+          if [ "$actual" != "$CHART_VERSION" ]; then
+            echo "::error::charts/open-design/Chart.yaml declares version $actual, requested $CHART_VERSION"
+            exit 1
+          fi
+          echo "Chart version $actual matches the requested version."
+
+      - name: Lint chart
+        run: helm lint --strict charts/open-design
+
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Check whether the version is already published
+        id: exists
+        env:
+          CHART_VERSION: ${{ inputs.version }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          if helm show chart "oci://ghcr.io/${ORG}/charts/open-design" --version "$CHART_VERSION" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "open-design ${CHART_VERSION} is already published; nothing to do."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package chart
+        if: steps.exists.outputs.exists == 'false'
+        run: helm package charts/open-design --destination dist
+
+      - name: Push chart
+        if: steps.exists.outputs.exists == 'false'
+        env:
+          CHART_VERSION: ${{ inputs.version }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          helm push "dist/open-design-${CHART_VERSION}.tgz" "oci://ghcr.io/${ORG}/charts"
+
+      - name: Summary
+        env:
+          CHART_VERSION: ${{ inputs.version }}
+          ORG: ${{ github.repository_owner }}
+          EXISTS: ${{ steps.exists.outputs.exists }}
+        run: |
+          {
+            if [ "$EXISTS" = "true" ]; then
+              echo "### Chart ${CHART_VERSION} already published"
+            else
+              echo "### Published open-design ${CHART_VERSION}"
+            fi
+            echo
+            echo '```'
+            echo "oci://ghcr.io/${ORG}/charts/open-design --version ${CHART_VERSION}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
