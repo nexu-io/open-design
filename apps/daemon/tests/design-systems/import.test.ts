@@ -300,4 +300,73 @@ describe('importLocalDesignSystemProject', () => {
       },
     });
   });
+
+  it('preserves authored components.html, carries DESIGN.md sections, normalizes fontsource names, and inlines preview tokens', async () => {
+    fs.writeFileSync(
+      path.join(sourceRoot, 'components.html'),
+      [
+        '<!doctype html>',
+        '<html><head><title>Authored showcase</title><link rel="stylesheet" href="./tokens.css" /><style>',
+        'body { background: var(--bg); color: var(--fg); }',
+        '.btn-primary { background: var(--accent); color: var(--accent-on); }',
+        '.badge { border: 1px solid var(--border); }',
+        '</style></head>',
+        '<body><main><nav><a href="#cards">Overview</a><kbd>⌘K</kbd></nav><section class="card"><span class="badge">Live</span><button class="btn-primary">Launch</button></section></main></body></html>',
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(sourceRoot, 'DESIGN.md'),
+      [
+        '# Kami App',
+        '',
+        '## 3. Typography Rules',
+        '- **Display:** "Inter" — weights 500, 700',
+        '- **Body:** "Inter" — weights 400, 500',
+        '',
+        '## Voice & Tone',
+        '- **Adjectives:** Crisp, Direct, Quiet',
+        '- **Tone:** Technical and concise',
+        '',
+        '## Imagery',
+        '- **Style:** Dark editorial screenshots',
+        '',
+        '## Layout',
+        '- **Radius:** 12px',
+        '- **Spacing:** 4px baseline grid',
+      ].join('\n'),
+    );
+    fs.writeFileSync(path.join(sourceRoot, 'src', 'assets', 'fonts', 'inter-latin-400-normal.woff2'), 'font');
+    fs.writeFileSync(path.join(sourceRoot, 'src', 'assets', 'fonts', 'jetbrains-mono-latin-500-normal.woff2'), 'font');
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+
+    const componentsHtml = fs.readFileSync(path.join(result.dir, 'components.html'), 'utf8');
+    expect(componentsHtml).toContain('Authored showcase');
+    expect(componentsHtml).toContain('btn-primary');
+
+    const componentsManifest = JSON.parse(
+      fs.readFileSync(path.join(result.dir, 'components.manifest.json'), 'utf8'),
+    ) as { groups: Array<{ id: string; present: boolean }> };
+    expect(componentsManifest.groups.find((g) => g.id === 'badges')?.present).toBe(true);
+    expect(componentsManifest.groups.find((g) => g.id === 'keyboard')?.present).toBe(true);
+
+    const designMd = fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8');
+    expect(designMd).toContain('## Typography');
+    expect(designMd).toContain('## Voice & Tone');
+    expect(designMd).toContain('## Imagery');
+    expect(designMd).toContain('## Layout');
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8')) as {
+      fonts: Array<{ family: string; file: string }>;
+    };
+    expect(manifest.fonts.map((f) => f.family)).toEqual(
+      expect.arrayContaining(['AcmeSans Regular', 'Inter', 'JetBrains Mono']),
+    );
+
+    const colorsPreview = fs.readFileSync(path.join(result.dir, 'preview', 'colors.html'), 'utf8');
+    expect(colorsPreview).toContain('--accent: #ff3366;');
+    expect(colorsPreview).toContain('<link rel="stylesheet" href="../tokens.css" />');
+  });
 });

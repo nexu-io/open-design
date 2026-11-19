@@ -73,4 +73,61 @@ describe('parsedToKit package static assets', () => {
       },
     ]);
   });
+
+  it('exposes kit, token, manifest, and preview URLs for editable local imports without projectId', () => {
+    const kit = parsedToKit(parseDesignMd('# Webomage'), {
+      designSystemId: 'user:webomage',
+      editable: true,
+      packageInfo: {
+        availableFiles: [
+          'DESIGN.md',
+          'tokens.css',
+          'design-tokens.json',
+          'components.html',
+          'components.manifest.json',
+          'preview/colors.html',
+          'preview/app.html',
+        ],
+        manifest: {
+          schemaVersion: 'od-design-system-project/v1',
+          id: 'webomage',
+          name: 'Webomage',
+          category: 'Imported',
+          files: {
+            design: 'DESIGN.md',
+            tokens: 'tokens.css',
+            designTokens: 'design-tokens.json',
+            components: 'components.html',
+          },
+          componentsManifest: 'components.manifest.json',
+          preview: {
+            dir: 'preview',
+            pages: [
+              { path: 'preview/colors.html', role: 'colors', title: 'Colors' },
+              { path: 'preview/app.html', role: 'app', title: 'App Preview' },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(kit.system).toMatchObject({
+      kitUrl: '/api/design-systems/user%3Awebomage/static?path=components.html',
+      designTokensUrl: '/api/design-systems/user%3Awebomage/static?path=design-tokens.json',
+      componentsManifestUrl: '/api/design-systems/user%3Awebomage/static?path=components.manifest.json',
+      kitLabel: 'components.html',
+    });
+    expect(kit.assets).toEqual([
+      {
+        kind: 'colors',
+        label: 'Colors',
+        url: '/api/design-systems/user%3Awebomage/static?path=preview%2Fcolors.html',
+      },
+      {
+        kind: 'app',
+        label: 'App Preview',
+        url: '/api/design-systems/user%3Awebomage/static?path=preview%2Fapp.html',
+      },
+    ]);
+  });
 });
