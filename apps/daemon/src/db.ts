@@ -539,6 +539,14 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'cancel_origin')) {
     db.exec(`ALTER TABLE messages ADD COLUMN cancel_origin TEXT`);
   }
+  // Backs the awaiting-input candidate queries run on every `GET /api/projects`
+  // (#9563). Only form-bearing assistant messages enter the index, so those
+  // queries read O(forms) rows in (created_at, position) order instead of
+  // lowercasing every message body in the history. The WHERE clause must stay
+  // textually identical to the queries' prefilter, hence the shared builder.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_awaiting_input_candidates
+    ON messages(created_at, position)
+    WHERE role = 'assistant' AND ${awaitingInputMarkerPrefilter('content')}`);
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
     db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
@@ -1995,10 +2003,24 @@ export function listLatestRunStatuses(db: SqliteDb) {
  * a candidate too. The authoritative test is `emittedRenderableQuestionForm`,
  * applied to the candidate content in JS.
  */
-const AWAITING_INPUT_MARKER_PREFILTER = `(
-                LOWER(m.content) LIKE '%<question-form%'
-                OR LOWER(m.content) LIKE '%<ask-question%'
-              )`;
+const AWAITING_INPUT_MARKER_PREFILTER = awaitingInputMarkerPrefilter('m.content');
+
+/**
+ * Build the marker prefilter over `column`. One builder serves both the
+ * candidate queries (`m.content`) and the partial index that backs them
+ * (`content`, see `idx_messages_awaiting_input_candidates`), so the two
+ * predicates cannot drift apart: SQLite only uses a partial index when the
+ * query repeats the index's WHERE terms exactly.
+ *
+ * `instr(lower(x), p) > 0` is exactly the earlier `LOWER(x) LIKE '%p%'`: both
+ * patterns are ASCII lowercase with no `_`/`%` inside, and SQLite's `lower()`
+ * and `LIKE` both fold ASCII only. Unlike `LIKE` (whose behavior a pragma can
+ * change), `instr`/`lower` are deterministic, so the expression is safe inside
+ * an index.
+ */
+function awaitingInputMarkerPrefilter(column: 'm.content' | 'content'): string {
+  return `(instr(lower(${column}), '<question-form') > 0 OR instr(lower(${column}), '<ask-question') > 0)`;
+}
 
 interface AwaitingInputCandidate {
   partitionKey: string;
@@ -2071,10 +2093,8 @@ function listPartitionsAwaitingInput(
   return awaiting;
 }
 
-export function listProjectsAwaitingInput(db: SqliteDb) {
-  const rows = db
-    .prepare(
-      `SELECT c.project_id AS partitionKey,
+/** Candidate rows for {@link listProjectsAwaitingInput}; exported for query-plan tests. */
+export const PROJECTS_AWAITING_INPUT_CANDIDATES_SQL = `SELECT c.project_id AS partitionKey,
               m.conversation_id AS conversationId,
               m.created_at AS createdAt,
               m.position AS position,
@@ -2083,16 +2103,10 @@ export function listProjectsAwaitingInput(db: SqliteDb) {
          JOIN conversations c ON c.id = m.conversation_id
         WHERE m.role = 'assistant'
           AND ${AWAITING_INPUT_MARKER_PREFILTER}
-        ORDER BY m.created_at DESC, m.position DESC`,
-    )
-    .iterate() as Iterable<AwaitingInputCandidate>;
-  return listPartitionsAwaitingInput(db, rows);
-}
+        ORDER BY m.created_at DESC, m.position DESC`;
 
-export function listConversationsAwaitingInput(db: SqliteDb) {
-  const rows = db
-    .prepare(
-      `SELECT m.conversation_id AS partitionKey,
+/** Candidate rows for {@link listConversationsAwaitingInput}; exported for query-plan tests. */
+export const CONVERSATIONS_AWAITING_INPUT_CANDIDATES_SQL = `SELECT m.conversation_id AS partitionKey,
               m.conversation_id AS conversationId,
               m.created_at AS createdAt,
               m.position AS position,
@@ -2100,8 +2114,18 @@ export function listConversationsAwaitingInput(db: SqliteDb) {
          FROM messages m
         WHERE m.role = 'assistant'
           AND ${AWAITING_INPUT_MARKER_PREFILTER}
-        ORDER BY m.created_at DESC, m.position DESC`,
-    )
+        ORDER BY m.created_at DESC, m.position DESC`;
+
+export function listProjectsAwaitingInput(db: SqliteDb) {
+  const rows = db
+    .prepare(PROJECTS_AWAITING_INPUT_CANDIDATES_SQL)
+    .iterate() as Iterable<AwaitingInputCandidate>;
+  return listPartitionsAwaitingInput(db, rows);
+}
+
+export function listConversationsAwaitingInput(db: SqliteDb) {
+  const rows = db
+    .prepare(CONVERSATIONS_AWAITING_INPUT_CANDIDATES_SQL)
     .iterate() as Iterable<AwaitingInputCandidate>;
   return listPartitionsAwaitingInput(db, rows);
 }
