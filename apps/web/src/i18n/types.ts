@@ -3866,6 +3866,10 @@ export interface Dict {
   'workspace.focusMode': string;
   'workspace.showChat': string;
   'workspace.closeTab': string;
+  'workspace.closeOtherTabs': string;
+  'workspace.closeTabsToLeft': string;
+  'workspace.closeTabsToRight': string;
+  'workspace.closeAllTabs': string;
   'workspace.deleteFileConfirm': string;
   'workspace.readonlyNotice': string;
   'workspace.readonlyNoticeBy': string;
