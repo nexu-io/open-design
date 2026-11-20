@@ -591,10 +591,15 @@ export async function renderVelaVideo(
       code: 'MEDIA_MODEL_UNAVAILABLE', retryable: false,
     });
   }
-  if (input.length != null && modelEntry.durations && !modelEntry.durations.includes(input.length)) {
-    throw new Error(
-      `Vela video model ${wireModel} does not support duration ${input.length}s; supported: ${modelEntry.durations.join(', ')}`,
-    );
+  if (input.length != null) {
+    if (!modelEntry.durations) {
+      throw new Error(`Vela video catalogue has no usable durations for model ${wireModel}; no generation was submitted`);
+    }
+    if (!modelEntry.durations.includes(input.length)) {
+      throw new Error(
+        `Vela video model ${wireModel} does not support duration ${input.length}s; supported: ${modelEntry.durations.join(', ')}`,
+      );
+    }
   }
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'open-design-vela-video-'));
   const outputPath = path.join(tempDir, 'result.mp4');

@@ -676,6 +676,25 @@ describe('Vela media provider', () => {
     expect(runVelaCommandMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+    ['invalid', [0, -1, 1.5, '5']],
+  ])('rejects a requested duration when published durations are %s', async (_label, durations) => {
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({
+      models: [{ model: 'doubao-seedance-2-0-260128', kind: 'video', capabilities: { durations } }],
+    }));
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 999,
+      output: 'rejected.mp4',
+    })).rejects.toThrow(/catalogue has no usable durations.*no generation was submitted/);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video' && args[1] === 'gen')).toBe(false);
+  });
+
   it('validates video duration dynamically against published capabilities.durations and forwards 15s', async () => {
     const seedance25Durations = Array.from({ length: 27 }, (_, i) => i + 4);
     const wan27Durations = Array.from({ length: 14 }, (_, i) => i + 2);
