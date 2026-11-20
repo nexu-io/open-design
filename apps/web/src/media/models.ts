@@ -331,6 +331,7 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'vela/nano-banana-2-lite', label: 'nano-banana-2-lite (Cloud)', hint: 'OpenDesign Cloud · fast managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   { id: 'vela/seedream-5.0', label: 'seedream-5.0 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   { id: 'vela/seedream-5.0-pro', label: 'seedream-5.0-pro (Cloud)', hint: 'OpenDesign Cloud · high-quality managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/seedream-5.5', label: 'seedream-5.5 (Cloud)', hint: 'OpenDesign Cloud · high-quality managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   // OpenAI — fully integrated path.
   {
     id: 'gpt-image-2',
@@ -780,4 +781,73 @@ export function groupByProvider(models: MediaModel[]): Array<{
       return provider ? { provider, models: list } : null;
     })
     .filter((entry): entry is { provider: MediaProvider; models: MediaModel[] } => entry != null);
+}
+
+export interface VelaImageModelOptions {
+  aspects: readonly MediaAspect[];
+  resolutions: readonly string[];
+  aspectResolutions?: Readonly<Record<string, readonly string[]>>;
+  qualities?: readonly string[];
+  defaultAspect?: MediaAspect;
+  defaultResolution?: string;
+  defaultQuality?: string;
+}
+
+const VELA_IMAGE_MODEL_OPTIONS: Readonly<Record<string, VelaImageModelOptions>> = {
+  'vela/gpt-image-2': {
+    aspects: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+    resolutions: ['1K', '2K'],
+    aspectResolutions: {
+      '1:1': ['1K', '2K'],
+      '4:3': ['1K', '2K'],
+      '3:4': ['1K', '2K'],
+      '16:9': ['2K'],
+      '9:16': ['2K'],
+    },
+    qualities: ['low', 'medium', 'high'],
+    defaultAspect: '1:1',
+    defaultResolution: '1K',
+    defaultQuality: 'low',
+  },
+  'vela/nano-banana-2': {
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    resolutions: ['1K', '2K'],
+    defaultAspect: '1:1',
+    defaultResolution: '2K',
+  },
+  'vela/nano-banana-2-lite': {
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    resolutions: ['1K'],
+    defaultAspect: '1:1',
+    defaultResolution: '1K',
+  },
+  'vela/seedream-5.0': {
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    resolutions: ['2K'],
+    defaultAspect: '1:1',
+    defaultResolution: '2K',
+  },
+  'vela/seedream-5.0-pro': {
+    aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    resolutions: ['1K', '2K'],
+    aspectResolutions: {
+      '1:1': ['1K', '2K'],
+      '16:9': ['2K'],
+      '9:16': ['2K'],
+      '4:3': ['2K'],
+      '3:4': ['2K'],
+    },
+    defaultAspect: '1:1',
+    defaultResolution: '2K',
+  },
+  'vela/seedream-5.5': {
+    aspects: ['1:1'],
+    resolutions: ['1K', '2K'],
+    defaultAspect: '1:1',
+    defaultResolution: '2K',
+  },
+};
+
+export function velaImageModelOptions(modelId: string): VelaImageModelOptions | undefined {
+  return VELA_IMAGE_MODEL_OPTIONS[canonicalMediaModelId(modelId)];
 }

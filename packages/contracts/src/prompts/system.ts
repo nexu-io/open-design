@@ -841,6 +841,12 @@ function imageLines(
     out.push(
       `- **aspectRatio**: ${metadata.imageAspect ?? '(not provided; common choices include 1:1, 16:9, 9:16, 4:3, or 3:4)'}`,
     );
+    if (metadata.imageResolution) {
+      out.push(`- **resolution**: ${metadata.imageResolution}`);
+    }
+    if (metadata.imageQuality) {
+      out.push(`- **quality**: ${metadata.imageQuality}`);
+    }
     if (metadata.imageStyle) {
       out.push(`- **styleNotes**: ${metadata.imageStyle}`);
     }
