@@ -180,6 +180,9 @@ importers:
       undici:
         specifier: 7.29.0
         version: 7.29.0
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
     devDependencies:
       '@babel/types':
         specifier: 7.29.0

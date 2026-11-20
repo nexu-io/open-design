@@ -34,7 +34,7 @@
 // performs the IO.
 
 import path from 'node:path';
-import { isMap, parseDocument } from 'yaml';
+import { Document, isMap, parseDocument, YAMLMap, type ParsedNode } from 'yaml';
 
 export const AGENT_SLUGS = [
   'claude',
@@ -485,23 +485,52 @@ function parseJsonObject(text: string | null, where: string): Record<string, unk
 // --- YAML merge / removal (the 'yaml' strategy, comment-preserving) -----
 
 /**
+ * setIn, but any missing path segment is created as a plain mapping.
+ * Under the yaml-1.1 schema the library's auto-created collections are
+ * !!omap ordered maps (they render as sequences of pairs and reload as
+ * arrays), so new nodes are built with the core schema instead; scalar
+ * quoting at emit time still follows the document's 1.1 schema.
+ */
+function setPlainIn(doc: Document, keys: string[], value: unknown): void {
+  for (let i = 0; i < keys.length; i++) {
+    const sub = keys.slice(0, i + 1);
+    if (!doc.hasIn(sub)) {
+      doc.setIn(
+        sub,
+        i === keys.length - 1
+          ? new Document(value).contents
+          : new YAMLMap<ParsedNode, ParsedNode | null>(),
+      );
+    }
+  }
+}
+
+/**
  * Merge one server entry into existing YAML text without disturbing the
  * rest. Uses the yaml Document API so comments and unrelated keys survive
- * (the JSON strategy's parse/stringify round-trip would drop them). Throws
- * if existing text is non-empty but unparseable or not a mapping (caller
- * decides whether to bail or back up).
+ * (the JSON strategy's parse/stringify round-trip would drop them).
+ * Parses/emits with the YAML 1.1 schema to match Hermes (hermes_yaml.py
+ * pins version (1, 1)): under the default 1.2 core schema, scalars like
+ * `0123` change value (octal 83 → decimal 123) and emitted strings like
+ * `yes`/`off` would reload as booleans. Throws if existing text is
+ * non-empty but unparseable or not a mapping (caller decides whether to
+ * bail or back up).
  */
 export function applyYamlInstall(existingText: string | null, plan: FileInstallPlan): string {
-  const doc = parseDocument(existingText ?? '');
+  // Seed empty input with a parsed '{}' so the root is a properly-typed
+  // parsed mapping (freshly constructed nodes fail the strict Parsed types).
+  const isEmpty = existingText == null || existingText.trim() === '';
+  const doc = parseDocument(isEmpty ? '{}' : existingText, { schema: 'yaml-1.1' });
   if (doc.errors.length > 0) {
     throw new Error(
       `existing config at ${plan.configPath} is not valid YAML: ${doc.errors[0]?.message ?? 'unknown parse error'}`,
     );
   }
-  if (doc.contents != null && !isMap(doc.contents)) {
+  if (!isMap(doc.contents)) {
     throw new Error(`existing config at ${plan.configPath} is not a YAML mapping`);
   }
-  doc.setIn([...plan.keyPath, plan.serverKey], plan.entry);
+  if (isEmpty) doc.contents.flow = false; // emit block style, not inline {}
+  setPlainIn(doc, [...plan.keyPath, plan.serverKey], plan.entry);
   return doc.toString();
 }
 
@@ -514,7 +543,9 @@ export function removeYamlInstall(
   plan: FileInstallPlan,
 ): string | null {
   if (existingText == null || existingText.trim() === '') return null;
-  const doc = parseDocument(existingText);
+  // Same YAML 1.1 schema as applyYamlInstall — removal must not re-value
+  // existing 1.1 scalars (e.g. octal `0123`) either.
+  const doc = parseDocument(existingText, { schema: 'yaml-1.1' });
   if (doc.errors.length > 0) {
     throw new Error(
       `existing config at ${plan.configPath} is not valid YAML: ${doc.errors[0]?.message ?? 'unknown parse error'}`,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 import {
   AGENT_SLUGS,
@@ -341,6 +342,34 @@ describe('applyYamlInstall', () => {
   it('throws when the existing root is not a mapping', () => {
     expect(() => applyYamlInstall('- a\n- b\n', plan)).toThrow(/not a YAML mapping/);
   });
+
+  it('preserves YAML 1.1 scalar values in the existing config (Hermes schema)', () => {
+    const existing = 'octal: 0123\nflag: yes\nswitch: off\nname: on\n';
+    const out = applyYamlInstall(existing, plan);
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    expect(reloaded.octal).toBe(0o123); // 83, not 123
+    expect(reloaded.flag).toBe(true);
+    expect(reloaded.switch).toBe(false);
+    expect(reloaded.name).toBe(true);
+    expect(reloaded.mcp_servers['open-design'].command).toBe(SPEC.command);
+  });
+
+  it('emits 1.1-boolean-like strings quoted so Hermes keeps them strings', () => {
+    const spec: McpLaunchSpec = {
+      command: SPEC.command,
+      args: ['off'],
+      env: { OD_FLAG: 'yes', OD_SWITCH: 'off', OD_NUM: '0123' },
+    };
+    const p = planAgentInstall('hermes', spec, ctx());
+    if (p.kind !== 'yaml') throw new Error('expected yaml');
+    const out = applyYamlInstall(null, p);
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    const entry = reloaded.mcp_servers['open-design'];
+    expect(entry.args).toEqual(['off']);
+    expect(entry.env.OD_FLAG).toBe('yes');
+    expect(entry.env.OD_SWITCH).toBe('off');
+    expect(entry.env.OD_NUM).toBe('0123');
+  });
 });
 
 describe('removeYamlInstall', () => {
@@ -361,5 +390,14 @@ describe('removeYamlInstall', () => {
     expect(removeYamlInstall(null, plan)).toBeNull();
     expect(removeYamlInstall('', plan)).toBeNull();
     expect(removeYamlInstall('mcp_servers: {}\n', plan)).toBeNull();
+  });
+
+  it('preserves YAML 1.1 scalar values when removing the entry', () => {
+    const existing = applyYamlInstall('octal: 0123\nflag: yes\n', plan);
+    const out = removeYamlInstall(existing, plan)!;
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    expect(reloaded.octal).toBe(0o123);
+    expect(reloaded.flag).toBe(true);
+    expect(reloaded.mcp_servers).not.toHaveProperty('open-design');
   });
 });
