@@ -40,6 +40,9 @@ import {
   fetchLiveArtifacts,
   fetchSkillExample,
   invalidateProjectFilesCache,
+  importGitHubDesignSystem,
+  importLocalDesignSystem,
+  importShadcnDesignSystem,
   importSkill,
   installSkill,
   isDeployProviderId,
@@ -2601,5 +2604,31 @@ describe('OPEND-3894 comment reads distinguish errors from empty success', () =>
   it('accepts an explicitly empty successful response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({comments:[]})));
     await expect(fetchPreviewComments('p','c')).resolves.toEqual([]);
+  });
+});
+
+describe('design-system import helpers forward workspace identity headers', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sends workspaceProjectHeaders for local, GitHub, and shadcn design-system imports when signed in', async () => {
+    const fetchMock = vi.fn(async () => Response.json({
+      designSystem: { id: 'user:acme-ds', title: 'Acme Studio', category: 'Imported', summary: '' },
+      tokenContractRebuild: null,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const context = personalWorkspaceContext();
+
+    await importLocalDesignSystem({ baseDir: '/tmp/acme-ds' }, context);
+    await importGitHubDesignSystem({ githubUrl: 'https://github.com/acme/ds' }, context);
+    await importShadcnDesignSystem({ reference: 'https://ui.shadcn.com' }, context);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const call of fetchMock.mock.calls as unknown as Array<[string, RequestInit]>) {
+      const headers = call[1].headers as Record<string, string>;
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers['x-od-workspace-id']).toBe(context.workspaceId);
+      expect(headers['x-od-workspace-member-id']).toBe(context.workspaceMemberId);
+      expect(headers['x-od-workspace-type']).toBe(context.workspaceType);
+    }
   });
 });

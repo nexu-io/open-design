@@ -1243,11 +1243,15 @@ export async function deleteDesignSystemDraft(
 
 export async function importLocalDesignSystem(
   input: ImportLocalDesignSystemRequest,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ImportLocalDesignSystemResponse | { error: SkillImportError }> {
   try {
     const resp = await fetch('/api/design-systems/import/local', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify(input),
     });
     if (!resp.ok) {
@@ -1266,11 +1270,15 @@ export async function importLocalDesignSystem(
 
 export async function importGitHubDesignSystem(
   input: ImportGitHubDesignSystemRequest,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ImportGitHubDesignSystemResponse | { error: SkillImportError }> {
   try {
     const resp = await fetch('/api/design-systems/import/github', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };
@@ -1287,11 +1295,15 @@ export async function importGitHubDesignSystem(
 
 export async function importShadcnDesignSystem(
   input: ImportShadcnDesignSystemRequest,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ImportShadcnDesignSystemResponse | { error: SkillImportError }> {
   try {
     const resp = await fetch('/api/design-systems/import/shadcn', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
       body: JSON.stringify(input),
     });
     if (!resp.ok) return { error: await readImportError(resp) };

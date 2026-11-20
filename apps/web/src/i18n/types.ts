@@ -2315,6 +2315,8 @@ export interface Dict {
   'dsManager.createTitle': string;
   'dsManager.createBody': string;
   'dsManager.createAction': string;
+  'dsManager.importFolderAction': string;
+  'dsManager.importingFolder': string;
   'dsManager.emptyMine': string;
   'dsManager.badgeDefault': string;
   'dsManager.rowMetaUpdated': string;

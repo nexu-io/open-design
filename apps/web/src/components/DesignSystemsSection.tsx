@@ -245,12 +245,13 @@ export function DesignSystemsSection({
       importMode: packageImportMode,
       craftApplies,
     };
+    const ctxArgs = workspaceContext ? ([workspaceContext] as const) : ([] as const);
     const result =
       importSource === 'github'
-        ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions })
+        ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions }, ...ctxArgs)
         : importSource === 'shadcn'
-          ? await importShadcnDesignSystem({ reference: importTarget, ...importOptions })
-          : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
+          ? await importShadcnDesignSystem({ reference: importTarget, ...importOptions }, ...ctxArgs)
+          : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions }, ...ctxArgs);
     setImporting(false);
     if ('error' in result) {
       setImportError(result.error.message);

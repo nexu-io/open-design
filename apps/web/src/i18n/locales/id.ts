@@ -4576,6 +4576,8 @@ export const id: Dict = {
   'dsManager.createTitle': 'Buat design system baru',
   'dsManager.createBody': 'Ajarkan OpenDesign tentang brand, produk, kode, aset, dan referensi desain Anda.',
   'dsManager.createAction': 'Buat',
+  'dsManager.importFolderAction': 'Impor folder',
+  'dsManager.importingFolder': 'Mengimpor folder...',
   'dsManager.emptyMine': 'Belum ada design system. Buat dari konteks produk nyata, tinjau drafnya, lalu terbitkan untuk proyek mendatang.',
   'dsManager.badgeDefault': 'Default',
   'dsManager.rowMetaUpdated': 'Anda · diperbarui {date}',

@@ -300,4 +300,26 @@ describe('importLocalDesignSystemProject', () => {
       },
     });
   });
+
+  it('prefers DESIGN.md frontmatter name over package.json name when options.name is omitted', async () => {
+    fs.writeFileSync(
+      path.join(sourceRoot, 'package.json'),
+      JSON.stringify({ name: '@acme/design-system', dependencies: {} }),
+    );
+    fs.writeFileSync(
+      path.join(sourceRoot, 'DESIGN.md'),
+      '---\nname: "Acme Studio"\ncategory: Imported\n---\n\n# Acme Studio\n',
+    );
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+
+    expect(result.id).toBe('acme-studio');
+    const manifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
+    expect(manifest).toMatchObject({
+      id: 'acme-studio',
+      name: 'Acme Studio',
+    });
+  });
 });

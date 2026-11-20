@@ -52,6 +52,7 @@ export type DesignSystemProjectSource =
 
 type ProjectScan = {
   sourceRoot: string;
+  sourceDesignName: string | undefined;
   packageName: string | undefined;
   packageDescription: string | undefined;
   packageTech: string[];
@@ -128,7 +129,9 @@ export async function importLocalDesignSystemProject(
   }
 
   const scan = await scanProject(sourceRoot);
-  const displayName = cleanDisplayName(options.name ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot));
+  const displayName = cleanDisplayName(
+    options.name ?? scan.sourceDesignName ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot),
+  );
   const id = await reserveNextAvailableSlug(userDesignSystemsRoot, slugify(displayName), options.reservedIds);
   const outDir = path.join(userDesignSystemsRoot, id);
   const importMode = normalizeImportMode(options.importMode);
@@ -203,7 +206,8 @@ export class LocalDesignSystemImportError extends Error {
 }
 
 async function scanProject(sourceRoot: string): Promise<ProjectScan> {
-  const [packageJson, readmeExcerpt, files] = await Promise.all([
+  const [sourceDesignName, packageJson, readmeExcerpt, files] = await Promise.all([
+    readSourceDesignName(sourceRoot),
     readPackageJson(sourceRoot),
     readReadme(sourceRoot),
     walkProject(sourceRoot),
@@ -216,6 +220,7 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
     .slice(0, 80);
   return {
     sourceRoot,
+    sourceDesignName,
     packageName: packageJson.name,
     packageDescription: packageJson.description,
     packageTech: packageJson.tech,
@@ -227,6 +232,25 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
     components: findComponentSignals(files),
     files,
   };
+}
+
+async function readSourceDesignName(sourceRoot: string): Promise<string | undefined> {
+  for (const candidate of ['DESIGN.md', 'design.md']) {
+    try {
+      const raw = await readFile(path.join(sourceRoot, candidate), 'utf8');
+      const frontmatter = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+      if (!frontmatter?.[1]) continue;
+      for (const line of frontmatter[1].split(/\r?\n/)) {
+        const match = line.match(/^\s*name\s*:\s*(.+?)\s*$/);
+        if (!match?.[1]) continue;
+        const unquoted = match[1].replace(/^(['"])(.*)\1$/, '$2').trim();
+        if (unquoted) return unquoted;
+      }
+    } catch {
+      // Try next DESIGN.md candidate filename.
+    }
+  }
+  return undefined;
 }
 
 async function readPackageJson(

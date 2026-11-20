@@ -4576,6 +4576,8 @@ export const ptBR: Dict = {
   'dsManager.createTitle': 'Criar novo design system',
   'dsManager.createBody': 'Ensine ao OpenDesign sua marca, produto, código, ativos e referências de design.',
   'dsManager.createAction': 'Criar',
+  'dsManager.importFolderAction': 'Importar pasta',
+  'dsManager.importingFolder': 'Importando pasta...',
   'dsManager.emptyMine': 'Nenhum design system ainda. Crie um a partir do contexto real do produto, revise o rascunho e publique-o para projetos futuros.',
   'dsManager.badgeDefault': 'Padrão',
   'dsManager.rowMetaUpdated': 'Você · atualizado {date}',

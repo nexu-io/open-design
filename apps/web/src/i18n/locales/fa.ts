@@ -4582,6 +4582,8 @@ export const fa: Dict = {
   'dsManager.createTitle': 'ساخت سیستم طراحی جدید',
   'dsManager.createBody': 'برند، محصول، کد، دارایی‌ها و مراجع طراحی خود را به OpenDesign بیاموزید.',
   'dsManager.createAction': 'ساختن',
+  'dsManager.importFolderAction': 'وارد کردن پوشه',
+  'dsManager.importingFolder': 'در حال وارد کردن پوشه...',
   'dsManager.emptyMine': 'هنوز سیستم طراحی‌ای وجود ندارد. یکی را از روی بافت واقعی محصول بسازید، پیش‌نویس را بررسی کنید، سپس آن را برای پروژه‌های آینده منتشر کنید.',
   'dsManager.badgeDefault': 'پیش‌فرض',
   'dsManager.rowMetaUpdated': 'شما · به‌روزرسانی {date}',
