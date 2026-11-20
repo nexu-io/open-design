@@ -573,12 +573,15 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
 
   // Imported / preset systems serve their bundle through the daemon static
   // route: resolve the brand logo and self-hosted font manifest from the
-  // package file list. Kits backed by a project project keep the project
-  // logo/font plumbing instead.
-  const resolveBundleAsset = opts.designSystemId && (!opts.projectId || !opts.editable)
+  // package file list when availableFiles is explicitly populated. Kits
+  // backed by a project keep the project logo/font plumbing instead.
+  const hasExplicitBundleFiles = Boolean(
+    staticUrl && Array.isArray(opts.packageInfo?.availableFiles),
+  );
+  const resolveBundleAsset = hasExplicitBundleFiles
     ? (rel: string): string | null => {
         const available = firstAvailablePackageFile(opts.packageInfo, [rel]);
-        return available ? designSystemStaticUrl(opts.designSystemId!, rel, opts.workspaceContext) : null;
+        return available ? staticUrl!(rel) : null;
       }
     : null;
   const logoSrc = resolveBundleAsset
@@ -586,10 +589,8 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
         .map((rel) => resolveBundleAsset!(rel))
         .find((url): url is string => Boolean(url)) ?? null)
     : null;
-  const fontsManifestUrl = opts.designSystemId && (!opts.projectId || !opts.editable)
-    ? (firstAvailablePackageFile(opts.packageInfo, ['fonts/manifest.json'])
-        ? designSystemStaticUrl(opts.designSystemId, 'fonts/manifest.json', opts.workspaceContext)
-        : null)
+  const fontsManifestUrl = hasExplicitBundleFiles && firstAvailablePackageFile(opts.packageInfo, ['fonts/manifest.json'])
+    ? staticUrl!('fonts/manifest.json')
     : null;
 
   return {
