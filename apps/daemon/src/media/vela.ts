@@ -363,9 +363,7 @@ function selectImageOutputProfile(
       );
     }
     const matchingByRes = published.profiles.filter((profile) => profile.resolution === publishedResolution);
-    const preferredAspect =
-      aspect && matchingByRes.some((p) => p.aspectRatio === aspect) ? aspect : published.defaultAspectRatio;
-    return matchingByRes.find((profile) => profile.aspectRatio === preferredAspect) ?? matchingByRes[0];
+    return matchingByRes.find((profile) => profile.aspectRatio === published.defaultAspectRatio) ?? matchingByRes[0];
   }
   const matching = published.profiles.filter((profile) => profile.aspectRatio === effectiveAspect);
   if (matching.length === 0) {

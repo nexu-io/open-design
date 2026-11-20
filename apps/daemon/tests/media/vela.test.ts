@@ -348,6 +348,28 @@ describe('Vela media provider', () => {
     expect(valueAfter(args, '--resolution')).toBe('2K');
   });
 
+  it('prefers the published default aspect for a resolution-only request', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({ models: [{
+          model: 'wide-default', kind: 'image', capabilities: { profiles: { generations: {
+            profiles: [{ aspect_ratio: '1:1', resolution: '2K' }, { aspect_ratio: '16:9', resolution: '2K' }],
+            default: { aspect_ratio: '16:9', resolution: '2K' },
+          } } },
+        }] });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_wide', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({ ...baseArgs(), surface: 'image', model: 'vela/wide-default', resolution: '2K', output: 'wide.png' });
+
+    expect(valueAfter(imageCall()[0], '--aspect-ratio')).toBe('16:9');
+    expect(valueAfter(imageCall()[0], '--resolution')).toBe('2K');
+  });
+
   // Tiers are priced apart by more than an order of magnitude, so what an
   // unqualified request sends is a billing decision, not a formatting one.
   it('sends no quality tier when the caller asked for none, leaving the model default in charge', async () => {
