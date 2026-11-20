@@ -20,7 +20,11 @@ function listen(app: express.Express): Promise<string> {
   });
 }
 
-function registerRoutes(app: express.Express, staticHtml: string | null) {
+function registerRoutes(
+  app: express.Express,
+  staticHtml: string | null,
+  extraStaticFiles: Record<string, { bytes: string; contentType: string }> = {},
+) {
   registerDesignSystemRoutes(app, {
     db: {} as never,
     paths: {
@@ -48,14 +52,23 @@ function registerRoutes(app: express.Express, staticHtml: string | null) {
       prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
       readAvailableDesignSystem: async (id: string) => (id === 'bento' ? '# Bento' : null),
       readAvailableDesignSystemPackageInfo: async () => null,
-      readAvailableDesignSystemStaticFile: async (_id: string, filePath: string) =>
-        staticHtml && filePath === 'system/kit.html'
+      readAvailableDesignSystemStaticFile: async (_id: string, filePath: string) => {
+        const extra = extraStaticFiles[filePath];
+        if (extra) {
+          return {
+            bytes: Buffer.from(extra.bytes, 'utf8'),
+            contentType: extra.contentType,
+            updatedAt: 'Tue, 30 Jun 2026 00:00:00 GMT',
+          };
+        }
+        return staticHtml && filePath === 'system/kit.html'
           ? {
               bytes: Buffer.from(staticHtml, 'utf8'),
               contentType: 'text/html; charset=utf-8',
               updatedAt: 'Tue, 30 Jun 2026 00:00:00 GMT',
             }
-          : null,
+          : null;
+      },
       readDesignSystemWorkspaceTextFile: async () => null,
       readUserDesignSystemFile: async () => null,
       renderDesignSystemPreview: () => '<!doctype html><title>preview</title>',
@@ -109,5 +122,31 @@ describe('design-system showcase route', () => {
 
     expect(res.status).toBe(200);
     expect(html).toContain('bento synthetic');
+  });
+
+  it('rewrites relative asset URLs inside HTML served from /static', async () => {
+    const app = express();
+    registerRoutes(app, null, {
+      'preview/colors.html': {
+        contentType: 'text/html; charset=utf-8',
+        bytes: '<!doctype html><link rel="stylesheet" href="../tokens.css" /><img src="../assets/logo.svg" />',
+      },
+      'tokens.css': {
+        contentType: 'text/css; charset=utf-8',
+        bytes: ':root { --bg: #020617; }',
+      },
+    });
+    const baseUrl = await listen(app);
+
+    const htmlRes = await fetch(`${baseUrl}/api/design-systems/bento/static?path=preview%2Fcolors.html`);
+    const html = await htmlRes.text();
+    expect(htmlRes.status).toBe(200);
+    expect(html).toContain('/api/design-systems/bento/static?path=tokens.css');
+    expect(html).toContain('/api/design-systems/bento/static?path=assets%2Flogo.svg');
+
+    const cssRes = await fetch(`${baseUrl}/api/design-systems/bento/static?path=tokens.css`);
+    const css = await cssRes.text();
+    expect(cssRes.status).toBe(200);
+    expect(css).toBe(':root { --bg: #020617; }');
   });
 });

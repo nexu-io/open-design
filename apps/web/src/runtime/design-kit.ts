@@ -88,6 +88,8 @@ export interface KitSystem {
   kitUrl: string;
   kitDarkUrl?: string;
   tokensUrl?: string;
+  designTokensUrl?: string;
+  componentsManifestUrl?: string;
   indexUrl?: string;
   kitLabel?: string;
 }
@@ -543,7 +545,7 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     avoid: parsed.imagery.avoid,
     samples: [],
   };
-  const staticUrl = !opts.editable && opts.designSystemId && opts.packageInfo?.manifest
+  const staticUrl = (!opts.projectId || !opts.editable) && opts.designSystemId && opts.packageInfo?.manifest
     ? (rel: string): string => designSystemStaticUrl(
         opts.designSystemId!,
         rel,
@@ -564,6 +566,16 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     ? firstAvailablePackageFile(opts.packageInfo, [
         'system/tokens.default.json',
         manifestFiles?.designTokens,
+      ])
+    : null;
+  const designTokensPath = staticUrl
+    ? firstAvailablePackageFile(opts.packageInfo, [
+        manifestFiles?.designTokens ?? 'design-tokens.json',
+      ])
+    : null;
+  const componentsManifestPath = staticUrl
+    ? firstAvailablePackageFile(opts.packageInfo, [
+        opts.packageInfo?.manifest?.componentsManifest ?? 'components.manifest.json',
       ])
     : null;
   const indexPath = staticUrl
@@ -592,6 +604,10 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
           kitUrl: staticUrl(kitPath),
           ...(kitDarkPath ? { kitDarkUrl: staticUrl(kitDarkPath) } : {}),
           ...(tokensPath ? { tokensUrl: staticUrl(tokensPath) } : {}),
+          ...(designTokensPath ? { designTokensUrl: staticUrl(designTokensPath) } : {}),
+          ...(componentsManifestPath
+            ? { componentsManifestUrl: staticUrl(componentsManifestPath) }
+            : {}),
           ...(indexPath ? { indexUrl: staticUrl(indexPath) } : {}),
           kitLabel: kitPath,
         }

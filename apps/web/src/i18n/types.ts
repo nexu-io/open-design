@@ -5101,6 +5101,13 @@ export interface Dict {
   'brandDetail.deleteConfirm': string;
   'brandDetail.viewMore': string;
   'brandDetail.viewLess': string;
+  'brandDetail.components': string;
+  'brandDetail.tokens': string;
+  'brandDetail.tokenSpacing': string;
+  'brandDetail.tokenRadii': string;
+  'brandDetail.tokenTypeScale': string;
+  'brandDetail.tokenElevation': string;
+  'brandDetail.tokenMotion': string;
   'settings.resetOnboarding': string;
   'settings.resetOnboardingDesc': string;
   'settings.resetOnboardingButton': string;
