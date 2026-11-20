@@ -29,10 +29,10 @@ export interface HomeMediaComposerState {
 export const HOME_MEDIA_CHIP_IDS = ['image', 'video', 'hyperframes', 'audio'] as const;
 const NO_TEMPLATE_PLACEHOLDER = 'No template';
 const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
-const MEDIA_RESOLUTIONS = ['2k', '4k'] as const;
+const MEDIA_RESOLUTIONS = ['1k', '2k'] as const;
 const MEDIA_RESOLUTION_LABELS: Record<(typeof MEDIA_RESOLUTIONS)[number], string> = {
+  '1k': '1K',
   '2k': '2K',
-  '4k': '4K',
 };
 const DEFAULT_MEDIA_RESOLUTION = '2k';
 

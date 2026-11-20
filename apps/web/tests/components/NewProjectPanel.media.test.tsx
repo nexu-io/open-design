@@ -290,4 +290,48 @@ describe('NewProjectPanel media provider badges', () => {
       }),
     );
   });
+
+  it('filters Vela aspects for seedream-5.5 and forwards optional resolution and quality', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByRole('button', { name: '2K' }));
+    fireEvent.click(screen.getByRole('button', { name: 'high' }));
+
+    // Switching to seedream-5.5 restricts ratios to 1:1 and clears quality because it has no quality tiers.
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    fireEvent.click(screen.getByTestId('model-picker-option-vela/seedream-5.5'));
+    expect(screen.getAllByRole('radio').map((node) => node.textContent)).toEqual(['1:1']);
+    expect(screen.queryByRole('button', { name: 'high' })).toBeNull();
+
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Seedream 5.5 2K' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          kind: 'image',
+          imageModel: 'vela/seedream-5.5',
+          imageAspect: '1:1',
+          imageResolution: '2K',
+        }),
+      }),
+    );
+    expect(onCreate.mock.calls[0]?.[0]?.metadata).not.toHaveProperty('imageQuality');
+  });
 });

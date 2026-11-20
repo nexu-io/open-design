@@ -23,4 +23,12 @@ describe('Home image composer metadata', () => {
       imageModel: 'gpt-image-2',
     });
   });
+
+  it('offers 1K and 2K resolution options aligned with Cloud capabilities', () => {
+    const composer = buildHomeMediaComposer('image', []);
+    const resField = composer.fields.find((field) => field.name === 'resolution');
+    expect(resField?.type).toBe('select');
+    expect(resField?.options).toEqual(['1k', '2k']);
+    expect(composer.inputs.resolution).toBe('2k');
+  });
 });

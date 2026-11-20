@@ -436,6 +436,15 @@ export async function generateMedia(args: {
         provider: 'fal',
         caps: surface === 'image' ? ['t2i'] : surface === 'video' ? ['t2v'] : [],
       };
+    } else if (surface === 'image' && /^vela\//.test(model)) {
+      isCatalogBypass = true;
+      def = {
+        id: model,
+        label: model,
+        hint: 'OpenDesign Cloud',
+        provider: 'vela',
+        caps: ['t2i', 'i2i'],
+      };
     } else if (/^aihubmix-/.test(model)) {
       // AIHubMix image/audio models are discovered live from its catalogue
       // (GET /api/v1/models?type=image_generation), so most ids are NOT in the
@@ -619,7 +628,10 @@ export async function generateMedia(args: {
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'vela' && surface === 'image') {
-      const result = await renderVelaImage(ctx);
+      const result = await renderVelaImage({
+        ...ctx,
+        aspectExplicit: Boolean(typeof aspect === 'string' && aspect.trim()),
+      });
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
