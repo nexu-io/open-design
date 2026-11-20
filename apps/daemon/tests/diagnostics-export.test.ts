@@ -421,6 +421,47 @@ describe('diagnostics export handler — packaged (runtime) layout', () => {
     },
   );
 
+  it('bundles desktop and sidecar log contents for a packaged headless launch', async () => {
+    const root = join(tmpdir(), `od-diag-headless-${randomUUID()}`);
+    const namespace = 'dock-fresh';
+    const namespaceRoot = join(root, 'namespaces', namespace);
+    const logs = {
+      'logs/daemon/latest.log': 'daemon started',
+      'logs/web/latest.log': 'web started',
+      'logs/desktop/latest.log': 'display scale observed',
+      'logs/desktop/previous.log': 'display scale mismatch before relaunch',
+      'logs/desktop/renderer.log': 'renderer ready',
+      'logs/desktop/gpu-info.json': 'hardwareAcceleration',
+    };
+
+    try {
+      for (const [file, content] of Object.entries(logs)) {
+        const absolute = join(namespaceRoot, file);
+        await mkdir(dirname(absolute), { recursive: true });
+        await writeFile(absolute, file.endsWith('.json') ? JSON.stringify({ [content]: true }) : content, 'utf8');
+      }
+
+      const runtime: SidecarRuntimeContext = {
+        app: APP_KEYS.DAEMON,
+        base: join(namespaceRoot, 'runtime'),
+        mode: 'headless',
+        namespace,
+        source: SIDECAR_SOURCES.PACKAGED,
+      };
+      const handler = createDiagnosticsExportHandler({ runtime, projectRoot: root });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      for (const [file, content] of Object.entries(logs)) {
+        expect(await zip.file(file)?.async('string'), file).toContain(content);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('reports missing packaged log files under logical log paths without duplicating runtime segments', async () => {
     const root = join(tmpdir(), `od-diag-missing-${randomUUID()}`);
     const namespaceRoot = join(root, 'namespaces', 'release-beta');
