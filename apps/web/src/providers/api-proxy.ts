@@ -12,6 +12,8 @@ import { workspaceProjectHeaders } from '../collab/workspace-identity';
 import type { StreamHandlers } from './anthropic';
 import { parseSseFrame } from './sse';
 import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
+import { KNOWN_PROVIDERS } from '../state/config';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 
 /**
  * Optional per-request context that some protocols thread into the
@@ -44,7 +46,19 @@ export async function streamProxyEndpoint(
   handlers: StreamHandlers,
   context?: ProxyContext,
 ): Promise<void> {
-  if (!cfg.apiKey) {
+  const protocol = cfg.apiProtocol ?? 'anthropic';
+  const selectedProvider = KNOWN_PROVIDERS.find(
+    (provider) =>
+      provider.protocol === protocol
+      && provider.baseUrl === cfg.baseUrl
+      && (cfg.apiProviderBaseUrl == null || provider.baseUrl === cfg.apiProviderBaseUrl),
+  );
+  const requiresApiKey = byokProviderRequiresApiKey(
+    protocol,
+    selectedProvider,
+    cfg.baseUrl,
+  );
+  if (requiresApiKey && !cfg.apiKey.trim()) {
     handlers.onError(new Error('Missing API key — open Settings and paste one in.'));
     return;
   }
@@ -65,6 +79,7 @@ export async function streamProxyEndpoint(
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
         model: cfg.model,
+        ...(requiresApiKey ? {} : { requiresApiKey: false }),
         systemPrompt: system,
         messages,
         maxTokens: effectiveMaxTokens(cfg),

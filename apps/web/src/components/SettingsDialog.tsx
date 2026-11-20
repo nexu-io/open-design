@@ -2676,6 +2676,7 @@ export function SettingsDialog({
           baseUrl: cfg.baseUrl,
           apiKey: cleanByokApiKey(cfg.apiKey),
           model: cfg.model,
+          ...(byokRequiresApiKey ? {} : { requiresApiKey: false }),
           apiVersion:
             apiProtocol === 'azure'
               ? cfg.apiVersion?.trim() || undefined
@@ -2906,6 +2907,7 @@ export function SettingsDialog({
           protocol: apiProtocol,
           baseUrl: cfg.baseUrl,
           apiKey: cleanByokApiKey(cfg.apiKey),
+          ...(byokRequiresApiKey ? {} : { requiresApiKey: false }),
         },
         controller.signal,
       );

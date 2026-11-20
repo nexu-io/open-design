@@ -35,6 +35,7 @@ import {
 } from '../providers/daemon';
 import { openExternalUrl } from '../providers/registry';
 import { amrPlansUrlForWorkspace } from '../runtime/amr-guidance';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { isMacPlatform } from '../utils/platform';
 import {
   useWorkspaceBillingResponse,
@@ -452,9 +453,14 @@ export function AvatarMenu({
           provider.protocol === apiProtocol &&
           (config.apiProviderBaseUrl
             ? provider.baseUrl === config.apiProviderBaseUrl
-            : false),
+            : provider.baseUrl === config.baseUrl),
       ) ?? KNOWN_PROVIDERS.find((provider) => provider.protocol === apiProtocol),
-    [apiProtocol, config.apiProviderBaseUrl],
+    [apiProtocol, config.apiProviderBaseUrl, config.baseUrl],
+  );
+  const byokRequiresApiKey = byokProviderRequiresApiKey(
+    apiProtocol,
+    byokProvider,
+    config.baseUrl ?? '',
   );
   const byokModelsKey = providerModelsCacheKey(
     apiProtocol,
@@ -476,14 +482,15 @@ export function AvatarMenu({
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
     const baseUrl = config.baseUrl?.trim() ?? '';
     if (!/^https?:\/\//i.test(baseUrl)) return;
-    // AIHubMix's catalogue is public; every other protocol needs a key.
-    if (apiProtocol !== 'aihubmix' && !(config.apiKey ?? '').trim()) return;
+    // AIHubMix's catalogue and keyless local providers (oMLX/vLLM) need no key.
+    if (apiProtocol !== 'aihubmix' && byokRequiresApiKey && !(config.apiKey ?? '').trim()) return;
     const key = byokModelsKey;
     let cancelled = false;
     void fetchProviderModels({
       protocol: apiProtocol,
       baseUrl,
       apiKey: config.apiKey ?? '',
+      ...(byokRequiresApiKey ? {} : { requiresApiKey: false }),
     })
       .then((result) => {
         if (cancelled || !result.ok || !result.models?.length) return;
@@ -502,6 +509,7 @@ export function AvatarMenu({
     open,
     config.mode,
     apiProtocol,
+    byokRequiresApiKey,
     config.baseUrl,
     config.apiKey,
     byokModelsKey,

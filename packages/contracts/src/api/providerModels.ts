@@ -14,6 +14,8 @@ export interface ProviderModelsRequest extends ReasoningExecutionRequestFields {
   // Azure only. Kept in the contract so the request shape can stay aligned
   // with provider testing, even though Azure model discovery is not supported.
   apiVersion?: string;
+  // Set false for keyless local endpoints (e.g. oMLX, vLLM, local Ollama).
+  requiresApiKey?: boolean;
 }
 
 export type ProviderModelOption = AgentModelOption;

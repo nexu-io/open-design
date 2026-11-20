@@ -457,4 +457,51 @@ describe('byok-opencode runtime config', () => {
       ?.[BYOK_OPENCODE_PROVIDER_ID];
     expect(provider?.options).not.toHaveProperty('apiKey');
   });
+
+  it.each([
+    'http://localhost:8000/v1',
+    'http://127.0.0.1:8888/v1',
+  ])('allows keyless loopback OpenAI-compatible endpoints (oMLX) at %s', (baseUrl) => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: '',
+        baseUrl,
+      },
+      'qwen3',
+    );
+
+    expect(out?.modelId).toBe('open-design-byok/qwen3');
+    expect(out?.env).toEqual({});
+    const provider = (out?.config.provider as Record<string, { options?: Record<string, unknown> }> | undefined)
+      ?.[BYOK_OPENCODE_PROVIDER_ID];
+    expect(provider?.options).not.toHaveProperty('apiKey');
+  });
+
+  it('still forwards an optional API key when supplied for oMLX', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'omlx-secret-token',
+        baseUrl: 'http://localhost:8000/v1',
+        requiresApiKey: false,
+      },
+      'qwen3',
+    );
+
+    expect(out?.env).toEqual({
+      [BYOK_OPENCODE_API_KEY_ENV]: 'omlx-secret-token',
+    });
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'http://localhost:8000/v1',
+            apiKey: '{env:OPEN_DESIGN_BYOK_API_KEY}',
+          },
+        },
+      },
+    });
+  });
 });
