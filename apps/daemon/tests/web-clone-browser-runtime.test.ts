@@ -162,6 +162,17 @@ describe('Website Clone main-path browser runtime', () => {
     )).toMatchObject({ width: 1600, height: 900 });
   });
 
+  it('passes --use-mock-keychain when launching a fallback system browser directly', async () => {
+    const systemBrowser = await import(pathToFileURL(systemBrowserPath).href) as {
+      buildSystemBrowserLaunchArgs: (profileDir: string) => string[];
+    };
+
+    const args = systemBrowser.buildSystemBrowserLaunchArgs('/tmp/od-web-clone-browser-test');
+    expect(args).toContain('--headless=new');
+    expect(args).toContain('--user-data-dir=/tmp/od-web-clone-browser-test');
+    expect(args).toContain('--use-mock-keychain');
+  });
+
   it('forbids project-local Playwright installation and documents navigation timeout separately', () => {
     const skill = readFileSync(skillPath, 'utf8');
     const recon = readFileSync(reconPath, 'utf8');
