@@ -71,9 +71,17 @@ when the proxy is disabled, so an external proxy or ingress can reach the pod.
 
 {{/*
 Host the exec probes connect to. Follows a custom bind host so the probe and
-OD_BIND_HOST cannot drift, but never dials the 0.0.0.0 wildcard.
+OD_BIND_HOST cannot drift. IPv6 literals are bracketed so they render as valid
+URI authorities, and the wildcard addresses are mapped to loopback because
+neither 0.0.0.0 nor :: is dialable.
 */}}
 {{- define "open-design.probeHost" -}}
 {{- $host := include "open-design.bindHost" . -}}
-{{- ternary "127.0.0.1" $host (eq $host "0.0.0.0") -}}
+{{- if or (eq $host "0.0.0.0") (eq $host "::") -}}
+{{- ternary "127.0.0.1" "[::1]" (eq $host "0.0.0.0") -}}
+{{- else if contains ":" $host -}}
+{{- printf "[%s]" $host -}}
+{{- else -}}
+{{- $host -}}
+{{- end -}}
 {{- end -}}
