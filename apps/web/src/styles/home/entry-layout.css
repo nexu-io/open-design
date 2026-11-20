@@ -566,9 +566,6 @@
   text-align: center;
 }
 .entry-local-mode-tip__activation-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
   color: var(--text-strong);
   font-weight: 600;
   text-decoration: underline;

@@ -1810,6 +1810,8 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
 
     await vi.advanceTimersByTimeAsync(3000);
     const reopen = screen.getByRole('button', { name: /Reopen/i });
+    // The text is the link; no trailing external-link icon (OPEND-4628).
+    expect(reopen.querySelector('svg')).toBeNull();
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     fireEvent.click(reopen);
     await act(async () => {});
