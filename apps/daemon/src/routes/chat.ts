@@ -71,7 +71,7 @@ function isKeylessLocalProviderRequest(
   requiresApiKey: unknown,
 ): boolean {
   if (protocol !== 'openai' && protocol !== 'ollama') return false;
-  if (requiresApiKey === false) return true;
+  if (requiresApiKey === true) return false;
   if (typeof baseUrl !== 'string' || !baseUrl.trim()) return false;
   try {
     return isLoopbackApiHost(new URL(baseUrl.trim()).hostname);

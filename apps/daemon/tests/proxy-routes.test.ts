@@ -454,6 +454,27 @@ describe('API proxy routes', () => {
     );
   });
 
+  it('rejects remote OpenAI proxy requests with a blank API key even when requiresApiKey is false', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        requiresApiKey: false,
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.text()).resolves.toContain('baseUrl, apiKey, and model are required');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('allows IPv4-mapped loopback API base URLs for local OpenAI-compatible providers', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);

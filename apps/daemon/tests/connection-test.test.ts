@@ -929,6 +929,45 @@ describe('POST /api/test/connection provider mode', () => {
       }),
     });
     expect(remoteRes.status).toBe(400);
+
+    const remoteWithFlagModelsRes = await realFetch(`${baseUrl}/api/provider/models`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        requiresApiKey: false,
+      }),
+    });
+    expect(remoteWithFlagModelsRes.status).toBe(400);
+
+    const remoteWithFlagTestRes = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4o',
+        requiresApiKey: false,
+      }),
+    });
+    expect(remoteWithFlagTestRes.status).toBe(400);
+
+    const remoteWithFlagProxyRes = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4o',
+        requiresApiKey: false,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+    expect(remoteWithFlagProxyRes.status).toBe(400);
   });
 
   it('returns static AWS Bedrock model seeds without calling upstream fetch', async () => {
