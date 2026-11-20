@@ -194,7 +194,6 @@ export function CloudSignInTip({ sharePrompt = false, className, onLoginSuccess,
                 {status.browserOpenFailed
                   ? t('settings.amrActivationOpen')
                   : t('settings.onboardingActivationReopen')}
-                <Icon name="external-link" size={11} />
               </a>
             </p>
           ) : null}

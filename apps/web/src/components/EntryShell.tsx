@@ -4138,8 +4138,7 @@ function OnboardingView({
                     className={onboardingWelcomeStyles.reopen}
                     onClick={() => void reopenCloudSignIn()}
                   >
-                    <span>{t('settings.onboardingActivationReopen')}</span>
-                    <Icon name="external-link" size={13} />
+                    {t('settings.onboardingActivationReopen')}
                   </button>
                 </p>
               ) : null}
