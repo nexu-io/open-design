@@ -68,6 +68,11 @@ const DEFAULT_VELA_VIDEO_TOTAL_TIMEOUT_MS = 15 * 60_000;
 const DEFAULT_VELA_VIDEO_RESOLUTION = '720p';
 const VELA_MAX_INPUT_IMAGES = 5;
 const VELA_VIDEO_RATIOS = new Set(['16:9', '9:16', '1:1']);
+const VELA_VIDEO_DEFAULT_AUDIO_MODELS = new Set([
+  'wan-2.7',
+  'doubao-seedance-2-5-260628',
+  'doubao-seedance-2-5-flash-261115',
+]);
 
 /** The installed local media runtime predates Vela's media command surface. */
 export const VELA_MEDIA_CLI_INCOMPATIBLE_CODE = 'MEDIA_CLI_INCOMPATIBLE';
@@ -632,6 +637,7 @@ export async function renderVelaVideo(
       '--resolution',
       DEFAULT_VELA_VIDEO_RESOLUTION,
       ...(input.length == null ? [] : ['--duration', String(input.length)]),
+      ...(VELA_VIDEO_DEFAULT_AUDIO_MODELS.has(wireModel) ? ['--generate-audio'] : []),
       ...(firstFrame ? ['--first-frame', firstFrame.abs] : []),
       ...references.flatMap((image) => ['--ref', image.abs]),
       '--no-wait',

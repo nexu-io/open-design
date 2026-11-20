@@ -742,5 +742,25 @@ describe('Vela media provider', () => {
     const submit = runVelaCommandMock.mock.calls.find(([args]) => args[0] === 'video' && args[1] === 'gen')![0] as string[];
     expect(valueAfter(submit, '--model')).toBe('doubao-seedance-2-5-260628');
     expect(valueAfter(submit, '--duration')).toBe('15');
+    expect(submit).toContain('--generate-audio');
+
+    // Accepts 3s for wan-2.7 (2-15s) and passes `--generate-audio` for vela-cli 0.1.10 compatibility.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'vela/doubao-seedance-2-0-260128': 'wan-2.7',
+    });
+    const wanResult = await generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 3,
+      output: 'clip-wan-3s.mp4',
+    });
+    expect(wanResult.name).toBe('clip-wan-3s.mp4');
+    const wanSubmit = runVelaCommandMock.mock.calls
+      .filter(([args]) => args[0] === 'video' && args[1] === 'gen')
+      .at(-1)![0] as string[];
+    expect(valueAfter(wanSubmit, '--model')).toBe('wan-2.7');
+    expect(valueAfter(wanSubmit, '--duration')).toBe('3');
+    expect(wanSubmit).toContain('--generate-audio');
   });
 });
