@@ -558,7 +558,7 @@ describe('Vela media provider', () => {
   it('submits and polls video with first-frame/references, progress heartbeats, and one terminal download', async () => {
     const progress: string[] = [];
     runVelaCommandMock.mockImplementation(async (args: string[]) => {
-      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]});
+      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video',capabilities:{durations:[5,10]}}]});
       if (args[0] === 'video' && args[1] === 'gen') {
         return JSON.stringify({ task_id: 'mt_test', status: 'queued' });
       }
@@ -622,7 +622,7 @@ describe('Vela media provider', () => {
 
   it('preserves a failed video status and provider error', async () => {
     runVelaCommandMock
-      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]}))
+      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video',capabilities:{durations:[5,10]}}]}))
       .mockResolvedValueOnce(JSON.stringify({ task_id: 'mt_failed', status: 'queued' }))
       .mockResolvedValueOnce(JSON.stringify({
         task_id: 'mt_failed',
