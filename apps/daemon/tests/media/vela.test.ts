@@ -662,9 +662,9 @@ describe('Vela media provider', () => {
 
   it.each([
     ['4:3', 5, 'only supports aspect ratios'],
-    ['16:9', 6, 'only supports durations of 5 or 10'],
-    ['16:9', 8, 'only supports durations of 5 or 10'],
-  ])('rejects unsupported video capability %s/%ss before spawning', async (aspect, length, message) => {
+    ['16:9', 0, 'duration must be a positive integer'],
+    ['16:9', 5.5, 'duration must be a positive integer'],
+  ])('rejects invalid video capability %s/%ss before spawning', async (aspect, length, message) => {
     await expect(generateMedia({
       ...baseArgs(),
       surface: 'video',
@@ -674,5 +674,54 @@ describe('Vela media provider', () => {
       output: 'unsupported.mp4',
     })).rejects.toThrow(message);
     expect(runVelaCommandMock).not.toHaveBeenCalled();
+  });
+
+  it('validates video duration dynamically against published capabilities.durations and forwards 15s', async () => {
+    const seedance25Durations = Array.from({ length: 27 }, (_, i) => i + 4);
+    const wan27Durations = Array.from({ length: 14 }, (_, i) => i + 2);
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            { model: 'doubao-seedance-2-0-260128', kind: 'video', capabilities: { durations: { values: [5, 10], default: 5 } } },
+            { model: 'doubao-seedance-2-5-260628', kind: 'video', capabilities: { durations: { values: seedance25Durations, default: 5 } } },
+            { model: 'wan-2.7', kind: 'video', capabilities: { durations: { values: wan27Durations, default: 5 } } },
+          ],
+        });
+      }
+      if (args[0] === 'video' && args[1] === 'gen') {
+        return JSON.stringify({ task_id: 'mt_15s', status: 'queued' });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, VIDEO_BYTES);
+      return JSON.stringify({ task_id: 'mt_15s', status: 'succeeded' });
+    });
+
+    // Rejects a duration outside the model's published capabilities before calling `video gen`.
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 15,
+      output: 'rejected-seedance20.mp4',
+    })).rejects.toThrow(/does not support duration 15s; supported: 5, 10/);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video')).toBe(false);
+
+    // Accepts 15s for doubao-seedance-2-5-260628 (4-30s) via alias and forwards `--duration 15`.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'vela/doubao-seedance-2-0-260128': 'doubao-seedance-2-5-260628',
+    });
+    const result = await generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 15,
+      output: 'clip-15s.mp4',
+    });
+    expect(result.name).toBe('clip-15s.mp4');
+    const submit = runVelaCommandMock.mock.calls.find(([args]) => args[0] === 'video' && args[1] === 'gen')![0] as string[];
+    expect(valueAfter(submit, '--model')).toBe('doubao-seedance-2-5-260628');
+    expect(valueAfter(submit, '--duration')).toBe('15');
   });
 });
