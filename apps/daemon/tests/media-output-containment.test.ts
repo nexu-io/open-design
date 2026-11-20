@@ -234,6 +234,94 @@ describe('generated media honours the project file APIs\' containment', () => {
     });
   });
 
+  /**
+   * The read side of the same guarantee. `--image` and `--composition-dir` are
+   * agent-supplied project-relative paths that the daemon reads, so they have
+   * to be held to the same symlink-aware rule as writes: a prefix check on the
+   * literal path passes for `assets -> $HOME/.ssh` until readFile follows it.
+   */
+  describe.each(['managed project', 'imported project'])('%s reference reads', (flowName) => {
+    const flowFor = () => flows.find((flow) => flow.name === flowName)!;
+
+    it('refuses a --image that traverses out of the project, before any provider call', async () => {
+      const flow = flowFor();
+      const fetchMock = stubProvider({ mustNotBeCalled: true });
+
+      const error = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: flow.projectId,
+        metadata: flow.metadata(),
+        surface: 'image',
+        model: 'minimax-image-01',
+        prompt: 'containment probe',
+        output: 'media/ref.png',
+        image: '../outside.png',
+      }).then(() => null, (err: Refusal) => err);
+
+      expect(error, 'a traversing --image was accepted').not.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+      await expect(readFile(path.join(root, 'outside.png'))).rejects.toThrow();
+    });
+
+    it('refuses to read a --image through a symlinked subdirectory', async (ctx) => {
+      const flow = flowFor();
+      const fetchMock = stubProvider({ mustNotBeCalled: true });
+      const projectDir = flow.expectedRoot();
+      const outside = path.join(root, `${flow.projectId}-image-outside`);
+      await mkdir(projectDir, { recursive: true });
+      await mkdir(outside, { recursive: true });
+      await writeFile(path.join(outside, 'secret.png'), Buffer.from(PNG_BASE64, 'base64'));
+
+      try {
+        await symlink(outside, path.join(projectDir, 'assets'), process.platform === 'win32' ? 'junction' : 'dir');
+      } catch {
+        ctx.skip('this host does not allow creating a directory symlink');
+      }
+
+      const error = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: flow.projectId,
+        metadata: flow.metadata(),
+        surface: 'image',
+        model: 'minimax-image-01',
+        prompt: 'containment probe',
+        output: 'media/ref.png',
+        image: 'assets/secret.png',
+      }).then(() => null, (err: Refusal) => err);
+
+      expect(error, 'a symlinked --image was accepted').not.toBeNull();
+      // The refusal must be the shared helper's, not an incidental failure.
+      expect(String(error!.message)).toMatch(/resolves outside the project directory/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('still reads a normal --image inside the project root', async () => {
+      const flow = flowFor();
+      stubProvider();
+      const projectDir = flow.expectedRoot();
+      await mkdir(path.join(projectDir, 'media'), { recursive: true });
+      await writeFile(path.join(projectDir, 'media', 'ref.png'), Buffer.from(PNG_BASE64, 'base64'));
+
+      const result = await generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: flow.projectId,
+        metadata: flow.metadata(),
+        surface: 'image',
+        model: 'minimax-image-01',
+        prompt: 'containment probe',
+        output: 'media/out.png',
+        image: 'media/ref.png',
+      });
+
+      expect(result.kind).toBe('image');
+      await expect(readFile(path.join(projectDir, 'media', 'out.png')))
+        .resolves.toEqual(Buffer.from(PNG_BASE64, 'base64'));
+    });
+  });
+
   it('keeps the imported root as the write target, never the managed projects dir', async () => {
     const imported = flows.find((flow) => flow.name === 'imported project')!;
     stubProvider();

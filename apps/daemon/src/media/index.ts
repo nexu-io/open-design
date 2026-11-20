@@ -236,18 +236,26 @@ function stubsAllowed() {
  * Security: refuses anything that escapes the project directory.
  * Without this guard, an agent (or a hallucinated arg) could ask the
  * daemon to upload `/etc/passwd` to a paid model.
+ *
+ * Reads go through `resolveSafeReal`, the same symlink-aware containment the
+ * project file APIs use. A plain string-prefix check on the resolved path is
+ * not enough here: a symlink *inside* the project still looks contained until
+ * the OS follows it at `readFile`, so `assets -> ~/.ssh` would pass a prefix
+ * test and then upload a private key. Calling the shared helper means "inside
+ * the project" means exactly one thing for reads, writes and the file APIs.
  */
 async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
   if (typeof rel !== 'string' || !rel.trim()) return null;
-  const projectRootResolved = path.resolve(projectDir);
-  const abs = path.resolve(projectRootResolved, rel.trim());
-  if (
-    abs !== projectRootResolved &&
-    !abs.startsWith(projectRootResolved + path.sep)
-  ) {
-    throw new Error(
-      `--image path "${rel}" resolves outside the project directory.`,
-    );
+  let abs: string;
+  try {
+    abs = await resolveSafeReal(projectDir, rel.trim());
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === 'EPATHESCAPE') {
+      throw new Error(
+        `--image path "${rel}" resolves outside the project directory.`,
+      );
+    }
+    throw err;
   }
   let info;
   try {
@@ -3909,17 +3917,20 @@ async function renderHyperFrames(
   // Resolve compositionDir against projectDir and refuse anything that
   // escapes — the agent has free file access to the project but the
   // dispatcher must not let a bad relative path render an arbitrary
-  // directory on the host.
-  const projectRootResolved = path.resolve(projectDir);
-  const compAbs = path.resolve(projectRootResolved, compRel);
-  if (
-    compAbs !== projectRootResolved &&
-    !compAbs.startsWith(projectRootResolved + path.sep)
-  ) {
-    throw new Error(
-      `compositionDir "${compRel}" resolves outside the project directory. ` +
-        'Pass a path relative to the project (e.g. ".hyperframes-cache/abc").',
-    );
+  // directory on the host. Uses the shared symlink-aware helper for the same
+  // reason as `--image`: a prefix check on the literal path passes for a
+  // symlinked directory that only leaves the project once the OS follows it.
+  let compAbs: string;
+  try {
+    compAbs = await resolveSafeReal(projectDir, compRel.trim());
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === 'EPATHESCAPE') {
+      throw new Error(
+        `compositionDir "${compRel}" resolves outside the project directory. ` +
+          'Pass a path relative to the project (e.g. ".hyperframes-cache/abc").',
+      );
+    }
+    throw err;
   }
   // Existence check — render against a missing directory hangs HF for
   // a while before failing, so short-circuit with a clear error.
