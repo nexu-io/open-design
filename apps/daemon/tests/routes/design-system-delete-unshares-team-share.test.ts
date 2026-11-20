@@ -273,6 +273,35 @@ describe('DELETE /api/design-systems/:id unshares from the team hub first', () =
     expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
   });
 
+  it('continues local deletion when team resource sharing is unconfigured (configured: false)', async () => {
+    const hub = fakeHub();
+    const unconfiguredShare = createTeamResourceShareService({
+      kind: 'design_system',
+      idPrefix: 'ds',
+      resolveDir: () => '/tmp/ds',
+      run: hub.run,
+      env: {},
+    });
+    expect(unconfiguredShare.configured).toBe(false);
+
+    const app = express();
+    app.use(express.json());
+    const { deleteUserDesignSystem, scope } = registerRoutes(app, {
+      hub,
+      unshareTeamDesignSystemIfShared: (id) =>
+        unshareIfCurrentlyShared(unconfiguredShare, id, scope),
+    });
+    const baseUrl = await listen(app);
+
+    const res = await fetch(`${baseUrl}/api/design-systems/user:my-brand`, {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(204);
+    expect(hub.removeCalls).toHaveLength(0);
+    expect(deleteUserDesignSystem).toHaveBeenCalledOnce();
+  });
+
   it('aborts the local delete when the caller cannot actually manage the shared resource', async () => {
     // Defensive case: if `unshare()` ever throws (e.g. a `canUnshare: false`
     // race), the route must not proceed to the local delete. Simulate that by

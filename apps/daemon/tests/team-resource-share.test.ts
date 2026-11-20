@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TeamResourceAuthorityUnavailableError,
   TeamResourceShareForbiddenError,
   createTeamResourceShareService,
   parseSharedResourceIds,
   parseSharedResourceRecords,
   teamResourceRequestScopeFromContext,
   teamResourceRequestScopeForWorkspaceId,
+  unshareIfCurrentlyShared,
   type TeamResourceRequestScope,
 } from '../src/collab/team-resource-share.js';
 import type {
@@ -425,5 +427,31 @@ describe('team resource share permission gate', () => {
       title: 'Agentic',
       ownerMemberId: 'wm-1',
     }]);
+  });
+
+  it('returns false from unshareIfCurrentlyShared when service is unconfigured but still fails closed when configured', async () => {
+    const unconfigured = createTeamResourceShareService({
+      kind: 'design_system',
+      idPrefix: 'ds',
+      resolveDir: () => '/tmp/ds',
+      run: unreachableRun,
+      env: {},
+    });
+    expect(unconfigured.configured).toBe(false);
+    await expect(unshareIfCurrentlyShared(unconfigured, 'user:acme', scope)).resolves.toBe(false);
+
+    const configuredOffline = createTeamResourceShareService({
+      kind: 'design_system',
+      idPrefix: 'ds',
+      resolveDir: () => '/tmp/ds',
+      run: async () => {
+        throw new Error('hub offline');
+      },
+      env: { OD_WORKSPACE_CONTEXT_SOURCE: 'vela' },
+    });
+    expect(configuredOffline.configured).toBe(true);
+    await expect(unshareIfCurrentlyShared(configuredOffline, 'user:acme', scope)).rejects.toThrow(
+      TeamResourceAuthorityUnavailableError,
+    );
   });
 });
