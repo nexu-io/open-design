@@ -335,6 +335,48 @@ describe('applyYamlInstall', () => {
     expect(applyYamlInstall(once, plan)).toBe(once);
   });
 
+  it('reinstall replaces an existing entry when the launch spec changes', () => {
+    const existing = [
+      '# Hermes configuration',
+      'model: gpt-5',
+      'mcp_servers:',
+      '  # sibling stays',
+      '  other:',
+      '    command: foo',
+      '',
+    ].join('\n');
+    const first = applyYamlInstall(existing, plan);
+    expect(parse(first, { schema: 'yaml-1.1' }).mcp_servers['open-design'].command).toBe(SPEC.command);
+
+    // A daemon move / config change produces a different launch spec.
+    const changed: McpLaunchSpec = {
+      command: '/opt/new/daemon-cli.mjs',
+      args: ['mcp', '--daemon-url', 'http://127.0.0.1:9999'],
+      env: { OD_DATA_DIR: '/new/data', OD_CUSTOM: 'changed' },
+    };
+    const changedPlan = planAgentInstall('hermes', changed, ctx()) as YamlInstallPlan;
+    const second = applyYamlInstall(first, changedPlan);
+    const reloaded = parse(second, { schema: 'yaml-1.1' });
+    const entry = reloaded.mcp_servers['open-design'];
+    expect(entry.command).toBe('/opt/new/daemon-cli.mjs');
+    expect(entry.args).toEqual(['mcp', '--daemon-url', 'http://127.0.0.1:9999']);
+    expect(entry.env.OD_DATA_DIR).toBe('/new/data');
+    expect(entry.env.OD_CUSTOM).toBe('changed');
+    // unrelated keys, comments and sibling servers survive the reinstall
+    expect(second).toContain('# Hermes configuration');
+    expect(second).toContain('# sibling stays');
+    expect(second).toContain('model: gpt-5');
+    expect(reloaded.mcp_servers.other.command).toBe('foo');
+    // re-applying the changed spec is itself idempotent
+    expect(applyYamlInstall(second, changedPlan)).toBe(second);
+  });
+
+  it('reinstall repairs an intermediate segment that is not a mapping', () => {
+    const out = applyYamlInstall('mcp_servers: not-a-map\n', plan);
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    expect(reloaded.mcp_servers['open-design'].command).toBe(SPEC.command);
+  });
+
   it('throws on unparseable YAML rather than clobbering it', () => {
     expect(() => applyYamlInstall('key: [unclosed', plan)).toThrow(/not valid YAML/);
   });

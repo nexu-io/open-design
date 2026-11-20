@@ -485,24 +485,27 @@ function parseJsonObject(text: string | null, where: string): Record<string, unk
 // --- YAML merge / removal (the 'yaml' strategy, comment-preserving) -----
 
 /**
- * setIn, but any missing path segment is created as a plain mapping.
+ * setIn, but missing intermediate path segments are created as plain
+ * mappings, while the FINAL entry is always (re)assigned so reinstalling
+ * with a changed launch spec updates an existing server entry instead of
+ * silently keeping stale settings.
  * Under the yaml-1.1 schema the library's auto-created collections are
  * !!omap ordered maps (they render as sequences of pairs and reload as
  * arrays), so new nodes are built with the core schema instead; scalar
  * quoting at emit time still follows the document's 1.1 schema.
  */
 function setPlainIn(doc: Document, keys: string[], value: unknown): void {
-  for (let i = 0; i < keys.length; i++) {
+  // Create only missing (or non-mapping) intermediate segments; preserve any
+  // existing mapping so its comments and sibling keys survive.
+  for (let i = 0; i < keys.length - 1; i++) {
     const sub = keys.slice(0, i + 1);
-    if (!doc.hasIn(sub)) {
-      doc.setIn(
-        sub,
-        i === keys.length - 1
-          ? new Document(value).contents
-          : new YAMLMap<ParsedNode, ParsedNode | null>(),
-      );
+    if (!isMap(doc.getIn(sub))) {
+      doc.setIn(sub, new YAMLMap<ParsedNode, ParsedNode | null>());
     }
   }
+  // Always assign the final entry — this is what makes reinstall idempotent
+  // for an unchanged spec and corrective for a changed one.
+  doc.setIn(keys, new Document(value).contents);
 }
 
 /**
