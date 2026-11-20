@@ -891,7 +891,10 @@ export function DesignSystemsTab({
       if (!selected) return;
       setImportingFolder(true);
       notifyActionLoading(t('dsManager.importingFolder'));
-      const result = await importLocalDesignSystem({ baseDir: selected }, workspaceContextRef.current);
+      const activeWorkspace = workspaceContextRef.current;
+      const result = activeWorkspace
+        ? await importLocalDesignSystem({ baseDir: selected }, activeWorkspace)
+        : await importLocalDesignSystem({ baseDir: selected });
       if ('error' in result) {
         notifyAction('error', result.error.message || t('ds.actionFailed'));
         return;

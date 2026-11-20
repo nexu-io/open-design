@@ -587,5 +587,6 @@ describe('DesignSystemsTab surface filtering', () => {
     fireEvent.click(screen.getByTestId('design-systems-import-folder'));
 
     await screen.findByText('Folder does not contain a readable project.');
+    expect(importLocalDesignSystem).toHaveBeenCalledWith({ baseDir: '/tmp/bad-ds' });
   });
 });
