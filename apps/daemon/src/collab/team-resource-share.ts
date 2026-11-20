@@ -295,10 +295,12 @@ async function defaultRun(args: string[], workspaceId?: string): Promise<string>
  * the caller's delete must abort rather than proceed past a failed unshare.
  */
 export async function unshareIfCurrentlyShared(
-  service: Pick<TeamResourceShareService, 'sharedResources' | 'unshare'>,
+  service: Pick<TeamResourceShareService, 'sharedResources' | 'unshare'> &
+    Partial<Pick<TeamResourceShareService, 'configured'>>,
   resourceId: string,
   scope: TeamResourceRequestScope,
 ): Promise<boolean> {
+  if (service.configured === false) return false;
   let resources: TeamResourceShareRecord[];
   try {
     resources = await service.sharedResources(scope, { authoritative: true });
