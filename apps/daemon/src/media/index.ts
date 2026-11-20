@@ -95,10 +95,12 @@ import {
 } from './hyperframes-runtime.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
 import {
+  assertVisibleForImportedProject,
   ensureProject,
   kindFor,
   mimeFor,
-  sanitizeName,
+  resolveSafeReal,
+  sanitizePath,
 } from '../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -508,10 +510,20 @@ export async function generateMedia(args: {
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
   const dir = await ensureProject(projectsRoot, projectId, metadata);
-  const safeOut = sanitizeName(
-    output || autoOutputName(surface, model, resolvedAudioKind),
-  );
-  const target = path.join(dir, safeOut);
+  // Write target containment, via the project file APIs' own pair: validate the
+  // name as a project-relative path (`sanitizePath`, which rejects absolute
+  // paths, traversal segments and reserved project paths), refuse hidden
+  // segments for imported roots (`assertVisibleForImportedProject`), then
+  // re-validate the resolved target against the realpath of the project dir
+  // (`resolveSafeReal`) so a descendant symlink cannot redirect the write out
+  // of the project. Calling the shared helpers — instead of a second
+  // string-prefix check here — is what makes "inside the project" mean exactly
+  // one thing across the file APIs and generated media, for managed and
+  // imported/custom roots (`metadata.baseDir`) alike.
+  const requestedOut = output || autoOutputName(surface, model, resolvedAudioKind);
+  assertVisibleForImportedProject(requestedOut, metadata);
+  const safeOut = sanitizePath(requestedOut);
+  const target = await resolveSafeReal(dir, safeOut);
   await mkdir(path.dirname(target), { recursive: true });
 
   // Reference image for image-to-video / image-edit flows. The agent
@@ -869,7 +881,11 @@ export async function generateMedia(args: {
     const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
-  const finalTarget = path.join(dir, finalOut);
+  // Same containment as the requested name above: the extension swap only
+  // rewrites the stem, but the bytes still land through the shared resolver so
+  // a symlinked parent directory is rejected here too rather than written
+  // through.
+  const finalTarget = await resolveSafeReal(dir, finalOut);
   await writeFile(finalTarget, bytes);
   const st = await stat(finalTarget);
   if (args.onBytesWritten) {
