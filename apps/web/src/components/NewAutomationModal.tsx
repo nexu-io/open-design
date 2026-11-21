@@ -445,12 +445,12 @@ export function NewAutomationModal({
     e.preventDefault();
     setError(null);
     if (!form.name.trim()) {
-      setError('Add a title for this automation.');
+      setError(t('automations.errorTitleRequired'));
       titleRef.current?.focus();
       return;
     }
     if (!form.prompt.trim()) {
-      setError('Add a prompt for the scheduled conversation.');
+      setError(t('automations.errorPromptRequired'));
       return;
     }
     setSubmitting(true);
