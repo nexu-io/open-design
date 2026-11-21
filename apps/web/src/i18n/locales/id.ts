@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const id: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "File dibuat; ringkasan belum tersedia",
+  'chat.runError.artifactsWithoutSummaryMessage': "File yang tersedia: {files}. AI tidak memberikan ringkasan akhir. Anda dapat membuka atau mengunduh file di atas.",
+  'chat.runError.availableArtifacts': "File yang tersedia: {files}. Anda dapat membuka atau mengunduhnya di atas.",
+  'chat.artifact.missingSummary': "File telah dibuat, tetapi AI tidak memberikan ringkasan akhir.",
   "referral.notice.label": "Pemberitahuan kartu reset",
   "referral.notice.registered": "Dapatkan kartu reset dengan langganan pertama dalam 48 jam",
   "referral.notice.pending": "Langganan pertama selesai. Kartu sedang menunggu penerbitan.",

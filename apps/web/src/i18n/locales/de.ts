@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const de: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Dateien erstellt; Zusammenfassung fehlt",
+  'chat.runError.artifactsWithoutSummaryMessage': "Verfügbare Dateien: {files}. Die KI hat keine abschließende Zusammenfassung geliefert. Du kannst die Dateien oben öffnen oder herunterladen.",
+  'chat.runError.availableArtifacts': "Verfügbare Dateien: {files}. Du kannst sie oben öffnen oder herunterladen.",
+  'chat.artifact.missingSummary': "Dateien wurden erstellt, aber die KI hat keine abschließende Zusammenfassung geliefert.",
   "referral.notice.label": "Reset-Karten-Hinweis",
   "referral.notice.registered": "Erhalte eine Reset-Karte mit deinem ersten Abo innerhalb von 48 Stunden",
   "referral.notice.pending": "Dein erstes Abo ist abgeschlossen. Die Reset-Karte wird ausgestellt.",

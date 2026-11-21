@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "Dosyalar oluşturuldu; özet eksik",
+  'chat.runError.artifactsWithoutSummaryMessage': "Kullanılabilir dosyalar: {files}. Yapay zekâ son bir özet sunmadı. Yukarıdaki dosyaları açabilir veya indirebilirsiniz.",
+  'chat.runError.availableArtifacts': "Kullanılabilir dosyalar: {files}. Bunları yukarıdan açabilir veya indirebilirsiniz.",
+  'chat.artifact.missingSummary': "Dosyalar oluşturuldu, ancak yapay zekâ son bir özet sunmadı.",
   "referral.notice.label": "Sıfırlama kartı bildirimi",
   "referral.notice.registered": "48 saat içinde ilk aboneliğinizle bir sıfırlama kartı kazanın",
   "referral.notice.pending": "İlk aboneliğiniz tamamlandı. Kartın verilmesi bekleniyor.",

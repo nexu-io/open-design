@@ -1,6 +1,10 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "تم إنشاء الملفات؛ الملخص مفقود",
+  'chat.runError.artifactsWithoutSummaryMessage': "الملفات المتاحة: {files}. لم يقدم الذكاء الاصطناعي ملخصًا نهائيًا. يمكنك فتح الملفات أعلاه أو تنزيلها.",
+  'chat.runError.availableArtifacts': "الملفات المتاحة: {files}. يمكنك فتحها أو تنزيلها أعلاه.",
+  'chat.artifact.missingSummary': "تم إنشاء الملفات، لكن الذكاء الاصطناعي لم يقدم ملخصًا نهائيًا.",
   "referral.notice.label": "إشعار بطاقة إعادة الضبط",
   "referral.notice.registered": "احصل على بطاقة إعادة ضبط عند اشتراكك الأول خلال 48 ساعة",
   "referral.notice.pending": "اكتمل اشتراكك الأول والبطاقة بانتظار الإصدار.",
