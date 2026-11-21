@@ -1,0 +1,32 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-skill-editorial-collage",
+  "title": "Editorial Cut-Paper Collage",
+  "version": "0.1.0",
+  "description": "A bright, physically assembled editorial collage with one hero subject, expressive paper layers, and sparse exact typography.",
+  "license": "Apache-2.0",
+  "author": {"name": "OpenDesign", "url": "https://github.com/nexu-io/open-design"},
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/image-templates/image-editorial-collage",
+  "tags": ["image-skill", "first-party", "image", "editorial", "collage", "fashion", "cut-paper", "print"],
+  "compat": {"agentSkills": [{"path": "./SKILL.md"}]},
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {"type": "image", "poster": "./example.webp"},
+    "useCase": {
+      "query": "Create a flat vertical editorial fashion collage using only these exact text strings: 'SECOND SKIN' and 'MATERIAL STUDY 02'. One adult woman with close-cropped hair is the hero cutout, wearing a brilliant azure architectural suit with a vivid coral translucent organza layer. Assemble the page physically on bright warm-white uncoated paper. Place a large saturated sun-yellow circle behind the figure; overlap pale-mint botanical paper printed with deep-emerald leaves, one irregular silver torn-foil shard, and two small photocopied texture fragments. Add one hot-pink grease-pencil gesture crossing the lower half. Show authentic construction: scissor nicks, torn paper fibers, glue wrinkles, a small translucent tape edge, graphite crop marks, uneven halftone, and slight photocopy grain. Set SECOND SKIN vertically in large condensed cobalt type along one edge. Set MATERIAL STUDY 02 as a compact vermilion caption at the bottom. Keep the hero face and body believable, the organza translucent, and all layer shadows consistent with a single soft overhead light. Preserve generous white paper and saturated clean colors. No extra text, logos, watermark, repeated face crops, extra limbs, smooth digital stickers, perfect vector edges, random scrapbook decoration, glossy 3D, dark background, or imitation publication masthead. Output only the finished collage page.",
+      "exampleOutputs": [{"path": "./example.webp", "title": "Editorial Cut-Paper Collage"}]
+    },
+    "inputs": [
+      {"name": "model", "label": "Model", "type": "select", "options": ["vela/gpt-image-2"], "default": "vela/gpt-image-2"},
+      {"name": "aspect", "label": "Aspect ratio", "type": "select", "options": ["1:1", "16:9", "9:16", "4:5", "3:2"], "default": "4:5"}
+    ],
+    "context": {"skills": [{"path": "./SKILL.md"}], "assets": ["./template.json", "./example.webp"]},
+    "pipeline": {"stages": [{"id": "generate", "atoms": ["media-image"]}]},
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
