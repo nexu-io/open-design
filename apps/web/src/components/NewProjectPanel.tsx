@@ -2928,6 +2928,7 @@ function MediaModelCards({
         type="button"
         data-testid="model-picker-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${selected ? '' : ' empty'}`}
+        title={triggerTitle}
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -2980,6 +2981,7 @@ function MediaModelCards({
                         role="option"
                         aria-selected={active}
                         data-testid={`model-picker-option-${model.id}`}
+                        title={model.hint ? `${model.label} — ${model.hint}` : model.label}
                         className={`ds-picker-item${active ? ' active' : ''}`}
                         onClick={() => pick(model.id)}
                       >
