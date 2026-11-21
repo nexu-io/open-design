@@ -104,7 +104,7 @@ import {
   type SettingsHighlight,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
-import { TestCampaignModal, observeTestRuntimeIdentity } from './components/TestCampaignModal';
+import { TestCampaignModal, observeTestRuntimeIdentity, testCampaignOwner } from './components/TestCampaignModal';
 import { ProductionCampaignModal } from './components/ProductionCampaignModal';
 import {
   clearHomeComposerAttachments,
@@ -2007,8 +2007,12 @@ function AppInner() {
   }, []);
 
 
-  const testRuntimeAuthenticated = isAmrSessionAuthenticated(amrLoginStatus);
-  const testRuntimeOwner = amrLoginStatus?.user?.id ?? null;
+  const testWorkspace = workspaceResourceReadContext(workspaceContextState);
+  const testAccountId = amrLoginStatus?.user?.id ?? null;
+  const testRuntimeOwner = testWorkspace
+    ? testCampaignOwner(testAccountId, testWorkspace.workspaceId, testWorkspace.workspaceMemberId)
+    : null;
+  const testRuntimeAuthenticated = isAmrSessionAuthenticated(amrLoginStatus) && testRuntimeOwner !== null;
   useEffect(() => {
     // Home hosts unmount on navigation; identity changes elsewhere still
     // spend their in-process replay grants, including a change back later.
@@ -6340,8 +6344,10 @@ function AppInner() {
       {route.kind === 'home' && route.view === 'home' && (
         <>
           <TestCampaignModal
-            authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
-            sessionSubject={amrLoginStatus?.user?.id ?? null}
+            authenticated={testRuntimeAuthenticated}
+            sessionSubject={testAccountId}
+            workspaceId={testWorkspace?.workspaceId}
+            workspaceMemberId={testWorkspace?.workspaceMemberId}
           />
           <ProductionCampaignModal
             authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
