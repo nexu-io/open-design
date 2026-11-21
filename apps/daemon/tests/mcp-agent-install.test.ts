@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 import {
   AGENT_SLUGS,
   applyJsonInstall,
+  applyYamlInstall,
   isAgentSlug,
   planAgentInstall,
   removeJsonInstall,
+  removeYamlInstall,
   type JsonInstallPlan,
   type McpLaunchSpec,
+  type YamlInstallPlan,
 } from '../src/mcp-agent-install.js';
 
 const SPEC: McpLaunchSpec = {
@@ -202,8 +206,8 @@ describe('JSON-config agents', () => {
 });
 
 describe('manual (unverified) agents', () => {
-  it('pi / vibe / hermes never produce a writable plan', () => {
-    for (const slug of ['pi', 'vibe', 'hermes'] as const) {
+  it('pi / vibe never produce a writable plan', () => {
+    for (const slug of ['pi', 'vibe'] as const) {
       const plan = planAgentInstall(slug, SPEC, ctx());
       expect(plan.kind).toBe('manual');
       if (plan.kind !== 'manual') throw new Error('expected manual');
@@ -270,5 +274,172 @@ describe('removeJsonInstall', () => {
     expect(removeJsonInstall(null, plan)).toBeNull();
     expect(removeJsonInstall('{}', plan)).toBeNull();
     expect(removeJsonInstall(JSON.stringify({ mcpServers: {} }), plan)).toBeNull();
+  });
+});
+
+describe('YAML-config agents (hermes)', () => {
+  it('hermes plans a merge under mcp_servers in ~/.hermes/config.yaml', () => {
+    const plan = planAgentInstall('hermes', SPEC, ctx());
+    expect(plan.kind).toBe('yaml');
+    if (plan.kind !== 'yaml') throw new Error('expected yaml');
+    expect(plan.configPath).toBe('/home/u/.hermes/config.yaml');
+    expect(plan.keyPath).toEqual(['mcp_servers']);
+    expect(plan.serverKey).toBe('open-design');
+    expect(plan.entry).toEqual({
+      command: SPEC.command,
+      args: SPEC.args,
+      env: SPEC.env,
+    });
+  });
+
+  it('omits env entirely when the launch spec has no env', () => {
+    const plan = planAgentInstall('hermes', SPEC_NO_ENV, ctx());
+    if (plan.kind !== 'yaml') throw new Error('expected yaml');
+    expect(plan.entry).not.toHaveProperty('env');
+  });
+});
+
+describe('applyYamlInstall', () => {
+  const plan = planAgentInstall('hermes', SPEC, ctx()) as YamlInstallPlan;
+
+  it('creates the file structure from empty input', () => {
+    const out = applyYamlInstall(null, plan);
+    expect(out).toContain('mcp_servers:');
+    expect(out).toContain('open-design:');
+    expect(out).toContain(SPEC.command);
+  });
+
+  it('preserves comments, unrelated keys and sibling servers', () => {
+    const existing = [
+      '# Hermes configuration',
+      'model: gpt-5',
+      'mcp_servers:',
+      '  # my other server',
+      '  other:',
+      '    command: foo',
+      'theme: dark # inline comment',
+      '',
+    ].join('\n');
+    const out = applyYamlInstall(existing, plan);
+    expect(out).toContain('# Hermes configuration');
+    expect(out).toContain('# my other server');
+    expect(out).toContain('# inline comment');
+    expect(out).toContain('model: gpt-5');
+    expect(out).toContain('theme: dark');
+    expect(out).toContain('other:');
+    expect(out).toContain('open-design:');
+  });
+
+  it('is idempotent — re-applying yields the same content', () => {
+    const once = applyYamlInstall(null, plan);
+    expect(applyYamlInstall(once, plan)).toBe(once);
+  });
+
+  it('reinstall replaces an existing entry when the launch spec changes', () => {
+    const existing = [
+      '# Hermes configuration',
+      'model: gpt-5',
+      'mcp_servers:',
+      '  # sibling stays',
+      '  other:',
+      '    command: foo',
+      '',
+    ].join('\n');
+    const first = applyYamlInstall(existing, plan);
+    expect(parse(first, { schema: 'yaml-1.1' }).mcp_servers['open-design'].command).toBe(SPEC.command);
+
+    // A daemon move / config change produces a different launch spec.
+    const changed: McpLaunchSpec = {
+      command: '/opt/new/daemon-cli.mjs',
+      args: ['mcp', '--daemon-url', 'http://127.0.0.1:9999'],
+      env: { OD_DATA_DIR: '/new/data', OD_CUSTOM: 'changed' },
+    };
+    const changedPlan = planAgentInstall('hermes', changed, ctx()) as YamlInstallPlan;
+    const second = applyYamlInstall(first, changedPlan);
+    const reloaded = parse(second, { schema: 'yaml-1.1' });
+    const entry = reloaded.mcp_servers['open-design'];
+    expect(entry.command).toBe('/opt/new/daemon-cli.mjs');
+    expect(entry.args).toEqual(['mcp', '--daemon-url', 'http://127.0.0.1:9999']);
+    expect(entry.env.OD_DATA_DIR).toBe('/new/data');
+    expect(entry.env.OD_CUSTOM).toBe('changed');
+    // unrelated keys, comments and sibling servers survive the reinstall
+    expect(second).toContain('# Hermes configuration');
+    expect(second).toContain('# sibling stays');
+    expect(second).toContain('model: gpt-5');
+    expect(reloaded.mcp_servers.other.command).toBe('foo');
+    // re-applying the changed spec is itself idempotent
+    expect(applyYamlInstall(second, changedPlan)).toBe(second);
+  });
+
+  it('reinstall repairs an intermediate segment that is not a mapping', () => {
+    const out = applyYamlInstall('mcp_servers: not-a-map\n', plan);
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    expect(reloaded.mcp_servers['open-design'].command).toBe(SPEC.command);
+  });
+
+  it('throws on unparseable YAML rather than clobbering it', () => {
+    expect(() => applyYamlInstall('key: [unclosed', plan)).toThrow(/not valid YAML/);
+  });
+
+  it('throws when the existing root is not a mapping', () => {
+    expect(() => applyYamlInstall('- a\n- b\n', plan)).toThrow(/not a YAML mapping/);
+  });
+
+  it('preserves YAML 1.1 scalar values in the existing config (Hermes schema)', () => {
+    const existing = 'octal: 0123\nflag: yes\nswitch: off\nname: on\n';
+    const out = applyYamlInstall(existing, plan);
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    expect(reloaded.octal).toBe(0o123); // 83, not 123
+    expect(reloaded.flag).toBe(true);
+    expect(reloaded.switch).toBe(false);
+    expect(reloaded.name).toBe(true);
+    expect(reloaded.mcp_servers['open-design'].command).toBe(SPEC.command);
+  });
+
+  it('emits 1.1-boolean-like strings quoted so Hermes keeps them strings', () => {
+    const spec: McpLaunchSpec = {
+      command: SPEC.command,
+      args: ['off'],
+      env: { OD_FLAG: 'yes', OD_SWITCH: 'off', OD_NUM: '0123' },
+    };
+    const p = planAgentInstall('hermes', spec, ctx());
+    if (p.kind !== 'yaml') throw new Error('expected yaml');
+    const out = applyYamlInstall(null, p);
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    const entry = reloaded.mcp_servers['open-design'];
+    expect(entry.args).toEqual(['off']);
+    expect(entry.env.OD_FLAG).toBe('yes');
+    expect(entry.env.OD_SWITCH).toBe('off');
+    expect(entry.env.OD_NUM).toBe('0123');
+  });
+});
+
+describe('removeYamlInstall', () => {
+  const plan = planAgentInstall('hermes', SPEC, ctx()) as YamlInstallPlan;
+
+  it('removes only the open-design entry and keeps comments', () => {
+    const existing = applyYamlInstall(
+      '# top comment\nmcp_servers:\n  other:\n    command: x\n',
+      plan,
+    );
+    const out = removeYamlInstall(existing, plan)!;
+    expect(out).not.toContain('open-design');
+    expect(out).toContain('other:');
+    expect(out).toContain('# top comment');
+  });
+
+  it('returns null when there is nothing to remove', () => {
+    expect(removeYamlInstall(null, plan)).toBeNull();
+    expect(removeYamlInstall('', plan)).toBeNull();
+    expect(removeYamlInstall('mcp_servers: {}\n', plan)).toBeNull();
+  });
+
+  it('preserves YAML 1.1 scalar values when removing the entry', () => {
+    const existing = applyYamlInstall('octal: 0123\nflag: yes\n', plan);
+    const out = removeYamlInstall(existing, plan)!;
+    const reloaded = parse(out, { schema: 'yaml-1.1' });
+    expect(reloaded.octal).toBe(0o123);
+    expect(reloaded.flag).toBe(true);
+    expect(reloaded.mcp_servers).not.toHaveProperty('open-design');
   });
 });
