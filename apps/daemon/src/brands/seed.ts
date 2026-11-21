@@ -10,6 +10,8 @@
 //
 // No SeedToken / Ant-Design coupling — just plain hex strings + a family name.
 
+import { siteBrandColorSourceRank } from './color-sources.js';
+import { isFrameworkDefaultColor } from './framework-colors.js';
 import type { PrefetchResult } from './prefetch.js';
 
 const DEFAULT_PRIMARY = '#1677ff';
@@ -217,6 +219,51 @@ function chooseSecondary(candidates: SeedCandidate[], primaryHex: string): strin
   return best > -Infinity ? linkHex : '';
 }
 
+function siteBrandRank(candidate: SeedCandidate, hasBootstrap5Primary: boolean): number {
+  // A bare --primary matching a Bootstrap 4 or Laravel default is ambiguous.
+  // Bootstrap 5 uses --bs-primary, while the older palette also ships --blue.
+  const isLegacyBlue = candidate.hex === '#007bff' || candidate.hex === '#3490dc';
+  const isLegacyPrimary = isLegacyBlue && (
+    !hasBootstrap5Primary || candidate.sources.some((source) => /^css-var:--blue(?:\s|$)/i.test(source))
+  );
+  return candidate.sources.reduce((best, source) => {
+    if (isLegacyPrimary && /^css-var:--primary(?:\s|$)/i.test(source)) return best;
+    return Math.max(best, siteBrandColorSourceRank(source));
+  }, 0);
+}
+
+/**
+ * Keep the ordinary palette unless a stock primary has no site branding
+ * behind it and a measured color has its own brand token or selector.
+ */
+function chooseBrandAccents(candidates: SeedCandidate[]): Pick<BrandSeed, 'colorPrimary' | 'colorLink'> {
+  const primary =
+    explicitSemanticPrimary(candidates) ??
+    dominantDarkPrimary(candidates) ??
+    fallbackChromaticPrimary(candidates);
+
+  if (isFrameworkDefaultColor(primary)) {
+    const hasBootstrap5Primary = candidates.some((candidate) =>
+      candidate.sources.some((source) => /^css-var:--bs-primary(?:\s|$)/i.test(source)),
+    );
+    const siteColors = candidates
+      .filter((candidate) => Number.isFinite(chromaticScore(candidate)))
+      .map((candidate) => ({ candidate, rank: siteBrandRank(candidate, hasBootstrap5Primary) }))
+      .filter(({ rank }) => rank > 0)
+      .sort((a, b) => b.rank - a.rank);
+    const primaryColors = siteColors
+      .filter(({ rank }) => rank === siteColors[0]?.rank)
+      .map(({ candidate }) => candidate);
+    // A site can explicitly brand itself with the same hex as a framework.
+    if (primaryColors.length > 0 && !primaryColors.some((candidate) => candidate.hex === primary)) {
+      const colorPrimary = explicitSemanticPrimary(primaryColors) ?? fallbackChromaticPrimary(primaryColors);
+      return { colorPrimary, colorLink: chooseSecondary(siteColors.map(({ candidate }) => candidate), colorPrimary) };
+    }
+  }
+
+  return { colorPrimary: primary, colorLink: chooseSecondary(candidates, primary) };
+}
+
 /**
  * Deterministically infer a small brand seed from raw prefetch material.
  * Same input always yields the same seed — no Date/random, no network.
@@ -225,19 +272,7 @@ export function seedFromMaterial(material: PrefetchResult): BrandSeed {
   const candidates = (material.colors ?? [])
     .map((c) => ({ hex: normalizeHex(c.hex), count: c.count, sources: c.sources ?? [] }))
     .filter((c): c is SeedCandidate => c.hex !== null);
-
-  // ── primary: prefer explicit human-readable brand evidence. If a site is
-  // mostly monochrome and only has generic generated chromatic effects, allow
-  // a dominant near-black to be the brand primary. Otherwise fall back to the
-  // old chromatic heuristic.
-  const primaryHex =
-    explicitSemanticPrimary(candidates) ??
-    dominantDarkPrimary(candidates) ??
-    fallbackChromaticPrimary(candidates);
-
-  // ── link/secondary: strongest remaining chromatic evidence, with logo and
-  // semantic sources preferred over generic generated decoration.
-  const linkHex = chooseSecondary(candidates, primaryHex);
+  const accents = chooseBrandAccents(candidates);
 
   // ── light vs dark cast: count-weighted mean luminance over the measured
   // colors. Extremes are kept here on purpose — they reveal whether the canvas
@@ -257,8 +292,7 @@ export function seedFromMaterial(material: PrefetchResult): BrandSeed {
     material.fonts?.[0]?.family ?? material.fontFaceFamilies?.[0] ?? '';
 
   return {
-    colorPrimary: primaryHex,
-    colorLink: linkHex,
+    ...accents,
     colorTextBase: dark ? '#ffffff' : '#000000',
     colorBgBase: dark ? '#000000' : '#ffffff',
     primaryFontFamily,
