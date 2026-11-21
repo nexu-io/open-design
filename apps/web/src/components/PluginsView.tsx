@@ -26,8 +26,12 @@ import {
 import {
   fetchSkills,
   importSkill,
+  importSkillsBatch,
   installSkill,
   uninstallSkill,
+  type SkillBatchImportFile,
+  type SkillBatchImportItemResult,
+  type SkillBatchImportSkill,
   type SkillImportInput,
   type SkillImportError,
 } from '../providers/registry';
@@ -1183,12 +1187,18 @@ export function ExtensionsMarketplace({
   // to the real daemon import path where one exists:
   //   Plugin · 从链接导入   → installPluginSource(url)
   //   Plugin · 上传本地文件夹 → uploadPluginFolder(files)
-  //   Skill  · 上传本地文件夹 → importSkill(<SKILL.md body>)  (reads the folder)
+  //   Skill  · 上传本地文件夹 → importSkill(<SKILL.md body>) / batch import when
+  //     the pick is a parent folder of several skills (issue #8753)
   //   Skill  · 从链接导入   → installSkill(source)
   const [createOpen, setCreateOpen] = useState(false);
   const [createKind, setCreateKind] = useState<'plugin' | 'skill'>('plugin');
   const [createUrl, setCreateUrl] = useState('');
   const [createFolderFiles, setCreateFolderFiles] = useState<File[]>([]);
+  // Per-skill outcomes after a parent-folder batch import (issue #8753);
+  // null outside the batch flow.
+  const [createSkillBatchResults, setCreateSkillBatchResults] = useState<
+    SkillBatchImportItemResult[] | null
+  >(null);
   const [createBusy, setCreateBusy] = useState<'import' | 'upload' | null>(null);
   const createFolderInputRef = useRef<HTMLInputElement>(null);
 
@@ -1200,6 +1210,7 @@ export function ExtensionsMarketplace({
     setCreateKind(mode === 'skills' ? 'skill' : 'plugin');
     setCreateUrl('');
     setCreateFolderFiles([]);
+    setCreateSkillBatchResults(null);
     setCreateBusy(null);
     setCreateOpen(true);
   }
@@ -1229,6 +1240,7 @@ export function ExtensionsMarketplace({
     setCreateKind(next);
     setCreateUrl('');
     setCreateFolderFiles([]);
+    setCreateSkillBatchResults(null);
   }
 
   async function handleCreateImportUrl() {
@@ -1321,6 +1333,57 @@ export function ExtensionsMarketplace({
       // Skill: read SKILL.md out of the picked folder and import it through the
       // existing /api/skills/import endpoint (importSkill). Imports to the user
       // (个人的) registry; promoting to the team is the existing 转为团队共享 action.
+      // When the selection is a parent folder containing several skill folders,
+      // import them all through /api/skills/import-batch instead (issue #8753):
+      // each item carries the ORIGINAL SKILL.md plus every companion file so
+      // the daemon materializes the folders verbatim (references/, scripts/,
+      // assets/ survive) — a rebuild from parsed fields would drop them.
+      // Items are independent, and the per-skill outcome list renders in
+      // this dialog so a skipped duplicate or a malformed folder never hides
+      // what happened to the rest.
+      const skillGroups = skillFolderGroups(createFolderFiles);
+      if (skillGroups.size > 1) {
+        const items: SkillBatchImportSkill[] = [];
+        for (const [dir, skillFile] of skillGroups) {
+          let skillMd = '';
+          try {
+            skillMd = await skillFile.text();
+          } catch {
+            // Leave skillMd empty; the daemon reports this item as failed
+            // and the rest of the batch keeps going.
+          }
+          items.push({
+            fallbackName: dir.split('/').pop() ?? dir,
+            skillMd,
+            files: await readSkillBatchSideFiles(dir, createFolderFiles),
+          });
+        }
+        const batch = await importSkillsBatch(items, workspaceContext);
+        if ('error' in batch) {
+          trackResourceResult({
+            kind: 'skill', scope: 'personal', action: 'add', result: 'failed',
+            startedAt,
+            errorCode: resourceActionAnalyticsErrorCode(batch.error, 'import_failed'),
+          });
+          setToast({ message: batch.error.message, tone: 'error' });
+          return;
+        }
+        setCreateSkillBatchResults(batch.results);
+        const importedCount = batch.results.filter((item) => item.status === 'imported').length;
+        if (importedCount > 0) {
+          trackResourceResult({
+            kind: 'skill', scope: 'personal', action: 'add', result: 'success', startedAt,
+          });
+          await refresh();
+          revealImported('skill');
+        } else {
+          trackResourceResult({
+            kind: 'skill', scope: 'personal', action: 'add', result: 'failed',
+            startedAt, errorCode: 'import_failed',
+          });
+        }
+        return;
+      }
       const input = await readSkillImportInputFromFolder(createFolderFiles, t);
       if ('error' in input) {
         trackResourceResult({
@@ -2608,9 +2671,10 @@ export function ExtensionsMarketplace({
                     disabled={createBusy !== null}
                     style={{ display: 'none' }}
                     {...{ webkitdirectory: '', directory: '' }}
-                    onChange={(event) =>
-                      setCreateFolderFiles(Array.from(event.currentTarget.files ?? []))
-                    }
+                    onChange={(event) => {
+                      setCreateSkillBatchResults(null);
+                      setCreateFolderFiles(Array.from(event.currentTarget.files ?? []));
+                    }}
                   />
                   {/* Folder picker + upload on one row inside the card, the
                       demo's `folder-action-row` shape. The upload button as a
@@ -2643,6 +2707,38 @@ export function ExtensionsMarketplace({
                         : t('pluginsView.uploadKind', { kind: pluginKindLabel(createKind, t) })}
                     </button>
                   </div>
+                  {createSkillBatchResults ? (
+                    <div
+                      className="plugin-marketplace__batch-results"
+                      data-testid="skill-batch-results"
+                    >
+                      <div className="plugin-marketplace__batch-results-title">
+                        {t('pluginsView.importBatchResultsTitle')}
+                      </div>
+                      {createSkillBatchResults.map((item, index) => (
+                        <div
+                          key={`${item.name}-${index}`}
+                          className="plugin-marketplace__batch-result"
+                        >
+                          <span className="plugin-marketplace__batch-result-name">
+                            {item.name || t('pluginsView.importBatchUnnamed')}
+                          </span>
+                          <span
+                            className={`plugin-marketplace__batch-result-status is-${item.status}`}
+                          >
+                            {t(
+                              item.status === 'imported'
+                                ? 'pluginsView.importBatchImported'
+                                : item.status === 'skipped'
+                                  ? 'pluginsView.importBatchSkipped'
+                                  : 'pluginsView.importBatchFailed',
+                            )}
+                            {item.error ? ` · ${item.error}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </article>
             </div>
@@ -2654,6 +2750,62 @@ export function ExtensionsMarketplace({
       ) : null}
     </section>
   );
+}
+
+// Maps each directory that directly contains a SKILL.md (relative to the
+// webkitdirectory pick) to that SKILL.md file. More than one such directory
+// means the user picked a parent folder of several skills — batch import
+// (issue #8753); zero or one keeps the single-skill flow.
+function skillFolderGroups(files: File[]): Map<string, File> {
+  const groups = new Map<string, File>();
+  for (const file of files) {
+    const rel = file.webkitRelativePath || file.name;
+    if (!/(^|\/)SKILL\.md$/i.test(rel)) continue;
+    const dirSegments = rel.split('/').slice(0, -1);
+    if (dirSegments.length === 0) continue;
+    groups.set(dirSegments.join('/'), file);
+  }
+  return groups;
+}
+
+// Bounds mirror the daemon's side-file validation; dotfiles are skipped so
+// a stray .DS_Store never fails an import (the daemon would reject it).
+const SKILL_BATCH_MAX_FILES = 500;
+
+// Collects every companion file under `skillDir` (the directory holding one
+// picked SKILL.md) and shapes it into a /api/skills/import-batch side-file
+// list. SKILL.md itself travels separately in `skillMd`.
+async function readSkillBatchSideFiles(
+  skillDir: string,
+  files: File[],
+): Promise<SkillBatchImportFile[]> {
+  const prefix = `${skillDir}/`;
+  const out: SkillBatchImportFile[] = [];
+  const sorted = [...files].sort((a, b) =>
+    (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name));
+  for (const file of sorted) {
+    if (out.length >= SKILL_BATCH_MAX_FILES) break;
+    const rel = file.webkitRelativePath || file.name;
+    if (!rel.startsWith(prefix)) continue;
+    const inner = rel.slice(prefix.length);
+    if (!inner || /(^|\/)\./.test(inner) || /(^|\/)SKILL\.md$/i.test(inner)) continue;
+    try {
+      out.push({ path: inner, contentBase64: await fileToBase64(file) });
+    } catch {
+      // Unreadable file: skip rather than fail the whole folder.
+    }
+  }
+  return out;
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
 }
 
 // Reads a SKILL.md out of a webkitdirectory folder selection and shapes it into

@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import type {
   DesignSystemTokenContractRebuildJobResponse,
+  SkillBatchImportItemResult,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
@@ -17,8 +18,10 @@ import {
   deleteUserSkill,
   findSkillById,
   importUserSkill,
+  importUserSkillFolder,
   listSkills,
   listSkillFiles,
+  resolveSkillFolderImportName,
   splitDerivedSkillId,
   updateUserSkill,
 } from '../skills.js';
@@ -112,6 +115,11 @@ export function registerAtomRoutes(app: Express, ctx: RegisterAtomRoutesDeps) {
     res.json(body);
   });
 }
+
+// Upper bound for one /api/skills/import-batch request. Large local skill
+// collections should import in multiple batches; this keeps the request
+// body and the per-request work bounded.
+const SKILL_IMPORT_BATCH_MAX_ITEMS = 100;
 
 export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticResourceRoutesDeps) {
   const { db } = ctx;
@@ -609,6 +617,68 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'BAD_REQUEST' ? 400 : 500;
         return sendApiError(res, status, err.code, err.message);
       }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  // POST /api/skills/import-batch — import multiple user skills in one
+  // request (issue #8753). Items carry the ORIGINAL SKILL.md plus companion
+  // files and are materialized verbatim (importUserSkillFolder), so a
+  // parent-folder import keeps references/, scripts/, assets/ and the exact
+  // frontmatter it started with instead of reporting success over a rebuilt
+  // fragment (mrcfps PR #8754 review). Items are independent: a malformed or
+  // conflicting item is reported per-skill (skipped for duplicate/conflict,
+  // failed for invalid input) and never blocks the remaining items (partial
+  // success). Duplicate names inside one batch fall out naturally: the first
+  // item creates the slug folder, the second hits the CONFLICT below.
+  app.post('/api/skills/import-batch', async (req, res) => {
+    try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const items = Array.isArray(req.body?.skills) ? req.body.skills : null;
+      if (!items || items.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'skills array required');
+      }
+      if (items.length > SKILL_IMPORT_BATCH_MAX_ITEMS) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          `skills array exceeds the batch limit of ${SKILL_IMPORT_BATCH_MAX_ITEMS}`,
+        );
+      }
+      const results: SkillBatchImportItemResult[] = [];
+      for (const item of items) {
+        const label = typeof item?.fallbackName === 'string' ? item.fallbackName.trim() : '';
+        try {
+          const name = resolveSkillFolderImportName(item || {});
+          if (name && await skillIdentityConflict(authority, name)) {
+            results.push({
+              name,
+              status: 'skipped',
+              code: 'WORKSPACE_RESOURCE_ID_CONFLICT',
+              error: 'a Personal skill with this id belongs to another workspace member',
+            });
+            continue;
+          }
+          const result = await importUserSkillFolder(USER_SKILLS_DIR, item || {});
+          bindImportedSkillToWorkspace(authority, result.id);
+          results.push({ name, status: 'imported', id: result.id, slug: result.slug });
+        } catch (err) {
+          if (err instanceof SkillImportError) {
+            results.push({
+              name: label,
+              status: err.code === 'CONFLICT' ? 'skipped' : 'failed',
+              code: err.code,
+              error: err.message,
+            });
+          } else {
+            results.push({ name: label, status: 'failed', code: 'INTERNAL_ERROR', error: String(err) });
+          }
+        }
+      }
+      res.json({ results });
+    } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
     }
   });
