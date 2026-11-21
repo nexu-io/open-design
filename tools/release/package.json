@@ -30,6 +30,6 @@
     "playwright": "1.60.0"
   },
   "engines": {
-    "node": "~24"
+    "node": "^24 || ^26"
   }
 }

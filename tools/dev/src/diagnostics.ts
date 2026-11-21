@@ -14,8 +14,8 @@ export type NodeRuntimeDiagnosticInput = {
   nodeVersion: string;
 };
 
-const SUPPORTED_NODE_MAJOR = 24;
-const SUPPORTED_NODE_RANGE = "Node ~24";
+const SUPPORTED_NODE_MAJORS = new Set([24, 26]);
+const SUPPORTED_NODE_RANGE = "Node 24 or 26 (LTS)";
 const NATIVE_ADDON_ABI_MISMATCH_PATTERN = /was compiled against a different Node\.js version[\s\S]*?NODE_MODULE_VERSION\s+\d+[\s\S]*?requires\s+NODE_MODULE_VERSION\s+\d+/i;
 const NODE_MODULE_VERSION_PATTERN = /NODE_MODULE_VERSION\s+\d+[\s\S]*?NODE_MODULE_VERSION\s+\d+/i;
 const NEXT_PACKAGE_RESOLUTION_PATTERN = /couldn't find the Next\.js package.*from the project directory:/i;
@@ -34,15 +34,16 @@ function parseNodeMajor(nodeVersion: string): number | null {
 }
 
 export function isSupportedNodeRuntime(nodeVersion = process.version): boolean {
-  return parseNodeMajor(nodeVersion) === SUPPORTED_NODE_MAJOR;
+  const major = parseNodeMajor(nodeVersion);
+  return major !== null && SUPPORTED_NODE_MAJORS.has(major);
 }
 
 export function formatUnsupportedNodeRuntimeMessage(runtime: NodeRuntimeDiagnosticInput = currentNodeRuntime()): string {
   return [
     `tools-dev must run with ${SUPPORTED_NODE_RANGE} before starting OpenDesign.`,
     `Current runtime: Node ${runtime.nodeVersion} (NODE_MODULE_VERSION ${runtime.nodeModuleVersion}).`,
-    "Switch to Node 24 first, then refresh native dependencies if this worktree was installed under another Node:",
-    "  nvm use 24",
+    "Switch to Node 24 or 26 LTS first, then refresh native dependencies if this worktree was installed under another Node:",
+    "  nvm use 26  # or: nvm use 24",
     "  corepack pnpm install --frozen-lockfile",
     "  corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
   ].join("\n");
@@ -53,16 +54,17 @@ export function createUnsupportedNodeRuntimeError(runtime?: NodeRuntimeDiagnosti
 }
 
 function formatNativeAddonAbiMismatchRecommendation(runtime: NodeRuntimeDiagnosticInput): string {
+  const activeMajor = parseNodeMajor(runtime.nodeVersion);
   const base = [
-    "OpenDesign's dev stack must run with Node ~24.",
+    `OpenDesign's dev stack must run with ${SUPPORTED_NODE_RANGE}.`,
     `Current tools-dev runtime: Node ${runtime.nodeVersion} (NODE_MODULE_VERSION ${runtime.nodeModuleVersion}).`,
   ];
 
   if (!isSupportedNodeRuntime(runtime.nodeVersion)) {
     return [
       ...base,
-      "Switch to Node 24 first, then refresh native daemon dependencies:",
-      "  nvm use 24",
+      "Switch to Node 24 or 26 LTS first, then refresh native daemon dependencies:",
+      "  nvm use 26  # or: nvm use 24",
       "  corepack pnpm install --frozen-lockfile",
       "  corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
     ].join("\n");
@@ -70,7 +72,7 @@ function formatNativeAddonAbiMismatchRecommendation(runtime: NodeRuntimeDiagnost
 
   return [
     ...base,
-    "Refresh native daemon dependencies for the active Node 24 runtime:",
+    `Refresh native daemon dependencies for the active Node ${activeMajor} runtime:`,
     "  corepack pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending",
     "or refresh the workspace install:",
     "  corepack pnpm install --frozen-lockfile",
