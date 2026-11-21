@@ -113,7 +113,7 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
-import { isSafeId, validateProjectPath } from '../../projects.js';
+import { getProjectStorageMirror, isSafeId, validateProjectPath } from '../../projects.js';
 import {
   acceptProjectUserSubmission,
   getProjectUserSubmission,
@@ -5681,6 +5681,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       await cancelRunsOwnedBy(design.runs, { projectId: project.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      // #7043 — mirror the project delete to the S3 store (best-effort).
+      await getProjectStorageMirror()?.deleteProject(project.id).catch(() => {});
       const body: ProjectDeleteResponse = { ok: true, ...(shareResiduals?.length ? { shareResiduals } : {}) };
       res.json(body);
     } catch (err: any) {
