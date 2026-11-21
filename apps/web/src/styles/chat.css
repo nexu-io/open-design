@@ -2888,10 +2888,12 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 }
 /* One box for both: a staged video opens in this same card as a player (the
    home composer previews video now, not only stills), and it has to be bound
-   by the card exactly the way an image is. */
+   by the card exactly the way an image is. `margin: 0 auto` centers narrow or
+   portrait media inside the 720px flex-column card. */
 .staged-preview-card > img,
 .staged-preview-card > video {
   display: block;
+  margin: 0 auto;
   max-width: 100%;
   max-height: min(70vh, 640px);
   object-fit: contain;
