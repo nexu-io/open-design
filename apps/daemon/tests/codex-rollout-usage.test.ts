@@ -188,7 +188,11 @@ describe('readCodexRolloutFirstCall', () => {
     } finally { rmSync(home, { recursive: true, force: true }); }
   });
 
-  it.each(['outside archive', 'other thread', 'symlink', 'writable file'])(
+  it.each([
+    'outside archive',
+    'other thread',
+    ...(process.platform === 'win32' ? [] : ['symlink', 'writable file']),
+  ])(
     'does not trust an indexed rollout pointing to %s',
     async (scenario) => {
       const sid = '019eef4f-7409-7c82-bebe-30504eed3959';
