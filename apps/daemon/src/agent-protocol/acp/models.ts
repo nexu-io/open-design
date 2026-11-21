@@ -228,6 +228,7 @@ export async function detectAcpModels({
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...env },
+      windowsHide: process.platform === 'win32',
     });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');

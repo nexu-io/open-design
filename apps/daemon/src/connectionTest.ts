@@ -2266,6 +2266,7 @@ function runQuietCommand(command: string, args: string[], cwd: string): Promise<
       cwd,
       stdio: 'ignore',
       shell: false,
+      windowsHide: process.platform === 'win32',
     });
     child.once('error', reject);
     child.once('close', (code, signal) => {
@@ -2707,6 +2708,7 @@ async function testAgentConnectionInternal(
       stdio: [stdinMode, 'pipe', 'pipe'],
       cwd: tempDir,
       shell: false,
+      windowsHide: process.platform === 'win32',
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     childExit = new Promise<AgentChildExit>((resolve) => {

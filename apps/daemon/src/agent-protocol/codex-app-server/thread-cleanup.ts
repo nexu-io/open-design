@@ -49,6 +49,7 @@ export async function cleanupClosedCodexThread(opts: CodexThreadCleanupOptions):
       child = spawn(opts.command, [...opts.args], {
         cwd: opts.cwd, env: opts.env, stdio: ['pipe', 'pipe', 'pipe'], shell: false,
         detached: process.platform !== 'win32',
+        windowsHide: process.platform === 'win32',
         windowsVerbatimArguments: opts.windowsVerbatimArguments,
       });
     } catch (error) {
