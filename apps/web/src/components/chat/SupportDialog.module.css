@@ -15,7 +15,7 @@
    * 取 1500 是和聊天区另一个真模态 `.staged-preview-modal` 同档,
    * 不自立一个刚好够用的数字 —— 那种数字会在下一个人抬高某层 chrome 时再坏一次。
    */
-  z-index: 1500;
+  z-index: 2000;
   display: grid;
   place-items: center;
   padding: 18px;
