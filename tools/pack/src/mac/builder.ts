@@ -132,6 +132,12 @@ export async function runElectronBuilder(
     mac: {
       category: "public.app-category.developer-tools",
       electronLanguages: MAC_ELECTRON_LANGUAGES,
+      // Voice dictation: the microphone prompt text, and the speech-recognition
+      // prompt text for the Apple-native `od-speech` helper the app spawns.
+      extendInfo: {
+        NSMicrophoneUsageDescription: "Open Design uses the microphone for voice dictation.",
+        NSSpeechRecognitionUsageDescription: "Open Design uses speech recognition to turn your voice into text.",
+      },
       entitlements: config.signed ? macResources.entitlements : undefined,
       entitlementsInherit: config.signed ? macResources.entitlementsInherit : undefined,
       gatekeeperAssess: false,

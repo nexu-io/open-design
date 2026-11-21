@@ -30,6 +30,7 @@ import {
 } from "../node-pty-runtime.js";
 import { copyBundledResourceTrees, packBundledDshRuntime } from "../resources/index.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
+import { buildMacSpeechHelper } from "./native-speech.js";
 import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
 import {
@@ -160,6 +161,11 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
     platform: "mac",
     requireBundled: config.requireVelaCli,
     resourceRoot: paths.resourceRoot,
+  });
+  // Apple-native speech recognition for voice dictation (see native-speech.ts).
+  await buildMacSpeechHelper({
+    resourceRoot: paths.resourceRoot,
+    workspaceRoot: config.workspaceRoot,
   });
 }
 

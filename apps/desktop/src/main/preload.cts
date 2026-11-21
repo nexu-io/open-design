@@ -12,6 +12,8 @@ import type {
   OpenDesignHostProjectImportResult,
   OpenDesignHostProjectImportInit,
   OpenDesignHostProjectReplaceWorkingDirResult,
+  OpenDesignHostSpeechEvent,
+  OpenDesignHostSpeechStartOptions,
   OpenDesignHostPickWorkingDirResult,
   OpenDesignHostPreviewNavigationFailure,
   OpenDesignHostPreviewNavigationFailureListener,
@@ -30,6 +32,7 @@ const UPDATER_OPEN_DIALOG_EVENT = 'od:update:open-dialog';
 const APP_CONFIG_CHANGED_IPC_CHANNEL = 'od:app-config-changed';
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const PREVIEW_NAVIGATION_FAILURE_IPC_CHANNEL = 'od:preview-navigation-failed';
+const SPEECH_EVENT_IPC_CHANNEL = 'od:speech:event';
 
 // Mirror of the argv prefix used by main's `applyOsLocaleSwitch` and
 // runtime's `additionalArguments`. Duplicated literal on purpose: the
@@ -385,6 +388,27 @@ const hostBridge = {
     // app theme. Fire-and-forget: the main process validates the value.
     setTheme: (theme: 'light' | 'dark' | 'system'): void =>
       ipcRenderer.send('od:appearance:set-theme', theme),
+  },
+  speech: {
+    isAvailable: (): Promise<boolean> =>
+      ipcRenderer.invoke('od:speech:available').then((value: unknown) => value === true).catch(() => false),
+    start: (options: OpenDesignHostSpeechStartOptions): Promise<OpenDesignHostActionResult> =>
+      ipcRenderer.invoke('od:speech:start', { locale: options?.locale })
+        .then((result: unknown) => (isRecord(result) && result.ok === true
+          ? { ok: true as const }
+          : actionFailure(isRecord(result) && typeof result.reason === 'string' ? result.reason : 'speech recognition did not start')))
+        .catch((error: unknown) => actionFailure(reasonFromError(error))),
+    stop: (): Promise<OpenDesignHostActionResult> =>
+      ipcRenderer.invoke('od:speech:stop')
+        .then(() => ({ ok: true as const }))
+        .catch((error: unknown) => actionFailure(reasonFromError(error))),
+    subscribe: (listener: (event: OpenDesignHostSpeechEvent) => void): (() => void) => {
+      const handler = (_event: unknown, speechEvent: OpenDesignHostSpeechEvent): void => {
+        if (isRecord(speechEvent) && typeof speechEvent.type === 'string') listener(speechEvent);
+      };
+      ipcRenderer.on(SPEECH_EVENT_IPC_CHANNEL, handler);
+      return () => { ipcRenderer.removeListener(SPEECH_EVENT_IPC_CHANNEL, handler); };
+    },
   },
   downloads: {
     subscribe: (listener: (result: OpenDesignHostDownloadResult) => void): (() => void) => {

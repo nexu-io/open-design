@@ -112,6 +112,7 @@ import {
   middleTruncateFileName,
   splitFileName,
 } from '../runtime/chat/attachment';
+import { isVoicePermissionError, useVoiceDictation } from '../runtime/chat/voice-dictation';
 import {
   attachmentNavDelta,
   attachmentNavState,
@@ -1464,6 +1465,28 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       editorRef.current?.clear();
       return true;
     }
+
+    // Voice dictation: speech is transcribed into the draft (appended to what is
+    // already typed). It never sends; the user still presses send.
+    const voice = useVoiceDictation({
+      lang: locale,
+      getBaseText: () => editorRef.current?.getText() ?? draftRef.current ?? "",
+      onText: (text) => {
+        setDraft(text);
+        editorRef.current?.setText(text);
+        seededRef.current = true;
+      },
+    });
+    const voiceLabel = voice.transcribing
+      ? t('chat.voiceTranscribing')
+      : voice.listening
+        ? t('chat.voiceStop')
+        : t('chat.voiceStart');
+    useEffect(() => {
+      if (voice.error) {
+        onShowToast?.(isVoicePermissionError(voice.error) ? t('chat.voicePermissionDenied') : t('chat.voiceError'));
+      }
+    }, [voice.error, onShowToast, t]);
 
     useImperativeHandle(
       ref,
@@ -3907,6 +3930,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 switch it (ChatPane.handleNextStepPromptAction) — it just is
                 not chosen from here any more. */}
             {footerAccessory}
+            {voice.supported ? (
+              <button
+                type="button"
+                className="composer-voice od-tooltip"
+                data-testid="chat-voice"
+                onClick={voice.toggle}
+                disabled={voice.transcribing}
+                aria-pressed={voice.listening}
+                aria-busy={voice.transcribing}
+                aria-label={voiceLabel}
+                title={voiceLabel}
+                data-tooltip={voiceLabel}
+              >
+                <Icon name="mic" size={16} />
+              </button>
+            ) : null}
             {showAdmissionPendingButton ? (
               <button
                 type="button"

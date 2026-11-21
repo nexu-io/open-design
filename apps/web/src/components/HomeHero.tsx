@@ -37,6 +37,7 @@ import type {
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
+import { isVoicePermissionError, useVoiceDictation } from '../runtime/chat/voice-dictation';
 import {
   FileTypeIcon,
   fileTypePreviewKind,
@@ -513,6 +514,24 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     return () => observer.disconnect();
   }, [beamPhase]);
   const editorRef = useRef<LexicalComposerInputHandle | null>(null);
+  // Voice dictation into the home prompt: speech is appended to what is already
+  // typed; it never submits.
+  const voice = useVoiceDictation({
+    lang: locale,
+    getBaseText: () => editorRef.current?.getText() ?? prompt,
+    onText: (text) => {
+      onPromptChange(text);
+      editorRef.current?.setText(text);
+    },
+  });
+  const voiceErrorLabel = isVoicePermissionError(voice.error)
+    ? t('chat.voicePermissionDenied')
+    : t('chat.voiceError');
+  const voiceLabel = voice.transcribing
+    ? t('chat.voiceTranscribing')
+    : voice.listening
+      ? t('chat.voiceStop')
+      : t('chat.voiceStart');
   const promptEditorRef = useRef<HTMLDivElement | null>(null);
   // A single-line chip row leads the prompt's FIRST line and every wrapped line
   // returns to the chip's own left edge. A float cannot do that — its band is
@@ -2400,6 +2419,23 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}
               </div>
+            ) : null}
+            {voice.supported ? (
+              <button
+                type="button"
+                className="composer-voice od-tooltip"
+                data-testid="home-hero-voice"
+                data-error={voice.error ? 'true' : undefined}
+                onClick={voice.toggle}
+                disabled={voice.transcribing}
+                aria-pressed={voice.listening}
+                aria-busy={voice.transcribing}
+                aria-label={voiceLabel}
+                title={voice.error ? voiceErrorLabel : voiceLabel}
+                data-tooltip={voice.error ? voiceErrorLabel : voiceLabel}
+              >
+                <Icon name="mic" size={16} />
+              </button>
             ) : null}
             <button
               type="button"
