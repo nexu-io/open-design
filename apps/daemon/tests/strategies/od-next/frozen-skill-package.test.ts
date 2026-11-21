@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, symlink, writeFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -147,6 +148,60 @@ describe('OD Next frozen user-selected Skill package', () => {
       }
     },
   );
+
+  it('reads back a package stored before its Skill id was renamed', async () => {
+    const skill = await fixtureSkill('guizang-ppt');
+    const current = await captureFrozenSkillPackage({ skillId: skill.id, catalog: [skill] });
+    const selections = current.selections.map((selection) => ({
+      ...selection,
+      canonicalId: 'magazine-web-ppt',
+    }));
+    // Mirrors packageIdentityInput + canonicalJson (keys in sorted order).
+    const identityInput = {
+      schema: current.schema,
+      selections: selections.map((selection) => ({
+        bodyByteLength: selection.bodyByteLength,
+        bodyDigest: selection.bodyDigest,
+        canonicalId: selection.canonicalId,
+        files: selection.files.map((file) => ({
+          byteLength: file.byteLength,
+          digest: file.digest,
+          path: file.path,
+        })),
+        name: selection.name,
+      })),
+    };
+    const legacy = {
+      schema: current.schema,
+      identity: `sha256:${createHash('sha256').update(JSON.stringify(identityInput)).digest('hex')}`,
+      selections,
+    };
+    const db = packageDb();
+    try {
+      db.prepare(`
+        INSERT INTO strategy_task_frozen_skill_packages (
+          task_execution_id, schema, identity, payload_json
+        ) VALUES (?, ?, ?, ?)
+      `).run('task-1', legacy.schema, legacy.identity, JSON.stringify(legacy));
+
+      const restored = getFrozenSkillPackage(db, 'task-1');
+      expect(restored.identity).toBe(legacy.identity);
+      expect(restored.selections[0]?.canonicalId).toBe('magazine-web-ppt');
+      const cwd = await mkdtemp(path.join(os.tmpdir(), 'od-frozen-renamed-'));
+      temporaryRoots.push(cwd);
+      const aliases = await materializeFrozenSkillPackage({ frozen: restored, cwd });
+      expect(aliases).toHaveLength(1);
+      expect(await readFile(path.join(cwd, aliases[0]!, 'SKILL.md'), 'utf8'))
+        .toBe(restored.selections[0]!.body);
+
+      // New packages still have to use the current id.
+      db.prepare('INSERT INTO strategy_task_executions (task_execution_id) VALUES (?)').run('task-2');
+      expect(() => insertFrozenSkillPackage(db, 'task-2', restored))
+        .toThrow(InvalidFrozenSkillPackageError);
+    } finally {
+      db.close();
+    }
+  });
 
   it('fails closed on persisted tampering, unknown Skills, and side-file symlinks', async () => {
     const skill = await fixtureSkill();

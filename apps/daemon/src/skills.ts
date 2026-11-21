@@ -29,6 +29,7 @@ export const SKILL_ID_ALIASES = Object.freeze({
   "editorial-collage": "open-design-landing",
   "editorial-collage-deck": "open-design-landing-deck",
   "taste-skill": "design-taste-frontend",
+  "magazine-web-ppt": "guizang-ppt",
 });
 
 type SkillMode = "utility" | "image" | "video" | "audio" | "deck" | "design-system" | "template" | "prototype";

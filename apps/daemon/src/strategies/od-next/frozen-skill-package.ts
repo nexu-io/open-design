@@ -309,6 +309,15 @@ export function insertFrozenSkillPackage(
   frozen: FrozenSkillPackageV1,
 ): void {
   const verified = verifyFrozenSkillPackage(frozen);
+  // New packages must carry current ids. Stored packages are read back as
+  // written, so a row saved before a Skill rename keeps its old id.
+  for (const selection of verified.selections) {
+    if (resolveSkillId(selection.canonicalId) !== selection.canonicalId) {
+      throw new InvalidFrozenSkillPackageError(
+        `Frozen Skill ${selection.canonicalId} must use its current id.`,
+      );
+    }
+  }
   db.prepare(`
     INSERT INTO strategy_task_frozen_skill_packages (
       task_execution_id, schema, identity, payload_json
@@ -892,7 +901,6 @@ function verifySelection(value: unknown): FrozenSkillSelectionV1 {
   }
   if (
     !selection.canonicalId.trim()
-    || resolveSkillId(selection.canonicalId) !== selection.canonicalId
     || !selection.name.trim()
     || /[\r\n]/.test(selection.name)
     || selection.name.length > 256
