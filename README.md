@@ -122,6 +122,7 @@ Review and refine the generated project, then reuse it for your next release, ca
 | [Trae](https://www.trae.ai/) | ✅ Supported | `od mcp install trae` |
 | [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) | ✅ Supported | `od mcp install kimi` |
 | [Kiro](https://kiro.dev) | ✅ Supported | `od mcp install kiro` |
+| [Kilo Code CLI](https://kilo.ai/docs/code-with-ai/platforms/cli) | ✅ Native runtime | `npm install -g @kilocode/cli` |
 | [Pi Agent](https://github.com/badlogic/pi-mono) | ✅ Supported | `od mcp install pi` |
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |

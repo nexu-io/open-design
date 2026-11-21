@@ -134,6 +134,7 @@ import {
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
   resolveOdNextRequestUserPrompt,
+  resolveWebChatAttachmentsForAcp,
   excludeAcpImagePathsAlreadyDeliveredAsResources,
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
@@ -200,6 +201,7 @@ export {
   resolveResearchCommandContract,
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
+  resolveWebChatAttachmentsForAcp,
   excludeAcpImagePathsAlreadyDeliveredAsResources,
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
@@ -11937,24 +11939,6 @@ export async function startServer({
     }
     const { safeImages, oversizedImages, failedImages } =
       resolveSafePromptImagePaths(odNextTaskInputSnapshot ? [] : imagePaths);
-    if (oversizedImages.length > 0) {
-      return failRun(
-        'BAD_REQUEST',
-        'Image attachments must be 1 MB or smaller.',
-      );
-    }
-    if (failedImages.length > 0) {
-      return failRun(
-        'INTERNAL_ERROR',
-        'Failed to read one or more image attachments.',
-      );
-    }
-    const transportSourceImages = odNextTaskInputSnapshot?.imagePaths ?? safeImages;
-    const amrStagedImages =
-      def.id === 'amr' && !odNextTaskInputSnapshot
-        ? await stageAmrImagePaths(cwd ?? PROJECT_ROOT, safeImages, UPLOAD_DIR)
-        : transportSourceImages;
-
     // Project-scoped attachments: project-relative paths inside cwd. Each
     // is run through the same path-traversal guard the file CRUD endpoints
     // use, then existence-checked. Whatever survives shows up as an
@@ -11963,6 +11947,38 @@ export async function startServer({
     const safeAttachments = !odNextTaskInputSnapshot && cwd
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
+    const webChatAcpTransport = resolveWebChatAttachmentsForAcp(
+      cwd,
+      safeAttachments,
+      {
+        enabled: !odNextTaskInputSnapshot && def.acpImagePathFormat === 'file-url',
+        mimePolicy: def.acpResourceMimePolicy ?? 'generic-image',
+      },
+    );
+    if (oversizedImages.length > 0 || webChatAcpTransport.oversizedImages.length > 0) {
+      return failRun(
+        'BAD_REQUEST',
+        'Image attachments must be 1 MB or smaller.',
+      );
+    }
+    if (failedImages.length > 0 || webChatAcpTransport.failedImages.length > 0) {
+      return failRun(
+        'INTERNAL_ERROR',
+        'Failed to read one or more image attachments.',
+      );
+    }
+    if (webChatAcpTransport.failedResources.length > 0) {
+      return failRun(
+        'INTERNAL_ERROR',
+        'Failed to read one or more project attachments.',
+      );
+    }
+    const transportSourceImages = odNextTaskInputSnapshot?.imagePaths ?? safeImages;
+    const amrStagedImages =
+      def.id === 'amr' && !odNextTaskInputSnapshot
+        ? await stageAmrImagePaths(cwd ?? PROJECT_ROOT, safeImages, UPLOAD_DIR)
+        : transportSourceImages;
+
     run.projectAttachmentPaths = odNextTaskInputSnapshot
       ? odNextTaskInputSnapshot.attachmentReferences
       : safeAttachments;
@@ -13123,7 +13139,7 @@ export async function startServer({
           promptImagePaths,
           odNextTaskInputSnapshot.attachmentPaths,
         )
-      : promptImagePaths;
+      : [...promptImagePaths, ...webChatAcpTransport.imagePaths];
     const taskConfigPendingFact = isOdNextInitialRun
       ? odNextTaskInputSnapshot?.taskConfigText ?? ''
       : '';
@@ -16327,7 +16343,7 @@ export async function startServer({
             (runtimeResumesSessionById(def) || def.resumesSessionViaAcpLoad === true) &&
             !run.resumeAutoReseeded &&
             resolveAgentResumeFailurePolicy({
-              agentId: def.id,
+              agentId: def.resumeFailureAgentId ?? def.id,
               stderr: agentStderrTail,
               stdout: agentStdoutTail,
               isResuming: agentResumePromptPolicy.skipTranscript,
@@ -16587,7 +16603,10 @@ export async function startServer({
               : 'unknown',
         },
         imagePaths: def.supportsImagePaths ? acpPromptImagePaths : [],
-        resourcePaths: odNextTaskInputSnapshot?.attachmentPaths ?? [],
+        resourcePaths: odNextTaskInputSnapshot?.attachmentPaths
+          ?? webChatAcpTransport.resourcePaths,
+        imagePathFormat: def.acpImagePathFormat ?? 'path',
+        resourceMimePolicy: def.acpResourceMimePolicy ?? 'generic-image',
         mcpServers,
         envFormat: def.acpMcpEnvFormat ?? 'array',
         // Lets the session withhold stdio MCP servers from agent builds that
@@ -16603,6 +16622,7 @@ export async function startServer({
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId
           ? { resumeSessionId: agentResumePromptPolicy.resumeSessionId }
           : {}),
+        captureSessionIdAsDurable: def.acpSessionIdIsDurable === true,
         nativeContinuation: forceInternalResume ? pendingNativeSessionContinue?.amrContinuation : null,
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
@@ -16688,7 +16708,7 @@ export async function startServer({
             def.resumesSessionViaAcpLoad === true &&
             !run.resumeAutoReseeded &&
             resolveAgentResumeFailurePolicy({
-              agentId: def.id,
+              agentId: def.resumeFailureAgentId ?? def.id,
               stderr: agentStderrTail,
               stdout: agentStdoutTail,
               isResuming: agentResumePromptPolicy.skipTranscript,
@@ -17112,7 +17132,7 @@ export async function startServer({
         (runtimeResumesSessionById(def) || def.resumesSessionViaAcpLoad === true) &&
         run.conversationId &&
         resolveAgentResumeFailurePolicy({
-          agentId: def.id,
+          agentId: def.resumeFailureAgentId ?? def.id,
           stderr: agentStderrTail,
           stdout: agentStdoutTail,
           isResuming: agentResumePromptPolicy.skipTranscript,

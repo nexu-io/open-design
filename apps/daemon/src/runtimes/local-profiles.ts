@@ -170,6 +170,7 @@ function createLocalAgentDef(
 
   return {
     ...baseWithoutAuthProbe,
+    resumeFailureAgentId: base.resumeFailureAgentId ?? base.id,
     id,
     name,
     bin,
