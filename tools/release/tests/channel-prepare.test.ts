@@ -131,6 +131,10 @@ async function writeFakeGhScript(root: string): Promise<string> {
       "  console.log('[]');",
       "  process.exit(0);",
       "}",
+      "if (args[0] === 'api' && /actions\\/runs\\/123$/.test(args[1])) {",
+      "  console.log(process.env.FAKE_RUN_JSON || '{}');",
+      "  process.exit(0);",
+      "}",
       "console.error(`unsupported fake gh args: ${args.join(' ')}`);",
       "process.exit(1);",
       "",
@@ -243,6 +247,29 @@ function stablePrereleaseMetadata(publicOrigin: string, baseVersion: string): Re
 }
 
 describe("tools-release local channel prepare validation", () => {
+  it("verifies the originating run for automatically built prereleases", async () => {
+    const packagedVersion = await readPackagedVersion();
+    const prereleaseVersion = `${packagedVersion}-prerelease.2`;
+    const objects: Record<string, unknown> = {};
+    const server = await startMetadataServer(objects);
+    const ghRoot = await mkdtemp(join(tmpdir(), "od-tools-release-gh-"));
+    const metadata = stablePrereleaseMetadata(server.origin, packagedVersion);
+    Object.assign(metadata.github as object, { workflow: "notify-release-feishu", runId: 123, runAttempt: 1 });
+    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = metadata;
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const run = { path: ".github/workflows/notify-release-feishu.yml", head_branch: `release/v${packagedVersion}`, head_sha: sha, status: "completed", conclusion: "success", run_attempt: 1 };
+    try {
+      const fakeGh = await writeFakeGhScript(ghRoot);
+      const env = { GITHUB_REF_NAME: `release/v${packagedVersion}`, GITHUB_REPOSITORY: "nexu-io/open-design", GITHUB_SHA: sha, OPEN_DESIGN_GH_NODE_SCRIPT: fakeGh, OPEN_DESIGN_RELEASE_DRY_RUN: "metadata", OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: server.origin, OPEN_DESIGN_STABLE_PRERELEASE_VERSION: prereleaseVersion };
+      await expect(runPrepare("stable", { ...env, FAKE_RUN_JSON: JSON.stringify(run) })).resolves.toBeDefined();
+      await expect(runPrepare("stable", { ...env, FAKE_RUN_JSON: JSON.stringify({ ...run, head_sha: "wrong" }) })).rejects.toThrow();
+      await expect(runPrepare("stable", { ...env, FAKE_RUN_JSON: JSON.stringify({ ...run, conclusion: "failure" }) })).rejects.toThrow();
+      await expect(runPrepare("stable", { ...env, FAKE_RUN_JSON: JSON.stringify({ ...run, path: ".github/workflows/other.yml" }) })).rejects.toThrow();
+    } finally {
+      await server.close();
+      await rm(ghRoot, { force: true, recursive: true });
+    }
+  });
   it("prepares beta, betas, preview, and prerelease from local metadata fixtures", async () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {

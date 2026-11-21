@@ -383,7 +383,29 @@ async function validateStablePrereleaseMetadata(options: {
   expectStringFieldIfPresent(github, "branch", options.branch, `${sourceName}.github`);
   expectStringFieldIfPresent(github, "commit", options.commit, `${sourceName}.github`);
   expectStringFieldIfPresent(github, "repository", options.repository, `${sourceName}.github`);
-  expectStringFieldIfPresent(github, "workflow", "release-prerelease", `${sourceName}.github`);
+  const workflow = readStringField(github, "workflow");
+  if (workflow === "notify-release-feishu") {
+    const runId = github.runId;
+    const runAttempt = github.runAttempt;
+    if (!Number.isSafeInteger(runId) || (runId as number) <= 0 || !Number.isSafeInteger(runAttempt) || (runAttempt as number) <= 0) {
+      fail(`${sourceName}.github requires a valid runId and runAttempt for ${workflow}`);
+    }
+    let run: Record<string, unknown>;
+    try {
+      const result = await execGh(["api", `repos/${options.repository}/actions/runs/${runId}`]);
+      run = JSON.parse(result.stdout) as Record<string, unknown>;
+    } catch {
+      fail(`${sourceName}.github could not verify originating workflow run ${runId}`);
+    }
+    expectStringField(run, "path", ".github/workflows/notify-release-feishu.yml", "GitHub workflow run");
+    expectStringField(run, "head_branch", options.branch, "GitHub workflow run");
+    expectStringField(run, "head_sha", options.commit, "GitHub workflow run");
+    expectStringField(run, "status", "completed", "GitHub workflow run");
+    expectStringField(run, "conclusion", "success", "GitHub workflow run");
+    if (run.run_attempt !== runAttempt) fail("GitHub workflow run attempt does not match prerelease metadata");
+  } else {
+    expectStringFieldIfPresent(github, "workflow", "release-prerelease", `${sourceName}.github`);
+  }
 
   const r2 = requireObjectField(metadata, "r2", sourceName);
   expectStringField(r2, "versionPrefix", expectedVersionPrefix, `${sourceName}.r2`);
