@@ -73,6 +73,18 @@ export function plainStdoutFromRunEvents(events: readonly RunEventLike[]): strin
   return stdout;
 }
 
+export function textDeltaFromRunEvents(events: readonly RunEventLike[]): string {
+  let text = '';
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data as { type?: unknown; delta?: unknown } | null | undefined;
+    if (data?.type === 'text_delta' && typeof data?.delta === 'string') {
+      text += data.delta;
+    }
+  }
+  return text;
+}
+
 export function extractPlainStreamArtifacts(stdout: string): PlainStreamArtifact[] {
   if (!stdout.includes(OPEN_TAG)) return [];
   const skipRanges = computeMarkdownSkipRanges(stdout);
