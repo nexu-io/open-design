@@ -7685,7 +7685,7 @@ async function runProject(args) {
   if (args[0] === 'share') return runProjectShare(args.slice(1));
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
-  od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
+  od project create [--device-only] [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
                     [--mode design|chat|plan] [--task-type motion-design]
                     [--prompt-file <path|->] [--json]
@@ -7762,7 +7762,7 @@ Common options:
   }
   const flags = parseFlags(rest, {
     string: PROJECT_RESOURCE_STRING_FLAGS,
-    boolean: PROJECT_BOOLEAN_FLAGS,
+    boolean: sub === 'create' ? new Set([...PROJECT_BOOLEAN_FLAGS, 'device-only']) : PROJECT_BOOLEAN_FLAGS,
   });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   const explicitWorkspaceHeaders = workspaceHeadersFromExplicitFlags(flags);
@@ -7898,6 +7898,7 @@ Common options:
       const body = {
         id,
         name,
+        ...(flags['device-only'] ? { deviceOnly: true } : {}),
         skillId:        flags.skill ?? null,
         designSystemId: flags['design-system'] ?? null,
       };

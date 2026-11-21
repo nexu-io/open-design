@@ -1010,6 +1010,7 @@ export const fr: Dict = {
   'home.createTimedOut': 'La préparation du projet a expiré avant de démarrer. Réessayez d’envoyer.',
   'home.amrGateUnavailable': 'Impossible de confirmer votre solde OpenDesign Cloud. Réessayez d\'envoyer.',
   'entry.cloudRecovering': 'Connexion au compte interrompue. Reconnexion automatique en cours…',
+  'entry.createDeviceProject': 'Créer un projet uniquement sur cet appareil',
   'entry.authExpiredBody': 'Open Design n’est pas connecté\nConnectez-vous pour voir vos projets et poursuivre la conversation.',
   'home.createFailed': 'Impossible de démarrer la tâche. Réessayez.',
   'home.daemonRecovering': 'Connexion locale interrompue\nImpossible de joindre le service Open Design sur cet ordinateur pour le moment. Redémarrez l’application.',

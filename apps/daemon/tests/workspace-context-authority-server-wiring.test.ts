@@ -68,6 +68,60 @@ afterEach(async () => {
 }, 30_000);
 
 describe('server workspace context authority wiring', () => {
+  it('creates a device-only project during a real directory timeout and restores bound reads on recovery', async () => {
+    const h = await startDirectoryRunHarness();
+    const boundProject = 'bound-during-directory-timeout';
+    const deviceProject = 'device-during-directory-timeout';
+    const create = (body: Record<string, unknown>, headers: Record<string, string> = {}) =>
+      fetch(`${daemon!.url}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+      });
+    expect((await create({ id: boundProject, name: 'Bound fixture' }, workspaceHeaders())).status)
+      .toBe(200);
+
+    let releaseDirectory: () => void = () => {};
+    let directoryBlocked = false;
+    const blocked = new Promise<void>((resolve) => { releaseDirectory = resolve; });
+    h.directory.beforeResponse = async () => {
+      directoryBlocked = true;
+      await blocked;
+    };
+    const timeout = h.directoryBroker.fresh();
+    try {
+      await vi.waitFor(() => expect(directoryBlocked).toBe(true));
+      const boundRead = fetch(`${daemon!.url}/api/projects/${boundProject}`, {
+        headers: workspaceHeaders(),
+      });
+      const created = await create({ id: deviceProject, name: 'Device fixture', deviceOnly: true });
+      expect(created.status).toBe(200);
+      await expect(created.json()).resolves.toMatchObject({
+        project: { id: deviceProject, metadata: { deviceOnly: true } },
+      });
+      expect((await timeout).ok).toBe(false);
+      const denied = await boundRead;
+      expect(denied.status).toBe(503);
+      await expect(denied.json()).resolves.toMatchObject({
+        error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE' },
+      });
+    } finally {
+      delete h.directory.beforeResponse;
+      releaseDirectory();
+    }
+
+    expect((await h.directoryBroker.fresh()).ok).toBe(true);
+    expect((await fetch(`${daemon!.url}/api/projects/${boundProject}`, {
+      headers: workspaceHeaders(),
+    })).status).toBe(200);
+    const localCatalog = await fetch(`${daemon!.url}/api/projects`);
+    await expect(localCatalog.json()).resolves.toMatchObject({
+      projects: expect.arrayContaining([
+        expect.objectContaining({ id: deviceProject, workspaceId: null }),
+      ]),
+    });
+  }, 30_000);
+
   it.each(['absent', 'removed'] as const)('cancels only current actor runs with %s membership after missed Hub events', async (membership) => {
     const h = await startDirectoryRunHarness();
     const removed = h.run(WORKSPACE_ID);

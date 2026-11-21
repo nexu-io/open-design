@@ -1013,6 +1013,7 @@ export const zhTW: Dict = {
   "entry.teamSlotNote": "此檢視由團隊服務提供，接入中。",
   "entry.cloudCalloutTitle": "OpenDesign Cloud 版",
   'entry.cloudRecovering': '帳號連線中斷，正在自動恢復…',
+  'entry.createDeviceProject': '新增僅儲存在此裝置的專案',
   'entry.authExpiredBody': 'Open Design 尚未登入\n請先登入，以便查看專案和繼續對話。',
   'home.createFailed': '啟動任務失敗，請再試一次。',
   'home.daemonRecovering': '本機連線已中斷\n暫時無法連線到這台電腦上的 Open Design 服務，請重新啟動用戶端。',

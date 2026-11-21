@@ -1352,6 +1352,7 @@ export interface Dict {
   'entry.teamSlotNote': string;
   'entry.cloudCalloutTitle': string;
   'entry.cloudRecovering': string;
+  'entry.createDeviceProject': string;
   'entry.authExpiredBody': string;
   'home.createFailed': string;
   'home.daemonRecovering': string;

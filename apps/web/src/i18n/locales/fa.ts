@@ -1019,6 +1019,7 @@ export const fa: Dict = {
   'entry.teamSlotNote': 'This space is provided by the team service. Integration is in progress.',
   "entry.cloudCalloutTitle": "OpenDesign Cloud",
   'entry.cloudRecovering': 'Account connection interrupted. Recovering automatically…',
+  'entry.createDeviceProject': 'ایجاد پروژه فقط روی این دستگاه',
   'entry.authExpiredBody': 'به Open Design وارد نشده‌اید\nبرای دیدن پروژه‌ها و ادامه گفت‌وگو وارد شوید.',
   'home.createFailed': 'Failed to start the run. Try again.',
   'home.daemonRecovering': 'اتصال محلی قطع شد\nدر حال حاضر امکان اتصال به سرویس Open Design روی این رایانه وجود ندارد. لطفاً برنامه را دوباره راه‌اندازی کنید.',

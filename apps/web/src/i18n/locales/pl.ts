@@ -1008,6 +1008,7 @@ export const pl: Dict = {
   'entry.teamSlotNote': 'This space is provided by the team service. Integration is in progress.',
   "entry.cloudCalloutTitle": "OpenDesign Cloud",
   'entry.cloudRecovering': 'Account connection interrupted. Recovering automatically…',
+  'entry.createDeviceProject': 'Utwórz projekt tylko na tym urządzeniu',
   'entry.authExpiredBody': 'Nie zalogowano w Open Design\nZaloguj się, aby zobaczyć swoje projekty i kontynuować rozmowę.',
   'home.createFailed': 'Failed to start the run. Try again.',
   'home.daemonRecovering': 'Utracono połączenie lokalne\nNie można teraz połączyć się z usługą Open Design na tym komputerze. Uruchom ponownie aplikację.',

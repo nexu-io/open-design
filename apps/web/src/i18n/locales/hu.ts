@@ -1008,6 +1008,7 @@ export const hu: Dict = {
   'entry.teamSlotNote': 'This space is provided by the team service. Integration is in progress.',
   "entry.cloudCalloutTitle": "OpenDesign Cloud",
   'entry.cloudRecovering': 'Account connection interrupted. Recovering automatically…',
+  'entry.createDeviceProject': 'Projekt létrehozása csak ezen az eszközön',
   'entry.authExpiredBody': 'Az Open Design nincs bejelentkezve\nJelentkezz be, hogy lásd a projektjeidet és folytathasd a beszélgetést.',
   'home.createFailed': 'Failed to start the run. Try again.',
   'home.daemonRecovering': 'Megszakadt a helyi kapcsolat\nJelenleg nem lehet csatlakozni a számítógépen futó Open Design szolgáltatáshoz. Indítsd újra az alkalmazást.',
