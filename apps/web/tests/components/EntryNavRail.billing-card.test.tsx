@@ -392,6 +392,63 @@ describe('billing card keyboard access', () => {
   });
 });
 
+// OPEND-4599 — the pill's card painted UNDER the sharing modal. The cause was
+// not a too-small z-index but the wrong parent: rendered inside the rail, it was
+// ordered within the rail's stacking context whatever number it carried, so a
+// dialog at z-index 1500 covered it. The fix moves it into a body portal, which
+// is the only thing worth asserting here: the card must not be a descendant of
+// the rail, and the hover bridge across the gap the portal opens has to hold.
+describe('billing card floats above dialogs', () => {
+  const paid = () =>
+    renderRail({
+      context: context({
+        billingState: 'active',
+        planId: 'team_plus',
+        permissions: { ...context().permissions, canManageBilling: true },
+      }),
+      billing: billing({ membershipTier: 'team_plus', subscriptionStatus: 'active' }),
+    });
+
+  it('renders the card outside the rail so no ancestor stacking context can trap it', () => {
+    paid();
+    fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
+    const panel = screen.getByTestId('entry-top-right-credits-panel');
+    // The rail owns the stacking context; a descendant of it can never paint
+    // above a dialog, which is exactly what OPEND-4599 reported.
+    expect(panel.closest('.entry-nav-rail')).toBeNull();
+    expect(panel.parentElement).toBe(document.body);
+    expect(screen.getByTestId('entry-top-right-credits').contains(panel)).toBe(false);
+  });
+
+  it('keeps the card open while the pointer crosses the gap into it', () => {
+    vi.useFakeTimers();
+    paid();
+    const pill = screen.getByTestId('entry-top-right-credits');
+    fireEvent.pointerEnter(pill);
+    const panel = screen.getByTestId('entry-top-right-credits-panel');
+    // Leaving the pill arms the 180ms close timer; entering the card (a
+    // sibling in <body> now, not a child of the anchor) has to disarm it.
+    fireEvent.pointerLeave(pill.closest('.entry-top-right-credits-anchor')!);
+    fireEvent.pointerEnter(panel);
+    act(() => vi.advanceTimersByTime(400));
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).not.toBeNull();
+    // And leaving the card closes it, so it is not stuck open forever.
+    fireEvent.pointerLeave(panel);
+    act(() => vi.advanceTimersByTime(400));
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).toBeNull();
+  });
+
+  it('closes on Escape even though the card lives outside the rail', () => {
+    paid();
+    fireEvent.pointerEnter(screen.getByTestId('entry-top-right-credits'));
+    const panel = screen.getByTestId('entry-top-right-credits-panel');
+    // Dispatched from inside the card, the way a keyboard user hits Escape
+    // while the portalled surface has their focus.
+    fireEvent.keyDown(panel, { key: 'Escape' });
+    expect(screen.queryByTestId('entry-top-right-credits-panel')).toBeNull();
+  });
+});
+
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>('../../src/providers/registry');
   return { ...actual, openExternalUrl: async (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); return true; } };

@@ -1141,8 +1141,17 @@ export function EntryTopRightCluster({
   // Opens on hover or focus; clicking the pill still opens the upgrade flow
   // for a free member.
   const [creditsPanelOpen, setCreditsPanelOpen] = useState(false);
+  // OPEND-4599: the card has to paint above dialogs (the sharing modal), and an
+  // absolutely-positioned child of the rail can never escape the rail's own
+  // stacking context — whatever number its z-index carries. Same trap the
+  // recent-row preview hit, and the same answer: ride a body portal with a
+  // measured anchor (see `.entry-nav-rail__recent-preview`).
+  const [creditsPanelAnchor, setCreditsPanelAnchor] = useState<
+    { top: number; right: number } | null
+  >(null);
   const creditsPanelId = useId();
   const creditsAnchorRef = useRef<HTMLDivElement | null>(null);
+  const creditsPanelRef = useRef<HTMLDivElement | null>(null);
   const creditsCloseTimer = useRef<number | null>(null);
   const openCreditsPanel = () => {
     if (creditsCloseTimer.current !== null) {
@@ -1156,7 +1165,11 @@ export function EntryTopRightCluster({
     creditsCloseTimer.current = window.setTimeout(() => {
       creditsCloseTimer.current = null;
       // Pointer exit must not unmount actions a keyboard user is navigating.
-      if (!creditsAnchorRef.current?.contains(document.activeElement)) {
+      // The card is a sibling in <body> now, so its own focus counts too.
+      if (
+        !creditsAnchorRef.current?.contains(document.activeElement) &&
+        !creditsPanelRef.current?.contains(document.activeElement)
+      ) {
         setCreditsPanelOpen(false);
       }
     }, 180);
@@ -1167,6 +1180,39 @@ export function EntryTopRightCluster({
     },
     [],
   );
+  // Anchor the portalled card to the pill's viewport rect. Re-measured on
+  // resize and on any scroll: `fixed` does not follow the anchor by itself.
+  useLayoutEffect(() => {
+    if (!creditsPanelOpen) {
+      setCreditsPanelAnchor(null);
+      return undefined;
+    }
+    const anchor = creditsAnchorRef.current;
+    if (!anchor) return undefined;
+    const syncAnchor = () => {
+      const rect = anchor.getBoundingClientRect();
+      setCreditsPanelAnchor({
+        top: rect.bottom,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+    syncAnchor();
+    window.addEventListener('resize', syncAnchor);
+    window.addEventListener('scroll', syncAnchor, true);
+    return () => {
+      window.removeEventListener('resize', syncAnchor);
+      window.removeEventListener('scroll', syncAnchor, true);
+    };
+  }, [creditsPanelOpen]);
+  // Escape closes it, the way every other floating surface in the rail does.
+  useEffect(() => {
+    if (!creditsPanelOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCreditsPanelOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [creditsPanelOpen]);
   // Message-center panel (opened from the bell beside the identity row) and
   // its unread count, which drives the red dot on that bell.
   const [messageCenterOpen, setMessageCenterOpen] = useState(false);
@@ -1481,13 +1527,21 @@ export function EntryTopRightCluster({
                   links out to B's console. It receives only an explicitly
                   scoped money value; raw credits are never formatted as
                   dollars here. */}
-              {creditsPanelOpen ? (
+              {creditsPanelOpen && creditsPanelAnchor ? createPortal(
                 <div
+                  ref={creditsPanelRef}
                   id={creditsPanelId}
                   role="dialog"
                   aria-label={t('entry.credits')}
                   className={`entry-top-right-credits-panel ${planCardStyles.panel}`}
+                  style={creditsPanelAnchor}
                   data-testid="entry-top-right-credits-panel"
+                  // The 6px gap to the pill lives inside this div, but the div
+                  // is no longer a descendant of the anchor: the pill's
+                  // pointer-leave arms the close timer on the way here, so the
+                  // card has to disarm it on entry itself.
+                  onPointerEnter={openCreditsPanel}
+                  onPointerLeave={scheduleCreditsPanelClose}
                 >
                   <WorkspaceQuotaPopover
                     view={quotaView}
@@ -1501,7 +1555,8 @@ export function EntryTopRightCluster({
                       setCreditsPanelOpen(false);
                     }}
                   />
-                </div>
+                </div>,
+                document.body,
               ) : null}
             </div>
           ) : null}
