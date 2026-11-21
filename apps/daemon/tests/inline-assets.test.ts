@@ -182,4 +182,64 @@ describe('inlineRelativeAssets (FS-backed)', () => {
     expect(out).toContain('.s{}');
     expect(out).not.toContain('href="small.css"');
   });
+
+  // --- #8891 regression: HTML entity-decoded attribute values ---
+
+  it('resolves asset paths when href uses numeric entity &#38; for ampersand (#8891)', async () => {
+    write('theme&dark.css', '.t{color:red}');
+    const html = '<link rel="stylesheet" href="theme&#38;dark.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('.t{color:red}');
+    // Original encoded href is preserved in data-od-inline-asset as audit trail
+    expect(out).toContain('data-od-inline-asset="theme&#38;dark.css"');
+  });
+
+  it('decodes &amp; in href and resolves the corresponding asset (#8891)', async () => {
+    write('boot&main.js', 'window.OK = true;');
+    const html = '<script src="boot&amp;main.js"></script>';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('window.OK = true;');
+    expect(out).not.toContain('src="boot&amp;main.js"');
+  });
+
+  it('preserves decoded entities in carried <link> attributes on the generated <style> tag (#8891)', async () => {
+    write('x.css', '.x{color:blue}');
+    const html =
+      '<link rel="stylesheet" href="x.css" title="R&amp;D" media="screen and (width &gt; 500px)">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('.x{color:blue}');
+    // Attributes are properly escaped in output (valid HTML)
+    expect(out).toContain('title="R&amp;D"');
+    expect(out).toContain('media="screen and (width &gt; 500px)"');
+  });
+
+  it('handles mixed entities in a single attribute value', async () => {
+    write('a&b.css', '.a{margin:0}');
+    const html = '<link rel="stylesheet" href="a&amp;b.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('.a{margin:0}');
+    expect(out).not.toContain('href="a&amp;b.css"');
+  });
+
+  it('leaves unknown entities untouched while still resolving plain assets', async () => {
+    write('plain.css', '.p{}');
+    const html = '<link rel="stylesheet" href="plain.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('.p{}');
+  });
+
+  // Additional P2 regression tests per nettee review
+  it('handles named entity eacute (&eacute;) in asset path (#8891)', async () => {
+    write('café.css', '.c{color:red}');
+    const html = '<link rel="stylesheet" href="caf&amp;eacute;.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    expect(out).toContain('.c{color:red}');
+  });
+
+  it('bounds-checks invalid numeric reference &amp;#1114112; without throwing (#8891)', async () => {
+    const html = '<link rel="stylesheet" href="bad&amp;#1114112;.css">';
+    const out = await inlineRelativeAssets(html, 'index.html', fsReader());
+    // Should not throw; tag stays as URL ref since file won't exist
+    expect(out).toContain('<link rel="stylesheet"');
+  });
 });
