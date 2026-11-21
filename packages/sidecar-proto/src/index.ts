@@ -38,13 +38,13 @@ export const SIDECAR_ENV = Object.freeze({
 } as const);
 
 /**
- * Shape of an MCP registration written by a daemon whose packaged outer manages
- * the headless bootstrap. Only a managed outer appends `MANAGED_ARG` to the
- * bootstrap argv, so registrations produced under an older outer keep today's
- * shape and today's behavior.
+ * Shape of a packaged MCP registration that discovers both windowed and
+ * headless owners. Windows launchers and managed macOS outers append
+ * `MANAGED_ARG` to opt in; existing registrations without it keep their
+ * original discovery behavior until refreshed.
  */
 export const MCP_BOOTSTRAP_CONTRACT = Object.freeze({
-  /** Appended to OD_MCP_BOOTSTRAP_ARGS by a managed outer. */
+  /** Appended to OD_MCP_BOOTSTRAP_ARGS to enable discovery across owner modes. */
   MANAGED_ARG: "--od-mcp-managed",
   /**
    * JSON `{ daemon: string[]; desktop: string[] }` of absolute sidecar client

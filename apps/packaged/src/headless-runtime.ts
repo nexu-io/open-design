@@ -129,12 +129,17 @@ export function parsePackagedHeadlessRequest(
 export function resolvePackagedMcpBootstrapLaunch(options: {
   currentExecutablePath?: string;
   installedLaunchPath: string | null;
-  /** The launch belongs to a managed outer; see managed-headless.ts. */
+  /** The macOS launch belongs to a managed outer; see managed-headless.ts. */
   managed?: boolean;
   platform?: NodeJS.Platform;
 }): PackagedMcpBootstrapLaunch {
   const launch = resolveUnmanagedMcpBootstrapLaunch(options);
-  return options.managed === true
+  // Windows uses a separate owner for headless MCP sessions.
+  // Registrations from either entry must discover both modes, independently
+  // of macOS's deferred-window lifecycle and managed-outer signal.
+  const discoversBothModes = options.managed === true
+    || (options.platform ?? process.platform) === 'win32';
+  return discoversBothModes
     ? { ...launch, args: [...launch.args, MCP_BOOTSTRAP_CONTRACT.MANAGED_ARG] }
     : launch;
 }
