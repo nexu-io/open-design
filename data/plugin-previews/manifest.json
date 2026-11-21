@@ -1351,6 +1351,13 @@
       "durationMs": 1267,
       "holdMs": 1267,
       "hash": "57139c6526c57deb"
+    },
+    "example-live-artifact": {
+      "video": "example-live-artifact/6e15905658086017/preview.mp4",
+      "poster": "example-live-artifact/6e15905658086017/poster.jpg",
+      "durationMs": 1267,
+      "holdMs": 1267,
+      "hash": "6e15905658086017"
     }
   }
 }
