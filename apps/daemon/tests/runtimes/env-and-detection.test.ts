@@ -1654,3 +1654,106 @@ test('spawnEnvForAgent expands a ~-prefixed PI_CODING_AGENT_DIR like the other c
 
   assert.equal(env.PI_CODING_AGENT_DIR, join(homedir(), '.pi-isolated', 'agent'));
 });
+
+test('spawnEnvForAgent isolates BYOK OpenCode XDG_CONFIG_HOME under OD_DATA_DIR', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-byok-data-'));
+  try {
+    const env = spawnEnvForAgent('byok-opencode', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+    });
+
+    assert.equal(
+      env.XDG_CONFIG_HOME,
+      join(dataDir, 'byok-opencode-home', '.config'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent preserves configured BYOK OpenCode XDG_CONFIG_HOME override', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-byok-data-'));
+  try {
+    const configuredConfig = join(dataDir, 'custom-config');
+    const env = spawnEnvForAgent('byok-opencode', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+    }, {
+      XDG_CONFIG_HOME: configuredConfig,
+    });
+
+    assert.equal(env.XDG_CONFIG_HOME, configuredConfig);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent does not set XDG_CONFIG_HOME for regular opencode agent', () => {
+  const env = spawnEnvForAgent('opencode', {
+    PATH: '/usr/bin',
+  });
+  assert.equal(env.XDG_CONFIG_HOME, undefined);
+});
+
+test('spawnEnvForAgent sets OPENCODE_TEST_HOME for byok-opencode under OD_DATA_DIR', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-byok-data-'));
+  try {
+    const env = spawnEnvForAgent('byok-opencode', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+    });
+
+    assert.equal(
+      env.OPENCODE_TEST_HOME,
+      join(dataDir, 'byok-opencode-home'),
+    );
+    assert.equal(
+      env.XDG_CONFIG_HOME,
+      join(dataDir, 'byok-opencode-home', '.config'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent isolates inherited XDG_CONFIG_HOME for byok-opencode', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-byok-data-inherited-'));
+  try {
+    const inheritedXdg = '/home/user/.config';
+    const env = spawnEnvForAgent('byok-opencode', {
+      OD_DATA_DIR: dataDir,
+      PATH: '/usr/bin',
+      XDG_CONFIG_HOME: inheritedXdg,
+    });
+
+    // Inherited XDG_CONFIG_HOME must be overridden for isolation
+    assert.equal(
+      env.XDG_CONFIG_HOME,
+      join(dataDir, 'byok-opencode-home', '.config'),
+    );
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('spawnEnvForAgent preserves explicit BYOK-configured XDG_CONFIG_HOME override', () => {
+  const dataDir = mkdtempSync(join(tmpdir(), 'od-byok-data-'));
+  try {
+    const configuredConfig = join(dataDir, 'custom-config');
+    const env = spawnEnvForAgent(
+      'byok-opencode',
+      {
+        OD_DATA_DIR: dataDir,
+        PATH: '/usr/bin',
+      },
+      {
+        XDG_CONFIG_HOME: configuredConfig,
+      },
+    );
+
+    assert.equal(env.XDG_CONFIG_HOME, configuredConfig);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
