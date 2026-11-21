@@ -22,10 +22,12 @@ import { emittedRenderableQuestionForm } from './question-form-markup.js';
 /** Turn-terminal stop reasons that mean the model was cut off mid-generation
  *  rather than finishing cleanly. A run truncated here is incomplete even if its
  *  last TodoWrite looked done. Shared by the daemon capture path and the persisted
- *  events predicate so the live and reloaded verdicts agree. */
+ *  events predicate so the live and reloaded verdicts agree. `length` is the
+ *  OpenAI / AI SDK spelling that OpenCode reports on `step_finish` (#9363). */
 export const MID_TURN_TRUNCATION_STOP_REASONS: ReadonlySet<string> = new Set([
   'max_tokens',
   'max_output_tokens',
+  'length',
 ]);
 
 /** True when a turn stop reason indicates a mid-generation truncation. */

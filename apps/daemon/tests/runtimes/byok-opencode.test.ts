@@ -6,6 +6,7 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
   opencodeByokModelId,
+  opencodeByokOutputTokenLimit,
 } from '../../src/runtimes/byok-opencode.js';
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
 
@@ -99,6 +100,63 @@ describe('byok-opencode runtime config', () => {
       },
     });
   });
+
+  it('uses the requested Max tokens as the OpenCode output limit (#9363)', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-secret',
+        baseUrl: 'https://models.example/v1',
+        maxTokens: 32_000,
+      },
+      'deepseek-v4.1-flash',
+    );
+
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          models: {
+            'deepseek-v4.1-flash': { limit: { context: 128_000, output: 32_000 } },
+          },
+        },
+      },
+    });
+    // Within OpenCode 1.x's default 32,000 reply cap, so no override is needed.
+    expect(out?.env).toEqual({ [BYOK_OPENCODE_API_KEY_ENV]: 'sk-secret' });
+  });
+
+  it('bounds Max tokens to half the context window and lifts OpenCode 1.x\'s reply cap to match', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: 'sk-secret',
+        baseUrl: 'https://models.example/v1',
+        maxTokens: 131_072,
+      },
+      'deepseek-v4.1-flash',
+    );
+
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          models: {
+            'deepseek-v4.1-flash': { limit: { context: 128_000, output: 64_000 } },
+          },
+        },
+      },
+    });
+    expect(out?.env).toEqual({
+      [BYOK_OPENCODE_API_KEY_ENV]: 'sk-secret',
+      OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX: '64000',
+    });
+  });
+
+  it.each([undefined, 0, -1, 1.5, Number.NaN, '32000'])(
+    'keeps the default output limit for a missing or invalid Max tokens (%s)',
+    (maxTokens) => {
+      expect(opencodeByokOutputTokenLimit(maxTokens)).toBe(16_384);
+    },
+  );
 
   it('maps native OpenAI BYOK to the OpenAI provider package', () => {
     const out = buildOpenCodeByokProviderConfig(

@@ -6,6 +6,7 @@ export interface ByokCliOptions {
   apiVersion?: string;
   keyEnv?: string;
   keyless?: boolean;
+  maxTokens?: string;
 }
 
 export function byokProviderFromCliOptions(
@@ -18,6 +19,7 @@ export function byokProviderFromCliOptions(
     && options.apiVersion === undefined
     && options.keyEnv === undefined
     && !options.keyless
+    && options.maxTokens === undefined
   ) return undefined;
 
   const protocol = options.protocol;
@@ -39,11 +41,17 @@ export function byokProviderFromCliOptions(
     throw new Error('--byok-key-env must name a non-empty environment variable containing the API key');
   }
 
+  const maxTokens = options.maxTokens === undefined ? undefined : Number(options.maxTokens);
+  if (maxTokens !== undefined && !(Number.isInteger(maxTokens) && maxTokens > 0)) {
+    throw new Error('--byok-max-tokens must be a positive integer');
+  }
+
   return {
     protocol,
     apiKey,
     ...(options.baseUrl !== undefined ? { baseUrl: options.baseUrl } : {}),
     ...(options.apiVersion !== undefined ? { apiVersion: options.apiVersion } : {}),
     ...(options.keyless ? { requiresApiKey: false } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
   };
 }
