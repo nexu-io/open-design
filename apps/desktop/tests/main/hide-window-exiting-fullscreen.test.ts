@@ -12,6 +12,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   attachNonDarwinMainWindowCloseShutdown,
+  closeWithActiveRunsPrompt,
   hideWindowExitingFullscreen,
   type MainWindowCloseSurface,
   type WindowFullscreenSurface,
@@ -145,17 +146,40 @@ describe('hideWindowExitingFullscreen', () => {
 });
 
 describe('attachNonDarwinMainWindowCloseShutdown', () => {
-  function createMockCloseWindow(): {
+  function createMockCloseWindow(options: { vetoRetry?: boolean } = {}): {
     emitClosed: () => void;
+    emitClose: () => { prevented: boolean };
+    closeCalls: () => number;
     window: MainWindowCloseSurface;
   } {
     let closedListener: (() => void) | null = null;
+    let closeListener: ((event: { preventDefault: () => void }) => void) | null = null;
+    let closeCalls = 0;
+    let destroyed = false;
+    const emitClose = () => {
+      const result = { prevented: false };
+      closeListener?.({ preventDefault: () => { result.prevented = true; } });
+      return result;
+    };
     return {
-      emitClosed: () => closedListener?.(),
+      emitClosed: () => { destroyed = true; closedListener?.(); },
+      emitClose,
+      closeCalls: () => closeCalls,
       window: {
-        on: (event, listener) => {
-          if (event === 'closed') closedListener = listener;
+        on: ((event: 'close' | 'closed', listener: (...args: never[]) => void) => {
+          if (event === 'closed') closedListener = listener as () => void;
+          if (event === 'close') closeListener = listener as (event: { preventDefault: () => void }) => void;
           return undefined;
+        }) as MainWindowCloseSurface['on'],
+        isDestroyed: () => destroyed,
+        close: () => {
+          closeCalls += 1;
+          if (destroyed) throw new Error('Object has been destroyed');
+          // Electron emits `close` again for a programmatic close.
+          if (!emitClose().prevented && !options.vetoRetry) {
+            destroyed = true;
+            closedListener?.();
+          }
         },
       },
     };
@@ -186,4 +210,109 @@ describe('attachNonDarwinMainWindowCloseShutdown', () => {
 
     expect(requestQuit).not.toHaveBeenCalled();
   });
+
+  // Windows: closing the main window quit the app and interrupted running
+  // tasks without warning (OPEND-4390): 101 of 121 interrupted runs with a
+  // bundle on 10/23-10/26 were Windows.
+  test('keeps the window open when the user chooses to keep active tasks running', async () => {
+    const { emitClose, closeCalls, window } = createMockCloseWindow();
+    const requestQuit = vi.fn();
+    const confirm = vi.fn(async () => false);
+
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => false,
+      requestQuit,
+      confirmCloseWithActiveRuns: confirm,
+    });
+    expect(emitClose().prevented).toBe(true);
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+
+    expect(closeCalls()).toBe(0);
+    expect(requestQuit).not.toHaveBeenCalled();
+  });
+
+  test('closes and quits once the user confirms, or when nothing is running', async () => {
+    const { emitClose, closeCalls, window } = createMockCloseWindow();
+    const requestQuit = vi.fn();
+
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => false,
+      requestQuit,
+      confirmCloseWithActiveRuns: async () => true,
+    });
+    expect(emitClose().prevented).toBe(true);
+    await vi.waitFor(() => expect(requestQuit).toHaveBeenCalledTimes(1));
+    expect(closeCalls()).toBe(1);
+  });
+
+  test('checks again after the renderer vetoes the immediate close retry', async () => {
+    const { emitClose, closeCalls, window } = createMockCloseWindow({ vetoRetry: true });
+    const requestQuit = vi.fn();
+    const confirm = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false);
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => false,
+      requestQuit,
+      confirmCloseWithActiveRuns: confirm,
+    });
+
+    expect(emitClose().prevented).toBe(true);
+    await vi.waitFor(() => expect(closeCalls()).toBe(1));
+    expect(emitClose().prevented).toBe(true);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(requestQuit).not.toHaveBeenCalled();
+  });
+
+  test.each(['stopped', 'destroyed'] as const)(
+    'does not retry a pending confirmation after the window is %s',
+    async (state) => {
+      const { emitClose, emitClosed, closeCalls, window } = createMockCloseWindow();
+      let stopped = false;
+      let answer!: (proceed: boolean) => void;
+      const pending = new Promise<boolean>((resolve) => { answer = resolve; });
+      const requestQuit = vi.fn();
+      attachNonDarwinMainWindowCloseShutdown(window, {
+        isStopped: () => stopped,
+        requestQuit,
+        confirmCloseWithActiveRuns: () => pending,
+      });
+
+      expect(emitClose().prevented).toBe(true);
+      if (state === 'stopped') stopped = true;
+      else emitClosed();
+      requestQuit.mockClear();
+      answer(true);
+      // Drain the confirmation's catch/then continuation deterministically.
+      await pending;
+      await Promise.resolve();
+      expect(closeCalls()).toBe(0);
+      expect(requestQuit).not.toHaveBeenCalled();
+    },
+  );
+
+  test('does not ask again while a prompt is already open', async () => {
+    const { emitClose, window } = createMockCloseWindow();
+    let answer: (proceed: boolean) => void = () => {};
+    const confirm = vi.fn(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+
+    attachNonDarwinMainWindowCloseShutdown(window, {
+      isStopped: () => false,
+      requestQuit: vi.fn(),
+      confirmCloseWithActiveRuns: confirm,
+    });
+    emitClose();
+    emitClose();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    answer(false);
+  });
 });
+
+describe('closeWithActiveRunsPrompt', () => {
+  test('names the running tasks in Chinese and English', () => {
+    expect(closeWithActiveRunsPrompt(2, 'zh-CN')).toMatchObject({ buttons: ['继续运行', '仍然退出'] });
+    expect(closeWithActiveRunsPrompt(2, 'zh-CN').message).toContain('2');
+    expect(closeWithActiveRunsPrompt(1, 'en-US')).toMatchObject({ buttons: ['Keep running', 'Quit anyway'] });
+    expect(closeWithActiveRunsPrompt(1, 'en-US').message).toContain('1 task');
+  });
+});
+
