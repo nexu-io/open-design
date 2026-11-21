@@ -295,10 +295,16 @@ async function defaultRun(args: string[], workspaceId?: string): Promise<string>
  * the caller's delete must abort rather than proceed past a failed unshare.
  */
 export async function unshareIfCurrentlyShared(
-  service: Pick<TeamResourceShareService, 'sharedResources' | 'unshare'>,
+  service: Pick<TeamResourceShareService, 'sharedResources' | 'unshare' | 'configured'>,
   resourceId: string,
   scope: TeamResourceRequestScope,
 ): Promise<boolean> {
+  // Short-circuit when team sharing is not configured: no live hub exists,
+  // so the resource cannot be shared. This lets signed-in users delete their
+  // own workspace design systems (and other resources) when team sharing is
+  // unconfigured, without hitting the stub's authoritative-read error.
+  if (service.configured === false) return false;
+
   let resources: TeamResourceShareRecord[];
   try {
     resources = await service.sharedResources(scope, { authoritative: true });
