@@ -101,4 +101,13 @@ export const deepseekHarnessAgentDef = {
   resumesSessionViaProfileStdio: true,
   capturesSessionIdFromStream: true,
   supportsCustomModel: false,
+  // The harness exposes blocking background-job tools (`job_output` /
+  // `job_list`) that the model calls with `wait: true` and its own
+  // `timeout_ms`, up to 15 minutes. While one is outstanding the profile
+  // runtime emits no frames at all — the wait is the tool working as
+  // documented, not a hang — so the 10-minute global default killed healthy
+  // runs as `stalled` at exactly the model's requested wait, every time.
+  // Same reasoning as the copilot def (#2467): a longer ceiling for a CLI
+  // that legitimately goes silent, still bounded so a real hang ends.
+  inactivityTimeoutMs: 30 * 60 * 1000,
 } satisfies RuntimeAgentDef;
