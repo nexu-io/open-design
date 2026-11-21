@@ -3885,6 +3885,8 @@ export interface Dict {
   'workspace.noFilesMatch': string;
   'workspace.allFiles': string;
   'workspace.createNew': string;
+  'workspace.reopenDesignFiles': string;
+  'workspace.reopenDesignFilesLabel': string;
   'workspace.tabOpen': string;
   'workspace.sideChatContextBanner': string;
   'workspace.sideChatDefaultTitle': string;
