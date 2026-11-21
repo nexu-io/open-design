@@ -1,4 +1,5 @@
 import type { WorkspaceInviteEntry } from '@open-design/contracts/analytics';
+import { randomUUID } from '../../utils/uuid';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { type WorkspaceCollabContext, type WorkspaceInviteRole } from '@open-design/contracts';
@@ -27,7 +28,7 @@ interface Props {
   canAssignRoles?: boolean;
   entryFrom?: WorkspaceInviteEntry;
 }
-const emptyRow = (): Row => ({ email: '', role: 'member', idempotencyKey: crypto.randomUUID() });
+const emptyRow = (): Row => ({ email: '', role: 'member', idempotencyKey: randomUUID() });
 const validEmail = (value: string) => {
   const input = document.createElement('input');
   input.type = 'email';
@@ -125,7 +126,7 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
     if (!open) { exposure.current = null; return; }
     const key = `${identity}:${entryFrom}`;
     if (exposure.current?.key === key) return;
-    surfaceId.current = crypto.randomUUID();
+    surfaceId.current = randomUUID();
     exposure.current = { key, id: surfaceId.current };
     if (onboarding) trackWorkspaceInvitePageView(analytics.track, { page_name: 'onboarding', area: 'onboarding_invite_step', step_name: 'invite_teammates', entry_from: 'onboarding', invite_surface_id: surfaceId.current, ...dimensions });
     else trackWorkspaceSurfaceView(analytics.track, { page_name: page === 'onboarding' ? 'home' : page, area: 'workspace_invite_dialog', entry_from: entryFrom, invite_surface_id: surfaceId.current, ...dimensions });
@@ -204,7 +205,7 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
       if (i !== index) return row;
       const next = { ...row, ...patch, error: undefined };
       const changed = next.email.trim().toLowerCase() !== row.email.trim().toLowerCase() || canonicalRole(next.role) !== canonicalRole(row.role);
-      return { ...next, idempotencyKey: changed ? crypto.randomUUID() : row.idempotencyKey };
+      return { ...next, idempotencyKey: changed ? randomUUID() : row.idempotencyKey };
     }));
     setError(null);
   }
@@ -229,7 +230,7 @@ export function InviteDialog({ open, onClose, workspaceContext, onSubmit, canAss
     const requestId = analytics.newRequestId();
     const startedAt = performance.now();
     let reported = false;
-    const batchId = crypto.randomUUID();
+    const batchId = randomUUID();
     const result = (succeeded: number, failed: number, code?: string, unknown = 0) => {
       reported = true;
       return trackWorkspaceInviteResult(analytics.track, {

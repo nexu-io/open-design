@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { randomUUID } from '../utils/uuid';
 import type { WorkspaceJourneySurfaceProps } from '@open-design/contracts/analytics';
 import { useAnalytics } from './provider';
 import { trackWorkspaceJourneyClick, trackWorkspaceJourneyView } from './events';
@@ -13,7 +14,7 @@ export function useWorkspaceJourney(
   const instance = useRef<{ key: string; id: string; viewed: boolean } | null>(null);
   const key = visible ? JSON.stringify([props.area, props.workspace_key, props.reason, props.run_id]) : '';
   if (!key) instance.current = null;
-  else if (instance.current?.key !== key) instance.current = { key, id: crypto.randomUUID(), viewed: false };
+  else if (instance.current?.key !== key) instance.current = { key, id: randomUUID(), viewed: false };
   const id = instance.current?.id ?? '';
   const latest = useRef(props); latest.current = props;
   useEffect(() => {

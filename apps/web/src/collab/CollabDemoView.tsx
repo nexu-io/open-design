@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { randomUUID } from '../utils/uuid';
 import type { CollabMemberRole } from '@open-design/contracts';
 import { navigate } from '../router';
 import { useCollab } from './useCollab';
@@ -17,7 +18,7 @@ const ROLES: CollabMemberRole[] = ['owner', 'admin', 'member'];
 function makeDemoMemberId(): string {
   const uuid =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
+      ? randomUUID()
       : `${Date.now().toString(36)}-${performance.now().toString(36)}`;
   return `demo-${uuid.slice(0, 8)}`;
 }

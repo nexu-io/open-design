@@ -1,4 +1,5 @@
 import { parseClientMetricEvent, type ClientMetricProps } from '@open-design/contracts/analytics';
+import { randomUUID } from '../utils/uuid';
 import { BackoffController } from '../lib/backoff';
 import type { InputAggregationStore } from './input-aggregation-store';
 
@@ -23,7 +24,7 @@ const identityOf = (raw: Raw) => JSON.stringify([raw.device_id, raw.app_session_
 
 /** A single transaction owns the collector tail, raw outbox and both summary periods. */
 export class InputAggregation {
-  readonly pageId = crypto.randomUUID();
+  readonly pageId = randomUUID();
   stopped: string | null = null;
   private collecting = new Map<string, Raw>();
   private rawPending: Raw[] = [];
@@ -115,7 +116,7 @@ export class InputAggregation {
       if (summary && Date.parse(summary.window_start) !== start) {
         this.active.delete(key); this.freeze(summary, 'window'); summary = undefined;
       }
-      summary ??= { ...raw, area: raw.area as Summary['area'], event_id: crypto.randomUUID(),
+      summary ??= { ...raw, area: raw.area as Summary['area'], event_id: randomUUID(),
         capture_source: 'web/input-aggregation', aggregation_page_id: raw.aggregation_page_id!,
         period_ms: period, window_start: new Date(start).toISOString(), window_end: new Date(start + period).toISOString(),
         flush_reason: 'window', source_event_count: 0, source_window_ms: 0,

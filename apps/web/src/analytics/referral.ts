@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { randomUUID } from '../utils/uuid';
 import type { ReferralEntrySource } from '../runtime/referral-navigation';
 import { observeAnalytics } from './observe';
 import { useAnalytics } from './provider';
@@ -37,7 +38,7 @@ export function useReferralAnalytics<T extends HTMLElement>(
       observeAnalytics(() => track('surface_view', {
         ...latest.current,
         element: source === 'client_entry' ? 'invite' : 'notice',
-        surface_instance_id: crypto.randomUUID(),
+        surface_instance_id: randomUUID(),
       }));
     };
     const observer = new IntersectionObserver(([entry]) => {
