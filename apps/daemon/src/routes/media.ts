@@ -15,7 +15,7 @@ import type {
 import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
-import { findMediaModel, type MediaModel } from '../media/models.js';
+import { findMediaModel, isFalCustomModelPath, type MediaModel } from '../media/models.js';
 import { fetchVelaVideoModels } from '../media/vela.js';
 import type { CloudVideoModelsResponse } from '@open-design/contracts';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
@@ -175,7 +175,7 @@ function reconciledMediaTaskFile(
 function mediaProviderId(model: string): string | undefined {
   const registered = findMediaModel(model)?.provider;
   if (registered) return registered;
-  if (model.startsWith('fal-ai/')) return 'fal';
+  if (isFalCustomModelPath(model)) return 'fal';
   if (model.startsWith('aihubmix-')) return 'aihubmix';
   return undefined;
 }

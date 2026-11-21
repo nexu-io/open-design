@@ -72,6 +72,7 @@ import type {
 } from '@open-design/sidecar-proto';
 import {
   AUDIO_DURATIONS_SEC,
+  FAL_FLUX3_TEXT_TO_IMAGE,
   type AudioKind,
   type MediaModel,
   type MediaProvider,
@@ -79,6 +80,7 @@ import {
   VIDEO_LENGTHS_SEC,
   findMediaModel,
   findProvider,
+  isFalCustomModelPath,
   modelsForSurface,
 } from './models.js';
 import { assertAndFetchExternalAsset } from '../connectionTest.js';
@@ -427,7 +429,15 @@ export async function generateMedia(args: {
   let isFalCustomPath = false;
   let isCatalogBypass = false;
   if (!def) {
-    if (/^fal-ai\//.test(model)) {
+    if (isFalCustomModelPath(model)) {
+      // Partner endpoints carry their own per-endpoint schema (see
+      // falImageInputFor); FLUX 3 text-to-image only renders images, so
+      // refuse other surfaces here rather than fail inside the queue.
+      if (model === FAL_FLUX3_TEXT_TO_IMAGE && surface !== 'image') {
+        throw new Error(
+          `model "${model}" is image-only; pass --surface image.`,
+        );
+      }
       isFalCustomPath = true;
       def = {
         id: model,
@@ -460,7 +470,8 @@ export async function generateMedia(args: {
     } else {
       throw new Error(
         `unknown model: ${model}. Pass --model from the registered list (see /api/media/models), ` +
-        `or pass a full fal-ai/* path (e.g. fal-ai/flux/dev) for any Fal model.`,
+        `or pass a full fal-ai/* path (e.g. fal-ai/flux/dev) for any Fal model ` +
+        `(FLUX 3: ${FAL_FLUX3_TEXT_TO_IMAGE}).`,
       );
     }
   }
@@ -3757,28 +3768,75 @@ function falQueueBase(baseUrl: string): string {
   return baseUrl.replace(/^https:\/\/fal\.run/, 'https://queue.fal.run');
 }
 
+// FLUX 3 Image (fal partner endpoint `blackforestlabs/flux-3/text-to-image`).
+// Its published schema replaces the FLUX 1.x knobs: no `num_images`, no
+// `image_size`, no image input; size is `resolution` tier + `aspect_ratio`.
+// Every MEDIA_ASPECTS value is in this enum, so the fallback only guards
+// against a caller passing an aspect the daemon itself never offers.
+const FAL_FLUX3_ASPECT_RATIOS = new Set([
+  '21:9', '2:1', '16:9', '3:2', '7:5', '4:3', '5:4', '1:1',
+  '4:5', '3:4', '5:7', '2:3', '9:16', '1:2',
+]);
+// fal's own default tier. 2k/4k are slower and pricier, and the daemon has
+// no resolution input yet, so it never opts into them implicitly.
+const FAL_FLUX3_RESOLUTION = '1k';
+
+type FalImageInput = {
+  input: Record<string, unknown>;
+  /** Human-readable size descriptor for the providerNote. */
+  sizeLabel: string;
+};
+
+/**
+ * Build the fal queue request body for an image endpoint. Each fal model
+ * family publishes its own input schema, so the body is chosen per
+ * endpoint; the legacy branch is the original FLUX 1.x / SD / Ideogram
+ * mapping and must stay byte-for-byte stable for existing callers.
+ */
+function falImageInputFor(endpoint: string, ctx: MediaContext): FalImageInput {
+  const prompt = ctx.prompt || 'A high-quality image.';
+  const aspectRatio = ctx.aspect ?? '1:1';
+
+  if (endpoint === FAL_FLUX3_TEXT_TO_IMAGE) {
+    // Fail loudly instead of silently dropping the reference: the user
+    // asked for an edit this endpoint cannot perform.
+    if (ctx.imageRef) {
+      throw new Error(
+        `fal ${endpoint} does not accept a reference image; ` +
+        'omit --image for text-to-image.',
+      );
+    }
+    const flux3Aspect = FAL_FLUX3_ASPECT_RATIOS.has(aspectRatio) ? aspectRatio : '1:1';
+    return {
+      input: { prompt, aspect_ratio: flux3Aspect, resolution: FAL_FLUX3_RESOLUTION },
+      sizeLabel: `${flux3Aspect} · ${FAL_FLUX3_RESOLUTION}`,
+    };
+  }
+
+  const input: Record<string, unknown> = { prompt, num_images: 1 };
+  let sizeLabel: string;
+  // flux-pro-ultra and similar pro variants expect `aspect_ratio` as a
+  // ratio string; most other fal image models use a named `image_size`.
+  if (FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint)) {
+    input.aspect_ratio = aspectRatio;
+    sizeLabel = aspectRatio;
+  } else {
+    sizeLabel = FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd';
+    input.image_size = sizeLabel;
+  }
+  if (ctx.imageRef?.dataUrl) {
+    input.image_url = ctx.imageRef.dataUrl;
+  }
+  return { input, sizeLabel };
+}
+
 async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(`no Fal API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set FAL_KEY`);
   }
   const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
   const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
-  const aspectRatio = ctx.aspect ?? '1:1';
-
-  const input: Record<string, unknown> = {
-    prompt: ctx.prompt || 'A high-quality image.',
-    num_images: 1,
-  };
-  // flux-pro-ultra and similar pro variants expect `aspect_ratio` as a
-  // ratio string; most other fal image models use a named `image_size`.
-  if (FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint)) {
-    input.aspect_ratio = aspectRatio;
-  } else {
-    input.image_size = FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd';
-  }
-  if (ctx.imageRef?.dataUrl) {
-    input.image_url = ctx.imageRef.dataUrl;
-  }
+  const { input, sizeLabel } = falImageInputFor(endpoint, ctx);
 
   const result = await falQueueRun(endpoint, queueBase, credentials.apiKey, input, falMaxPollMs(5 * 60 * 1000));
 
@@ -3789,7 +3847,6 @@ async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): P
   const dlResp = await fetch(imageEntry.url);
   if (!dlResp.ok) throw new Error(`fal image download ${dlResp.status}`);
   const bytes = Buffer.from(await dlResp.arrayBuffer());
-  const sizeLabel = FAL_IMAGE_USES_ASPECT_RATIO.has(endpoint) ? aspectRatio : (FAL_IMAGE_SIZES[aspectRatio] ?? 'square_hd');
 
   return {
     bytes,
