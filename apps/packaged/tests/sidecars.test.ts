@@ -282,6 +282,52 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
+  it('forwards Windows structural variables so packaged children can resolve executables and profiles', () => {
+    const env = resolvePackagedChildBaseEnv({
+      APPDATA: 'C:\\Users\\ai\\AppData\\Roaming',
+      COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+      LOCALAPPDATA: 'C:\\Users\\ai\\AppData\\Local',
+      PATHEXT: '.COM;.EXE;.BAT;.CMD',
+      PROGRAMDATA: 'C:\\ProgramData',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+      SYSTEMROOT: 'C:\\Windows',
+      TEMP: 'C:\\Users\\ai\\AppData\\Local\\Temp',
+      USERPROFILE: 'C:\\Users\\ai',
+    });
+
+    expect(env).toMatchObject({
+      APPDATA: 'C:\\Users\\ai\\AppData\\Roaming',
+      COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+      LOCALAPPDATA: 'C:\\Users\\ai\\AppData\\Local',
+      PATHEXT: '.COM;.EXE;.BAT;.CMD',
+      PROGRAMDATA: 'C:\\ProgramData',
+      SYSTEMROOT: 'C:\\Windows',
+      TEMP: 'C:\\Users\\ai\\AppData\\Local\\Temp',
+      USERPROFILE: 'C:\\Users\\ai',
+    });
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
+  it('forwards mixed-case Windows structural variables with their original casing', () => {
+    const env = resolvePackagedChildBaseEnv({
+      ComSpec: 'D:\\Win\\System32\\cmd.exe',
+      ProgramData: 'D:\\ProgramData',
+      ProgramFiles: 'D:\\Program Files',
+      SystemDrive: 'D:',
+      SystemRoot: 'D:\\Win',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env).toMatchObject({
+      ComSpec: 'D:\\Win\\System32\\cmd.exe',
+      ProgramData: 'D:\\ProgramData',
+      ProgramFiles: 'D:\\Program Files',
+      SystemDrive: 'D:',
+      SystemRoot: 'D:\\Win',
+    });
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('forwards CODEX_HOME so isolated and managed Codex installs never fall back to another user config', () => {
     const env = resolvePackagedChildBaseEnv({
       CODEX_HOME: '/tmp/isolated-codex-home',
