@@ -200,6 +200,41 @@ describe('od files write / upload (ESM require regression)', () => {
     });
   });
 
+  it('`project create --metadata-json` fails with exit code 2 for invalid JSON', async () => {
+    const badPath = join(scratchDir, 'bad.json');
+    writeFileSync(badPath, '{invalid json}');
+
+    const result = await runCli([
+      'project',
+      'create',
+      '--name',
+      'Should not create',
+      '--metadata-json',
+      badPath,
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--metadata-json must be valid JSON');
+  });
+
+  it('`project create --metadata-json` fails with exit code 2 for missing file', async () => {
+    const result = await runCli([
+      'project',
+      'create',
+      '--name',
+      'Should not create',
+      '--metadata-json',
+      join(scratchDir, 'does-not-exist.json'),
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--metadata-json must be valid JSON');
+  });
+
   it('`files upload --as` overrides the destination name', async () => {
     const localPath = join(scratchDir, 'local-name.txt');
     writeFileSync(localPath, 'asset body');
