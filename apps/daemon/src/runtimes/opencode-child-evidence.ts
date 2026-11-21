@@ -12,6 +12,12 @@ import {
   type SafeChildPromptInput,
 } from '../prompt-telemetry.js';
 import { execAgentFile } from './invocation.js';
+import {
+  OPENCODE_PURE_FLAG,
+  classifyOpenCodeCliLine,
+  type OpenCodeCliLine,
+} from './opencode-permissions.js';
+import type { RuntimeCapabilityMap } from './types.js';
 
 export const OPENCODE_CHILD_EVIDENCE_ADAPTER_VERSION =
   'od-opencode-child-evidence/v1' as const;
@@ -368,22 +374,91 @@ export async function collectOpenCodeChildRuntimeFacts(input: {
   }
 }
 
+/** One export invocation and the only rejection that may advance past it. */
+interface Attempt {
+  argv: string[];
+  mayRetry?: (err: unknown) => boolean;
+}
+
+function exportFailureText(err: unknown): string {
+  return [
+    (err as { stdout?: unknown })?.stdout,
+    (err as { stderr?: unknown })?.stderr,
+    err instanceof Error ? err.message : String(err),
+  ]
+    .filter((part): part is string => typeof part === 'string')
+    .join('\n');
+}
+
+const OPENCODE_UNKNOWN_INVOCATION = /Unrecognized (flag|command|option|argument)|unknown (command|option|subcommand|flag)|not found|no such command/i;
+
+function rejectsUnknownInvocationShape(err: unknown): boolean {
+  if ((err as { code?: unknown })?.code === 'ENOENT') return true;
+  return OPENCODE_UNKNOWN_INVOCATION.test(exportFailureText(err));
+}
+
+function rejectsUnknownFlag(err: unknown, flag: string): boolean {
+  const text = exportFailureText(err);
+  if (!text.includes(flag)) return false;
+  return OPENCODE_UNKNOWN_INVOCATION.test(text);
+}
+
 /**
- * Read one child session through `opencode export <id> --sanitize`, the only
- * OpenCode surface that emits a child transcript together with the `parentID`
- * the two-sided verification needs, and with transcript and file bytes already
+ * The export invocation shapes for one CLI line. Selecting the line from the
+ * `run --help` capability map avoids paying for a shape the executable does
+ * not have. An unresolved probe keeps the tolerant 2.x-then-1.x order.
+ */
+function openCodeExportAttempts(
+  childSessionId: string,
+  cliLine: OpenCodeCliLine,
+): Attempt[] {
+  const twoXArgv = ['session', 'export', childSessionId, '--sanitize'];
+  const oneXIsolated: Attempt = {
+    argv: ['export', childSessionId, '--sanitize', '--pure'],
+    mayRetry: (err) => rejectsUnknownFlag(err, OPENCODE_PURE_FLAG),
+  };
+  const oneXBare: Attempt = {
+    argv: ['export', childSessionId, '--sanitize'],
+  };
+  if (cliLine === '2x') return [{ argv: twoXArgv }];
+  if (cliLine === '1x') return [oneXIsolated, oneXBare];
+  return [
+    {
+      argv: twoXArgv,
+      mayRetry: (err) => rejectsUnknownInvocationShape(err),
+    },
+    oneXIsolated,
+    oneXBare,
+  ];
+}
+
+/**
+ * Read one child session through the sanitized export, the only OpenCode
+ * surface that emits a child transcript together with the `parentID` the
+ * two-sided verification needs, and with transcript and file bytes already
  * redacted by the CLI itself.
  *
- * `--pure` keeps a user-installed OpenCode plugin from executing inside the
- * evidence path, and `execAgentFile` supplies a neutral working directory so
- * the bun-based CLI cannot drop a lockfile into the user's project (see
- * `invocation.ts`). The env must be the one the Run was spawned with: it
- * carries the `XDG_DATA_HOME` / `HOME` that decide which session store the
- * spawned CLI actually wrote to.
+ * OpenCode 1.x serves this as `opencode export <id> --sanitize --pure`;
+ * OpenCode 2.x moved it to `opencode session export <id> --sanitize` with no
+ * `--pure` flag (verified on 2.0.24). The `run --help` capability map selects
+ * the shape so a 1.x run never pays for a rejected `session export` probe.
+ * Callers without a resolved map keep the tolerant 2.x-then-1.x order.
+ *
+ * `--pure` (1.x only) keeps a user-installed OpenCode plugin from executing
+ * inside the evidence path, and `execAgentFile` supplies a neutral working
+ * directory so the bun-based CLI cannot drop a lockfile into the user's
+ * project (see `invocation.ts`). The env must be the one the Run was spawned
+ * with: it carries the `XDG_DATA_HOME` / `HOME` that decide which session
+ * store the spawned CLI actually wrote to.
  */
 export function createOpenCodeSanitizedExportLoader(input: {
   launchPath: string;
   env: NodeJS.ProcessEnv;
+  /**
+   * The resolved `run --help` capability map for this exact executable.
+   * `null`/`undefined` keeps the tolerant probe order.
+   */
+  capabilities?: RuntimeCapabilityMap | null;
   timeoutMs?: number;
   maxBytes?: number;
 }): (childSessionId: string) => Promise<unknown> {
@@ -391,18 +466,30 @@ export function createOpenCodeSanitizedExportLoader(input: {
     if (!OPENCODE_CHILD_SESSION_ID.test(childSessionId)) {
       throw new TypeError(`Unsupported OpenCode child session id: ${childSessionId}`);
     }
-    const { stdout } = await execAgentFile(
-      input.launchPath,
-      ['export', childSessionId, '--sanitize', '--pure'],
-      {
-        env: input.env,
-        timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
-        maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
-      },
+    const options = {
+      env: input.env,
+      timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,
+      maxBuffer: input.maxBytes ?? OPENCODE_CHILD_EXPORT_MAX_BYTES,
+    };
+    const attempts = openCodeExportAttempts(
+      childSessionId,
+      classifyOpenCodeCliLine(input.capabilities),
     );
-    // `opencode export` writes its progress line to stderr, so stdout is the
-    // session document alone.
-    return JSON.parse(typeof stdout === 'string' ? stdout : String(stdout));
+    let lastError: unknown = null;
+    for (const attempt of attempts) {
+      try {
+        const { stdout } = await execAgentFile(input.launchPath, attempt.argv, options);
+        // The export writes its progress line to stderr, so stdout is the
+        // session document alone.
+        return JSON.parse(typeof stdout === 'string' ? stdout : String(stdout));
+      } catch (err) {
+        lastError = err;
+        // A well-formed export that fails for a real reason (missing session,
+        // bad JSON) must surface, not retry.
+        if (!attempt.mayRetry?.(err)) throw err;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   };
 }
 

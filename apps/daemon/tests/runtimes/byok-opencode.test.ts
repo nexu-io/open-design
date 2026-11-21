@@ -15,6 +15,10 @@ describe('byok-opencode runtime config', () => {
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
       '--dangerously-skip-permissions': 'skipPermissions',
+      '--auto': 'autoApprove',
+      '--dir': 'workspaceDir',
+      '--variant': 'variantFlag',
+      '--pure': 'pureMode',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -29,6 +33,34 @@ describe('byok-opencode runtime config', () => {
         '--format',
         'json',
         '--dangerously-skip-permissions',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('uses the 2.x argv shape for BYOK runs (no --dir, no --dangerously-skip-permissions)', () => {
+    agentCapabilities.set('byok-opencode', {
+      autoApprove: true,
+      workspaceDir: false,
+      skipPermissions: false,
+      pureMode: false,
+      variantFlag: false,
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs(
+        '',
+        [],
+        [],
+        { model: 'gpt-5.5' },
+        { cwd: '/projects/p1' },
+      )).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--auto',
         '-m',
         'open-design-byok/gpt-5.5',
       ]);

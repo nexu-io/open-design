@@ -3,7 +3,10 @@ import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
   appendOpenCodeWorkspaceDir,
+  isOpenCode2xCapabilities,
+  shouldUseOpenCodeVariantFlag,
 } from '../opencode-permissions.js';
+import { execAgentFile } from '../invocation.js';
 import { getRememberedLiveModels } from '../models.js';
 import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
@@ -105,6 +108,59 @@ function supportsOpenCodeVariant(
   return Boolean(live?.reasoningOptions?.some((option) => option.id === variant));
 }
 
+function parseOpenCodeVariantCatalog(stdout: string): Map<string, string[]> {
+  try {
+    const parsed = JSON.parse(stdout) as unknown;
+    if (!Array.isArray(parsed)) return new Map();
+    const map = new Map<string, string[]>();
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const providerId = (item as { providerID?: string }).providerID;
+      const modelId = (item as { modelID?: string }).modelID;
+      const variants = (item as { variants?: unknown[] }).variants;
+      if (!providerId || !modelId) continue;
+      const fullId = `${providerId}/${modelId}`;
+      const variantIds = Array.isArray(variants)
+        ? variants
+            .map((v) => (v && typeof v === 'object' ? (v as { id?: string }).id : null))
+            .filter((id): id is string => typeof id === 'string' && OPENCODE_VARIANT_ID.test(id))
+        : [];
+      if (variantIds.length > 0) map.set(fullId, variantIds);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function withCatalogVariants(
+  models: RuntimeModelOption[],
+  catalog: Map<string, string[]>,
+): RuntimeModelOption[] {
+  return models.map((model) => {
+    const variantIds = catalog.get(model.id);
+    if (!variantIds || variantIds.length === 0) return model;
+    return {
+      ...model,
+      reasoningOptions: reasoningOptions(variantIds),
+    };
+  });
+}
+
+function withRememberedVariants(models: RuntimeModelOption[]): RuntimeModelOption[] {
+  const remembered = new Map(
+    getRememberedLiveModels('opencode').map((model) => [model.id, model] as const),
+  );
+  if (remembered.size === 0) return models;
+  return models.map((model) => {
+    if (model.reasoningOptions && model.reasoningOptions.length > 0) return model;
+    const known = remembered.get(model.id)?.reasoningOptions;
+    return known && known.length > 0
+      ? { ...model, reasoningOptions: known.map((option) => ({ ...option })) }
+      : model;
+  });
+}
+
 export const opencodeAgentDef = {
     id: 'opencode',
     name: 'OpenCode',
@@ -122,6 +178,42 @@ export const opencodeAgentDef = {
       args: ['models', '--verbose'],
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
+    },
+    fetchModels: async (resolvedBin, env, capabilities) => {
+      const caps = await capabilities;
+      const options = {
+        env: env as NodeJS.ProcessEnv,
+        timeout: 15_000,
+        maxBuffer: 8 * 1024 * 1024,
+      };
+      const readModels = async (args: string[]): Promise<RuntimeModelOption[] | null> => {
+        try {
+          const { stdout } = await execAgentFile(resolvedBin, args, options);
+          return parseOpenCodeModels(String(stdout));
+        } catch {
+          return null;
+        }
+      };
+      const models = await (async () => {
+        if (!isOpenCode2xCapabilities(caps)) {
+          const verbose = await readModels(['models', '--verbose']);
+          if (verbose) return verbose;
+          return readModels(['models']);
+        }
+        const plain = await readModels(['models']);
+        if (!plain) return null;
+        try {
+          const { stdout } = await execAgentFile(
+            resolvedBin,
+            ['api', 'GET', '/api/model'],
+            options,
+          );
+          return withCatalogVariants(plain, parseOpenCodeVariantCatalog(String(stdout)));
+        } catch {
+          return plain;
+        }
+      })();
+      return models ? withRememberedVariants(models) : null;
     },
     fallbackModels: OPENCODE_FALLBACK_MODELS,
     // OpenCode 1.18.x exposes provider/model-specific variants. Detection
@@ -142,7 +234,7 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the
@@ -158,10 +250,17 @@ export const opencodeAgentDef = {
         args.push('-s', resumeSessionId);
       }
       if (options.model && options.model !== 'default') {
-        args.push('-m', options.model);
-      }
-      if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+        if (supportsOpenCodeVariant(options.model, options.reasoning)) {
+          if (shouldUseOpenCodeVariantFlag('opencode')) {
+            args.push('-m', options.model);
+            args.push('--variant', options.reasoning);
+          } else {
+            // OpenCode 2.x: variant folds into `-m provider/model#variant`.
+            args.push('-m', `${options.model}#${options.reasoning}`);
+          }
+        } else {
+          args.push('-m', options.model);
+        }
       }
       return args;
     },
