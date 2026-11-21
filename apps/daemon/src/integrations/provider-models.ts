@@ -12,6 +12,7 @@ import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
+import { aimlapiHeaders, isAimlapiApiHost } from './aimlapi.js';
 
 type ProviderModelsInput = ProviderModelsRequest & {
   signal?: AbortSignal;
@@ -136,6 +137,47 @@ function extractOpenAiModels(data: unknown): ProviderModelOption[] {
   );
 }
 
+// AI/ML API's `/v1/models` is a mixed catalog spanning chat, embeddings,
+// image/video/audio generation, OCR, and Anthropic-native endpoints, with
+// each row tagged by a structured `type` (e.g. "openai/chat-completions",
+// "internal/video-generations/submit", "openai/embeddings") rather than a
+// `types` list like AIHubMix's. The same model id can also appear more than
+// once — once per endpoint it supports (e.g. `openai/gpt-4o` under both
+// "openai/chat-completions" and "openai/responses/submit") — so an
+// id-substring blacklist alone (isOpenAiChatModelId, above) both leaks ~150
+// non-chat models with no chat-completions entry at all (video:
+// openai/sora-2, bytedance/seedance-*; embeddings: anthropic/voyage-*;
+// audio: elevenlabs/eleven_*; Responses-only ids like openai/gpt-5.5-pro)
+// into the chat picker, where Test connection then 400s them — AND would
+// wrongly drop real chat models whose id happens to contain a blacklisted
+// substring (e.g. openai/gpt-5-image, google/gemini-3-pro-image — chat
+// models with image OUTPUT, still served via chat-completions). Trust the
+// structured `type` field instead of either heuristic. Live-verified
+// against api.aimlapi.com/v1/models.
+function aimlapiModelOption(item: unknown): ProviderModelOption | null {
+  if (!item || typeof item !== 'object') return null;
+  const obj = item as { id?: unknown; type?: unknown; metadata?: unknown };
+  if (obj.type !== 'openai/chat-completions') return null;
+  const id = typeof obj.id === 'string' ? obj.id : '';
+  if (!id) return null;
+  const metadata = extractModelMetadata(obj.metadata);
+  return {
+    id,
+    label: id,
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function extractAimlapiModels(data: unknown): ProviderModelOption[] {
+  const items = (data as { data?: unknown }).data;
+  if (!Array.isArray(items)) return [];
+  return uniqueModels(
+    items
+      .map(aimlapiModelOption)
+      .filter((model): model is ProviderModelOption => model != null),
+  );
+}
+
 function openAiModelOption(item: unknown): ProviderModelOption | null {
   if (!item || typeof item !== 'object') return null;
   const obj = item as { id?: unknown; metadata?: unknown };
@@ -241,7 +283,7 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
     // (GET /api/v1/models?type=llm), not the OpenAI /v1/models route.
     return aihubmixCatalogUrl(baseUrl, 'llm');
   }
-  if (protocol === 'openai' || protocol === 'senseaudio') {
+  if (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'aimlapi') {
     return appendVersionedApiPath(baseUrl, '/models');
   }
   if (protocol === 'anthropic') {
@@ -258,9 +300,26 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
 function providerModelsHeaders(
   protocol: ConnectionTestProtocol,
   apiKey: string,
+  baseUrl: string,
 ): Record<string, string> {
+  // aimlapi.com is OpenAI-wire-compatible, so it already worked through the
+  // generic "OpenAI" tab before this integration existed — those saved
+  // configs stay protocol: 'openai' (explicit backward-compat promise: saved
+  // configs load unchanged), so a dispatch keyed only on protocol ===
+  // 'aimlapi' would silently exclude them from the attribution pair this
+  // integration exists to add. Checked before the generic openai/senseaudio
+  // branch so it takes priority for exactly this host.
+  if (protocol === 'openai' && isAimlapiApiHost(baseUrl)) {
+    return aimlapiHeaders(apiKey);
+  }
   if (protocol === 'openai' || protocol === 'senseaudio') {
     return { authorization: `Bearer ${apiKey}` };
+  }
+  if (protocol === 'aimlapi') {
+    // Carries the X-AIMLAPI-Source/Partner-ID attribution pair alongside Bearer
+    // auth — see aimlapiHeaders() for why every aimlapi.com call funnels through
+    // this helper instead of hand-building the Authorization header.
+    return aimlapiHeaders(apiKey);
   }
   if (protocol === 'aihubmix') {
     // The catalogue is public — only attach Bearer auth (+ APP-Code) when the
@@ -277,7 +336,11 @@ function providerModelsHeaders(
   return {};
 }
 
-function extractModels(protocol: ConnectionTestProtocol, data: unknown): ProviderModelOption[] {
+function extractModels(
+  protocol: ConnectionTestProtocol,
+  data: unknown,
+  baseUrl: string,
+): ProviderModelOption[] {
   // SenseAudio's /v1/models response follows the OpenAI envelope
   // (`{ data: [{ id, ... }] }`), so the same extractor handles both.
   // Chat picker: drop media-generation rows. AIHubMix's `?type=llm` matches any
@@ -285,7 +348,17 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   // (e.g. gpt-image-2 → "image_generation,llm") would otherwise leak in. Those
   // belong to the dedicated image/video/audio pickers.
   if (protocol === 'aihubmix') return parseAIHubMixCatalog(data, { chatOnly: true });
-  if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
+  // AI/ML API's mixed catalog needs its own type-aware extractor — see
+  // extractAimlapiModels for why the shared id-substring heuristic isn't
+  // enough (or safe) here. Also applies to a legacy generic-OpenAI-tab
+  // config pointed at aimlapi.com — same host, same mixed catalog, same
+  // leak/false-positive risk (see providerModelsHeaders above).
+  if (protocol === 'aimlapi' || (protocol === 'openai' && isAimlapiApiHost(baseUrl))) {
+    return extractAimlapiModels(data);
+  }
+  if (protocol === 'openai' || protocol === 'senseaudio') {
+    return extractOpenAiModels(data);
+  }
   if (protocol === 'anthropic') return extractAnthropicModels(data);
   if (protocol === 'google') return extractGoogleModels(data);
   return [];
@@ -347,7 +420,7 @@ export async function listProviderModels(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: providerModelsHeaders(input.protocol, input.apiKey),
+      headers: providerModelsHeaders(input.protocol, input.apiKey, input.baseUrl),
       ...input.requestInit,
       signal: controller.signal,
       redirect: 'error',
@@ -385,7 +458,7 @@ export async function listProviderModels(
       };
     }
 
-    const models = extractModels(input.protocol, data);
+    const models = extractModels(input.protocol, data, input.baseUrl);
     console.log(
       `[provider:models] ${input.protocol} ${validated.parsed.hostname} → ${models.length} models in ${latencyMs}ms`,
     );
