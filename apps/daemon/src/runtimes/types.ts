@@ -47,10 +47,9 @@ export type RuntimeContext = {
   // tell them apart. Adapters that don't have a `--log-file` flag
   // ignore this field; the daemon cleans the file up after reading.
   agentLogFilePath?: string;
-  // Override for the antigravity model-selection settings file path.
-  // Production code leaves this undefined (falls back to the default
-  // ~/.gemini/antigravity-cli/settings.json). Tests pass a temp path
-  // so unit assertions against buildArgs do not touch the real home dir.
+  // Unused by the current antigravity spawn path. Model selection is
+  // `--model <slug>` and does not write settings.json. Kept so older
+  // callers can still pass a path without a type break.
   antigravitySettingsPath?: string;
   // Daemon-owned path to a temp file containing the composed prompt.
   // Adapters with `promptViaFile: true` read this instead of receiving

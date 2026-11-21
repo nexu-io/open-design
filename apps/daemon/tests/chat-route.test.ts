@@ -3293,6 +3293,88 @@ process.stdin.on('end', () => {
     });
   });
 
+  it('resumes Antigravity with --conversation and does not resend the prior turn', async () => {
+    const projectId = `proj-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'agy cache resume' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+    const conversationsResponse = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`);
+    expect(conversationsResponse.ok).toBe(true);
+    const conversationsBody = await conversationsResponse.json() as {
+      conversations: Array<{ id: string }>;
+    };
+    const conversationId = conversationsBody.conversations[0]?.id;
+    expect(conversationId).toBeTruthy();
+
+    const logFile = join(tmpdir(), `od-agy-resume-${randomUUID()}.jsonl`);
+    const firstMarker = `FIRST_TURN_${randomUUID()}`;
+    const secondMarker = `SECOND_TURN_${randomUUID()}`;
+    const fake = `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.5.6');
+  process.exit(0);
+}
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({ argv: args, stdin }) + '\\n');
+  const emit = (event) => process.stdout.write(JSON.stringify(event) + '\\n');
+  const conversation_id = 'agy-cache-1';
+  emit({ event: 'init', conversation_id, init: {} });
+  emit({ event: 'step_update', step_update: { conversation_id, step_index: 1, state: 'DONE', step_type: 'agent_response', text_delta: 'OK' } });
+  const convIndex = args.indexOf('--conversation');
+  emit({ event: 'result', result: { conversation_id, status: 'SUCCESS', response: 'OK', duration_seconds: 0.1, num_turns: 1, usage: { input_tokens: 20, output_tokens: 1, thinking_tokens: 0, cache_read_tokens: convIndex === -1 ? 0 : 12, total_tokens: 21 } } });
+  process.exit(0);
+});
+`;
+    await withFakeAgent('agy', fake, async () => {
+      const start = async (message: string) => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: 'antigravity', projectId, conversationId, message }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        await readSseUntil(eventsResponse, 'event: final');
+        eventsController.abort();
+        const statusBody = await waitForRunStatus(baseUrl, runId);
+        expect(statusBody.status).toBe('succeeded');
+      };
+      await start(firstMarker);
+      await start(secondMarker);
+    });
+
+    const entries = readFileSync(logFile, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { argv: string[]; stdin: string });
+    expect(entries).toHaveLength(2);
+    expect(entries[0]?.argv.includes('--conversation')).toBe(false);
+    expect(entries[0]?.argv.includes('-c')).toBe(false);
+    expect(entries[0]?.stdin).toContain(firstMarker);
+    expect(entries[1]?.argv).toEqual(expect.arrayContaining([
+      '--conversation',
+      'agy-cache-1',
+      '--input-format',
+      'stream-json',
+    ]));
+    expect(entries[1]?.argv.includes('-c')).toBe(false);
+    expect(entries[1]?.stdin).toContain(secondMarker);
+    expect(entries[1]?.stdin).not.toContain(firstMarker);
+    rmSync(logFile, { force: true });
+  });
+
   it('reports a signed-out Antigravity CLI as AGENT_AUTH_REQUIRED', async () => {
     await withFakeAgent('agy', fakeAgyReplaying('signed-out', 1), async () => {
       const createResponse = await fetch(`${baseUrl}/api/runs`, {
