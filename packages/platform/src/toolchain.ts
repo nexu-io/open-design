@@ -9,7 +9,7 @@
  * concerns.
  */
 import { existsSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 export type WellKnownUserToolchainOptions = {
@@ -185,6 +185,10 @@ export function wellKnownUserToolchainBins(
     dirs.push("/run/current-system/sw/bin");
     // `/nix/var/nix/profiles/default/bin` — default system profile
     dirs.push("/nix/var/nix/profiles/default/bin");
+    // Home Manager as a nix-darwin / NixOS module (`home.packages`) lands
+    // binaries here — not in ~/.nix-profile. Prefer os.userInfo().username
+    // over $USER: launchd GUI processes often have USER unset (#7790).
+    dirs.push(`/etc/profiles/per-user/${userInfo().username}/bin`);
   }
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
