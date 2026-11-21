@@ -148,6 +148,68 @@ export function applyClaudeStreamJsonRunBookkeeping(
 }
 
 /**
+ * Whether a decoded Claude stream event represents progress toward an answer
+ * or a tool action. Raw stdout and thinking deltas are deliberately excluded:
+ * a CLI can keep emitting reasoning frames after the model has stopped making
+ * forward progress, which must not keep the run's inactivity watchdog alive.
+ *
+ * Non-empty `tool_input_delta` frames DO count. A large `Write` payload streams
+ * its arguments as a run of `tool_input_delta` chunks and the terminal
+ * `tool_use` only lands at `content_block_stop`; excluding the deltas would let
+ * a file that is actively being written cross the inactivity ceiling and be
+ * killed as stalled. Empty deltas are still ignored so a chunk carrying no
+ * bytes cannot masquerade as progress.
+ */
+export function claudeStreamEventCountsAsActionableProgress(ev: unknown): boolean {
+  if (!ev || typeof ev !== 'object') return false;
+  const event = ev as { type?: unknown; delta?: unknown };
+  if (event.type === 'text_delta' || event.type === 'tool_input_delta') {
+    return typeof event.delta === 'string' && event.delta.length > 0;
+  }
+  return event.type === 'tool_use'
+    || event.type === 'tool_result'
+    || event.type === 'artifact'
+    || event.type === 'turn_end'
+    || event.type === 'usage';
+}
+
+/**
+ * Production runs represent an explicit deliverable request. A clean CLI exit
+ * with only a text acknowledgement must not be reported as success unless the
+ * run actually created or registered an artifact.
+ */
+export function productionRunMissingArtifact(params: {
+  inputStage?: unknown;
+  code: number | null;
+  cancelRequested: boolean;
+  artifactProducedThisRun: boolean;
+}): boolean {
+  return params.inputStage === 'production'
+    && params.code === 0
+    && !params.cancelRequested
+    && !params.artifactProducedThisRun;
+}
+
+/**
+ * Whether the authoritative end-of-run filesystem diff shows a deliverable on
+ * disk. The event ledger that feeds `productionRunMissingArtifact` only sees
+ * direct artifact events and successful Write/Edit tool results, but the
+ * filesystem contract also permits artifacts created through Bash. A production
+ * run that writes `index.html` via a shell redirect therefore registers no
+ * ledger artifact yet left a real deliverable — this verdict is consulted
+ * before failing such a run so an on-disk file is never rejected as "missing".
+ */
+export function filesystemArtifactProduced(outcome: {
+  artifactCount?: number | null;
+  diff?: { touchedPaths?: unknown } | null;
+} | null | undefined): boolean {
+  if (!outcome) return false;
+  if ((outcome.artifactCount ?? 0) > 0) return true;
+  const touched = outcome.diff?.touchedPaths;
+  return Array.isArray(touched) && touched.length > 0;
+}
+
+/**
  * Whether an emission from a runtime adapter counts as *agent progress* for the
  * inactivity clock (`run.lastAgentActivityAt`, exported to analytics as
  * `last_progress_age_ms`).
