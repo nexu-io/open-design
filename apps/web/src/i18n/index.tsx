@@ -23,6 +23,7 @@ import { zhCN } from './locales/zh-CN';
 import { zhTW } from './locales/zh-TW';
 import { pl } from './locales/pl';
 import { hu } from './locales/hu';
+import { he } from './locales/he';
 import { fr } from './locales/fr';
 import { uk } from './locales/uk';
 import { tr } from './locales/tr';
@@ -45,6 +46,7 @@ const DICTS: Record<Locale, Dict> = {
   'pt-BR': ptBR,
   'es-ES': esES,
   'ru': ru,
+  'he': he,
   'fa': fa,
   'ar': ar,
   'ja': ja,
@@ -197,7 +199,7 @@ interface ProviderProps {
   children: ReactNode;
 }
 
-const RTL_LOCALES: Locale[] = ['ar', 'fa'];
+const RTL_LOCALES: Locale[] = ['ar', 'fa', 'he'];
 
 /**
  * Whether a locale lays out right-to-left. Exported because direction also
