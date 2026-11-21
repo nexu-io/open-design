@@ -105,6 +105,52 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.deepEqual(internals.terminalOutput('done'), { output: 'done' });
   });
 
+  test('recovers final message text without duplicating streamed messages', () => {
+    const frames: Array<{ type: string; content?: string }> = [];
+    const forwarder = internals.createSessionEventForwarder(
+      { write: (chunk: string) => frames.push(JSON.parse(chunk)) },
+      { v: 1, type: 'execute', request_id: 'r', cwd: '/tmp', prompt: 'hi', mcp_servers: [] },
+      'provider', 'model',
+    );
+    const message = (text: string) => ({ type: 'assistant/message', data: { message: { content: [{ type: 'text', text }] } } }) as never;
+    const delta = (text: string) => ({ type: 'assistant/chunk', data: { chunk: { type: 'text-delta', text } } }) as never;
+    forwarder.accept(message('OK'));
+    forwarder.accept(delta('hel'));
+    forwarder.accept(message('hello'));
+    forwarder.accept(delta('done'));
+    forwarder.accept(message('done'));
+    assert.deepEqual(frames.filter((frame) => frame.type === 'text').map((frame) => frame.content), ['OK', 'hel', 'lo', 'done']);
+    assert.equal(forwarder.getOutput(), 'OKhellodone');
+  });
+
+  test('forwards completed assistant text through execute', async () => {
+    const frames: Array<{ type: string; content?: string; output?: string }> = [];
+    let listener: (session: { id: string }, event: unknown) => void = () => {};
+    let sessionId = '';
+    const handle = {
+      agent: {
+        session: { seq: 0 },
+        whenIdle: async () => {},
+        followup: async () => {
+          listener({ id: sessionId }, { type: 'assistant/message', seq: 1, data: { message: { content: [{ type: 'text', text: 'OK' }] } } });
+          listener({ id: sessionId }, { type: 'turn/end', seq: 2, data: { reason: { kind: 'completed' } } });
+        },
+      },
+      dispose: async () => {},
+    };
+    const ctx = {
+      agentDefaultModel: { currentSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-flash' }) },
+      agents: { create: async (options: { sessionId: string }) => { sessionId = options.sessionId; return handle; } },
+      on: (_event: string, callback: typeof listener) => { listener = callback; return () => {}; },
+      sessions: { flush: async () => {} },
+    };
+    await internals.execute(ctx as never, {
+      v: 1, type: 'execute', request_id: 'r', cwd: '/tmp', prompt: 'hi', mcp_servers: [],
+    }, { write: (chunk: string) => frames.push(JSON.parse(chunk)) }, () => {}, new AbortController().signal);
+    assert.equal(frames.find((frame) => frame.type === 'text')?.content, 'OK');
+    assert.equal(frames.find((frame) => frame.type === 'result')?.output, 'OK');
+  });
+
   test('normalizes every failed terminal reason to a wire error', () => {
     assert.deepEqual(internals.resultError({ kind: 'blocked' }), {
       code: 'DSH_PROFILE_TURN_BLOCKED',
