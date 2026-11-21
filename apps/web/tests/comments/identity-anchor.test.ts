@@ -34,3 +34,38 @@ describe('strict Owner new namespace', () => {
     expect(resolveOwnerCommentAnchor(comment, indexCommentTargets([{ ...target, ...override }]), 2).state).toBe('lost');
   });
 });
+
+
+describe('frame-qualified comment identities', () => {
+  const elementId = `frame:${encodeURIComponent(JSON.stringify(['child.html', target.elementId]))}`;
+  const childTarget = { ...target, elementId, filePath: 'child.html' };
+  const childComment = { ...comment, ...childTarget };
+  it('resolves the child UUID while retaining its qualified identity and file', () => {
+    expect(resolveOwnerCommentAnchor(childComment, indexCommentTargets([childTarget]), 1))
+      .toEqual({ state: 'anchored', snapshot: childTarget });
+  });
+  it('rejects duplicate child identities before indexing', () => {
+    expect(indexCommentTargets([childTarget, { ...childTarget }]).size).toBe(0);
+    expect(resolveOwnerCommentAnchor(childComment, indexCommentTargets([childTarget, { ...childTarget }]), 1).state).toBe('lost');
+  });
+  it.each([{ selector: '[data-od-id="tool"]' }, { filePath: 'other.html' }, { slideIndex: 2 }])('retains child selector/file/slide checks for %j', override => {
+    expect(resolveOwnerCommentAnchor(childComment, indexCommentTargets([{ ...childTarget, ...override }]), 1).state).toBe('lost');
+  });
+  it('keeps the same local UUID in distinct child files independently addressable', () => {
+    const otherId = `frame:${encodeURIComponent(JSON.stringify(['other.html', target.elementId]))}`;
+    const otherTarget = { ...childTarget, elementId: otherId, filePath: 'other.html' };
+    const targets = indexCommentTargets([childTarget, otherTarget]);
+    expect(targets.size).toBe(2);
+    expect(resolveOwnerCommentAnchor(childComment, targets, 1).snapshot).toBe(childTarget);
+    expect(resolveOwnerCommentAnchor({ ...comment, ...otherTarget }, targets, 1).snapshot).toBe(otherTarget);
+  });
+  it.each(['cmt:bad', 'cmt:'])('rejects malformed child identity %s without falling back to text', localId => {
+    const malformed = { ...childTarget, elementId: `frame:${encodeURIComponent(JSON.stringify(['child.html', localId]))}` };
+    expect(indexCommentTargets([malformed]).size).toBe(0);
+    expect(resolveOwnerCommentAnchor({ ...childComment, ...malformed }, indexCommentTargets([childTarget]), 1).state).toBe('lost');
+  });
+  it('does not accept a UUID belonging to another qualified file', () => {
+    const otherId = `frame:${encodeURIComponent(JSON.stringify(['other.html', target.elementId]))}`;
+    expect(resolveOwnerCommentAnchor({ ...childComment, elementId: otherId }, indexCommentTargets([{ ...childTarget, elementId: otherId }]), 1).state).toBe('lost');
+  });
+});
