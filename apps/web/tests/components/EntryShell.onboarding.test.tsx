@@ -886,6 +886,58 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     expect(trackedEvents('onboarding_complete_result')).toHaveLength(0);
   });
 
+  it('returns Home once after switching account instead of bouncing back to the sign-in gate', async () => {
+    // OPEND-4754. The previous account's credentials were rejected (401), so
+    // the shell's workspace context holds `reauth-required` and Home sends the
+    // user to the welcome gate. The daemon already reports the NEW account as
+    // signed in, so the gate's passive reauth finishes onboarding straight
+    // away. The new account's workspace read is still in flight — and in the
+    // real loop every bounce retires it with another identity refresh, so it
+    // never lands. Home must not read the old rejection as the new answer.
+    workspaceContextModule.resetWorkspaceContextCache();
+    let rejectOldAccount = true;
+    globalThis.fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'new-user', email: 'new@example.com' },
+        });
+      }
+      if (url.includes('/api/workspace/')) {
+        if (rejectOldAccount) {
+          rejectOldAccount = false;
+          return new Response(null, { status: 401 });
+        }
+        return new Promise<Response>(() => undefined);
+      }
+      return jsonResponse({});
+    }) as typeof fetch;
+
+    const props = renderHome({
+      config: baseConfig({
+        onboardingCompleted: true,
+        mode: 'daemon',
+        agentId: 'amr',
+        agentModels: { amr: { model: 'amr-model' } },
+      }),
+      agents: [amrAgent()],
+      amrLoggedIn: true,
+    });
+
+    await waitFor(() => expect(props.onCompleteOnboarding).toHaveBeenCalled());
+    // Give a would-be bounce every chance to happen before asserting it did not.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(props.onCompleteOnboarding).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByRole('heading', { name: 'Welcome to OpenDesign' })).toBeNull();
+    workspaceContextModule.resetWorkspaceContextCache();
+  });
+
   it('switches a completed but invalid setup to Hosted after sign-in', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
