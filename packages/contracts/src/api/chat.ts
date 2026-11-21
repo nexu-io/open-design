@@ -434,6 +434,7 @@ export interface McpRunCreateRequest {
   skillIds?: string[];
   pluginId?: string;
   model?: string;
+  reasoning?: string;
   serviceTier?: string;
   pluginInputs?: Record<string, unknown>;
   mediaExecution?: MediaExecutionPolicy;

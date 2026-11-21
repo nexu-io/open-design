@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildProjectRawFileUrl } from '@open-design/contracts';
 
-import { handleMcpToolCall, localMcpToolDefinitions } from '../src/mcp.js';
+import { handleMcpToolCall, localMcpToolDefinitions, validateMcpToolArgs } from '../src/mcp.js';
 import { _resetMcpWorkspaceContextCacheForTests } from '../src/mcp-workspace-context.js';
 
 const originalFetch = globalThis.fetch;
@@ -52,6 +52,86 @@ describe('public MCP discovery + generation tools', () => {
     expect(definitions.some((tool) => tool.name === 'list_byok_profiles')).toBe(false);
     const startRun = definitions.find((tool) => tool.name === 'start_run');
     expect(startRun?.inputSchema.properties).not.toHaveProperty('byokProfile');
+  });
+
+  it('advertises an optional runtime-specific reasoning string without a fixed enum', () => {
+    const startRun = localMcpToolDefinitions().find((tool) => tool.name === 'start_run');
+
+    expect(startRun?.inputSchema).toMatchObject({
+      properties: { reasoning: { type: 'string' } },
+      additionalProperties: false,
+    });
+    expect(startRun?.inputSchema.properties?.reasoning).not.toHaveProperty('enum');
+    expect(startRun?.inputSchema.required ?? []).not.toContain('reasoning');
+    for (const reasoning of ['low', 'medium', 'high', 'xhigh']) {
+      expect(() => validateMcpToolArgs('start_run', {
+        agent: 'codex', model: 'gpt-6.1-sol', reasoning,
+      })).not.toThrow();
+    }
+    expect(() => validateMcpToolArgs('start_run', {})).not.toThrow();
+  });
+
+  it.each([null, 7, true, {}])('rejects non-string reasoning at the MCP boundary: %j', (reasoning) => {
+    expect(() => validateMcpToolArgs('start_run', { reasoning })).toThrow(/PLUGIN_CONTRACT_REJECTED/u);
+  });
+
+  it.each(['low', 'medium', 'high', 'xhigh', 'default'])('start_run forwards explicit reasoning %s to the runner', async (reasoning) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ runId: 'run-reasoning' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: '11111111-1111-4111-8111-111111111111',
+      prompt: 'Create a disposable counter page',
+      agent: 'codex',
+      model: 'gpt-6.1-sol',
+      reasoning,
+    });
+
+    const runsCalls = fetchMock.mock.calls.filter(([url, init]) =>
+      url.endsWith('/api/runs') && init?.method === 'POST',
+    );
+    expect(runsCalls).toHaveLength(1);
+    expect(JSON.parse(String(runsCalls[0]?.[1]?.body))).toMatchObject({
+      agentId: 'codex',
+      model: 'gpt-6.1-sol',
+      reasoning,
+    });
+    expect(result.isError).not.toBe(true);
+  });
+
+  it.each([undefined, ''])('start_run preserves runner defaults when reasoning is %s', async (reasoning) => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ runId: 'run-default-reasoning' }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: '11111111-1111-4111-8111-111111111111',
+      prompt: 'Create a disposable counter page',
+      agent: 'codex',
+      ...(reasoning === undefined ? {} : { reasoning }),
+    });
+
+    const runsCall = fetchMock.mock.calls.find(([url, init]) =>
+      url.endsWith('/api/runs') && init?.method === 'POST',
+    );
+    expect(runsCall).toBeDefined();
+    expect(JSON.parse(String(runsCall?.[1]?.body))).not.toHaveProperty('reasoning');
+    expect(result.isError).not.toBe(true);
   });
 
   it('start_run rejects raw credential fields at any nesting depth', async () => {

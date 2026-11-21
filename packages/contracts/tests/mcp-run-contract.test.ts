@@ -8,6 +8,12 @@ describe('McpRunCreateRequest contract', () => {
     expect(minimal.projectId).toBe('proj-1');
     expect(minimal.agentId).toBeUndefined();
     expect(minimal.message).toBeUndefined();
+    expect(minimal.reasoning).toBeUndefined();
+  });
+
+  it.each(['low', 'medium', 'high', 'xhigh'])('accepts explicit reasoning %s for typed MCP callers', (reasoning) => {
+    const request: McpRunCreateRequest = { projectId: 'proj-reasoning', reasoning };
+    expect(request.reasoning).toBe(reasoning);
   });
 
   it('accepts projectId + message + agentId shape', () => {
