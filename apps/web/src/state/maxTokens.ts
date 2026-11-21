@@ -57,6 +57,7 @@ const OVERRIDES: Record<string, number> = {
   'kimi-k2:1t': 131072,
   'kimi-k2-thinking': 131072,
   'kimi-k2.5': 131072,
+  'kimi-k3': 131072,
   'kimi-k2.6': 131072,
   'kimi-k2.7-code': 131072,
   'minimax-m2': 131072,
