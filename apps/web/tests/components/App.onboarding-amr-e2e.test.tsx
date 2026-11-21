@@ -30,10 +30,12 @@ import {
 import { fetchAmrModels } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 import { I18nProvider, useI18n } from '../../src/i18n';
-import { clearTestRuntimeSession, observeTestRuntimeIdentity, useTestRuntime } from '../../src/components/TestCampaignModal';
+import { clearTestRuntimeSession, observeTestRuntimeIdentity, testCampaignOwner, useTestRuntime } from '../../src/components/TestCampaignModal';
+import { workspaceContextFixture, workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
 const cmsTestMocks = vi.hoisted(() => ({ realCoordinator: false }));
+const workspace = workspaceContextFixture({ workspaceId: 'workspace-a', workspaceMemberId: 'member-a' });
 
 // App owns route eligibility; the host suites separately exercise authorization,
 // network cancellation and verified content. These stand-ins expose whether App
@@ -250,6 +252,8 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.endsWith('/api/workspace/directory')) return Response.json(workspaceDirectoryFixture([workspace]));
+      if (url.endsWith('/api/workspace/context')) return Response.json({ context: workspace });
       const json = url.includes('/api/integrations/vela/status')
         ? {
             loggedIn: true,
@@ -344,7 +348,7 @@ describe('CMS campaigns outside the home view', () => {
     let loggedIn = true;
     let failed = false;
     const placements = ['opend.home.campaign-modal', 'opend.home.account-badge', 'opend.home.hover-entry', 'opend.home.hover-layer'];
-    const context = { deploymentId: 'test-deployment', scenario: 'realtime', updatedAt: new Date().toISOString(), testerMemberId: owner };
+    const context = { deploymentId: 'test-deployment', scenario: 'realtime', updatedAt: new Date().toISOString(), testerMemberId: workspace.workspaceMemberId };
     const fetchMock = vi.mocked(fetch);
     const original = fetchMock.getMockImplementation()!;
     fetchMock.mockImplementation(async (input, init) => {
@@ -379,10 +383,10 @@ describe('CMS campaigns outside the home view', () => {
       if (boundary === 'account') currentOwner = 'account-b';
       else loggedIn = false;
       await act(async () => fireEvent(window, new Event('focus')));
-      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenCalledWith(loggedIn, currentOwner, 'en'));
+      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenCalledWith(loggedIn, testCampaignOwner(currentOwner, workspace.workspaceId, workspace.workspaceMemberId), 'en'));
       currentOwner = owner; loggedIn = true;
       await act(async () => fireEvent(window, new Event('focus')));
-      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenLastCalledWith(true, owner, 'en'));
+      await waitFor(() => expect(observeTestRuntimeIdentity).toHaveBeenLastCalledWith(true, testCampaignOwner(owner, workspace.workspaceId, workspace.workspaceMemberId), 'en'));
     }
     await act(async () => navigate({ kind: 'home', view: 'home' }));
     expect(probe.result.current?.decisions.size ?? 0).toBe(0);
