@@ -7906,7 +7906,15 @@ Common options:
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
       if (flags['metadata-json']) {
         const mj = safeReadJsonFile(flags['metadata-json']);
-        if (mj && typeof mj === 'object') body.metadata = mj;
+        if (mj === null) {
+          console.error(`--metadata-json '${flags['metadata-json']}' is not valid JSON or could not be read`);
+          process.exit(2);
+        }
+        if (typeof mj !== 'object' || Array.isArray(mj)) {
+          console.error(`--metadata-json '${flags['metadata-json']}' must contain a JSON object`);
+          process.exit(2);
+        }
+        body.metadata = mj;
       }
       const prompt = await readPromptFromFlags(flags);
       if (prompt) body.pendingPrompt = prompt;

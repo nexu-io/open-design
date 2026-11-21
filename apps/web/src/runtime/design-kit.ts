@@ -685,7 +685,7 @@ function mergeLegacyBrandLogo(
     workspaceContext?: WorkspaceCollabContext | null;
   },
 ): DesignKit {
-  if (!logo || (!options.projectId && !(options.publishedAssets && options.designSystemId))) return kit;
+  if (!logo || (!options.projectId && !options.publishedAssets && !options.designSystemId)) return kit;
   const asset = (filePath: string) => withCacheBust(
     options.publishedAssets && options.designSystemId
       ? designSystemStaticUrl(options.designSystemId, filePath, options.workspaceContext)
@@ -743,7 +743,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         workspaceContext,
       });
 
-    if (!projectId && !publishedAssets) {
+    if (!projectId && !publishedAssets && !designSystemId) {
       setKit(fromDesignMd(body));
       setLoading(false);
       return () => {
@@ -757,7 +757,9 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
       // resolves in a single async hop — brand.json wins when it is a valid kit.
       const read = (filePath: string) => publishedAssets
         ? fetchDesignSystemStaticText(designSystemId, filePath, workspaceContext)
-        : fetchProjectFileText(projectId!, filePath, { cache: 'no-store', cacheBustKey: reloadKey, workspaceContext });
+        : designSystemId
+          ? fetchDesignSystemStaticText(designSystemId, filePath, workspaceContext)
+          : fetchProjectFileText(projectId!, filePath, { cache: 'no-store', cacheBustKey: reloadKey, workspaceContext });
       const [rawBrand, rawDesignMd] = await Promise.all([
         read('brand.json'),
         body != null ? Promise.resolve(body) : read('DESIGN.md'),

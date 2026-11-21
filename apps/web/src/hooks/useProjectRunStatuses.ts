@@ -30,7 +30,7 @@
  */
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ProjectDisplayStatus, WorkspaceCollabContext } from '@open-design/contracts';
-import { listRunsForProject, RUNS_CHANGED_EVENT } from '../providers/daemon';
+import { listRunsForProject, RUNS_CHANGED_EVENT, type RunListFailure } from '../providers/daemon';
 import {
   displayStatusForSummary,
   foldRunsToProjectRunSummaries,
@@ -76,6 +76,8 @@ const summaries = new Map<string, ProjectRunSummary | null>();
 let acknowledged: AcknowledgedRuns | null = null;
 const subscriptions = new Set<Subscription>();
 const inFlight = new Set<string>();
+/** Projects that returned a terminal (non-retryable) error — stop polling them. */
+const deadProjects = new Set<string>();
 const listeners = new Set<() => void>();
 let version = 0;
 /** Bumped by a reset so a read started before it cannot land afterwards. */
@@ -112,10 +114,24 @@ function sameSummary(a: ProjectRunSummary | null | undefined, b: ProjectRunSumma
     && a.stoppedWhileAway === b.stoppedWhileAway;
 }
 
+function isRunListFailure(result: unknown): result is RunListFailure {
+  return (
+    result !== null &&
+    typeof result === 'object' &&
+    'kind' in result &&
+    result.kind === 'retryable-failure'
+  );
+}
+
 async function readProject(projectId: string, context: WorkspaceCollabContext | null): Promise<void> {
   const startedIn = generation;
   const result = await listRunsForProject(projectId, context);
   if (startedIn !== generation) return;
+  // A terminal (non-retryable) failure means we should stop polling this project.
+  if (isRunListFailure(result)) {
+    deadProjects.add(projectId);
+    return;
+  }
   // An unreadable project yields null; keeping whatever was known leaves the
   // row as it was rather than asserting a status nobody verified.
   if (!result) return;
@@ -153,6 +169,7 @@ export function releaseProjectRunStatusReads(projectId: string): void {
 function refresh(ids: Iterable<string>, contextFor: (projectId: string) => WorkspaceCollabContext | null): void {
   for (const projectId of ids) {
     if (unpersistedProjectIds.has(projectId)) continue;
+    if (deadProjects.has(projectId)) continue;
     if (inFlight.has(projectId)) continue;
     inFlight.add(projectId);
     void readProject(projectId, contextFor(projectId)).finally(() => {
@@ -240,6 +257,7 @@ export function resetProjectRunStatusStore(): void {
   inFlight.clear();
   unpersistedProjectIds.clear();
   subscriptions.clear();
+  deadProjects.clear();
   stopFeed();
   version += 1;
 }
@@ -260,14 +278,14 @@ export function useProjectRunSummaries(
   const enabled = options?.enabled ?? true;
   // One subscription per id set, so the effect must not re-run just because
   // the caller rebuilt the array. Sorted + joined is the identity that matters.
-  const idsKey = useMemo(() => [...projectIds].sort().join(' '), [projectIds]);
+  const idsKey = useMemo(() => [...projectIds].sort().join('\u0000'), [projectIds]);
   const contextRef = useRef<WorkspaceCollabContext | null>(options?.workspaceContext ?? null);
   contextRef.current = options?.workspaceContext ?? null;
   const storeVersion = useSyncExternalStore(subscribeToStore, getVersion, getVersion);
 
   useEffect(() => {
     if (!enabled || !idsKey) return undefined;
-    const subscription: Subscription = { ids: idsKey.split(' '), contextRef };
+    const subscription: Subscription = { ids: idsKey.split('\u0000'), contextRef };
     addSubscription(subscription);
     return () => removeSubscription(subscription);
   }, [idsKey, enabled]);
@@ -275,7 +293,7 @@ export function useProjectRunSummaries(
   return useMemo(() => {
     if (!enabled || !idsKey) return EMPTY_SUMMARIES;
     const result = new Map<string, ProjectRunSummary>();
-    for (const projectId of idsKey.split(' ')) {
+    for (const projectId of idsKey.split('\u0000')) {
       const summary = summaries.get(projectId);
       if (summary) result.set(projectId, summary);
     }
