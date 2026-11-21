@@ -716,6 +716,100 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.sample).toBe('ok');
   });
 
+  it('rejects an Anthropic 200 with an empty content array as an upstream failure (#9470)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse({
+          content: [],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 36, output_tokens: 48 },
+        }),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-ant-test',
+        model: 'claude-sonnet-4-5',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('upstream_unavailable');
+    expect(body.detail).toContain('empty content array');
+    // Billing evidence present (usage.output_tokens > 0): report the charge.
+    expect(body.detail).toContain('billing 48 output tokens');
+  });
+
+  it('rejects an Anthropic 200 with an empty content array and no usage without asserting a charge (#9470)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse({
+          content: [],
+          stop_reason: 'end_turn',
+        }),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-ant-test',
+        model: 'claude-sonnet-4-5',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('upstream_unavailable');
+    expect(body.detail).toContain('empty content array');
+    // No usage field: must report the contentless turn without claiming a charge.
+    expect(body.detail).not.toMatch(/billing|billed|output tokens/i);
+  });
+
+  it('rejects an Anthropic 200 whose only content block is empty text (#9470)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse({
+          content: [{ type: 'text', text: '' }],
+          stop_reason: 'end_turn',
+        }),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'anthropic',
+        baseUrl: 'https://api.anthropic.com',
+        apiKey: 'sk-ant-test',
+        model: 'claude-sonnet-4-5',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('upstream_unavailable');
+    // The array is not empty, so the detail must not say it is.
+    expect(body.detail).toContain('only blank content blocks');
+    expect(body.detail).not.toContain('empty content array');
+    expect(body.detail).not.toContain('billing');
+  });
+
   it('redacts submitted keys from success samples', async () => {
     vi.stubGlobal(
       'fetch',
