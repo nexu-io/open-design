@@ -247,10 +247,16 @@ export function launchHostTool(
     // cmd.exe with CommandLineToArgvW-safe verbatim args and everything else
     // directly — no shell, no metacharacter interpretation.
     const invocation = createCommandInvocation({ command, args });
+    // Only console shims need their window hidden. createCommandInvocation
+    // rewrites .cmd/.bat to cmd.exe, while a direct .exe host tool is a GUI
+    // launcher (Explorer, editors) whose window must stay visible — passing
+    // windowsHide for one makes the OS create its window hidden. Test the
+    // original path here: invocation.command is already cmd.exe for shims.
+    const hideWindowsConsole = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command);
     const child = spawn(invocation.command, invocation.args, {
       detached: true,
       stdio: 'ignore',
-      windowsHide: process.platform === 'win32',
+      windowsHide: hideWindowsConsole,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     let settled = false;
