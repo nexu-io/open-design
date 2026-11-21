@@ -89,6 +89,18 @@ function activeRunner(): CodexRunner {
   return _runner ?? defaultCodexRunner;
 }
 
+// Every `codex` invocation from the one-click flow runs with the Codex
+// settings saved in Settings (agentCliEnv.codex), the same env the agent
+// runtime spawns Codex with: CODEX_BIN picks the executable and CODEX_HOME
+// picks the config.toml the registration lands in. Dropping them would
+// register the MCP server with a different Codex than the one the agent runs
+// (#5734). With no saved settings, Codex resolves from PATH as before.
+function runCodex(args: string[], configuredEnv: Record<string, string>): Promise<CodexRunnerResult> {
+  return Object.keys(configuredEnv).length > 0
+    ? activeRunner().run(args, { env: configuredEnv })
+    : activeRunner().run(args);
+}
+
 export interface CodexInstallStatus {
   // True when the `codex` CLI was found and is runnable. False = the
   // user does not have Codex CLI on PATH (the UI should show the
@@ -100,9 +112,12 @@ export interface CodexInstallStatus {
   installed: boolean;
 }
 
-export async function probeCodexInstall(name: string): Promise<CodexInstallStatus> {
+export async function probeCodexInstall(
+  name: string,
+  configuredEnv: Record<string, string> = {},
+): Promise<CodexInstallStatus> {
   try {
-    const result = await activeRunner().run(['mcp', 'get', name]);
+    const result = await runCodex(['mcp', 'get', name], configuredEnv);
     return { available: true, installed: result.exitCode === 0 };
   } catch (err) {
     const code = (err as NodeJS.ErrnoException | undefined)?.code;
@@ -123,13 +138,16 @@ export interface CodexInstallSpec {
   env: Record<string, string>;
 }
 
-export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
+export async function installCodexMcp(
+  spec: CodexInstallSpec,
+  configuredEnv: Record<string, string> = {},
+): Promise<void> {
   const argv: string[] = ['mcp', 'add', spec.name];
   for (const [key, value] of Object.entries(spec.env)) {
     argv.push('--env', `${key}=${value}`);
   }
   argv.push('--', spec.command, ...spec.args);
-  const result = await activeRunner().run(argv);
+  const result = await runCodex(argv, configuredEnv);
   if (result.exitCode !== 0) {
     throw new Error(`codex mcp add failed: ${failureDetail(result)}`);
   }
@@ -173,10 +191,11 @@ export type CodexRegistrationRefresh = 'refreshed' | 'absent' | 'unavailable' | 
 export async function refreshOwnedCodexMcp(
   spec: CodexInstallSpec,
   isOwned: (existing: CodexMcpRegistration) => boolean,
+  configuredEnv: Record<string, string> = {},
 ): Promise<CodexRegistrationRefresh> {
   let result: CodexRunnerResult;
   try {
-    result = await activeRunner().run(['mcp', 'get', spec.name, '--json']);
+    result = await runCodex(['mcp', 'get', spec.name, '--json'], configuredEnv);
   } catch (err) {
     if ((err as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return 'unavailable';
     throw err;
@@ -185,12 +204,15 @@ export async function refreshOwnedCodexMcp(
   const existing = parseCodexMcpRegistration(result.stdout);
   if (existing == null) return 'unreadable';
   if (!isOwned(existing)) return 'foreign';
-  await installCodexMcp(spec);
+  await installCodexMcp(spec, configuredEnv);
   return 'refreshed';
 }
 
-export async function uninstallCodexMcp(name: string): Promise<void> {
-  const result = await activeRunner().run(['mcp', 'remove', name]);
+export async function uninstallCodexMcp(
+  name: string,
+  configuredEnv: Record<string, string> = {},
+): Promise<void> {
+  const result = await runCodex(['mcp', 'remove', name], configuredEnv);
   if (result.exitCode !== 0) {
     throw new Error(`codex mcp remove failed: ${failureDetail(result)}`);
   }
