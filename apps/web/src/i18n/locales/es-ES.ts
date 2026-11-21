@@ -3013,6 +3013,8 @@ export const esES: Dict = {
   'designFiles.empty': 'Las creaciones aparecerán aquí',
   'designFiles.buildingPreview': 'Vista previa completa',
   'designFiles.syncing': 'Sincronizando los archivos compartidos del equipo…',
+  'designFiles.loadFailed': 'No se pudieron cargar los archivos de este proyecto.',
+  'designFiles.retry': 'Reintentar',
   'designFiles.refresh': 'Actualizar',
   'designFiles.delete': 'Eliminar',
   'designFiles.searchPlaceholder': 'Buscar archivos…',

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@open-design/components';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
@@ -71,6 +72,17 @@ interface Props {
    * of mistake the `downloadPending` branch below already guards (OPEND-2283).
    */
   filesAuthoritative?: boolean;
+  /**
+   * The newest file-list read failed (aborted, timed out, non-2xx, malformed).
+   * Only consulted while `filesAuthoritative` is false: a read that could not
+   * be completed says so and offers `onRetryFilesListing`, instead of a
+   * "Loading…" that never resolves or an empty state that claims the project
+   * has no files (#9489). A failure after an accepted listing keeps showing
+   * that listing.
+   */
+  filesListFailed?: boolean;
+  /** Re-runs the authoritative file-list read after `filesListFailed`. */
+  onRetryFilesListing?: () => Promise<void> | void;
   /**
    * Before the first authoritative read, draw the empty state instead of
    * "Loading…" -- inert, so none of its CTAs can act on a guess. For a project
@@ -489,6 +501,8 @@ export function DesignFilesPanel({
   viewerOnly = false,
   downloadPending = false,
   filesAuthoritative = true,
+  filesListFailed = false,
+  onRetryFilesListing,
   emptyLookBeforeFirstListing = false,
   rootDirName,
   reloading,
@@ -1501,6 +1515,18 @@ export function DesignFilesPanel({
   );
 
   const visibleUploadError = uploadError ?? dropReadError;
+
+  const [retryingFilesListing, setRetryingFilesListing] = useState(false);
+  const retryFilesListing = useCallback(async () => {
+    if (!onRetryFilesListing) return;
+    setRetryingFilesListing(true);
+    try {
+      await onRetryFilesListing();
+    } finally {
+      setRetryingFilesListing(false);
+    }
+  }, [onRetryFilesListing]);
+  const showFilesListError = filesListFailed && !retryingFilesListing;
   const hasSelection = selected.size > 0;
 
   // The empty state's one markup, for the confirmed-empty project and for the
@@ -1716,7 +1742,25 @@ export function DesignFilesPanel({
               />
             </div>
           ) : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && !filesAuthoritative ? (
-            emptyLookBeforeFirstListing ? renderEmptyState(true) : (
+            showFilesListError ? (
+              // The read failed, so the project's contents are unknown -- not
+              // empty. Offer the empty-state CTAs only for a confirmed listing.
+              <div className="df-empty df-empty-syncing" data-testid="design-files-load-error" role="alert">
+                <div className="df-empty-pill">
+                  <span className="df-empty-title">{t('designFiles.loadFailed')}</span>
+                  {onRetryFilesListing ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      data-testid="design-files-load-error-retry"
+                      onClick={() => { void retryFilesListing(); }}
+                    >
+                      {t('designFiles.retry')}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ) : emptyLookBeforeFirstListing && !filesListFailed ? renderEmptyState(true) : (
             // The list has not arrived. Saying nothing reads as "stuck"; saying
             // "no designs yet" would be a guess. Say we are working instead.
             <div className="df-empty df-empty-syncing" data-testid="design-files-loading">

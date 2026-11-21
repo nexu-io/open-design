@@ -3002,6 +3002,8 @@ export const th: Dict = {
   'designFiles.empty': 'ลากไฟล์มาใส่เลย หรือสร้างภาพสเก็ตช์',
   'designFiles.buildingPreview': 'ดูตัวอย่างเต็มจอ',
   'designFiles.syncing': 'กำลังซิงค์ไฟล์ที่ทีมแชร์…',
+  'designFiles.loadFailed': 'โหลดไฟล์ของโปรเจกต์นี้ไม่สำเร็จ',
+  'designFiles.retry': 'ลองอีกครั้ง',
   'designFiles.refresh': 'รีเฟรช',
   'designFiles.delete': 'ลบ',
   'designFiles.searchPlaceholder': 'ค้นหาไฟล์…',

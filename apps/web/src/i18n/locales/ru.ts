@@ -3002,6 +3002,8 @@ export const ru: Dict = {
   'designFiles.empty': 'Здесь появятся ваши работы',
   'designFiles.buildingPreview': 'Полный предпросмотр',
   'designFiles.syncing': 'Синхронизация файлов, которыми поделилась команда…',
+  'designFiles.loadFailed': 'Не удалось загрузить файлы этого проекта.',
+  'designFiles.retry': 'Повторить',
   'designFiles.refresh': 'Обновить',
   'designFiles.delete': 'Удалить',
   'designFiles.searchPlaceholder': 'Поиск файлов…',

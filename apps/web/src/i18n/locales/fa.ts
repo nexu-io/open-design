@@ -3013,6 +3013,8 @@ export const fa: Dict = {
   'designFiles.empty': 'آفرینش‌ها اینجا نمایش داده می‌شوند',
   'designFiles.buildingPreview': 'پیش‌نمایش تمام‌صفحه',
   'designFiles.syncing': 'در حال همگام‌سازی فایل‌های مشترک تیم…',
+  'designFiles.loadFailed': 'بارگیری فایل‌های این پروژه ممکن نشد.',
+  'designFiles.retry': 'تلاش دوباره',
   'designFiles.refresh': 'بازنشانی',
   'designFiles.delete': 'حذف',
   'designFiles.searchPlaceholder': 'جستجوی فایل‌ها…',

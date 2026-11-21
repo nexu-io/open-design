@@ -3002,6 +3002,8 @@ export const ptBR: Dict = {
   'designFiles.empty': 'As criações aparecerão aqui',
   'designFiles.buildingPreview': 'Visualização completa',
   'designFiles.syncing': 'Sincronizando os arquivos compartilhados da equipe…',
+  'designFiles.loadFailed': 'Não foi possível carregar os arquivos deste projeto.',
+  'designFiles.retry': 'Tentar novamente',
   'designFiles.refresh': 'Atualizar',
   'designFiles.delete': 'Excluir',
   'designFiles.searchPlaceholder': 'Buscar arquivos…',
