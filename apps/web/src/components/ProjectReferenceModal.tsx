@@ -129,13 +129,25 @@ export function ProjectReferenceModal({
     return projects.filter((project) => selected.has(project.id));
   }, [projects, selectedIds]);
 
+  // The selection the user can actually SEE and act on. A row hidden by the
+  // active search must not be submitted: the dialog auto-selects the first
+  // project, and once a query hides that row its "Confirm" would otherwise
+  // submit a project the user cannot see and may believe is deselected. The
+  // submitted set is therefore the selection intersected with the visible
+  // list, so hiding a row withdraws it from the submit without discarding the
+  // selection itself — clearing the query restores it.
+  const visibleSelectedProjects = useMemo(() => {
+    const visible = new Set(visibleProjects.map((project) => project.id));
+    return selectedProjects.filter((project) => visible.has(project.id));
+  }, [selectedProjects, visibleProjects]);
+
   async function confirm() {
-    if (selectedProjects.length === 0 || pending) return;
+    if (visibleSelectedProjects.length === 0 || pending) return;
     setPending(true);
     setError(null);
     try {
       const selections: ProjectReferenceSelection[] = [];
-      for (const project of selectedProjects) {
+      for (const project of visibleSelectedProjects) {
         // `ensureDir` materializes a managed project's folder before we read
         // its resolved dir, so an empty (never-generated) project references
         // to a real directory instead of a path that fails existence checks.
@@ -263,7 +275,7 @@ export function ProjectReferenceModal({
             type="button"
             className={`${styles.button} ${styles.primary}`}
             onClick={() => void confirm()}
-            disabled={selectedProjects.length === 0 || pending}
+            disabled={visibleSelectedProjects.length === 0 || pending}
           >
             {pending ? t('common.loading') : t('chat.referenceProject.confirm')}
           </button>
