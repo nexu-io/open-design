@@ -1,11 +1,10 @@
 // Regression coverage for #4456: local CLI auth probes can misclassify valid
 // API-key and profile-based auth.
 //
-//   Case 1 — Codex custom-provider env_key: a working custom provider (e.g.
-//     Azure via AZURE_OPENAI_API_KEY in ~/.codex/config.toml) must not be
+//   Case 1 — Codex custom-provider auth: a working provider using `env_key`
+//     or `experimental_bearer_token` in ~/.codex/config.toml must not be
 //     reported as missing auth just because `codex login status` exits
-//     non-zero. The probe should short-circuit to `ok` when the selected
-//     provider's env_key is present, without running the probe at all.
+//     non-zero. The probe should short-circuit to `ok`.
 //
 //   Case 2 — inherited Claude profile classifier: a local profile that
 //     inherits Claude's authProbe runs under the profile id. With the base
@@ -156,6 +155,26 @@ describe('probeAgentAuthStatus (#4456)', () => {
         { id: 'codex', name: 'Codex CLI', authProbe: { args: ['login', 'status'] } },
         '/fake/bin/codex',
         { CODEX_HOME: codexHome, AZURE_OPENAI_API_KEY: 'secret-value' },
+      );
+      expect(result).toEqual({ status: 'ok' });
+      expect(execAgentFileMock).not.toHaveBeenCalled();
+    });
+
+    it('short-circuits to ok when the selected provider has an inline bearer token', async () => {
+      await writeFile(
+        path.join(codexHome, 'config.toml'),
+        [
+          'model_provider = "deepseek"',
+          '[model_providers.deepseek]',
+          'base_url = "https://api.deepseek.com"',
+          'experimental_bearer_token = "secret-value"',
+        ].join('\n'),
+        'utf8',
+      );
+      const result = await probeAgentAuthStatus(
+        { id: 'codex', name: 'Codex CLI', authProbe: { args: ['login', 'status'] } },
+        '/fake/bin/codex',
+        { CODEX_HOME: codexHome },
       );
       expect(result).toEqual({ status: 'ok' });
       expect(execAgentFileMock).not.toHaveBeenCalled();

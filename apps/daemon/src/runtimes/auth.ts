@@ -1,5 +1,5 @@
 import { execAgentFile } from './invocation.js';
-import { readCodexProviderEnvKey } from '../codex-config-normalize.js';
+import { readCodexProviderAuth } from '../codex-config-normalize.js';
 import { reportsPlatformProviderCredentialFault } from '../integrations/vela-errors.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
@@ -608,13 +608,12 @@ export async function probeAgentAuthStatus(
   const classifierId = probe.classifierAgentId ?? def.id;
   const agentName = def.name || def.id;
   if (hasProbeSatisfyingAuth(classifierId, env)) return { status: 'ok' };
-  // Codex custom providers authenticate via a provider-specific `env_key` (e.g.
-  // AZURE_OPENAI_API_KEY) declared in config.toml, even when `codex login
-  // status` (a ChatGPT/OpenAI-login check) exits non-zero. Honor that key so a
-  // working custom-provider install isn't misreported as missing auth (#4456).
   if (classifierId === 'codex') {
-    const providerEnvKey = await readCodexProviderEnvKey(env);
-    if (providerEnvKey && hasNonEmptyEnv(env, [providerEnvKey])) {
+    const providerAuth = await readCodexProviderAuth(env);
+    if (
+      providerAuth?.kind === 'inline-bearer-token' ||
+      (providerAuth?.kind === 'env-key' && hasNonEmptyEnv(env, [providerAuth.envKey]))
+    ) {
       return { status: 'ok' };
     }
   }
