@@ -370,11 +370,11 @@ describe('SearchableModelSelect', () => {
 
     for (const model of models) {
       const option = await screen.findByRole('option', { name: model.label });
-      expect(option.getAttribute('title')).toBe(model.label);
+      expect(option.getAttribute('data-tooltip')).toBe(model.id);
     }
     // The trigger readout truncates the same way, so it carries the full name
     // on hover too.
-    expect(screen.getByRole('combobox').getAttribute('title')).toBe(models[0]!.label);
+    expect(screen.getByRole('combobox').getAttribute('data-tooltip')).toBe(models[0]!.id);
   });
 
   it('keeps the full name in the hover title when the row shortens it', async () => {
@@ -396,9 +396,9 @@ describe('SearchableModelSelect', () => {
     fireEvent.click(screen.getByRole('combobox'));
 
     // The company-grouped row drops the company token (`v4-pro`) because the
-    // brand mark already carries it; the title restores the full identity.
+    // brand mark already carries it; the tooltip restores the full identity.
     const option = await screen.findByRole('option', { name: 'v4-pro' });
     expect(option.textContent).toContain('v4-pro');
-    expect(option.getAttribute('title')).toBe('deepseek-v4-pro');
+    expect(option.getAttribute('data-tooltip')).toBe('deepseek-v4-pro');
   });
 });
