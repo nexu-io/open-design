@@ -53,6 +53,13 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
+  /* height:auto releases the global button primitive's 36px clamp
+     (primitives.css) — head row + desc + example is two to three lines
+     tall. white-space/line-height undo the primitive's nowrap/1 so the
+     description wraps at its own 1.45 instead of a single 36px band. */
+  height: auto;
+  white-space: normal;
+  line-height: normal;
   background: transparent;
   border: 0;
   padding: 0;
@@ -2095,6 +2102,13 @@
   gap: 2px;
   align-items: flex-start;
   width: 100%;
+  /* height:auto releases the global button primitive's 36px clamp
+     (primitives.css) — label + desc is two lines tall. white-space/
+     line-height undo the primitive's nowrap/1 so the desc wraps, same
+     as .artifact-version-card in shell.css. */
+  height: auto;
+  white-space: normal;
+  line-height: normal;
   padding: 8px 10px;
   background: transparent;
   border: none;
