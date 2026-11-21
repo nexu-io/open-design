@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.open_design.Open_Design</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+
+  <name>Open Design</name>
+  <summary>Local-first AI design tool powered by your coding agent</summary>
+
+  <developer id="io.github.nexu-io">
+    <name>Open Design Contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      Open Design is the open-source, local-first alternative to AI-powered design tools.
+      It auto-detects installed coding agent CLIs on your PATH (Claude Code, Codex, Gemini CLI,
+      Cursor Agent, GitHub Copilot CLI, and more) and uses them as the design engine.
+    </p>
+    <ul>
+      <li>31 composable Skills: prototype, deck, marketing, mobile, dashboard, PM spec, and more</li>
+      <li>72+ brand-grade Design Systems: Linear, Stripe, Vercel, Apple, Notion, Figma, and more</li>
+      <li>Streams design artifacts into a sandboxed preview with real-time progress</li>
+      <li>Export to HTML, PDF, PPTX, ZIP, or Markdown</li>
+      <li>Media generation: image, video, audio, and motion graphics</li>
+      <li>Local SQLite storage — all your projects and conversations stay on your machine</li>
+      <li>MCP server so other coding agents can read your design files directly</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">ai.open_design.Open_Design.desktop</launchable>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#f0f0f0</color>
+    <color type="primary" scheme_preference="dark">#1a1a1a</color>
+  </branding>
+
+  <content_rating type="oars-1.1" />
+
+  <url type="homepage">https://open-design.ai/</url>
+  <url type="bugtracker">https://github.com/nexu-io/open-design/issues</url>
+  <url type="vcs-browser">https://github.com/nexu-io/open-design</url>
+
+  <releases>
+    <release version="0.15.1" date="2026-07-17">
+      <description>
+        <ul>
+          <li>Upgraded the built-in OpenDesign Agent with sharper multimodal image handling and more reliable long-running sessions.</li>
+          <li>Added inline clarifying questions, AtomCode runtime support, a SiliconFlow Global BYOK preset, and parallel AMR web search.</li>
+          <li>Fixed HTML preview delivery, deck exports, BYOK agent failures, packaged startup, and update reliability.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.15.0" date="2026-07-14">
+      <description>
+        <ul>
+          <li>Optimized the Design System Prompt for faster first responses, shorter end-to-end runs, and lower token use.</li>
+          <li>Improved deck navigation, speaker notes, presentation controls, exports, and website cloning from a URL.</li>
+          <li>Made task failures, stopping behavior, desktop recovery, localization, and library previews more reliable.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.14.1" date="2026-07-10">
+      <description>
+        <p>Added an opt-in silent update preference for applying downloaded updates the next time Open Design starts.</p>
+      </description>
+    </release>
+  </releases>
+
+  <requires>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <display_length compare="ge">768</display_length>
+  </requires>
+</component>
