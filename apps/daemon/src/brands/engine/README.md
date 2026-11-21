@@ -26,12 +26,11 @@ algorithm — never hand-authored.
 
 Every downstream value traces back to the Seed via algorithm — nothing is
 hand-typed. The 10-step color ladders are a faithful, dependency-free port of
-`@ant-design/colors`' `generate()` (the canonical blue ladder reproduces
-bit-for-bit; see `__tests__/palette.test.ts`).
+`@ant-design/colors`' `generate()` (see `palette.ts`).
 
 ## Public API
 
-Import from the barrel `@/lib/brand/engine`:
+Import from the barrel `./index.js` (the daemon has no `@/` path alias):
 
 ```ts
 import {
@@ -48,58 +47,45 @@ import {
   // helpers + types
   cssVar, varRef, flattenTokens,
   type SeedToken, type ThemeAlgorithm, type DesignTokens, type BrandSystem,
-} from "@/lib/brand/engine";
+} from "./index.js";
 ```
 
 `BrandSystem` is `{ slug, seed, themes: { default, dark, compact }, files }`
 where `files` is a `{ relativePath → contents }` map ready to write, return over
 HTTP, or inspect.
 
-## How an agent drives it — one command
+## How an agent drives it
 
-### CLI
+There is no dedicated build CLI for the engine. It is reached through the
+daemon's brand endpoints and the `od brand` subcommands that call them:
 
 ```bash
-# From an already-synthesized brand kit (offline, deterministic):
-pnpm brand:build path/to/brand.json [outDir]
-
-# Straight from a site URL (deterministic prefetch → seed → system; no LLM):
-pnpm brand:build https://stripe.com [outDir]
+od brand extract https://stripe.com   # reserve a brand + backing project
+od brand preview <id>                 # re-render brand.html live during extraction
+od brand finalize <id>                # register the kit as a design system
 ```
 
-Default `outDir` is `./out/<slug>`. The command prints the file tree and the
-path to `index.html`.
-
-> Node 24 strips TS types but does not add `.ts` to the engine's extensionless
-> relative imports, so `pnpm brand:build` re-spawns node with
-> `scripts/ts-resolve-hook.mjs` registered (a dependency-free ESM resolver shim
-> that maps `./palette` → `./palette.ts`). No source or build changes required.
+`od brand --help` lists every subcommand. `BRAND_USAGE` in
+`apps/daemon/src/cli-help/brands-cli-help.ts` is the authoritative text.
 
 ### HTTP API
 
-`POST /api/brand/build` (Node runtime):
+Brand extraction is served from `apps/daemon/src/brand-routes.ts`:
 
-```jsonc
-// from a URL
-{ "url": "https://stripe.com", "write": false }
-
-// from a brand kit, also writing to disk
-{ "brand": { /* Brand */ }, "write": true, "outDir": "./out/acme" }
+```
+POST   /api/brands                       # reserve the brand, start extraction
+GET    /api/brands                       # list
+GET    /api/brands/:id                   # full detail (meta + brand + guide)
+POST   /api/brands/:id/preview           # re-render from the current brand.json
+POST   /api/brands/:id/finalize          # register the kit as a design system
+POST   /api/brands/:id/extract-from-html # re-run against pre-captured HTML
+POST   /api/brands/:id/cancel-extraction # stop the daemon-owned extraction
+DELETE /api/brands/:id                   # remove brand + design system
 ```
 
-Response:
-
-```jsonc
-{
-  "slug": "stripe",
-  "themes": ["default", "dark", "compact"],
-  "files": { "seed.json": "…", "variables.css": "…", "index.html": "…", … },
-  "writtenTo": "./out/stripe"   // only when write: true
-}
-```
-
-Binary logo assets (URL path) come back as `*.b64` string entries and are
-decoded to real bytes by `writeBrandSystem` / `write: true`.
+Extraction is agent-driven and registers a real design system, so it does not
+return a `BrandSystem` file bundle directly. The bundle is written to the
+project's design-system directory by `finalize`.
 
 ## Produced files
 
