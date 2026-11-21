@@ -8,6 +8,7 @@ import {
   configuredAllowedInternalHosts,
   configuredAllowedOrigins,
   isAllowedBrowserOrigin,
+  isSandboxedPreviewRead,
   isLocalSameOrigin,
   isZeroConfigClipperLibraryRequest,
 } from '../src/origin-validation.js';
@@ -52,8 +53,6 @@ function closeServer(server: http.Server): Promise<void> {
 }
 
 function createOriginMiddleware(resolvedPort: number, host = '127.0.0.1') {
-  const _NULL_ORIGIN_SAFE_GET_RE =
-    /^\/projects\/[^/]+\/(?:raw|preview)\/|^\/codex-pets\/[^/]+\/spritesheet$|^\/asset-cache$/;
   return (req: Request, res: Response, next: NextFunction) => {
     // Mirror the real /api middleware: the zero-config clipper bypass runs
     // first, using the same predicate server.ts uses. `req.path` is
@@ -65,7 +64,7 @@ function createOriginMiddleware(resolvedPort: number, host = '127.0.0.1') {
     if (origin == null || origin === '') return next();
     if (origin === 'null') {
       const isSafeReadOnly =
-        req.method === 'GET' && _NULL_ORIGIN_SAFE_GET_RE.test(req.path);
+        isSandboxedPreviewRead(req.method, req.path);
       if (!isSafeReadOnly) {
         return res.status(403).json({ error: 'Origin: null not allowed for this route' });
       }
@@ -814,5 +813,33 @@ describe('configuredAllowedInternalHosts: OD_ALLOWED_INTERNAL_HOSTS parsing (iss
     expect(hosts).toEqual(['10.0.0.5']);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/CIDR/i);
+  });
+});
+
+
+describe('sandboxed design-system preview origin boundary', () => {
+  it.each([
+    '/plugins/example/asset/assets/a.woff2',
+    '/design-systems/user%3Ademo/static/previews/opaque-scope/files/assets/main.mjs',
+    '/design-systems/user%3Ademo/static/previews/opaque-scope/files/fonts/a.woff2',
+  ])('permits only GET for %s', pathname => {
+    expect(isSandboxedPreviewRead('GET', pathname)).toBe(true);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
+      expect(isSandboxedPreviewRead(method, pathname)).toBe(false);
+    }
+  });
+
+  it.each([
+    '/plugins/example/asset', '/plugins/example/assets/a',
+    '/plugins/example/preview', '/plugins/example/uninstall',
+    '/design-systems', '/design-systems/demo', '/design-systems/demo/file',
+    '/design-systems/demo/archive', '/design-systems/demo/sync-assets',
+    '/design-systems/demo/showcase', '/design-systems/demo/static/other',
+    '/design-systems/demo/static/workspaces/w/files/a.mjs',
+    '/design-systems/user%3Ademo/static',
+    '/design-systems/user%3Ademo/static/files/assets/main.mjs',
+    '/design-systems/user%3Ademo/static/workspaces/w/members/m/files/fonts/a.woff2',
+  ])('does not widen sandbox access to %s', pathname => {
+    expect(isSandboxedPreviewRead('GET', pathname)).toBe(false);
   });
 });

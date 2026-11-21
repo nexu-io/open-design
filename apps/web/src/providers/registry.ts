@@ -3435,6 +3435,11 @@ export function designSystemStaticUrl(
   );
 }
 
+function designSystemResponseUrl(response: Response): string {
+  const location = response.headers.get('content-location');
+  return location ? new URL(location, response.url).href : response.url;
+}
+
 export async function fetchDesignSystemStaticText(
   designSystemId: string,
   filePath: string,
@@ -3674,20 +3679,25 @@ export async function fetchDesignSystemPreview(
   }
 }
 
+export interface DesignSystemShowcaseDocument {
+  html: string;
+  baseHref: string;
+}
+
 export async function fetchDesignSystemShowcase(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
-): Promise<string | null> {
+): Promise<DesignSystemShowcaseDocument | null> {
   try {
     const resp = await fetch(
       workspaceResourceUrl(
         `/api/design-systems/${encodeURIComponent(id)}/showcase`,
         workspaceContext,
       ),
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+      { headers: { ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}), 'x-od-design-system-preview': '1' } },
     );
     if (!resp.ok) return null;
-    return await resp.text();
+    return { html: await resp.text(), baseHref: designSystemResponseUrl(resp) };
   } catch {
     return null;
   }
