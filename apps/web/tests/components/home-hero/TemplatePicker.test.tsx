@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useLayoutEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,6 +25,18 @@ function chipById(chipId: string): HomeHeroChip {
 
 function labelFor(chipId: string): string {
   return chipById(chipId).label;
+}
+
+function triggerButton(): HTMLButtonElement {
+  const trigger = screen.getByTestId('home-hero-template-trigger').querySelector('button[aria-haspopup="listbox"]');
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error('Missing template picker trigger');
+  return trigger;
+}
+
+function itemAt<T>(items: readonly T[], index: number): T {
+  const item = items[index];
+  if (item === undefined) throw new Error(`Missing test item at index ${index}`);
+  return item;
 }
 
 describe('TemplatePicker', () => {
@@ -185,5 +197,343 @@ describe('TemplatePicker — the sub-type row cannot move the pill', () => {
     expect(screen.queryByTestId('home-hero-template-clear-subtype')).toBeNull();
     fireEvent.mouseOver(screen.getByTestId('home-hero-template-picker'));
     expect(screen.queryByTestId('home-hero-template-clear')).toBeNull();
+  });
+});
+
+describe('TemplatePicker keyboard interaction', () => {
+  it('opens all categories and switches the committed template', () => {
+    const onPick = vi.fn();
+    render(<TemplatePicker templates={templates} onPick={onPick} activeChipId="deck" labelFor={labelFor} />);
+
+    expect(screen.getByTestId('home-hero-template-picker').className).toContain('has-selection');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain(labelFor('deck'));
+
+    fireEvent.click(triggerButton());
+    expect(screen.getAllByRole('option')).toHaveLength(templates.length);
+    expect(screen.getByRole('option', { name: labelFor('deck') }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
+    expect(onPick).toHaveBeenCalledWith(chipById('prototype'));
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+  });
+
+  it('does not reapply an already selected type', () => {
+    const onPick = vi.fn();
+    render(<TemplatePicker templates={templates} activeChipId="prototype" onPick={onPick} labelFor={labelFor} />);
+    fireEvent.click(triggerButton());
+    fireEvent.click(screen.getByRole('option', { name: labelFor('prototype') }));
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('keeps a click made as the picker becomes enabled before passive effects flush', () => {
+    function ReadyPicker({ disabled }: { disabled: boolean }) {
+      useLayoutEffect(() => {
+        if (!disabled) triggerButton().click();
+      }, [disabled]);
+      return <TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} disabled={disabled} />;
+    }
+    const { rerender } = render(<ReadyPicker disabled />);
+    rerender(<ReadyPicker disabled={false} />);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+
+  it('opens from the selected trigger with ArrowDown and moves to the next option', async () => {
+    render(<TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} />);
+    const trigger = triggerButton();
+
+    expect(fireEvent.keyDown(trigger, { key: 'ArrowDown' })).toBe(false);
+    const selected = screen.getByRole('option', { name: labelFor('deck') });
+    await waitFor(() => expect(document.activeElement).toBe(selected));
+    fireEvent.keyDown(selected, { key: 'ArrowDown' });
+
+    const selectedIndex = templates.findIndex((chip) => chip.id === 'deck');
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole('option', { name: labelFor(itemAt(templates, selectedIndex + 1).id) }),
+    ));
+  });
+
+  it.each([
+    ['ArrowDown', 0],
+    ['ArrowUp', templates.length - 1],
+  ])('opens without a selection on %s and focuses the expected boundary', async (key, expectedIndex) => {
+    render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+
+    expect(fireEvent.keyDown(triggerButton(), { key })).toBe(false);
+
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole('option', { name: labelFor(itemAt(templates, expectedIndex).id) }),
+    ));
+  });
+
+  it.each([
+    ['ArrowDown', 'deck', 'deck'],
+    ['ArrowUp', 'deck', 'deck'],
+    ['ArrowDown', null, itemAt(templates, 0).id],
+    ['ArrowUp', null, itemAt(templates, templates.length - 1).id],
+  ])('moves focus from an already-open trigger on %s with active type %s', async (key, activeChipId, expectedChipId) => {
+    render(<TemplatePicker templates={templates} activeChipId={activeChipId} labelFor={labelFor} />);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(document.activeElement).toBe(trigger);
+    expect(fireEvent.keyDown(trigger, { key })).toBe(false);
+
+    await waitFor(() => expect(document.activeElement).toBe(
+      screen.getByRole('option', { name: labelFor(expectedChipId) }),
+    ));
+  });
+
+  it('clamps Arrow navigation at both option boundaries', async () => {
+    render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    fireEvent.keyDown(triggerButton(), { key: 'ArrowDown' });
+    const options = screen.getAllByRole('option');
+    const first = itemAt(options, 0);
+    const last = itemAt(options, options.length - 1);
+    await waitFor(() => expect(document.activeElement).toBe(first));
+
+    fireEvent.keyDown(first, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: 'End' });
+    await waitFor(() => expect(document.activeElement).toBe(last));
+    fireEvent.keyDown(last, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(last, { key: 'Home' });
+    await waitFor(() => expect(document.activeElement).toBe(first));
+  });
+
+  it('renders exactly one option in the tab order', () => {
+    render(<TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} />);
+    fireEvent.click(triggerButton());
+
+    const tabStops = screen.getAllByRole('option').filter((option) => option.tabIndex === 0);
+    expect(tabStops).toHaveLength(1);
+    expect(itemAt(tabStops, 0)).toBe(screen.getByRole('option', { name: labelFor('deck') }));
+  });
+
+  it.each(['Enter', ' '])('selects exactly once with %s and restores trigger focus', async (key) => {
+    const onPick = vi.fn();
+    render(<TemplatePicker templates={templates} activeChipId="deck" onPick={onPick} labelFor={labelFor} />);
+    const trigger = triggerButton();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const selected = screen.getByRole('option', { name: labelFor('deck') });
+    await waitFor(() => expect(document.activeElement).toBe(selected));
+    fireEvent.keyDown(selected, { key: 'ArrowDown' });
+    const next = screen.getByRole('option', {
+      name: labelFor(itemAt(templates, templates.findIndex((chip) => chip.id === 'deck') + 1).id),
+    });
+    await waitFor(() => expect(document.activeElement).toBe(next));
+
+    fireEvent.keyDown(next, { key });
+    fireEvent.keyUp(next, { key });
+    fireEvent.click(next);
+
+    expect(onPick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('closes a keyboard re-selection without calling onPick', async () => {
+    const onPick = vi.fn();
+    render(<TemplatePicker templates={templates} activeChipId="deck" onPick={onPick} labelFor={labelFor} />);
+    const trigger = triggerButton();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const selected = screen.getByRole('option', { name: labelFor('deck') });
+    await waitFor(() => expect(document.activeElement).toBe(selected));
+
+    fireEvent.keyDown(selected, { key: 'Enter' });
+    fireEvent.click(selected);
+
+    expect(onPick).not.toHaveBeenCalled();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('restores trigger focus when Escape is pressed from an option', async () => {
+    render(<TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} />);
+    const trigger = triggerButton();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const selected = screen.getByRole('option', { name: labelFor('deck') });
+    await waitFor(() => expect(document.activeElement).toBe(selected));
+
+    fireEvent.keyDown(selected, { key: 'Escape' });
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('closes when focus leaves both trigger and popup', async () => {
+    render(<><TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} /><button type="button">Outside</button></>);
+    fireEvent.click(triggerButton());
+    screen.getByRole('option', { name: labelFor('deck') }).focus();
+
+    screen.getByRole('button', { name: 'Outside' }).focus();
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Outside' }));
+  });
+
+  it('repairs roving focus when the focused template is removed', async () => {
+    const { rerender } = render(<TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />);
+    fireEvent.keyDown(triggerButton(), { key: 'ArrowDown' });
+    const removedTemplate = itemAt(templates, 1);
+    const options = screen.getAllByRole('option');
+    const removed = itemAt(options, 1);
+    fireEvent.keyDown(itemAt(options, 0), { key: 'ArrowDown' });
+    await waitFor(() => expect(document.activeElement).toBe(removed));
+
+    rerender(<TemplatePicker templates={templates.filter((chip) => chip.id !== removedTemplate.id)} activeChipId={null} labelFor={labelFor} />);
+
+    expect(screen.queryByRole('option', { name: labelFor(removedTemplate.id) })).toBeNull();
+    const tabStops = screen.getAllByRole('option').filter((option) => option.tabIndex === 0);
+    expect(tabStops).toHaveLength(1);
+    await waitFor(() => expect(document.activeElement).toBe(itemAt(tabStops, 0)));
+  });
+
+  it('keeps focus stable when an outside pointer dismisses the popup', () => {
+    render(<><TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} /><button type="button">Outside</button></>);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Outside' }));
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it.each([false, true])('dismisses a pointer-open menu on Tab from the trigger (shift: %s)', (shiftKey) => {
+    render(<><TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} /><button type="button">Outside</button></>);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect(fireEvent.keyDown(trigger, { key: 'Tab', shiftKey })).toBe(true);
+    act(() => screen.getByRole('button', { name: 'Outside' }).focus());
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Outside' }));
+  });
+
+  it('keeps the menu open when Tab moves from the trigger into the selected option', () => {
+    render(<TemplatePicker templates={templates} activeChipId="deck" labelFor={labelFor} />);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+    const selected = screen.getByRole('option', { name: labelFor('deck') });
+
+    expect(fireEvent.keyDown(trigger, { key: 'Tab' })).toBe(true);
+    act(() => selected.focus());
+
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(document.activeElement).toBe(selected);
+    expect(selected.tabIndex).toBe(0);
+  });
+
+  it('closes an open menu when the controlled selection changes', () => {
+    const { rerender } = render(
+      <TemplatePicker templates={templates} activeChipId={null} labelFor={labelFor} />,
+    );
+    fireEvent.click(triggerButton());
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    rerender(<TemplatePicker templates={templates} activeChipId="prototype" labelFor={labelFor} />);
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(triggerButton().getAttribute('aria-expanded')).toBe('false');
+    expect(triggerButton().textContent).toContain(labelFor('prototype'));
+
+    fireEvent.click(triggerButton());
+    expect(screen.getByRole('option', { name: labelFor('prototype') }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('keeps a menu opened after a committed type change open', () => {
+    // On a loaded machine React commits a render and runs its passive effects
+    // in separate tasks, so a click can land on a trigger that already shows
+    // the new type before that commit's effects run. Opening the menu there is
+    // a fresh intent; the type change the user already saw must not close it.
+    // The layout effect below clicks at exactly that point: after the commit,
+    // before its passive effects.
+    function ClickAfterCommit({ activeChipId }: { activeChipId: string | null }) {
+      useLayoutEffect(() => {
+        if (activeChipId !== 'prototype') return;
+        triggerButton().click();
+      }, [activeChipId]);
+      return null;
+    }
+    function Host({ activeChipId }: { activeChipId: string | null }) {
+      return (
+        <>
+          <TemplatePicker templates={templates} activeChipId={activeChipId} labelFor={labelFor} />
+          <ClickAfterCommit activeChipId={activeChipId} />
+        </>
+      );
+    }
+    const { rerender } = render(<Host activeChipId={null} />);
+    rerender(<Host activeChipId="prototype" />);
+
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain(labelFor('prototype'));
+    expect(screen.queryByTestId('home-hero-template-menu')).not.toBeNull();
+  });
+});
+
+
+describe('TemplatePicker current trigger layouts', () => {
+  it.each([null, 'deck'])('transfers focus after Shift+Tab returns to the open trigger (%s)', async (activeChipId) => {
+    render(<TemplatePicker templates={templates} activeChipId={activeChipId} onClear={vi.fn()} labelFor={labelFor} />);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+    const option = screen.getAllByRole('option').find((item) => item.tabIndex === 0)!;
+    act(() => option.focus());
+    fireEvent.keyDown(option, { key: 'Tab', shiftKey: true });
+    act(() => trigger.focus());
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    await waitFor(() => expect(document.activeElement).toBe(option));
+    // Repeating the same request must still transfer focus without a state change.
+    act(() => trigger.focus());
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(option);
+  });
+
+  it.each([null, 'deck'])('closes when focus leaves a click-open trigger (%s)', (activeChipId) => {
+    render(<><TemplatePicker templates={templates} activeChipId={activeChipId} onClear={vi.fn()} labelFor={labelFor} /><textarea aria-label="Prompt" /></>);
+    const trigger = triggerButton();
+    trigger.focus();
+    fireEvent.click(trigger);
+    act(() => screen.getByRole('textbox', { name: 'Prompt' }).focus());
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('clears an open selected menu and reopens the unselected trigger', () => {
+    const onClear = vi.fn();
+    const { rerender } = render(<TemplatePicker templates={templates} activeChipId="deck" onClear={onClear} labelFor={labelFor} />);
+    fireEvent.click(triggerButton());
+    fireEvent.click(screen.getByTestId('home-hero-template-clear'));
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    rerender(<TemplatePicker templates={templates} activeChipId={null} onClear={onClear} labelFor={labelFor} />);
+    fireEvent.click(triggerButton());
+    expect(screen.getAllByRole('option').every((option) => option.getAttribute('aria-selected') === 'false')).toBe(true);
+  });
+
+  it.each([null, 'deck'])('closes and prevents reopening while disabled (%s)', (activeChipId) => {
+    const onClear = vi.fn();
+    const onPick = vi.fn();
+    const props = { templates, activeChipId, onClear, onPick, labelFor };
+    const { rerender } = render(<TemplatePicker {...props} />);
+    fireEvent.click(triggerButton());
+    rerender(<TemplatePicker {...props} disabled />);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    fireEvent.click(triggerButton());
+    fireEvent.keyDown(triggerButton(), { key: 'ArrowDown' });
+    const clear = screen.queryByTestId('home-hero-template-clear');
+    if (clear) fireEvent.click(clear);
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(onClear).not.toHaveBeenCalled();
+    expect(onPick).not.toHaveBeenCalled();
   });
 });
