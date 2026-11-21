@@ -9,6 +9,7 @@ import { buildFeedbackPayload, postLegacyTelemetryBatch, readFeedbackTelemetrySi
 import { buildTraceObjectManifests, type TraceObjectSource, type TraceObjectUploadManifests } from '../trace-object-manifest.js';
 import { readTelemetryEnvironment } from '../telemetry-environment.js';
 import { type AttachmentContextEntry, evidenceMode } from '../observability/eval-context.js';
+import { PERMANENT_TELEMETRY_DROP_REASONS } from '../observability/delivery-state.js';
 
 type FrozenSource = Omit<TraceObjectSource, 'body'> & { snapshotHash?: string };
 interface ObjectJob { taskTraceId?: string; context: ReportContext; sources: FrozenSource[]; capturedAt: string; environment?: string }
@@ -102,8 +103,7 @@ export async function enqueueFeedbackEvidence(dataDir: string, context: Feedback
 
 function deliveryAttempt(result: LangfuseDeliveryState): DeliveryAttempt {
   if (result.langfuse_delivery_status === 'accepted') return { status: 'accepted', reason: 'receipt_pending' };
-  const terminal = new Set(['payload_too_large', 'payload_build_error', 'langfuse_4xx', 'vela_400', 'vela_403', 'vela_413', 'relay_413']);
-  return { status: terminal.has(result.langfuse_drop_reason ?? '') ? 'terminal' : 'retry', reason: result.langfuse_drop_reason ?? 'network_error' };
+  return { status: PERMANENT_TELEMETRY_DROP_REASONS.has(result.langfuse_drop_reason ?? '') ? 'terminal' : 'retry', reason: result.langfuse_drop_reason ?? 'network_error' };
 }
 
 /** All Task publishers share the same clearing history because the receiver deep-merges maps. */
