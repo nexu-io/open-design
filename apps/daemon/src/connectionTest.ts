@@ -2661,6 +2661,13 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
+    // Reasonix persists session state into its REASONIX_STATE_HOME by default.
+    // Without overriding it, a connection-test probe leaves a ghost conversation
+    // in the user's real state dir (%APPDATA%\\reasonix\\sessions\\*.jsonl). Pin
+    // state to the throwaway tempDir so probe sessions vanish on cleanup (#8572).
+    if (input.agentId === 'reasonix') {
+      env.REASONIX_STATE_HOME = tempDir;
+    }
     model = await resolveConnectionTestModelForAgent(
       def,
       model,
