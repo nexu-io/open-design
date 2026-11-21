@@ -19,6 +19,8 @@ import type {
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
+import { useHostResolvedPreview } from '../hooks/useHostResolvedPreview';
+import { injectTemplatePreviewEscapeBridge } from '../runtime/template-preview-escape';
 import type { Dict, Locale } from '../i18n/types';
 import { Icon } from './Icon';
 import { CREATION_TYPE_ORDER, type CreationTypeId } from './creation-type-order';
@@ -273,6 +275,8 @@ export function TemplatePreviewModal({
   const t = useT();
   const panelRef = useRef<HTMLElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const livePreview = useHostResolvedPreview(template.previewSrc);
+  const previewDocument = template.previewSrc ? livePreview : templatePreviewHtml(template);
   useEffect(() => {
     panelRef.current?.focus();
   }, []);
@@ -297,10 +301,18 @@ export function TemplatePreviewModal({
         // Cross-origin previews cannot be observed by the host document.
       }
     }
+    function onMessage(event: MessageEvent): void {
+      if (!frame?.contentWindow || event.source !== frame.contentWindow) return;
+      if (!event.data || typeof event.data !== 'object'
+        || event.data.type !== 'od:template-preview-escape') return;
+      onClose();
+    }
+    window.addEventListener('message', onMessage);
     document.addEventListener('keydown', onKeyDown, true);
     frame?.addEventListener('load', bindFrame);
     bindFrame();
     return () => {
+      window.removeEventListener('message', onMessage);
       document.removeEventListener('keydown', onKeyDown, true);
       frame?.removeEventListener('load', bindFrame);
       frameDocument?.removeEventListener('keydown', onKeyDown, true);
@@ -339,9 +351,8 @@ export function TemplatePreviewModal({
           // Html-preview plugins load their real daemon-served page; media
           // templates have no page to load, so the same frame carries their
           // poster/clip instead.
-          {...(template.previewSrc
-            ? { src: template.previewSrc }
-            : { srcDoc: templatePreviewHtml(template) })}
+          sandbox="allow-scripts"
+          srcDoc={previewDocument ? injectTemplatePreviewEscapeBridge(previewDocument) : ''}
         />
       </section>
     </div>

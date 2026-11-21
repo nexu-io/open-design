@@ -3,9 +3,10 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import type { InstalledPluginRecord, WorkspaceCollabContext } from '@open-design/contracts';
 
 import { DesignSystemPreviewModal } from '../../src/components/DesignSystemPreviewModal';
+import { PluginDesignSystemDetail } from '../../src/components/plugin-details/PluginDesignSystemDetail';
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
 import { BrandLogo } from '../../src/components/DesignKitView';
 import { I18nProvider } from '../../src/i18n';
@@ -20,12 +21,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+type PreviewResult = string | { html: string; baseHref: string } | null;
+
 const workspaceHarness = vi.hoisted(() => ({ state: null as any }));
 const registryMocks = vi.hoisted(() => ({
   fetchDesignSystem: vi.fn(),
   fetchDesignSystemPreview: vi.fn(),
   fetchDesignSystemShowcase: vi.fn(),
   fetchProjectFileText: vi.fn(),
+  fetchPluginAssetText: vi.fn(),
   updateDesignSystemDraft: vi.fn(),
 }));
 
@@ -51,6 +55,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchDesignSystemPreview: registryMocks.fetchDesignSystemPreview,
     fetchDesignSystemShowcase: registryMocks.fetchDesignSystemShowcase,
     fetchProjectFileText: registryMocks.fetchProjectFileText,
+    fetchPluginAssetText: registryMocks.fetchPluginAssetText,
     updateDesignSystemDraft: registryMocks.updateDesignSystemDraft,
     deleteDesignSystemDraft: vi.fn(async () => true),
     projectRawUrl: (
@@ -76,6 +81,13 @@ const SYSTEM: DesignSystemSummary = {
   status: 'draft',
   isEditable: true,
   projectId: 'project-generation-fence',
+};
+
+const PLUGIN: InstalledPluginRecord = {
+  id: 'plugin-scope', title: 'Scoped plugin', version: '1.0.0',
+  sourceKind: 'bundled', source: '/fixture', trust: 'bundled', capabilitiesGranted: [],
+  fsPath: '/fixture', installedAt: 0, updatedAt: 0,
+  manifest: { name: 'plugin-scope', version: '1.0.0', od: { context: { designSystem: { ref: 'system-scope' } } } },
 };
 
 function setWorkspaceGeneration(
@@ -119,6 +131,7 @@ beforeEach(() => {
   registryMocks.fetchDesignSystemPreview.mockReset();
   registryMocks.fetchDesignSystemShowcase.mockReset();
   registryMocks.fetchProjectFileText.mockReset();
+  registryMocks.fetchPluginAssetText.mockReset();
   registryMocks.updateDesignSystemDraft.mockReset();
   registryMocks.updateDesignSystemDraft.mockResolvedValue(null);
 });
@@ -259,12 +272,15 @@ describe('design-system resource read identity', () => {
     ['showcase', registryMocks.fetchDesignSystemShowcase],
     ['tokens', registryMocks.fetchDesignSystemPreview],
   ] as const)('fences the modal lazy %s response by generation', async (viewId, fetchLazy) => {
-    const generationA = deferred<string | null>();
+    const generationA = deferred<string | { html: string; baseHref: string } | null>();
+    const documentFor = (generation: string) => viewId === 'showcase'
+      ? { html: `<!doctype html><p>${viewId} ${generation}</p>`, baseHref: `http://localhost/${generation.replaceAll(' ', '-')}/system/kit.html` }
+      : `<!doctype html><p>${viewId} ${generation}</p>`;
     let issuingGeneration = 'generation-a';
     registryMocks.fetchDesignSystem.mockResolvedValue({ ...SYSTEM, body: '# Stable detail' });
     registryMocks.fetchProjectFileText.mockResolvedValue(null);
     fetchLazy.mockImplementation(() => issuingGeneration === 'generation-b'
-      ? Promise.resolve(`<!doctype html><p>${viewId} generation B</p>`)
+      ? Promise.resolve(documentFor('generation B'))
       : generationA.promise);
 
     const view = render(
@@ -296,11 +312,111 @@ describe('design-system resource read identity', () => {
     });
 
     await act(async () => {
-      generationA.resolve(`<!doctype html><p>${viewId} generation A late</p>`);
+      generationA.resolve(documentFor('generation A late'));
       await Promise.resolve();
     });
     expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain(`${viewId} generation B`);
     expect(document.querySelector('iframe')?.getAttribute('srcdoc')).not.toContain('generation A late');
+  });
+
+  it.each(['showcase', 'tokens'] as const)('fences modal %s reads across system A → B → A', async (viewId) => {
+    const pending = [deferred<PreviewResult>(), deferred<PreviewResult>(), deferred<PreviewResult>()] as const;
+    const fetchLazy = viewId === 'showcase'
+      ? registryMocks.fetchDesignSystemShowcase
+      : registryMocks.fetchDesignSystemPreview;
+    const result = (label: string) => viewId === 'showcase'
+      ? { html: `<p>${label}</p>`, baseHref: `http://localhost/${label}/index.html` }
+      : `<p>${label}</p>`;
+    let visit: 0 | 1 | 2 = 0;
+    fetchLazy.mockImplementation(() => pending[visit].promise);
+    registryMocks.fetchDesignSystem.mockResolvedValue(null);
+    registryMocks.fetchProjectFileText.mockResolvedValue(null);
+    const modal = (id: string) => (
+      <I18nProvider initial="en">
+        <DesignSystemPreviewModal system={{ ...SYSTEM, id }} initialViewId={viewId} onClose={() => {}} />
+      </I18nProvider>
+    );
+    const view = render(modal('system-a'));
+    await waitFor(() => expect(fetchLazy).toHaveBeenCalledTimes(1));
+    visit = 1;
+    view.rerender(modal('system-b'));
+    await waitFor(() => expect(fetchLazy).toHaveBeenCalledWith('system-b', CONTEXT));
+    await act(async () => pending[1].resolve(result('current-b')));
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('current-b');
+    const beforeReturn = fetchLazy.mock.calls.length;
+    visit = 2;
+    view.rerender(modal('system-a'));
+    await waitFor(() => expect(fetchLazy.mock.calls.length).toBeGreaterThan(beforeReturn));
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc') ?? '').not.toContain('current-b');
+    await act(async () => pending[0].resolve(result('obsolete-a')));
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc') ?? '').not.toContain('obsolete-a');
+    await act(async () => pending[2].resolve(result('current-a')));
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('current-a');
+    if (viewId === 'showcase') {
+      expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('http://localhost/current-a/index.html');
+    }
+  });
+
+  it.each(['showcase', 'tokens'] as const)('reloads plugin %s and its open spec across workspace A → B → A', async (viewId) => {
+    const contextB = workspaceContextFixture({ workspaceId: 'ws-b', workspaceMemberId: 'member-b', workspaceType: 'personal' });
+    const pending = [deferred<PreviewResult>(), deferred<PreviewResult>(), deferred<PreviewResult>()] as const;
+    const specs = [deferred<string | null>(), deferred<string | null>(), deferred<string | null>()] as const;
+    const fetchLazy = viewId === 'showcase'
+      ? registryMocks.fetchDesignSystemShowcase
+      : registryMocks.fetchDesignSystemPreview;
+    const result = (label: string) => viewId === 'showcase'
+      ? { html: `<p>${label}</p>`, baseHref: `http://localhost/${label}/index.html` }
+      : `<p>${label}</p>`;
+    registryMocks.fetchDesignSystemShowcase.mockResolvedValue(null);
+    fetchLazy.mockImplementationOnce(() => pending[0].promise)
+      .mockImplementationOnce(() => pending[1].promise)
+      .mockImplementationOnce(() => pending[2].promise);
+    registryMocks.fetchPluginAssetText.mockImplementationOnce(() => specs[0].promise)
+      .mockImplementationOnce(() => specs[1].promise)
+      .mockImplementationOnce(() => specs[2].promise);
+    const modal = (context: WorkspaceCollabContext) => (
+      <I18nProvider initial="en">
+        <PluginDesignSystemDetail record={PLUGIN} workspaceContext={context} onClose={() => {}} onUse={() => {}} />
+      </I18nProvider>
+    );
+    const view = render(modal(CONTEXT));
+    if (viewId === 'tokens') fireEvent.click(screen.getByRole('tab', { name: 'Tokens' }));
+    await waitFor(() => expect(fetchLazy).toHaveBeenCalledTimes(1));
+    view.rerender(modal(contextB));
+    await waitFor(() => {
+      expect(fetchLazy).toHaveBeenCalledTimes(2);
+      expect(registryMocks.fetchPluginAssetText).toHaveBeenCalledTimes(2);
+    });
+    await act(async () => {
+      pending[1].resolve(result('current-b'));
+      specs[1].resolve('Spec B current');
+    });
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('current-b');
+    expect(screen.getByText('Spec B current')).toBeTruthy();
+    view.rerender(modal(CONTEXT));
+    await waitFor(() => {
+      expect(fetchLazy).toHaveBeenCalledTimes(3);
+      expect(registryMocks.fetchPluginAssetText).toHaveBeenCalledTimes(3);
+    });
+    expect(screen.queryByText('Spec B current')).toBeNull();
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc') ?? '').not.toContain('current-b');
+    await act(async () => {
+      pending[0].resolve(result('obsolete-a'));
+      specs[0].resolve('Spec A obsolete');
+    });
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc') ?? '').not.toContain('obsolete-a');
+    expect(screen.queryByText('Spec A obsolete')).toBeNull();
+    await act(async () => {
+      pending[2].resolve(result('current-a'));
+      specs[2].resolve('Spec A current');
+    });
+    expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('current-a');
+    expect(screen.getByText('Spec A current')).toBeTruthy();
+    expect(fetchLazy).toHaveBeenNthCalledWith(2, 'system-scope', contextB);
+    expect(registryMocks.fetchPluginAssetText).toHaveBeenNthCalledWith(2, PLUGIN.id, './DESIGN.md', contextB);
+    if (viewId === 'showcase') {
+      expect(document.querySelector('iframe')?.getAttribute('srcdoc')).toContain('http://localhost/current-a/index.html');
+    }
   });
 
   it('retries an unchanged logo URL when the read generation advances', () => {

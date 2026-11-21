@@ -44,7 +44,7 @@ import {
   deleteDesignSystemDraft,
   DesignSystemDeleteError,
   fetchDesignSystem,
-  designSystemStaticUrl,
+  fetchDesignSystemStaticUrl,
   fetchDesignSystemStaticText,
   fetchProjectFileText,
   projectRawUrl,
@@ -1318,7 +1318,7 @@ function useProjectLogoSrc(
     const manifest = publishedSystemId
       ? fetchDesignSystemStaticText(publishedSystemId, 'brand.json', read.context)
       : fetchProjectFileText(projectId!, 'brand.json', { cache: 'no-store', workspaceContext: read.context });
-    void manifest.then((raw) => {
+    void manifest.then(async (raw) => {
       if (cancelled || !read.isStillCurrent(resourceReadIdentityRef.current)) return;
       let primary: string | null = null;
       if (raw) {
@@ -1330,9 +1330,11 @@ function useProjectLogoSrc(
           // Not a valid brand.json (e.g. a non-brand "Create"d system) — no logo.
         }
       }
-      setSrc(primary ? publishedSystemId
-        ? designSystemStaticUrl(publishedSystemId, primary, read.context)
-        : projectRawUrl(projectId!, primary, read.context) : null);
+      const nextSrc = primary ? publishedSystemId
+        ? await fetchDesignSystemStaticUrl(publishedSystemId, primary, read.context)
+        : projectRawUrl(projectId!, primary, read.context) : null;
+      if (cancelled || !read.isStillCurrent(resourceReadIdentityRef.current)) return;
+      setSrc(nextSrc);
     });
     return () => {
       cancelled = true;

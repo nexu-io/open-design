@@ -18,6 +18,7 @@
 //
 // Copy is intentionally inline (not yet i18n-keyed), matching LibrarySection.
 
+import { useHostResolvedPreview } from '../hooks/useHostResolvedPreview';
 import { type CSSProperties, useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
@@ -150,6 +151,9 @@ function UrlStage({ asset, rawUrl }: { asset: LibraryAsset; rawUrl: string }) {
 
 function Stage({ asset }: { asset: LibraryAsset }) {
   const rawUrl = libraryAssetRawUrl(asset.id);
+  const previewDocument = useHostResolvedPreview(
+    asset.kind === 'html' || asset.kind === 'design-system' ? rawUrl : null,
+  );
   const title = assetTitle(asset);
   switch (asset.kind) {
     case 'image':
@@ -159,7 +163,7 @@ function Stage({ asset }: { asset: LibraryAsset }) {
     case 'design-system':
     case 'html':
       // Opaque-origin sandbox: scripts/animations run, daemon stays unreachable.
-      return <iframe className={styles.stageFrame} src={rawUrl} sandbox="allow-scripts" title={title} />;
+      return <iframe className={styles.stageFrame} srcDoc={previewDocument ?? ''} sandbox="allow-scripts" title={title} />;
     case 'font':
       return <FontSpecimen asset={asset} rawUrl={rawUrl} />;
     case 'color':

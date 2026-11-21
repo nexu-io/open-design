@@ -16,7 +16,7 @@ import type {
   DesignSystemPackageInfo,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
-import { designSystemStaticUrl, fetchDesignSystemStaticText, fetchProjectFileText, projectRawUrl } from '../providers/registry';
+import { designSystemStaticUrl, fetchDesignSystemStaticUrl, fetchDesignSystemStaticText, fetchProjectFileText, projectRawUrl } from '../providers/registry';
 import { parseDesignMd, type ParsedDesignMd } from './design-md-parse';
 
 // ── shared pure helpers (also re-exported from BrandPreviewCard) ──────────
@@ -342,6 +342,7 @@ export function mergeBrandKitWithDesignMd(
 // ── adapters ───────────────────────────────────────────────────────────────
 
 interface BrandKitOptions {
+  staticUrl?: (filePath: string) => string;
   /** Read assets from the explicitly shared resource, not its private project. */
   publishedAssets?: boolean;
   designSystemId?: string;
@@ -365,7 +366,7 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
   const hasAssetSource = Boolean(projectId || (opts.publishedAssets && opts.designSystemId));
   const showSystem = ready && hasAssetSource;
   const assetUrl = (rel: string): string => opts.publishedAssets && opts.designSystemId
-    ? designSystemStaticUrl(opts.designSystemId, rel, opts.workspaceContext)
+    ? (opts.staticUrl?.(rel) ?? designSystemStaticUrl(opts.designSystemId, rel, opts.workspaceContext))
     : projectRawUrl(projectId ?? '', rel, opts.workspaceContext);
   const asset = (rel: string): string | null => hasAssetSource
     ? withCacheBust(assetUrl(rel), opts.reloadKey)
@@ -478,6 +479,7 @@ export function brandSummaryToKit(
 }
 
 interface ParsedKitOptions {
+  staticUrl?: (filePath: string) => string;
   designSystemId?: string;
   projectId?: string;
   editable: boolean;
@@ -544,11 +546,11 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     samples: [],
   };
   const staticUrl = !opts.editable && opts.designSystemId && opts.packageInfo?.manifest
-    ? (rel: string): string => designSystemStaticUrl(
+    ? opts.staticUrl ?? ((rel: string): string => designSystemStaticUrl(
         opts.designSystemId!,
         rel,
         opts.workspaceContext,
-      )
+      ))
     : null;
   const manifestFiles = opts.packageInfo?.manifest?.files;
   const kitPath = staticUrl
@@ -681,6 +683,7 @@ function mergeLegacyBrandLogo(
     projectId?: string;
     designSystemId?: string;
     publishedAssets?: boolean;
+    staticUrl?: (filePath: string) => string;
     reloadKey?: number | string;
     workspaceContext?: WorkspaceCollabContext | null;
   },
@@ -688,7 +691,7 @@ function mergeLegacyBrandLogo(
   if (!logo || (!options.projectId && !(options.publishedAssets && options.designSystemId))) return kit;
   const asset = (filePath: string) => withCacheBust(
     options.publishedAssets && options.designSystemId
-      ? designSystemStaticUrl(options.designSystemId, filePath, options.workspaceContext)
+      ? (options.staticUrl?.(filePath) ?? designSystemStaticUrl(options.designSystemId, filePath, options.workspaceContext))
       : projectRawUrl(options.projectId!, filePath, options.workspaceContext),
     options.reloadKey,
   );
@@ -700,6 +703,17 @@ function mergeLegacyBrandLogo(
       : kit.logoAlternates,
     logoNotes: logo.notes ?? kit.logoNotes,
   };
+}
+
+function canonicalPackageRoot(canonical: string | null): string | null {
+  if (!canonical) return null;
+  try {
+    const url = new URL(canonical);
+    const prefix = url.pathname.match(/^\/api\/design-systems\/[^/]+\/static\/previews\/[^/]+\/files\//)?.[0];
+    return prefix ? new URL(prefix, url).href : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -729,7 +743,8 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
 
   useEffect(() => {
     let cancelled = false;
-    const fromDesignMd = (designMd: string | undefined): DesignKit =>
+    let staticUrl: ((filePath: string) => string) | undefined;
+    const fromDesignMd = (designMd: string | undefined, includePackage = true): DesignKit =>
       parsedToKit(parseDesignMd(designMd ?? ''), {
         designSystemId,
         projectId,
@@ -737,24 +752,34 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         title,
         host,
         swatches,
-        packageInfo,
+        packageInfo: includePackage ? packageInfo : undefined,
+        staticUrl,
         showcaseHtml,
         reloadKey,
         workspaceContext,
       });
 
-    if (!projectId && !publishedAssets) {
-      setKit(fromDesignMd(body));
-      setLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
+    setKit(null);
     setLoading(true);
     void (async () => {
-      // Fetch brand.json (richest) and DESIGN.md (fallback) together so the kit
-      // resolves in a single async hop — brand.json wins when it is a valid kit.
+      if (publishedAssets || (!editable && packageInfo?.manifest)) {
+        const entry = packageInfo?.manifest?.files?.design ?? 'DESIGN.md';
+        const canonical = await fetchDesignSystemStaticUrl(designSystemId, entry, workspaceContext);
+        if (cancelled) return;
+        const root = canonicalPackageRoot(canonical);
+        if (!root) {
+          setKit(fromDesignMd(body, false));
+          setLoading(false);
+          return;
+        }
+        staticUrl = filePath => root + filePath.split('/').map(encodeURIComponent).join('/');
+      }
+      if (!projectId && !publishedAssets) {
+        setKit(fromDesignMd(body));
+        setLoading(false);
+        return;
+      }
+
       const read = (filePath: string) => publishedAssets
         ? fetchDesignSystemStaticText(designSystemId, filePath, workspaceContext)
         : fetchProjectFileText(projectId!, filePath, { cache: 'no-store', cacheBustKey: reloadKey, workspaceContext });
@@ -767,6 +792,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
       if (brand) {
         const brandKit = brandToKit(brand, {
           publishedAssets,
+          staticUrl,
           ...(publishedAssets ? { ready: packageInfo?.availableFiles?.includes('system/kit.html') ?? false } : {}),
           designSystemId,
           projectId,
@@ -784,6 +810,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
           host,
           swatches,
           packageInfo,
+          staticUrl,
           showcaseHtml,
           workspaceContext,
         }));
@@ -791,7 +818,7 @@ export function useDesignKit(source: DesignKitSource): { kit: DesignKit | null; 
         setKit(mergeLegacyBrandLogo(
           fromDesignMd(rawDesignMd ?? ''),
           tryParseLegacyBrandLogo(rawBrand),
-          { projectId, designSystemId, publishedAssets, reloadKey, workspaceContext },
+          { projectId, designSystemId, publishedAssets, staticUrl, reloadKey, workspaceContext },
         ));
       }
       setLoading(false);

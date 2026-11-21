@@ -478,13 +478,30 @@ async function expectSharedLogo(
     complete: true,
     width: 320,
     height: 160,
-    workspaceId: WORKSPACE_ID,
-    workspaceMemberId: sharedResource?.memberId ?? OWNER.memberId,
+    workspaceId: sharedResource ? null : WORKSPACE_ID,
+    workspaceMemberId: sharedResource ? null : OWNER.memberId,
   });
   if (sharedResource) {
-    const source = new URL((await logo.getAttribute('src'))!, 'http://localhost');
-    expect(source.pathname).toBe(`/api/design-systems/${encodeURIComponent(sharedResource.id)}/static`);
-    expect(source.searchParams.get('path')).toBe('assets/logo.svg');
+    const source = new URL(await logo.evaluate((image: HTMLImageElement) => image.src));
+    const prefix = `/api/design-systems/${encodeURIComponent(sharedResource.id)}/static/previews/`;
+    expect(source.pathname.startsWith(prefix)).toBe(true);
+    expect(source.pathname.slice(prefix.length)).toMatch(/^[^/]+\/files\/assets\/logo\.svg$/);
+    expect(source.searchParams.get('path')).toBeNull();
+    const headers = {
+      'x-od-workspace-id': WORKSPACE_ID,
+      'x-od-workspace-member-id': sharedResource.memberId,
+    };
+    const scopedLogo = await container.page().request.get(source.href, { headers, timeout: T.long });
+    expect(scopedLogo.status()).toBe(200);
+    expect(await scopedLogo.text()).toBe(sharedLogoSvg());
+    for (const key of ['x-od-workspace-id', 'x-od-workspace-member-id']) {
+      const conflictingLogo = await container.page().request.get(source.href, {
+        headers: { ...headers, [key]: 'different-workspace-or-member' },
+        timeout: T.long,
+      });
+      expect(conflictingLogo.status()).toBe(400);
+      expect(await conflictingLogo.json()).toEqual({ error: 'WORKSPACE_CONTEXT_CONFLICT' });
+    }
   }
 }
 

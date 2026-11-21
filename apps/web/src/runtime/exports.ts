@@ -1467,7 +1467,7 @@ export async function exportAsPdf(
   // build it with jsPDF. No print dialog, no agent. The window.print() popup
   // below is kept only as a last-resort fallback if the capture path throws.
   try {
-    await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, onProgress: opts?.onProgress });
+    await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, baseHref: opts?.baseHref, onProgress: opts?.onProgress });
     return;
   } catch (err) {
     console.warn('[exportAsPdf] programmatic PDF failed, falling back to print popup:', err);
@@ -1834,6 +1834,7 @@ async function captureArtifactSlides(
   html: string,
   opts: {
     deck: boolean;
+    baseHref?: string;
     mode: 'image';
     width?: number;
     height?: number;
@@ -1850,7 +1851,7 @@ async function captureArtifactSlides(
   iframe.setAttribute('aria-hidden', 'true');
   iframe.setAttribute('tabindex', '-1');
   iframe.style.cssText = `position:fixed;left:-100000px;top:0;width:${width}px;height:${height}px;border:0;background:#fff;`;
-  iframe.srcdoc = buildSrcdoc(html, { deck: opts.deck });
+  iframe.srcdoc = buildSrcdoc(html, { deck: opts.deck, baseHref: opts.baseHref });
   document.body.appendChild(iframe);
 
   const slides: CapturedSlide[] = [];
@@ -1922,10 +1923,11 @@ export async function exportArtifactImageDataUrl(
 export async function exportArtifactAsPdf(
   html: string,
   title: string,
-  opts: { deck: boolean; onProgress?: ExportProgress; timeoutMs?: number },
+  opts: { deck: boolean; baseHref?: string; onProgress?: ExportProgress; timeoutMs?: number },
 ): Promise<void> {
   const slides = await captureArtifactSlides(html, {
     deck: opts.deck,
+    baseHref: opts.baseHref,
     mode: 'image',
     onProgress: opts.onProgress,
     timeoutMs: opts.timeoutMs,

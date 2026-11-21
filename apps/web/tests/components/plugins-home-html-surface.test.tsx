@@ -29,7 +29,7 @@ const PREVIEW: HtmlPreviewSpec = {
 };
 
 const okResponse = (): Response =>
-  ({ ok: true, status: 200 } as unknown as Response);
+  new Response('<p>html preview sentinel</p>', { headers: { 'content-type': 'text/html' } });
 const notFoundResponse = (): Response =>
   ({ ok: false, status: 404 } as unknown as Response);
 
@@ -63,6 +63,8 @@ describe('HtmlSurface reachability probe', () => {
       },
       { timeout: 2000 },
     );
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBeNull();
+    await waitFor(() => expect(container.querySelector('iframe')?.getAttribute('srcdoc')).toContain('html preview sentinel'));
     expect(
       container.querySelector('[data-testid="plugins-home-html-fallback"]'),
     ).toBeNull();

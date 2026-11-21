@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { workspaceResourceUrl } from '../../collab/workspace-identity';
+import { useHostResolvedPreview } from '../../hooks/useHostResolvedPreview';
 import { Icon } from '../Icon';
 
 export interface PluginExampleEntry {
@@ -47,9 +48,9 @@ export function PluginPreviewHero({
     items[0]?.key ?? null,
   );
 
-  if (items.length === 0) return null;
-
-  const active = items.find((it) => it.key === activeKey) ?? items[0]!;
+  const active = items.find((it) => it.key === activeKey) ?? items[0];
+  const previewDocument = useHostResolvedPreview(active?.href);
+  if (!active) return null;
 
   return (
     <section
@@ -122,7 +123,7 @@ export function PluginPreviewHero({
         <iframe
           key={active.key}
           title={`${pluginTitle} — ${active.name}`}
-          src={active.href}
+          srcDoc={previewDocument ?? ''}
           sandbox="allow-scripts"
           loading="lazy"
           className="plugin-details-modal__hero-iframe"

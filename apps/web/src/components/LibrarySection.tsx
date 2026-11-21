@@ -13,6 +13,7 @@
 // rubber-band box drag, Cmd/Ctrl+A — and the selection can be bulk-deleted from
 // the action bar or with Delete / Backspace.
 
+import { useHostResolvedPreview } from '../hooks/useHostResolvedPreview';
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ChatAttachment, DesignSystemSummary, LibraryAsset } from '@open-design/contracts';
 import {
@@ -133,6 +134,9 @@ function dayHeading(key: string, t: Translate): string {
 function MediaThumb({ asset }: { asset: LibraryAsset }) {
   const [loaded, setLoaded] = useState(false);
   const rawUrl = libraryAssetRawUrl(asset.id);
+  const previewDocument = useHostResolvedPreview(
+    asset.kind === 'html' || asset.kind === 'design-system' ? rawUrl : null,
+  );
   const title = assetTitle(asset);
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -169,7 +173,7 @@ function MediaThumb({ asset }: { asset: LibraryAsset }) {
     media = (
       <iframe
         className={styles.thumbFrame}
-        src={rawUrl}
+        srcDoc={previewDocument ?? ''}
         sandbox=""
         scrolling="no"
         loading="lazy"

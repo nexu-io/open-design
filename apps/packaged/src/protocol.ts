@@ -1,4 +1,6 @@
-import { net, protocol } from "electron";
+import { randomUUID } from 'node:crypto';
+import { net, protocol, session } from "electron";
+import { isSandboxedPreviewRead } from "@open-design/contracts";
 
 const OD_SCHEME = "od";
 const OD_ENTRY_URL = `${OD_SCHEME}://app/`;
@@ -158,9 +160,7 @@ const defaultRetryDelay = (ms: number): Promise<void> =>
  *     tears down) aborts the upstream too.
  */
 /**
- * Two response-header repairs every proxied response needs:
- *
- * 1. Drop `content-encoding`/`content-length`/`transfer-encoding`. The
+ * Drop `content-encoding`/`content-length`/`transfer-encoding`. The
  *    main-process fetch has ALREADY decompressed the upstream body, but the
  *    stale headers ride along, so Chromium's renderer-side consumers that
  *    honor them (the font loader chief among them) try to gunzip plain
@@ -168,17 +168,23 @@ const defaultRetryDelay = (ms: number): Promise<void> =>
  *    packaged icon font rendered as tofu squares while plain fetch() of the
  *    same TTF returned 200 — the fetch path never re-decodes. Classic
  *    protocol.handle-proxy pitfall.
- * 2. Stamp `Access-Control-Allow-Origin: *`. Font loads are CORS-mode
- *    requests per the CSS Fonts spec; od:// is reachable only from this
- *    app's own renderer, so the wildcard leaks nothing.
  */
-function sanitizeProxyResponseHeaders(headers: Headers): Headers {
+function sanitizeProxyResponseHeaders(headers: Headers, requestUrl: string, responseUrl: string): Headers {
   const out = new Headers(headers);
   out.delete("content-encoding");
   out.delete("content-length");
   out.delete("transfer-encoding");
   out.set("Access-Control-Allow-Origin", "*");
+  if (isUntrustedDocumentResponseUrl(requestUrl) || isUntrustedDocumentResponseUrl(responseUrl)) {
+    out.append("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-downloads");
+  }
   return out;
+}
+
+function isUntrustedDocumentResponseUrl(value: string): boolean {
+  if (!value) return false;
+  const pathname = new URL(value).pathname.toLowerCase();
+  return /^\/(?:api|artifacts|frames)(?:\/|$)/.test(pathname);
 }
 
 async function fetchOdTargetOnce(
@@ -220,7 +226,7 @@ async function fetchOdTargetOnce(
     return new Response(null, {
       status: upstream.status,
       statusText: upstream.statusText,
-      headers: sanitizeProxyResponseHeaders(upstream.headers),
+      headers: sanitizeProxyResponseHeaders(upstream.headers, request.url, upstream.url),
     });
   }
   const reader = upstream.body.getReader();
@@ -250,7 +256,7 @@ async function fetchOdTargetOnce(
   return new Response(body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: sanitizeProxyResponseHeaders(upstream.headers),
+    headers: sanitizeProxyResponseHeaders(upstream.headers, request.url, upstream.url),
   });
 }
 
@@ -522,6 +528,30 @@ function resolveOdProxyFetch(isQuiesced: () => boolean = () => false): OdProtoco
  * address itself.
  */
 export function registerOdProtocol(resolveWebRuntimeUrl: OdProtocolTargetResolver): OdProtocolControl {
+  const frameTokenHeader = 'x-od-protocol-frame-token';
+  const trustedFrameToken = randomUUID();
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ["od://*/*"] }, (details, callback) => {
+    const requestHeaders = Object.fromEntries(Object.entries(details.requestHeaders)
+      .filter(([name]) => name.toLowerCase() !== frameTokenHeader));
+    try {
+      if (details.frame?.origin === "od://app") requestHeaders[frameTokenHeader] = trustedFrameToken;
+    } catch {}
+    callback({ requestHeaders });
+  });
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ["od://*/*"] }, (details, callback) => {
+    let cancel = true;
+    try {
+      const url = new URL(details.url);
+      const apiPath = /^\/api(?=\/|$)/i.exec(url.pathname);
+      const ambiguousPath = /\\|\/{2,}|^\/[^/]*%/.test(url.pathname);
+      cancel = url.host !== "app" || (details.frame?.origin !== "od://app"
+        && (ambiguousPath || (apiPath !== null
+          && !isSandboxedPreviewRead(details.method, url.pathname.slice(apiPath[0].length)))));
+    } catch {
+      cancel = true;
+    }
+    callback({ cancel });
+  });
   let quiesced = false;
   const activeControllers = new Set<AbortController>();
   const fetchImpl = resolveOdProxyFetch(() => quiesced);
@@ -530,7 +560,13 @@ export function registerOdProtocol(resolveWebRuntimeUrl: OdProtocolTargetResolve
     // transport barrier is therefore the authoritative boundary: once armed,
     // no request can race sidecar retirement or dial the old localhost origin.
     if (quiesced) return buildRuntimeRetiringResponse(request);
-    return await handleOdRequest(request, resolveWebRuntimeUrl(), fetchImpl, {
+    const headers = new Headers(request.headers);
+    const trustedCaller = headers.get(frameTokenHeader) === trustedFrameToken;
+    headers.delete(frameTokenHeader);
+    if (trustedCaller) headers.delete('Origin');
+    else headers.set('Origin', 'null');
+    const authorizedRequest = new Request(request, { headers });
+    return await handleOdRequest(authorizedRequest, resolveWebRuntimeUrl(), fetchImpl, {
       activeControllers,
       isQuiesced: () => quiesced,
     });
