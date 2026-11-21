@@ -147,6 +147,58 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(runBody.assistantMessageId).toBeTruthy();
   });
 
+  it('rejects overlapping project-only runs after binding the default conversation', async () => {
+    started = await startTestServer();
+    const binDir = await mkdtemp(path.join(os.tmpdir(), 'od-headless-concurrency-bin-'));
+    const emptyAgentHome = await mkdtemp(path.join(os.tmpdir(), 'od-headless-concurrency-home-'));
+    const priorConfig = await readAppConfigFromServer(started.url);
+    try {
+      const opencodeBin = await writeFakeOpencode(binDir, true);
+      process.env.OD_AGENT_HOME = emptyAgentHome;
+      const configured = await fetch(`${started.url}/api/app-config`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'opencode', agentCliEnv: { opencode: { OPENCODE_BIN: opencodeBin } } }),
+      });
+      expect(configured.status).toBe(200);
+      const { projectId, conversationId } = await createProject(started.url, 'Concurrent headless project');
+      const post = (body: Record<string, unknown>) => fetch(`${started!.url}/api/runs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const requestId = randomUUID();
+      const body = { projectId, agentId: 'opencode', clientRequestId: requestId, message: 'first task' };
+      const first = await post(body);
+      expect(first.status).toBe(202);
+      const firstRun = await first.json() as { runId: string; conversationId: string };
+      expect(firstRun.conversationId).toBe(conversationId);
+      const replay = await post(body);
+      expect(replay.status).toBe(202);
+      expect(await replay.json()).toMatchObject({ runId: firstRun.runId, reused: true });
+      const second = await post({ ...body, clientRequestId: randomUUID(), message: 'independent task' });
+      expect(second.status).toBe(409);
+      expect(await second.json()).toMatchObject({ error: { code: 'RUN_IN_PROGRESS' } });
+      const explicit = await post({ ...body, conversationId, clientRequestId: randomUUID(), message: 'explicit conversation' });
+      expect(explicit.status).toBe(409);
+      const otherConversation = await createConversation(started.url, projectId, 'Independent conversation');
+      const other = await post({ ...body, conversationId: otherConversation, clientRequestId: randomUUID(), message: 'independent conversation' });
+      expect(other.status).toBe(202);
+      const otherRun = await other.json() as { runId: string };
+      await fetch(`${started.url}/api/runs/${otherRun.runId}/cancel`, { method: 'POST' });
+      const cancellation = await fetch(`${started.url}/api/runs/${firstRun.runId}/cancel`, { method: 'POST' });
+      expect(cancellation.ok).toBe(true);
+      const [afterCancel, racing] = await Promise.all([
+        post({ ...body, clientRequestId: randomUUID(), message: 'after cancellation A' }),
+        post({ ...body, clientRequestId: randomUUID(), message: 'after cancellation B' }),
+      ]);
+      expect([afterCancel.status, racing.status].sort()).toEqual([202, 409]);
+      const afterRun = await (afterCancel.status === 202 ? afterCancel : racing).json() as { runId: string };
+      await fetch(`${started.url}/api/runs/${afterRun.runId}/cancel`, { method: 'POST' });
+    } finally {
+      await restoreAppConfig(started.url, priorConfig);
+      await rm(binDir, { recursive: true, force: true });
+      await rm(emptyAgentHome, { recursive: true, force: true });
+    }
+  });
+
   it('mints assistantMessageId when conversationId is present but pin id is omitted', async () => {
     started = await startTestServer();
     const { projectId, conversationId } = await createProject(
@@ -1061,7 +1113,7 @@ async function restoreAppConfig(url: string, config: Record<string, unknown>): P
   });
 }
 
-async function writeFakeOpencode(dir: string): Promise<string> {
+async function writeFakeOpencode(dir: string, hold = false): Promise<string> {
   const bin = path.join(dir, 'opencode');
   await writeFile(bin, `#!/usr/bin/env node
 if (process.argv.includes('--version')) {
@@ -1074,8 +1126,8 @@ if (process.argv[2] === 'models') {
 }
 if (process.argv[2] === 'run') {
   process.stdin.resume();
-  process.stdin.on('end', () => process.exit(0));
-  setTimeout(() => process.exit(0), 50);
+  ${hold ? "process.stdin.on('end', () => {});" : "process.stdin.on('end', () => process.exit(0));"}
+  ${hold ? 'setInterval(() => {}, 60_000);' : 'setTimeout(() => process.exit(0), 50);'}
 } else {
   process.exit(0);
 }
