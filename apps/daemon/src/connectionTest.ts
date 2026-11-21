@@ -956,7 +956,8 @@ function inspectProviderCompletion(
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
-      responseModel !== requestedModel
+      responseModel !== requestedModel &&
+      !responseModel.endsWith(`/${requestedModel}`)
     ) {
       return {
         valid: false,
