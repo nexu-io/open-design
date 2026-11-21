@@ -106,6 +106,16 @@ describe('recorded media failures carry a next step', () => {
     ).toBe('open-settings');
   });
 
+  it('classifies a signed-out Vela CLI profile failure as sign-in', () => {
+    const error = mediaTaskErrorFromFailure(
+      new Error(
+        'Command failed: ...\\vela.exe media models --json\nError: profile "prod" is not logged in; run `vela login`\n',
+      ),
+      { model: 'vela/gpt-image-2' },
+    );
+    expect(error.nextStep).toBe('sign-in');
+  });
+
   it('survives the SQLite round-trip the way code and retryable do', () => {
     const restored = roundTrip(
       new VelaMediaError('the reference image was refused', {
