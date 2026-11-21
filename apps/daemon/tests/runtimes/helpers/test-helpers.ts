@@ -84,6 +84,7 @@ export const kilo = requireAgent('kilo');
 export const vibe = requireAgent('vibe');
 export const devin = requireAgent('devin');
 export const pi = requireAgent('pi');
+export const omp = requireAgent('omp');
 export const deepseek = requireAgent('deepseek');
 export const qoder = requireAgent('qoder');
 export const qwen = requireAgent('qwen');
