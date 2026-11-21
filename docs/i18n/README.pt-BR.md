@@ -102,6 +102,7 @@ Esse fluxo de trabalho é aberto e extensível. O OpenDesign é licenciado sob A
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Suportado | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Suportado | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Suportado | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Suportado | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Suportado | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Suportado | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Suportado | `od mcp install cline` |

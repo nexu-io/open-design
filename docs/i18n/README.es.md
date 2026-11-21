@@ -102,6 +102,7 @@ Ese flujo de trabajo es abierto y ampliable. OpenDesign tiene licencia Apache 2.
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Compatible | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Compatible | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Compatible | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Compatible | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Compatible | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Compatible | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Compatible | `od mcp install cline` |
