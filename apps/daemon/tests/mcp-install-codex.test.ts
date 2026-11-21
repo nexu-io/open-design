@@ -8,6 +8,7 @@ import {
   createCodexCliInvocation,
   installCodexMcp,
   probeCodexInstall,
+  readCodexMcpRegistration,
   refreshOwnedCodexMcp,
   setCodexRunner,
   uninstallCodexMcp,
@@ -194,6 +195,34 @@ describe('codex-cli uninstall', () => {
     const runner = makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'Error: not found\n' }));
     setCodexRunner(runner);
     await expect(uninstallCodexMcp('open-design')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('readCodexMcpRegistration', () => {
+  it('returns the registered stdio env so a re-install can keep a pinned URL', async () => {
+    const stdout = JSON.stringify({
+      name: 'open-design',
+      transport: { type: 'stdio', command: '/n', args: ['mcp'], env: { OD_DAEMON_URL: 'http://127.0.0.1:7456' } },
+    });
+    const runner = makeStubRunner(async () => ({ exitCode: 0, stdout, stderr: '' }));
+    setCodexRunner(runner);
+    await expect(readCodexMcpRegistration('open-design')).resolves.toEqual({
+      command: '/n',
+      args: ['mcp'],
+      env: { OD_DAEMON_URL: 'http://127.0.0.1:7456' },
+    });
+    expect(runner.calls.map((call) => call.args)).toEqual([['mcp', 'get', 'open-design', '--json']]);
+  });
+
+  it('returns null when nothing is registered or Codex is missing', async () => {
+    setCodexRunner(makeStubRunner(async () => ({ exitCode: 1, stdout: '', stderr: 'not found' })));
+    await expect(readCodexMcpRegistration('open-design')).resolves.toBeNull();
+    setCodexRunner({
+      async run() {
+        throw Object.assign(new Error('spawn codex ENOENT'), { code: 'ENOENT' });
+      },
+    });
+    await expect(readCodexMcpRegistration('open-design')).resolves.toBeNull();
   });
 });
 

@@ -123,6 +123,22 @@ export interface CodexInstallSpec {
   env: Record<string, string>;
 }
 
+/**
+ * The current stdio registration named `name`, or null when Codex is missing,
+ * nothing is registered, or the entry is not a readable stdio server.
+ */
+export async function readCodexMcpRegistration(name: string): Promise<CodexMcpRegistration | null> {
+  let result: CodexRunnerResult;
+  try {
+    result = await activeRunner().run(['mcp', 'get', name, '--json']);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return null;
+    throw err;
+  }
+  if (result.exitCode !== 0) return null;
+  return parseCodexMcpRegistration(result.stdout);
+}
+
 export async function installCodexMcp(spec: CodexInstallSpec): Promise<void> {
   const argv: string[] = ['mcp', 'add', spec.name];
   for (const [key, value] of Object.entries(spec.env)) {
