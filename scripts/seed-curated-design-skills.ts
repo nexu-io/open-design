@@ -644,6 +644,18 @@ const CATALOGUE: CuratedSkill[] = [
     attribution: 'Curated from @ibelick.',
   },
   {
+    id: 'oil-ui',
+    description:
+      'Design, review, and refine websites, apps, dashboards, and UI components with direction-first workflows, distinct multi-direction comparison pages, and screenshot verification.',
+    triggers: ['oil-ui', 'ui design', 'compare ui directions', 'design review', 'screenshot to ui'],
+    mode: 'design-system',
+    category: 'design-systems',
+    upstream: 'https://github.com/oil-oil/oil-ui',
+    attribution: 'Curated from @oil-oil.',
+    catalogueOnlyNote:
+      'OpenDesign ships this entry as discovery metadata only. The upstream Oil UI reference guides, style-explorer comparison generator, and browser screenshot scripts are not bundled here; install the upstream bundle (`npx skills add oil-oil/oil-ui`) for the full workflow, or disclose the limitation before falling back to OpenDesign defaults.',
+  },
+  {
     id: 'ui-ux-pro-max',
     description:
       'Catalog-only UI/UX Pro Max entry. The full upstream templates, data, and search workflow are not bundled in OpenDesign.',
