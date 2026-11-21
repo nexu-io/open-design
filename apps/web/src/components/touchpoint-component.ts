@@ -1,4 +1,5 @@
 import { getTopModalDialog } from "@open-design/components";
+import { randomUUID } from "../utils/uuid";
 import {
 	type TouchpointComponentV2Manifest as ContentPackageManifest,
 	TouchpointComponentV2ManifestSchema as contentPackageManifestSchema,
@@ -728,7 +729,7 @@ export function webTouchpointContext(
 		: undefined;
 	if (!locale) return undefined;
 	return Object.freeze({
-		instanceId: crypto.randomUUID(),
+		instanceId: randomUUID(),
 		contentVersionId: touchpoint.id,
 		placementKey: touchpoint.placementKey,
 		locale,
