@@ -2971,6 +2971,11 @@ export const ar: Dict = {
   'workspace.focusMode': 'التركيز على مساحة العمل',
   'workspace.showChat': 'إظهار المحادثة',
   'workspace.closeTab': 'إغلاق علامة التبويب',
+  'workspace.closeOtherTabs': 'إغلاق علامات التبويب الأخرى',
+  // The tab strip mirrors in RTL, so tabs before the clicked one sit on its right.
+  'workspace.closeTabsToLeft': 'إغلاق علامات التبويب إلى اليمين',
+  'workspace.closeTabsToRight': 'إغلاق علامات التبويب إلى اليسار',
+  'workspace.closeAllTabs': 'إغلاق كل علامات التبويب',
   'workspace.fileSyncDownloading': 'جارٍ التنزيل من الفريق…',
   'workspace.fileSyncUploading': 'جارٍ المزامنة مع الفريق…',
   'workspace.deleteFileConfirm': 'حذف "{name}" من مجلد المشروع؟',
