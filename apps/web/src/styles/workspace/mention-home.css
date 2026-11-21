@@ -538,6 +538,24 @@
   background: color-mix(in srgb, var(--text-strong) 88%, var(--brand, #87ea5c));
 }
 
+/* Destructive override for restart-safety denials; mirrors the app-menu
+   UpdateDialog danger action. */
+.updater-popup__button--danger {
+  border-color: color-mix(in srgb, #c1583c 38%, var(--border-soft));
+  color: #a74631;
+  background: color-mix(in srgb, #c1583c 8%, var(--bg-elevated));
+}
+
+.updater-popup__button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, #c1583c 13%, var(--bg-elevated));
+}
+
+/* Warning states add a third action; stack the pills so the destructive
+   option sits apart from the safe defaults. */
+.updater-popup__actions:has(.updater-popup__button--danger) {
+  grid-template-columns: 1fr;
+}
+
 @media (max-width: 560px) {
   .updater-popup {
     width: calc(100vw - var(--entry-rail-width, 56px) - 18px);
