@@ -4494,6 +4494,20 @@ export function ProjectView({
       } catch (err) {
         if (cancelled) return;
         loadedTranscriptRef.current = null;
+
+        // Treat transient 503s as non-fatal. Keep the run visible with a retry.
+        const isTransient = err instanceof Error && (
+          err.message.includes('503') ||
+          err.message.includes('WORKSPACE_AUTHORITY_UNAVAILABLE')
+        );
+
+
+        if (isTransient) {
+          setError('Failed to load the transcript. Please try again.');
+          return;
+        }
+
+
         const message = err instanceof Error && err.message
           ? err.message
           : 'Could not load messages for this conversation.';
