@@ -55,7 +55,7 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
  * `TerminalViewer`, `connectorBrandColor`, `MentionNode`). Stamping it
  * unconditionally is what keeps a dark OS from leaking through.
  */
-export const FORCED_APP_THEME = 'light' as const;
+export const FORCED_APP_THEME = 'dark' as const;
 
 /**
  * Coerce any persisted theme to the only one that still exists.

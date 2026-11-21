@@ -1430,19 +1430,19 @@ describe('loadConfig', () => {
     expect(config.apiProtocol).toBe('anthropic');
   });
 
-  it('preserves a valid saved accent color while forcing the theme back to light', () => {
+  it('preserves a valid saved accent color while forcing the theme to dark', () => {
     const savedConfig: Partial<AppConfig> = {
-      theme: 'dark',
+      theme: 'light',
       accentColor: '#4F46E5',
     };
     store.set('open-design:config', JSON.stringify(savedConfig));
 
     const config = loadConfig();
 
-    // The theme setting was removed and the app ships light-only, so a stored
-    // dark preference is coerced on read (see tests/state/force-light-theme).
+    // The theme setting was removed and the app ships dark mode, so a stored
+    // light preference is coerced on read (see tests/state/force-light-theme).
     // The accent, which has no such rule, must still survive.
-    expect(config.theme).toBe('light');
+    expect(config.theme).toBe('dark');
     expect(config.accentColor).toBe('#4f46e5');
   });
 
