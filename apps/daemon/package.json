@@ -53,6 +53,7 @@
     "blake3-wasm": "2.1.5",
     "cheerio": "1.2.0",
     "chokidar": "3.6.0",
+    "compression": "1.8.1",
     "express": "5.2.1",
     "gsap": "3.14.2",
     "htmlparser2": "10.1.0",
@@ -72,6 +73,7 @@
   "devDependencies": {
     "@babel/types": "7.29.0",
     "@types/better-sqlite3": "7.6.13",
+    "@types/compression": "1.8.1",
     "@types/express": "5.0.6",
     "@types/multer": "2.1.0",
     "@types/node": "20.19.39",
