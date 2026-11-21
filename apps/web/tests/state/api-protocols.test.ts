@@ -43,4 +43,22 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the LLMTR preset wired to OpenAI-compatible chat models', () => {
+    const llmtrProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://llmtr.com/v1',
+    );
+
+    expect(llmtrProvider).toMatchObject({
+      label: 'LLMTR',
+      apiKeyConsoleLink: {
+        host: 'llmtr.com',
+        url: 'https://llmtr.com/dashboard/keys?utm_source=open_design&utm_medium=provider_preset&utm_campaign=llmtr_byok',
+      },
+    });
+    expect(llmtrProvider?.preferredModels?.[0]).toBe('qwen/qwen3.8-27b-free');
+    expect(llmtrProvider?.preferredModels).toContain('llmtr/qwen3-8-27b');
+  });
 });
