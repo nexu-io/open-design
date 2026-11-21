@@ -155,12 +155,14 @@ export async function startDaemonSidecar(
   // the public `status()` method below recompute it from
   // `isDesktopAuthGateActive()` per request — the value cached here is
   // a startup snapshot only.
+  const startedAt = new Date().toISOString();
   const state: DaemonStatusSnapshot = {
     desktopAuthGateActive: isDesktopAuthGateActive(),
     pid: process.pid,
     state: "running",
+    startedAt,
     trustedWebOriginPort: parseOptionalTrustedWebPort(process.env[WEB_PORT_ENV]),
-    updatedAt: new Date().toISOString(),
+    updatedAt: startedAt,
     url: serverHandle.url,
   };
   let stopped = false;

@@ -72,6 +72,7 @@ import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
+import { formatUptime } from "./uptime.js";
 import { resolveDevVelaEnv } from "./vela-runtime.js";
 
 type CliOptions = ToolDevOptions & {
@@ -159,10 +160,12 @@ function formatStatusSummary(status: unknown): string {
   const parts = [stringField(record, "state") ?? "unknown"];
   const url = stringField(record, "url");
   const pid = numberField(record, "pid");
+  const uptime = formatUptime(stringField(record, "startedAt"));
   const title = stringField(record, "title");
   const windowVisible = record.windowVisible;
   if (url != null) parts.push(url);
   if (pid != null) parts.push(`pid ${pid}`);
+  if (uptime != null) parts.push(`up ${uptime}`);
   if (title != null) parts.push(`title ${JSON.stringify(title)}`);
   if (typeof windowVisible === "boolean") parts.push(`window ${windowVisible ? "visible" : "hidden"}`);
 

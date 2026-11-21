@@ -177,6 +177,12 @@ export type DaemonStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
   trustedWebOriginPort?: number | null;
+  /**
+   * ISO timestamp of process start. `updatedAt` moves whenever the snapshot's
+   * state changes, so it cannot answer "how old is the sidecar answering me" —
+   * which is exactly what a dev sidecar reused across days needs to report.
+   */
+  startedAt?: string;
   updatedAt?: string;
   url: string | null;
   /**
@@ -196,6 +202,8 @@ export type DaemonStatusSnapshot = {
 export type WebStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  /** ISO timestamp of process start; see `DaemonStatusSnapshot.startedAt`. */
+  startedAt?: string;
   updatedAt?: string;
   url: string | null;
 };
