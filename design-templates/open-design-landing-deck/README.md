@@ -80,8 +80,9 @@ design-templates/open-design-landing-deck/
 ## Image strategy
 
 The deck inherits the sister template's 16-slot image library. Set
-`inputs.imagery.assets_path` to wherever those PNGs live; the example
-uses `'../open-design-landing/assets/'`.
+`inputs.imagery.assets_path` to the shared asset directory; the example
+uses `'../open-design-landing/assets/'`. The composer references SVG slots
+for `placeholder` and PNG slots for `generate` or `bring-your-own`.
 
 To regenerate or stub:
 
