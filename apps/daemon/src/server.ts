@@ -617,6 +617,7 @@ import {
 } from './storage/message-event-payload-heal.js';
 import { createTaskObservationRolloutService } from './observability/task-observation-rollout.js';
 import { strategyTaskRunObservationId } from './observability/task-observation-aggregation.js';
+import { runTelemetryDeliveryReportedStatus } from './observability/delivery-state.js';
 import { collectCodexChildEvidence } from './runtimes/codex-child-evidence.js';
 import {
   collectOpenCodeChildEvidenceFacts,
@@ -2530,7 +2531,7 @@ export function createFinalizedMessageTelemetryReporter({
             ? existingDelivery.status !== 'not_expected'
             : true,
           langfuse_delivery_status: alreadyTerminal
-            ? existingDelivery.status
+            ? runTelemetryDeliveryReportedStatus(existingDelivery)
             : 'failed',
           ...(alreadyTerminal && existingDelivery.dropReason
             ? { langfuse_drop_reason: existingDelivery.dropReason }
