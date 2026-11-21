@@ -29,6 +29,28 @@ export interface AutomaticDiagnosticSource extends LogSource {
   omitReason?: string;
   /** Keeps only the lines that belong to the incident from a log shared by many runs. */
   selectLines?: (lines: string[]) => string[];
+  /**
+   * Produces the content on demand instead of reading `absolutePath` (rows
+   * exported from a database, for example). The consent fence sets
+   * `notBeforeMs`; records older than it must not be returned.
+   */
+  render?: (notBeforeMs: number | null) => Promise<string>;
+  notBeforeMs?: number;
+}
+
+/** Keeps the last whole lines of rendered content that fit in `limit` bytes. */
+function keepTail(content: string, limit: number): string {
+  if (Buffer.byteLength(content) <= limit) return content;
+  const lines = content.split('\n');
+  const kept: string[] = [];
+  let bytes = 0;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const size = Buffer.byteLength(lines[index]!) + 1;
+    if (bytes + size > limit) break;
+    kept.unshift(lines[index]!);
+    bytes += size;
+  }
+  return kept.join('\n');
 }
 
 /** Read the filtered tail with bounded memory, even for receipt-only or oversized lines. */
@@ -107,16 +129,30 @@ export async function buildAutomaticDiagnostics(input: {
       input.signal?.throwIfAborted();
       if (source.kind === 'binary' || /\.(dmp|core|zip)$/i.test(source.name)) continue;
       if (source.omitReason) { notes.push({ name: source.name, reason: source.omitReason }); continue; }
-      const size = await stat(source.absolutePath).then((s) => s.size).catch(() => 0);
-      const available = source.startOffset === undefined ? Infinity : Math.max(0, size - source.startOffset);
-      const limit = Math.min(source.tailBytes ?? DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_CHUNK_BYTES, remaining, available);
-      if (available === 0) { notes.push({ name: source.name, reason: 'consent_boundary' }); continue; }
-      if (limit <= 0) { notes.push({ name: source.name, reason: 'incident_size_limit' }); continue; }
-      const file = source.kind === 'text'
-        ? await readAutomaticTextTail(source, limit, input.signal)
+      let size: number;
+      let limit: number;
+      let file: { content: unknown; error?: unknown };
+      if (source.render) {
+        limit = Math.min(source.tailBytes ?? DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_CHUNK_BYTES, remaining);
+        if (limit <= 0) { notes.push({ name: source.name, reason: 'incident_size_limit' }); continue; }
+        const rendered = await source.render(source.notBeforeMs ?? null)
           .then((content) => ({ content, error: false }))
-          .catch(() => ({ content: '', error: true }))
-        : await collectLogSource({ ...source, tailBytes: limit }, input.redaction);
+          .catch(() => ({ content: '', error: true }));
+        // `size` past `limit` is what reports `tail_truncated` below.
+        size = Buffer.byteLength(rendered.content);
+        file = { content: keepTail(rendered.content, limit), error: rendered.error };
+      } else {
+        size = await stat(source.absolutePath).then((s) => s.size).catch(() => 0);
+        const available = source.startOffset === undefined ? Infinity : Math.max(0, size - source.startOffset);
+        limit = Math.min(source.tailBytes ?? DIAGNOSTIC_CHUNK_BYTES, DIAGNOSTIC_CHUNK_BYTES, remaining, available);
+        if (available === 0) { notes.push({ name: source.name, reason: 'consent_boundary' }); continue; }
+        if (limit <= 0) { notes.push({ name: source.name, reason: 'incident_size_limit' }); continue; }
+        file = source.kind === 'text'
+          ? await readAutomaticTextTail(source, limit, input.signal)
+            .then((content) => ({ content, error: false }))
+            .catch(() => ({ content: '', error: true }))
+          : await collectLogSource({ ...source, tailBytes: limit }, input.redaction);
+      }
       input.signal?.throwIfAborted();
       if (file.error) { notes.push({ name: source.name, reason: 'source_unavailable' }); continue; }
       let lines = String(file.content ?? '').split('\n');
