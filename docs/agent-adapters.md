@@ -411,7 +411,7 @@ authentication, and the boundary between REST and MCP.
   ```sh
   pnpm --filter @open-design/dsh-runtime build
   pnpm -C packages/dsh-runtime pack --pack-destination <temporary-directory>
-  dsh plugin --profile open-design add <temporary-directory>/open-design-dsh-runtime-0.1.0.tgz
+  dsh plugin --profile open-design add <temporary-directory>/open-design-dsh-runtime-*.tgz
   dsh --profile open-design --probe
   dsh --profile open-design --models
   ```
