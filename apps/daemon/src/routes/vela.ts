@@ -348,8 +348,16 @@ function proxyAmrApiRequest(req: Request, res: Response): void {
     {
       method: req.method,
       headers,
+      // Pin AMR API traffic to IPv4 — the #4210 fallback proxy exists for hosts
+      // whose IPv6 edge path to amr-api is broken — but forward the caller's
+      // `all` instead of forcing `all: false`. Node 24's autoSelectFamily
+      // (Happy Eyeballs) invokes this lookup with `all: true` and expects an
+      // array of addresses back; a forced single record made the connector
+      // reject the result with ERR_INVALID_IP_ADDRESS, so every proxied call
+      // 502'd with "Invalid IP address: undefined" (#9453). Spreading `options`
+      // keeps whichever shape Node asked for, and `callback` already matches it.
       lookup: (hostname, options, callback) => {
-        dns.lookup(hostname, { ...options, family: 4, all: false }, callback);
+        dns.lookup(hostname, { ...options, family: 4 }, callback);
       },
     },
     (upstreamRes) => {
