@@ -240,6 +240,58 @@ describe('PluginsView', () => {
     expect(screen.getAllByText('Example Catalog').length).toBeGreaterThan(0);
   });
 
+  it('resolves manifest i18n for installed plugin then catalog i18n fallback', async () => {
+    const onUsePlugin = vi.fn();
+    const manifestLocalized = makePlugin('open-design/official-plugin', 'bundled', 'trusted', 'Official Plugin');
+    // The installed manifest carries its own zh-CN copy — that wins.
+    manifestLocalized.manifest.title_i18n = { 'zh-CN': '已安装看板' };
+    manifestLocalized.manifest.description_i18n = { 'zh-CN': '已安装描述。' };
+    const catalogOnly = makePlugin('open-design/catalog-plugin', 'bundled', 'trusted', 'Catalog Plugin');
+    mockedListPlugins.mockResolvedValue([manifestLocalized, catalogOnly]);
+    mockedListMarketplaces.mockResolvedValue([
+      {
+        id: 'official',
+        url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
+        trust: 'official',
+        manifest: {
+          name: 'OpenDesign Official',
+          version: '1.0.0',
+          plugins: [
+            {
+              name: 'open-design/official-plugin',
+              title: 'Official Plugin',
+              title_i18n: { 'zh-CN': '官方看板' },
+              source: 'github:nexu-io/open-design@main/plugins/_official/examples/official-plugin',
+              version: '1.0.0',
+              description: 'Bundled official plugin.',
+              description_i18n: { 'zh-CN': '内置官方插件。' },
+              tags: ['prototype', 'kanban'],
+            },
+            {
+              name: 'open-design/catalog-plugin',
+              title: 'Catalog Plugin',
+              title_i18n: { 'zh-CN': '目录看板' },
+              source: 'github:nexu-io/open-design@main/plugins/_official/examples/catalog-plugin',
+              version: '1.0.0',
+              description: 'Catalog-only official plugin.',
+              description_i18n: { 'zh-CN': '目录描述。' },
+              tags: ['prototype', 'kanban'],
+            },
+          ],
+        },
+      },
+    ]);
+
+    render(<PluginsView onUsePlugin={onUsePlugin} />);
+    fireEvent.click(await screen.findByTestId('plugins-tab-available'));
+
+    // Manifest i18n wins for the plugin whose installed manifest is localized.
+    expect(await screen.findByText('已安装看板')).toBeTruthy();
+    // The catalog translation is retained for the plugin whose installed
+    // manifest carries no i18n fields at all.
+    expect(await screen.findByText('目录看板')).toBeTruthy();
+  });
+
   it('keeps bundled official catalog entries available and uses the installed record', async () => {
     const onUsePlugin = vi.fn();
     mockedListMarketplaces.mockResolvedValue([
