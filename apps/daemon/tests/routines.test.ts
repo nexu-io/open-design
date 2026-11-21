@@ -10,6 +10,13 @@ import {
   validateTarget,
 } from '../src/routines.js';
 
+// Hourly schedules fire on the daemon's local wall clock (`nextHourlyRunAt`
+// uses setMinutes/setHours), so these fixtures pin local time, not UTC. A UTC
+// instant puts the next ":01" 30 minutes away in a half-hour zone such as
+// Asia/Kolkata, and the scheduler never fires inside the test window.
+const localTime = (hour: number, minute: number, second = 0) =>
+  new Date(2026, 4, 17, hour, minute, second);
+
 function partsIn(timezone: string, at: Date): Record<string, string> {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
@@ -193,11 +200,12 @@ describe('nextRunAtForSchedule DST handling', () => {
   });
 
   it('returns the next hourly slot strictly after now', () => {
-    const now = new Date('2026-05-13T10:45:30Z');
+    // Local wall clock, like the hourly scheduler itself.
+    const now = new Date(2026, 4, 13, 10, 45, 30);
     const next = nextRunAtForSchedule({ kind: 'hourly', minute: 15 }, now);
     expect(next).not.toBeNull();
     if (!next) return;
-    expect(next.toISOString()).toBe('2026-05-13T11:15:00.000Z');
+    expect(next.getTime()).toBe(new Date(2026, 4, 13, 11, 15, 0).getTime());
   });
 
   it('returns the next weekday occurrence for weekday schedules', () => {
@@ -238,7 +246,7 @@ describe('nextRunAtForSchedule DST handling', () => {
 describe('RoutineService scheduled run idempotency', () => {
   it('starts only one scheduled run when two scheduler instances fire the same slot', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
     const first = new RoutineService(persistence);
@@ -260,7 +268,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
       expect(starts).toHaveLength(1);
       expect(persistence.runs).toHaveLength(1);
-      expect(persistence.claimedSlots).toEqual(new Set(['routine-1:1779012060000']));
+      expect(persistence.claimedSlots).toEqual(new Set([`routine-1:${localTime(10, 1).getTime()}`]));
     } finally {
       first.stop();
       second.stop();
@@ -269,7 +277,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
   it('retries the same scheduled slot when durable run insertion fails', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
     persistence.failScheduledInsertAttempts = 1;
@@ -294,7 +302,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
       expect(starts).toHaveLength(1);
       expect(persistence.runs).toHaveLength(1);
-      expect(persistence.claimedSlots).toEqual(new Set(['routine-1:1779012060000']));
+      expect(persistence.claimedSlots).toEqual(new Set([`routine-1:${localTime(10, 1).getTime()}`]));
     } finally {
       service.stop();
       errors.mockRestore();
@@ -303,7 +311,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
   it('terminates the in-memory run and persists real IDs when prepare fails after assigning them', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
     const updatePatches: Array<Partial<RoutineRun>> = [];
@@ -392,7 +400,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
   it('does not persist scheduled placeholder IDs when prepare fails before assigning real IDs', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
     const updatePatches: Array<Partial<RoutineRun>> = [];
@@ -560,7 +568,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
   it('still finalizes the failed row when prepare cleanup itself throws', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
     const service = new RoutineService(persistence);
@@ -621,10 +629,10 @@ describe('RoutineService scheduled run idempotency', () => {
 
   it('retries the same scheduled slot when duplicate loser cleanup fails', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const persistence = new SharedRoutinePersistence([fixtureRoutine()]);
-    persistence.claimedSlots.add('routine-1:1779012060000');
+    persistence.claimedSlots.add(`routine-1:${localTime(10, 1).getTime()}`);
     const service = new RoutineService(persistence);
     let discardAttempts = 0;
     let discardFailures = 1;
@@ -650,7 +658,7 @@ describe('RoutineService scheduled run idempotency', () => {
 
       expect(discardAttempts).toBe(1);
       expect(persistence.runs).toHaveLength(0);
-      expect(persistence.claimedSlots).toEqual(new Set(['routine-1:1779012060000']));
+      expect(persistence.claimedSlots).toEqual(new Set([`routine-1:${localTime(10, 1).getTime()}`]));
 
       await vi.advanceTimersByTimeAsync(1_000);
 
