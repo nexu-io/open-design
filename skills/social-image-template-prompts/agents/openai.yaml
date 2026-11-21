@@ -1,0 +1,7 @@
+interface:
+  display_name: "Social Image Templates"
+  short_description: "Reference images into social image prompts"
+  default_prompt: "Use $social-image-template-prompts to turn this reference image and new headline into a social-ready prompt."
+
+policy:
+  allow_implicit_invocation: true
