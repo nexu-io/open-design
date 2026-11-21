@@ -68,7 +68,11 @@ const DEFAULT_VELA_VIDEO_TOTAL_TIMEOUT_MS = 15 * 60_000;
 const DEFAULT_VELA_VIDEO_RESOLUTION = '720p';
 const VELA_MAX_INPUT_IMAGES = 5;
 const VELA_VIDEO_RATIOS = new Set(['16:9', '9:16', '1:1']);
-const VELA_VIDEO_DURATIONS = new Set([5, 10]);
+const VELA_VIDEO_DEFAULT_AUDIO_MODELS = new Set([
+  'wan-2.7',
+  'doubao-seedance-2-5-260628',
+  'doubao-seedance-2-5-flash-261115',
+]);
 
 /** The installed local media runtime predates Vela's media command surface. */
 export const VELA_MEDIA_CLI_INCOMPATIBLE_CODE = 'MEDIA_CLI_INCOMPATIBLE';
@@ -580,16 +584,27 @@ export async function renderVelaVideo(
   if (!VELA_VIDEO_RATIOS.has(ratio)) {
     throw new Error(`Vela video only supports aspect ratios 16:9, 9:16, or 1:1; received ${ratio}`);
   }
-  if (input.length != null && !VELA_VIDEO_DURATIONS.has(input.length)) {
-    throw new Error(`Vela video only supports durations of 5 or 10 seconds; received ${input.length}`);
+  if (input.length != null && (!Number.isInteger(input.length) || input.length <= 0)) {
+    throw new Error(`Vela video duration must be a positive integer; received ${input.length}`);
   }
 
   const wireModel = wireModelForVela(input.model, input.wireModel);
-  const available = await fetchVelaVideoModels(input.workspaceId, runCommand);
-  if (!available.includes(wireModel)) {
+  const catalogue = await fetchVelaVideoCatalogue(input.workspaceId, runCommand);
+  const modelEntry = catalogue.find((entry) => entry.model === wireModel);
+  if (!modelEntry) {
     throw new VelaMediaError(`unknown or unavailable video model: ${wireModel}; no generation was submitted`, {
       code: 'MEDIA_MODEL_UNAVAILABLE', retryable: false,
     });
+  }
+  if (input.length != null) {
+    if (!modelEntry.durations) {
+      throw new Error(`Vela video catalogue has no usable durations for model ${wireModel}; no generation was submitted`);
+    }
+    if (!modelEntry.durations.includes(input.length)) {
+      throw new Error(
+        `Vela video model ${wireModel} does not support duration ${input.length}s; supported: ${modelEntry.durations.join(', ')}`,
+      );
+    }
   }
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'open-design-vela-video-'));
   const outputPath = path.join(tempDir, 'result.mp4');
@@ -622,6 +637,7 @@ export async function renderVelaVideo(
       '--resolution',
       DEFAULT_VELA_VIDEO_RESOLUTION,
       ...(input.length == null ? [] : ['--duration', String(input.length)]),
+      ...(VELA_VIDEO_DEFAULT_AUDIO_MODELS.has(wireModel) ? ['--generate-audio'] : []),
       ...(firstFrame ? ['--first-frame', firstFrame.abs] : []),
       ...references.flatMap((image) => ['--ref', image.abs]),
       '--no-wait',
@@ -663,7 +679,7 @@ export async function renderVelaVideo(
         const bytes = await readNonEmptyOutput(outputPath, 'video get');
         return {
           bytes,
-          providerNote: `vela/${wireModel} · ${ratio} · ${input.length ?? 5}s · ${DEFAULT_VELA_VIDEO_RESOLUTION} default · ${bytes.length} bytes`,
+          providerNote: `vela/${wireModel} · ${ratio} · ${input.length ?? modelEntry.defaultDuration ?? 5}s · ${DEFAULT_VELA_VIDEO_RESOLUTION} default · ${bytes.length} bytes`,
           suggestedExt: '.mp4',
         };
       }
@@ -683,14 +699,48 @@ export async function renderVelaVideo(
   }
 }
 
-/** Account/workspace-filtered catalogue. Never treat a failed read as an empty catalogue. */
-export async function fetchVelaVideoModels(workspaceId?: string, runCommand: VelaCommandRunner = runVelaCommand): Promise<string[]> {
+interface VelaVideoModelEntry {
+  model: string;
+  durations: number[] | null;
+  defaultDuration: number | null;
+}
+
+function parsePublishedVideoDurations(
+  capabilities: JsonRecord | null,
+): { durations: number[] | null; defaultDuration: number | null } {
+  const raw = capabilities?.durations;
+  const envelope = isRecord(raw) ? raw : null;
+  const rawValues = Array.isArray(raw) ? raw : Array.isArray(envelope?.values) ? envelope.values : null;
+  if (!rawValues) return { durations: null, defaultDuration: null };
+  const durations = [...new Set(
+    rawValues.filter((value): value is number => typeof value === 'number' && Number.isInteger(value) && value > 0),
+  )];
+  if (durations.length === 0) return { durations: null, defaultDuration: null };
+  const defaultDuration = typeof envelope?.default === 'number' && durations.includes(envelope.default)
+    ? envelope.default
+    : null;
+  return { durations, defaultDuration };
+}
+
+async function fetchVelaVideoCatalogue(
+  workspaceId?: string,
+  runCommand: VelaCommandRunner = runVelaCommand,
+): Promise<VelaVideoModelEntry[]> {
   const raw = await runCommand(['media', 'models', '--json'], {
     ...velaWorkspaceCommandOptions(workspaceId), timeoutMs: VELA_MODELS_TIMEOUT_MS,
   });
   const response = parseJsonObject(raw, 'media models');
   if (!Array.isArray(response.models)) throw new Error('Vela media catalogue is unavailable: missing models');
-  return response.models.filter((entry): entry is JsonRecord => isRecord(entry) && entry.kind === 'video'
-    && typeof entry.model === 'string' && Boolean(entry.model.trim()) && entry.enabled !== false)
-    .map(entry => String(entry.model));
+  return response.models
+    .filter((entry): entry is JsonRecord => isRecord(entry) && entry.kind === 'video'
+      && typeof entry.model === 'string' && Boolean(entry.model.trim()) && entry.enabled !== false)
+    .map((entry) => ({
+      model: String(entry.model),
+      ...parsePublishedVideoDurations(isRecord(entry.capabilities) ? entry.capabilities : null),
+    }));
+}
+
+/** Account/workspace-filtered catalogue. Never treat a failed read as an empty catalogue. */
+export async function fetchVelaVideoModels(workspaceId?: string, runCommand: VelaCommandRunner = runVelaCommand): Promise<string[]> {
+  return (await fetchVelaVideoCatalogue(workspaceId, runCommand)).map((entry) => entry.model);
 }
