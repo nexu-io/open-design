@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "ecot-public-information-design-skill-mu7x9ot9",
+  "title": "ECOT Public Information Design Skill",
+  "version": "0.1.0",
+  "description": "--- name: ecot-public-information-design description: ECOTの公開情報、適合品データベース、メーカー登録案内を設計・実装するための再利用可能なデザインシステムパッケージ。 user-invocable: true ---",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
