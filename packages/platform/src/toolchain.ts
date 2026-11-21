@@ -6,11 +6,17 @@
  * PATH — npm/pnpm/bun/cargo/deno/go/pyenv prefixes, version-manager shims
  * (asdf, volta, mise, nvm, fnm), and per-version Node install roots. Pure path
  * assembly plus best-effort directory probing; no process, command, or proxy
- * concerns.
+ * concerns — with one deliberate exception: the Windows `.npmrc` npm-prefix
+ * fallback, which shells out to `npm config get prefix` only when reading the
+ * real process environment (never for caller-supplied env maps) and then
+ * routes it through the shared `command` module's `cmd.exe` shim.
  */
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
+
+import { createCommandInvocation } from "./command.js";
 
 export type WellKnownUserToolchainOptions = {
   // Override homedir() so callers in sandboxed tests or namespaced launches
@@ -26,6 +32,11 @@ export type WellKnownUserToolchainOptions = {
   // npm prefixes are picked up automatically. Pass an empty object to
   // suppress lookup (useful in tests).
   env?: NodeJS.ProcessEnv;
+  // Test seam for the Windows `npm config get prefix` probe: run the probe
+  // through this command runner instead of the default subprocess one. Same
+  // shape as `resolveSystemProxyEnv`'s `runCommand`, so tests can exercise the
+  // successful fallback and the failure path without spawning npm.
+  runCommand?: (command: string, args: string[]) => string;
 };
 
 /** @internal Resolve a possibly `~`-prefixed or absolute path against `home`, or `null` when it is neither. */
@@ -38,6 +49,27 @@ function resolveUserScopedHome(raw: string | undefined, home: string): string | 
     return join(home, value.slice(2));
   }
   return isAbsolute(value) ? value : null;
+}
+
+/**
+ * @internal Run one toolchain probe and return its captured stdout (empty on a
+ * non-zero exit). Windows `npm` is a `.cmd` shim, and Node cannot `execFile` a
+ * `.cmd` directly, so the probe goes through `createCommandInvocation`: it
+ * rewraps `.cmd` targets as `cmd.exe /d /s /c "..."`, and its
+ * `windowsVerbatimArguments` flag is what keeps that quoting intact.
+ * (`spawnSync` is used because `execFileSync` does not expose that flag.)
+ */
+function defaultToolchainCommandRunner(command: string, args: string[]): string {
+  const invocation = createCommandInvocation({ command, args });
+  const result = spawnSync(invocation.command, invocation.args, {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 3_000,
+    windowsHide: true,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+  if (result.error) throw result.error;
+  return result.status === 0 ? result.stdout : "";
 }
 
 // Single source of truth for "user-level CLI install locations the daemon
@@ -104,6 +136,40 @@ export function wellKnownUserToolchainBins(
       if (process.platform === "win32") {
         dirs.push(npmPrefix);
       }
+    }
+  } else if (
+    process.platform === "win32" &&
+    (env === process.env || options.runCommand !== undefined)
+  ) {
+    // Windows: GUI-launched daemons usually lack NPM_CONFIG_PREFIX /
+    // npm_config_prefix (npm-internal vars are not inherited by Electron
+    // child processes), so the env-driven block above no-ops. Fall back to
+    // reading the user's actual npm configuration so a custom prefix from
+    // .npmrc is still detected — this is the `.npmrc` tier of npm's own
+    // resolution order (env > .npmrc > default). Guarded on
+    // `env === process.env` (or an explicitly injected runner) so
+    // caller-supplied env maps (tests, sandboxed detection runs) stay
+    // deterministic and never shell out.
+    //
+    // Windows `npm` is `npm.cmd`, which Node cannot `execFile` directly; the
+    // default runner requests `.cmd` explicitly so `createCommandInvocation`
+    // wraps it in `cmd.exe /d /s /c "..."` instead of failing with ENOENT.
+    try {
+      const npmPrefix = (options.runCommand ?? defaultToolchainCommandRunner)(
+        "npm.cmd",
+        ["config", "get", "prefix"],
+      ).trim();
+      if (npmPrefix.length > 0) {
+        // Same two entries as the env-driven block above: <prefix>/bin for
+        // cross-platform parity, plus the prefix root because Windows npm
+        // installs global binaries directly into the prefix (no /bin
+        // subdirectory).
+        dirs.push(join(npmPrefix, "bin"));
+        dirs.push(npmPrefix);
+      }
+    } catch {
+      // npm missing from PATH or failed — conventional/default locations
+      // below still apply.
     }
   }
   // Windows: %APPDATA%\npm is npm's default global prefix. NPM_CONFIG_PREFIX /
