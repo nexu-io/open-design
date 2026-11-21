@@ -228,6 +228,7 @@ export interface Dict {
   'common.rename': string;
   'common.edit': string;
   'common.preview': string;
+  'common.retry': string;
   'common.share': string;
   'common.search': string;
   'common.searchEllipsis': string;
@@ -3909,6 +3910,7 @@ export interface Dict {
   'designFiles.buildingPreview': string;
   'designFiles.syncing': string;
   'designFiles.refresh': string;
+  'designFiles.error': string;
   'designFiles.delete': string;
   'designFiles.searchPlaceholder': string;
   'designFiles.up': string;
