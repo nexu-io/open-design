@@ -621,6 +621,59 @@ describe('manual edit bridge target normalization', () => {
     dom.window.close();
   });
 
+  it('routes the selected-element action through an explicit delete request', () => {
+    const posts: Array<{ type?: string; id?: string }> = [];
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><section data-od-source-path="path-0-0"><div>Delete me</div></section></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const section = dom.window.document.querySelector('section') as HTMLElement;
+    section.getBoundingClientRect = () => ({
+      x: 20, y: 60, width: 180, height: 80, top: 60, right: 200, bottom: 140, left: 20, toJSON: () => ({}),
+    } as DOMRect);
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; id?: string });
+    }) as typeof dom.window.parent.postMessage;
+
+    section.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    posts.length = 0;
+    const action = dom.window.document.querySelector('[data-od-edit-delete-action]') as HTMLButtonElement | null;
+    expect(action?.getAttribute('aria-label')).toBe('Delete element');
+    action?.dispatchEvent(new dom.window.Event('pointerover', { bubbles: true }));
+    action?.dispatchEvent(new dom.window.Event('pointermove', { bubbles: true }));
+    expect(action?.isConnected).toBe(true);
+    action?.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(posts).toContainEqual({ type: 'od-edit-delete-request', id: 'path-0-0' });
+    dom.window.close();
+  });
+
+  it.each(['Delete', 'Backspace'])('routes %s through the selected element delete request', (key) => {
+    const posts: Array<{ type?: string; id?: string }> = [];
+    const dom = new JSDOM(
+      `<main data-od-source-path="path-0"><section data-od-source-path="path-0-0"><div>Delete me</div></section></main>${buildManualEditBridge(true)}`,
+      { runScripts: 'dangerously', url: 'http://localhost' },
+    );
+    const section = dom.window.document.querySelector('section') as HTMLElement;
+    section.getBoundingClientRect = () => ({
+      x: 20, y: 60, width: 180, height: 80, top: 60, right: 200, bottom: 140, left: 20, toJSON: () => ({}),
+    } as DOMRect);
+    dom.window.parent.postMessage = ((message: unknown) => {
+      posts.push(message as { type?: string; id?: string });
+    }) as typeof dom.window.parent.postMessage;
+
+    section.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    posts.length = 0;
+    dom.window.document.documentElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', {
+      key,
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    expect(posts).toContainEqual({ type: 'od-edit-delete-request', id: 'path-0-0' });
+    dom.window.close();
+  });
+
   it('clears hover reference guides when the pointer leaves all targets', () => {
     const dom = new JSDOM(
       `<main data-od-source-path="path-0"><h1 data-od-source-path="path-0-0">Plain title</h1></main>${buildManualEditBridge(true)}`,
@@ -886,6 +939,8 @@ describe('manual edit bridge target normalization', () => {
     expect(style).toContain('[data-od-edit-guides-layer] .od-edit-guide-box-selected');
     expect(style).toContain('[data-od-edit-guides-layer] .od-edit-guide-handle');
     expect(style).toContain('[data-od-edit-guides-layer] .od-edit-guide-measure');
+    expect(style).toContain('[data-od-edit-guides-layer] .od-edit-selection-action');
+    expect(style).toContain('pointer-events: auto');
   });
 
   it('moves the runtime selected marker between selected targets', () => {
