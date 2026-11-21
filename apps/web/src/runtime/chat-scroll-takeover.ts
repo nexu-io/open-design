@@ -115,11 +115,11 @@
 // the user back to the bottom mid-gesture. Its `keydown` listener runs too, and
 // resets the wheel witness the way any keyboard input does.
 //
-// The one writer that could fight is that bottom-pin, and it cannot be live
-// here by construction: pinning uses the JS write path, which is healthy during
-// this defect, so a following log is a log sitting at its bottom — and a log at
-// its bottom has no unreachable content, which is a precondition of the freeze
-// verdict this module waits for.
+// Follow-mode can still put a frozen log at its layout bottom through the
+// healthy JS path. That does not heal the native path: its next downward notch
+// may snap the log backwards. The observation must recognise that even when
+// there was no forward travel left, and an engaged takeover must keep owning
+// root-directed wheels at the edge instead of returning them to the browser.
 
 import type { ChatScrollHealProps } from '@open-design/contracts/analytics';
 
@@ -196,6 +196,8 @@ interface Observation {
   startedAt: number;
   /** `scrollTop` the log was settled at before the first notch. */
   topBefore: number;
+  scrollHeightBefore: number;
+  clientHeightBefore: number;
   requestedPx: number;
   wheelCount: number;
   scrollEvents: number;
@@ -450,14 +452,19 @@ function onWheelObserve(event: WheelEvent): void {
     return;
   }
   // A wheel a code block or a tool-output box absorbs never asked the chat log
-  // to move, so it is not evidence about the chat log. This reads layout in a
-  // wheel handler, which this module otherwise refuses to do; it is bounded
-  // by the number of wheels before the first one aimed at the log itself.
+  // to move, so it is not evidence about the chat log. These layout reads and
+  // the baseline below are limited to the post-freeze observation; the normal
+  // taken-over wheel path only needs the inner-scrollport check.
   if (innerScrollerWants(active.element, event.target, px)) return;
 
   const observation = active.observation ?? {
     startedAt: now(),
     topBefore: active.settledTop,
+    // Only the first notch of this post-freeze observation reads layout. A
+    // backwards move is evidence of a snap-back only if the box stayed the
+    // same size; collapsing a thinking drawer must not convict the browser.
+    scrollHeightBefore: active.element.scrollHeight,
+    clientHeightBefore: active.element.clientHeight,
     requestedPx: 0,
     wheelCount: 0,
     scrollEvents: 0,
@@ -510,9 +517,14 @@ function concludeObservation(active: Surface): void {
   const layoutMax = Math.max(0, after.scrollHeight - after.clientHeight);
   const room = Math.max(0, layoutMax - observation.topBefore);
   const expected = clamp(observation.requestedPx, 0, room);
-  if (expected <= MIN_UNREACHABLE_PX) {
-    // A notch at the bottom proves nothing either way — the detector refuses
-    // to convict there for the same reason. Wait for one with room.
+  const moved = after.scrollTop - observation.topBefore;
+  const snappedBack = moved < -MIN_UNREACHABLE_PX
+    && after.scrollHeight === observation.scrollHeightBefore
+    && after.clientHeight === observation.clientHeightBefore;
+  if (expected <= MIN_UNREACHABLE_PX && !snappedBack) {
+    // Staying at the bottom proves nothing. Moving backwards on an unchanged
+    // layout does: follow-mode can reach the bottom through JS while the next
+    // native notch throws the log back onto the compositor's stale ceiling.
     active.inconclusiveNotches += 1;
     active.phase = 'probing';
     active.settledTop = after.scrollTop;
@@ -520,7 +532,6 @@ function concludeObservation(active: Surface): void {
     return;
   }
 
-  const moved = after.scrollTop - observation.topBefore;
   const healed = moved > 0 && expected - moved <= MIN_UNREACHABLE_PX;
   reportHeal(active, healed ? 'healed' : 'takeover', observation, after, layoutMax, expected, moved);
 
@@ -658,43 +669,15 @@ function onWheelCapture(event: WheelEvent): void {
   const px = wheelDeltaToPx(deltaY, event.deltaMode, viewportPxOf(active));
   if (px === 0) return;
 
-  if (!travelRemains(active, px)) {
-    // At a genuine edge the native behaviour is to hand the wheel outward, so
-    // this one goes back to the browser untouched.
-    //
-    // But the cache it was judged against is a frame old, and on a streaming
-    // log a frame is enough for the bottom to have moved. Without the refresh
-    // below that is a deadlock, not a hiccup: a user parked at what USED to be
-    // the bottom declines every wheel, each declined wheel schedules nothing,
-    // so nothing ever re-reads the geometry that would let the next one
-    // through — on a surface whose native path is broken, which is the whole
-    // premise. So the frame is asked for anyway; it carries no pending pixels
-    // and does nothing but take a fresh reading.
-    scheduleApply(active);
-    return;
-  }
-
   if (innerScrollerWants(active.element, event.target, px)) return;
 
+  // A taken-over log has a broken native path even at a layout edge. Giving
+  // that path one more notch can snap the whole conversation back to its old
+  // ceiling. Keep owning root-directed wheels and clamp against fresh layout
+  // in the frame; inner scrollports and zoom gestures still remain native.
   event.preventDefault();
   active.pendingPx += px;
   scheduleApply(active);
-}
-
-/**
- * Is there travel left in this direction, once the pending burst has landed?
- *
- * Where the log WILL be, not where it was: at speed a flick delivers several
- * notches before any of them are applied, and reasoning from the pre-burst
- * position would keep claiming travel that the earlier notches in the same
- * frame already spent.
- */
-function travelRemains(active: Surface, px: number): boolean {
-  const travel = Math.max(0, active.geometry.scrollHeight - active.geometry.clientHeight);
-  if (travel <= 0) return false;
-  const projectedTop = clamp(pendingBase(active, active.geometry.scrollTop, travel) + active.pendingPx, 0, travel);
-  const remaining = px > 0 ? travel - projectedTop : projectedTop;
-  return remaining > 0;
 }
 
 /**
@@ -706,8 +689,8 @@ function travelRemains(active: Surface, px: number): boolean {
  * this question would freeze every code block, tool-output box and scrollable
  * card in the transcript — a worse bug than the one being worked around.
  *
- * It reads layout, per wheel event, which everything else in this file refuses
- * to do. That is a deliberate exception and it is affordable for one reason:
+ * Like the observation baseline, it reads layout in the wheel handler. This
+ * deliberate exception is affordable for one reason:
  * this code path only exists on a surface the compositor has already stopped
  * scrolling, so the alternative to the read is not a cheaper takeover, it is a
  * wrong one. The walk is bounded by the depth of the transcript node the
@@ -784,13 +767,6 @@ function keyboardRequest(key: string, shift: boolean, viewportPx: number): numbe
     default:
       return null;
   }
-}
-
-/** Where the pending pixels are measured from: the queued edge, else the current position. */
-function pendingBase(active: Surface, scrollTop: number, max: number): number {
-  if (active.pendingEdge === 'top') return 0;
-  if (active.pendingEdge === 'bottom') return max;
-  return scrollTop;
 }
 
 function keyboardAimsAtLog(active: Surface, key: string): boolean {
