@@ -739,10 +739,7 @@ test('[P0] @critical reloading the project keeps the latest conversation selecte
   await expect(historyList.locator('.chat-conv-item')).toHaveCount(2);
 });
 
-// Parked (OPEND-3087, Demo #8113): the history dropdown no longer carries a
-// per-row delete button, so this flow has no UI entry point. The steps are kept
-// verbatim so it can be re-enabled once a delete entry point returns.
-test.skip('[P0] @critical deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
+test('[P0] @critical deleting the active conversation selects the remaining conversation in history', async ({ page }) => {
   page.on('dialog', async (dialog: Dialog) => {
     await dialog.accept();
   });
