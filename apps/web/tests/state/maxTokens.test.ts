@@ -43,6 +43,22 @@ describe('modelMaxTokensDefault', () => {
     expect(modelMaxTokensDefault('definitely-not-a-real-model-x9z')).toBe(FALLBACK_MAX_TOKENS);
     expect(FALLBACK_MAX_TOKENS).toBe(8192);
   });
+
+  it('clamps every shipped catalog default to the Settings ceiling', () => {
+    // #9344: some catalog rows exceed the 400k ceiling (a few are context
+    // windows, up to 10M), so the field used to clear a model's own displayed
+    // default on blur. Every default we can show must survive re-entry.
+    const models = litellmData.models as Record<string, number>;
+    const entries = Object.entries(models);
+    expect(entries.length).toBeGreaterThan(100);
+    for (const [model] of entries) {
+      const def = modelMaxTokensDefault(model);
+      expect(def).toBeLessThanOrEqual(MAX_MAX_TOKENS);
+      if (def >= MIN_MAX_TOKENS) {
+        expect(effectiveMaxTokens({ maxTokens: def, model })).toBe(def);
+      }
+    }
+  });
 });
 
 describe('effectiveMaxTokens', () => {
