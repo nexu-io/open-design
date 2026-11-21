@@ -526,14 +526,13 @@ async function connectOverDaemon({ daemonUrl, projectId }) {
   });
 }
 
-async function launchSystemBrowser({ executablePath }) {
-  if (!executablePath) throw new Error("A system browser executable path is required");
-  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-web-clone-browser-"));
-  const child = spawn(executablePath, [
+export function buildSystemBrowserLaunchArgs(profileDir) {
+  return [
     "--headless=new",
     "--remote-debugging-port=0",
     "--remote-allow-origins=*",
     `--user-data-dir=${profileDir}`,
+    "--use-mock-keychain",
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-background-networking",
@@ -542,7 +541,13 @@ async function launchSystemBrowser({ executablePath }) {
     "--disable-sync",
     "--metrics-recording-only",
     "about:blank",
-  ], { stdio: ["ignore", "pipe", "pipe"] });
+  ];
+}
+
+async function launchSystemBrowser({ executablePath }) {
+  if (!executablePath) throw new Error("A system browser executable path is required");
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "od-web-clone-browser-"));
+  const child = spawn(executablePath, buildSystemBrowserLaunchArgs(profileDir), { stdio: ["ignore", "pipe", "pipe"] });
 
   const browserSocketUrl = await withTimeout(new Promise((resolve, reject) => {
     let output = "";
