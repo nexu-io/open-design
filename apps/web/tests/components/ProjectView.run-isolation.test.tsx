@@ -413,6 +413,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     messages,
     onAttachComment,
     onSelectConversation,
+    onRenameConversation,
     onSend,
     onSendQueuedNow,
     onNewConversation,
@@ -437,6 +438,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     error: string | null;
     onAttachComment?: (comment: PreviewComment) => void;
     onSelectConversation: (id: string) => void;
+    onRenameConversation?: (id: string, title: string) => void;
     onSend: (
       prompt: string,
       attachments: unknown[],
@@ -470,6 +472,8 @@ vi.mock('../../src/components/ChatPane', () => ({
     return (
       <section>
         <output data-testid="active-conversation">{activeConversationId}</output>
+        <output data-testid="conversation-titles">{conversations.map((c) => `${c.id}:${c.title ?? ''}`).join('\n')}</output>
+        <button type="button" data-testid="rename-active" onClick={() => activeConversationId && onRenameConversation?.(activeConversationId, 'Manual title')}>rename</button>
         <output data-testid="streaming-state">{streaming ? 'streaming' : 'idle'}</output>
         <output data-testid="chat-error">{error}</output>
         <output data-testid="conversation-latest-runs">
@@ -892,6 +896,7 @@ describe('ProjectView conversation run isolation', () => {
   let conversationAMessages: ChatMessage[] = [runningAssistant];
 
   beforeEach(() => {
+    patchConversation.mockReset();
     // P0-24 Q2: the sound plays only once a notification was actually shown.
     showCompletionNotification.mockResolvedValue('shown');
     window.localStorage.clear();
@@ -3373,6 +3378,42 @@ describe('ProjectView conversation run isolation', () => {
         }),
       ),
     );
+  });
+
+  it('preserves a manual title when sending the first message', async () => {
+    const emptyConversation: Conversation = { id: 'conv-empty', projectId: project.id, title: null, createdAt: 1, updatedAt: 1 };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+    renderProjectView();
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    fireEvent.click(screen.getByTestId('rename-active'));
+    await waitFor(() => expect(screen.getByTestId('conversation-titles').textContent).toContain('conv-empty:Manual title'));
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
+    expect(patchConversation).not.toHaveBeenCalledWith(project.id, 'conv-empty', { title: 'Hello From B' }, expect.anything());
+    expect(screen.getByTestId('conversation-titles').textContent).toContain('conv-empty:Manual title');
+  });
+
+  it('restores a manual title after a late first-turn title patch', async () => {
+    const emptyConversation: Conversation = { id: 'conv-empty', projectId: project.id, title: null, createdAt: 1, updatedAt: 1 };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+    let finishAutoPatch!: () => void;
+    patchConversation.mockImplementation((_projectId: string, _id: string, update: { title?: string }) =>
+      update.title === 'Hello From B' ? new Promise<void>((resolve) => { finishAutoPatch = resolve; }) : Promise.resolve(),
+    );
+    renderProjectView();
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(finishAutoPatch).toBeDefined());
+    fireEvent.click(screen.getByTestId('rename-active'));
+    await waitFor(() => expect(patchConversation).toHaveBeenCalledWith(project.id, 'conv-empty', { title: 'Manual title' }, expect.anything()));
+    await act(async () => { finishAutoPatch(); });
+    await waitFor(() => expect(patchConversation.mock.calls.filter((call) => call[2]?.title === 'Manual title')).toHaveLength(2));
+    expect(screen.getByTestId('conversation-titles').textContent).toContain('conv-empty:Manual title');
   });
 
   it('replaces the first-turn fallback title with an agent-generated title', async () => {
