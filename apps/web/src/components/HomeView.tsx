@@ -89,6 +89,7 @@ import type {
   Project,
   ProjectMetadata,
   PromptTemplateSummary,
+  MediaProviderCredentials,
   SkillSummary,
 } from '../types';
 import { inlineMentionToken, mentionTokenPresent } from '../utils/inlineMentions';
@@ -304,6 +305,10 @@ interface Props {
   skillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
+  // Stored BYOK media credentials used only to seed each media surface's
+  // default model, so a connected provider wins over the managed Cloud
+  // constant (issue #7088). EntryShell threads config.mediaProviders through.
+  mediaProviders?: Record<string, MediaProviderCredentials>;
   // Personalized first-run starting point (spec §7). Null unless the user just
   // finished the About-you survey this session; EntryShell owns the state.
   // Accepted for API compatibility but no longer rendered — see
@@ -524,6 +529,7 @@ export function HomeView({
   skillsLoading = false,
   connectors = EMPTY_CONNECTORS,
   promptTemplates = EMPTY_PROMPT_TEMPLATES,
+  mediaProviders,
   recommendation = null,
   onRecommendationStart,
   onRecommendationDismiss,
@@ -1096,17 +1102,31 @@ export function HomeView({
     elevenLabsVoices.length,
   ]);
 
+  // Per-surface latch for an explicit user model pick. The Home media
+  // composer exposes no model control today, but any future inline edit
+  // that changes `model` latches here so the provider-hydration reseed in
+  // the effect above can never overwrite a deliberate choice (issue #7088).
+  const mediaModelTouchedRef = useRef<Partial<Record<HomeComposerMediaSurface, boolean>>>({});
+
   useEffect(() => {
     if (!active?.mediaSurface) return;
+    // Providers hydrate asynchronously after mount. When the user never
+    // picked a model, drop the seeded `model` from the re-seed inputs so
+    // normalizeHomeMediaInputs re-resolves the default against the freshly
+    // stored credentials instead of keeping the pre-hydration Cloud route.
+    const seedInputs = mediaModelTouchedRef.current[active.mediaSurface]
+      ? active.inputs
+      : { ...active.inputs, model: undefined };
     const composer = buildHomeMediaComposer(
       active.mediaSurface,
       promptTemplates,
-      active.inputs,
+      seedInputs,
       elevenLabsVoices,
       {
         elevenLabsVoiceWarning,
         elevenLabsVoicesLoading,
         imageModels: composerImageModels,
+        mediaProviders,
       },
     );
     const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
@@ -1138,7 +1158,7 @@ export function HomeView({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels]);
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading, composerImageModels, mediaProviders]);
 
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
@@ -2127,7 +2147,7 @@ export function HomeView({
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
     const normalizedInputs = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels)
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices, composerImageModels, mediaProviders)
       : nextInputs;
     const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
     const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
@@ -2231,14 +2251,18 @@ export function HomeView({
 
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
+    if (active.mediaSurface && next.model !== active.inputs.model) {
+      mediaModelTouchedRef.current[active.mediaSurface] = true;
+    }
     const normalized = active.mediaSurface
-      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels)
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices, composerImageModels, mediaProviders)
       : next;
     const mediaComposer = active.mediaSurface
       ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
           elevenLabsVoiceWarning,
           elevenLabsVoicesLoading,
           imageModels: composerImageModels,
+          mediaProviders,
         })
       : null;
     const inputFields = mediaComposer?.fields ?? active.inputFields;
@@ -2340,6 +2364,7 @@ export function HomeView({
                 elevenLabsVoiceWarning,
                 elevenLabsVoicesLoading,
                 imageModels: composerImageModels,
+                mediaProviders,
               },
             );
             void usePlugin(record, undefined, {
@@ -2583,6 +2608,7 @@ export function HomeView({
               elevenLabsVoiceWarning,
               elevenLabsVoicesLoading,
               imageModels: composerImageModels,
+              mediaProviders,
             },
           );
           requestActivePlugin(record, undefined, {
@@ -2956,8 +2982,14 @@ export function HomeView({
       const contextLinkedDirs = contextLinkedDirCandidates;
       const submittedProjectKind =
         submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
+      // Media metadata must read the PRE-strip composer inputs: the re-apply
+      // above replaces `submittedActive.inputs` with the deferral-stripped set
+      // (no `model`), and dropping the seeded image route there would let the
+      // daemon fall back to its vela default for every Home image project
+      // (issue #7088). The strip stays authoritative for pluginInputs/snapshot —
+      // metadata only carries `kind` / the image route / the picked template.
       const submittedProjectMetadata = submittedActive?.mediaSurface
-        ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
+        ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedApplyInputs, promptTemplates)
         : homeCreateProjectMetadata(
             submittedProjectKind,
             submittedActive?.inputs ?? null,
