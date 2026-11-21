@@ -12,6 +12,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -67,6 +68,144 @@ afterEach(() => {
 });
 
 describe('OD Next task-scoped input snapshots', () => {
+  // #9230: the facts used to carry only `comments: { count }`, so the Agent
+  // never learned which element a "Send to chat" comment targeted.
+  it('freezes the turn preview comment targets as a task-input resource instead of only a count', () => {
+    const f = fixture();
+    const snapshot = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'comment-target',
+      commentCount: 1,
+      commentAttachments: [{
+        id: 'comment-1', order: 1, filePath: 'invoices.html', elementId: 'cell-3',
+        selector: 'tbody > tr:nth-of-type(1) > td:nth-of-type(3)', label: 'td.p-2.align-middle',
+        comment: 'Change to My Best company', commentContext: 'query',
+        currentText: 'COMMENT_CURRENT_TEXT_SENTINEL', htmlHint: '<td data-slot="table-cell">',
+        pagePosition: { x: 10, y: 20, width: 200, height: 40 },
+      }],
+    });
+    const loaded = loadOdNextTaskInputSnapshot(snapshot, f.snapshotsRoot);
+    const facts = JSON.parse(loaded.workspaceInputFactsText);
+    expect(facts.comments).toMatchObject({ count: 1, role: 'current_user_preview_feedback' });
+    expect(facts.comments.reference).toMatch(/^task-input:attachments\/attachment-\d{3}\.json$/);
+    const resource = loaded.files.find(file => `task-input:${file.relativePath}` === facts.comments.reference);
+    expect(resource?.mediaType).toBe('application/json');
+    const feedback = JSON.parse(resource!.content.toString('utf8'));
+    expect(feedback).toMatchObject({
+      schema: 'open-design.preview-feedback/v1',
+      role: 'current_user_preview_feedback',
+    });
+    expect(feedback.scope).toContain('Hard scope: change ONLY the elements identified below');
+    expect(feedback.comments).toEqual([expect.objectContaining({
+      filePath: 'invoices.html',
+      elementId: 'cell-3',
+      selector: 'tbody > tr:nth-of-type(1) > td:nth-of-type(3)',
+      currentText: 'COMMENT_CURRENT_TEXT_SENTINEL',
+      htmlHint: '<td data-slot="table-cell">',
+      pagePosition: { x: 10, y: 20, width: 200, height: 40 },
+    })]);
+    // A query comment's body is already the user request; do not duplicate it.
+    expect(JSON.stringify(feedback)).not.toContain('Change to My Best company');
+    expect(JSON.stringify(feedback)).not.toContain(f.projectRoot);
+    // Bodies stay out of the inline facts that the Prompt Bundle carries.
+    expect(loaded.workspaceInputFactsText).not.toContain('COMMENT_CURRENT_TEXT_SENTINEL');
+    expect(loaded.attachmentFactsText).not.toContain('COMMENT_CURRENT_TEXT_SENTINEL');
+  });
+
+  it('freezes a visual comment screenshot and binds it by digest rather than by path', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'mark.png'), PNG);
+    const snapshot = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'comment-visual',
+      commentAttachments: [{
+        id: 'visual-1', order: 1, filePath: 'index.html', elementId: 'visual-mark',
+        selectionKind: 'visual', screenshotPath: 'mark.png', markKind: 'stroke',
+        comment: 'Make this bigger', pagePosition: { x: 0, y: 0, width: 80, height: 40 },
+      }],
+    });
+    const loaded = loadOdNextTaskInputSnapshot(snapshot, f.snapshotsRoot);
+    const facts = JSON.parse(loaded.workspaceInputFactsText);
+    const image = loaded.files.find(file => file.mediaType === 'image/png');
+    expect(image?.content).toEqual(PNG);
+    const resource = loaded.files.find(file => `task-input:${file.relativePath}` === facts.comments.reference)!;
+    const feedback = JSON.parse(resource.content.toString('utf8'));
+    expect(feedback.comments[0]).toMatchObject({ comment: 'Make this bigger', selectionKind: 'visual' });
+    expect(feedback.comments[0].screenshots).toEqual([{ sha256: image!.sha256, mediaType: 'image/png' }]);
+    expect(JSON.stringify(feedback)).not.toContain('mark.png');
+  });
+
+  it('binds a screenshot the client also attached without freezing it twice', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'mark.png'), PNG);
+    const loaded = loadOdNextTaskInputSnapshot(createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'comment-visual-attached',
+      projectAttachments: ['mark.png'],
+      // The screenshot and the feedback resource fit only if the screenshot
+      // is not counted a second time as a comment source.
+      countCap: 2,
+      commentAttachments: [{
+        id: 'visual-1', order: 1, filePath: 'index.html', elementId: 'visual-mark',
+        selectionKind: 'visual', screenshotPath: 'mark.png', pagePosition: { x: 0, y: 0, width: 80, height: 40 },
+      }],
+    }), f.snapshotsRoot);
+    const images = loaded.files.filter(file => file.mediaType === 'image/png');
+    expect(images).toHaveLength(1);
+    const reference = JSON.parse(loaded.workspaceInputFactsText).comments.reference;
+    const feedback = JSON.parse(loaded.files.find(file => `task-input:${file.relativePath}` === reference)!.content.toString('utf8'));
+    expect(feedback.comments[0].screenshots).toEqual([{ sha256: images[0]!.sha256, mediaType: 'image/png' }]);
+  });
+
+  it('keeps a comment whose screenshot cannot be read instead of refusing the turn', () => {
+    const f = fixture();
+    const loaded = loadOdNextTaskInputSnapshot(createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'comment-visual-missing',
+      commentAttachments: [{
+        id: 'visual-1', order: 1, filePath: 'index.html', elementId: 'visual-mark', selector: '#hero',
+        selectionKind: 'visual', screenshotPath: 'missing.png', pagePosition: { x: 0, y: 0, width: 80, height: 40 },
+      }],
+    }), f.snapshotsRoot);
+    const reference = JSON.parse(loaded.workspaceInputFactsText).comments.reference;
+    const feedback = JSON.parse(loaded.files.find(file => `task-input:${file.relativePath}` === reference)!.content.toString('utf8'));
+    expect(feedback.comments[0]).toMatchObject({ selector: '#hero', selectionKind: 'visual' });
+    expect(feedback.comments[0].screenshots).toBeUndefined();
+    expect(loaded.files).toHaveLength(1);
+  });
+
+  it('rejects a comment reference that does not name a frozen JSON resource', () => {
+    const f = fixture();
+    writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'brief');
+    const descriptor = createOdNextTaskInputSnapshot({
+      ...f,
+      taskExecutionId: 'comment-tamper',
+      projectAttachments: ['brief.txt'],
+      commentAttachments: [{
+        id: 'comment-1', order: 1, filePath: 'index.html', elementId: 'title', selector: '#title',
+        comment: 'Bigger', pagePosition: { x: 0, y: 0, width: 10, height: 10 },
+      }],
+    });
+    const manifestPath = path.join(descriptor.snapshotDir, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.requestInputFacts.comments.reference = 'task-input:attachments/attachment-001.txt';
+    const rewritten = Buffer.from(JSON.stringify(manifest));
+    chmodSync(manifestPath, 0o600);
+    writeFileSync(manifestPath, rewritten);
+    const resealed = { ...descriptor, manifestSha256: createHash('sha256').update(rewritten).digest('hex') };
+    expect(() => loadOdNextTaskInputSnapshot(resealed, f.snapshotsRoot))
+      .toThrow(/preview feedback reference does not match a frozen resource/);
+  });
+
+  it('keeps the count-only facts when the request carried no usable comment', () => {
+    const f = fixture();
+    const loaded = loadOdNextTaskInputSnapshot(createOdNextTaskInputSnapshot({
+      ...f, taskExecutionId: 'comment-none', commentAttachments: [],
+    }), f.snapshotsRoot);
+    expect(loaded.workspaceInputFactsText).toBe('');
+    expect(loaded.files).toEqual([]);
+  });
+
   it('carries verified old attachments into a fresh task even after the original upload is removed', () => {
     const f = fixture();
     const image = path.join(f.uploadRoot, 'reference.png');
@@ -658,6 +797,43 @@ describe('OD Next task-scoped input snapshots', () => {
     expect(() => loadOdNextTaskInputSnapshot(descriptor, f.snapshotsRoot))
       .toThrow(/manifest digest mismatch/);
   });
+});
+
+// The classic composer keeps comment sections metadata-only in telemetry
+// (prompt-telemetry `commentAttachments`). The frozen feedback resource must
+// not reopen that channel as an uploaded attachment body, in its own task or
+// after a successor task inherits it.
+it('telemetry sends only metadata for the frozen preview feedback resource, also once inherited', async () => {
+  const f = fixture();
+  writeFileSync(path.join(f.projectRoot, 'brief.txt'), 'brief body');
+  const descriptor = createOdNextTaskInputSnapshot({
+    ...f,
+    taskExecutionId: 'odnext_comment_telemetry',
+    projectAttachments: ['brief.txt'],
+    commentAttachments: [{
+      id: 'comment-1', order: 1, filePath: 'invoices.html', elementId: 'cell-3', selector: '#TELEMETRY_SELECTOR_SENTINEL',
+      comment: 'COMMENT_BODY_SENTINEL', currentText: 'Globex', pagePosition: { x: 0, y: 0, width: 10, height: 10 },
+    }],
+  });
+  const successor = createOdNextTaskInputSnapshot({
+    ...f, taskExecutionId: 'odnext_comment_telemetry_next', inheritedSnapshot: descriptor,
+  });
+  for (const snapshot of [descriptor, successor]) {
+    const loaded = loadOdNextTaskInputSnapshot(snapshot, f.snapshotsRoot);
+    const sources = await freezeTraceObjectSources({
+      installationId: null, projectId: 'project', runId: `run-${snapshot.taskExecutionId}`, projectsRoot: f.root,
+      prompt: '', prefs: { metrics: true, content: true, artifactManifest: true },
+      attachmentPaths: loaded.attachmentReferences, taskInputSnapshot: { descriptor: snapshot, snapshotsRoot: f.snapshotsRoot },
+      runScopedIds: true, env: { OPEN_DESIGN_TELEMETRY_RELAY_URL: 'https://telemetry.open-design.ai/api/langfuse' },
+    });
+    const attachments = sources.filter(source => source.objectClass === 'attachment');
+    expect(attachments.find(source => source.mime === 'text/plain')?.body?.toString()).toBe('brief body');
+    const feedback = attachments.find(source => source.mime === 'application/json');
+    expect(feedback).toMatchObject({ reason: 'preview_feedback_metadata_only' });
+    expect(feedback?.body).toBeUndefined();
+    expect(JSON.stringify(sources.map(({ body, ...rest }) => ({ ...rest, body: body?.toString() }))))
+      .not.toContain('TELEMETRY_SELECTOR_SENTINEL');
+  }
 });
 
 it('telemetry freezes validated task-input bytes after the original attachment changes', async () => {
