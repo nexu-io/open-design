@@ -25,12 +25,20 @@ export function createJsonLineStream(onMessage: (message: unknown, rawLine: stri
   let pendingJsonLines: string[] = [];
 
   const emit = (candidate: string): boolean => {
+    let message: unknown;
     try {
-      onMessage(JSON.parse(candidate), candidate);
-      return true;
+      message = JSON.parse(candidate);
     } catch {
       return false;
     }
+    try {
+      onMessage(message, candidate);
+    } catch (error) {
+      console.error('[json-line] message handler failed', error);
+    }
+    // A delivered frame is consumed even if its handler failed. Replaying it
+    // as malformed JSON could repeat side effects already performed by the handler.
+    return true;
   };
 
   const pendingCandidate = () => pendingJsonLines.join('\n');
