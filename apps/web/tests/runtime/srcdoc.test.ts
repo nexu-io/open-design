@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { DECK_STRUCTURED_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
+import { buildPreviewBaseHrefBridge } from '@open-design/contracts/runtime/preview-observability';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
 const deckHtml = `<!doctype html>
@@ -69,6 +70,29 @@ describe('buildSrcdoc', () => {
     expect(dom.window.document.querySelector('base')?.getAttribute('href'))
       .toBe('https://cdn.example/assets/');
     dom.window.close();
+  });
+
+  it('announces the replacement scope and expiry after an injected base update', () => {
+    const href = 'http://open-design.local/api/projects/project-1/preview/scope-1/';
+    const nextHref = href.replace('scope-1', 'scope-2');
+    const dom = new JSDOM(`<html><head><base data-od-project-preview-base href="${href}">
+      ${buildPreviewBaseHrefBridge({ href, expiresAt: 1000 })}</head><body></body></html>`, {
+      url: 'http://open-design.local/', runScripts: 'dangerously',
+    });
+    try {
+      const post = vi.spyOn(dom.window.parent, 'postMessage');
+      const message = (data: Record<string, unknown>) => dom.window.dispatchEvent(
+        new dom.window.MessageEvent('message', { source: dom.window.parent, data }),
+      );
+      message({ type: 'od:preview-base-update', href: nextHref, expiresAt: 9000 });
+      post.mockClear();
+      message({ type: 'od:preview-base-scope-probe' });
+      expect(post).toHaveBeenCalledWith({
+        type: 'od:preview-base-scope', href: nextHref, expiresAt: 9000,
+      }, '*');
+    } finally {
+      dom.window.close();
+    }
   });
 
   it('updates an injected preview base in place without navigating the document', () => {
