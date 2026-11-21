@@ -72,6 +72,58 @@ type ChatSessionMode = 'design' | 'chat' | 'plan';
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
 
+// Anything that changes what the project list shows funnels through the project
+// and workspace-binding writers below, whichever entry point caused it (web
+// route, `od` CLI, MCP bridge, import, routine). Listeners are keyed by the
+// database handle so concurrent daemons in one process do not hear each other.
+const projectCatalogListeners = new WeakMap<SqliteDb, Set<() => void>>();
+
+export function onProjectCatalogMutation(db: SqliteDb, listener: () => void): () => void {
+  let listeners = projectCatalogListeners.get(db);
+  if (!listeners) {
+    listeners = new Set();
+    projectCatalogListeners.set(db, listeners);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notifyProjectCatalogMutation(db: SqliteDb): void {
+  const listeners = projectCatalogListeners.get(db);
+  if (!listeners) return;
+  for (const listener of Array.from(listeners)) {
+    try {
+      listener();
+    } catch {
+      // A broken subscriber must never fail the write that triggered it.
+    }
+  }
+}
+
+function projectListFingerprint(project: DbRow): string {
+  return JSON.stringify([
+    project.name,
+    project.skillId ?? null,
+    project.designSystemId ?? null,
+    project.pendingPrompt ?? null,
+    project.metadata ?? null,
+    project.customInstructions ?? null,
+    project.updatedAt,
+  ]);
+}
+
+function workspaceBindingListFingerprint(binding: DbRow): string {
+  return JSON.stringify([
+    binding.workspaceId,
+    binding.visibility,
+    binding.resourceState,
+    binding.syncState ?? null,
+    binding.cloudTombstonedAt ?? null,
+  ]);
+}
+
 function row(value: unknown): DbRow | null {
   return value && typeof value === 'object' ? value as DbRow : null;
 }
@@ -1433,6 +1485,7 @@ export function ensureWorkspaceProject(db: SqliteDb, input: DbRow) {
     input.createdAt ?? now,
     insertedUpdatedAt,
   );
+  notifyProjectCatalogMutation(db);
   return getWorkspaceProject(db, input.workspaceId, input.projectId);
 }
 
@@ -1477,6 +1530,9 @@ export function updateWorkspaceProject(db: SqliteDb, workspaceId: string, projec
     workspaceId,
     projectId,
   );
+  if (workspaceBindingListFingerprint(existing) !== workspaceBindingListFingerprint(next)) {
+    notifyProjectCatalogMutation(db);
+  }
   return getWorkspaceProject(db, workspaceId, projectId);
 }
 
@@ -1540,14 +1596,18 @@ export function rebindWorkspaceProject(db: SqliteDb, projectId: string, patch: D
     next.updatedAt,
     projectId,
   );
+  if (workspaceBindingListFingerprint(existing) !== workspaceBindingListFingerprint(next)) {
+    notifyProjectCatalogMutation(db);
+  }
   return getWorkspaceProjectByProjectId(db, projectId);
 }
 
 export function deleteWorkspaceProject(db: SqliteDb, workspaceId: string, projectId: string): void {
-  db.prepare(
+  const { changes } = db.prepare(
     `DELETE FROM workspace_projects
       WHERE workspace_id = ? AND project_id = ?`,
   ).run(workspaceId, projectId);
+  if (changes > 0) notifyProjectCatalogMutation(db);
 }
 
 /**
@@ -2130,6 +2190,7 @@ export function insertProject(db: SqliteDb, p: DbRow) {
     p.createdAt,
     p.updatedAt,
   );
+  notifyProjectCatalogMutation(db);
   return getProject(db, p.id);
 }
 
@@ -2206,11 +2267,15 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
     merged.updatedAt,
     id,
   );
+  if (projectListFingerprint(existing) !== projectListFingerprint(merged)) {
+    notifyProjectCatalogMutation(db);
+  }
   return getProject(db, id);
 }
 
 export function deleteProject(db: SqliteDb, id: string) {
-  db.prepare(`DELETE FROM projects WHERE id = ?`).run(id);
+  const { changes } = db.prepare(`DELETE FROM projects WHERE id = ?`).run(id);
+  if (changes > 0) notifyProjectCatalogMutation(db);
 }
 
 function normalizeProject(row: DbRow) {

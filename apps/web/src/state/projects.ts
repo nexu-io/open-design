@@ -279,6 +279,11 @@ export async function listProjects(options?: {
   throwOnError?: boolean;
   workspaceContext?: WorkspaceCollabContext | null;
   workspaceView?: WorkspaceProjectListView;
+  /**
+   * The caller was told the list changed, so neither a read settled in the last
+   * second nor one still in flight (it may predate the change) may answer it.
+   */
+  fresh?: boolean;
 }): Promise<Project[]> {
   const context = options?.workspaceContext ?? null;
   if (context) {
@@ -286,6 +291,7 @@ export async function listProjects(options?: {
       context,
       workspaceView: options?.workspaceView,
       throwOnError: options?.throwOnError,
+      fresh: options?.fresh,
     });
     const seenProjectIds = new Set<string>();
     return summaries.flatMap((summary) => {
@@ -315,6 +321,7 @@ export async function listProjects(options?: {
   // workspace-scoped read's own key is built in
   // `listWorkspaceProjectSummaries` below and carries the full wire identity
   // plus the requested view.
+  if (options?.fresh) evictCoalescedGet('local-projects');
   try {
     return await coalescedGet('local-projects', async () => {
       const resp = await fetch('/api/projects');
@@ -334,10 +341,12 @@ export async function listWorkspaceProjectSummaries(options: {
   context: WorkspaceCollabContext;
   throwOnError?: boolean;
   workspaceView?: WorkspaceProjectListView;
+  fresh?: boolean;
 }): Promise<WorkspaceProjectSummary[]> {
   const { context } = options;
   const workspaceView = options.workspaceView ?? 'drafts';
   const key = workspaceProjectListCacheKey(context, workspaceView);
+  if (options.fresh) evictCoalescedGet(key);
   try {
     return await coalescedGet(key, async () => {
       const resp = await fetch(
