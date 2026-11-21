@@ -4823,7 +4823,7 @@ export function FileWorkspace({
   );
 }
 
-function DesignSystemProjectPanel({
+export function DesignSystemProjectPanel({
   projectId,
   system,
   brandId,
@@ -4880,7 +4880,7 @@ function DesignSystemProjectPanel({
 }) {
   const t = useT();
   const analytics = useAnalytics();
-  const { workspaceContext } = useProjectCollabContext();
+  const { workspaceContext, workspaceScopeSettledUnbound } = useProjectCollabContext();
   // Match the exact fields sent by workspaceProjectHeaders. Billing-only
   // refreshes must not blank and reload the kit, while a role, membership, or
   // permission change must discard every prior identity's source snapshot.
@@ -4917,10 +4917,28 @@ function DesignSystemProjectPanel({
     deleteRequest && workspaceContext ? deleteRequest.projectId : undefined,
     workspaceContext, 'delete-confirmation',
   );
-  const deleteShareStatus = deleteRequest && (!workspaceContext || deleteRequest.projectId !== projectId
-    || deleteRequest.generation !== currentWorkspaceAccountGeneration()) ? 'error' : deleteHistoryStatus;
-  const deleteActiveShareCount = deleteShareHistory
-    ? deleteShareHistory.publications.filter(publication => publication.status === 'active').length : null;
+  // A project whose workspace scope has SETTLED as `unbound` (verified by
+  // ProjectView via `projectWorkspaceScopeSettledUnbound`, never a bare null
+  // context, which also covers loading and unavailable reads) has no share
+  // surface in scope: publishing requires the workspace binding it lacks, and
+  // the daemon's delete path owns stop-before-delete authorization
+  // server-side. Resolve that reading to a settled, share-free confirmation —
+  // a forced 'error' here made every local design-system delete dead-end on
+  // the generic retry copy with a permanently disabled accept button, so
+  // local-first deletes never issued (#8926). Any other null context stays
+  // fail closed: an unresolved scope must not be treated as a workspace-free
+  // project.
+  const deleteShareFreeSession = workspaceContext == null && workspaceScopeSettledUnbound === true;
+  const deleteShareOutOfSync = deleteRequest && (deleteRequest.projectId !== projectId
+    || deleteRequest.generation !== currentWorkspaceAccountGeneration());
+  const deleteShareStatus = deleteShareOutOfSync ? 'error'
+    : deleteShareFreeSession ? 'ready'
+      : deleteHistoryStatus;
+  const deleteActiveShareCount = deleteShareFreeSession
+    ? 0
+    : deleteShareHistory
+      ? deleteShareHistory.publications.filter(publication => publication.status === 'active').length
+      : null;
   // Transient feedback for kit edits (upload / refresh / reset / delete) so an
   // action that previously fired-and-forgot now reports success or failure.
   const [kitToast, setKitToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);

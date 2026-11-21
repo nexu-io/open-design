@@ -266,6 +266,10 @@ interface Props {
   inviteSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
   context: WorkspaceCollabContext | null;
+  /** Whether a null context is a SETTLED signed-out reading (the shell
+   *  verifies via `workspaceIdentitySettledSignedOut`); loading/unavailable
+   *  reads are also null and must keep the delete flows fail closed. */
+  contextSettledSignedOut?: boolean;
   /** Account billing metadata (via the vela CLI 收口). Null → the billing
    *  chip falls back to the context plan-tier hint. */
   billing?: WorkspaceBillingSummary | null;
@@ -422,6 +426,7 @@ function RailRecentSection({
   onProjectShared,
   onProjectShareFailed,
   workspaceContext,
+  workspaceSignedOut,
   analyticsPage,
   label,
 }: {
@@ -435,6 +440,9 @@ function RailRecentSection({
   onProjectShared?: (project: WorkspaceProjectSummary) => void;
   onProjectShareFailed?: (projectId: string) => void;
   workspaceContext?: WorkspaceCollabContext | null;
+  /** Whether a null `workspaceContext` is a settled signed-out reading, from
+   *  `workspaceIdentitySettledSignedOut` at the shell. Fail closed by default. */
+  workspaceSignedOut?: boolean;
   analyticsPage: TrackingWorkspacePage;
   label: string;
 }) {
@@ -463,6 +471,7 @@ function RailRecentSection({
     onDelete,
     analyticsPage: collectionPage,
     workspaceContext,
+    workspaceSignedOut,
   });
   const duplicateFlow = useProjectDuplicateFlow({
     onDuplicate,
@@ -1985,6 +1994,7 @@ export function EntryNavRail({
   topRightSlot,
   inviteSlot,
   context,
+  contextSettledSignedOut,
   billing,
   billingResponse,
   balanceUsd,
@@ -2543,6 +2553,7 @@ export function EntryNavRail({
               onProjectShared={onRecentProjectShared}
               onProjectShareFailed={onRecentProjectShareFailed}
               workspaceContext={context}
+              workspaceSignedOut={contextSettledSignedOut}
               analyticsPage={analyticsPage}
               label={t('recentProjects.title')}
             />
@@ -2627,6 +2638,7 @@ export function EntryNavRail({
               onDelete={onDeleteRecentProject}
               onDuplicate={onDuplicateRecentProject}
               workspaceContext={null}
+              workspaceSignedOut={contextSettledSignedOut}
               analyticsPage={analyticsPage}
               label={t('recentProjects.title')}
             />

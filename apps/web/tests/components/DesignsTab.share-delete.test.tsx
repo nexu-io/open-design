@@ -12,7 +12,8 @@ const context: WorkspaceCollabContext = {
   permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
 };
 let workspaceContext: WorkspaceCollabContext | null = context;
-vi.mock('../../src/collab/useWorkspaceContext', () => ({ useWorkspaceContext: () => ({ context: workspaceContext, loading: false }) }));
+let workspaceLoading = false;
+vi.mock('../../src/collab/useWorkspaceContext', () => ({ useWorkspaceContext: () => ({ context: workspaceContext, loading: workspaceLoading }) }));
 vi.mock('../../src/providers/registry', () => ({
   deleteLiveArtifact: vi.fn(), fetchLiveArtifacts: vi.fn(async () => []),
   fetchProjectFiles: vi.fn(async () => []), liveArtifactPreviewUrl: () => '/preview',
@@ -27,6 +28,7 @@ const request = vi.fn<typeof fetch>();
 
 beforeEach(() => {
   workspaceContext = context;
+  workspaceLoading = false;
   remove.mockClear();
   request.mockReset();
   window.localStorage.clear();
@@ -89,7 +91,7 @@ it('All Projects batch checks both selected projects and warns of the aggregate 
   expect(dialog.isConnected).toBe(false);
 });
 
-it('All Projects batch never deletes when workspace context is missing and no share count is known', () => {
+it('All Projects batch deletes without a workspace identity and waits on no share-state read', () => {
   workspaceContext = null;
   const other: Project = { ...project, id: 'project-2', name: 'Brand system' };
   render(<DesignsTab projects={[project, other]} skills={[]} designSystems={[]} onOpen={vi.fn()} onOpenLiveArtifact={vi.fn()} onDelete={remove} />);
@@ -98,8 +100,29 @@ it('All Projects batch never deletes when workspace context is missing and no sh
   fireEvent.click(screen.getByText('Brand system').closest('.design-card') as HTMLElement);
   fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
   const dialog = screen.getByRole('alertdialog');
+  // A signed-out session has no share surface in scope, so the confirmation
+  // settles without a read instead of reporting the generic retry error.
+  expect(within(dialog).queryByRole('alert')).toBeNull();
+  expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeEnabled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected' }));
+  expect(remove).toHaveBeenCalledTimes(2);
+  expect(remove.mock.calls.map(([id]) => id).sort()).toEqual(['project-1', 'project-2']);
+  expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(0);
+});
+it('All Projects batch fails closed while the workspace read is loading', () => {
+  workspaceContext = null;
+  workspaceLoading = true;
+  const other: Project = { ...project, id: 'project-2', name: 'Brand system' };
+  render(<DesignsTab projects={[project, other]} skills={[]} designSystems={[]} onOpen={vi.fn()} onOpenLiveArtifact={vi.fn()} onDelete={remove} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+  fireEvent.click(screen.getByText('Landing refresh').closest('.design-card') as HTMLElement);
+  fireEvent.click(screen.getByText('Brand system').closest('.design-card') as HTMLElement);
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+  const dialog = screen.getByRole('alertdialog');
+  // A null context during loading is not proof of sign-out: the batch keeps
+  // waiting instead of claiming share-free.
   expect(within(dialog).getByRole('button', { name: 'Delete selected' })).toBeDisabled();
-  expect(within(dialog).getByRole('alert')).toBeVisible();
+  expect(within(dialog).queryByRole('alert')).toBeNull();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Delete selected' }));
   expect(remove).not.toHaveBeenCalled();
   expect(request.mock.calls.filter(([url]) => String(url).endsWith('/share-state'))).toHaveLength(0);
