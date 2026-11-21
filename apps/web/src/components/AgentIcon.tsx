@@ -20,6 +20,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   'cursor-agent': 'svg',
   copilot: 'svg',
   qwen: 'svg',
+  zcode: 'svg',
   qoder: 'svg',
   deepseek: 'svg',
   reasonix: 'svg',

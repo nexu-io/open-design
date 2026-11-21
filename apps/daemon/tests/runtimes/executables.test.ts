@@ -6,6 +6,7 @@ import {
 import {
   codexAppBundleCandidates,
   resolveAmrOpenCodeExecutable,
+  zcodeAppBundleCandidates,
 } from '../../src/runtimes/executables.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
@@ -827,5 +828,47 @@ fsTest(
 fsTest('codexAppBundleCandidates is empty on non-darwin platforms', () => {
   return withPlatform('linux', () => {
     assert.deepEqual(codexAppBundleCandidates(), []);
+  });
+});
+
+fsTest(
+  'zcodeAppBundleCandidates honors the sandbox detection home and skips /Applications',
+  () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'od-zcode-sandbox-data-'));
+    try {
+      return withEnvSnapshot(
+        ['OD_AGENT_HOME', 'OD_SANDBOX_MODE', 'OD_DATA_DIR'],
+        () =>
+          withPlatform('darwin', () => {
+            delete process.env.OD_AGENT_HOME;
+            process.env.OD_SANDBOX_MODE = '1';
+            process.env.OD_DATA_DIR = dataDir;
+
+            const candidates = zcodeAppBundleCandidates();
+
+            assert.deepEqual(candidates, [
+              join(
+                dataDir,
+                'sandbox',
+                'agent-home',
+                'Applications',
+                'ZCode.app',
+                'Contents',
+                'Resources',
+                'glm',
+                'zcode.cjs',
+              ),
+            ]);
+          }),
+      );
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  },
+);
+
+fsTest('zcodeAppBundleCandidates is empty on non-darwin platforms', () => {
+  return withPlatform('linux', () => {
+    assert.deepEqual(zcodeAppBundleCandidates(), []);
   });
 });
