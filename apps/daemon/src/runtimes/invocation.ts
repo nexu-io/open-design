@@ -42,6 +42,11 @@ export function execAgentFile(
     // These are read-only metadata probes, so there is nothing to flush: kill
     // them outright. Listed before the spread so a caller can still choose.
     killSignal: 'SIGKILL',
+    // A probe reaches the OS the same way a run does — the resolved agent CLI
+    // is a `.cmd` shim on Windows, so it goes through cmd.exe — and the daemon
+    // has no console of its own to host it. Without this every detection pass
+    // flashes a console window for each probe it runs.
+    windowsHide: true,
     ...options,
     cwd: options.cwd ?? os.tmpdir(),
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
