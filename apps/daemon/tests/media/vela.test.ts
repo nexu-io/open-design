@@ -558,7 +558,7 @@ describe('Vela media provider', () => {
   it('submits and polls video with first-frame/references, progress heartbeats, and one terminal download', async () => {
     const progress: string[] = [];
     runVelaCommandMock.mockImplementation(async (args: string[]) => {
-      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]});
+      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video',capabilities:{durations:[5,10]}}]});
       if (args[0] === 'video' && args[1] === 'gen') {
         return JSON.stringify({ task_id: 'mt_test', status: 'queued' });
       }
@@ -622,7 +622,7 @@ describe('Vela media provider', () => {
 
   it('preserves a failed video status and provider error', async () => {
     runVelaCommandMock
-      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]}))
+      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video',capabilities:{durations:[5,10]}}]}))
       .mockResolvedValueOnce(JSON.stringify({ task_id: 'mt_failed', status: 'queued' }))
       .mockResolvedValueOnce(JSON.stringify({
         task_id: 'mt_failed',
@@ -662,9 +662,9 @@ describe('Vela media provider', () => {
 
   it.each([
     ['4:3', 5, 'only supports aspect ratios'],
-    ['16:9', 6, 'only supports durations of 5 or 10'],
-    ['16:9', 8, 'only supports durations of 5 or 10'],
-  ])('rejects unsupported video capability %s/%ss before spawning', async (aspect, length, message) => {
+    ['16:9', 0, 'duration must be a positive integer'],
+    ['16:9', 5.5, 'duration must be a positive integer'],
+  ])('rejects invalid video capability %s/%ss before spawning', async (aspect, length, message) => {
     await expect(generateMedia({
       ...baseArgs(),
       surface: 'video',
@@ -674,5 +674,93 @@ describe('Vela media provider', () => {
       output: 'unsupported.mp4',
     })).rejects.toThrow(message);
     expect(runVelaCommandMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+    ['invalid', [0, -1, 1.5, '5']],
+  ])('rejects a requested duration when published durations are %s', async (_label, durations) => {
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({
+      models: [{ model: 'doubao-seedance-2-0-260128', kind: 'video', capabilities: { durations } }],
+    }));
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 999,
+      output: 'rejected.mp4',
+    })).rejects.toThrow(/catalogue has no usable durations.*no generation was submitted/);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video' && args[1] === 'gen')).toBe(false);
+  });
+
+  it('validates video duration dynamically against published capabilities.durations and forwards 15s', async () => {
+    const seedance25Durations = Array.from({ length: 27 }, (_, i) => i + 4);
+    const wan27Durations = Array.from({ length: 14 }, (_, i) => i + 2);
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            { model: 'doubao-seedance-2-0-260128', kind: 'video', capabilities: { durations: { values: [5, 10], default: 5 } } },
+            { model: 'doubao-seedance-2-5-260628', kind: 'video', capabilities: { durations: { values: seedance25Durations, default: 5 } } },
+            { model: 'wan-2.7', kind: 'video', capabilities: { durations: { values: wan27Durations, default: 5 } } },
+          ],
+        });
+      }
+      if (args[0] === 'video' && args[1] === 'gen') {
+        return JSON.stringify({ task_id: 'mt_15s', status: 'queued' });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, VIDEO_BYTES);
+      return JSON.stringify({ task_id: 'mt_15s', status: 'succeeded' });
+    });
+
+    // Rejects a duration outside the model's published capabilities before calling `video gen`.
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 15,
+      output: 'rejected-seedance20.mp4',
+    })).rejects.toThrow(/does not support duration 15s; supported: 5, 10/);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video')).toBe(false);
+
+    // Accepts 15s for doubao-seedance-2-5-260628 (4-30s) via alias and forwards `--duration 15`.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'vela/doubao-seedance-2-0-260128': 'doubao-seedance-2-5-260628',
+    });
+    const result = await generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 15,
+      output: 'clip-15s.mp4',
+    });
+    expect(result.name).toBe('clip-15s.mp4');
+    const submit = runVelaCommandMock.mock.calls.find(([args]) => args[0] === 'video' && args[1] === 'gen')![0] as string[];
+    expect(valueAfter(submit, '--model')).toBe('doubao-seedance-2-5-260628');
+    expect(valueAfter(submit, '--duration')).toBe('15');
+    expect(submit).toContain('--generate-audio');
+
+    // Accepts 3s for wan-2.7 (2-15s) and passes `--generate-audio` for vela-cli 0.1.10 compatibility.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'vela/doubao-seedance-2-0-260128': 'wan-2.7',
+    });
+    const wanResult = await generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 3,
+      output: 'clip-wan-3s.mp4',
+    });
+    expect(wanResult.name).toBe('clip-wan-3s.mp4');
+    const wanSubmit = runVelaCommandMock.mock.calls
+      .filter(([args]) => args[0] === 'video' && args[1] === 'gen')
+      .at(-1)![0] as string[];
+    expect(valueAfter(wanSubmit, '--model')).toBe('wan-2.7');
+    expect(valueAfter(wanSubmit, '--duration')).toBe('3');
+    expect(wanSubmit).toContain('--generate-audio');
   });
 });
