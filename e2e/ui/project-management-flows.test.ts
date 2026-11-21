@@ -2167,6 +2167,60 @@ test('[P1] a disabled project design system is omitted from the next run request
   expect(runRequestBodies[0]?.designSystemId).toBeNull();
 });
 
+test('[P1] OPEND-5013 switcher and Home keep project names and recent order after rename and reload', async ({ page }, testInfo) => {
+  const rows = [];
+  for (const [name, time] of [['Hi', 10], ['Hi', 30], ['Older project', 20]] as const) {
+    const created = await (await createProjectViaApi(page, name)).json();
+    const updated = await page.request.post(`/api/projects/${created.project.id}/submissions`, {
+      data: { id: `submission-${created.project.id}`, conversationId: created.conversationId, submittedAt: time },
+    });
+    expect(updated.ok(), await updated.text()).toBeTruthy();
+    rows.push({ id: created.project.id as string, conversationId: created.conversationId as string, name, time });
+  }
+  // The shared non-auth suite models a Cloud-status outage, so account scope
+  // remains unresolved and cannot accumulate tabs through route changes.
+  // Restore a normal attributed tab snapshot; project data still comes only
+  // from the real daemon endpoints above (no mocked project/list responses).
+  await page.addInitScript((projects) => {
+    const key = 'open-design:workspace-tabs:v1';
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, JSON.stringify({
+      scopeKey: 'anon::none',
+      activeTabId: `project:${projects[0]!.id}`,
+      tabs: projects.map(row => ({
+        id: `project:${row.id}`, kind: 'project', projectId: row.id,
+        conversationId: row.conversationId, fileName: null, createdAt: 1, lastActiveAt: 1,
+      })),
+    }));
+  }, rows);
+  await page.goto(`/projects/${rows[0]!.id}/conversations/${rows[0]!.conversationId}`);
+  await expectWorkspaceReady(page);
+  const switcher = page.getByTestId('workspace-tabs-dropdown-trigger');
+  await switcher.click();
+  const options = page.getByRole('listbox').getByRole('option');
+  await expect(options).toHaveText(['Hi', 'Older project', 'Hi']);
+  await expect(options.nth(2)).toHaveAttribute('aria-selected', 'true');
+  await page.screenshot({ path: testInfo.outputPath('01-switcher-same-names.png') });
+  await options.nth(2).click();
+
+  // Rename one same-named project by ID via the production endpoint, then reload
+  // to test persisted data rather than optimistic component state.
+  const renamed = await page.request.patch(`/api/projects/${rows[0]!.id}`, { data: { name: 'Renamed oldest' } });
+  expect(renamed.ok()).toBeTruthy();
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await expect(switcher).toContainText('Renamed oldest');
+  await switcher.click();
+  await expect(options).toHaveText(['Hi', 'Older project', 'Renamed oldest']);
+  await page.screenshot({ path: testInfo.outputPath('02-switcher-renamed.png') });
+  await options.nth(2).click();
+  await page.goto('/');
+  await ensureRailOpen(page);
+  const recent = page.getByTestId('entry-nav-recent-item');
+  await expect(recent).toHaveText(['Hi', 'Older project', 'Renamed oldest']);
+  await page.screenshot({ path: testInfo.outputPath('03-home-renamed.png') });
+});
+
 test('[P1] project rename from the switcher persists after reload and ignores blank titles', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Original rename title');
@@ -5100,7 +5154,7 @@ async function renameProjectFromSwitcher(
   const input = page.getByRole('textbox', { name: 'Rename' });
   await input.fill(nextName);
   await input.press('Enter');
-  await page.locator('.workspace-tabs-dropdown__backdrop').click({ position: { x: 4, y: 4 } });
+  await page.getByRole('listbox').getByRole('option', { selected: true }).click();
 }
 
 async function uploadTinyHtml(
