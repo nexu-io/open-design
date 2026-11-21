@@ -44,6 +44,87 @@ afterEach(() => {
 });
 
 describe('od:// protocol proxy', () => {
+  it.each(['GET', 'HEAD'].flatMap((method) => [
+    'http://127.0.0.1:17579/',
+    'http://127.0.0.2:17579/',
+    'http://[::1]:17579/',
+    'http://[0:0:0:0:0:0:0:1]:17579/',
+    'http://2130706433:17579/',
+  ].map((target) => [method, target])))('removes the app Origin for %s to %s', async (method, target) => {
+    const captured: Request[] = [];
+    const incoming = new Request('od://app/fonts/AlbertSans-VariableFont_wght.ttf', {
+      method,
+      headers: {
+        Origin: 'od://app', Accept: 'font/ttf', 'X-Test': 'preserved',
+        Authorization: 'Bearer test-token', Cookie: 'test=value',
+      },
+    });
+    const response = await handleOdRequest(incoming, target, async (request) => {
+      captured.push(request);
+      return new Response(null);
+    });
+    expect(response.status).toBe(200);
+    expect(captured[0]!.headers.get('origin')).toBeNull();
+    expect(captured[0]!.headers.get('accept')).toBe('font/ttf');
+    expect(captured[0]!.headers.get('x-test')).toBe('preserved');
+    expect(captured[0]!.headers.get('authorization')).toBe('Bearer test-token');
+    expect(captured[0]!.headers.get('cookie')).toBe('test=value');
+    expect(incoming.headers.get('origin')).toBe('od://app');
+  });
+
+  it.each([
+    ['POST', 'od://app'],
+    ['PUT', 'od://app'],
+    ['PATCH', 'od://app'],
+    ['DELETE', 'od://app'],
+    ['GET', 'https://example.com'],
+    ['HEAD', 'https://example.com'],
+    ['GET', 'null'],
+    ['HEAD', 'null'],
+  ])('preserves Origin for %s from %s', async (method, origin) => {
+    let forwarded: Request | undefined;
+    await handleOdRequest(new Request('od://app/api/example', {
+      method, headers: { Origin: origin },
+    }), 'http://127.0.0.1:17579/', async (request) => {
+      forwarded = request;
+      return new Response(null);
+    });
+    expect(forwarded!.headers.get('origin')).toBe(origin);
+  });
+
+  it.each(['GET', 'HEAD'].flatMap((method) => [
+    'http://example.com/',
+    'https://example.com/',
+    'https://127.0.0.1:17579/',
+    'http://192.168.1.1:17579/',
+    'http://0.0.0.0:17579/',
+    'http://[::ffff:127.0.0.1]:17579/',
+    'http://localhost:17579/',
+    'http://127.0.0.1.example.com/',
+  ].map((target) => [method, target])))('preserves the app Origin for %s to %s', async (method, target) => {
+    let forwarded: Request | undefined;
+    const response = await handleOdRequest(new Request('od://app/font.ttf', {
+      method, headers: { Origin: 'od://app' },
+    }), target, async (request) => {
+      forwarded = request;
+      return new Response(null);
+    });
+    expect(response.status).toBe(200);
+    expect(forwarded!.headers.get('origin')).toBe('od://app');
+  });
+
+  it.each(['GET', 'HEAD'].flatMap((method) => [
+    'http://127.0.0.1@example.com/',
+    'http://example.com@127.0.0.1/',
+  ].map((target) => [method, target])))('rejects credentials in the %s target %s before fetching', async (method, target) => {
+    const fetchImpl = vi.fn();
+    const response = await handleOdRequest(new Request('od://app/font.ttf', {
+      method, headers: { Origin: 'od://app' },
+    }), target, fetchImpl, { delay: async () => {} });
+    expect(response.status).toBe(502);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('proxies the request through fetchImpl with the rewritten target URL', async () => {
     const captured: Request[] = [];
     const fetchImpl: typeof fetch = async (input) => {
@@ -683,6 +764,33 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
   // Guard: a generic net.fetch rejection still gets the undici fallback —
   // that fallback exists because Electron can reject specific renderer-owned
   // subresource requests (CSS-mask GETs) that undici serves fine.
+  it('logs repeated fallback failures only once per registered session', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
+
+    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
+      new Response('ok', { status: 200 }));
+    vi.stubGlobal('fetch', undiciFetch);
+
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+
+    for (let i = 0; i < 5; i++) {
+      const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
+      expect(response.status).toBe(200);
+    }
+
+    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(5);
+    expect(undiciFetch).toHaveBeenCalledTimes(5);
+
+    const fallbackWarnings = warnSpy.mock.calls.filter(
+      ([message]) => typeof message === 'string'
+        && message.includes('net.fetch failed; falling back to undici'),
+    );
+
+    expect(fallbackWarnings).toHaveLength(1);
+  });
+
   it('still falls back to undici on a generic net::ERR_FAILED', async () => {
     vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
     const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
@@ -695,6 +803,117 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
 
     expect(response.status).toBe(200);
     expect(undiciFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['http://127.0.0.1:61424/', null],
+    ['https://example.com/', 'od://app'],
+  ])('keeps scoped headers and cancellation on the undici fallback to %s', async (target, origin) => {
+    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
+    let forwarded: Request | undefined;
+    const undiciFetch = vi.fn(async (request: Request) => {
+      forwarded = request;
+      return new Response(new ReadableStream());
+    });
+    vi.stubGlobal('fetch', undiciFetch);
+    const controller = new AbortController();
+    registerOdProtocol(() => target!);
+    const response = await registeredHandler()(new Request('od://app/font.ttf', {
+      headers: { Origin: 'od://app' }, signal: controller.signal,
+    }));
+    expect(response.status).toBe(200);
+    expect(forwarded!.headers.get('origin')).toBe(origin);
+    expect(undiciFetch).toHaveBeenCalledTimes(1);
+    expect(forwarded!.signal.aborted).toBe(false);
+    controller.abort();
+    expect(forwarded!.signal.aborted).toBe(true);
+    await response.body!.cancel();
+  });
+
+  it('reports distinct fallback methods, upstream origins, error codes and messages', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const undiciFetch = vi.fn(async () => new Response(null));
+    vi.stubGlobal('fetch', undiciFetch);
+    let failure = Object.assign(new Error('transport failed'), { code: 'EONE' });
+    vi.mocked(net.fetch).mockImplementation(async () => { throw failure; });
+    let target = 'http://127.0.0.1:61424/';
+    registerOdProtocol(() => target);
+    const handler = registeredHandler();
+    await handler(new Request('od://app/a.svg'));
+    await handler(new Request('od://app/b.svg'));
+    await handler(new Request('od://app/b.svg', { method: 'HEAD' }));
+    failure = Object.assign(new Error('transport failed'), { code: 'ETWO' });
+    await handler(new Request('od://app/a.svg'));
+    failure = Object.assign(new Error('different failure'), { code: 'ETWO' });
+    await handler(new Request('od://app/a.svg'));
+    target = 'http://127.0.0.1:61425/';
+    await handler(new Request('od://app/a.svg'));
+    const warnings = () => warnSpy.mock.calls.filter(([message]) =>
+      typeof message === 'string' && message.includes('net.fetch failed; falling back to undici'));
+    expect(warnings()).toHaveLength(5);
+    expect(warnings()[0]![1]).toMatchObject({ code: 'EONE' });
+    expect(warnings()[2]![1]).toMatchObject({ code: 'ETWO' });
+    expect(undiciFetch).toHaveBeenCalledTimes(6);
+
+    registerOdProtocol(() => target);
+    await registeredHandler()(new Request('od://app/a.svg'));
+    expect(warnings()).toHaveLength(6);
+  });
+
+  it('keeps concurrent reads on Electron after an isolated HEAD fallback', async () => {
+    const undiciFetch = vi.fn(async () => new Response(null));
+    vi.stubGlobal('fetch', undiciFetch);
+    vi.mocked(net.fetch).mockRejectedValueOnce(new Error('net::ERR_FAILED'));
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const handler = registeredHandler();
+    expect((await handler(new Request('od://app/icon.svg', { method: 'HEAD' }))).status).toBe(200);
+
+    const first = Promise.withResolvers<Response>();
+    const second = Promise.withResolvers<Response>();
+    vi.mocked(net.fetch).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const pending = [handler(new Request('od://app/a')), handler(new Request('od://app/b'))];
+    const callsBeforeCompletion = vi.mocked(net.fetch).mock.calls.length;
+    first.resolve(new Response('a'));
+    second.resolve(new Response('b'));
+    const responses = await Promise.all(pending);
+    expect(callsBeforeCompletion).toBe(3);
+    expect(await Promise.all(responses.map((response) => response.text()))).toEqual(['a', 'b']);
+    expect(undiciFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not replay a POST whose body Electron consumed before rejecting', async () => {
+    const undiciFetch = vi.fn();
+    vi.stubGlobal('fetch', undiciFetch);
+    let body: string | undefined;
+    vi.mocked(net.fetch).mockImplementation((async (request: Request) => {
+      body = await request.text();
+      throw new Error('net::ERR_FAILED');
+    }) as typeof net.fetch);
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const response = await registeredHandler()(new Request('od://app/api/example', {
+      method: 'POST', body: 'write-once', headers: { Origin: 'od://app' },
+    }));
+    expect(body).toBe('write-once');
+    expect(response.status).toBe(502);
+    expect(net.fetch).toHaveBeenCalledTimes(1);
+    expect(undiciFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back after the renderer cancels an in-flight read', async () => {
+    const controller = new AbortController();
+    const undiciFetch = vi.fn();
+    vi.stubGlobal('fetch', undiciFetch);
+    vi.mocked(net.fetch).mockImplementation(async () => {
+      controller.abort();
+      throw new Error('net::ERR_FAILED');
+    });
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const response = await registeredHandler()(new Request('od://app/icon.svg', {
+      signal: controller.signal, headers: { Origin: 'od://app' },
+    }));
+    expect(response.status).toBe(499);
+    expect(net.fetch).toHaveBeenCalledTimes(1);
+    expect(undiciFetch).not.toHaveBeenCalled();
   });
 });
 
