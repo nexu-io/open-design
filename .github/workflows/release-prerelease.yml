@@ -221,7 +221,7 @@ jobs:
       base_version: ${{ steps.prerelease.outputs.base_version }}
       branch: ${{ steps.prerelease.outputs.branch }}
       channel: ${{ steps.prerelease.outputs.channel }}
-      commit: ${{ steps.prerelease.outputs.commit }}
+      commit: ${{ steps.source.outputs.commit }}
       github_release_enabled: ${{ steps.prerelease.outputs.github_release_enabled }}
       latest_stable: ${{ steps.prerelease.outputs.latest_stable }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
@@ -236,7 +236,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
           # Shallow. Nothing in this workflow reads git history: the built
           # commit arrives as an explicit input/env (RELEASE_COMMIT), `pnpm
           # guard` uses `git ls-files` (index, not history), and tools-pack /
@@ -258,7 +258,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Resolve built commit
-        run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+        id: source
+        # GITHUB_SHA remains the event commit even when inputs.ref checks out a
+        # different commit. Publish the actual checkout as the shared identity.
+        run: |
+          built_sha="$(git rev-parse HEAD)"
+          echo "BUILT_SHA=$built_sha" >> "$GITHUB_ENV"
+          echo "commit=$built_sha" >> "$GITHUB_OUTPUT"
 
       - name: Capture previous prerelease commit
         id: prev
@@ -289,7 +295,7 @@ jobs:
         id: reservation
         env:
           BASE_VERSION: ${{ steps.prerelease.outputs.base_version }}
-          RELEASE_COMMIT: ${{ env.BUILT_SHA }}
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
           RELEASE_CHANNEL: prerelease
           RELEASE_LANE: release-prerelease
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
