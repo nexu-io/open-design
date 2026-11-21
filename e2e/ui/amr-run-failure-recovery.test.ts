@@ -1068,7 +1068,7 @@ test('[P0] CLI upstream outages preserve guidance with only the Cloud switch', a
   const card = runErrorCard(page);
   await expect(card).toContainText('Model service unavailable', { timeout: T.long });
   await expect(card.getByTestId('chat-run-error-description')).toHaveText(
-    'The current model is temporarily unavailable. Try again later, or switch models.',
+    'The upstream model service provider is experiencing temporary issues. Please try again shortly or switch to another model.',
   );
   await expect(card.getByRole('button')).toHaveText([
     'Contact us', 'Export logs', 'Switch to OpenDesign Cloud',
@@ -1274,9 +1274,29 @@ test('[P0] antigravity rate limits keep classification and use only the Cloud sw
   runRequests.dispose?.();
 });
 
+test('[P0] membership RPM limit after tool completion shows the reset time and allows retry', async ({ page }, testInfo) => {
+  await stubRuntimeAgents(page);
+  const amr = await setupAmrWorkspace(page, {
+    selectedAgentId: 'amr',
+    requireLoginConfig: false,
+    membershipRpmFailureOnce: '[code=tier_limit_exceeded] membership rpm limit exceeded: 3/2 resets 2026-10-30T02:47:00Z',
+    assistantText: 'Recovered after RPM reset.',
+  });
+  await gotoProject(page, amr.projectId);
+  await sendPrompt(page, 'Exercise membership RPM rejection');
+  const card = runErrorCard(page);
+  await expect(card).toBeVisible({ timeout: T.long });
+  await expect(card).toContainText('Too many requests');
+  await expect(card).toContainText(/retry after .*47/i);
+  await testInfo.attach('membership-rpm-reset', { body: await page.screenshot(), contentType: 'image/png' });
+  await card.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(page.getByText('Recovered after RPM reset.', { exact: true }).first()).toBeVisible({ timeout: T.long });
+});
+
 async function setupAmrWorkspace(
   page: Page,
   options: {
+    membershipRpmFailureOnce?: string;
     failAuthAtPrompt?: boolean;
     failAuthAtPromptOnce?: boolean;
     failBalanceAtPrompt?: boolean;
@@ -1300,6 +1320,7 @@ async function setupAmrWorkspace(
   const fakeVelaSessionId = `fake-amr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const velaBin = await writeFakeVelaBin(join(root, 'bin'), {
     sessionId: fakeVelaSessionId,
+    ...(options.membershipRpmFailureOnce ? { membershipRpmFailureOnce: options.membershipRpmFailureOnce } : {}),
     ...(options.fundingCheck ? { fundingCheck: { status: options.fundingCheck,
       workspaceMemberId: AMR_PERSONAL_WORKSPACE_ITEM.workspaceMemberId } } : {}),
     ...(options.assistantText !== undefined ? { assistantText: options.assistantText } : {}),

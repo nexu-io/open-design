@@ -7,8 +7,8 @@ export function isMembershipConcurrencyLimitFailure(
     && /\bmembership concurrency limit exceeded\b/i.test(text);
 }
 
-/** The instant vela says a membership concurrency slot becomes available again. */
-export function readMembershipConcurrencyResetAt(
+/** The reset instant carried by a Vela membership policy rejection. */
+export function readMembershipLimitResetAt(
   text: string | null | undefined,
 ): string | null {
   if (!text) return null;
@@ -16,3 +16,5 @@ export function readMembershipConcurrencyResetAt(
     .exec(text);
   return match?.[1] ?? null;
 }
+
+export const readMembershipConcurrencyResetAt = readMembershipLimitResetAt;
