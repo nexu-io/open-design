@@ -45,6 +45,7 @@ import { listProviderModels } from '../src/integrations/provider-models.js';
 import { readVelaCredentialRevision } from '../src/integrations/vela.js';
 import { startServer } from '../src/server.js';
 import { getRememberedLiveModels, rememberLiveModels } from '../src/runtimes/models.js';
+import { agentCapabilities } from '../src/runtimes/capabilities.js';
 import { amrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import { buildAmrModelCacheKey } from '../src/runtimes/amr-model-probe.js';
 
@@ -3903,6 +3904,15 @@ process.exit(1);
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-'));
     const argvFile = path.join(markerDir, 'argv.json');
     const stdinFile = path.join(markerDir, 'stdin.txt');
+    // Pin the 1.x capability shape: the 1.3 argv ORDER this test guards only
+    // exists when the `--help` probe saw `--dir`/`--pure`. A dev machine with
+    // a real OpenCode 2.x on PATH would otherwise leak its cached caps in.
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.set('opencode', {
+      workspaceDir: true,
+      pureMode: true,
+      variantFlag: true,
+    });
     try {
       await withFakeOpenCode(
         `
@@ -3965,13 +3975,164 @@ process.stdin.on('end', () => {
         },
       );
     } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('omits --dir/--pure on OpenCode 2.x connection tests', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-argv-2x-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.set('opencode', { workspaceDir: false, pureMode: false, autoApprove: true });
+    try {
+      await withFakeOpenCode(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  console.error('Usage: opencode run [options]');
+  console.error('  --auto  Auto-approve permissions');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'opencode',
+              model: 'github-copilot/gpt-4o',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+          });
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv).toEqual([
+            'run',
+            '--format',
+            'json',
+            '--auto',
+            '-m',
+            'github-copilot/gpt-4o',
+            '--title',
+            'Connection test',
+          ]);
+        },
+      );
+    } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('probes configured OPENCODE_BIN capabilities and updates stale 1.x cache', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-stale-override-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const runner = path.join(markerDir, 'opencode-2x-runner.cjs');
+    const bin = process.platform === 'win32'
+      ? path.join(markerDir, 'opencode-2x.cmd')
+      : path.join(markerDir, 'opencode-2x');
+
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.set('opencode', {
+      workspaceDir: true,
+      pureMode: true,
+      variantFlag: true,
+      skipPermissions: true,
+    });
+
+    try {
+      const fakeScript = `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  console.error('Usage: opencode run [options]');
+  console.error('  --auto  Auto-approve permissions');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`;
+      if (process.platform === 'win32') {
+        await fsp.writeFile(runner, fakeScript);
+        await fsp.writeFile(bin, `@echo off\r\nnode "${runner}" %*\r\n`);
+      } else {
+        await fsp.writeFile(bin, `#!/usr/bin/env node\n${fakeScript}`);
+        await fsp.chmod(bin, 0o755);
+      }
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'agent',
+          agentId: 'opencode',
+          model: 'github-copilot/gpt-4o',
+          agentCliEnv: { opencode: { OPENCODE_BIN: bin } },
+        }),
+      });
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        agentName: 'OpenCode',
+      });
+
+      const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+      expect(argv).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--auto',
+        '-m',
+        'github-copilot/gpt-4o',
+        '--title',
+        'Connection test',
+      ]);
+      expect(argv).not.toContain('--dir');
+      expect(argv).not.toContain('--pure');
+      expect(argv).not.toContain('--dangerously-skip-permissions');
+    } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
       await fsp.rm(markerDir, { recursive: true, force: true });
     }
   });
 
   it('does not reuse another OpenCode binary variant catalog for an OPENCODE_BIN connection test', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-variant-scope-'));
-    const bin = path.join(markerDir, 'opencode-other');
+    const runner = path.join(markerDir, 'opencode-other-runner.cjs');
+    const bin = process.platform === 'win32'
+      ? path.join(markerDir, 'opencode-other.cmd')
+      : path.join(markerDir, 'opencode-other');
     const argvFile = path.join(markerDir, 'argv.json');
     const previousModels = getRememberedLiveModels('opencode');
     rememberLiveModels('opencode', [{
@@ -3980,17 +4141,22 @@ process.stdin.on('end', () => {
       reasoningOptions: [{ id: 'high', label: 'high' }],
     }]);
     try {
-      await fsp.writeFile(
-        bin,
-        `#!/usr/bin/env node
-const fs = require('node:fs');
+      const script = `const fs = require('node:fs');
 const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
 process.stdin.resume();
 process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } })));
-`,
-      );
-      await fsp.chmod(bin, 0o755);
+`;
+      if (process.platform === 'win32') {
+        await fsp.writeFile(runner, script);
+        await fsp.writeFile(bin, `@echo off\r\nnode "${runner}" %*\r\n`);
+      } else {
+        await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+        await fsp.chmod(bin, 0o755);
+      }
 
       const result = await testAgentConnection({
         agentId: 'opencode',
