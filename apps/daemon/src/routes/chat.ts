@@ -1732,6 +1732,41 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       }
 
       const accum: Record<number, AccumulatedToolCall> = {};
+      const toolCallIndexById = new Map<string, number>();
+      const toolCallIndexByPosition = new Map<number, number>();
+      let nextImplicitToolCallIndex = 0;
+      let lastToolCallIndex: number | undefined;
+      const allocateToolCallIndex = (): number => {
+        while (accum[nextImplicitToolCallIndex]) nextImplicitToolCallIndex++;
+        return nextImplicitToolCallIndex++;
+      };
+      const resolveToolCallIndex = (tc: any, position: number, batchSize: number): number => {
+        if (typeof tc?.index === 'number') return tc.index;
+        const id = typeof tc?.id === 'string' && tc.id ? tc.id : undefined;
+        const knownIndex = id ? toolCallIndexById.get(id) : undefined;
+        if (knownIndex !== undefined) return knownIndex;
+
+        const name =
+          typeof tc?.function?.name === 'string' && tc.function.name
+            ? tc.function.name
+            : undefined;
+        const positionedIndex = toolCallIndexByPosition.get(position);
+        if (
+          name &&
+          positionedIndex !== undefined &&
+          accum[positionedIndex]?.name === name
+        ) {
+          return positionedIndex;
+        }
+        if (name) return allocateToolCallIndex();
+        if (batchSize > 1 && positionedIndex !== undefined) return positionedIndex;
+        if (lastToolCallIndex !== undefined) return lastToolCallIndex;
+
+        const existingIndices = Object.keys(accum);
+        return existingIndices.length === 1
+          ? Number(existingIndices[0])
+          : allocateToolCallIndex();
+      };
       let finishReason = '';
       let providerError = '';
 
@@ -1764,25 +1799,32 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           }
         }
 
-        // Tool call deltas stream as fragments — `id` arrives once at
-        // the start, `function.name` once at the start, and
-        // `function.arguments` accumulates a chunked JSON string we
-        // have to concatenate. Parallel calls use the `index` field to
-        // distinguish slots. Default to 0 when omitted (older models).
+        // Tool call deltas stream as fragments. Prefer the upstream index,
+        // then the call id, then the position of a parallel fragment; for
+        // unkeyed single-call fragments, continue the most recently opened call.
         if (Array.isArray(delta.tool_calls)) {
-          for (const tc of delta.tool_calls) {
-            const idx = typeof tc?.index === 'number' ? tc.index : 0;
+          for (let position = 0; position < delta.tool_calls.length; position++) {
+            const tc = delta.tool_calls[position];
+            const id = typeof tc?.id === 'string' && tc.id ? tc.id : undefined;
+            const name =
+              typeof tc?.function?.name === 'string' && tc.function.name
+                ? tc.function.name
+                : undefined;
+            const idx = resolveToolCallIndex(tc, position, delta.tool_calls.length);
             if (!accum[idx]) {
               accum[idx] = { id: '', name: '', arguments: '' };
             }
             const slot = accum[idx];
-            if (typeof tc.id === 'string' && tc.id) slot.id = tc.id;
-            if (typeof tc.function?.name === 'string' && tc.function.name) {
-              slot.name = tc.function.name;
+            if (id) {
+              slot.id = id;
+              toolCallIndexById.set(id, idx);
             }
+            if (name) slot.name = name;
             if (typeof tc.function?.arguments === 'string') {
               slot.arguments += tc.function.arguments;
             }
+            toolCallIndexByPosition.set(position, idx);
+            lastToolCallIndex = idx;
           }
         }
 

@@ -1656,6 +1656,114 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('keeps parallel BYOK tool calls separate when upstream omits their indices', async () => {
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const upstreamChatBodies: any[] = [];
+    let chatCallIndex = 0;
+    let imageIndex = 0;
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url === 'https://api.senseaudio.cn/v1/image/sync') {
+        return new Response(
+          JSON.stringify({ url: `https://93.184.216.34/image-${imageIndex++}.png` }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.startsWith('https://93.184.216.34/image-')) {
+        return new Response(pngBytes, {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        });
+      }
+      if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
+        upstreamChatBodies.push(JSON.parse(String(init?.body || '{}')));
+        chatCallIndex++;
+        if (chatCallIndex === 1) {
+          return sseResponse([
+            `data: ${JSON.stringify({
+              choices: [{
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      id: 'call_first',
+                      type: 'function',
+                      function: { name: 'generate_image', arguments: '{"prompt":"first' },
+                    },
+                    {
+                      id: 'call_second',
+                      type: 'function',
+                      function: { name: 'generate_image', arguments: '{"prompt":"second' },
+                    },
+                  ],
+                },
+              }],
+            })}`,
+            '',
+            `data: ${JSON.stringify({
+              choices: [{
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    { id: 'call_first', function: { arguments: '"}' } },
+                    { function: { arguments: '"}' } },
+                  ],
+                },
+              }],
+            })}`,
+            '',
+            'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'));
+        }
+        return sseResponse([
+          'data: {"choices":[{"index":0,"delta":{"content":"Done."}}]}',
+          '',
+          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sa-test',
+        projectId: 'test-project',
+        model: 'senseaudio-s2',
+        messages: [{ role: 'user', content: 'draw two images' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.text()).resolves.toContain('Done.');
+    expect(upstreamChatBodies).toHaveLength(2);
+    expect(upstreamChatBodies[1].messages[1]).toMatchObject({
+      role: 'assistant',
+      tool_calls: [
+        {
+          id: 'call_first',
+          function: { name: 'generate_image', arguments: '{"prompt":"first"}' },
+        },
+        {
+          id: 'call_second',
+          function: { name: 'generate_image', arguments: '{"prompt":"second"}' },
+        },
+      ],
+    });
+    expect(upstreamChatBodies[1].messages.slice(2).map((message: any) => message.tool_call_id))
+      .toEqual(['call_first', 'call_second']);
+  });
+
   it('feeds a tool error message back to the model when generate_image fails', async () => {
     const upstreamChatBodies: any[] = [];
     let chatCallIndex = 0;
