@@ -26,6 +26,9 @@ import {
   createFatalUncaughtExceptionHandler,
   createFatalUnhandledRejectionHandler,
   isHarmlessSocketOptionError,
+  isShutdownAbortError,
+  markPackagedShutdownInProgress,
+  resetPackagedShutdownStateForTests,
   type PackagedDesktopLogger,
 } from '../src/logging.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
@@ -337,5 +340,114 @@ describe('createFatalUnhandledRejectionHandler (issue #647 review follow-up)', (
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(removeListenerSpy).toHaveBeenCalledWith('unhandledRejection', handler);
     expect(scheduled).toHaveLength(1);
+  });
+});
+
+// Shutdown-time AbortErrors: quiesce aborts in-flight od:// proxy fetches, and
+// Electron net.fetch streams can reject with an unhandled AbortError. Once the
+// shutdown flag is armed that rejection is expected and must only be logged.
+// Before the flag, or for any other error, the fatal path is unchanged.
+describe('shutdown-time abort errors (OPEND-5169)', () => {
+  afterEach(() => {
+    resetPackagedShutdownStateForTests();
+  });
+
+  function abortError(): Error {
+    const error = new Error('This operation was aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  function captureImmediate() {
+    const scheduled: Array<() => void> = [];
+    const spy = vi
+      .spyOn(globalThis, 'setImmediate')
+      .mockImplementation(((fn: () => void) => {
+        scheduled.push(fn);
+        return 0 as unknown as NodeJS.Immediate;
+      }) as typeof setImmediate);
+    return { scheduled, spy };
+  }
+
+  it('isShutdownAbortError matches AbortError name, ABORT_ERR code and DOMException', () => {
+    expect(isShutdownAbortError(abortError())).toBe(true);
+    expect(isShutdownAbortError(new DOMException('aborted', 'AbortError'))).toBe(true);
+    const coded = new Error('aborted') as NodeJS.ErrnoException;
+    coded.code = 'ABORT_ERR';
+    expect(isShutdownAbortError(coded)).toBe(true);
+    expect(isShutdownAbortError(new Error('boom'))).toBe(false);
+    expect(isShutdownAbortError('AbortError')).toBe(false);
+    expect(isShutdownAbortError(null)).toBe(false);
+  });
+
+  it('(a) after shutdown is armed, an AbortError rejection and uncaught exception only warn and keep the listeners', () => {
+    markPackagedShutdownInProgress();
+    const logger = stubLogger();
+    const uncaught = createFatalUncaughtExceptionHandler(logger);
+    const rejection = createFatalUnhandledRejectionHandler(logger);
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+    const { spy: setImmediateSpy } = captureImmediate();
+
+    uncaught(abortError());
+    rejection(abortError());
+
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(removeListenerSpy).not.toHaveBeenCalled();
+    expect(setImmediateSpy).not.toHaveBeenCalled();
+  });
+
+  it('(a2) a DOMException AbortError rejection after shutdown is armed is tolerated', () => {
+    markPackagedShutdownInProgress();
+    const logger = stubLogger();
+    const rejection = createFatalUnhandledRejectionHandler(logger);
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+
+    rejection(new DOMException('aborted', 'AbortError'));
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(removeListenerSpy).not.toHaveBeenCalled();
+  });
+
+  it('(b) the same AbortError before shutdown stays fatal', () => {
+    const logger = stubLogger();
+    const uncaught = createFatalUncaughtExceptionHandler(logger);
+    const rejection = createFatalUnhandledRejectionHandler(logger);
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+    const { scheduled } = captureImmediate();
+
+    const uncaughtError = abortError();
+    uncaught(uncaughtError);
+    const rejectionReason = abortError();
+    rejection(rejectionReason);
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(2);
+    expect(removeListenerSpy).toHaveBeenCalledWith('uncaughtException', uncaught);
+    expect(removeListenerSpy).toHaveBeenCalledWith('unhandledRejection', rejection);
+    expect(scheduled).toHaveLength(2);
+    expect(() => scheduled[0]!()).toThrow(uncaughtError);
+    expect(() => scheduled[1]!()).toThrow(rejectionReason);
+  });
+
+  it('(c) a non-abort error after shutdown is armed stays fatal', () => {
+    markPackagedShutdownInProgress();
+    const logger = stubLogger();
+    const uncaught = createFatalUncaughtExceptionHandler(logger);
+    const rejection = createFatalUnhandledRejectionHandler(logger);
+    const removeListenerSpy = vi.spyOn(process, 'removeListener');
+    const { scheduled } = captureImmediate();
+
+    const realBug = new Error('failed ipc registration');
+    uncaught(realBug);
+    rejection(new TypeError('unexpected shape'));
+
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledTimes(2);
+    expect(removeListenerSpy).toHaveBeenCalledWith('uncaughtException', uncaught);
+    expect(removeListenerSpy).toHaveBeenCalledWith('unhandledRejection', rejection);
+    expect(scheduled).toHaveLength(2);
+    expect(() => scheduled[0]!()).toThrow(realBug);
   });
 });

@@ -9,3 +9,4 @@ export * from './update-lifecycle.js';
 export * from './client-metrics.js';
 export * from './media-stock.js';
 export * from './share-observation.js';
+export * from './input-aggregation.js';

@@ -15,6 +15,8 @@ import {
   getOpenDesignHost,
   installHostUpdater,
   isOpenDesignHostAvailable,
+  isHostPickWorkingDirUnsupported,
+  pickHostWorkingDir,
   isOpenDesignHostBridge,
   normalizeOpenDesignHostProjectImportResult,
   openHostExternalUrl,
@@ -122,6 +124,30 @@ describe("open-design host contract", () => {
       ok: false,
       reason: "failed",
     });
+  });
+
+  it("tells a host without the picker apart from a pick that ran and failed", async () => {
+    const legacy: Record<string, unknown> = {};
+    legacy[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      project: { pickWorkingDir: undefined },
+    });
+    const legacyResult = await pickHostWorkingDir(legacy);
+    expect(legacyResult.ok).toBe(false);
+    expect(isHostPickWorkingDirUnsupported(legacyResult)).toBe(true);
+
+    const current: Record<string, unknown> = {};
+    current[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      project: {
+        pickWorkingDir: vi.fn(async () => ({
+          ok: false as const,
+          reason: "desktop auth handshake with the daemon failed; please retry",
+        })),
+      },
+    });
+    const failed = await pickHostWorkingDir(current);
+    expect(failed.ok).toBe(false);
+    expect(isHostPickWorkingDirUnsupported(failed)).toBe(false);
+    expect(isHostPickWorkingDirUnsupported({ ok: false, canceled: true })).toBe(false);
   });
 
   it("normalizes privileged project-import results into host-owned identifiers", () => {

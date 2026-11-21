@@ -5,7 +5,7 @@ import { tmpdir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
 
 import {
@@ -50,8 +50,14 @@ interface DiagnosticsManifestFile {
 describe('diagnostics export handler — non-sidecar launch', () => {
   it('exports failure-time workspace/proxy evidence and the previous process checkpoint through the existing handler', async () => {
     const root = join(tmpdir(), `od-diag-environment-${randomUUID()}`);
+    const query = vi.fn(async () => `
+      ProxyEnable REG_DWORD 0x1
+      ProxyServer REG_SZ http://user:private-password@127.0.0.1:7890
+      ProxyOverride REG_SZ localhost
+      AutoConfigURL REG_SZ https://private-pac.example/config
+    `);
     const evidence = createDiagnosticsEvidence({
-      collect: () => collectSystemEnvironment({ platform: 'linux', env: {}, interfaces: () => ({}) }),
+      collect: () => collectSystemEnvironment({ platform: 'win32', query, env: {}, interfaces: () => ({}) }),
       write: createEvidenceCheckpointWriter(root),
     });
     try {
@@ -69,7 +75,14 @@ describe('diagnostics export handler — non-sidecar launch', () => {
       const current = await zip.file('summary/environment-evidence.json')!.async('string');
       expect(JSON.parse(current).context).toMatchObject({ workspaceId: 'team-1', memberId: 'member-1', workspaceType: 'team' });
       expect(JSON.parse(current).failures[0]).toMatchObject({ source: 'team-projects', code: 'timeout', count: 1 });
+      expect(query).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(current).environments[0]).toMatchObject({
+        status: 'collected',
+        pacConfigured: true,
+        systemProxy: { https: { configured: true, loopback: true, port: '7890' } },
+      });
       expect(current).not.toContain('private-password');
+      expect(current).not.toContain('private-pac.example');
       const previous = await zip.file('logs/diagnostics/environment-evidence.previous.json')!.async('string');
       expect(previous).toContain('prior-process-evidence');
     } finally { evidence.close(); await rm(root, { recursive: true, force: true }); }

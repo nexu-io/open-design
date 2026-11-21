@@ -267,6 +267,11 @@ describe('packaged stale sidecar retirement', () => {
 });
 
 describe('packaged child Vite+ environment forwarding', () => {
+  it('keeps an explicit telemetry test environment without enabling input trials or forwarding unrelated variables', () => {
+    const env = resolvePackagedChildBaseEnv({ OD_TELEMETRY_ENV: 'test', OD_INPUT_TRIAL_CAPABILITY: '1', RANDOM_FLAG: 'drop' });
+    expect(env.OD_TELEMETRY_ENV).toBe('test');
+    expect(env.OD_INPUT_TRIAL_CAPABILITY).toBeUndefined(); expect(env.RANDOM_FLAG).toBeUndefined();
+  });
   it('forwards JSON IPC tracing without forwarding unrelated variables', () => {
     const env = resolvePackagedChildBaseEnv({
       OD_JSON_IPC_TRACE: '1',

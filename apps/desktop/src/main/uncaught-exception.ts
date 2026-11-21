@@ -42,6 +42,13 @@
  *     this log line and silently keep the process alive, which would
  *     hide real main-process bugs (issue #647 review by Siri-Ray and
  *     the codex P2 thread on PR #1298).
+ *
+ *  4. Once desktop shutdown has started (`markDesktopShutdownInProgress`,
+ *     called by `shutdown()` before the window closes), an `AbortError` /
+ *     `ABORT_ERR` from a cancelled in-flight request is expected: both
+ *     handlers log one warning and return. An abort before shutdown, or any
+ *     other error during shutdown, still takes the fatal path. The packaged
+ *     entry carries the same rule in `apps/packaged/src/logging.ts`.
  */
 
 /**
@@ -70,6 +77,30 @@ export function isHarmlessSocketOptionError(value: unknown): boolean {
   return message.includes('EINVAL');
 }
 
+let desktopShutdownInProgress = false;
+
+/** Arm the shutdown-abort tolerance. Called once at the start of desktop
+ *  shutdown; every shutdown path ends in `process.exit`. */
+export function markDesktopShutdownInProgress(): void {
+  desktopShutdownInProgress = true;
+}
+
+/** @internal Reset the shutdown flag between unit tests. */
+export function resetDesktopShutdownStateForTests(): void {
+  desktopShutdownInProgress = false;
+}
+
+/** Recognise the abort raised when shutdown cancels an in-flight request. */
+export function isShutdownAbortError(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const { code, name } = value as { code?: unknown; name?: unknown };
+  return name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function isExpectedShutdownAbort(value: unknown): boolean {
+  return desktopShutdownInProgress && isShutdownAbortError(value);
+}
+
 /** Minimal logger surface the desktop entry already has by way of
  *  `console.*`. Exposed as an injectable parameter so tests can capture
  *  log calls without mocking the console. */
@@ -86,6 +117,10 @@ export function createDesktopUncaughtExceptionHandler(
   const handler = (error: unknown): void => {
     if (isHarmlessSocketOptionError(error)) {
       logger.warn('desktop main swallowed harmless socket option error', { error });
+      return;
+    }
+    if (isExpectedShutdownAbort(error)) {
+      logger.warn('desktop main ignored abort error during shutdown', { error });
       return;
     }
     logger.error('desktop main fatal uncaught exception', { error });
@@ -114,6 +149,10 @@ export function createDesktopUnhandledRejectionHandler(
   const handler = (reason: unknown): void => {
     if (isHarmlessSocketOptionError(reason)) {
       logger.warn('desktop main swallowed harmless socket option rejection', { reason });
+      return;
+    }
+    if (isExpectedShutdownAbort(reason)) {
+      logger.warn('desktop main ignored abort rejection during shutdown', { reason });
       return;
     }
     logger.error('desktop main unhandled rejection', { reason });
