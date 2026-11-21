@@ -105,6 +105,13 @@ export type DshProfileToolCallFrame = {
   arguments: string;
 };
 
+export type DshProfileToolCallProgressFrame = {
+  v: 1;
+  type: 'tool_call_progress';
+  request_id: string;
+  call_id: string;
+};
+
 export type DshProfileToolResultFrame = {
   v: 1;
   type: 'tool_result';
@@ -160,6 +167,7 @@ export type DshProfileRuntimeFrame =
   | DshProfileSessionFrame
   | DshProfileThinkingFrame
   | DshProfileTextFrame
+  | DshProfileToolCallProgressFrame
   | DshProfileToolCallFrame
   | DshProfileToolResultFrame
   | DshProfileUsageFrame
