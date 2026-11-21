@@ -117,7 +117,31 @@ function parseDataUrl(dataUrl: string): { bytes: Buffer; mime: string | undefine
   return { bytes, mime };
 }
 
-async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: string | undefined }> {
+/** Whole-request deadline (headers + body) for a client-supplied ingest URL. */
+const REMOTE_FETCH_TIMEOUT_MS = 30_000;
+
+export interface FetchRemoteBytesOptions {
+  /**
+   * Test seam only. Production always uses the SSRF-guarded
+   * `fetchExternalBrandAsset`; the route never passes this.
+   */
+  fetchImpl?: (url: string, init?: RequestInit) => Promise<globalThis.Response>;
+  maxBytes?: number;
+  timeoutMs?: number;
+}
+
+/**
+ * Fetch a client-supplied URL with bounded time and memory: the request is
+ * aborted after `timeoutMs`, and the body is read as a stream and abandoned the
+ * moment it crosses `maxBytes`. A chunked response carries no Content-Length,
+ * so the cap must be enforced while reading, never after buffering (#9564).
+ */
+export async function fetchRemoteBytes(
+  url: string,
+  options: FetchRemoteBytesOptions = {},
+): Promise<{ bytes: Buffer; mime: string | undefined }> {
+  const maxBytes = options.maxBytes ?? MAX_REMOTE_BYTES;
+  const signal = AbortSignal.timeout(options.timeoutMs ?? REMOTE_FETCH_TIMEOUT_MS);
   // Route the client-supplied URL through the same SSRF guard the brand-asset
   // path uses (assertPublicBrandUrl): reject cloud-metadata (169.254.169.254),
   // loopback, RFC1918/CGNAT, and link-local hosts, re-validating on every
@@ -125,14 +149,41 @@ async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: str
   // privileged daemon fetch an internal/loopback URL and read the response back
   // via GET /api/library/assets/:id/raw — SSRF + response exfiltration. Sibling
   // to the loopback-SSRF class in #5478.
-  const resp = await fetchExternalBrandAsset(url);
-  if (!resp.ok) throw new Error(`remote fetch failed: ${resp.status}`);
+  const resp = await (options.fetchImpl ?? fetchExternalBrandAsset)(url, { signal });
+  if (!resp.ok) {
+    await resp.body?.cancel().catch(() => {});
+    throw new Error(`remote fetch failed: ${resp.status}`);
+  }
   const declared = Number(resp.headers.get('content-length') ?? '0');
-  if (declared && declared > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
-  const buf = Buffer.from(await resp.arrayBuffer());
-  if (buf.length > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
+  if (declared && declared > maxBytes) {
+    await resp.body?.cancel().catch(() => {});
+    throw new Error('remote resource too large');
+  }
+  const bytes = await readBodyCapped(resp, maxBytes);
   const mime = resp.headers.get('content-type')?.split(';')[0]?.trim() || undefined;
-  return { bytes: buf, mime };
+  return { bytes, mime };
+}
+
+async function readBodyCapped(resp: globalThis.Response, maxBytes: number): Promise<Buffer> {
+  if (!resp.body) return Buffer.alloc(0);
+  const reader = resp.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) throw new Error('remote resource too large');
+      chunks.push(value);
+    }
+  } finally {
+    // Release the upstream connection on every exit: overflow, timeout, or a
+    // completed read (where cancel is a no-op).
+    await reader.cancel().catch(() => {});
+  }
+  return Buffer.concat(chunks, total);
 }
 
 /**
