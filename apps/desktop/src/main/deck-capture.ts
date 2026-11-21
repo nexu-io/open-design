@@ -402,6 +402,11 @@ export async function renderDeckSlides(
         });
       }
       const indices = input.index != null ? [input.index] : range(count);
+      const deckNotes = (await window.webContents.executeJavaScript(
+        `(${collectSpeakerNotes.toString()})(${JSON.stringify(SLIDE_SELECTOR)})`,
+        true,
+      )) as string[];
+      const notes = indices.map((i) => deckNotes[i] ?? "");
       const images: Array<{ buffer: Buffer; jpeg: boolean }> = [];
       let width = stage.w;
       let height = stage.h;
@@ -412,7 +417,14 @@ export async function renderDeckSlides(
         height = size.height;
         images.push({ buffer: jpeg ? image.toJPEG(82) : image.toPNG(), jpeg });
       }
-      return finish({ ok: true, ...(await emitImages(images, input.outputDir)), width, height, mode: "deck" });
+      return finish({
+        ok: true,
+        ...(await emitImages(images, input.outputDir)),
+        ...(notes.some((note) => note.trim()) ? { notes } : {}),
+        width,
+        height,
+        mode: "deck",
+      });
     } finally {
       if (deckDbgAttached) {
         try {
@@ -2039,6 +2051,36 @@ function countRealSlides(slideSelector: string): number {
   return Array.prototype.slice
     .call(document.querySelectorAll(slideSelector))
     .filter((el) => !(el as HTMLElement).closest(".mini-slide, .overview, .notes-overlay, .thumb")).length;
+}
+
+// Serialized into the page: one speaker note per real slide, found the way the
+// in-app export-capture bridge (`notes()` in apps/web/src/runtime/srcdoc.ts)
+// finds them — the editor's `#speaker-notes` JSON first, then each slide's own
+// `.notes`. Indexed like countRealSlides so notes line up with captured slides.
+export function collectSpeakerNotes(slideSelector: string): string[] {
+  const slides = Array.prototype.slice
+    .call(document.querySelectorAll(slideSelector))
+    .filter((el) => !(el as HTMLElement).closest(".mini-slide, .overview, .notes-overlay, .thumb")) as HTMLElement[];
+  const block = document.getElementById("speaker-notes");
+  if (block) {
+    const text = block.textContent || "";
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Not JSON: a plain-text block is the first slide's note.
+    }
+    if (Array.isArray(parsed)) {
+      const list = parsed as unknown[];
+      return slides.map((_, i) => (typeof list[i] === "string" ? (list[i] as string) : ""));
+    }
+    const plain = text.replace(/\s+/g, " ").trim();
+    if (plain) return slides.map((_, i) => (i === 0 ? plain : ""));
+  }
+  return slides.map((slide) => {
+    const note = slide.querySelector(".notes");
+    return note ? (note.textContent || "").replace(/\s+/g, " ").trim() : "";
+  });
 }
 
 // Serialized into the page: lays out every real slide simultaneously (stacked at
