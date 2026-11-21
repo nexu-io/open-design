@@ -29,6 +29,7 @@ import {
 } from '../analytics/events';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useI18n, useT, type Locale } from '../i18n';
+import { middleClickHandlers } from '../lib/middle-click';
 import { useStableHandler } from '../lib/use-stable-handler';
 import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
 import { isMacPlatform } from '../utils/platform';
@@ -8666,6 +8667,7 @@ const Tab = memo(function Tab({
       title={tabTooltip}
       data-tooltip={tabTooltip}
       data-tooltip-placement="bottom"
+      {...(closable && onClose ? middleClickHandlers(onClose) : undefined)}
       draggable={draggable}
       onDragStart={draggable ? onDragStart : undefined}
       onDragOver={draggable ? onDragOver : undefined}
