@@ -264,4 +264,16 @@ describe("ProductionCampaignBadge", () => {
     await Promise.resolve();
     expect(screen.getByTestId("production-campaign-badge").querySelector("opend-touchpoint")?.shadowRoot?.textContent).toContain("中文内容");
   });
+  it("keeps the badge touchpoint host transparent without clipping rounded materials", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const css = readFileSync(
+      resolve(import.meta.dirname, "../../src/components/ProductionCampaignBadge.module.css"),
+      "utf8",
+    );
+    const hostRule = css.match(/\.badge\s*>\s*:global\(opend-touchpoint\)\s*\{[^}]*\}/)?.[0];
+    expect(hostRule).toContain("background: transparent");
+    expect(hostRule).not.toMatch(/overflow:\s*hidden/);
+    expect(hostRule).not.toMatch(/border-radius:/);
+  });
 });

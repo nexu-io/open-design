@@ -974,6 +974,21 @@ describe("ProductionCampaignHover", () => {
 		await Promise.resolve();
 		expect(screen.getByTestId("production-hover-overlay")).toHaveTextContent("zh-CN");
 	});
+	it("keeps hover entry and layer touchpoint hosts transparent without clipping shadows", async () => {
+		const { readFileSync } = await import("node:fs");
+		const { resolve } = await import("node:path");
+		const css = readFileSync(
+			resolve(import.meta.dirname, "../../src/components/HoverTouchpointOverlay.module.css"),
+			"utf8",
+		);
+		const entryRule = css.match(/\.entry\s*\{[^}]*\}/)?.[0];
+		const layerRule = css.match(/\.layer\s*\{[^}]*\}/)?.[0];
+		expect(entryRule).toContain("background: transparent");
+		expect(layerRule).toContain("background: transparent");
+		expect(layerRule).toContain("overflow: visible");
+		expect(layerRule).not.toMatch(/overflow:\s*hidden/);
+		expect(layerRule).not.toMatch(/border-radius:/);
+	});
 });
 
 describe('online timeout recovery', () => {
