@@ -150,9 +150,33 @@ export function groupModelsByCompany(options: AgentModelOption[]): ModelCompanyG
   return groups;
 }
 
-function matchesModelSearch(model: AgentModelOption, query: string): boolean {
+export function matchesModelSearch(model: AgentModelOption, query: string): boolean {
   const haystack = `${model.id}\n${model.label}`.toLowerCase();
   return haystack.includes(query);
+}
+
+/**
+ * The `provider/` prefix shared by every prefixed label in a list — the
+ * context half of a catalog like `opencode-go/deepseek-*` that an ellipsised
+ * row repeats instead of showing what tells it apart from its neighbours.
+ * Only a prefix every prefixed label carries qualifies; mixed catalogs return
+ * the empty string and rows keep their full names.
+ */
+export function sharedProviderPrefix(labels: string[]): string {
+  const prefixed = labels.filter((label) => label.includes('/'));
+  const [firstLabel] = prefixed;
+  if (!firstLabel) return '';
+  const first = firstLabel.slice(0, firstLabel.indexOf('/') + 1);
+  return prefixed.every((label) => label.startsWith(first)) ? first : '';
+}
+
+/** Drops `sharedPrefix` while the label still has a visible tail. */
+export function withoutSharedProviderPrefix(
+  label: string,
+  sharedPrefix: string,
+): string {
+  if (!sharedPrefix || !label.startsWith(sharedPrefix)) return label;
+  return label.slice(sharedPrefix.length) || label;
 }
 
 interface SearchableModelSelectProps
