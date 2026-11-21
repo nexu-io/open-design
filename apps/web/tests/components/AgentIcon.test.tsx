@@ -41,6 +41,26 @@ describe('AgentIcon', () => {
     expect(markup).not.toContain('agent-icon-mono');
   });
 
+  it('renders the Kimchi SVG mark (orange disc + dark glyph, baked colors)', () => {
+    // kimchi.svg is extracted from the official kimchi.dev logo lockup: a
+    // solid #FF521D disc with a #18181A glyph, so it reads on any surface
+    // and needs no theme-aware masking.
+    const kimchiSvg = readFileSync(
+      new URL('../../public/agent-icons/kimchi.svg', import.meta.url),
+      'utf8',
+    );
+
+    expect(kimchiSvg).toMatch(/^<svg\b/);
+    expect(kimchiSvg).toContain('fill="#FF521D"');
+    expect(kimchiSvg).toContain('fill="#18181A"');
+    expect(kimchiSvg).not.toContain('currentColor');
+
+    const markup = renderToStaticMarkup(<AgentIcon id="kimchi" size={24} />);
+    expect(markup).toContain('src="/agent-icons/kimchi.svg"');
+    expect(markup).not.toContain('agent-icon-mono');
+    expect(markup).not.toContain('agent-icon-fallback');
+  });
+
   it('renders Devin as a PNG (Cognition does not publish an SVG mark)', () => {
     const markup = renderToStaticMarkup(<AgentIcon id="devin" size={24} />);
 

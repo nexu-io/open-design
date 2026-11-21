@@ -34,6 +34,7 @@ export function modelProviderIconSrc(
   if (vendor.includes('qwen')) return '/agent-icons/qwen.svg';
   if (vendor.includes('kimi') || vendor.includes('moonshot'))
     return '/agent-icons/kimi.svg';
+  if (vendor.includes('kimchi')) return '/agent-icons/kimchi.svg';
   if (vendor.includes('mimo')) return '/agent-icons/mimo.svg';
   if (vendor.includes('minimax')) return '/model-icons/minimax.svg';
   if (vendor.includes('muse') || vendor.includes('meta') || vendor.includes('llama'))
