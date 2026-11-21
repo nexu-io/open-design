@@ -1349,6 +1349,32 @@ describe("negotiated immutable Test context", () => {
 		expect(isSelectedTestCampaignDecision({ ...decision(), testContext: { ...context(), updatedAt: "2030-01-01T00:00:05.000Z" } }, context())).toBe(true);
 	});
 
+	it("selects a fresh tester when the same account changes workspace on the same deployment", async () => {
+		window.history.replaceState(null, "", "/");
+		const directory = fetches();
+		const mock = vi.fn(async (url: string, init?: RequestInit) => {
+			const workspace = new Headers(init?.headers).get("x-vela-workspace-id");
+			expect(["A", "B"]).toContain(workspace);
+			const tester = { ...context(workspace!), testerMemberId: "member-" + workspace };
+			if (url.endsWith("/deployments")) return directory(url);
+			if (url.endsWith("/context")) return json(tester, 201);
+			expect(new URL(url, "http://localhost").searchParams.get("contextToken")).toBe(tester.contextToken);
+			return json({ ...decision(workspace!), testContext: tester });
+		});
+		vi.stubGlobal("fetch", mock);
+		const host = (workspace: string) => <><Probe /><TestCampaignModal authenticated sessionSubject="account-a"
+			workspaceId={workspace} workspaceMemberId={"member-" + workspace} /></>;
+		const view = render(host("A"));
+		await waitFor(() => expect(latest?.decisions.size).toBe(1));
+		expect(latest?.context.testerMemberId).toBe("member-A");
+		const previous = latest!;
+		view.rerender(host("B"));
+		expect(previous.isAuthorized()).toBe(false);
+		await waitFor(() => expect(latest?.context.testerMemberId).toBe("member-B"));
+		expect(latest?.decisions.size).toBe(1);
+		expect(contextCalls(mock)).toBe(2);
+	});
+
 	it("repairs an equal-timestamp token mismatch once and records redacted correlated recovery", async () => {
 		let posts = 0;
 		const mock = server({ context: () => json(context(++posts === 1 ? "one" : "two")), decision: () => json(decision("two")) });

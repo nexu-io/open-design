@@ -105,6 +105,10 @@ export function sameTestDeployment(left: TestDeployment, right: TestDeployment):
 	);
 }
 
+export function testWorkspaceHeaders(workspaceId?: string): Record<string, string> {
+	return workspaceId ? { "x-vela-workspace-id": workspaceId } : {};
+}
+
 type SelectionState = {
 	owner: string | null;
 	deployments: TestDeployment[];
@@ -120,6 +124,7 @@ type SelectionState = {
 export function useTestDeploymentSelection({
 	enabled,
 	owner,
+	workspaceId,
 	manual,
 	initialSelection = null,
 	onSelection,
@@ -128,6 +133,7 @@ export function useTestDeploymentSelection({
 }: {
 	enabled: boolean;
 	owner: string | null;
+	workspaceId?: string;
 	manual: boolean;
 	/** An already-authorized in-process selection, never an offline directory grant. */
 	initialSelection?: TestDeployment | null;
@@ -190,6 +196,7 @@ export function useTestDeploymentSelection({
 					const query = cursor === null ? "" : `?${new URLSearchParams({ cursor })}`;
 					const response = await fetch(`/api/touchpoints/test-runtime/deployments${query}`, {
 						cache: "no-store",
+						headers: testWorkspaceHeaders(workspaceId),
 						signal: controller.signal,
 					});
 					if (!current()) return;
@@ -296,7 +303,7 @@ export function useTestDeploymentSelection({
 			window.removeEventListener("offline", cancel);
 			document.removeEventListener("visibilitychange", visibility);
 		};
-	}, [enabled, owner, manual, onSelection, pauseAutomaticRequests, onRequestResult]);
+	}, [enabled, owner, workspaceId, manual, onSelection, pauseAutomaticRequests, onRequestResult]);
 
 	const select = useCallback(
 		(id: string) => {
