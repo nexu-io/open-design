@@ -530,8 +530,20 @@ function velaModelsErrorMessage(error: unknown): string {
   return String(error ?? '');
 }
 
+// The text that describes why `vela` failed. An execFile rejection's message
+// begins with "Command failed: <path> <args>", so matching on it lets the
+// install path or temp dir decide retries: a path containing "504" turned a
+// 401 invalid_api_key into three attempts. Read the CLI's stderr when execFile
+// captured it; otherwise use the message without that command line.
+function velaModelsFailureText(error: unknown): string {
+  const stderr = (error as { stderr?: unknown } | null)?.stderr;
+  if (typeof stderr === 'string' && stderr.trim()) return stderr;
+  if (Buffer.isBuffer(stderr) && stderr.length > 0) return stderr.toString('utf8');
+  return velaModelsErrorMessage(error).replace(/^Command failed: [^\n]*\n?/, '');
+}
+
 function isRetriableVelaModelsError(error: unknown): boolean {
-  const message = velaModelsErrorMessage(error).toLowerCase();
+  const text = velaModelsFailureText(error).toLowerCase();
   return [
     'deadline exceeded',
     'timed out',
@@ -541,10 +553,9 @@ function isRetriableVelaModelsError(error: unknown): boolean {
     'econnreset',
     'econnrefused',
     'enotfound',
-    '502',
-    '503',
-    '504',
-  ].some((pattern) => message.includes(pattern));
+  ].some((pattern) => text.includes(pattern))
+    // Whole numbers only, so a request id or hash containing "503" is not a 503.
+    || /(?<![\w.])50[234](?![\w.])/.test(text);
 }
 
 async function fetchVelaModelsWithRetry(
