@@ -64,7 +64,16 @@ async function retireSidecarProcessTree(
   const deadline = Date.now() + graceMs;
   const remainingInitialPids = (): number[] => initialPids.filter(isProcessAlive);
   let remaining = remainingInitialPids();
+  let descendantsSignalled = false;
   while (remaining.length > 0 && Date.now() < deadline) {
+    // Once the root has exited, its graceful work (including writes) is
+    // finished. Surviving children cannot receive its lifecycle request;
+    // explicitly terminate the fenced descendants instead of merely waiting
+    // for the entire grace period and then sending SIGKILL.
+    if (!descendantsSignalled && !isProcessAlive(ref.rootPid)) {
+      signalProcesses(remaining, "SIGTERM");
+      descendantsSignalled = true;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
     remaining = remainingInitialPids();
   }

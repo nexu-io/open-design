@@ -1,5 +1,8 @@
-import { SidecarFactory } from "../../src/index.js";
+import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+
+import { SidecarFactory } from "../../src/index.js";
 
 if (process.env.OD_TEST_RENAME_RUNTIME === "1") process.title = "next-server";
 
@@ -12,6 +15,12 @@ type ManagedRuntime = {
 const client = SidecarFactory.create<ManagedRuntime>({
   lifecycle: {
     async start(resources): Promise<ManagedRuntime> {
+      const descendantPath = process.env.OD_TEST_GRACEFUL_DESCENDANT;
+      if (descendantPath != null) {
+        const descendant = spawn(process.execPath, ["-e", "setInterval(() => {}, 60000)"], { stdio: "ignore" });
+        descendant.unref();
+        writeFileSync(descendantPath, JSON.stringify({ pid: descendant.pid }));
+      }
       const server = createServer((_request, response) => {
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify({ pid: resources.pid }));
