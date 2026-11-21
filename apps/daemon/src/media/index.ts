@@ -98,10 +98,12 @@ import {
 import { prepareHyperFramesAudio, hyperFramesAudioEncodingArgs, type HyperFramesAudioTrack } from './hyperframes-audio.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
 import {
+  assertVisibleForImportedProject,
   ensureProject,
   kindFor,
   mimeFor,
-  sanitizeName,
+  resolveSafeReal,
+  sanitizePath,
 } from '../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -237,18 +239,26 @@ function stubsAllowed() {
  * Security: refuses anything that escapes the project directory.
  * Without this guard, an agent (or a hallucinated arg) could ask the
  * daemon to upload `/etc/passwd` to a paid model.
+ *
+ * Reads go through `resolveSafeReal`, the same symlink-aware containment the
+ * project file APIs use. A plain string-prefix check on the resolved path is
+ * not enough here: a symlink *inside* the project still looks contained until
+ * the OS follows it at `readFile`, so `assets -> ~/.ssh` would pass a prefix
+ * test and then upload a private key. Calling the shared helper means "inside
+ * the project" means exactly one thing for reads, writes and the file APIs.
  */
 async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
   if (typeof rel !== 'string' || !rel.trim()) return null;
-  const projectRootResolved = path.resolve(projectDir);
-  const abs = path.resolve(projectRootResolved, rel.trim());
-  if (
-    abs !== projectRootResolved &&
-    !abs.startsWith(projectRootResolved + path.sep)
-  ) {
-    throw new Error(
-      `--image path "${rel}" resolves outside the project directory.`,
-    );
+  let abs: string;
+  try {
+    abs = await resolveSafeReal(projectDir, rel.trim());
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === 'EPATHESCAPE') {
+      throw new Error(
+        `--image path "${rel}" resolves outside the project directory.`,
+      );
+    }
+    throw err;
   }
   let info;
   try {
@@ -336,6 +346,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @param {string} args.projectRoot   - Repo root (.od/ lives directly under).
  * @param {string} args.projectsRoot  - Absolute path to <repo>/.od/projects.
  * @param {string} args.projectId
+ * @param {unknown} [args.metadata] Project metadata used to resolve imported-folder roots.
  * @param {'image'|'video'|'audio'} args.surface
  * @param {string} args.model
  * @param {string} [args.prompt]
@@ -349,7 +360,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
  */
 export async function generateMedia(args: {
-  projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
+  projectRoot: string; projectsRoot: string; projectId: string; metadata?: unknown; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; quality?: string; resolution?: string;
   length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
@@ -382,6 +393,7 @@ export async function generateMedia(args: {
     projectRoot,
     projectsRoot,
     projectId,
+    metadata,
     surface,
     model,
     prompt,
@@ -508,11 +520,21 @@ export async function generateMedia(args: {
     : durationClamp.value;
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
-  const dir = await ensureProject(projectsRoot, projectId);
-  const safeOut = sanitizeName(
-    output || autoOutputName(surface, model, resolvedAudioKind),
-  );
-  const target = path.join(dir, safeOut);
+  const dir = await ensureProject(projectsRoot, projectId, metadata);
+  // Write target containment, via the project file APIs' own pair: validate the
+  // name as a project-relative path (`sanitizePath`, which rejects absolute
+  // paths, traversal segments and reserved project paths), refuse hidden
+  // segments for imported roots (`assertVisibleForImportedProject`), then
+  // re-validate the resolved target against the realpath of the project dir
+  // (`resolveSafeReal`) so a descendant symlink cannot redirect the write out
+  // of the project. Calling the shared helpers — instead of a second
+  // string-prefix check here — is what makes "inside the project" mean exactly
+  // one thing across the file APIs and generated media, for managed and
+  // imported/custom roots (`metadata.baseDir`) alike.
+  const requestedOut = output || autoOutputName(surface, model, resolvedAudioKind);
+  assertVisibleForImportedProject(requestedOut, metadata);
+  const safeOut = sanitizePath(requestedOut);
+  const target = await resolveSafeReal(dir, safeOut);
   await mkdir(path.dirname(target), { recursive: true });
 
   // Reference image for image-to-video / image-edit flows. The agent
@@ -871,7 +893,11 @@ export async function generateMedia(args: {
     const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
-  const finalTarget = path.join(dir, finalOut);
+  // Same containment as the requested name above: the extension swap only
+  // rewrites the stem, but the bytes still land through the shared resolver so
+  // a symlinked parent directory is rejected here too rather than written
+  // through.
+  const finalTarget = await resolveSafeReal(dir, finalOut);
   await writeFile(finalTarget, bytes);
   const st = await stat(finalTarget);
   if (args.onBytesWritten) {
@@ -3896,17 +3922,20 @@ async function renderHyperFrames(
   // Resolve compositionDir against projectDir and refuse anything that
   // escapes — the agent has free file access to the project but the
   // dispatcher must not let a bad relative path render an arbitrary
-  // directory on the host.
-  const projectRootResolved = path.resolve(projectDir);
-  const compAbs = path.resolve(projectRootResolved, compRel);
-  if (
-    compAbs !== projectRootResolved &&
-    !compAbs.startsWith(projectRootResolved + path.sep)
-  ) {
-    throw new Error(
-      `compositionDir "${compRel}" resolves outside the project directory. ` +
-        'Pass a path relative to the project (e.g. ".hyperframes-cache/abc").',
-    );
+  // directory on the host. Uses the shared symlink-aware helper for the same
+  // reason as `--image`: a prefix check on the literal path passes for a
+  // symlinked directory that only leaves the project once the OS follows it.
+  let compAbs: string;
+  try {
+    compAbs = await resolveSafeReal(projectDir, compRel.trim());
+  } catch (err) {
+    if ((err as { code?: string } | null)?.code === 'EPATHESCAPE') {
+      throw new Error(
+        `compositionDir "${compRel}" resolves outside the project directory. ` +
+          'Pass a path relative to the project (e.g. ".hyperframes-cache/abc").',
+      );
+    }
+    throw err;
   }
   // Existence check — render against a missing directory hangs HF for
   // a while before failing, so short-circuit with a clear error.

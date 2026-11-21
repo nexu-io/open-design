@@ -1483,7 +1483,13 @@ function resolveSafe(dir, name) {
 // candidate (or its existing prefix, for writes that haven't created
 // the file yet) and re-validates against the realpath of dir, so
 // descendant symlinks can't reach outside the project.
-async function resolveSafeReal(dir, name) {
+//
+// Exported because it is THE project-path containment guarantee, not a
+// file-API private. Any other surface that reads or writes a path inside a
+// project — generated media included — calls this rather than repeating a
+// string-prefix check, which would be both weaker (no symlink awareness) and
+// a second definition of "inside the project" free to drift.
+export async function resolveSafeReal(dir, name) {
   const candidate = resolveSafe(dir, name);
   const rootReal = await realpath(dir).catch(() => dir);
   let real;
