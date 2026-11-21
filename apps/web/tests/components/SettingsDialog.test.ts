@@ -470,6 +470,27 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
+  it('keeps UberLLM as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+    const openai = switchApiProtocolConfig(baseConfig, 'openai');
+    const uberllm = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.uberllm.dev/v1',
+      model: 'anthropic/claude-sonnet-4.6',
+      apiProviderBaseUrl: 'https://api.uberllm.dev/v1',
+    });
+
+    expect(openai).toMatchObject({
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(uberllm).toMatchObject({
+      apiProtocol: 'openai',
+      baseUrl: 'https://api.uberllm.dev/v1',
+      model: 'anthropic/claude-sonnet-4.6',
+      apiProviderBaseUrl: 'https://api.uberllm.dev/v1',
+    });
+  });
+
   it('auto-fills Google defaults when switching from a selected known provider', () => {
     expect(switchApiProtocolConfig(baseConfig, 'google')).toMatchObject({
       mode: 'api',
