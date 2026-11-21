@@ -407,6 +407,8 @@ export interface ProjectTabsState {
   browserTabs?: ProjectBrowserWorkspaceTab[];
   hasSavedState?: boolean;
   updatedAt?: number;
+  /** The root Design Files tab was closed for this project. */
+  designFilesTabHidden?: boolean;
 }
 
 export interface Conversation {

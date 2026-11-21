@@ -2878,6 +2878,43 @@ describe('FileWorkspace launcher tab creation', () => {
     ]);
   });
 
+  it('hides closed Design Files and reopens it from the tab strip', () => {
+    const onTabsStateChange = vi.fn();
+    const renderWithHidden = (designFilesTabHidden: boolean) => render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('notes.txt')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        viewerOnly
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB, designFilesTabHidden }}
+        onTabsStateChange={onTabsStateChange}
+      />,
+    );
+
+    renderWithHidden(false);
+    const closeButton = within(screen.getByTestId('design-files-tab')).getByRole('button');
+    fireEvent.click(closeButton);
+    expect(onTabsStateChange).toHaveBeenCalledWith(
+      expect.objectContaining({ designFilesTabHidden: true }),
+    );
+
+    cleanup();
+    renderWithHidden(true);
+    expect(screen.queryByTestId('design-files-tab')).toBeNull();
+    expect(screen.queryByTestId('design-files-tabs')).toBeNull();
+    const reopenTab = screen.getByTestId('design-files-tab-reopen');
+    fireEvent.click(reopenTab);
+    expect(onTabsStateChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        active: DESIGN_FILES_TAB,
+        designFilesTabHidden: false,
+      }),
+    );
+  });
+
   it('shows project sync progress on the Design Files root tab without hiding materialized files', () => {
     render(
       <FileWorkspace

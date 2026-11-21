@@ -66,6 +66,25 @@ describe('project tabs state persistence', () => {
     });
   });
 
+  it('round-trips a closed Design Files tab', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Project',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    setTabs(db, 'proj-1', {
+      tabs: [],
+      active: '__design_files__',
+      designFilesTabHidden: true,
+    });
+
+    expect(listTabs(db, 'proj-1')).toMatchObject({ designFilesTabHidden: true });
+  });
+
   it('removes browser workspace tabs when the saved state omits them', () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const now = Date.now();
