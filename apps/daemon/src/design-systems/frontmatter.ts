@@ -79,9 +79,9 @@ function parseYamlSubset(src: string): FrontmatterObject {
           continue;
         }
       }
-      if (value.includes(':')) {
+      const colonIdx = sequenceItemColon(value);
+      if (colonIdx !== -1) {
         const obj: FrontmatterObject = {};
-        const colonIdx = value.indexOf(':');
         const key = value.slice(0, colonIdx).trim();
         const valRaw = value.slice(colonIdx + 1).trim();
         if (valRaw) obj[key] = coerce(valRaw);
@@ -191,6 +191,31 @@ function splitInlineArrayItems(inner: string): string[] {
   }
   items.push(buf);
   return items;
+}
+
+// Index of the `:` that turns a block-sequence item into a single-line mapping,
+// or -1 when the item is a plain scalar. A leading quoted token is skipped as a
+// whole, so `- "1:1 notes"` stays a string while `- "name": foo` is still a
+// mapping. Unquoted items (and unterminated quotes) keep the first-colon rule.
+function sequenceItemColon(value: string): number {
+  const quote = value[0];
+  if (quote !== '"' && quote !== "'") return value.indexOf(':');
+  for (let j = 1; j < value.length; j++) {
+    const ch = value[j];
+    if (quote === '"' && ch === '\\') {
+      j++;
+      continue;
+    }
+    if (ch !== quote) continue;
+    if (quote === "'" && value[j + 1] === "'") {
+      j++;
+      continue;
+    }
+    const rest = value.slice(j + 1);
+    const trimmed = rest.trimStart();
+    return trimmed.startsWith(':') ? j + 1 + (rest.length - trimmed.length) : -1;
+  }
+  return value.indexOf(':');
 }
 
 function coerce(raw: string | undefined): FrontmatterValue {
