@@ -16,8 +16,14 @@ export interface OwnedContentSyncDeps {
   publicationScope(projectId: string, principal?: ResourceHubPrincipal | null): OwnedContentScope | null;
   onChange(scope: OwnedContentScope): void;
   onApplied?(scope: OwnedContentScope, version: number): void | Promise<void>;
+  /** Secret-free diagnostics: version corrections and failed replacements. */
+  onDiagnostic?(event: OwnedContentSyncDiagnostic): void;
   now?: () => number;
 }
+
+export type OwnedContentSyncDiagnostic =
+  | { kind: 'latest-corrected'; projectId: string; storedLatestVersion: number; headVersion: number; localVersion: number | null }
+  | { kind: 'apply-failed'; projectId: string; expectedVersion: number | null; receivedVersion: number | null; error: string };
 
 /** One daemon authority for owner replacement, shared by page entry, SSE and CLI. */
 export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
@@ -51,17 +57,24 @@ export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
     deps.store.write(scope, { ...deps.store.read(scope), ...patch });
   }
 
-  async function perform(scope: OwnedContentScope, request: OwnedProjectContentUpdateRequest, hintedVersion?: number): Promise<OwnedProjectContentUpdate> {
+  async function perform(scope: OwnedContentScope, request: OwnedProjectContentUpdateRequest): Promise<OwnedProjectContentUpdate> {
     if (!deps.isSupported(scope)) return publish(scope, 'unsupported', 'PROJECT_DIRECTORY_UNSUPPORTED');
     if (scope.ownerMemberId !== scope.viewerMemberId) throw new Error('owned content requires the current owner');
     if (request.action === 'reset-preference') {
       updateRecord(scope, { promptSuppressedUntil: null, ignoredVersion: null });
       return publish(scope);
     }
-    const head = hintedVersion ?? await deps.head(scope);
+    // An event version is only a wake-up hint: the root head is the sole
+    // authority, and it also repairs a latestVersion persisted from a
+    // non-root resource version (OPEND-4100).
+    const head = await deps.head(scope);
     if (head != null && (!Number.isSafeInteger(head) || head < 0)) throw new Error('invalid published version');
     const old = deps.store.read(scope);
-    const latest = head == null ? old.latestVersion : Math.max(old.latestVersion ?? -1, head);
+    const latest = head ?? old.latestVersion;
+    if (head != null && old.latestVersion != null && head < old.latestVersion) {
+      deps.onDiagnostic?.({ kind: 'latest-corrected', projectId: scope.projectId,
+        storedLatestVersion: old.latestVersion, headVersion: head, localVersion: old.localVersion });
+    }
     updateRecord(scope, { latestVersion: latest });
     const record = deps.store.read(scope);
     const hasContent = await deps.hasContent(scope);
@@ -88,8 +101,19 @@ export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
     publish(scope, 'downloading');
     try {
       // Acceptance is one replacement, independent of any existing reminder silence.
-      const received = await deps.apply(scope, latest);
-      if (received.version !== latest) throw new Error('published version changed; check again');
+      let received: Awaited<ReturnType<OwnedContentSyncDeps['apply']>>;
+      try {
+        received = await deps.apply(scope, latest);
+      } catch (error) {
+        deps.onDiagnostic?.({ kind: 'apply-failed', projectId: scope.projectId, expectedVersion: latest,
+          receivedVersion: null, error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
+      if (received.version !== latest) {
+        deps.onDiagnostic?.({ kind: 'apply-failed', projectId: scope.projectId, expectedVersion: latest,
+          receivedVersion: received.version, error: 'published version changed' });
+        throw new Error('published version changed; check again');
+      }
       updateRecord(scope, {
         localVersion: received.version,
         latestVersion: Math.max(deps.store.read(scope).latestVersion ?? -1, received.version),
@@ -123,7 +147,7 @@ export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
       return read(scope);
     }
     let task!: Promise<OwnedProjectContentUpdate>;
-    task = perform(scope, input, hintedVersion)
+    task = perform(scope, input)
       .finally(() => { if (inFlight.get(key) === task) inFlight.delete(key); });
     inFlight.set(key, task);
     try {
