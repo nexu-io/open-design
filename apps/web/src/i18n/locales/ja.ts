@@ -2979,6 +2979,8 @@ export const ja: Dict = {
   'workspace.noFilesMatch': '一致するファイルがありません',
   'workspace.allFiles': 'すべて',
   'workspace.createNew': '新規作成',
+  'workspace.reopenDesignFiles': 'デザインファイルを再度開く',
+  'workspace.reopenDesignFilesLabel': 'デザインファイル',
   'workspace.tabOpen': '開いています',
   'workspace.sideChatContextBanner': '現在の会話のコンテキストを引き継ぎました',
   'workspace.sideChatDefaultTitle': 'サイドチャット',
