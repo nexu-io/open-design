@@ -296,4 +296,37 @@ describe('ProjectReferenceModal', () => {
       ]);
     });
   });
+
+  // Regression for #7836: when a search query filters out an auto-selected
+  // project, Confirm must not silently submit it. selectedProjects is derived
+  // from visibleProjects so the dialog disables Confirm once the only selection
+  // leaves the filtered result set.
+  it('does not confirm a project hidden by the active search filter (#7836)', async () => {
+    const first: Project = { ...project, name: 'Alpha', id: 'alpha' };
+    const second: Project = { ...project, name: 'Beta', id: 'beta' };
+    const { onSelect } = renderModal({ projects: [first, second] });
+    vi.mocked(getProjectDetail).mockResolvedValue({
+      project: first,
+      resolvedDir: '/tmp/open-design/alpha',
+    });
+
+    await screen.findByText('Alpha');
+
+    // Type a query that hides Alpha but shows Beta; the auto-selected Alpha
+    // should disappear from the list and Confirm should become disabled.
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'Beta' } });
+
+    await screen.findByText('Beta');
+    expect(screen.queryByText('Alpha')).toBeNull();
+
+    // Confirm is disabled because the auto-selected project is no longer visible.
+    const confirmBtn = screen.getByRole('button', { name: /reference project/i });
+    expect(confirmBtn).toBeDisabled();
+
+    // Even if the user somehow triggers confirm, onSelect must not fire with
+    // a project the UI says is unavailable.
+    await waitFor(() => {
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+  });
 });
