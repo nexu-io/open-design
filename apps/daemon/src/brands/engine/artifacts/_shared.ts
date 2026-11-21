@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * artifacts/_shared — the bits every artifact (or 2+ of them) needs: the HTML
  * document shell, the brand-font resolver, the derived-copy helpers (tagline /
@@ -179,8 +178,8 @@ export function pillarList(brand: Brand): string[] {
  * instead of a truncated sentence as the title.
  */
 export function splitPillar(pillar: string): { title: string; body?: string } {
-  const m = pillar.match(/^(.{2,60}?)\s*(?:—|–|:|·)\s+(.{12,})$/);
-  if (m) return { title: cap(m[1].trim()), body: cap(m[2].trim()) };
+  const [, head, tail] = pillar.match(/^(.{2,60}?)\s*(?:—|–|:|·)\s+(.{12,})$/) ?? [];
+  if (head && tail) return { title: cap(head.trim()), body: cap(tail.trim()) };
   return { title: cap(pillar) };
 }
 
@@ -202,24 +201,20 @@ export const FEATURE_FALLBACKS: Array<{ title: string; body: string }> = [
 export function featureCards(brand: Brand): Array<{ title: string; body: string }> {
   const pillars = pillarList(brand);
   const adjectives = brand.voice.adjectives.map((a) => a.trim()).filter(Boolean);
-  const out: Array<{ title: string; body: string }> = [];
-  for (let i = 0; i < 6; i++) {
-    if (pillars[i]) {
-      const split = splitPillar(pillars[i]);
-      const adj = adjectives[i % Math.max(1, adjectives.length)];
-      out.push({
-        title: split.title,
-        body:
-          split.body ??
-          (adj
-            ? `${cap(adj)} by design — and built into every surface ${brand.name} ships.`
-            : FEATURE_FALLBACKS[i].body),
-      });
-    } else {
-      out.push(FEATURE_FALLBACKS[i]);
-    }
-  }
-  return out;
+  return FEATURE_FALLBACKS.map((fallback, i) => {
+    const pillar = pillars[i];
+    if (!pillar) return fallback;
+    const split = splitPillar(pillar);
+    const adj = adjectives[i % Math.max(1, adjectives.length)];
+    return {
+      title: split.title,
+      body:
+        split.body ??
+        (adj
+          ? `${cap(adj)} by design — and built into every surface ${brand.name} ships.`
+          : fallback.body),
+    };
+  });
 }
 
 export function howSteps(brand: Brand): Array<{ title: string; body: string }> {
