@@ -1,0 +1,19 @@
+{
+  "candidateId": "ebd1bd35-7697-44dc-b810-131c3eaac458",
+  "projectId": "45d64246-d080-468f-a9dc-b58528090352",
+  "runId": "1e4c6d78-7efb-4ae1-abf5-5ded2a119bbd",
+  "conversationId": "54adc585-3174-4e50-ba35-141e387bab77",
+  "provenance": {
+    "summary": "Detected from traco-urbano-launch-roteiro.md after a successful run.",
+    "detectedAt": 1784229456447
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "traco-urbano-launch-roteiro.md",
+      "label": "traco-urbano-launch-roteiro.md",
+      "size": 3254,
+      "copied": true
+    }
+  ]
+}
