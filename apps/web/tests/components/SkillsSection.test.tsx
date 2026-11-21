@@ -251,6 +251,35 @@ describe('SkillsSection', () => {
     });
   });
 
+  it('offers a Utility type filter and returns only utility skills', async () => {
+    renderSkillsSection([
+      makeSkill({ id: 'form-design', name: 'Form design', mode: 'utility' }),
+      makeSkill({ id: 'hallmark', name: 'Hallmark', mode: 'utility' }),
+      makeSkill({
+        id: 'make-interfaces-feel-better',
+        name: 'Make interfaces feel better',
+        mode: 'utility',
+      }),
+      makeSkill({ id: 'video-skill', name: 'Video skill', mode: 'video' }),
+    ]);
+
+    const typeSelect = await screen.findByLabelText('Type');
+    await waitFor(() => {
+      expect(
+        typeSelect.querySelector('option[value="utility"]')?.textContent,
+      ).toContain('(3)');
+    });
+
+    fireEvent.change(typeSelect, { target: { value: 'utility' } });
+
+    expect(await screen.findByTestId('skill-row-form-design')).toBeTruthy();
+    expect(screen.getByTestId('skill-row-hallmark')).toBeTruthy();
+    expect(
+      screen.getByTestId('skill-row-make-interfaces-feel-better'),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('skill-row-video-skill')).toBeNull();
+  });
+
   it('treats an omitted source as built-in for counts and filtering', async () => {
     renderSkillsSection([
       makeSkill({
