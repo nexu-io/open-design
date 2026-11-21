@@ -1,7 +1,7 @@
 // Pure Markdown/protocol ownership shared by the web renderer and host detector.
 // The Markdown delimiters match the existing chat renderer; this is not a new
 // Markdown grammar. Form recognition is supplied by the existing form parser.
-import { splitOnOdCards } from './od-card.js';
+import { findOdCardClose, splitOnOdCards } from './od-card.js';
 
 export type ChatProtocolRange = readonly [number, number];
 // Opening fences may carry a language; closing fences are bare. Neither
@@ -82,16 +82,12 @@ export function chatProtocolSkipRanges(text: string, readFormPayload: ReadFormPa
   const opens = Array.from(text.matchAll(/<od-card(?=\s|>)[^>]*>/gi), (match) => ({
     start: match.index, end: match.index + match[0].length,
   }));
-  const closes = Array.from(text.matchAll(/<\/od-card>/gi), (match) => ({
-    start: match.index, end: match.index + match[0].length,
-  }));
   const forms = Array.from(text.matchAll(/<(?:question-form|ask-question)\b[^>]*>/gi), (match) => match.index);
   const result: ChatProtocolRange[] = [];
   let cursor = 0;
   let lineIndex = 0;
   let tickIndex = 0;
   let openIndex = 0;
-  let closeIndex = 0;
   let formIndex = 0;
   while (cursor < text.length) {
     while (lines[lineIndex] && lines[lineIndex]!.next <= cursor) lineIndex++;
@@ -149,10 +145,11 @@ export function chatProtocolSkipRanges(text: string, readFormPayload: ReadFormPa
       }
       if (!open) break;
       openIndex++;
-      while (closes[closeIndex] && closes[closeIndex]!.start < open.end) closeIndex++;
-      const close = closes[closeIndex];
-      const end = close?.end ?? text.length;
-      const recognized = !close || splitOnOdCards(text.slice(open.start, end))
+      // The shared JSON-aware boundary: a `</od-card>` quoted inside a payload
+      // string is data, so form/code-like text after it stays card-owned.
+      const closeStart = findOdCardClose(text, open.end);
+      const end = closeStart === -1 ? text.length : closeStart + '</od-card>'.length;
+      const recognized = closeStart === -1 || splitOnOdCards(text.slice(open.start, end))
         .some((part) => part.kind === 'card');
       if (recognized) {
         result.push([open.start, end]);

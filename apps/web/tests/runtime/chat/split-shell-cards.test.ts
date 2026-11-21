@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { splitShellCards } from '../../../src/runtime/chat/split-shell-cards';
+import { memoryWrittenCardContent } from '../../../src/runtime/useMemoryWrittenCard';
 
 const payload = { summary: 'Preserve `<od-demo>text</od-demo>`', fields: [] };
 const card = `<od-card type="task-brief">${JSON.stringify(payload)}</od-card>`;
@@ -115,5 +116,49 @@ describe('shell card decoding · Markdown context around a dropped block', () =>
         { kind: 'text', text: 'Inline example: ```\nstill prose\n' },
         { kind: 'card', card: { kind: 'memory-applied', ...plainPayload }, raw: plain },
       ]);
+  });
+});
+
+// #8379: a close marker quoted inside the card's JSON is payload data. The
+// shell must use the same JSON-aware outer boundary as the shared parser.
+describe('shell card decoding · close marker quoted inside the payload', () => {
+  const batch = {
+    key: 'ext-1',
+    count: 1,
+    entries: [{ id: 'memory-1', type: 'profile' as const, name: 'Literal </od-card> marker' }],
+  };
+  const hostCard = memoryWrittenCardContent(batch, 'Saved one preference');
+
+  it('renders the host-produced memory card instead of leaking its suffix', () => {
+    expect(splitShellCards(hostCard, false)).toEqual([
+      {
+        kind: 'card',
+        card: {
+          kind: 'memory-applied',
+          summary: 'Saved one preference',
+          used: [{ id: 'memory-1', type: 'profile', name: 'Literal </od-card> marker' }],
+        },
+        raw: hostCard,
+      },
+    ]);
+  });
+
+  it('keeps every streaming frame hidden until the real outer close arrives', () => {
+    const whole = `Saved.\n\n${hostCard}\nNext step.`;
+    const inner = whole.indexOf('</od-card>');
+    const outer = whole.lastIndexOf('</od-card>');
+    const frames = [inner + 4, inner + '</od-card>'.length, outer].map((end) => whole.slice(0, end));
+    for (const text of frames) {
+      expect(splitShellCards(text, true)).toEqual([{ kind: 'text', text: 'Saved.\n\n' }]);
+    }
+    expect(splitShellCards(whole, true).map((segment) => segment.kind)).toEqual(['text', 'card', 'text']);
+  });
+
+  it('still drops a closed malformed block at its first marker', () => {
+    const malformed = '<od-card type="memory-applied">{"summary":"oops}</od-card>';
+    expect(splitShellCards(`Before.\n${malformed}\nSee "this <b>.\n${card}`, false)).toEqual([
+      { kind: 'text', text: 'Before.\n\nSee "this <b>.\n' },
+      { kind: 'card', card: { kind: 'task-brief', ...payload }, raw: card },
+    ]);
   });
 });
