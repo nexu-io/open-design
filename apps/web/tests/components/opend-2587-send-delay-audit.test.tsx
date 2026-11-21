@@ -12,7 +12,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { composerText, flushMounts, typeAndSettle } from '../helpers/lexical-composer';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
-import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import { fetchAmrWalletSnapshot, streamViaDaemon } from '../../src/providers/daemon';
 import {
@@ -241,7 +240,7 @@ function stubFetch() {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.startsWith('/api/workspace/billing/preflight?') && pendingBilling) return pendingBilling;
+      if (url.startsWith('/api/workspace/billing/send-preflight') && pendingBilling) return pendingBilling;
       if (url.includes('/api/workspace/context')) {
         return new Response(JSON.stringify({ context: CALLER_CONTEXT }), { status: 200 });
       }
@@ -284,7 +283,7 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     window.sessionStorage.clear();
     window.localStorage.clear();
     resetWorkspaceContextCache();
-    invalidateAmrFundingFeedback();
+
     vi.mocked(fetchAmrWalletSnapshot).mockResolvedValue(null);
     pendingBilling = null;
     releasePendingBilling = null;
@@ -316,7 +315,7 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     // A failed assertion must not leave the shared funding cache waiting on
     // this test-only deferred response in the following sign-in cases.
     await act(async () => { releasePendingBilling?.(); });
-    invalidateAmrFundingFeedback();
+
     vi.unstubAllGlobals();
     vi.clearAllMocks();
     resetWorkspaceContextCache();
@@ -339,10 +338,10 @@ describe('OPEND-2587 real composer and transcript during delayed local reception
     releasePendingBilling = () => resolveBilling(new Response(JSON.stringify({ preflight: null }), { status: 503 }));
     await sendPrompt();
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(
-      ([url]) => String(url).startsWith('/api/workspace/billing/preflight?'),
+      ([url]) => String(url).startsWith('/api/workspace/billing/send-preflight'),
     )).toBe(true));
-    const requests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/workspace/billing/preflight?'));
-    expect(new URL(String(requests[0]![0]), 'http://localhost').searchParams.get('workspaceId')).toBe(TEAM_WORKSPACE);
+    const requests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/workspace/billing/send-preflight'));
+    expect(JSON.parse(String(requests[0]![1]?.body)).workspaceId).toBe(TEAM_WORKSPACE);
     // Seats phase1 waits for this scoped verdict before provider admission.
     // An unavailable result may still defer to the backend after it settles.
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();

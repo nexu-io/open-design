@@ -143,3 +143,33 @@ describe('createdProjectWorkspaceHome', () => {
     )).resolves.toBeNull();
   });
 });
+
+describe('explicit target-only creation', () => {
+  const directory = () => ({ ok: true as const, items: [{ workspaceId: 'workspace-a', workspaceName: 'Team A', workspaceType: 'team' as const, workspaceMemberId: 'canonical-member', role: 'member' as const, memberStatus: 'active' as const, lifecycleState: 'active' as const }] });
+  it('derives canonical current member without headers, and ignores stale member assertions', async () => {
+    for (const headers of [{}, ACTIVE_HEADERS]) {
+      const req = { ...request(headers), body: { workspaceTarget: { workspaceId: 'workspace-a' } } };
+      expect(await authorizeCreatedProjectWorkspace(req, async () => directory())).toMatchObject({ ok: true, context: { workspaceId: 'workspace-a', workspaceMemberId: 'canonical-member', role: 'member' } });
+    }
+  });
+  it('rejects malformed/conflicting target before resolving authority', async () => {
+    const fetchDirectory = vi.fn(async () => directory());
+    for (const target of [null, {}, { workspaceId: '' }, { workspaceId: 'workspace-other' }]) {
+      expect(await authorizeCreatedProjectWorkspace({ ...request(), body: { workspaceTarget: target } }, fetchDirectory)).toMatchObject({ ok: false, status: 400 });
+    }
+    expect(fetchDirectory).not.toHaveBeenCalled();
+  });
+  it('never degrades an explicit target to unbound when authority is missing or member removed', async () => {
+    const req = { ...request({}), body: { workspaceTarget: { workspaceId: 'workspace-a' } } };
+    expect(await authorizeCreatedProjectWorkspace(req)).toMatchObject({ ok: false, status: 503 });
+    expect(await authorizeCreatedProjectWorkspace(req, async () => ({ ok: false, items: [] }))).toMatchObject({ ok: false, status: 503 });
+    expect(await authorizeCreatedProjectWorkspace(req, async () => ({ ok: true, items: [] }))).toMatchObject({ ok: false, status: 403 });
+  });
+  it('rechecks fresh authority on every resolver call', async () => {
+    const req = { ...request({}), body: { workspaceTarget: { workspaceId: 'workspace-a' } } };
+    const fetchDirectory = vi.fn().mockResolvedValueOnce(directory()).mockResolvedValueOnce({ ok: true, items: [] });
+    expect(await createdProjectWorkspaceHome(req, fetchDirectory)).toMatchObject({ workspaceMemberId: 'canonical-member' });
+    await expect(createdProjectWorkspaceHome(req, fetchDirectory)).rejects.toMatchObject({ status: 403 });
+    expect(fetchDirectory).toHaveBeenCalledTimes(2);
+  });
+});

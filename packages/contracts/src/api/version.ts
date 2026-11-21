@@ -18,6 +18,7 @@ export interface AppRuntimeCapabilities {
    * plain daemon still has no renderer.
    */
   slideRenderer: boolean;
+  workspaceTargetCreate?: true;
 }
 
 export interface AppVersionInfo {

@@ -438,6 +438,7 @@ export interface CreateProjectExampleReference {
 }
 
 export interface CreateProjectRequest {
+  workspaceTarget?: { workspaceId: string };
   name: string;
   /** Optional project library location id. Omit or use `default` for .od/projects. */
   projectLocationId?: string;

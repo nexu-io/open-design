@@ -1327,3 +1327,33 @@ export interface CollabCloudCommentsResponse {
   comments: CollabCloudComment[];
   latestSeq: number;
 }
+
+/** Optional send preview v1. Vela owns the wire contract. */
+export interface SendPreflightRequest { clientRequestId: string; modelId: string | null }
+export interface WorkspaceSendPreflightRequest extends SendPreflightRequest { workspaceId: string }
+export const sendPreflightForbiddenCodes = ['user_banned', 'workspace_member_required', 'workspace_lifecycle_not_writable', 'workspace_forbidden'] as const;
+export type SendPreflightForbiddenCode = typeof sendPreflightForbiddenCodes[number];
+export type SendPreflightResponse = {
+  schemaVersion: 1; requestId: string; clientRequestId: string; workspaceId: string; modelId: string | null;
+} & ({ decision: 'proceed' } | { decision: 'reject'; reason: 'insufficient_funds' | 'concurrency_full'; details?: { running: string; limit: string } });
+export function validSendPreflightRequest(value: unknown): value is WorkspaceSendPreflightRequest {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.workspaceId === 'string' && v.workspaceId.length > 0
+    && typeof v.clientRequestId === 'string' && v.clientRequestId.length > 0 && v.clientRequestId.length <= 128
+    && (v.modelId === null || typeof v.modelId === 'string' && v.modelId.length > 0 && v.modelId.length <= 256);
+}
+/** Optional presentation never invalidates a valid core verdict. */
+export function parseSendPreflightResponse(value: unknown): SendPreflightResponse | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  if (v.schemaVersion !== 1 || typeof v.requestId !== 'string' || !v.requestId.length
+    || !validSendPreflightRequest(v) || (v.decision !== 'proceed' && v.decision !== 'reject')) return null;
+  const core = { schemaVersion: 1 as const, requestId: v.requestId, clientRequestId: v.clientRequestId, workspaceId: v.workspaceId, modelId: v.modelId };
+  if (v.decision === 'proceed') return { ...core, decision: 'proceed' };
+  if (v.reason !== 'insufficient_funds' && v.reason !== 'concurrency_full') return null;
+  const d = v.details as Record<string, unknown> | null;
+  const details = d && typeof d.running === 'string' && /^(0|[1-9]\d*)$/.test(d.running)
+    && typeof d.limit === 'string' && /^[1-9]\d*$/.test(d.limit) ? { running: d.running, limit: d.limit } : undefined;
+  return { ...core, decision: 'reject', reason: v.reason, ...(details ? { details } : {}) };
+}

@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "path": "/api/v1/workspaces/{workspaceId}/billing/send-preflight",
+  "request": {
+    "clientRequestId": "attempt-123",
+    "modelId": null
+  },
+  "responses": [
+    {
+      "schemaVersion": 1,
+      "requestId": "server-123",
+      "clientRequestId": "attempt-123",
+      "workspaceId": "workspace-123",
+      "modelId": null,
+      "decision": "proceed"
+    },
+    {
+      "schemaVersion": 1,
+      "requestId": "server-123",
+      "clientRequestId": "attempt-123",
+      "workspaceId": "workspace-123",
+      "modelId": null,
+      "decision": "reject",
+      "reason": "insufficient_funds"
+    },
+    {
+      "schemaVersion": 1,
+      "requestId": "server-123",
+      "clientRequestId": "attempt-123",
+      "workspaceId": "workspace-123",
+      "modelId": null,
+      "decision": "reject",
+      "reason": "concurrency_full",
+      "details": {
+        "running": "4",
+        "limit": "4"
+      }
+    }
+  ],
+  "invalidPresentation": {
+    "schemaVersion": 1,
+    "requestId": "server-123",
+    "clientRequestId": "attempt-123",
+    "workspaceId": "workspace-123",
+    "modelId": null,
+    "decision": "reject",
+    "reason": "concurrency_full",
+    "details": {
+      "running": 4,
+      "limit": "bad"
+    }
+  },
+  "errors": {
+    "401": ["unauthenticated"],
+    "403": [
+      "user_banned",
+      "workspace_member_required",
+      "workspace_lifecycle_not_writable",
+      "workspace_forbidden"
+    ]
+  }
+}
