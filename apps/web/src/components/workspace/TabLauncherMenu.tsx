@@ -46,6 +46,8 @@ interface Props {
   /** Fire a tab-launcher ui_click (host fills page/area/project_id). */
   onTrack?: (input: TabLauncherTrackInput) => void;
   onClose: () => void;
+  onReopenDesignFiles?: () => void;
+  isDesignFilesTabHidden?: boolean;
 }
 
 // Command-palette dropdown for the tab strip's "+" button. Rendered through a
@@ -64,7 +66,9 @@ export function TabLauncherMenu({
   onOpenTab,
   onTrack,
   onClose,
-}: Props) {
+  onReopenDesignFiles,
+  isDesignFilesTabHidden,
+} : Props) {
   const t = useT();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -287,7 +291,18 @@ export function TabLauncherMenu({
             </ul>
           </section>
         ) : null}
-
+        {isDesignFilesTabHidden && onReopenDesignFiles ? (
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>{t('workspace.reopenDesignFiles')}</div>
+            <button
+              type="button"
+              className={styles.row}
+              onClick={() => onReopenDesignFiles?.()}
+            >
+              <span className={styles.rowBody}>{t('workspace.reopenDesignFilesLabel')}</span>
+            </button>
+          </section>
+        ) : null}
         {results.length > 0 ? (
           <section className={styles.section}>
             <div className={styles.sectionHeader}>{t('workspace.openFile')}</div>
