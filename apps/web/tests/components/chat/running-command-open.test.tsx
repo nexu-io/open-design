@@ -183,11 +183,13 @@ describe('跑完自动收起(稿子:执行中展开 → 完成收起)', () => {
     expect(container.textContent).not.toContain('✓ built in 8.42s');
   });
 
-  it('跑完翻成失败的,**不收** —— 失败是稿子里唯一默认展开的完成态', () => {
+  it('在途自动展开的命令转失败时收起,可以手动查看错误', () => {
     const { rerender, container } = render(<ToolRow running row={running()} />);
     echoToggle(fold());
 
     rerender(<ToolRow row={settled({ failed: true, terminal: '✗ Could not resolve "./ProductCard"' })} />);
+    expect(fold().open).toBe(false);
+    clickSummary(fold());
     expect(fold().open).toBe(true);
     expect(container.textContent).toContain('✗ Could not resolve "./ProductCard"');
   });
@@ -224,10 +226,13 @@ describe('反向对照:别的状态一个都没改坏', () => {
     expect(container.textContent).not.toContain('✓ built in 8.42s');
   });
 
-  it('失败的默认展开,报错原文在 DOM 里(稿子 :1018-1019 是 `fold is-fail` + open)', () => {
+  it('失败默认收起,手动展开后报错原文可见', () => {
     const { container } = render(
       <ToolRow row={settled({ failed: true, terminal: '✗ Could not resolve "./ProductCard"', elapsedMs: 2100 })} />,
     );
+    expect(fold().open).toBe(false);
+    expect(container.textContent).not.toContain('✗ Could not resolve "./ProductCard"');
+    clickSummary(fold());
     expect(fold().open).toBe(true);
     expect(container.textContent).toContain('✗ Could not resolve "./ProductCard"');
     expect(screen.getByText('失败')).toBeTruthy();
