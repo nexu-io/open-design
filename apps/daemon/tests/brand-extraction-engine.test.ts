@@ -1526,6 +1526,164 @@ describe('agent-driven brand extraction engine', () => {
     expect(detail?.meta.designSystemId).toBe(first.designSystemId);
   });
 
+  describe('authored overrides survive the post-turn rebuild', () => {
+    // The web re-runs finalize after every chat turn in a brand project
+    // (ProjectView auditDesignSystemWorkspaceAfterRun), regenerating
+    // brand.html, DESIGN.md, and system/ from the kit's inputs. A follow-up
+    // turn's design work must therefore live in an input — the overrides
+    // layer — and come back from every rebuild.
+    const PATTERN_CSS = '.od-newsletter-hero { background-image: url(patterns/contour.svg); }\n';
+    const PATTERN_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1"/></svg>';
+    const NEWSLETTER = '<!doctype html><html><head><title>Authored newsletter</title></head><body><img src="../patterns/contour.svg"></body></html>';
+
+    async function startFinalizedBrand() {
+      const db = openDatabase(tempDir, { dataDir: tempDir });
+      const started = await startOfflineBrandExtraction({
+        url: 'acme.com',
+        brandsRoot,
+        projectsRoot,
+        skillsRoot: SKILLS_ROOT,
+        db,
+        logoFallback: NO_LOGO_FALLBACK,
+      });
+      const projectDir = path.join(projectsRoot, started.projectId);
+      const writeBrandJson = (brand: object) =>
+        writeFileSync(
+          path.join(projectDir, 'brand.json'),
+          JSON.stringify({ ...brand, sourceUrl: started.sourceUrl }, null, 2),
+          'utf8',
+        );
+      writeBrandJson(VALID_BRAND);
+      const finalizeTurn = () =>
+        finalizeBrand({
+          id: started.id,
+          brandsRoot,
+          userDesignSystemsRoot,
+          projectsRoot,
+          skillsRoot: SKILLS_ROOT,
+          db,
+          logoFallback: NO_LOGO_FALLBACK,
+          imageryFallback: NO_IMAGERY_FALLBACK,
+        });
+      await finalizeTurn();
+      const read = (rel: string) => readFileSync(path.join(projectDir, ...rel.split('/')), 'utf8');
+      const author = (rel: string, content: string) => {
+        const abs = path.join(projectDir, ...rel.split('/'));
+        mkdirSync(path.dirname(abs), { recursive: true });
+        writeFileSync(abs, content, 'utf8');
+      };
+      return { projectDir, finalizeTurn, writeBrandJson, read, author };
+    }
+
+    it('re-applies the authored stylesheet, pages, and assets on every rebuild', async () => {
+      const { finalizeTurn, read, author, writeBrandJson } = await startFinalizedBrand();
+
+      // Feedback turn: the agent authors its changes in the overrides layer.
+      author('overrides/brand.css', PATTERN_CSS);
+      author('overrides/system/patterns/contour.svg', PATTERN_SVG);
+      author('overrides/system/artifacts/newsletter.html', NEWSLETTER);
+      await finalizeTurn();
+      // …and the next turn's rebuild must not take any of it back.
+      await finalizeTurn();
+
+      expect(read('system/overrides.css')).toBe(PATTERN_CSS);
+      expect(read('system/patterns/contour.svg')).toBe(PATTERN_SVG);
+      expect(read('system/artifacts/newsletter.html')).toContain('<body><img src="../patterns/contour.svg"></body>');
+      expect(read('system/kit.html')).toContain('<link rel="stylesheet" href="overrides.css" data-od-brand-overrides>');
+      expect(read('system/kit.dark.html')).toContain('href="overrides.css" data-od-brand-overrides');
+      expect(read('system/artifacts/email.html')).toContain('href="../overrides.css" data-od-brand-overrides');
+      expect(read('brand.html')).toContain('href="system/overrides.css" data-od-brand-overrides');
+      // Gallery thumbnails: the authored newsletter previews with its own base,
+      // generated kinds pick up the stylesheet from the gallery's location.
+      const gallery = read('system/index.html');
+      expect(gallery).toContain('Authored newsletter');
+      expect(gallery).toContain('&lt;base href=&quot;artifacts/&quot;&gt;');
+      expect(gallery).toContain('href=&quot;overrides.css&quot; data-od-brand-overrides');
+
+      // A later brand.json change still flows into every generated page while
+      // the authored layer stays applied.
+      writeBrandJson({
+        ...VALID_BRAND,
+        colors: VALID_BRAND.colors.map((c) => (c.role === 'accent' ? { ...c, hex: '#123456' } : c)),
+      });
+      await finalizeTurn();
+      expect(read('system/variables.css').toLowerCase()).toContain('#123456');
+      expect(read('system/artifacts/email.html')).toContain('href="../overrides.css" data-od-brand-overrides');
+      expect(read('system/artifacts/newsletter.html')).toContain('Authored newsletter');
+    });
+
+    it('publishes the authored layer into the registered design system', async () => {
+      const { finalizeTurn, author } = await startFinalizedBrand();
+      author('overrides/brand.css', PATTERN_CSS);
+      author('overrides/system/artifacts/newsletter.html', NEWSLETTER);
+      const finalized = await finalizeTurn();
+
+      const dir = path.join(userDesignSystemsRoot, finalized.designSystemId.slice('user:'.length), 'system');
+      expect(readFileSync(path.join(dir, 'overrides.css'), 'utf8')).toBe(PATTERN_CSS);
+      expect(readFileSync(path.join(dir, 'artifacts', 'newsletter.html'), 'utf8')).toContain('Authored newsletter');
+    });
+
+    it('layers the authored stylesheet over a replacement page and its gallery preview', async () => {
+      const { finalizeTurn, read, author } = await startFinalizedBrand();
+      author('overrides/brand.css', PATTERN_CSS);
+      author('overrides/system/artifacts/newsletter.html', NEWSLETTER);
+      await finalizeTurn();
+
+      const newsletter = read('system/artifacts/newsletter.html');
+      expect(newsletter).toContain('Authored newsletter');
+      expect(newsletter).toContain('<link rel="stylesheet" href="../overrides.css" data-od-brand-overrides>');
+      // The preview resolves from `artifacts/` through its <base>, so the link
+      // climbs one level just like the page itself.
+      const gallery = read('system/index.html');
+      expect(gallery).toMatch(
+        /&lt;base href=&quot;artifacts\/&quot;&gt;[\s\S]*Authored newsletter[\s\S]*href=&quot;\.\.\/overrides\.css&quot; data-od-brand-overrides/,
+      );
+    });
+
+    it('stops applying an override once the project deletes it', async () => {
+      const { projectDir, finalizeTurn, read, author } = await startFinalizedBrand();
+      author('overrides/brand.css', PATTERN_CSS);
+      author('overrides/system/artifacts/newsletter.html', NEWSLETTER);
+      author('overrides/system/patterns/contour.svg', PATTERN_SVG);
+      await finalizeTurn();
+      expect(existsSync(path.join(projectDir, 'system', 'patterns', 'contour.svg'))).toBe(true);
+
+      rmSync(path.join(projectDir, 'overrides'), { recursive: true, force: true });
+      await finalizeTurn();
+
+      expect(read('system/artifacts/newsletter.html')).not.toContain('Authored newsletter');
+      expect(read('system/kit.html')).not.toContain('data-od-brand-overrides');
+      expect(read('brand.html')).not.toContain('data-od-brand-overrides');
+      // Files only an override contributed leave the project's system/ too.
+      expect(existsSync(path.join(projectDir, 'system', 'patterns', 'contour.svg'))).toBe(false);
+      expect(existsSync(path.join(projectDir, 'system', 'overrides.css'))).toBe(false);
+    });
+
+    it('still regenerates outputs that were edited directly', async () => {
+      const { finalizeTurn, read, author } = await startFinalizedBrand();
+      author('system/kit.html', '<!doctype html><html><head></head><body>hand edit</body></html>');
+      await finalizeTurn();
+      expect(read('system/kit.html')).not.toContain('hand edit');
+    });
+
+    it('rejects an override of a generated token file with a pointer to brand.json.seed', async () => {
+      const { finalizeTurn, author } = await startFinalizedBrand();
+      author('overrides/system/variables.css', ':root { --brand-color-primary: red; }');
+      await expect(finalizeTurn()).rejects.toThrow(
+        /overrides\/system\/variables\.css cannot override a generated token or doc file.*brand\.json\.seed/,
+      );
+    });
+
+    it.each(['Variables.css', 'Tokens.default.json', 'SEED.json', 'Overrides.css'])(
+      'rejects a case variant of a reserved file (%s)',
+      async (name) => {
+        const { finalizeTurn, author } = await startFinalizedBrand();
+        author(`overrides/system/${name}`, 'x');
+        await expect(finalizeTurn()).rejects.toThrow(/cannot override a generated token or doc file/);
+      },
+    );
+  });
+
   it('finalizeBrand fails clearly when the agent has not written brand.json yet', async () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const started = await startOfflineBrandExtraction({
