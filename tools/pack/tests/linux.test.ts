@@ -58,6 +58,7 @@ import {
   buildDockerArgs,
   cleanupPackedLinuxNamespace,
   createLinuxDesktopLaunchEnv,
+  createLinuxProductionInstallEnv,
   inspectPackedLinuxApp,
   LINUX_APPIMAGE_EXECUTABLE_ARGS,
   matchesAppImageProcess,
@@ -66,6 +67,7 @@ import {
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
   resolveProductionInstallCommand,
+  runProductionInstall,
   shouldRejectLinuxHeadlessInspectOptions,
   stopPackedLinuxApp,
   sanitizeNamespace,
@@ -573,6 +575,105 @@ describe("resolveProductionInstallCommand", () => {
       args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
     });
     expect(resolved.command).not.toBe("npm");
+  });
+});
+
+describe("createLinuxProductionInstallEnv", () => {
+  it("defaults ONNXRUNTIME_NODE_INSTALL_CUDA=skip when unset without mutating input", () => {
+    const input: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
+    const env = createLinuxProductionInstallEnv(input);
+
+    expect(env.ONNXRUNTIME_NODE_INSTALL_CUDA).toBe("skip");
+    expect(env.PATH).toBe("/usr/bin");
+    expect(input.ONNXRUNTIME_NODE_INSTALL_CUDA).toBeUndefined();
+  });
+
+  it("treats empty or whitespace ONNXRUNTIME_NODE_INSTALL_CUDA as unset", () => {
+    expect(
+      createLinuxProductionInstallEnv({ ONNXRUNTIME_NODE_INSTALL_CUDA: "" })
+        .ONNXRUNTIME_NODE_INSTALL_CUDA,
+    ).toBe("skip");
+    expect(
+      createLinuxProductionInstallEnv({ ONNXRUNTIME_NODE_INSTALL_CUDA: "   " })
+        .ONNXRUNTIME_NODE_INSTALL_CUDA,
+    ).toBe("skip");
+  });
+
+  it("preserves an explicit ONNXRUNTIME_NODE_INSTALL_CUDA override", () => {
+    const env = createLinuxProductionInstallEnv({
+      ONNXRUNTIME_NODE_INSTALL_CUDA: "v12",
+    });
+
+    expect(env.ONNXRUNTIME_NODE_INSTALL_CUDA).toBe("v12");
+  });
+
+  it("preserves npm_config_onnxruntime_node_install_cuda without shadowing it", () => {
+    const env = createLinuxProductionInstallEnv({
+      npm_config_onnxruntime_node_install_cuda: "v12",
+    });
+
+    expect(env.npm_config_onnxruntime_node_install_cuda).toBe("v12");
+    expect(env.ONNXRUNTIME_NODE_INSTALL_CUDA).toBeUndefined();
+  });
+});
+
+describe("runProductionInstall", () => {
+  it("passes ONNXRUNTIME_NODE_INSTALL_CUDA=skip to host npm install by default", async () => {
+    const exec = vi.fn(async () => ({ stdout: "", stderr: "" }));
+
+    await runProductionInstall("/tmp/assembled/app", exec, { PATH: "/usr/bin" });
+
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec).toHaveBeenCalledWith(
+      "npm",
+      ["install", "--omit=dev", "--no-package-lock"],
+      {
+        cwd: "/tmp/assembled/app",
+        env: {
+          PATH: "/usr/bin",
+          ONNXRUNTIME_NODE_INSTALL_CUDA: "skip",
+        },
+      },
+    );
+  });
+
+  it("passes ONNXRUNTIME_NODE_INSTALL_CUDA=skip when using OD_TOOLS_PACK_PNPM_BIN", async () => {
+    const exec = vi.fn(async () => ({ stdout: "", stderr: "" }));
+
+    await runProductionInstall("/tmp/assembled/app", exec, {
+      OD_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm",
+    });
+
+    expect(exec).toHaveBeenCalledWith(
+      "/tmp/pnpm",
+      ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
+      {
+        cwd: "/tmp/assembled/app",
+        env: {
+          OD_TOOLS_PACK_PNPM_BIN: "/tmp/pnpm",
+          ONNXRUNTIME_NODE_INSTALL_CUDA: "skip",
+        },
+      },
+    );
+  });
+
+  it("forwards an explicit caller ONNXRUNTIME_NODE_INSTALL_CUDA override unchanged", async () => {
+    const exec = vi.fn(async () => ({ stdout: "", stderr: "" }));
+
+    await runProductionInstall("/tmp/assembled/app", exec, {
+      ONNXRUNTIME_NODE_INSTALL_CUDA: "v12",
+    });
+
+    expect(exec).toHaveBeenCalledWith(
+      "npm",
+      ["install", "--omit=dev", "--no-package-lock"],
+      {
+        cwd: "/tmp/assembled/app",
+        env: {
+          ONNXRUNTIME_NODE_INSTALL_CUDA: "v12",
+        },
+      },
+    );
   });
 });
 

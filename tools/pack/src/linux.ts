@@ -47,6 +47,8 @@ const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
 // `electronuserland/builder:base`, which strips npm/npx/corepack.
 const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
+const ONNX_INSTALL_CUDA_ENV = "ONNXRUNTIME_NODE_INSTALL_CUDA";
+const ONNX_INSTALL_CUDA_NPM_CONFIG_ENV = "npm_config_onnxruntime_node_install_cuda";
 const CONTAINER_PNPM_PATH = "/tmp/pnpm";
 const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
@@ -456,11 +458,44 @@ export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): Product
   return { command: "npm", args: ["install", "--omit=dev", "--no-package-lock"] };
 }
 
-async function runProductionInstall(appRoot: string): Promise<void> {
-  const { command, args } = resolveProductionInstallCommand(process.env);
-  await execFileAsync(command, args, {
+/**
+ * Build the environment for materializing assembled-app production dependencies
+ * on Linux. ONNX Runtime bundles CPU support and workspace installs already skip
+ * `onnxruntime-node`'s optional CUDA postinstall via
+ * `pnpm-workspace.yaml#ignoredBuiltDependencies`. Standalone `npm install` in
+ * `assembled/app` does not read pnpm workspace config, so default
+ * `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` unless the caller explicitly opted in.
+ */
+export function createLinuxProductionInstallEnv(
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const callerSetCuda =
+    (baseEnv[ONNX_INSTALL_CUDA_ENV]?.trim().length ?? 0) > 0 ||
+    (baseEnv[ONNX_INSTALL_CUDA_NPM_CONFIG_ENV]?.trim().length ?? 0) > 0;
+  if (callerSetCuda) {
+    return { ...baseEnv };
+  }
+  return {
+    ...baseEnv,
+    [ONNX_INSTALL_CUDA_ENV]: "skip",
+  };
+}
+
+export type ProductionInstallExecutor = (
+  command: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv },
+) => Promise<unknown>;
+
+export async function runProductionInstall(
+  appRoot: string,
+  exec: ProductionInstallExecutor = (command, args, options) => execFileAsync(command, args, options),
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const { command, args } = resolveProductionInstallCommand(baseEnv);
+  await exec(command, args, {
     cwd: appRoot,
-    env: process.env,
+    env: createLinuxProductionInstallEnv(baseEnv),
   });
 }
 
