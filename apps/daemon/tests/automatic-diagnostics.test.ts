@@ -40,6 +40,21 @@ it('delivers no-run incidents without account/trace and records a completed rece
   expect(f.service.outbox.get(id)?.state).toBe('delivered');
   expect(f.calls.map((c) => c.path)).toEqual(['/api/objects/devices/register', '/api/objects/authorize', '/api/objects/batch', '/api/objects/batch']);
 });
+it('folds a client error card or project status for a captured run into the run incident', () => {
+  const f = fixture();
+  const run = f.service.record({ sourceId: 'run:r1:0:5', at: Date.now(), kind: 'run_error', runId: 'r1' })!;
+  const card = { occurrenceId: 'run:r1:visible_error:FAILED', category: 'visible_error' as const,
+    surface: 'run_failed_toast', errorCode: 'FAILED', observedAt: 1, runId: 'r1' };
+  expect(f.service.recordClientExperience(card)).toBe(run);
+  expect(f.service.recordClientExperience({ ...card, occurrenceId: 'project:p:r1:failed', category: 'project_failure',
+    surface: 'recent_rail', errorCode: 'failed' })).toBe(run);
+  // A run the daemon never captured keeps its own client evidence.
+  const uncaptured = f.service.recordClientExperience({ ...card, occurrenceId: 'run:r2:visible_error:FAILED', runId: 'r2' });
+  expect(uncaptured).toBeTruthy(); expect(uncaptured).not.toBe(run);
+  // Runtime and operation failures are not run outcomes and stay separate.
+  expect(f.service.recordClientExperience({ ...card, occurrenceId: 'client_white_screen:1', category: 'runtime_failure',
+    surface: 'client_white_screen', errorCode: 'client_white_screen' })).not.toBe(run);
+});
 it('retains failed delivery through shutdown and retries the same incident after a lost receipt', async () => {
   const f = fixture(); f.loseReceipt();
   const id = f.service.record({ sourceId: 'run:1', at: Date.now(), kind: 'run_error' })!;
