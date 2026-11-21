@@ -1309,7 +1309,7 @@ Result of `od project create --json`:
 ```
 od conversation list <projectId> [--json]
 od conversation new  <projectId> [--title "<title>"] [--json]
-od conversation info <conversationId> [--json]
+od conversation info <conversationId> --project <projectId> [--json]
 ```
 
 #### Run / task lifecycle (new)
