@@ -2990,6 +2990,8 @@ export const esES: Dict = {
   'workspace.noFilesMatch': 'No hay archivos coincidentes',
   'workspace.allFiles': 'Todos',
   'workspace.createNew': 'Crear nuevo',
+  'workspace.reopenDesignFiles': 'Reabrir Design Files',
+  'workspace.reopenDesignFilesLabel': 'Design Files',
   'workspace.tabOpen': 'Abierto',
   'workspace.sideChatContextBanner': 'Contexto de la conversación actual integrado',
   'workspace.sideChatDefaultTitle': 'Chat lateral',

@@ -120,14 +120,28 @@ function parseYamlSubset(src: string): FrontmatterObject {
         }
       }
       if (value.includes(':')) {
-        const obj: FrontmatterObject = {};
-        const colonIdx = value.indexOf(':');
-        const key = value.slice(0, colonIdx).trim();
-        const valRaw = value.slice(colonIdx + 1).trim();
-        if (valRaw) obj[key] = coerce(valRaw);
-        if (!Array.isArray(container)) throw new Error('frontmatter array container expected');
-        container.push(obj);
-        stack.push({ indent, container: obj, key: null });
+        // A quoted scalar like "1:1 notes" contains a colon but must not be
+        // parsed as a mapping. Only treat it as an object when the value is
+        // unquoted or the colon follows a closing quote (e.g. `"key": value`).
+        const trimmed = value.trim();
+        const first = trimmed[0];
+        const last = trimmed[trimmed.length - 1];
+        const isQuoted =
+          trimmed.length >= 2 &&
+          ((first === '"' && last === '"') || (first === "'" && last === "'"));
+        if (isQuoted) {
+          // Quoted scalar: strip quotes and keep as string.
+          container.push(coerce(value));
+        } else {
+          const obj: FrontmatterObject = {};
+          const colonIdx = value.indexOf(':');
+          const key = value.slice(0, colonIdx).trim();
+          const valRaw = value.slice(colonIdx + 1).trim();
+          if (valRaw) obj[key] = coerce(valRaw);
+          if (!Array.isArray(container)) throw new Error('frontmatter array container expected');
+          container.push(obj);
+          stack.push({ indent, container: obj, key: null });
+        }
       } else {
         if (!Array.isArray(container)) throw new Error('frontmatter array container expected');
         container.push(coerce(value));
