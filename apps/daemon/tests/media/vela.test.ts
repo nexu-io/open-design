@@ -121,6 +121,7 @@ describe('Vela media provider', () => {
           kind: 'image',
           capabilities: {
             profiles: {
+              generations: envelope([profile('1:1', '2K')], '2K'),
               // 16:9 exists at both tiers; the default tier must win.
               edits: envelope(
                 [profile('1:1', '2K'), profile('16:9', '1K'), profile('16:9', '2K')],
@@ -129,6 +130,13 @@ describe('Vela media provider', () => {
             },
           },
         },
+        ...['seedream-5.5', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'].map((model) => ({
+          model,
+          kind: 'image',
+          capabilities: {
+            profiles: { generations: envelope([profile('1:1', '2K')], '2K') },
+          },
+        })),
         {
           model: 'seedream-5.0-pro',
           kind: 'image',
@@ -208,6 +216,32 @@ describe('Vela media provider', () => {
       VELA_WORKSPACE_ID: 'workspace-team',
     });
     await expect(stat(tempOutputDirs[0]!)).rejects.toThrow();
+  });
+
+  it.each([
+    'seedream-5.5',
+    'nano-banana-2',
+    'gpt-image-2.6-flare',
+    'gpt-image-2.6-sunburst',
+  ])('routes the Cloud image model %s to Vela image generation', async (model) => {
+    mockReadyImage();
+
+    const result = await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: `vela/${model}`,
+      workspaceId: 'workspace-team',
+    });
+
+    expect(result.providerId).toBe('vela');
+    expect(result.usedStubFallback).toBe(false);
+    const [args, options] = imageCall();
+    expect(args.slice(0, 2)).toEqual(['image', 'gen']);
+    expect(valueAfter(args, '--model')).toBe(model);
+    expect(options.configuredEnv).toEqual({
+      VELA_INVOCATION_SOURCE: 'open-design',
+      VELA_WORKSPACE_ID: 'workspace-team',
+    });
   });
 
   it('routes the removed Codex image model id through Vela for existing projects', async () => {

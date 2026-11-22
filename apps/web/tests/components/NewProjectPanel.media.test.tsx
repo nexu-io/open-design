@@ -109,6 +109,48 @@ describe('NewProjectPanel media provider badges', () => {
     );
   });
 
+  it('offers the Cloud image models and saves the selected model ID', () => {
+    const onCreate = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={[]}
+        designSystems={[]}
+        defaultDesignSystemId={null}
+        templates={[]}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        mediaProviders={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Media' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
+    fireEvent.click(screen.getByTestId('model-picker-trigger'));
+    for (const id of [
+      'vela/seedream-5.5',
+      'vela/nano-banana-2',
+      'vela/gpt-image-2.6-flare',
+      'vela/gpt-image-2.6-sunburst',
+    ]) {
+      expect(screen.getByTestId(`model-picker-option-${id}`)).toBeDefined();
+    }
+
+    fireEvent.click(screen.getByTestId('model-picker-option-vela/gpt-image-2.6-sunburst'));
+    fireEvent.change(screen.getByTestId('new-project-name'), {
+      target: { value: 'Cloud image generation' },
+    });
+    fireEvent.click(screen.getByTestId('create-project'));
+    expect(onCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          kind: 'image',
+          imageModel: 'vela/gpt-image-2.6-sunburst',
+        }),
+      }),
+    );
+  });
+
   it('treats a legacy template gpt-image-2 recommendation as the managed Cloud route', async () => {
     const template = {
       id: 'legacy-gpt-image-template',
