@@ -470,12 +470,12 @@ describe('SettingsDialog API protocol switching', () => {
     });
   });
 
-  it('keeps UberLLM as an OpenAI-compatible known provider without changing the OpenAI default', () => {
+  it('keeps MartLLM as an OpenAI-compatible known provider without changing the OpenAI default', () => {
     const openai = switchApiProtocolConfig(baseConfig, 'openai');
-    const uberllm = updateCurrentApiProtocolConfig(openai, {
-      baseUrl: 'https://api.uberllm.dev/v1',
+    const martllm = updateCurrentApiProtocolConfig(openai, {
+      baseUrl: 'https://api.martllm.com/v1',
       model: 'anthropic/claude-sonnet-4.6',
-      apiProviderBaseUrl: 'https://api.uberllm.dev/v1',
+      apiProviderBaseUrl: 'https://api.martllm.com/v1',
     });
 
     expect(openai).toMatchObject({
@@ -483,11 +483,11 @@ describe('SettingsDialog API protocol switching', () => {
       model: 'gpt-4o',
       apiProviderBaseUrl: 'https://api.openai.com/v1',
     });
-    expect(uberllm).toMatchObject({
+    expect(martllm).toMatchObject({
       apiProtocol: 'openai',
-      baseUrl: 'https://api.uberllm.dev/v1',
+      baseUrl: 'https://api.martllm.com/v1',
       model: 'anthropic/claude-sonnet-4.6',
-      apiProviderBaseUrl: 'https://api.uberllm.dev/v1',
+      apiProviderBaseUrl: 'https://api.martllm.com/v1',
     });
   });
 

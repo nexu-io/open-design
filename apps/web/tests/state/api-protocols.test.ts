@@ -44,21 +44,21 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
 
-  it('keeps the UberLLM preset wired to OpenAI-compatible chat models', () => {
-    const uberllmProvider = KNOWN_PROVIDERS.find(
+  it('keeps the MartLLM preset wired to OpenAI-compatible chat models', () => {
+    const martllmProvider = KNOWN_PROVIDERS.find(
       (provider) =>
         provider.protocol === 'openai' &&
-        provider.baseUrl === 'https://api.uberllm.dev/v1',
+        provider.baseUrl === 'https://api.martllm.com/v1',
     );
 
-    expect(uberllmProvider).toMatchObject({
-      label: 'UberLLM',
+    expect(martllmProvider).toMatchObject({
+      label: 'MartLLM',
       apiKeyConsoleLink: {
-        host: 'uberllm.dev',
-        url: 'https://uberllm.dev/signup',
+        host: 'martllm.com',
+        url: 'https://martllm.com/signup',
       },
     });
-    expect(uberllmProvider?.preferredModels[0]).toBe('anthropic/claude-sonnet-4.6');
-    expect(uberllmProvider?.preferredModels).toContain('deepseek/deepseek-v4.1-flash');
+    expect(martllmProvider?.preferredModels[0]).toBe('anthropic/claude-sonnet-4.6');
+    expect(martllmProvider?.preferredModels).toContain('deepseek/deepseek-v4.1-flash');
   });
 });
