@@ -470,20 +470,14 @@ test('pi args preserve model and thinking when resource directories are supplied
   ]);
 });
 
-test('qoder entry uses qodercli with stream-json stdin delivery and tier model hints', () => {
+test('qoder entry uses qodercli with stream-json stdin delivery and live model discovery', () => {
   assert.equal(qoder.name, 'Qoder CLI');
   assert.equal(qoder.bin, 'qodercli');
   assert.deepEqual(qoder.versionArgs, ['--version']);
   assert.equal(qoder.promptViaStdin, true);
   assert.equal(qoder.streamFormat, 'qoder-stream-json');
-  assert.deepEqual(qoder.fallbackModels.map((m) => m.id), [
-    'default',
-    'lite',
-    'efficient',
-    'auto',
-    'performance',
-    'ultimate',
-  ]);
+  assert.deepEqual(qoder.listModels?.args, ['--list-models']);
+  assert.deepEqual(qoder.fallbackModels.map((m) => m.id), ['default']);
 });
 
 test('qoder args use non-interactive print mode with cwd, model, and add-dir', () => {
@@ -602,14 +596,9 @@ test('detectAgents keeps qoder unavailable with fallback metadata when qodercli 
     assert.ok(detected);
     assert.equal(detected.available, false);
     assert.equal(detected.bin, 'qodercli');
-    assert.deepEqual(detected.models.map((m: { id: string }) => m.id), [
-      'default',
-      'lite',
-      'efficient',
-      'auto',
-      'performance',
-      'ultimate',
-    ]);
+    // Fail closed to the CLI-configured model: without a runnable
+    // `qodercli --list-models` probe there is nothing trustworthy to offer.
+    assert.deepEqual(detected.models.map((m: { id: string }) => m.id), ['default']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
