@@ -3,9 +3,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
+import {
   FileViewer,
   cancelManualEditPendingStyleSnapshot,
 } from '../../src/components/FileViewer';
+import { CollabProvider, type CollabContextValue } from '../../src/collab/collab-context';
 import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 import type { ProjectFile } from '../../src/types';
 
@@ -16,6 +22,90 @@ afterEach(() => {
 });
 
 describe('FileViewer manual edit regressions', () => {
+  it('saves workspace-scoped manual edits from the original HTML asset paths', async () => {
+    const source = '<!doctype html><html><head><link rel="stylesheet" href="css/fonts.css"></head><body><main data-od-id="hero">Hero</main></body></html>';
+    const workspaceContext: WorkspaceCollabContext = {
+      workspaceId: 'workspace-1',
+      workspaceType: 'team',
+      teamId: 'team-1',
+      workspaceMemberId: 'member-1',
+      role: 'owner',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'platform_credits',
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 5, usedSeats: 1 }),
+      permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+    };
+    const collab: CollabContextValue = {
+      workspaceContext,
+      workspaceContextLoading: false,
+      projectResourceAuthority: 'workspace',
+      enabled: false,
+      member: null,
+      present: [],
+      publishedVersion: null,
+      syncState: null,
+      viewerOnly: false,
+      writerAuthority: 'allowed',
+      isOwner: true,
+      isEffectiveOwner: true,
+      isSharedNonOwner: false,
+      ownerDisplayName: null,
+      ownerRole: null,
+      downloadPending: false,
+      reportChange: () => {},
+      requestPublish: () => {},
+      refreshPresence: () => {},
+      checkStatusNow: () => {},
+    };
+    const savedBodies: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        savedBodies.push(String(init.body));
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/projects/project-1/raw/preview.html')) {
+        const parsed = new URL(url, 'http://open-design.local');
+        const body = parsed.searchParams.has('workspaceId')
+          ? source.replace(
+            'href="css/fonts.css"',
+            'href="/api/projects/project-1/raw/css/fonts.css?workspaceId=workspace-1&workspaceMemberId=member-1"',
+          )
+          : source;
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/html' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <CollabProvider value={collab}>
+        <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()} />
+      </CollabProvider>,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget();
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Edited hero' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(savedBodies).toHaveLength(1));
+    const payload = JSON.parse(savedBodies[0]!) as { content: string };
+    expect(payload.content).toContain('href="css/fonts.css"');
+    expect(payload.content).toContain('<main data-od-id="hero">Edited hero</main>');
+    const sourceFetch = fetchMock.mock.calls.find(([input]) =>
+      String(input).startsWith('/api/projects/project-1/raw/preview.html'),
+    );
+    expect(sourceFetch).toBeDefined();
+    expect(new Headers(sourceFetch?.[1]?.headers).get('x-od-workspace-id')).toBe('workspace-1');
+  });
+
   function clickManualTool(testId: string) {
     fireEvent.click(screen.getByTestId(testId));
   }

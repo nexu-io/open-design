@@ -2797,10 +2797,15 @@ export async function fetchProjectFileText(
     cache?: RequestCache;
     cacheBustKey?: string | number;
     signal?: AbortSignal;
+    preserveRelativeAssetPaths?: boolean;
     workspaceContext?: WorkspaceCollabContext | null;
   },
 ): Promise<string | null> {
-  const url = projectFileUrl(projectId, name, options?.workspaceContext);
+  // Navigation-scoped raw URLs trigger daemon-side HTML asset rewriting. Keep
+  // source reads canonical while still sending Workspace authority in headers.
+  const url = options?.preserveRelativeAssetPaths
+    ? projectRawUrl(projectId, name)
+    : projectFileUrl(projectId, name, options?.workspaceContext);
   const cacheBustKey = options?.cacheBustKey;
   const requestUrl =
     cacheBustKey == null
