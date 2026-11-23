@@ -4,7 +4,7 @@ type Status = Extract<PersistedAgentEvent, { kind: 'status' }>;
 
 export function runModelId(raw: unknown): string | undefined {
   const id = typeof raw === 'string' ? raw.trim() : '';
-  return id !== 'default' && /^[\w][\w./:+@-]{0,159}$/u.test(id) ? id : undefined;
+  return id && id !== 'default' ? id : undefined;
 }
 
 export function withRequestedRunModel(event: string, payload: unknown, requested: unknown): unknown {

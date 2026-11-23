@@ -11,6 +11,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 it('keeps model provenance on each run and its saved assistant message', async () => {
   vi.stubEnv('OD_NEXT_STRATEGY_ROLLOUT', 'off');
+  const providerModel = 'provider/模型[observed-one]';
   const root = await mkdtemp(path.join(tmpdir(), 'od-model-provenance-'));
   const fake = path.join(root, 'claude');
   let server: Server | undefined;
@@ -35,7 +36,7 @@ const index = process.argv.indexOf('--model');
 const selected = index < 0 ? 'default' : process.argv[index + 1];
 const emit = data => fs.writeSync(1, JSON.stringify(data) + '\\n');
 emit({ type: 'system', subtype: 'init', model: 'cli-configured-model' });
-emit({ type: 'assistant', message: { id: 'msg_fixture', ...(selected === 'requested-one' ? { model: 'provider-observed-one' } : {}),
+emit({ type: 'assistant', message: { id: 'msg_fixture', ...(selected === 'requested-one' ? { model: ${JSON.stringify(providerModel)} } : {}),
   content: [{ type: 'text', text: 'Isolated model provenance fixture.' }], stop_reason: 'end_turn' } });
 `, { mode: 0o755 });
     const started = (await startServer({ port: 0, returnServer: true })) as {
@@ -51,7 +52,7 @@ emit({ type: 'assistant', message: { id: 'msg_fixture', ...(selected === 'reques
       id: projectId, name: 'Model provenance fixture', skipDiscoveryBrief: true,
     });
     const routes: Array<{ id: string; stream: string; model: string }> = [];
-    for (const model of ['requested-one', 'requested-two']) {
+    for (const model of ['requested-one', 'requested-two'.padEnd(180, 'a')]) {
       const id = randomUUID();
       const { runId } = await request<ChatRunCreateResponse>('/api/runs', {
         projectId, conversationId, agentId: 'claude', assistantMessageId: id,
@@ -74,7 +75,7 @@ emit({ type: 'assistant', message: { id: 'msg_fixture', ...(selected === 'reques
       }));
       const observed = message?.events?.filter((event) => event.kind === 'status' && event.label === 'provider_model');
       expect(observed).toEqual(turn.model === 'requested-one'
-        ? [expect.objectContaining({ detail: 'provider-observed-one' })] : []);
+        ? [expect.objectContaining({ detail: providerModel })] : []);
     }
     const first = history.find((message) => message.id === routes[0]?.id);
     if (!first?.events) throw new Error('Fixture run did not save events');
