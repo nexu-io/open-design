@@ -15,6 +15,7 @@ export function modelProvenance(events: ChatMessage['events'] = []) {
       dispatched = event.dispatchedModel;
       reported = undefined;
     } else if (event.label === 'model_fallback' && event.dispatchedModel) {
+      if (dispatched !== event.dispatchedModel) reported = undefined;
       dispatched = event.dispatchedModel;
     } else if (event.label === 'provider_model') {
       reported = runModelId(event.detail);

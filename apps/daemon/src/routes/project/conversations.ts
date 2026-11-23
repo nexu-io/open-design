@@ -499,8 +499,8 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     }
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
     const storedEvents = stored.events ?? [];
-    const regressesEvents = incomingEvents.length < storedEvents.length
-      || !preservesRunModelEvidence(storedEvents, incomingEvents);
+    const losesModelEvidence = !preservesRunModelEvidence(storedEvents, incomingEvents);
+    const regressesEvents = incomingEvents.length < storedEvents.length || losesModelEvidence;
     const incomingStatus =
       typeof incoming.runStatus === 'string' ? incoming.runStatus : null;
     const regressesTerminalStatus =
@@ -509,11 +509,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       incomingStatus !== stored.runStatus;
     const daemonRun = stored.runId ? design.runs.get(stored.runId) : null;
     const daemonKnown = daemonRun !== null && daemonRun !== undefined;
-    // After a same-run resume the stored row is non-terminal, so a terminal
-    // `failed` snapshot may be a stale copy from BEFORE the resume. Accept it
-    // only when the daemon confirms the run genuinely failed (it writes that
-    // via reconcileAssistantMessageOnRunEnd); otherwise discard it so the
-    // resumed run does not relatch the old failure (nettee on #6418).
+    // A resumed run must not restore the preceding attempt's terminal snapshot.
     // Terminal-write arbitration across ALL client terminal statuses, keyed on
     // what the daemon positively knows (nettee 8/10 on #6418):
     //   1. Daemon has no record of the run (mock/client-owned row) -> the
@@ -547,7 +543,8 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           role: stored.role,
           runId: stored.runId,
           runStatus: incomingStatus,
-          events: incomingEvents,
+          // The client can finalize an untracked run while retaining recorded evidence.
+          events: losesModelEvidence ? storedEvents : incomingEvents,
           content:
             typeof incoming.content === 'string'
               ? incoming.content

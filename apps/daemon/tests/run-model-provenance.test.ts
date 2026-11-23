@@ -78,15 +78,33 @@ emit({ type: 'assistant', message: { id: 'msg_fixture', ...(selected === 'reques
     }
     const first = history.find((message) => message.id === routes[0]?.id);
     if (!first?.events) throw new Error('Fixture run did not save events');
-    await request(`${historyPath}/${first.id}`, {
-      ...first,
-      events: first.events.map((event) =>
-        event.kind === 'status' && (event.label === 'starting' || event.label === 'provider_model')
-          ? { kind: 'status', label: 'starting', detail: 'claude' }
-          : event),
-    }, 'PUT');
+    const staleEvents = first.events.map((event) =>
+      event.kind === 'status' && (event.label === 'starting' || event.label === 'provider_model')
+        ? { kind: 'status', label: 'starting', detail: 'claude' }
+        : event);
+    await request(`${historyPath}/${first.id}`, { ...first, events: staleEvents }, 'PUT');
     const { messages: afterStaleWrite } = await request<{ messages: ChatMessage[] }>(historyPath);
     expect(afterStaleWrite.find((message) => message.id === first.id)?.events).toEqual(first.events);
+
+    const forgottenEvents = first.events.filter((event) => event.kind !== 'done_key');
+    for (const runStatus of ['running', undefined] as const) {
+      const forgotten = {
+        ...first, id: randomUUID(), runId: randomUUID(), runStatus,
+        events: forgottenEvents, endedAt: undefined,
+      };
+      const forgottenPath = `${historyPath}/${forgotten.id}`;
+      await request(forgottenPath, forgotten, 'PUT');
+      expect((await fetch(`${base}/api/runs/${forgotten.runId}`)).status).toBe(404);
+      const endedAt = Date.now();
+      await request(forgottenPath, {
+        ...forgotten, events: staleEvents.filter((event) => event.kind !== 'done_key'),
+        runStatus: 'failed', endedAt, content: 'Client terminal content',
+      }, 'PUT');
+      const { messages: afterTerminalWrite } = await request<{ messages: ChatMessage[] }>(historyPath);
+      expect(afterTerminalWrite.find((message) => message.id === forgotten.id)).toMatchObject({
+        runStatus: 'failed', endedAt, content: 'Client terminal content', events: forgottenEvents,
+      });
+    }
   } finally {
     await shutdown?.();
     await new Promise<void>((resolve) => server ? server.close(() => resolve()) : resolve());

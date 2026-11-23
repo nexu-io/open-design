@@ -32,3 +32,13 @@ it('leaves actual unknown on a new attempt and on legacy history without evidenc
   ])} />);
   expect(screen.queryByTestId('run-model-identity')).toBeNull();
 });
+
+it('does not carry a previous provider response over a model fallback', () => {
+  const identity = modelProvenance([
+    { kind: 'status', label: 'starting', agentId: 'amr', requestedModel: 'original', dispatchedModel: 'original' },
+    { kind: 'status', label: 'provider_model', detail: 'original-observed' },
+    { kind: 'status', label: 'model_fallback', dispatchedModel: 'fallback' },
+  ]);
+  render(<RunModelIdentity identity={identity} />);
+  expect(screen.getByTestId('run-model-identity').textContent).toBe('original → fallback (selected)');
+});
