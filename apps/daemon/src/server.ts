@@ -137,6 +137,7 @@ import {
   excludeAcpImagePathsAlreadyDeliveredAsResources,
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
+import { isCodexPromptImage, resolveCodexPromptImages } from './runtimes/codex-image-inputs.js';
 import {
   agentStdinPromptPayload,
   recordPromptDeliveredAtSpawn,
@@ -11920,6 +11921,7 @@ export async function startServer({
           snapshotsRoot: path.join(RUNTIME_DATA_DIR, 'od-next-task-inputs'),
           projectionsRoot: path.join(RUNTIME_DATA_DIR, 'od-next-run-inputs'),
           runId: run.id,
+          ...(def.id === 'codex' ? { projectImageFilter: isCodexPromptImage } : {}),
         });
       } catch (error) {
         return failRun(
@@ -11955,11 +11957,7 @@ export async function startServer({
         ? await stageAmrImagePaths(cwd ?? PROJECT_ROOT, safeImages, UPLOAD_DIR)
         : transportSourceImages;
 
-    // Project-scoped attachments: project-relative paths inside cwd. Each
-    // is run through the same path-traversal guard the file CRUD endpoints
-    // use, then existence-checked. Whatever survives shows up as an
-    // explicit list at the bottom of the user message so the agent knows
-    // to Read it.
+    // Keep project-relative references in the text prompt.
     const safeAttachments = !odNextTaskInputSnapshot && cwd
       ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
@@ -11967,12 +11965,6 @@ export async function startServer({
       ? odNextTaskInputSnapshot.attachmentReferences
       : safeAttachments;
 
-    // Local code agents don't accept a separate "system" channel the way the
-    // Messages API does — we fold the skill + design-system prompt into the
-    // user message. The <artifact> wrapping instruction comes from
-    // systemPrompt. We also stitch in the cwd hint so the agent knows
-    // where its file tools should write, and the attachment list so it
-    // doesn't have to guess what the user just dropped in.
     const projectRecord =
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
@@ -13118,6 +13110,13 @@ export async function startServer({
       transportSourceImages,
       amrStagedImages,
     );
+    const runtimeImagePaths = def.id === 'codex' && !odNextTaskInputSnapshot
+      ? await resolveCodexPromptImages(
+          safeAttachments,
+          promptImagePaths,
+          async (name) => (await resolveProjectFilePath(PROJECTS_DIR, projectId, name, projectRecord?.metadata)).filePath,
+        )
+      : promptImagePaths;
     const acpPromptImagePaths = odNextTaskInputSnapshot
       ? excludeAcpImagePathsAlreadyDeliveredAsResources(
           promptImagePaths,
@@ -14561,7 +14560,7 @@ export async function startServer({
       await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
       args = def.buildArgs(
         composed,
-        promptImagePaths,
+        runtimeImagePaths,
         extraAllowedDirs,
         agentOptions,
         {
@@ -16829,7 +16828,7 @@ export async function startServer({
         // This handle came from our captured agent_sessions record (or a
         // same-run daemon continuation), never from the public chat payload.
         resumeSessionOwned: agentResumeCtx.isResuming,
-        imagePaths: def.supportsImagePaths ? amrStagedImages : [],
+        imagePaths: def.supportsImagePaths ? runtimeImagePaths : [],
         clientVersion: design.getAppVersion?.() ?? '0.0.0',
         // Capture-style resume, same contract as `exec resume <thread_id>`:
         // the id comes off the stream, and the daemon replays it here.

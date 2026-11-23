@@ -252,6 +252,9 @@ authentication, and the boundary between REST and MCP.
 - Legacy follow-up turns use `codex exec resume --json ... <thread-id>`. Resume uses
   `-c sandbox_mode=...` because Codex rejects create-only `--sandbox`, `-C`,
   and `--add-dir` flags on `exec resume`.
+- PNG, JPEG, GIF and WebP project attachments up to 1 MB reach Codex as
+  `localImage` inputs on app-server and as `--image` arguments on the legacy
+  transport, including follow-up turns. Project file references remain in the prompt.
 - Detection uses `codex login status` for auth and `codex debug models` for
   live model discovery, with static model hints as a fallback. Skills use the
   shared composition/staging path in §4 rather than version-gated loading from

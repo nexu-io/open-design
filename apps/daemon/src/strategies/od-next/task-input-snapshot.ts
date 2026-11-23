@@ -1002,6 +1002,8 @@ export function createOdNextRunInputProjection(input: {
   snapshotsRoot: string;
   projectionsRoot: string;
   runId: string;
+  /** Select adapter-supported native images from verified project attachments. */
+  projectImageFilter?: (mime: string, sizeBytes: number) => boolean;
   limits?: SnapshotReadLimits;
   hooks?: SnapshotReadHooks;
 }): OdNextRunInputProjection {
@@ -1053,29 +1055,27 @@ export function createOdNextRunInputProjection(input: {
     }
     fs.chmodSync(attachmentsDir, 0o555);
     fs.chmodSync(projectionDir, 0o555);
-    // The access root is handed to adapters as a writable root, and codex's
-    // Linux sandbox materialises synthetic bubblewrap mount targets (`.codex`,
-    // `.agents`, `.git`) directly inside every writable root. Creating them
-    // succeeds because bwrap runs in a user namespace, but the teardown that
-    // unlinks them runs as the real user and needs write permission on the
-    // PARENT. Freezing the root to 0o555 therefore made codex abort with
-    // `failed to remove synthetic bubblewrap mount target ... Permission
-    // denied`, and made our own cleanup below leave the root behind forever.
-    // Immutability lives on the projection directory and its 0o444 files, one
-    // level down; the root only needs to be traversable and owner-writable.
+    // Codex's Linux sandbox needs a writable access root to remove its
+    // bubblewrap mount targets. The projection itself stays read-only.
     fs.chmodSync(taskProjectionRoot, 0o700);
     const projectedPaths = loaded.files.map((file) => (
       path.join(projectionDir, file.relativePath)
     ));
+    const seenSources = new Set<string>();
     return {
       taskConfigText: loaded.taskConfigText,
       requestInputText: loaded.requestInputText,
       attachmentReferences: loaded.attachmentReferences,
       attachmentPaths: projectedPaths,
-      imagePaths: loaded.files
-        .map((file, index) => ({ file, projectedPath: projectedPaths[index]! }))
-        .filter(({ file }) => file.kind === 'image')
-        .map(({ projectedPath }) => projectedPath),
+      imagePaths: projectedPaths.filter((_, index) => {
+        const file = loaded.files[index]!;
+        if (file.kind === 'image') return true;
+        if (!input.projectImageFilter?.(file.mediaType, file.bytes)) return false;
+        const source = file.sourcePathHash ?? file.id;
+        if (seenSources.has(source)) return false;
+        seenSources.add(source);
+        return true;
+      }),
       projectionDir,
       projectionAccessRoot: taskProjectionRoot,
     };
