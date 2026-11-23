@@ -18,7 +18,7 @@
  * ## 它钉的是哪次事故
  *
  * `mirror-exec.html` 长期一条 `@font-face` 都没有,却声明着
- * `--sans: "Albert Sans", "PingFang SC", …`。页面照常渲染、照常好看、
+ * `--sans: \"Albert Sans\", \"PingFang SC\", …`。页面照常渲染、照常好看、
  * 逐格比对照常出数 —— 只是那些数全是 **PingFang SC** 量出来的。
  * 而稿子那一侧(`build-matrix.mjs`)自带 base64 内联的 Albert Sans。
  * 于是「稿子 vs 我们」实际上是「Albert Sans vs PingFang SC」,
@@ -34,7 +34,7 @@
  * 一个都匹配不上就「全都加载好了」,真空成立。正好是这次要抓的那种坏法。
  * 拿它当判据 = 一条永远绿的线。
  *
- * 所以真正的判据是**差分**:同一段文本,用 `"Albert Sans", <哨兵>` 和只用
+ * 所以真正的判据是**差分**:同一段文本,用 `\"Albert Sans\", <哨兵>` 和只用
  * `<哨兵>` 各量一次宽度,**必须不相等**。字体没进来时两边都落到哨兵上、宽度相同,
  * 当场红。再配一个**反向对照**:一个确定不存在的字族,它的差分必须是 0 ——
  * 这一条是给判据自己洗清的,差分量法要是坏了(比如把哨兵也弄丢了),
@@ -110,16 +110,16 @@ const root = repoRoot();
 const expected = extractFontFaces(readFileSync(join(root, FONT_SOURCE), 'utf8')).map(descriptorsOf);
 if (expected.length === 0) bad(`${FONT_SOURCE} 里一条 @font-face 都没有 —— 先修那边`);
 
-const blockMatch = new RegExp(`<style id="${BLOCK_ID}"[^>]*>([\\s\\S]*?)</style>`).exec(html);
+const blockMatch = new RegExp(`<style id=\"${BLOCK_ID}\"[^>]*>([\\s\\S]*?)</style>`).exec(html);
 if (!blockMatch) {
   bad(
-    '这份页面**还没上字体**(找不到 <style id="' + BLOCK_ID + '">)。\n'
+    '这份页面**还没上字体**(找不到 <style id=\"' + BLOCK_ID + '\">)。\n'
     + '     仓库里那份本来就不带字体:同一份字节 apps/web/public/fonts/ 里已经有了,再复制一份\n'
     + '     进 HTML 要 +423KB,并撑破 CI 的单文件 1048576 字节上限。字体由 inline-fonts.mjs\n'
     + '     在本地注入,注入结果不提交。\n'
     + '     现在量出来的行高 / 文本宽度 / 折行位置 / 卡片高度都是回退面 PingFang SC 的,\n'
     + '     而稿子那一侧自带内联字体 —— 比出来的差异会整批带偏。\n'
-    + '     跑这条:node docs/design/chat-mirror/inline-fonts.mjs',
+    + '     跑这条:node docs/design/chat-mirror/inline-fonts.mjs'
   );
 } else {
   const actual = extractFontFaces(blockMatch[1]).map(descriptorsOf);
@@ -139,11 +139,15 @@ if (!blockMatch) {
 
 // ── ② 运行时:浏览器里真的用上了吗 ────────────────────────────────────────
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const chrome = spawn(CHROME, [
+const launchArgs = [
   '--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
   `--remote-debugging-port=${PORT}`, `--user-data-dir=/tmp/od-check-fonts-${PORT}`,
   '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank',
-], { stdio: 'ignore' });
+];
+if (process.platform === 'darwin') {
+  launchArgs.push('--use-mock-keychain');
+}
+const chrome = spawn(CHROME, launchArgs, { stdio: 'ignore' });
 
 async function target() {
   for (let i = 0; i < 60; i += 1) {
