@@ -106,9 +106,10 @@ export interface ChatSseStartPayload {
   agentId?: string;
   bin: string;
   protocolVersion?: typeof CHAT_SSE_PROTOCOL_VERSION;
-  /** Legacy daemon-internal absolute cwd. Kept for compatibility during W2 adoption. */
+  /** Legacy absolute daemon cwd. */
   cwd?: string | null;
   projectId?: string | null;
+  requestedModel?: string | null;
   model?: string | null;
   reasoning?: string | null;
   serviceTier?: string | null;

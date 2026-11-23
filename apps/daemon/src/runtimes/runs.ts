@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import {
   todoSnapshotHasUnfinishedWork,
   turnEndedByAskingUser,
+  withRequestedRunModel,
 } from '@open-design/contracts';
 import {
   collectProcessTreePids,
@@ -1500,17 +1501,14 @@ export function createChatRunService({
   };
 
   const emit = (run, event, data, timestamp = Date.now(), persistLifecycle = true) => {
-    // Once a terminal verdict is waiting only on process-tree quiescence, the
-    // attempt no longer owns transcript or error state. Shutdown bytes and
-    // duplicate child callbacks must not overwrite the classified verdict
-    // during that bounded window. The termination barrier itself may still
-    // publish `termination_failed` evidence before the final `end` event.
+    // During process cleanup only termination diagnostics still own the Run.
     if (run.pendingTerminalFinish && event !== 'diagnostic') return null;
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
     }
+    data = withRequestedRunModel(event, data, run.model);
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp };
     // Fold committed side effects BEFORE the ring buffer can drop this record,

@@ -1,7 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import type Database from 'better-sqlite3';
 import type { PersistedAgentEvent } from '@open-design/contracts';
-import { MAX_ARTIFACT_FOCUS_SHOW, MAX_NEXT_STEP_SUGGESTIONS } from '@open-design/contracts';
+import { MAX_ARTIFACT_FOCUS_SHOW, MAX_NEXT_STEP_SUGGESTIONS, runFallbackModel, runStartStatus, withRequestedRunModel } from '@open-design/contracts';
 import type { RunFinishedProps } from '@open-design/contracts/analytics';
 import {
   appendMessageAgentEvents,
@@ -19,6 +19,7 @@ type SqliteDb = Database.Database;
 
 type ChatRunMessageState = {
   id: string;
+  model?: string | null;
   assistantMessageId?: string | null;
   conversationId?: string | null;
   agentId?: string | null;
@@ -245,7 +246,7 @@ export function persistRunEventToAssistantMessage(
 ): void {
   if (!run.assistantMessageId) return;
   if (event === 'start') retireSupersededAttemptProse(db, run);
-  const persisted = runSseEventToPersistedAgentEvent(event, data);
+  const persisted = runSseEventToPersistedAgentEvent(event, withRequestedRunModel(event, data, run.model));
   if (!persisted) {
     if (event === 'end' || event === 'close') flushRunMessageEvents(run);
     return;
@@ -456,13 +457,7 @@ function unboundedPersistedAgentEvent(
   data: unknown,
 ): PersistedAgentEvent | null {
   const record = isRecord(data) ? data : {};
-  if (event === 'start') {
-    return {
-      kind: 'status',
-      label: 'starting',
-      ...(typeof record.bin === 'string' ? { detail: record.bin } : {}),
-    };
-  }
+  if (event === 'start') return runStartStatus(record);
   if (event === 'stdout') {
     const chunk = typeof record.chunk === 'string' ? record.chunk : '';
     return chunk ? { kind: 'text', text: chunk } : null;
@@ -530,10 +525,7 @@ function unboundedAgentPayloadToPersistedAgentEvent(data: unknown): PersistedAge
   if (!isRecord(data)) return null;
   const type = data.type;
   if (type === 'status' && typeof data.label === 'string') {
-    // Filter out transient ACP status events that carry no user-visible content.
-    // The web-side translateAgentEvent already normalizes these for live display,
-    // but the daemon must also suppress them at persistence time so history replay
-    // doesn't show empty expandable rows labelled "tool_call" or "tool_call_update".
+    // Drop transient ACP markers so replay doesn't display empty tool rows.
     if (TRANSIENT_ACP_PERSISTED_STATUS_LABELS.has(data.label)) return null;
     const detail =
       typeof data.detail === 'string'
@@ -543,7 +535,7 @@ function unboundedAgentPayloadToPersistedAgentEvent(data: unknown): PersistedAge
           : typeof data.ttftMs === 'number'
             ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
             : undefined;
-    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}), ...runFallbackModel(data.label, data.model) };
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };

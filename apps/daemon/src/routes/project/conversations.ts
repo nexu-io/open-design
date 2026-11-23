@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { MESSAGES_STREAM_CONTENT_TYPE, type ChatMessage, type ChatSessionMode, type TaskDisplayProjection } from '@open-design/contracts';
+import { MESSAGES_STREAM_CONTENT_TYPE, preservesRunModelEvidence, type ChatMessage, type ChatSessionMode, type TaskDisplayProjection } from '@open-design/contracts';
 import { streamMessages } from '../../http/message-stream.js';
 import { readAnalyticsContext } from '../../analytics.js';
 import { nextForkedConversationTitle } from '../../conversation-fork-title.js';
@@ -433,11 +433,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     res.json({ messages: responseMessages });
   });
 
-  // #6396: the daemon is the single writer of a daemon-backed assistant
-  // message's run events / content / last-run-event id / run status. A stale
-  // web-client snapshot (captured in memory before a reconnect or project
-  // switch, then PUT after the daemon appended more events) must never regress
-  // those fields — that's how the early `status:model` event got wiped.
+  // #6396: stale client snapshots must preserve daemon-owned run events and status.
   //
   // The guard is a "no regression" rule, not a blanket write-ownership rule,
   // and it has two independent triggers:
@@ -502,10 +498,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       };
     }
     const incomingEvents = Array.isArray(incoming.events) ? incoming.events : [];
-    const shrinksEvents =
-      Boolean(stored.events) &&
-      stored.events!.length > 0 &&
-      incomingEvents.length < stored.events!.length;
+    const storedEvents = stored.events ?? [];
+    const regressesEvents = incomingEvents.length < storedEvents.length
+      || !preservesRunModelEvidence(storedEvents, incomingEvents);
     const incomingStatus =
       typeof incoming.runStatus === 'string' ? incoming.runStatus : null;
     const regressesTerminalStatus =
@@ -586,7 +581,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         };
       }
     }
-    if (!shrinksEvents && !regressesTerminalStatus) {
+    if (!regressesEvents && !regressesTerminalStatus) {
       const storedEventCount = Array.isArray(stored.events) ? stored.events.length : 0;
       const eventsGrew = incomingEvents.length > storedEventCount;
       const incomingText = typeof incoming.content === 'string' ? incoming.content : null;
