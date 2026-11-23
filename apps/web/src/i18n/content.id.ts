@@ -941,6 +941,7 @@ export const ID_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'apple': 'Elektronik konsumen. White space premium, SF Pro, citra sinematik.',
   'application': 'Dashboard aplikasi dengan estetika bertema ungu, navigasi top-bar, tata letak berbasis kartu, dan alur kerja yang mengutamakan developer.',
   'arc': '"Peramban yang menjelajah untuk Anda." Permukaan tembus pandang, kehangatan gradien, tata letak yang mengutamakan sidebar.',
+  'arco': 'Sistem desain enterprise open source dari ByteDance untuk produk admin dan back-office: aksi utama arcoblue, netral abu-abu dingin, tipografi 14px yang ringkas, radius kecil, input terisi tanpa garis tepi, dan palet terang/gelap resmi.',
   'artistic': 'Gaya berkontras tinggi dan ekspresif dengan tipografi kreatif dan pilihan warna berani untuk antarmuka yang memukau secara visual.',
   'atelier-zero': 'Sistem visual berkualitas majalah berbasis kolase: kanvas kertas hangat, citra\nplester-dan-arsitektur surealis, tipe display berukuran besar, garis tipis,\npenanda bagian angka Romawi, dan anotasi editorial kecil.\nTerinspirasi oleh produksi v',
   'bento': 'Tata letak grid modular dengan blok mirip kartu, hierarki yang jelas, spasi lembut, dan kontras visual halus untuk antarmuka yang teratur dan mudah dipindai.',

@@ -368,6 +368,8 @@ const DE_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   airbnb: 'Reisemarktplatz. Warmer Korallenakzent, fotogetrieben, abgerundete UI.',
   airtable: 'Spreadsheet-Datenbank-Hybrid. Farbenfroh, freundlich, strukturierte Datenästhetik.',
   apple: 'Unterhaltungselektronik. Premium-Weißraum, SF Pro, filmische Bildsprache.',
+  arco:
+    'Open-Source-Enterprise-Designsystem von ByteDance für Admin- und Backoffice-Produkte: Arcoblue-Primäraktionen, kühle Grautöne, kompakte 14px-Typografie, kleine Radien, randlose gefüllte Eingabefelder und offizielle Hell-/Dunkel-Paletten.',
   'atelier-zero':
     'Editoriales Studio-System. Warme Papierleinwand, surreale Plaster-und-Architektur-Collage, gemischte Italic-Serif-Display-Type, römische Ziffern als Sektionsmarker und ein einziger Korallenakzent — gemacht für Magazin-Landingpages, Studio-Sites und Manifestseiten.',
   binance: 'Krypto-Börse. Kräftiger gelber Akzent auf Monochrom, Trading-Floor-Dringlichkeit.',

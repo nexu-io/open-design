@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arco Design - reference components</title>
+    <meta name="description" content="Reference fixture for the OpenDesign Arco Design integration: arcoblue primary actions, borderless filled inputs, bordered cards and tables, status tags, and Arco's hover-lighter / active-darker state model." />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #ffffff;
+        --surface-warm: #f2f3f5;
+        --fg: #1d2129;
+        --fg-2: #4e5969;
+        --muted: #86909c;
+        --meta: var(--muted);
+        --border: #e5e6eb;
+        --border-soft: #f2f3f5;
+        --accent: #165dff;
+        --accent-on: #ffffff;
+        --accent-hover: #4080ff;
+        --accent-active: #0e42d2;
+        --success: #00b42a;
+        --warn: #ff7d00;
+        --danger: #f53f3f;
+        --font-display: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "noto sans", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-body: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "noto sans", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-mono: Consolas, Menlo, monospace;
+        --text-xs: 12px;
+        --text-sm: 13px;
+        --text-base: 14px;
+        --text-lg: 16px;
+        --text-xl: 20px;
+        --text-2xl: 24px;
+        --text-3xl: 36px;
+        --text-4xl: 48px;
+        --leading-body: 1.5715;
+        --leading-tight: 1.25;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 64px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+        --radius-sm: 2px;
+        --radius-md: 4px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 4px 10px rgba(0, 0, 0, 0.1);
+        --focus-ring: 0 0 0 2px #94bfff;
+        --motion-fast: 100ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.34, 0.69, 0.1, 1);
+        --container-max: 1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      [data-theme="dark"],
+      [arco-theme="dark"] {
+        --bg: #17171a;
+        --surface: #232324;
+        --surface-warm: rgba(255, 255, 255, 0.08);
+        --fg: rgba(255, 255, 255, 0.9);
+        --fg-2: rgba(255, 255, 255, 0.7);
+        --muted: rgba(255, 255, 255, 0.5);
+        --meta: var(--muted);
+        --border: #484849;
+        --border-soft: #2e2e30;
+        --accent: #3c7eff;
+        --accent-on: #ffffff;
+        --accent-hover: #306eff;
+        --accent-active: #689fff;
+        --success: #27c346;
+        --warn: #ff9626;
+        --danger: #f76965;
+        --elev-raised: 0 4px 10px rgba(23, 23, 26, 0.4);
+        --focus-ring: 0 0 0 2px #0e32a6;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body { background: var(--bg); color: var(--fg); font: 400 var(--text-base) / var(--leading-body) var(--font-body); }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 { font-family: var(--font-display); font-weight: 500; line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h1 { font-size: var(--text-2xl); }
+      h2 { font-size: var(--text-lg); }
+      h3 { font-size: var(--text-base); }
+      .page { min-height: 100vh; padding-block: var(--section-y-phone); }
+      .container { width: min(100% - (2 * var(--container-gutter-desktop)), var(--container-max)); margin-inline: auto; }
+      .stack-2 { display: grid; gap: var(--space-2); }
+      .stack-4 { display: grid; gap: var(--space-4); }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+      .eyebrow { color: var(--muted); font-size: var(--text-xs); }
+      .lead { max-width: 68ch; color: var(--fg-2); }
+      .layout-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: var(--space-4); margin-top: var(--space-6); }
+
+      .card { overflow: hidden; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-ring); transition: box-shadow var(--motion-base) linear; }
+      .card-hoverable:hover { box-shadow: var(--elev-ring), var(--elev-raised); }
+      .card-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: 46px; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+      .card-body { padding: var(--space-4); }
+
+      .btn { display: inline-flex; height: 32px; align-items: center; justify-content: center; gap: var(--space-2); padding: 0 15px; border: 1px solid transparent; border-radius: var(--radius-sm); font-size: var(--text-base); font-weight: 400; white-space: nowrap; transition: all var(--motion-fast) linear; }
+      .btn:focus-visible, .text-link:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary { background: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-primary:disabled { background: color-mix(in srgb, var(--accent), var(--surface) 55%); color: var(--accent-on); }
+      .btn-secondary { background: var(--surface-warm); color: var(--fg-2); }
+      .btn-secondary:hover { background: var(--border); }
+      .btn-secondary:active { background: color-mix(in srgb, var(--border), var(--fg) 12%); }
+      .btn-outline { border-color: var(--accent); background: transparent; color: var(--accent); }
+      .btn-outline:hover { border-color: var(--accent-hover); color: var(--accent-hover); }
+      .btn-outline:active { border-color: var(--accent-active); color: var(--accent-active); }
+      .btn-danger { background: var(--danger); color: var(--accent-on); }
+      .btn-loading::before { width: 12px; height: 12px; border: 2px solid currentcolor; border-right-color: transparent; border-radius: var(--radius-pill); animation: spin 1s linear infinite; content: ""; }
+      .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+      .field { display: grid; gap: var(--space-2); }
+      .field label { color: var(--fg-2); font-size: var(--text-base); }
+      .field input, .field select { width: 100%; height: 32px; padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg); transition: color var(--motion-fast) linear, border-color var(--motion-fast) linear, background-color var(--motion-fast) linear; }
+      .field input:hover, .field select:hover { background: var(--border); }
+      .field input:focus, .field select:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+      .field input[aria-invalid="true"] { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+      .field input[aria-invalid="true"]:focus { border-color: var(--danger); background: var(--surface); }
+      .field-help { color: var(--fg-2); font-size: var(--text-xs); }
+      .field-error { color: var(--danger); font-size: var(--text-xs); }
+
+      .tag { display: inline-flex; height: 24px; align-items: center; padding: 0 var(--space-2); border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg); font-size: var(--text-xs); }
+      .tag-success { background: color-mix(in srgb, var(--success) 12%, var(--surface)); color: var(--success); }
+      .tag-warning { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
+      .tag-danger { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); }
+      .tag-primary { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--accent); }
+
+      .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
+      .data-table th { padding: 9px var(--space-4); background: var(--surface-warm); color: var(--fg-2); font-weight: 500; text-align: left; }
+      .data-table td { padding: 9px var(--space-4); border-top: 1px solid var(--border); }
+      .data-table tbody tr:hover td { background: color-mix(in srgb, var(--surface-warm) 50%, var(--surface)); }
+      .num { font-variant-numeric: tabular-nums; text-align: right; }
+      .meta-text { color: var(--muted); font-size: var(--text-xs); }
+
+      .text-link { border-radius: var(--radius-sm); padding: 1px var(--space-1); color: var(--accent); text-decoration: none; transition: background-color var(--motion-fast) linear; }
+      .text-link:hover { background: var(--surface-warm); }
+      kbd { padding: 0 var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg-2); font: 400 var(--text-xs) / 1.6 var(--font-mono); }
+      .icon { display: inline-grid; width: 16px; height: 16px; place-items: center; color: var(--muted); }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (min-width: 768px) { .page { padding-block: var(--section-y-tablet); } }
+      @media (min-width: 1200px) { .page { padding-block: var(--section-y-desktop); } }
+      @media (max-width: 899px) { .layout-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 575px) { .container { width: min(100% - (2 * var(--container-gutter-phone)), var(--container-max)); } .row-between { align-items: flex-start; flex-direction: column; } }
+      @media (prefers-reduced-motion: reduce) { .btn-loading::before { animation: none; border-right-color: currentcolor; } }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="container">
+        <header class="row-between">
+          <div class="stack-2">
+            <p class="eyebrow">Arco Design</p>
+            <h1>Release console</h1>
+            <p class="lead">A back-office reference surface: bordered containers, filled inputs, one primary action per area, and status shown with text as well as color.</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" type="button">Export</button>
+            <button class="btn btn-primary" type="button">New release</button>
+          </div>
+        </header>
+
+        <section class="layout-grid" aria-label="Reference components">
+          <article class="card card-hoverable">
+            <header class="card-header">
+              <h2>Recent deployments</h2>
+              <a class="text-link" href="#all">View all</a>
+            </header>
+            <table class="data-table">
+              <thead>
+                <tr><th scope="col">Service</th><th scope="col">Status</th><th scope="col" class="num">Requests</th><th scope="col">Updated</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Payment gateway</td><td><span class="tag tag-success">Succeeded</span></td><td class="num">12,480</td><td class="meta-text">14:32</td></tr>
+                <tr><td>Search indexer</td><td><span class="tag tag-warning">Pending review</span></td><td class="num">3,215</td><td class="meta-text">13:05</td></tr>
+                <tr><td>Notification worker</td><td><span class="tag tag-danger">Failed</span></td><td class="num">0</td><td class="meta-text">09:47</td></tr>
+                <tr><td>Report builder</td><td><span class="tag tag-primary">Running</span></td><td class="num">1,092</td><td class="meta-text">08:20</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <aside class="card">
+            <header class="card-header"><h2>Create release</h2><span class="tag">Draft</span></header>
+            <div class="card-body stack-4">
+              <div class="field">
+                <label for="release-name">Release name</label>
+                <input id="release-name" value="v2.66 hotfix" />
+              </div>
+              <div class="field">
+                <label for="release-env">Environment</label>
+                <select id="release-env"><option>Production</option><option>Staging</option></select>
+                <p class="field-help">Production releases require one approver.</p>
+              </div>
+              <div class="field">
+                <label for="release-window">Release window</label>
+                <input id="release-window" aria-invalid="true" aria-describedby="release-window-error" value="" placeholder="HH:mm, 24-hour" />
+                <p id="release-window-error" class="field-error">Enter a start time, for example 22:00.</p>
+              </div>
+              <div class="actions">
+                <button class="btn btn-primary" type="button">Submit</button>
+                <button class="btn btn-outline" type="button">Save draft</button>
+                <button class="btn btn-danger" type="button">Discard</button>
+                <button class="btn btn-primary btn-loading" type="button" disabled aria-busy="true">Submitting</button>
+              </div>
+              <p class="meta-text"><span class="icon" aria-hidden="true">i</span> Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit.</p>
+            </div>
+          </aside>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

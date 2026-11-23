@@ -216,6 +216,8 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   airbnb: 'Marketplace de voyage. Accent corail chaleureux, fortement porté par la photo, UI arrondie.',
   airtable: 'Hybride spreadsheet / base de données. Coloré, accessible, esthétique de données structurées.',
   apple: 'Électronique grand public. Espace blanc premium, SF Pro, imagerie cinématique.',
+  arco:
+    'Design system enterprise open source de ByteDance pour les produits d’administration et de back-office : actions principales en arcoblue, neutres gris froids, typographie compacte en 14px, petits rayons, champs remplis sans bordure et palettes claire/sombre officielles.',
   'atelier-zero':
     'Système de studio éditorial. Canvas papier chaud, collage surréaliste plâtre + architecture, typographie display serif italique mixée, chiffres romains comme marqueurs de sections et un seul accent corail — fait pour landing pages magazine, sites de studio et pages manifeste.',
   binance: 'Exchange crypto. Accent jaune fort sur monochrome, urgence trading-floor.',

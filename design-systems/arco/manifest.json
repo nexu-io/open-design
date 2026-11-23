@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "arco",
+  "name": "Arco Design",
+  "category": "Professional & Corporate",
+  "description": "ByteDance's open-source enterprise design system for admin and back-office products: arcoblue primary actions, a cool ten-step gray scale, compact 14px typography, small 2–4px radii, borderless filled inputs, and official light and dark palettes.",
+  "source": {
+    "type": "bundled",
+    "origin": "OpenDesign curated integration of Arco Design from @arco-design/web-react 2.66.18 and @arco-design/color 0.4.0 (npm, MIT) and https://github.com/arco-design/arco-design at 84504beeaf68e8dd8a5fba7a74b45f4ca71c76f2 (site/docs_spec)"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  },
+  "usage": "USAGE.md",
+  "componentsManifest": "components.manifest.json",
+  "importMode": "normalized",
+  "craft": {
+    "applies": [],
+    "suggested": [
+      "color",
+      "accessibility-baseline"
+    ],
+    "exemptions": []
+  },
+  "preview": {
+    "dir": "preview",
+    "pages": [
+      {
+        "path": "preview/colors.html",
+        "role": "colors",
+        "title": "Colors"
+      },
+      {
+        "path": "preview/typography.html",
+        "role": "typography",
+        "title": "Typography"
+      },
+      {
+        "path": "preview/spacing.html",
+        "role": "spacing",
+        "title": "Spacing"
+      }
+    ]
+  },
+  "sourceFiles": {
+    "evidence": "source/evidence.md",
+    "tokens": "source/tokens.source.json"
+  }
+}

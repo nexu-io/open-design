@@ -941,6 +941,7 @@ export const PT_BR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'apple': 'Eletrônicos de consumo. Espaço em branco premium, SF Pro, imagens cinematográficas.',
   'application': 'Painel de aplicativo com estética em tema roxo, navegação em barra superior, layouts baseados em cards e fluxos de trabalho voltados para desenvolvedores.',
   'arc': '"O navegador que navega por você." Superfícies translúcidas, calor de gradiente, layout com barra lateral em primeiro plano.',
+  'arco': 'Sistema de design corporativo open source da ByteDance para produtos administrativos e de back-office: ações principais em arcoblue, neutros em cinza frio, tipografia compacta de 14px, raios pequenos, campos preenchidos sem borda e paletas oficiais clara e escura.',
   'artistic': 'Estilo expressivo e de alto contraste, com tipografia criativa e escolhas de cores ousadas para interfaces visualmente marcantes.',
   'atelier-zero': 'Um sistema visual de qualidade de revista, orientado por colagem: tela de papel quente, imagens surreais\nde gesso e arquitetura, tipografia de display superdimensionada, traços finíssimos,\nmarcadores de seção em numerais romanos e pequenas anotações editoriais.\nInspirado na produção v',
   'bento': 'Layout em grade modular com blocos no estilo de cards, hierarquia clara, espaçamento suave e contraste visual sutil para interfaces organizadas e fáceis de escanear.',

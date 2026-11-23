@@ -941,6 +941,7 @@ export const TR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'apple': 'Tüketici elektroniği. Premium beyaz alan, SF Pro, sinematik görseller.',
   'application': 'Mor temalı estetik, üst çubuk navigasyonu, kart tabanlı düzenler ve geliştirici öncelikli iş akışları içeren uygulama panosu.',
   'arc': '"Sizin yerinize gezinen tarayıcı." Yarı saydam yüzeyler, gradyan sıcaklığı, kenar çubuğu öncelikli düzen.',
+  'arco': 'ByteDance’in yönetim paneli ve back-office ürünleri için açık kaynaklı kurumsal tasarım sistemi: arcoblue birincil eylemler, soğuk gri nötrler, kompakt 14px tipografi, küçük köşe yarıçapları, kenarlıksız dolgulu giriş alanları ve resmî açık/koyu paletler.',
   'artistic': 'Görsel olarak çarpıcı arayüzler için yaratıcı tipografi ve cesur renk seçimleriyle yüksek kontrastlı, etkileyici stil.',
   'atelier-zero': 'Dergi kalitesinde, kolaj odaklı bir görsel sistem: sıcak kağıt tuvali, gerçeküstü\nalçı-ve-mimari görseller, aşırı büyük teşhir yazı tipi, ince çizgi kuralları,\nRoma rakamı bölüm işaretleri ve minik editöryel ek açıklamalar.\nProdüksiyon v\'den ilham alınmıştır',
   'bento': 'Düzenli, taranabilir arayüzler için kart benzeri bloklar, net hiyerarşi, yumuşak aralık ve ince görsel kontrast içeren modüler ızgara düzeni.',

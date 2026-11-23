@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arco Design spacing</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      h1, h2 { margin: 0; font-weight: 500; line-height: var(--leading-tight); }
+      h1 { font-size: var(--text-2xl); }
+      h2 { margin-bottom: var(--space-4); font-size: var(--text-lg); }
+      .intro { margin: var(--space-2) 0 var(--space-8); color: var(--fg-2); }
+      .layout { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8); }
+      .stack { display: grid; gap: var(--space-3); }
+      .row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: var(--space-4); color: var(--fg-2); font-size: var(--text-xs); }
+      .bar { height: var(--space-3); width: var(--size); border-radius: var(--radius-sm); background: var(--accent); }
+      .radii { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: var(--space-4); }
+      .radius { min-height: 88px; display: grid; place-items: center; background: var(--surface-warm); color: var(--fg-2); font: 400 var(--text-xs) / 1.5 var(--font-mono); box-shadow: var(--elev-ring); }
+      .heights { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-top: var(--space-8); }
+      .heights span { display: grid; place-items: center; padding: 0 var(--space-3); border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--fg-2); font-size: var(--text-xs); }
+      @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing, radius, and control size</h1>
+      <p class="intro">Arco's spacing scale on a 4px rhythm, small 2–8px radii, and 24/28/32/36px control heights.</p>
+      <div class="layout">
+        <section>
+          <h2>Spacing scale</h2>
+          <div class="stack">
+            <div class="row"><span>4px</span><div class="bar" style="--size: var(--space-1)"></div></div>
+            <div class="row"><span>8px</span><div class="bar" style="--size: var(--space-2)"></div></div>
+            <div class="row"><span>12px</span><div class="bar" style="--size: var(--space-3)"></div></div>
+            <div class="row"><span>16px</span><div class="bar" style="--size: var(--space-4)"></div></div>
+            <div class="row"><span>20px</span><div class="bar" style="--size: var(--space-5)"></div></div>
+            <div class="row"><span>24px</span><div class="bar" style="--size: var(--space-6)"></div></div>
+            <div class="row"><span>32px</span><div class="bar" style="--size: var(--space-8)"></div></div>
+            <div class="row"><span>48px</span><div class="bar" style="--size: var(--space-12)"></div></div>
+          </div>
+        </section>
+        <section>
+          <h2>Radius scale</h2>
+          <div class="radii">
+            <div class="radius" style="border-radius: var(--radius-sm)">2px / small</div>
+            <div class="radius" style="border-radius: var(--radius-md)">4px / medium</div>
+            <div class="radius" style="border-radius: var(--radius-lg)">8px / large</div>
+            <div class="radius" style="border-radius: var(--radius-pill)">round / circle</div>
+          </div>
+          <div class="heights" aria-label="Control heights">
+            <span style="height: 24px">mini 24</span>
+            <span style="height: 28px">small 28</span>
+            <span style="height: 32px">default 32</span>
+            <span style="height: 36px">large 36</span>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
