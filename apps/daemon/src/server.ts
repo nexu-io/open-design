@@ -273,6 +273,7 @@ import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
+  textDeltaFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
   readVelaLoginStatus,
@@ -512,6 +513,7 @@ import {
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
   cursorAuthGuidance,
+  isAntigravityAuthFailureText,
   normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
@@ -519,6 +521,7 @@ import { applyOpenCodeEventPlugin } from './runtimes/opencode-event-plugin.js';
 import { resolveOpenCodeEditBaseDirs } from './runtimes/opencode-permissions.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
+import { syncAntigravityBrainArtifacts } from './runtimes/antigravity-sync.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
@@ -12667,6 +12670,7 @@ export async function startServer({
     // Set from the `status` event's `sessionId` in `sendAgentEvent` below.
     const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
     let capturedSessionId: string | null = null;
+    let antigravityConversationId: string | null = null;
     // --- Model resolution hoisted above the resume-identity guard ---
     // The guard (and the persisted `agent_sessions.model`) must key off the
     // model identity actually requested for this turn. Explicit `default` is
@@ -13513,6 +13517,24 @@ export async function startServer({
       // head to the tail-biased run.events at their exact stream offset, so no
       // artifact is lost and none is double-counted regardless of where in the
       // stream it appears.
+      //
+      // Antigravity streams deliver user-facing text as `agent` text_delta events
+      // rather than raw stdout, so accumulate them for artifact extraction.
+      const antigravityArtifactChunk =
+        def.id === 'antigravity' &&
+        event === 'agent' &&
+        data &&
+        data.type === 'text_delta' &&
+        typeof data.delta === 'string'
+          ? data.delta
+          : null;
+      if (antigravityArtifactChunk !== null) {
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + antigravityArtifactChunk.length;
+        if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+          run.plainArtifactStdout =
+            ((run.plainArtifactStdout ?? '') + antigravityArtifactChunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+        }
+      }
       if (event === 'stderr' && data && typeof data.chunk === 'string' && data.chunk) {
         failureStderrWindow = `${failureStderrWindow}${data.chunk}`.slice(
           -FAILURE_STDERR_WINDOW_CAP,
@@ -14529,28 +14551,6 @@ export async function startServer({
       }
     }
 
-    // Serialize antigravity spawns whose buildArgs writes a concrete
-    // model into settings.json. Two concurrent runs with different
-    // models would otherwise race the file: A writes model A, B writes
-    // model B, then A's agy reads model B. The lock is acquired BEFORE
-    // buildArgs (which performs the write) and released asynchronously
-    // AFTER agy's --log-file confirms the model was propagated. See
-    // `antigravity.ts` for the chain implementation.
-    let antigravityModelLockRelease: (() => void) | null = null;
-    const antigravityConcreteModel =
-      def.id === 'antigravity'
-      && typeof agentOptions.model === 'string'
-      && agentOptions.model.length > 0
-      && agentOptions.model !== 'default'
-        ? agentOptions.model
-        : null;
-    if (antigravityConcreteModel) {
-      const { acquireAntigravityModelLock } = await import(
-        './runtimes/defs/antigravity.js'
-      );
-      antigravityModelLockRelease = await acquireAntigravityModelLock();
-    }
-
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
@@ -15416,56 +15416,6 @@ export async function startServer({
       run.child = child;
       run.childPid = typeof child.pid === 'number' ? child.pid : null;
       run.processGroupId = spawnedAgent.processGroupId;
-      // Schedule release of the antigravity model lock once agy's
-      // --log-file confirms the chosen model was propagated to the
-      // backend (the upstream signal that settings.json was read).
-      // The watcher's `false` return (timeout) deliberately does NOT
-      // release — looper review at 263fd2fe7 flagged that releasing
-      // on timeout reopens the slow-cold-start race: a >15s agy
-      // startup that hadn't yet read settings.json would let run B
-      // rewrite the file and run A would then read run B's model.
-      // The exit handler is the canonical fallback that releases the
-      // lock no matter what (crashed agy, fast exit, etc.) so the
-      // queue can never starve permanently.
-      if (
-        antigravityModelLockRelease
-        && antigravityConcreteModel
-        && agentLogFilePath
-      ) {
-        const releaseOnce = (() => {
-          let fired = false;
-          return () => {
-            if (fired) return;
-            fired = true;
-            antigravityModelLockRelease?.();
-          };
-        })();
-        const watcherAbort = new AbortController();
-        const { waitForAgyToReadModel } = await import(
-          './runtimes/defs/antigravity.js'
-        );
-        void waitForAgyToReadModel(
-          agentLogFilePath,
-          antigravityConcreteModel,
-          { abortSignal: watcherAbort.signal },
-        )
-          .then((found) => {
-            // Only release on TRUE confirmation; a `false` return means
-            // the watcher ran out of its polling window without seeing
-            // the propagation line. We hold the lock until child exit
-            // so a slow-cold-start agy can't be pre-empted by a
-            // concurrent settings.json rewrite from run B.
-            if (found) releaseOnce();
-          })
-          .catch(() => undefined);
-        child.once('exit', () => {
-          // Stop the watcher so its pending readFile / setTimeout
-          // chain does not outlive the run and leak into subsequent
-          // antigravity spawns (or test cases).
-          watcherAbort.abort();
-          releaseOnce();
-        });
-      }
       if (
         (def.promptViaStdin || def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT) &&
         child.stdin &&
@@ -16270,6 +16220,17 @@ export async function startServer({
           resumed: agentResumeCtx.isResuming,
         });
         publishNativeSessionRecoveryMetadata();
+      }
+      // Antigravity does not resume natively (see defs/antigravity.ts), but
+      // its `init` frame names the conversation whose brain directory holds
+      // the files agy wrote; the close handler syncs them into the project.
+      if (
+        def.id === 'antigravity' &&
+        ev?.type === 'status' &&
+        typeof ev.sessionId === 'string' &&
+        ev.sessionId.length > 0
+      ) {
+        antigravityConversationId = ev.sessionId;
       }
       lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
       noteAgentActivity();
@@ -17219,8 +17180,25 @@ export async function startServer({
         code === 0 &&
         !run.cancelRequested &&
         trackingSubstantiveOutput &&
-        !agentProducedOutput
+        !agentProducedOutput &&
+        // Antigravity has a later, log-aware silent-exit branch when no
+        // stdout was seen at all (agy fails silently on quota/auth in print
+        // mode). If stdout was seen (e.g. Gemini init/usage records) but
+        // carried no assistant content, fall through to AGENT_EXECUTION_FAILED.
+        !(def.id === 'antigravity' && !childStdoutSeen)
       ) {
+        const authFailure = classifyAgentAuthFailure(
+          agentId,
+          `${agentStderrTail}\n${agentStdoutTail}`,
+        );
+        if (authFailure?.status === 'missing') {
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? `${def.name} authentication required. Please re-authenticate and retry.`,
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
         markRpcCloseReason('empty_output');
         return finishWithRetryDecision('failed', code, signal, {
           emptyReplyError: createSseErrorPayload(
@@ -17276,14 +17254,31 @@ export async function startServer({
       // Plain-stream empty-output guard: plain agents send raw stdout
       // chunks without structured event tracking. Detect auth failures
       // and quota / upstream errors when exit 0 but no stdout was seen.
-      if (
-        code === 0 &&
+      //
+      // Antigravity is a structured stream (trackingSubstantiveOutput is
+      // set at spawn), so the plain branch never fires for it; but agy can
+      // still exit 0 having produced no agent content. Print mode is silent
+      // on stdout/stderr for both missing-auth AND quota-exhausted failures,
+      // so the daemon pipes agy's `--log-file` to `agentLogFilePath` and
+      // this guard greps the upstream error code (RESOURCE_EXHAUSTED 429 for
+      // quota, "not logged into Antigravity" for auth) to route the user to
+      // the right guidance.
+      const antigravitySilentExit =
+        def.id === 'antigravity' &&
+        !agentProducedOutput &&
+        !childStdoutSeen &&
         !run.cancelRequested &&
-        !trackingSubstantiveOutput &&
-        !childStdoutSeen
+        code === 0;
+      if (
+        (code === 0 &&
+          !run.cancelRequested &&
+          !trackingSubstantiveOutput &&
+          !childStdoutSeen) ||
+        antigravitySilentExit
       ) {
         markRpcCloseReason('empty_output');
-        const combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
+        const combinedDetail = `${agentStderrTail}
+${agentStdoutTail}`;
         const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
         if (authFailure) {
           // A login problem is a real failure, not an empty reply.
@@ -17293,6 +17288,39 @@ export async function startServer({
             { retryable: true },
           ));
           return finishWithRetryDecision('failed', 0, signal);
+        }
+        if (def.id === 'antigravity') {
+          const serviceFailure = classifyAgentServiceFailure(combinedDetail);
+          if (serviceFailure === 'RATE_LIMITED') {
+            // `RESOURCE_EXHAUSTED` is agy's hard per-model quota signal. An
+            // ordinary transient 429 is safe to retry, but retrying the same
+            // model on a hard quota only replaces the useful guidance with a
+            // second empty response (and can race the previous attempt's log
+            // cleanup).
+            const isHardQuota =
+              /RESOURCE_EXHAUSTED|(?:individual )?quota (?:reached|exhausted|exceeded)|(?:session|usage) limit/i.test(
+                combinedDetail,
+              );
+            send('error', createSseErrorPayload(
+              'RATE_LIMITED',
+              antigravityQuotaGuidance(),
+              { retryable: !isHardQuota },
+            ));
+            return finishWithRetryDecision('failed', 0, signal, {
+              allowRetry: !isHardQuota,
+            });
+          }
+          if (!serviceFailure) {
+            // Neither classifier matched a silent agy exit: empirically that
+            // is missing OAuth (the only other silent path, quota, was caught
+            // above from the log file).
+            send('error', createSseErrorPayload(
+              'AGENT_AUTH_REQUIRED',
+              antigravityAuthGuidance(),
+              { retryable: true },
+            ));
+            return finishWithRetryDecision('failed', 0, signal);
+          }
         }
         return finishWithRetryDecision('failed', 0, signal, {
           emptyReplyError: createSseErrorPayload(
@@ -17425,6 +17453,32 @@ export async function startServer({
               metadata: project?.metadata,
             });
             const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+            if (
+              def.id === 'antigravity' &&
+              antigravityConversationId &&
+              run.projectId
+            ) {
+              try {
+                const childEnv = spawnedAgentEnv ?? agentSpawnEnv;
+                const childHome =
+                  childEnv?.OD_AGENT_HOME ||
+                  childEnv?.HOME ||
+                  childEnv?.USERPROFILE ||
+                  (SANDBOX_RUNTIME.enabled ? SANDBOX_RUNTIME.roots.agentHomeDir : os.homedir());
+                const brainBaseDir = path.join(childHome, '.gemini', 'antigravity-cli', 'brain');
+                await syncAntigravityBrainArtifacts({
+                  projectsRoot: PROJECTS_DIR,
+                  projectId: run.projectId,
+                  sessionId: antigravityConversationId,
+                  projectMetadata: project?.metadata,
+                  brainBaseDir,
+                  agentHome: childHome,
+                  writeProjectFileFn: writeProjectFile,
+                });
+              } catch {
+                /* brain-sync best-effort */
+              }
+            }
             for (const f of files) {
               const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
               if (ext !== '.html' && ext !== '.htm') continue;
@@ -17445,7 +17499,7 @@ export async function startServer({
       }
       if (
         status === 'succeeded' &&
-        (def.streamFormat ?? 'plain') === 'plain' &&
+        ((def.streamFormat ?? 'plain') === 'plain' || def.id === 'antigravity') &&
         run.projectId
       ) {
         // Reconstruct the agent's stdout for artifact extraction from two
@@ -17468,7 +17522,10 @@ export async function startServer({
         //     was already unrecoverable before this change (the old code only
         //     ever had the tail).
         const head = run.plainArtifactStdout ?? '';
-        const tail = plainStdoutFromRunEvents(run.events);
+        const tail =
+          def.id === 'antigravity'
+            ? textDeltaFromRunEvents(run.events)
+            : plainStdoutFromRunEvents(run.events);
         const totalBytes = run.plainStdoutTotalBytes ?? head.length;
         const tailStart = Math.max(0, totalBytes - tail.length);
         let plainArtifacts: ReturnType<typeof extractPlainStreamArtifacts>;
@@ -17949,7 +18006,23 @@ export async function startServer({
           },
         );
       }
-      } finally {
+    } catch (childCloseErr) {
+      console.error('[runs] child close error:', childCloseErr);
+      if (!design.runs.isTerminal(run.status)) {
+        try {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `Internal daemon error during run completion: ${childCloseErr instanceof Error ? childCloseErr.message : String(childCloseErr)}`,
+            { retryable: false },
+          ));
+        } catch {}
+        try {
+          finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+        } catch (finishErr) {
+          console.error('[runs] finishWithRetryDecision failed in child close catch:', finishErr);
+        }
+      }
+    } finally {
         // Superseded attempts and early/error exits also release their own
         // receipt. The cleanup owner separately fences the shutdown deadline.
         completeCodexEvidenceCollection();
