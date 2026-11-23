@@ -64,6 +64,7 @@ import {
   inspectDaemonRuntime,
   inspectDesktopRuntime,
   inspectWebRuntime,
+  validateStartupTimeouts,
   waitForDaemonRuntime,
   waitForDesktopRuntime,
   waitForWebRuntime,
@@ -111,8 +112,9 @@ function output(payload: unknown, options: CliOptions = {}): void {
   printJson(payload);
 }
 
-function assertSupportedNodeRuntimeForStart(): void {
+function validateStartup(): void {
   if (!isSupportedNodeRuntime()) throw createUnsupportedNodeRuntimeError();
+  validateStartupTimeouts();
 }
 
 function normalizeDisplayUrl(url: string): string {
@@ -1173,7 +1175,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
   .option("--parent-pid <pid>", "stop started apps when this owner process exits")
   .action(
     async (appName: string | undefined, options: CliOptions) => {
-      assertSupportedNodeRuntimeForStart();
+      validateStartup();
       const parentPid = parseParentPidOption(options.parentPid);
       if (parentPid != null && !isProcessAlive(parentPid)) {
         throw new Error(`--parent-pid process is not alive: ${parentPid}`);
@@ -1195,7 +1197,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
 
 addPortOptions(addSharedOptions(cli.command("run [app]", "Start apps and keep this command alive until interrupted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
-    assertSupportedNodeRuntimeForStart();
+    validateStartup();
     await runForeground(resolveToolDevConfig(options), appName, options);
   },
 );
@@ -1217,7 +1219,7 @@ addSharedOptions(cli.command("stop [app]", "Stop daemon, web, desktop, or all wh
 
 addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
-    assertSupportedNodeRuntimeForStart();
+    validateStartup();
     printRestartResult(await restartTargets(resolveToolDevConfig(options), appName, options), options);
   },
 );

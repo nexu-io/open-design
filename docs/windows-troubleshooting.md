@@ -228,6 +228,19 @@ OpenDesign dev server ready
 
 The exact port may change; always read the terminal output.
 
+### Daemon or web startup times out
+
+If a cold start takes longer than the default wait, set the daemon or web
+startup budget before running `tools-dev`. Both values take a positive integer
+in milliseconds. The daemon defaults to 120,000 ms and the web sidecar
+defaults to 35,000 ms, or 120,000 ms when `CI=true`.
+
+```powershell
+$env:OD_TOOLS_DEV_DAEMON_STARTUP_TIMEOUT_MS = "600000"
+$env:OD_TOOLS_DEV_WEB_STARTUP_TIMEOUT_MS = "300000"
+pnpm tools-dev run web
+```
+
 ---
 
 ## Quick diagnostic checklist

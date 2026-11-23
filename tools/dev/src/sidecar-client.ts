@@ -25,6 +25,23 @@ export const DAEMON_STARTUP_TIMEOUT_MS = 120_000;
 // Concurrent CI workers can need longer for Next dev cold initialization.
 const WEB_STARTUP_TIMEOUT_MS = process.env.CI === "true" ? 120_000 : 35_000;
 const DESKTOP_STARTUP_TIMEOUT_MS = 15_000;
+const DAEMON_STARTUP_TIMEOUT_ENV = "OD_TOOLS_DEV_DAEMON_STARTUP_TIMEOUT_MS";
+const WEB_STARTUP_TIMEOUT_ENV = "OD_TOOLS_DEV_WEB_STARTUP_TIMEOUT_MS";
+
+function readStartupTimeoutMs(key: string, fallbackMs: number): number {
+  const value = process.env[key];
+  if (value == null) return fallbackMs;
+  const timeoutMs = Number(value);
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new Error(`${key} must be a positive integer in milliseconds`);
+  }
+  return timeoutMs;
+}
+
+export function validateStartupTimeouts(): void {
+  readStartupTimeoutMs(DAEMON_STARTUP_TIMEOUT_ENV, DAEMON_STARTUP_TIMEOUT_MS);
+  readStartupTimeoutMs(WEB_STARTUP_TIMEOUT_ENV, WEB_STARTUP_TIMEOUT_MS);
+}
 
 type ProcessAliveProbe = () => boolean;
 
@@ -44,7 +61,7 @@ export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs 
 
 export async function waitForDaemonRuntime(
   runtime: AppRuntimeLookup,
-  timeoutMs = DAEMON_STARTUP_TIMEOUT_MS,
+  timeoutMs = readStartupTimeoutMs(DAEMON_STARTUP_TIMEOUT_ENV, DAEMON_STARTUP_TIMEOUT_MS),
   isProcessAlive?: ProcessAliveProbe,
 ): Promise<DaemonStatusSnapshot> {
   const startedAt = Date.now();
@@ -56,7 +73,7 @@ export async function waitForDaemonRuntime(
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
   assertSpawnedProcessAlive(APP_KEYS.DAEMON, isProcessAlive);
-  throw new Error("daemon did not expose status in time");
+  throw new Error(`daemon did not expose status in time (${timeoutMs} ms)`);
 }
 
 export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<WebStatusSnapshot | null> {
@@ -69,7 +86,7 @@ export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 8
 
 export async function waitForWebRuntime(
   runtime: AppRuntimeLookup,
-  timeoutMs = WEB_STARTUP_TIMEOUT_MS,
+  timeoutMs = readStartupTimeoutMs(WEB_STARTUP_TIMEOUT_ENV, WEB_STARTUP_TIMEOUT_MS),
   isProcessAlive?: ProcessAliveProbe,
 ): Promise<WebStatusSnapshot> {
   const startedAt = Date.now();
@@ -81,7 +98,7 @@ export async function waitForWebRuntime(
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
   assertSpawnedProcessAlive(APP_KEYS.WEB, isProcessAlive);
-  throw new Error("web did not expose status in time");
+  throw new Error(`web did not expose status in time (${timeoutMs} ms)`);
 }
 
 export async function inspectDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DesktopStatusSnapshot | null> {

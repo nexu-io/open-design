@@ -58,4 +58,19 @@ describe("tools-dev CLI argument rewriting", () => {
     assert.match(result.stderr, /unsupported tools-dev app: not-an-app/);
     assert.doesNotMatch(result.stderr, /option `--env-file <path>` value is missing/);
   });
+
+  it("rejects an invalid startup timeout before resolving the restart target", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "src/index.ts", "restart", "daemon", "--namespace", "invalid/namespace", "--no-env-file"],
+      {
+        cwd: toolsDevRoot,
+        encoding: "utf8",
+        env: { ...process.env, OD_TOOLS_DEV_DAEMON_STARTUP_TIMEOUT_MS: "0" },
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /OD_TOOLS_DEV_DAEMON_STARTUP_TIMEOUT_MS must be a positive integer/);
+  });
 });
