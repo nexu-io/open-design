@@ -1475,15 +1475,8 @@ function resolveSafe(dir, name) {
   return target;
 }
 
-// Symlink-aware variant of resolveSafe. resolveSafe only does string-prefix
-// validation, which is fooled by symlinks *inside* the project tree
-// (a `assets/` symlink pointing at `/Users/me/.ssh` passes the prefix
-// check because the literal path stays under dir, but the OS follows
-// the link at open() time). This helper realpath()s the resolved
-// candidate (or its existing prefix, for writes that haven't created
-// the file yet) and re-validates against the realpath of dir, so
-// descendant symlinks can't reach outside the project.
-async function resolveSafeReal(dir, name) {
+/** Keep an existing path or future write under the canonical root, including symlinks. */
+export async function resolveSafeReal(dir, name) {
   const candidate = resolveSafe(dir, name);
   const rootReal = await realpath(dir).catch(() => dir);
   let real;

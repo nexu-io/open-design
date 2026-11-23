@@ -255,6 +255,7 @@ authentication, and the boundary between REST and MCP.
 - PNG, JPEG, GIF and WebP project attachments up to 1 MB reach Codex as
   `localImage` inputs on app-server and as `--image` arguments on the legacy
   transport, including follow-up turns. Project file references remain in the prompt.
+  Classic chat checks explicit image uploads by content before delivery.
 - Detection uses `codex login status` for auth and `codex debug models` for
   live model discovery, with static model hints as a fallback. Skills use the
   shared composition/staging path in §4 rather than version-gated loading from

@@ -137,7 +137,7 @@ import {
   excludeAcpImagePathsAlreadyDeliveredAsResources,
   selectPromptImagePaths,
 } from './runtimes/chat-prompt-inputs.js';
-import { isCodexPromptImage, resolveCodexPromptImages } from './runtimes/codex-image-inputs.js';
+import { isCodexPromptImage, resolveCodexPromptImages, resolveCodexUploadedImages } from './runtimes/codex-image-inputs.js';
 import {
   agentStdinPromptPayload,
   recordPromptDeliveredAtSpawn,
@@ -11902,8 +11902,7 @@ export async function startServer({
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
 
-    // Sanitise supplied image paths: must live under UPLOAD_DIR and stay
-    // below the prompt-image safety cap.
+    // Keep legacy uploads under UPLOAD_DIR and the image size cap.
     if (run.odNextTaskInputSnapshot) {
       if (
         strategyTaskAtStart
@@ -11951,7 +11950,8 @@ export async function startServer({
         'Failed to read one or more image attachments.',
       );
     }
-    const transportSourceImages = odNextTaskInputSnapshot?.imagePaths ?? safeImages;
+    const transportSourceImages = odNextTaskInputSnapshot?.imagePaths
+      ?? (def.id === 'codex' ? await resolveCodexUploadedImages(safeImages) : safeImages);
     const amrStagedImages =
       def.id === 'amr' && !odNextTaskInputSnapshot
         ? await stageAmrImagePaths(cwd ?? PROJECT_ROOT, safeImages, UPLOAD_DIR)
@@ -14554,9 +14554,7 @@ export async function startServer({
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
     try {
-      // Optional argv flags are gated on the `--help` capability map, which used
-      // to be filled only by `GET /api/agents`. Probe it here so a daemon that
-      // has never served that route still builds the same argv as one that has.
+      // Populate argv capabilities even if no client fetched `GET /api/agents` first.
       await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
       args = def.buildArgs(
         composed,

@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveProjectFilePath } from '../src/projects.js';
-import { isCodexPromptImage, resolveCodexPromptImages } from '../src/runtimes/codex-image-inputs.js';
+import {
+  isCodexPromptImage,
+  resolveCodexPromptImages,
+  resolveCodexUploadedImages,
+} from '../src/runtimes/codex-image-inputs.js';
 import {
   formatDesignFilesWorkspaceHint,
   formatProjectAttachmentHint,
@@ -20,6 +24,28 @@ import {
 const png = Buffer.from('89504e470d0a1a0a', 'hex');
 
 describe('Codex project images', () => {
+  it('recognizes legacy uploads by bytes and retains only images inside the upload root', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'od-codex-upload-images-'));
+    try {
+      const uploads = path.join(root, 'uploads');
+      const first = path.join(uploads, 'first.png');
+      const second = path.join(uploads, 'second.bin');
+      const mislabeled = path.join(uploads, 'text.png');
+      const outside = path.join(root, 'outside.png');
+      await mkdir(uploads);
+      await Promise.all([
+        writeFile(first, png),
+        writeFile(second, png),
+        writeFile(mislabeled, 'synthetic text'),
+        writeFile(outside, png),
+      ]);
+      const images = await resolveCodexUploadedImages([second, mislabeled, outside, first, second], uploads);
+      expect(images).toEqual(await Promise.all([second, first].map((file) => realpath(file))));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('keeps valid project images in order and leaves other files as references', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'od-codex-project-images-'));
     try {
