@@ -121,9 +121,10 @@ describe('CloudSignInTip', () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
     expect(screen.getByText("Sign-in page didn't open?")).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Reopen/i }).getAttribute('href')).toBe(
-      'https://amr.example/activate',
-    );
+    const reopen = screen.getByRole('link', { name: /Reopen/i });
+    expect(reopen.getAttribute('href')).toBe('https://amr.example/activate');
+    // The text is the link; no trailing external-link icon (OPEND-4628).
+    expect(reopen.querySelector('svg')).toBeNull();
   });
 
   it('cancels a timed-out login so a retry click can start a fresh vela login', async () => {
