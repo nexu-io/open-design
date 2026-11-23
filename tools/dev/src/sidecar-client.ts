@@ -27,6 +27,7 @@ const WEB_STARTUP_TIMEOUT_MS = process.env.CI === "true" ? 120_000 : 35_000;
 const DESKTOP_STARTUP_TIMEOUT_MS = 15_000;
 const DAEMON_STARTUP_TIMEOUT_ENV = "OD_TOOLS_DEV_DAEMON_STARTUP_TIMEOUT_MS";
 const WEB_STARTUP_TIMEOUT_ENV = "OD_TOOLS_DEV_WEB_STARTUP_TIMEOUT_MS";
+const STATUS_PROBE_TIMEOUT_MS = 800;
 
 function readStartupTimeoutMs(key: string, fallbackMs: number): number {
   const value = process.env[key];
@@ -51,7 +52,30 @@ function assertSpawnedProcessAlive(appName: string, isProcessAlive: ProcessAlive
   }
 }
 
-export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DaemonStatusSnapshot | null> {
+async function waitForHttpRuntime<T extends { url: string | null }>(
+  appName: string,
+  inspect: (timeoutMs: number) => Promise<T | null>,
+  timeoutMs: number,
+  isProcessAlive?: ProcessAliveProbe,
+): Promise<T> {
+  const startedAt = performance.now();
+  const remainingMs = () => Math.ceil(timeoutMs - (performance.now() - startedAt));
+  for (;;) {
+    assertSpawnedProcessAlive(appName, isProcessAlive);
+    const probeBudgetMs = remainingMs();
+    if (probeBudgetMs <= 0) break;
+    const snapshot = await inspect(Math.min(STATUS_PROBE_TIMEOUT_MS, probeBudgetMs));
+    if (snapshot?.url != null && remainingMs() > 0) return snapshot;
+
+    assertSpawnedProcessAlive(appName, isProcessAlive);
+    const pollBudgetMs = remainingMs();
+    if (pollBudgetMs <= 0) break;
+    await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(150, pollBudgetMs)));
+  }
+  throw new Error(`${appName} did not expose status in time (${timeoutMs} ms)`);
+}
+
+export async function inspectDaemonRuntime(runtime: AppRuntimeLookup, timeoutMs = STATUS_PROBE_TIMEOUT_MS): Promise<DaemonStatusSnapshot | null> {
   try {
     return await getSidecarStatus<DaemonStatusSnapshot>(convergedStamp(runtime, APP_KEYS.DAEMON), { timeoutMs });
   } catch {
@@ -64,19 +88,10 @@ export async function waitForDaemonRuntime(
   timeoutMs = readStartupTimeoutMs(DAEMON_STARTUP_TIMEOUT_ENV, DAEMON_STARTUP_TIMEOUT_MS),
   isProcessAlive?: ProcessAliveProbe,
 ): Promise<DaemonStatusSnapshot> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    assertSpawnedProcessAlive(APP_KEYS.DAEMON, isProcessAlive);
-    const snapshot = await inspectDaemonRuntime(runtime, 800);
-    if (snapshot?.url != null) return snapshot;
-    assertSpawnedProcessAlive(APP_KEYS.DAEMON, isProcessAlive);
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  assertSpawnedProcessAlive(APP_KEYS.DAEMON, isProcessAlive);
-  throw new Error(`daemon did not expose status in time (${timeoutMs} ms)`);
+  return waitForHttpRuntime(APP_KEYS.DAEMON, (probeMs) => inspectDaemonRuntime(runtime, probeMs), timeoutMs, isProcessAlive);
 }
 
-export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<WebStatusSnapshot | null> {
+export async function inspectWebRuntime(runtime: AppRuntimeLookup, timeoutMs = STATUS_PROBE_TIMEOUT_MS): Promise<WebStatusSnapshot | null> {
   try {
     return await getSidecarStatus<WebStatusSnapshot>(convergedStamp(runtime, APP_KEYS.WEB), { timeoutMs });
   } catch {
@@ -89,16 +104,7 @@ export async function waitForWebRuntime(
   timeoutMs = readStartupTimeoutMs(WEB_STARTUP_TIMEOUT_ENV, WEB_STARTUP_TIMEOUT_MS),
   isProcessAlive?: ProcessAliveProbe,
 ): Promise<WebStatusSnapshot> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    assertSpawnedProcessAlive(APP_KEYS.WEB, isProcessAlive);
-    const snapshot = await inspectWebRuntime(runtime, 800);
-    if (snapshot?.url != null) return snapshot;
-    assertSpawnedProcessAlive(APP_KEYS.WEB, isProcessAlive);
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  assertSpawnedProcessAlive(APP_KEYS.WEB, isProcessAlive);
-  throw new Error(`web did not expose status in time (${timeoutMs} ms)`);
+  return waitForHttpRuntime(APP_KEYS.WEB, (probeMs) => inspectWebRuntime(runtime, probeMs), timeoutMs, isProcessAlive);
 }
 
 export async function inspectDesktopRuntime(runtime: AppRuntimeLookup, timeoutMs = 800): Promise<DesktopStatusSnapshot | null> {

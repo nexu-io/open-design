@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { once } from "node:events";
+import { mkdir } from "node:fs/promises";
+import { createServer } from "node:net";
+import { dirname } from "node:path";
+import { describe, it, type TestContext } from "node:test";
+
+import { resolveSidecarClientEndpoint } from "@open-design/sidecar";
 
 import {
   DAEMON_STARTUP_TIMEOUT_MS,
@@ -7,6 +13,15 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "../src/sidecar-client.js";
+
+function setStartupTimeout(t: TestContext, key: string, timeoutMs: number): void {
+  const previous = process.env[key];
+  t.after(() => {
+    if (previous == null) delete process.env[key];
+    else process.env[key] = previous;
+  });
+  process.env[key] = String(timeoutMs);
+}
 
 describe("sidecar startup waits", () => {
   it("allows daemon initialization to continue past the legacy 35 second deadline", () => {
@@ -20,16 +35,11 @@ describe("sidecar startup waits", () => {
 
   for (const [appName, waitForRuntime, key, timeoutMs] of startupWaits) {
     it(`honors the configured ${appName} startup deadline`, async (t) => {
-      const previous = process.env[key];
-      t.after(() => {
-        if (previous == null) delete process.env[key];
-        else process.env[key] = previous;
-      });
-      process.env[key] = String(timeoutMs);
+      setStartupTimeout(t, key, timeoutMs);
 
       // Advance the clock around real IPC probes without a multi-minute wait.
       let elapsed = 0;
-      t.mock.method(Date, "now", () => elapsed);
+      t.mock.method(performance, "now", () => elapsed);
       await assert.rejects(
         waitForRuntime(
           { base: "unused", namespace: `startup-timeout-${appName}-${process.pid}` },
@@ -43,6 +53,29 @@ describe("sidecar startup waits", () => {
       );
       assert.ok(elapsed >= timeoutMs);
     });
+
+    for (const listening of [false, true]) {
+      const endpointState = listening ? "unresponsive" : "absent";
+      it(`keeps a short ${appName} deadline when its status endpoint is ${endpointState}`, async (t) => {
+        const budgetMs = 40;
+        setStartupTimeout(t, key, budgetMs);
+        const namespace = `short-wait-${appName}-${endpointState}-${process.pid}`;
+        let probed = false;
+        if (listening) {
+          const endpoint = resolveSidecarClientEndpoint({ app: appName, channel: "local", mode: "dev", namespace, source: "tools-dev" });
+          if (process.platform !== "win32") await mkdir(dirname(endpoint), { recursive: true });
+          const server = createServer((socket) => socket.once("data", () => { probed = true; }));
+          await once(server.listen(endpoint), "listening");
+          t.after(() => server[Symbol.asyncDispose]());
+        }
+
+        const startedAt = performance.now();
+        await assert.rejects(waitForRuntime({ base: "unused", namespace }), /did not expose status in time \(40 ms\)/);
+        const elapsedMs = performance.now() - startedAt;
+        assert.ok(!listening || probed, "the client should reach the listening endpoint");
+        assert.ok(elapsedMs >= 35 && elapsedMs < 130, `a ${budgetMs} ms deadline took ${elapsedMs.toFixed(1)} ms`);
+      });
+    }
   }
 
   it("fails immediately when a spawned app exits before publishing status", async () => {
