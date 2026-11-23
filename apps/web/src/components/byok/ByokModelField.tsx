@@ -19,6 +19,7 @@ interface ByokModelFieldProps {
     suggestedModelsHint: string;
   };
   model: string;
+  replacedModel?: string;
   modelSelectRef: Ref<HTMLButtonElement>;
   models: AgentModelOption[];
   modelsLoadedFromAccountMessage: string | null;
@@ -39,6 +40,7 @@ export function ByokModelField({
   customInputRef,
   labels,
   model,
+  replacedModel,
   modelSelectRef,
   models,
   modelsLoadedFromAccountMessage,
@@ -112,6 +114,11 @@ export function ByokModelField({
           />
         </label>
       )}
+      {replacedModel ? (
+        <span className="field-inline-status" role="status">
+          {labels.model} {replacedModel} → {model}
+        </span>
+      ) : null}
       {modelsLoadedFromAccountMessage ? (
         <span className="field-inline-status success" role="status">
           {modelsLoadedFromAccountMessage}

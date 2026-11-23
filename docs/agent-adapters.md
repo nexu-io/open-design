@@ -214,6 +214,8 @@ authentication, and the boundary between REST and MCP.
   `byok-opencode` profile. API-mode provider credentials and model selection
   are translated into OpenCode configuration, while the installed
   `opencode-cli`/`opencode` process still owns the model/tool loop.
+- When account discovery replaces a preset model, Settings shows the previous
+  and newly selected model IDs beside the picker.
 - Invocation is `opencode run --format json` with the composed prompt on
   stdin and the selected provider/model passed through OpenCode's model
   syntax. The profile shares the OpenCode JSON-event parser and external MCP
