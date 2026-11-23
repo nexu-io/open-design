@@ -96,6 +96,41 @@ describe('app-config', () => {
       expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
     });
 
+    // Retired picker hints must not survive an upgrade: the daemon forwards a
+    // stored `agentModels.<agent>.model` straight to `--model`, so an id the
+    // adapter no longer ships (Qoder's old `performance` etc.) would keep
+    // failing every run even though live discovery works.
+    it('drops retired Qoder model selections without touching other agents', async () => {
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          agentModels: {
+            qoder: { model: 'performance' },
+            codex: { model: 'performance' },
+            claude: { model: 'ultimate', reasoning: 'high' },
+          },
+        }),
+      );
+
+      const cfg = await readAppConfig(dataDir);
+
+      expect(cfg.agentModels?.qoder).toBeUndefined();
+      // The same string stays untouched for agents that really offer it.
+      expect(cfg.agentModels?.codex).toEqual({ model: 'performance' });
+      expect(cfg.agentModels?.claude).toEqual({ model: 'ultimate', reasoning: 'high' });
+    });
+
+    it('retires a stored Qoder model id on write and keeps sibling prefs', async () => {
+      await writeAppConfig(dataDir, { agentModels: { qoder: { model: 'lite' } } });
+      expect((await readAppConfig(dataDir)).agentModels?.qoder).toBeUndefined();
+
+      await writeFile(
+        path.join(dataDir, 'app-config.json'),
+        JSON.stringify({ agentModels: { qoder: { model: 'ultimate', reasoning: 'high' } } }),
+      );
+      expect((await readAppConfig(dataDir)).agentModels?.qoder).toEqual({ reasoning: 'high' });
+    });
+
     // A file that cannot be parsed at all resets every preference, including
     // this one, and that stays true. Singling out `odNextStrategyMode` to
     // survive a broken file would opt installations out of a rollout they never

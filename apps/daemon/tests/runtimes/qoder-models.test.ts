@@ -54,6 +54,15 @@ describe('parseQoderModelList', () => {
     expect(parseQoderModelList('MODEL\n')).toBeNull();
     expect(parseQoderModelList('\r\n  \r\n')).toBeNull();
   });
+
+  it('refuses headerless output instead of reporting it as a catalog', () => {
+    // A status or usage banner from an older/changed CLI is not a model table;
+    // accepting it would surface text as `--model` values that Qoder rejects.
+    expect(parseQoderModelList('Auto\nDeepSeek-Flash\n')).toBeNull();
+    expect(parseQoderModelList('qodercli 1.1.64\n')).toBeNull();
+    // The documented header has to lead the output, not sit below other text.
+    expect(parseQoderModelList('Models for your account:\nMODEL\nAuto\n')).toBeNull();
+  });
 });
 
 describe('qoderAgentDef model wiring', () => {

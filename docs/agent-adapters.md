@@ -323,7 +323,11 @@ authentication, and the boundary between REST and MCP.
   configuration remains authoritative. When the probe fails the picker offers
   only `default` instead of unverified ids — the previous static tier hints
   (`lite`, `efficient`, `auto`, `performance`, `ultimate`) are not accepted by
-  Qoder and made runs fail.
+  Qoder and made runs fail. The header row is required: headerless output (an
+  older CLI's status or usage text) is rejected rather than reported as a
+  catalog. Stored picks of those retired ids are dropped when
+  `app-config.json` is read or written, so an upgrade stops failing without the
+  user re-picking a model.
 - Skills use the shared §4 path. `--add-dir` is repeatable for absolute
   external roots; relative entries are not forwarded.
 - Permission: `--yolo` avoids headless approval prompts. Treat this as the

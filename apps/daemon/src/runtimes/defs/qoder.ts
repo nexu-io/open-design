@@ -10,13 +10,19 @@ const LIST_MODELS_HEADER = /^model$/i;
 // `--model`, so the picker can surface exactly what this install can run
 // instead of a static tier list that drifts with each release.
 export function parseQoderModelList(stdout: string): RuntimeModelOption[] | null {
-  // Trim CRLF (Windows) and drop the header row before reusing the shared
-  // one-id-per-line parser, which prepends the synthetic `default` option.
-  const ids = String(stdout ?? '')
+  // The `MODEL` header is required: a headerless success (status or usage text
+  // from an older or changed CLI) must not be reported as a live catalog, or
+  // the picker offers ids that `--model` then rejects. Fail closed instead, and
+  // let the adapter's default-only fallback take over.
+  const lines = String(stdout ?? '')
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !LIST_MODELS_HEADER.test(line));
+    .map((line) => line.trim());
+  const headerIndex = lines.findIndex((line) => line.length > 0);
+  if (headerIndex === -1 || !LIST_MODELS_HEADER.test(lines[headerIndex] ?? '')) return null;
+  const ids = lines.slice(headerIndex + 1).filter((line) => line.length > 0);
   if (ids.length === 0) return null;
+  // Reuse the shared one-id-per-line parser, which prepends the synthetic
+  // `default` option and de-dupes while preserving CLI order.
   return parseLineSeparatedModels(ids.join('\n'));
 }
 
