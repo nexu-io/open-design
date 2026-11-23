@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import {
   runVelaCommand,
-  velaCommandStderr,
   velaCommandStdout,
+  velaCommandStderr,
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
 
@@ -37,6 +37,7 @@ export interface VelaImageRenderInput {
   resolution: string | undefined;
   wireModel: string;
   workspaceId: string | undefined;
+  isCancelled?: (() => boolean) | undefined;
 }
 
 /**
@@ -65,6 +66,10 @@ const VELA_VIDEO_SUBMIT_TIMEOUT_MS = 330_000;
 const DEFAULT_VELA_VIDEO_POLL_COMMAND_TIMEOUT_MS = 90_000;
 const DEFAULT_VELA_VIDEO_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_VELA_VIDEO_TOTAL_TIMEOUT_MS = 15 * 60_000;
+// The service can queue a task for up to 24 hours. Allow one minute for
+// observing its terminal status rather than timing out at the same instant.
+const VELA_MEDIA_QUEUE_TIMEOUT_MS = 24 * 60 * 60_000 + 60_000;
+const VELA_MEDIA_QUEUE_POLL_INTERVAL_MS = 15_000;
 const DEFAULT_VELA_VIDEO_RESOLUTION = '720p';
 const VELA_MAX_INPUT_IMAGES = 5;
 const VELA_VIDEO_RATIOS = new Set(['16:9', '9:16', '1:1']);
@@ -103,15 +108,6 @@ function parseJsonObject(stdout: string, command: string): JsonRecord {
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function submittedImageTaskIdFromPollingFailure(
-  error: unknown,
-): string | undefined {
-  const match = velaCommandStderr(error).match(
-    /(?:^|\r?\n)Error: perform media request GET \/api\/v1\/media\/images\/tasks\/(mit_[A-Za-z0-9_-]+):/,
-  );
-  return match?.[1];
 }
 
 function positiveIntegerFromEnv(name: string, fallback: number): number {
@@ -355,6 +351,34 @@ function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
+async function waitForMediaPoll(input: VelaImageRenderInput, delayMs: number) {
+  const cancelled = input.isCancelled;
+  if (!cancelled) return wait(delayMs);
+  for (let remaining = delayMs; remaining > 0 && !cancelled();) {
+    const step = Math.min(500, remaining);
+    await wait(step);
+    remaining -= step;
+  }
+}
+
+function retryableStatusRead(error: unknown, kind: 'image', taskId: string) {
+  const endpoint = `/api/v1/media/${kind}s/tasks/${taskId}:`;
+  return velaCommandStderr(error).split(/\r?\n/).some((line) =>
+    line.startsWith(`Error: perform media request GET ${endpoint}`)
+    && /timed out|deadline exceeded|connection reset|unexpected EOF|connection refused/i.test(line),
+  );
+}
+
+async function stopCancelledTask(input: VelaImageRenderInput, run: VelaCommandRunner, kind: 'image', taskId?: string) {
+  if (!input.isCancelled?.()) return;
+  if (taskId) {
+    await run([kind, 'cancel', taskId], {
+      ...velaWorkspaceCommandOptions(input.workspaceId), timeoutMs: 10_000,
+    }).catch(() => undefined);
+  }
+  throw new VelaMediaError('Stopped waiting for the media task.', { code: 'media_wait_stopped', retryable: false });
+}
+
 export async function renderVelaImage(
   input: VelaImageRenderInput,
   runCommand: VelaCommandRunner = runVelaCommand,
@@ -400,10 +424,10 @@ export async function renderVelaImage(
         ? ['--aspect-ratio', profile.aspectRatio, '--resolution', profile.resolution]
         : []),
       ...quality,
-      '--output',
-      outputPath,
+      '--no-wait',
       '--json',
     ];
+    await stopCancelledTask(input, runCommand, 'image');
     let stdout: string;
     try {
       stdout = await runCommand(args, {
@@ -411,40 +435,46 @@ export async function renderVelaImage(
         timeoutMs: VELA_IMAGE_TIMEOUT_MS,
       });
     } catch (error) {
-      // A refused request is a verdict the user can act on, so it must reach
-      // them as one. Decode it before transport recovery so a provider verdict
-      // can never be mistaken for a retryable polling failure.
-      const providerError = velaMediaErrorFromFailure(error, `image ${command}`);
-      if (providerError) throw providerError;
-
-      const submittedTaskId = submittedImageTaskIdFromPollingFailure(error);
-      if (!submittedTaskId) throw error;
-
-      // `vela image gen --wait` has already submitted (and potentially charged)
-      // the remote task before its status GET can time out. Resume that exact
-      // task instead of calling `gen` again, which avoids duplicate work and
-      // duplicate billing while tolerating a transient poll failure.
-      try {
-        stdout = await runCommand(
-          [
-            'image',
-            'get',
-            submittedTaskId,
-            '--wait',
-            '--output',
-            outputPath,
-            '--json',
-          ],
-          {
-            ...velaWorkspaceCommandOptions(input.workspaceId),
-            timeoutMs: VELA_IMAGE_TIMEOUT_MS,
-          },
-        );
-      } catch (recoveryError) {
-        throw velaMediaErrorFromFailure(recoveryError, 'image get') ?? recoveryError;
-      }
+      throw velaMediaErrorFromFailure(error, `image ${command}`) ?? error;
     }
-    const asset = parseJsonObject(stdout, `image ${command}`);
+    const submitted = parseJsonObject(stdout, `image ${command}`);
+    const taskId = nonEmptyString(submitted.task_id);
+    if (!taskId) throw new Error('Vela image submission is missing task_id');
+    let deadline = Date.now() + VELA_MEDIA_QUEUE_TIMEOUT_MS;
+    let running = false;
+    let statusFailures = 0;
+    let asset: JsonRecord;
+    while (true) {
+      await stopCancelledTask(input, runCommand, 'image', taskId);
+      if (Date.now() >= deadline) throw new Error('Vela image task timed out');
+      try {
+        stdout = await runCommand(['image', 'get', taskId, '--output', outputPath, '--json'], {
+          ...velaWorkspaceCommandOptions(input.workspaceId), timeoutMs: DEFAULT_VELA_VIDEO_POLL_COMMAND_TIMEOUT_MS,
+        });
+      } catch (error) {
+        await stopCancelledTask(input, runCommand, 'image', taskId);
+        const verdict = velaMediaErrorFromFailure(error, 'image get');
+        if (verdict) throw verdict;
+        if (!retryableStatusRead(error, 'image', taskId) || ++statusFailures > 3) throw error;
+        await waitForMediaPoll(input, 500 * statusFailures);
+        continue;
+      }
+      statusFailures = 0;
+      await stopCancelledTask(input, runCommand, 'image', taskId);
+      asset = parseJsonObject(stdout, 'image get');
+      if (asset.asset_id) break;
+      if (asset.task_id !== taskId) throw new Error('Vela image get returned an unexpected task ID');
+      if (asset.status !== 'queued' && asset.status !== 'running') {
+        throw velaMediaErrorFromFailure({ stdout }, 'image get') ?? new Error(`Vela image task ended with status ${String(asset.status)}`);
+      }
+      if (asset.status === 'running' && !running) {
+        running = true;
+        deadline = Date.now() + VELA_IMAGE_TIMEOUT_MS;
+      }
+      await waitForMediaPoll(input, positiveIntegerFromEnv(
+        'OD_VELA_IMAGE_POLL_INTERVAL_MS', running ? 5_000 : VELA_MEDIA_QUEUE_POLL_INTERVAL_MS,
+      ));
+    }
     const assetId = nonEmptyString(asset.asset_id);
     const status = nonEmptyString(asset.status);
     const kind = nonEmptyString(asset.kind);

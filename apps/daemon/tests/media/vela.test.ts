@@ -153,9 +153,19 @@ describe('Vela media provider', () => {
   // that only stubs the render would have its catalogue lookup fall into that
   // stub and fail on a missing --output.
   function mockVelaCommand(handler: (args: string[]) => Promise<string>) {
+    let submission: string[] | undefined;
     runVelaCommandMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'media' && args[1] === 'models') {
         return JSON.stringify(publishedModels());
+      }
+      if (args[0] === 'image' && args.includes('--no-wait')) {
+        expect(args).not.toContain('--output');
+        submission = args;
+        return JSON.stringify({ task_id: 'mit_test', status: 'queued' });
+      }
+      if (args[0] === 'image' && args[1] === 'get' && submission) {
+        expect(args[2]).toBe('mit_test');
+        return handler([...submission, '--output', valueAfter(args, '--output')]);
       }
       return handler(args);
     });
@@ -208,6 +218,55 @@ describe('Vela media provider', () => {
       VELA_WORKSPACE_ID: 'workspace-team',
     });
     await expect(stat(tempOutputDirs[0]!)).rejects.toThrow();
+  });
+
+  it('polls the same image task after twenty minutes queued, then downloads it', async () => {
+    const original = process.env.OD_VELA_IMAGE_POLL_INTERVAL_MS;
+    process.env.OD_VELA_IMAGE_POLL_INTERVAL_MS = '1';
+    let now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    let polls = 0;
+    try {
+      runVelaCommandMock.mockImplementation(async (args: string[]) => {
+        if (args[0] === 'media') return JSON.stringify(publishedModels());
+        if (args[1] === 'gen') return JSON.stringify({ task_id: 'mit_long', status: 'queued' });
+        expect(args.slice(0, 3)).toEqual(['image', 'get', 'mit_long']);
+        polls++;
+        if (polls === 1) {
+          now += 21 * 60_000;
+          return JSON.stringify({ task_id: 'mit_long', status: 'queued' });
+        }
+        if (polls === 2) return JSON.stringify({ task_id: 'mit_long', status: 'running' });
+        await writeFile(valueAfter(args, '--output'), IMAGE_BYTES);
+        return JSON.stringify({ asset_id: 'ma_long', status: 'ready', kind: 'image', mime_type: 'image/webp' });
+      });
+      expect((await generateMedia({ ...baseArgs(), surface: 'image', model: 'vela/gpt-image-2', output: 'long.webp' })).name).toBe('long.webp');
+      expect(polls).toBe(3);
+      expect(runVelaCommandMock.mock.calls.filter(([args]) => args[1] === 'gen')).toHaveLength(1);
+    } finally {
+      clock.mockRestore();
+      if (original === undefined) delete process.env.OD_VELA_IMAGE_POLL_INTERVAL_MS;
+      else process.env.OD_VELA_IMAGE_POLL_INTERVAL_MS = original;
+    }
+  });
+
+  it('cancels the original image task if the run stops before submission returns', async () => {
+    let cancelled = false;
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media') return JSON.stringify(publishedModels());
+      if (args[1] === 'gen') {
+        cancelled = true;
+        return JSON.stringify({ task_id: 'mit_cancel', status: 'queued' });
+      }
+      if (args[1] === 'cancel') return '';
+      throw new Error(`Unexpected command ${args.join(' ')}`);
+    });
+    await expect(generateMedia({
+      ...baseArgs(), surface: 'image', model: 'vela/gpt-image-2',
+      output: 'cancel.png', isCancelled: () => cancelled,
+    })).rejects.toMatchObject({ code: 'media_wait_stopped' });
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args.join(' ') === 'image cancel mit_cancel')).toBe(true);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[1] === 'get')).toBe(false);
   });
 
   it('routes the removed Codex image model id through Vela for existing projects', async () => {

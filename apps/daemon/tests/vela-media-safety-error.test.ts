@@ -286,8 +286,9 @@ describe('renderVelaImage', () => {
     ) => {
       calls.push(args);
       optionsSeen.push(options);
-      if (args[0] === 'image' && args[1] === 'gen') throw timedOut;
+      if (args[0] === 'image' && args[1] === 'gen') return JSON.stringify({ task_id: 'mit_recover_once', status: 'queued' });
       if (args[0] === 'image' && args[1] === 'get') {
+        if (calls.length === 2) throw timedOut;
         const outputIndex = args.indexOf('--output');
         const output = args[outputIndex + 1];
         if (!output) throw new Error('missing recovery output path');
@@ -312,16 +313,16 @@ describe('renderVelaImage', () => {
       'image',
       'get',
       'mit_recover_once',
-      '--wait',
+      '--output',
     ]);
+    expect(calls[2]).toEqual(calls[1]);
     expect(calls[1]).toContain('--json');
-    expect(optionsSeen[1]).toEqual(optionsSeen[0]);
     expect(optionsSeen[1]).toMatchObject({
       configuredEnv: {
         VELA_INVOCATION_SOURCE: 'open-design',
         VELA_WORKSPACE_ID: 'team-1',
       },
-      timeoutMs: 330_000,
+      timeoutMs: 90_000,
     });
   });
 
@@ -346,10 +347,6 @@ describe('renderVelaImage', () => {
   });
 
   it('preserves a structured provider verdict returned by the recovery command', async () => {
-    const initialFailure = failedCommand(
-      '',
-      'Error: perform media request GET /api/v1/media/images/tasks/mit_recover_refused: operation timed out',
-    );
     const recoveryFailure = failedCommand(
       velaTaskJson({
         code: 'safety_rejection',
@@ -361,7 +358,7 @@ describe('renderVelaImage', () => {
     const calls: string[][] = [];
     const runCommand = (async (args: string[]) => {
       calls.push(args);
-      if (calls.length === 1) throw initialFailure;
+      if (calls.length === 1) return JSON.stringify({ task_id: 'mit_recover_refused', status: 'queued' });
       throw recoveryFailure;
     }) as unknown as Parameters<typeof renderVelaImage>[1];
 

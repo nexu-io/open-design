@@ -173,6 +173,7 @@ type MediaContext = {
   imageRefs: ImageRef[];
   projectRoot: string;
   workspaceId: string | undefined;
+  isCancelled?: (() => boolean) | undefined;
   onProviderRequestSettled:
     | ((summary: ImageGenerationRequestSummary & { providerId: string }) => void)
     | undefined;
@@ -356,6 +357,7 @@ export async function generateMedia(args: {
   compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn; requestInit?: MediaRequestInit;
   desktopFrameRenderer?: DesktopFrameRenderer | null;
   workspaceId?: string;
+  isCancelled?: () => boolean;
   onProviderRequestSettled?: (summary: ImageGenerationRequestSummary & { providerId: string }) => void;
   /**
    * Called once with the EXACT provider bytes that were just written, while
@@ -579,6 +581,7 @@ export async function generateMedia(args: {
     imageRefs,
     projectRoot,
     workspaceId,
+    isCancelled: args.isCancelled,
     onProviderRequestSettled,
   };
 
