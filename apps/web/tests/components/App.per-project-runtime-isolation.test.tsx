@@ -48,7 +48,13 @@ const HOME_ROUTE: Route = {
   view: 'home',
 };
 
+const SETTINGS_ROUTE: Route = {
+  kind: 'home',
+  view: 'settings',
+};
+
 const useRouteMock = vi.fn<() => Route>(() => PROJECT_A_ROUTE);
+const navigateMock = vi.hoisted(() => vi.fn());
 const useProjectRouteWorkspaceContextMock = vi.hoisted(() =>
   vi.fn(() => ({
     workspaceId: null,
@@ -60,7 +66,7 @@ const useProjectRouteWorkspaceContextMock = vi.hoisted(() =>
 );
 
 vi.mock('../../src/router', () => ({
-  navigate: vi.fn(),
+  navigate: navigateMock,
   useRoute: () => useRouteMock(),
 }));
 
@@ -111,6 +117,7 @@ vi.mock('../../src/components/ProjectView', () => ({
       agentId: string,
       choice: { model?: string; reasoning?: string; serviceTier?: string },
     ) => void;
+    onOpenSettings: () => void;
   }) => {
     const activeAgent = props.config.agentId ?? '';
     const activeModel = props.config.agentModels?.[activeAgent]?.model ?? '';
@@ -129,6 +136,44 @@ vi.mock('../../src/components/ProjectView', () => ({
           }}
         >
           Switch current project to pi glm-flash
+        </button>
+        <button onClick={() => props.onOpenSettings()}>
+          Open settings from project
+        </button>
+      </div>
+    );
+  },
+}));
+
+vi.mock('../../src/components/SettingsDialog', () => ({
+  SettingsDialog: (props: {
+    initial: AppConfig;
+    onPersist: (next: AppConfig) => Promise<void>;
+    onClose: () => void;
+  }) => {
+    const activeAgent = props.initial.agentId ?? '';
+    const activeModel = props.initial.agentModels?.[activeAgent]?.model ?? '';
+    return (
+      <div data-testid="settings-dialog-mock">
+        <output data-testid="settings-initial-runtime">
+          {props.initial.mode}:{activeAgent}:{activeModel}
+        </output>
+        <button
+          onClick={() => {
+            void props.onPersist({
+              ...props.initial,
+              agentId: 'pi',
+              agentModels: {
+                ...(props.initial.agentModels ?? {}),
+                pi: { model: 'zai/glm-5.3-flash' },
+              },
+            });
+          }}
+        >
+          Switch settings agent to pi glm-flash
+        </button>
+        <button onClick={() => props.onClose()}>
+          Close settings dialog
         </button>
       </div>
     );
@@ -599,5 +644,116 @@ describe('App per-project provider and model isolation', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  it('updates the originating project instead of freezing it to the old agent when switching inside full-page Settings opened from that project', async () => {
+    const view = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-id')).toHaveTextContent('project-a');
+      expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+        'daemon:codex:gpt-5.4',
+      );
+    });
+
+    navigateMock.mockClear();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open settings from project' }),
+    );
+    expect(navigateMock).toHaveBeenCalledWith(SETTINGS_ROUTE);
+
+    useRouteMock.mockReturnValue(SETTINGS_ROUTE);
+    view.rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-initial-runtime')).toHaveTextContent(
+        'daemon:codex:gpt-5.4',
+      );
+    });
+
+    vi.mocked(saveConfig).mockClear();
+    persistenceOrder.length = 0;
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Switch settings agent to pi glm-flash' }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(patchProject).toHaveBeenCalledWith(
+        'project-a',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            runtimePrefs: expect.objectContaining({
+              mode: 'daemon',
+              agentId: 'pi',
+              agentModels: expect.objectContaining({
+                pi: { model: 'zai/glm-5.3-flash' },
+              }),
+            }),
+          }),
+        }),
+        null,
+      );
+      expect(patchProject).toHaveBeenCalledWith(
+        'project-b',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            runtimePrefs: expect.objectContaining({
+              mode: 'daemon',
+              agentId: 'codex',
+              agentModels: expect.objectContaining({
+                codex: expect.objectContaining({ model: 'gpt-5.4' }),
+              }),
+            }),
+          }),
+        }),
+        null,
+      );
+    });
+
+    // Legacy Project B snapshot is saved before global AppConfig, while Project A moves to pi
+    const projectBPatchIdx = persistenceOrder.indexOf('patchProject:project-b');
+    const firstSaveIdx = persistenceOrder.findIndex((entry) =>
+      entry.startsWith('saveConfig:'),
+    );
+    expect(projectBPatchIdx).toBeGreaterThanOrEqual(0);
+    expect(firstSaveIdx).toBeGreaterThan(projectBPatchIdx);
+
+    navigateMock.mockClear();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close settings dialog' }),
+    );
+    expect(navigateMock).toHaveBeenCalledWith(PROJECT_A_ROUTE);
+
+    useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
+    view.rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-id')).toHaveTextContent('project-a');
+      expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+        'daemon:pi:zai/glm-5.3-flash',
+      );
+    });
+
+    // Across reload, Project A remains on pi while legacy Project B stays on codex
+    view.unmount();
+    useRouteMock.mockReturnValue(PROJECT_A_ROUTE);
+    const reloadedView = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+        'daemon:pi:zai/glm-5.3-flash',
+      );
+    });
+
+    useRouteMock.mockReturnValue(PROJECT_B_ROUTE);
+    reloadedView.rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('project-runtime')).toHaveTextContent(
+        'daemon:codex:gpt-5.4',
+      );
+    });
   });
 });
