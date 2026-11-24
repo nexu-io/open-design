@@ -2839,6 +2839,7 @@ export function ProjectView({
     refreshKey: number;
     generation: number;
   }>({ files: [], refreshKey: 0, generation: 0 });
+  const [filesError, setFilesError] = useState<boolean>(false);
   const projectFiles = projectFilesSnapshot.files;
   const committedFilesRefreshKey = projectFilesSnapshot.refreshKey;
   const committedFilesGeneration = projectFilesSnapshot.generation;
@@ -4899,10 +4900,14 @@ export function ProjectView({
         ...(options?.fresh ? { fresh: true } : {}),
         ...(options?.afterChange ? { afterChange: true } : {}),
       });
-    } catch {
+      // Clear error state on successful fetch
+      setFilesError(false);
+    } catch (error) {
       // A transport/HTTP failure is not an authoritative empty directory.
       // Keep the last accepted snapshot and generation, while preserving the
       // refresh helper's historical resolved-list contract for its callers.
+      // Mark the files as non-authoritative when there's a failure.
+      setFilesError(true);
       return projectFilesRef.current;
     }
     if (requestSeq === projectFilesRequestSeqRef.current) {
@@ -15146,6 +15151,7 @@ export function ProjectView({
           viewerOnly={projectMutationReadOnly}
           materializationPending={projectCollab.materializationPending}
           filesAuthoritative={committedFilesGeneration > 0}
+          filesError={filesError}
           emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
           projectReadsHeld={projectReadsHeld}
           readonlyNotice={
