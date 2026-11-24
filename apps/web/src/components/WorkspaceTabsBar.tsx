@@ -249,6 +249,14 @@ function shouldDeferShortcutToProjectWorkspace(): boolean {
   return document.querySelector('[data-testid="file-workspace"]') !== null;
 }
 
+export function clearSavedWorkspaceTabs(): void {
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Tabs can still be reset in memory when storage is unavailable.
+  }
+}
+
 export function openWorkspaceTab(route: Route): void {
   window.dispatchEvent(
     new CustomEvent<{ route: Route }>(OPEN_WORKSPACE_TAB_EVENT, {

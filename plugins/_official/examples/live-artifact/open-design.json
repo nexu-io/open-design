@@ -81,13 +81,20 @@
     "surface": "web",
     "preview": {
       "type": "html",
-      "entry": "./index.html"
+      "entry": "./example.html",
+      "motion": "scroll"
     },
     "useCase": {
       "query": {
         "en": "Create refreshable, auditable OpenDesign artifacts backed by connector or local data. Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts.",
         "zh-CN": "使用这个插件完成以下任务：Create refreshable, auditable OpenDesign artifacts backed by connector or local data. Trigger when the user asks for live dashboards, refreshable reports, synced views, or reusable data-backed artifacts."
-      }
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "On-Time Delivery · sample live artifact"
+        }
+      ]
     },
     "context": {
       "skills": [
@@ -99,6 +106,7 @@
         "primary": true
       },
       "assets": [
+        "./example.html",
         "./references/artifact-schema.md",
         "./references/connector-policy.md",
         "./references/refresh-contract.md"

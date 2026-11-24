@@ -2058,6 +2058,9 @@ async function migrateLegacyDesignSystemPackage(
   const title = normalizeTitle(metadata.title ?? firstHeading(body) ?? id);
   const summary = summarize(body) || 'A reusable OpenDesign design system.';
   const palette = normalizeSwatches(body);
+  // Agent-managed packages own their files: legacy renames still apply, but no
+  // placeholder catalogs or UI-kit components are written into them.
+  const writeScaffold = metadata.artifactMode !== 'agent-managed';
   const copyIfMissing = async (from: string, to: string): Promise<boolean> => {
     const fromPath = path.join(dir, ...from.split('/'));
     const toPath = path.join(dir, ...to.split('/'));
@@ -2107,11 +2110,11 @@ async function migrateLegacyDesignSystemPackage(
   const hasLegacyArtifacts = await hasAnyLegacyDesignSystemArtifact(dir);
   if (!hasLegacyArtifacts && !migratedArtifacts.some(Boolean)) {
     await rewriteLegacyPackageDocumentationReferences(dir);
-    if (appKitExists) await writeDefaultUiKitComponentsIfMissing(dir, title);
+    if (appKitExists && writeScaffold) await writeDefaultUiKitComponentsIfMissing(dir, title);
     return;
   }
 
-  await Promise.all([
+  if (writeScaffold) await Promise.all([
     writeIfMissing(
       'preview/components-buttons.html',
       renderComponentCatalogHtml('Buttons', title, summary, palette),
@@ -3456,19 +3459,35 @@ function normalizeBody(raw: string | undefined): string | null {
   return body.length > 0 ? `${body}\n` : null;
 }
 
+function splitLeadingFrontmatter(raw: string): { frontmatterPrefix: string; content: string } {
+  const match = /^(\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n?)([\s\S]*)$/.exec(raw);
+  if (!match) return { frontmatterPrefix: '', content: raw };
+  return {
+    frontmatterPrefix: match[1] ?? '',
+    content: match[2] ?? '',
+  };
+}
+
 function firstHeading(raw: string): string | null {
-  return /^#\s+(.+?)\s*$/m.exec(raw)?.[1]?.trim() ?? null;
+  const { content } = splitLeadingFrontmatter(raw);
+  return /^#\s+(.+?)\s*$/m.exec(content)?.[1]?.trim() ?? null;
 }
 
 function withDesignSystemHeader(
   body: string,
   input: { title: string; category: string; surface: DesignSystemSurface },
 ): string {
-  let next = body.replace(/^#\s+.*$/m, `# ${input.title}`);
-  if (next === body && !/^#\s+/.test(next)) next = `# ${input.title}\n\n${next}`;
+  const { frontmatterPrefix, content } = splitLeadingFrontmatter(body);
+  let next = content.replace(/^#\s+.*$/m, `# ${input.title}`);
+  if (next === content && !/^#\s+/m.test(next)) {
+    const trimmed = next.replace(/^\r?\n+/, '');
+    const leadingNewline = frontmatterPrefix ? '\n' : '';
+    next = `${leadingNewline}# ${input.title}${trimmed ? `\n\n${trimmed}` : '\n'}`;
+  }
   next = upsertBlockquoteMeta(next, 'Category', input.category);
   next = upsertBlockquoteMeta(next, 'Surface', input.surface);
-  return next.endsWith('\n') ? next : `${next}\n`;
+  const combined = `${frontmatterPrefix}${next}`;
+  return combined.endsWith('\n') ? combined : `${combined}\n`;
 }
 
 function upsertBlockquoteMeta(body: string, key: string, value: string): string {

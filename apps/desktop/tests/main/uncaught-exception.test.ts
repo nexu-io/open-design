@@ -19,6 +19,8 @@ import {
   createDesktopUncaughtExceptionHandler,
   createDesktopUnhandledRejectionHandler,
   isHarmlessSocketOptionError,
+  markDesktopShutdownInProgress,
+  resetDesktopShutdownStateForTests,
   type DesktopErrorFilterLogger,
 } from '../../src/main/uncaught-exception.js';
 
@@ -31,7 +33,23 @@ function stubLogger(): DesktopErrorFilterLogger {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  resetDesktopShutdownStateForTests();
 });
+
+function abortError(): Error {
+  const error = new Error('This operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function spyFatalPath() {
+  return {
+    removeListener: vi.spyOn(process, 'removeListener').mockReturnValue(process),
+    setImmediate: vi
+      .spyOn(global, 'setImmediate')
+      .mockImplementation(((cb: () => void) => cb as unknown as NodeJS.Immediate) as unknown as typeof setImmediate),
+  };
+}
 
 describe('isHarmlessSocketOptionError (desktop main, issue #647)', () => {
   it('matches the canonical undici setTypeOfService EINVAL shape', () => {
@@ -190,5 +208,46 @@ describe('createDesktopUnhandledRejectionHandler (desktop main, issue #647 revie
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(removeListener).toHaveBeenCalledWith('unhandledRejection', handler);
     expect(setImmediateSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('shutdown abort tolerance (desktop main, OPEND-5169)', () => {
+  it('warns and keeps both listeners for an AbortError once shutdown has started', () => {
+    markDesktopShutdownInProgress();
+    const logger = stubLogger();
+    const spies = spyFatalPath();
+
+    createDesktopUncaughtExceptionHandler(logger)(abortError());
+    createDesktopUnhandledRejectionHandler(logger)(new DOMException('aborted', 'AbortError'));
+
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(spies.removeListener).not.toHaveBeenCalled();
+    expect(spies.setImmediate).not.toHaveBeenCalled();
+  });
+
+  it('still treats an AbortError before shutdown as fatal', () => {
+    const logger = stubLogger();
+    const spies = spyFatalPath();
+    const handler = createDesktopUnhandledRejectionHandler(logger);
+
+    handler(abortError());
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(spies.removeListener).toHaveBeenCalledWith('unhandledRejection', handler);
+    expect(spies.setImmediate).toHaveBeenCalledTimes(1);
+  });
+
+  it('still treats a non-abort error during shutdown as fatal', () => {
+    markDesktopShutdownInProgress();
+    const logger = stubLogger();
+    const spies = spyFatalPath();
+    const handler = createDesktopUncaughtExceptionHandler(logger);
+
+    handler(new Error('boom'));
+
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(spies.removeListener).toHaveBeenCalledWith('uncaughtException', handler);
+    expect(spies.setImmediate).toHaveBeenCalledTimes(1);
   });
 });

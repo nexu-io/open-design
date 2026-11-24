@@ -1,6 +1,7 @@
 name: dsh-upstream-drift
 
-# Watch upstream DeepSeek Harness releases and say something when we fall behind.
+# Manually compare upstream DeepSeek Harness releases when requested.
+# Automatic checks and daily reminders are disabled by maintainer request.
 #
 # `@deepseek-ai/dsh` has twice published a new release line while this repo kept
 # pinning the old one, and both times a person reporting a broken install was the
@@ -12,10 +13,6 @@ name: dsh-upstream-drift
 # upstream release is not a reason to fail a PR.
 
 on:
-  schedule:
-    # 01:30 UTC = 09:30 Asia/Shanghai, after the landing summary so the two
-    # morning cards do not arrive at the same minute.
-    - cron: "30 1 * * *"
   workflow_dispatch:
 
 permissions:

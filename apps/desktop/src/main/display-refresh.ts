@@ -15,7 +15,18 @@ export type DisplayRefreshWindow = EventSource & {
   setBounds(bounds: Bounds, animate: boolean): void;
   setVibrancy(value: "under-window" | null): void;
   invalidateShadow(): void;
+  isFocused(): boolean;
+  hide(): void;
+  show(): void;
+  showInactive(): void;
 };
+
+/** How long the renderer gets to pick up a new scale before it is compared. */
+const SCALE_SETTLE_MS = 1000;
+/** A window is re-shown at most this often, so a cure that does not work cannot flicker in a loop. */
+const RESHOW_INTERVAL_MS = 10 * 60_000;
+/** Focus re-checks the scale at most this often. */
+const FOCUS_CHECK_INTERVAL_MS = 60_000;
 
 /**
  * A one-DIP width pulse asks Chromium to allocate its drawing surface at the
@@ -29,6 +40,17 @@ export type DisplayRefreshWindow = EventSource & {
  * starting during the pulse restores it synchronously before macOS applies the
  * user's bounds. Only pass application
  * windows created with MAC_WINDOW_CHROME, never invisible capture windows.
+ *
+ * Scale guard (only with `readRendererScale`): telemetry from the refresh
+ * above showed renderers still drawing at 1x on a 2x display after it ran,
+ * which is the blurry window users report (OPEND-4712). So one settle interval
+ * after every refresh, and when the window gains focus, the scale the renderer
+ * draws at is compared with the scale of the display the window is on. A
+ * window still drawing below it gets one more refresh, and if that does not bring
+ * it back it is hidden and shown again, which makes Chromium re-read the
+ * screen it is on. Each step reports through `notify` (`scale-recheck`,
+ * `scale-reshow`) after the renderer has had time to settle, so the next
+ * `scale_mismatch` reading says whether the step worked.
  */
 export function attachDisplayRefresh(input: {
   platform: string;
@@ -39,6 +61,9 @@ export function attachDisplayRefresh(input: {
   powerMonitor: EventSource;
   getWindows(): DisplayRefreshWindow[];
   notify(window: DisplayRefreshWindow, refresh: OpenDesignHostDisplayRefresh): void;
+  /** Renderer device pixel ratio divided by page zoom, i.e. the display scale it draws at. */
+  readRendererScale?(window: DisplayRefreshWindow): Promise<number>;
+  now?(): number;
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
 }): () => void {
@@ -53,6 +78,10 @@ export function attachDisplayRefresh(input: {
   // common way to change scale, so they run once the gesture settles.
   const deferred = new Map<DisplayRefreshWindow, Set<string>>();
   const reasons = new Set<string>();
+  const now = input.now ?? Date.now;
+  const checks = new Map<DisplayRefreshWindow, ReturnType<typeof setTimeout>>();
+  const reshownAt = new Map<DisplayRefreshWindow, number>();
+  const focusCheckedAt = new Map<DisplayRefreshWindow, number>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let disposed = false;
   const listen = (source: EventSource, event: string, listener: (...args: any[]) => void) => {
@@ -92,17 +121,75 @@ export function attachDisplayRefresh(input: {
       restores.get(window)?.();
       busy.delete(window);
       deferred.delete(window);
+      cancelCheck(window);
+    });
+    // The blur can outlive every display and wake event, so looking at the
+    // window again is also a moment to check it.
+    listen(window, "focus", () => {
+      const last = focusCheckedAt.get(window);
+      if (last !== undefined && now() - last < FOCUS_CHECK_INTERVAL_MS) return;
+      focusCheckedAt.set(window, now());
+      checkScale(window, "refresh");
     });
   }
-  function refresh(window: DisplayRefreshWindow, refreshReasons: string[]) {
+  const unusable = (window: DisplayRefreshWindow) => window.isDestroyed() || !window.isVisible()
+    || window.isMinimized() || window.isFullScreen();
+  const report = (window: DisplayRefreshWindow, refreshReasons: string[]) => input.notify(window, {
+    reasons: refreshReasons,
+    scaleFactor: input.screen.getDisplayMatching(window.getBounds()).scaleFactor,
+    displayCount: input.screen.getAllDisplays().length,
+  });
+  function cancelCheck(window: DisplayRefreshWindow) {
+    const pending = checks.get(window);
+    if (pending !== undefined) cancel(pending);
+    checks.delete(window);
+  }
+  /**
+   * After a settle interval, compare the renderer's scale with the display's
+   * and take `next` when they differ: another refresh, then a re-show.
+   */
+  function checkScale(window: DisplayRefreshWindow, next: "refresh" | "reshow") {
+    const read = input.readRendererScale;
+    if (!read || disposed) return;
+    cancelCheck(window);
+    checks.set(window, later(() => {
+      checks.delete(window);
+      if (disposed || unusable(window) || busy.has(window)) return;
+      void read(window).then((rendered) => {
+        if (disposed || unusable(window) || busy.has(window)) return;
+        const native = input.screen.getDisplayMatching(window.getBounds()).scaleFactor;
+        // Only the blurry direction: drawing above the display scale is sharp.
+        if (!Number.isFinite(rendered) || native - rendered <= 0.01) return;
+        if (next === "refresh") refresh(window, ["scale-recheck"], "reshow");
+        else reshow(window);
+      }, () => {});
+    }, SCALE_SETTLE_MS));
+  }
+  function reshow(window: DisplayRefreshWindow) {
+    const last = reshownAt.get(window);
+    if (last !== undefined && now() - last < RESHOW_INTERVAL_MS) return;
+    reshownAt.set(window, now());
+    const focused = window.isFocused();
+    window.hide();
+    if (focused) window.show();
+    else window.showInactive();
+    checks.set(window, later(() => {
+      checks.delete(window);
+      if (!disposed && !window.isDestroyed()) report(window, ["scale-reshow"]);
+    }, SCALE_SETTLE_MS));
+  }
+  function refresh(
+    window: DisplayRefreshWindow,
+    refreshReasons: string[],
+    next: "refresh" | "reshow" = "refresh",
+  ) {
     if (busy.has(window)) {
       const pending = deferred.get(window) ?? new Set<string>();
       for (const reason of refreshReasons) pending.add(reason);
       deferred.set(window, pending);
       return;
     }
-    if (window.isDestroyed() || !window.isVisible() || window.isMinimized()
-      || window.isFullScreen()) return;
+    if (unusable(window)) return;
     const bounds = window.getBounds();
     const pulse = !window.isMaximized();
     let pulsed: Bounds | undefined;
@@ -135,11 +222,8 @@ export function attachDisplayRefresh(input: {
         restore();
         if (disposed || window.isDestroyed()) return;
         window.invalidateShadow();
-        input.notify(window, {
-          reasons: refreshReasons,
-          scaleFactor: input.screen.getDisplayMatching(window.getBounds()).scaleFactor,
-          displayCount: input.screen.getAllDisplays().length,
-        });
+        report(window, refreshReasons);
+        checkScale(window, next);
       }, 16);
     } catch (error) {
       restore();
@@ -173,6 +257,8 @@ export function attachDisplayRefresh(input: {
     for (const pending of moveTimers.values()) cancel(pending);
     moveTimers.clear();
     for (const restore of restores.values()) restore();
+    for (const pending of checks.values()) cancel(pending);
+    checks.clear();
     busy.clear();
     deferred.clear();
   };

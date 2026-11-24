@@ -8348,6 +8348,7 @@ export async function startServer({
   let automaticDiagnostics: AutomaticDiagnostics | null = null;
   const telemetry = registerTelemetryRoutes(app, {
     dataDir: RUNTIME_DATA_DIR,
+    db,
     namespace: runtime?.namespace,
     readAppConfig,
     writeAppConfig,

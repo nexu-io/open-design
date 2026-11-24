@@ -71,6 +71,7 @@ test('[P1] real daemon renders scoped quota early and refreshes models after sub
     await expect(panel.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '80');
     await expect(panel).toContainText('$12.50');
     await expect(panel.getByTestId('workspace-quota-skeleton')).toHaveCount(0);
+    await expect(panel).toContainText(/Resets in 4 days 3 hours \d+ minutes/);
     const firstContext = timeline.find((row) => row.type === 'response' && new URL(row.url).pathname === '/api/workspace/context');
     const firstBase = timeline.find((row) => row.type === 'request' && row.url.includes('/api/workspace/billing?') && !row.url.includes('includePreflight'));
     expect(firstContext).toBeDefined();
@@ -107,6 +108,7 @@ test('[P1] real daemon renders scoped quota early and refreshes models after sub
     await expect(panel).not.toContainText('$999.00');
     await expect(panel).not.toContainText('$17.25');
     await expect(panel.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '45');
+    await expect(panel).toContainText(/Resets in 4 days 3 hours \d+ minutes/);
     await page.clock.resume();
     await info.attach('late-preview-keeps-current-scope', { body: await page.screenshot(), contentType: 'image/png' });
     await page.mouse.move(10, 400);

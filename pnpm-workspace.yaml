@@ -25,6 +25,9 @@ onlyBuiltDependencies:
   - electron-winstaller
   - esbuild
   - node-pty
-  - onnxruntime-node
   - protobufjs
   - sharp
+
+# ONNX Runtime bundles CPU support. Its install hook only fetches optional CUDA binaries.
+ignoredBuiltDependencies:
+  - onnxruntime-node

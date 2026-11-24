@@ -35,7 +35,7 @@ export function LegacyWorkspaceQuotaPopover({ view, context, profile, consoleOri
     const hours = Math.floor((minutes % 1_440) / 60);
     const rest = minutes % 60;
     const time = days
-      ? `${t('billing.codingPlanPeriodDays', { count: days })}${hours ? ` ${t('billing.codingPlanPeriodHours', { count: hours })}` : ''}`
+      ? `${t('billing.codingPlanPeriodDays', { count: days })}${hours ? ` ${t('billing.codingPlanPeriodHours', { count: hours })}` : ''}${rest ? ` ${t('workspaceQuota.periodMinutes', { count: rest })}` : ''}`
       : hours
         ? `${t('billing.codingPlanPeriodHours', { count: hours })}${rest ? ` ${t('workspaceQuota.periodMinutes', { count: rest })}` : ''}`
         : t('workspaceQuota.periodMinutes', { count: rest });
@@ -93,7 +93,7 @@ export function LegacyWorkspaceQuotaPopover({ view, context, profile, consoleOri
         <>
           <section aria-label={t('workspaceQuota.designPlanAllowance')}>
             <div className={styles.sectionHead}><h3>{t('workspaceQuota.designPlanAllowance')}{help('plan')}</h3></div>
-            {/* The Design Plan region is present even on Free. */}
+            {/* The Coding Plan region is present even on Free. */}
             {view.tier === 'free' ? <div className={styles.placeholder}>
               <span>{t('workspaceQuota.unsubscribed')}</span><small>{t('workspaceQuota.subscribeToUse')}</small>
             </div> : durations.map(duration => {

@@ -26,6 +26,7 @@ export async function createBillingPreviewFixture(scratch: string) {
   let walletRevision = '1';
   let bPlan = 'plus';
   let bBillingRevision = '1';
+  const quotaResetAt = Date.now() + (4 * 1_440 + 3 * 60 + 17) * 60_000;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     const workspaceId = url.searchParams.get('workspaceId') ?? String(req.headers['x-vela-workspace-id'] ?? '');
@@ -57,7 +58,7 @@ export async function createBillingPreviewFixture(scratch: string) {
       schemaVersion: 1, workspaceId, workspaceMemberId: space.workspaceMemberId, billingScopeVersion: 2,
       billing: { billingState: 'active', planId: personalA ? 'plus' : bPlan },
       wallet: { balanceUsd: personalA ? aBalance : '42.00', expiresAt: null, updatedAt: new Date().toISOString() },
-      designPlanWindows: [{ kind: '7d', windowStart: null, resetsAt: null, remainingCredits: personalA ? aRemaining : '45', limitCredits: '100' }],
+      designPlanWindows: [{ kind: '7d', windowStart: new Date(quotaResetAt - 7 * 1_440 * 60_000).toISOString(), resetsAt: new Date(quotaResetAt).toISOString(), remainingCredits: personalA ? aRemaining : '45', limitCredits: '100' }],
       revisions: { billing: personalA ? '1' : bBillingRevision, wallet: personalA ? walletRevision : '1' },
       revisionClocks: { billing: { epoch: 'billing', counter: personalA ? '1' : bBillingRevision }, wallet: { epoch: 'wallet', counter: personalA ? walletRevision : '1' } },
     });

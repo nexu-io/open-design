@@ -1,15 +1,15 @@
 {
-  "id": "0.27.0",
-  "title": "CoRouter for Teams",
-  "body": "One subscription for your whole team: Invite unlimited teammates for free, with no additional seat fees.\nLeading models, shared credits: Share credits across your team to use models like Opus 5.5 in Open Design or through the API.\nClear usage, centralized billing: Track team usage while the workspace owner manages the subscription and top-ups.",
+  "id": "0.27.1",
+  "title": "OpenDesign 0.27.1 — Invite Friends, Earn Reset",
+  "body": "Get up to 6 RESET on OpenDesign 🎉\nInvite a friend to subscribe. Both earn a Reset Card.\nFirst month $8. Up to $220 in DeepSeek usage.\nMotion videos, design & slides, all in OpenDesign.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://corouter.open-design.ai/",
-  "ctaLabel": "Try CoRouter",
+  "linkUrl": "https://open-design.ai/cloud/reset",
+  "ctaLabel": "Invite Friends",
   "locales": {
     "zh-CN": {
-      "title": "CoRouter：团队共享额度，支持 API 调用",
-      "body": "一份订阅，全队使用：免费邀请同事，不限成员，无需另付席位费\n顶尖模型，全队共享：团队成员共享额度，既能在 Open Design 中使用 Opus 5.5 等顶尖模型，也能通过 API 调用\n用量清晰，付费统一：查看团队使用明细，由所有者统一管理订阅和充值",
-      "ctaLabel": "体验 CoRouter"
+      "title": "OpenDesign 0.27.1 — 邀请好友，获重置卡",
+      "body": "好友来订阅，重置卡一起拿 🎉\n邀请好友订阅，你和好友各得 1 张重置卡\n首月 $8，享最高 $220 DeepSeek 额度\n动效视频、设计、幻灯片，尽在 OpenDesign",
+      "ctaLabel": "邀请好友"
     }
   }
 }

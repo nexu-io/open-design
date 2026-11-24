@@ -65,7 +65,7 @@ it('quota help clamps to the viewport and closes on Escape, scroll and pointer e
 describe.each(['zh-CN', 'en'] as const)('K6 C-01 reset rows (U001/UI-002) — %s', locale => {
   function renderQuota(value: WorkspaceQuotaView) {
     render(<I18nProvider initial={locale}><WorkspaceQuotaPopover context={context} view={value} profile="local" /></I18nProvider>);
-    return within(screen.getByRole('region', { name: locale === 'en' ? 'Design Plan allowance' : 'Design Plan 额度' }));
+    return within(screen.getByRole('region', { name: locale === 'en' ? 'Coding Plan allowance' : 'Coding Plan 额度' }));
   }
   function expectQuotaWithoutReset(value: WorkspaceQuotaView, percent: number, count: number) {
     const plan = renderQuota(value);
@@ -99,6 +99,36 @@ describe.each(['zh-CN', 'en'] as const)('K6 C-01 reset rows (U001/UI-002) — %s
     expect(plan.getAllByRole('progressbar')).toHaveLength(2);
     vi.useRealTimers();
   });
+
+  describe.each([true, false])('reset precision with sharedBilling=%s', sharedBilling => {
+    const now = Date.parse('2026-10-22T00:00:00Z');
+    it.each([
+      [(4 * 1_440 + 3 * 60 + 17) * 60_000, '4 天 3 小时 17 分钟后重置', 'Resets in 4 days 3 hours 17 minutes'],
+      [(1_440 + 11) * 60_000, '1 天 11 分钟后重置', 'Resets in 1 days 11 minutes'],
+      [1_440 * 60_000, '1 天后重置', 'Resets in 1 days'],
+      [77 * 60_000, '1 小时 17 分钟后重置', 'Resets in 1 hours 17 minutes'],
+      [11 * 60_000, '11 分钟后重置', 'Resets in 11 minutes'],
+      [8_000, '1 分钟后重置', 'Resets in 1 minutes'],
+    ] as const)('shows minute precision with %i ms remaining', (remaining, zh, en) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const plan = renderQuota({ ...view('plus', '24', 75, new Date(now + remaining).toISOString()), sharedBilling });
+      expect(plan.getByText(locale === 'en' ? en : zh)).toBeTruthy();
+    });
+
+    it('keeps Go 5-hour and 7-day reset times independent', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+      const value = { ...view('go'), sharedBilling };
+      value.windows = value.windows!.map(window => ({
+        ...window,
+        resetsAt: new Date(now + (window.durationSeconds === 18_000 ? 2 * 60 + 18 : 4 * 1_440 + 3 * 60 + 17) * 60_000).toISOString(),
+      }));
+      const plan = renderQuota(value);
+      expect(plan.getByText(locale === 'en' ? 'Resets in 2 hours 18 minutes' : '2 小时 18 分钟后重置')).toBeTruthy();
+      expect(plan.getByText(locale === 'en' ? 'Resets in 4 days 3 hours 17 minutes' : '4 天 3 小时 17 分钟后重置')).toBeTruthy();
+    });
+  });
 });
 
 const cases: Array<[string, WorkspaceQuotaTier, string, number]> = [
@@ -111,7 +141,7 @@ describe('C-01 state and role matrix (VIEW-001/002/021)', () => {
   for (const [id, tier, balance, percent] of cases) {
     it.each(['owner', 'admin', 'member'] as const)(`${id} ${tier}: %s sees the shared amount and its role action`, role => {
       render(panel(view(tier, balance, percent), role));
-      expect(screen.getByRole('region', { name: 'Design Plan 额度' })).toBeTruthy();
+      expect(screen.getByRole('region', { name: 'Coding Plan 额度' })).toBeTruthy();
       expect(screen.getByRole('region', { name: '按量额度' })).toBeTruthy();
       expect(screen.getByText(`$${Number(balance).toFixed(2)}`)).toBeTruthy();
       expect(screen.queryAllByRole('progressbar').length).toBe(tier === 'go' ? 2 : 1);
@@ -165,7 +195,7 @@ it('E03 missing breakdown/modelRestriction/windows stays unavailable, never fake
   render(panel({ ...view('go'), windows: null, balanceUsd: null }));
   expect(within(screen.getByRole('region', { name: '按量额度' })).getByText('—')).toBeTruthy();
   expect(screen.queryByText('明细暂不可用')).toBeNull();
-  expect(within(screen.getByRole('region', { name: 'Design Plan 额度' })).getAllByText('暂未获取用量')).toHaveLength(2);
+  expect(within(screen.getByRole('region', { name: 'Coding Plan 额度' })).getAllByText('暂未获取用量')).toHaveLength(2);
   expect(screen.getByRole('button', { name: /性价比模型/ })).toBeTruthy();
   expect(screen.getByRole('button', { name: /顶级模型/ })).toBeTruthy();
   expect(screen.queryByText('5 小时')).toBeNull();
