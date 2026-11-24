@@ -38,7 +38,7 @@ describe('InviteDialog — randomUUID fallback (#9359)', () => {
       writable: true,
     });
 
-    const fetchSpy = vi.fn(async () =>
+    const fetchSpy = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ results: [{ ok: true }] }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchSpy);
