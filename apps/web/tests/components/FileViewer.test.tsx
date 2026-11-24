@@ -9028,8 +9028,8 @@ describe('FileViewer tweaks toolbar', () => {
     const viewportButton = screen.getByRole('button', { name: 'Preview viewport' });
     expect(viewportButton.textContent).toContain('Desktop');
     fireEvent.click(viewportButton);
-    fireEvent.click(screen.getByRole('option', { name: /tablet/i }));
-    expect(screen.getByRole('button', { name: 'Preview viewport' }).textContent).toContain('Tablet');
+    fireEvent.click(screen.getByRole('option', { name: /iPad Air/i }));
+    expect(screen.getByRole('button', { name: 'Preview viewport' }).textContent).toContain('iPad Air · 820 × 1180');
 
     rerender(
       <FileViewer
@@ -9051,7 +9051,7 @@ describe('FileViewer tweaks toolbar', () => {
       />,
     );
 
-    expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('Tablet');
+    expect((await screen.findByRole('button', { name: 'Preview viewport' })).textContent).toContain('iPad Air · 820 × 1180');
   });
 
   it('keeps the Draw bar open after queueing an annotation', () => {
@@ -10967,7 +10967,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
-    fireEvent.click(screen.getByRole('option', { name: 'Mobile' }));
+    fireEvent.click(screen.getByRole('option', { name: /^iPhone 15\s*390 × 844$/i }));
     fireEvent.click(screen.getByTestId('comment-panel-toggle'));
 
     expect(screen.getByTestId('comment-preview-layout').classList).not.toContain(
@@ -11344,7 +11344,7 @@ describe('FileViewer tweaks toolbar', () => {
     );
 
     fireEvent.click(screen.getByLabelText('Preview viewport'));
-    fireEvent.click(screen.getByRole('option', { name: 'Tablet' }));
+    fireEvent.click(screen.getByRole('option', { name: /iPad Air/i }));
     clickAgentTool('board-mode-toggle');
 
     const layout = screen.getByTestId('comment-preview-layout');

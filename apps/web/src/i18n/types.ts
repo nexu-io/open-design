@@ -4281,6 +4281,11 @@ export interface Dict {
   'fileViewer.viewportTabletTitle': string;
   'fileViewer.viewportMobile': string;
   'fileViewer.viewportMobileTitle': string;
+  'fileViewer.viewportGroupMobile': string;
+  'fileViewer.viewportGroupTablet': string;
+  'fileViewer.viewportGroupDesktop': string;
+  'fileViewer.viewportRotate': string;
+  'fileViewer.viewportRotateTitle': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;
