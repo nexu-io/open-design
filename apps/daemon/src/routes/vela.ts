@@ -1174,6 +1174,22 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     Promise<VelaLiveAccount | null>
   >();
   const inFlightVelaAccountInvalidations = new Set<string>();
+  // Trial accounts get a standing 403 from the billing API on every refresh;
+  // warn once per account instead of spamming daemon.log with the same
+  // denied entry (#9420). Non-authorization failures still warn every time.
+  const velaLiveAccountAuthDeniedLogged = new Set<string>();
+  function isAuthorizationShapedVelaError(error: unknown): boolean {
+    const execError = error as { stderr?: unknown; message?: unknown } | null;
+    const text = [
+      typeof execError?.stderr === 'string' ? execError.stderr : '',
+      typeof execError?.message === 'string'
+        ? execError.message
+        : String(error ?? ''),
+    ].join(' ');
+    return /401|403|unauthorized|forbidden|not authorized|permission denied/i.test(
+      text,
+    );
+  }
   function fetchVelaLiveAccountSingleFlight(
     accountCacheKey: string,
     probe: AmrModelProbe,
@@ -1207,7 +1223,16 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         // summary` — even an auth-shaped one — must never expire the AMR
         // session. Genuine credential expiry is detected by the non-billing
         // workspace directory path.
-        console.warn('[amr] live account fetch failed', err);
+        if (isAuthorizationShapedVelaError(err)) {
+          if (!velaLiveAccountAuthDeniedLogged.has(accountCacheKey)) {
+            velaLiveAccountAuthDeniedLogged.add(accountCacheKey);
+            console.info(
+              '[amr] billing summary not authorized for this account; further entries are suppressed',
+            );
+          }
+        } else {
+          console.warn('[amr] live account fetch failed', err);
+        }
         return null;
       })
       .finally(() => {

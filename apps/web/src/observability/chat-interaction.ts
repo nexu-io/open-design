@@ -5,6 +5,7 @@ import {
   createExposureClock, reportResponsiveness,
   responsivenessVisible,
 } from './responsiveness';
+import { randomUUID } from '../utils/uuid';
 
 const WINDOW_MS = 30_000;
 const MAX_LEGACY_REPORTS = 20;
@@ -51,7 +52,7 @@ export function installChatInteractionObserver(): () => void {
   const state = (area: InputArea): InputWindow => {
     let value = inputs.get(area);
     if (!value) {
-      value = { id: crypto.randomUUID(), start: inputSince, lastWindowMs: 1, attempts: 0, samples: 0, slow: 0, max: null, queue: null };
+      value = { id: randomUUID(), start: inputSince, lastWindowMs: 1, attempts: 0, samples: 0, slow: 0, max: null, queue: null };
       inputs.set(area, value);
     }
     return value;

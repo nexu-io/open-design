@@ -530,8 +530,34 @@ function velaModelsErrorMessage(error: unknown): string {
   return String(error ?? '');
 }
 
+// `execFile` failures echo the invoked command — binary path included — into
+// `error.message`, so scanning the whole message lets an install path like
+// `vela-cli-503` force a retry forever. The retriable signal lives in the
+// process output: prefer captured stderr/stdout, then the part of `message`
+// after the `Command failed:` line (which is where Node appends stderr).
+// Pre-exec spawn failures carry a string `code` (e.g. `ENOENT`) and no output;
+// match on the code itself rather than the path-bearing message.
+function velaModelsErrorText(error: unknown): string {
+  if (!(error instanceof Error)) return String(error ?? '');
+  const execError = error as Error & {
+    code?: unknown;
+    stderr?: unknown;
+    stdout?: unknown;
+  };
+  const output = [execError.stderr, execError.stdout]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join('\n');
+  if (output.length > 0) return output;
+  if (typeof execError.code === 'string') return execError.code;
+  if (execError.message.startsWith('Command failed:')) {
+    const newline = execError.message.indexOf('\n');
+    return newline === -1 ? '' : execError.message.slice(newline + 1);
+  }
+  return execError.message;
+}
+
 function isRetriableVelaModelsError(error: unknown): boolean {
-  const message = velaModelsErrorMessage(error).toLowerCase();
+  const message = velaModelsErrorText(error).toLowerCase();
   return [
     'deadline exceeded',
     'timed out',

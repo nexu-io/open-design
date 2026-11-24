@@ -70,6 +70,7 @@ export interface RegisterLibraryRoutesDeps
 }
 
 const MAX_REMOTE_BYTES = 25 * 1024 * 1024;
+const REMOTE_FETCH_TIMEOUT_MS = 20_000;
 
 /** Strip the internal absolute `filePath` before returning an asset to a client. */
 function toPublicAsset(record: LibraryAssetRecord): LibraryAsset {
@@ -125,14 +126,42 @@ async function fetchRemoteBytes(url: string): Promise<{ bytes: Buffer; mime: str
   // privileged daemon fetch an internal/loopback URL and read the response back
   // via GET /api/library/assets/:id/raw — SSRF + response exfiltration. Sibling
   // to the loopback-SSRF class in #5478.
-  const resp = await fetchExternalBrandAsset(url);
+  // No budget previously: a hung origin held the ingest open forever. Bound
+  // the whole acquisition (DNS, redirect hops and the body read below) so a
+  // stalled remote can't pin the request or the ingest queue (#9564).
+  const resp = await fetchExternalBrandAsset(url, {
+    signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS),
+  });
   if (!resp.ok) throw new Error(`remote fetch failed: ${resp.status}`);
   const declared = Number(resp.headers.get('content-length') ?? '0');
   if (declared && declared > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
-  const buf = Buffer.from(await resp.arrayBuffer());
-  if (buf.length > MAX_REMOTE_BYTES) throw new Error('remote resource too large');
+  // Read the body with a hard byte cap: `arrayBuffer()` buffers the whole
+  // stream first, so a chunked response that lied about (or omitted)
+  // Content-Length could grow the daemon's heap past MAX_REMOTE_BYTES before
+  // the size check ever ran (#9564).
+  const buf = await readCappedResponseBody(resp, MAX_REMOTE_BYTES);
   const mime = resp.headers.get('content-type')?.split(';')[0]?.trim() || undefined;
   return { bytes: buf, mime };
+}
+
+export async function readCappedResponseBody(
+  resp: Awaited<ReturnType<typeof fetchExternalBrandAsset>>,
+  cap: number,
+): Promise<Buffer> {
+  const body = resp.body;
+  if (body === null) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of body) {
+    const piece = Buffer.from(chunk as Uint8Array);
+    total += piece.length;
+    if (total > cap) {
+      await body.cancel().catch(() => {});
+      throw new Error('remote resource too large');
+    }
+    chunks.push(piece);
+  }
+  return Buffer.concat(chunks);
 }
 
 /**

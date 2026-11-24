@@ -1403,4 +1403,45 @@ describe('durable run terminal reconciliation', () => {
 
     expect(seeded).toEqual(['run-a-unmarked', 'run-b-delivered']);
   });
+  it('stops re-attempting telemetry delivery once the attempt budget is exhausted (#9411)', async () => {
+    const runId = 'run-telemetry-exhausted';
+    const runDir = path.join(tmpDir, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: runId,
+      projectId: 'p1',
+      conversationId: 'c1',
+      assistantMessageId: 'm1',
+      agentId: 'codex',
+      status: 'failed',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      errorCode: 'AGENT_EXIT_1',
+      telemetryDelivery: {
+        version: 1,
+        idempotencyKey: 'od-run-telemetry-v1-exhausted',
+        status: 'failed',
+        attemptCount: 10,
+        crashWindow: false,
+        startedAt: 1_900,
+        dropReason: 'network_error',
+      },
+    }));
+    const reportLangfuse = vi.fn(async () => ({
+      langfuse_expected: true,
+      langfuse_delivery_status: 'failed' as const,
+      langfuse_drop_reason: 'network_error' as const,
+    }));
+
+    await reconcileDurableRunTerminals({
+      analytics: { capture: vi.fn() },
+      appVersion: '0.15.1',
+      db,
+      reportLangfuse,
+      runsLogDir: tmpDir,
+    });
+
+    expect(reportLangfuse).not.toHaveBeenCalled();
+  });
 });
