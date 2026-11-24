@@ -189,6 +189,40 @@ function raceVelaLiveAccountFetch(
 type ReadAppConfig = (dataDir: string) => Promise<AppConfigPrefs>;
 type PublicBaseUrlResolver = (req: Request) => string;
 
+// `execFile` echoes the invoked command — binary path included — into
+// `error.message`, so the classifier matches only stderr/stdout, or the
+// output Node appends after the `Command failed:` line. A path like
+// `vela-403` must not make an unrelated failure look authorization-shaped.
+export function isAuthorizationShapedVelaError(error: unknown): boolean {
+  const execError = error as {
+    code?: unknown;
+    stderr?: unknown;
+    stdout?: unknown;
+    message?: unknown;
+  } | null;
+  const output = [execError?.stderr, execError?.stdout]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join('\n');
+  let text = output;
+  if (text.length === 0) {
+    if (typeof execError?.code === 'string') {
+      // Pre-exec spawn failure: only the syscall code names the failure.
+      text = execError.code;
+    } else {
+      const message =
+        typeof execError?.message === 'string'
+          ? execError.message
+          : String(error ?? '');
+      text = message.startsWith('Command failed:')
+        ? (message.includes('\n') ? message.slice(message.indexOf('\n') + 1) : '')
+        : message;
+    }
+  }
+  return /401|403|unauthorized|forbidden|not authorized|permission denied/i.test(
+    text,
+  );
+}
+
 export interface RegisterVelaRoutesDeps {
   paths: {
     RUNTIME_DATA_DIR: string;
@@ -1178,18 +1212,6 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   // warn once per account instead of spamming daemon.log with the same
   // denied entry (#9420). Non-authorization failures still warn every time.
   const velaLiveAccountAuthDeniedLogged = new Set<string>();
-  function isAuthorizationShapedVelaError(error: unknown): boolean {
-    const execError = error as { stderr?: unknown; message?: unknown } | null;
-    const text = [
-      typeof execError?.stderr === 'string' ? execError.stderr : '',
-      typeof execError?.message === 'string'
-        ? execError.message
-        : String(error ?? ''),
-    ].join(' ');
-    return /401|403|unauthorized|forbidden|not authorized|permission denied/i.test(
-      text,
-    );
-  }
   function fetchVelaLiveAccountSingleFlight(
     accountCacheKey: string,
     probe: AmrModelProbe,
