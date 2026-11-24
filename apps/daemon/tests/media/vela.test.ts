@@ -130,7 +130,7 @@ describe('Vela media provider', () => {
             },
           },
         },
-        ...['seedream-5.5', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'].map((model) => ({
+        ...['seedream-5.0', 'seedream-5.5'].map((model) => ({
           model,
           kind: 'image',
           capabilities: {
@@ -219,10 +219,10 @@ describe('Vela media provider', () => {
   });
 
   it.each([
-    'seedream-5.5',
+    'gpt-image-2',
     'nano-banana-2',
-    'gpt-image-2.6-flare',
-    'gpt-image-2.6-sunburst',
+    'seedream-5.0',
+    'seedream-5.5',
   ])('routes the Cloud image model %s to Vela image generation', async (model) => {
     mockReadyImage();
 

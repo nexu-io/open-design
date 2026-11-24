@@ -128,15 +128,15 @@ describe('NewProjectPanel media provider badges', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Image' }));
     fireEvent.click(screen.getByTestId('model-picker-trigger'));
     for (const id of [
-      'vela/seedream-5.5',
+      'vela/gpt-image-2',
       'vela/nano-banana-2',
-      'vela/gpt-image-2.6-flare',
-      'vela/gpt-image-2.6-sunburst',
+      'vela/seedream-5.0',
+      'vela/seedream-5.5',
     ]) {
       expect(screen.getByTestId(`model-picker-option-${id}`)).toBeDefined();
     }
 
-    fireEvent.click(screen.getByTestId('model-picker-option-vela/gpt-image-2.6-sunburst'));
+    fireEvent.click(screen.getByTestId('model-picker-option-vela/seedream-5.5'));
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Cloud image generation' },
     });
@@ -145,7 +145,7 @@ describe('NewProjectPanel media provider badges', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({
           kind: 'image',
-          imageModel: 'vela/gpt-image-2.6-sunburst',
+          imageModel: 'vela/seedream-5.5',
         }),
       }),
     );
