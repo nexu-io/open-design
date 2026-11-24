@@ -1077,10 +1077,26 @@ export function resolveSettingsAutosavePayload(
   active: AppConfig,
   intent: { commitClearedActiveApiKey?: boolean } = {},
 ): AppConfig {
+  // A committed execution choice — a completed form, or an explicitly
+  // cleared API key — supersedes the stashed draft for the same provider
+  // key. Otherwise `restorePendingByokProviderDraft` resurrects the stale
+  // form (e.g. an older API key) over the saved one on every api-mode
+  // mount (#9536).
+  const supersedeStashedDraft = (config: AppConfig): AppConfig => {
+    const committedKey = byokProviderKeyForConfig(config);
+    const drafts = config.byokProviderConfigDrafts;
+    if (!drafts || !Object.hasOwn(drafts, committedKey)) return config;
+    const rest = Object.fromEntries(
+      Object.entries(drafts).filter(([key]) => key !== committedKey),
+    );
+    return { ...config, byokProviderConfigDrafts: rest };
+  };
+
   if (draft.mode !== 'api') return draft;
   if (byokPreflightBlockReason(draft) === null) {
-    if (!draft.byokPendingProviderKey) return draft;
-    return { ...draft, byokPendingProviderKey: undefined };
+    const superseded = supersedeStashedDraft(draft);
+    if (!superseded.byokPendingProviderKey) return superseded;
+    return { ...superseded, byokPendingProviderKey: undefined };
   }
 
   const draftKey = byokProviderKeyForConfig(draft);
@@ -1091,8 +1107,9 @@ export function resolveSettingsAutosavePayload(
     && active.apiKey.trim() !== ''
     && draft.apiKey.trim() === '';
   if (clearsActiveApiKey) {
-    if (!draft.byokPendingProviderKey) return draft;
-    return { ...draft, byokPendingProviderKey: undefined };
+    const superseded = supersedeStashedDraft(draft);
+    if (!superseded.byokPendingProviderKey) return superseded;
+    return { ...superseded, byokPendingProviderKey: undefined };
   }
 
   const withCurrentDraft = persistByokProviderConfigDraft(

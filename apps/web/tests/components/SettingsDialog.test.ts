@@ -1718,4 +1718,52 @@ describe('resolveSettingsAutosavePayload', () => {
 
     expect(resolveSettingsAutosavePayload(local, activeDaemon)).toBe(local);
   });
+
+  it('retires the stashed provider draft once the same provider completes (#9536)', () => {
+    // An incomplete edit leaves `byokProviderConfigDrafts[draftKey]` behind;
+    // on the next api-mode mount the draft restores over the live config, so
+    // an old API key in the draft keeps reappearing after restart.
+    const draftKey = 'openai:https://api.deepseek.com';
+    const completed: AppConfig = {
+      ...activeDaemon,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiKey: 'sk-deepseek-new',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-v4-pro',
+      apiProviderBaseUrl: 'https://api.deepseek.com',
+      byokPendingProviderKey: draftKey,
+      byokProviderConfigDrafts: {
+        [draftKey]: {
+          apiConfig: {
+            apiKey: 'sk-deepseek-old-ac85',
+            baseUrl: 'https://api.deepseek.com',
+            model: 'deepseek-v4-pro',
+            apiProviderBaseUrl: 'https://api.deepseek.com',
+          },
+          maxTokens: undefined,
+        },
+        'openai:https://api.openai.com/v1': {
+          apiConfig: {
+            apiKey: 'sk-other-provider-draft',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4o',
+            apiProviderBaseUrl: 'https://api.openai.com/v1',
+          },
+          maxTokens: undefined,
+        },
+      },
+    };
+
+    const payload = resolveSettingsAutosavePayload(completed, activeDaemon);
+
+    expect(payload.apiKey).toBe('sk-deepseek-new');
+    expect(payload.byokPendingProviderKey).toBeUndefined();
+    // The draft for the just-saved provider is superseded; unrelated
+    // providers' incomplete drafts survive.
+    expect(payload.byokProviderConfigDrafts?.[draftKey]).toBeUndefined();
+    expect(
+      payload.byokProviderConfigDrafts?.['openai:https://api.openai.com/v1'],
+    ).toBeDefined();
+  });
 });
