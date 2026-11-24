@@ -721,9 +721,10 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
   // Picker exposes the synthetic Default + the labels `agy models`
-  // reports for agy 1.5.x (Gemini 4 Argon / Neon / Hydrogen, Orchestrator,
-  // Gemini 3.8 Flash, Claude 5.5, GPT-OSS). Ids are the display labels
-  // because that is what agy reads from settings.json `model`.
+  // reports for agy 1.5.x (Gemini 4 Argon / Carbon / Neon / Hydrogen,
+  // Orchestrator, Gemini 3.8 Flash, Claude 5.5, GPT-OSS). Ids are the
+  // display labels because that is what agy reads from settings.json
+  // `model`.
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
@@ -731,6 +732,9 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
       'Gemini 4 Argon (High)',
       'Gemini 4 Argon (Medium)',
       'Gemini 4 Argon (Low)',
+      'Gemini 4 Carbon (High)',
+      'Gemini 4 Carbon (Medium)',
+      'Gemini 4 Carbon (Low)',
       'Gemini 4 Neon (XHigh)',
       'Gemini 4 Neon (High)',
       'Gemini 4 Neon (Medium)',
@@ -740,6 +744,7 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
       'Gemini 4 Hydrogen (Medium)',
       'Gemini 4 Hydrogen (Low)',
       'Orchestrator (Argon)',
+      'Orchestrator (Carbon)',
       'Orchestrator (Neon)',
       'Gemini 3.8 Flash (High)',
       'Gemini 3.8 Flash (Medium)',
