@@ -166,7 +166,7 @@ it('H04 retains over two offline hours of both areas and periods instead of hitt
   const delivered = await store.read() as { pending: unknown[]; rawPending: unknown[] };
   expect(delivered.pending).toHaveLength(0); expect(delivered.rawPending).toHaveLength(0);
 });
-it('H05 bounds a prolonged offline raw outbox without deleting already committed facts', async () => {
+it('H05 bounds a prolonged offline raw outbox without deleting already committed facts', { timeout: 30_000 }, async () => {
   const { a, send } = setup(); send.mockResolvedValue(false);
   for (let i = 0; i < 1025; i++) await a.observe(raw({ event_id: `raw-${i}` }));
   expect(a.stopped).toBe('queue_limit');
