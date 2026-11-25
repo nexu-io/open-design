@@ -3,9 +3,12 @@
 //
 // LiteLLM (MIT, https://github.com/BerriAI/litellm) maintains the de-facto
 // community catalog of model context/output caps and pricing across every
-// major provider. We vendor a filtered slice (chat-mode max_output_tokens
-// only) so the web client can default `max_tokens` per model without an
-// extra network call at runtime.
+// major provider. We vendor a chat-model slice so the web client can default
+// `max_tokens` per model without an extra network call at runtime. Prefer
+// `max_output_tokens`, falling back to LiteLLM's `max_tokens` when the
+// output-specific field is absent. Only these two fields supply token limits.
+// The fallback preserves existing defaults. Its meaning varies by catalog
+// entry, so confirming the output limit requires provider-specific evidence.
 //
 // Usage:
 //   node --experimental-strip-types scripts/sync-litellm-models.ts
