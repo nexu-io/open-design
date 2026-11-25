@@ -2657,7 +2657,7 @@ async function testAgentConnectionInternal(
       }
       if (input.agentId === 'antigravity') {
         const caps = agentCapabilities.get('antigravity');
-        if (caps?.effortFlag && !args.includes('--effort')) {
+        if (caps?.effortFlag && !args.includes('--effort') && !args.includes('--model')) {
           args.push('--effort', 'low');
         }
         if (caps?.disableSlashCommands && !args.includes('--disable-slash-commands')) {

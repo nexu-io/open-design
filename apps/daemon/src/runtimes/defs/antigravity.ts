@@ -194,26 +194,31 @@ export async function waitForAgyToReadModel(
   return false;
 }
 
-export function parseAntigravityModels(
-  stdout: string,
-): RuntimeModelOption[] | null {
-  const lines = String(stdout || '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !l.toLowerCase().startsWith('fetching'));
-  if (lines.length === 0) return null;
+// `agy models` prints a "Fetching available models..." progress line
+// followed by one TSV row per model:
+//
+//   gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+//
+// Rows are keyed by the *label*, not the slug, because OD's antigravity
+// model id IS the display label: `writeAntigravityModelSelection`
+// persists `options.model` verbatim into settings.json (where agy
+// accepts either form), and `waitForAgyToReadModel` greps the
+// `--log-file` for `label="<model id>"` to release the model lock early.
+// Emitting the slug as id would still resolve, but agy logs the resolved
+// label, so the watcher would never match `label="<slug>"` and every
+// model-locked run would hold the lock until process exit.
+export function parseAgyModels(stdout: string): RuntimeModelOption[] | null {
   const seen = new Set<string>();
-  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
-  for (const line of lines) {
-    const parts = line.includes('\t') ? line.split('\t') : line.split(/\s{2,}/);
-    const first = parts[0]?.trim() ?? '';
-    const second = parts[1]?.trim() ?? '';
-    const label = (parts.length > 1 && second) ? second : first;
+  const models: RuntimeModelOption[] = [];
+  for (const rawLine of stdout.split('\n')) {
+    const separator = rawLine.indexOf('\t');
+    if (separator < 0) continue;
+    const label = rawLine.slice(separator + 1).trim();
     if (!label || seen.has(label)) continue;
     seen.add(label);
-    out.push({ id: label, label });
+    models.push({ id: label, label });
   }
-  return out;
+  return models.length > 0 ? [DEFAULT_MODEL_OPTION, ...models] : null;
 }
 
 export const antigravityAgentDef = {
@@ -228,10 +233,13 @@ export const antigravityAgentDef = {
     [ANTIGRAVITY_EFFORT_FLAG]: 'effortFlag',
     [ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG]: 'disableSlashCommands',
   },
+  // `agy models` fetches the live catalog over the network (~2s warm,
+  // slower cold); 15s matches the listModels budget the other defs with
+  // remote fetches use (opencode et al).
   listModels: {
     args: ['models'],
-    timeoutMs: 8_000,
-    parse: parseAntigravityModels,
+    parse: parseAgyModels,
+    timeoutMs: 15_000,
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
@@ -246,9 +254,6 @@ export const antigravityAgentDef = {
     { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
     { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',
@@ -311,7 +316,11 @@ export const antigravityAgentDef = {
     if (caps?.modelFlag && model) {
       args.push(ANTIGRAVITY_MODEL_FLAG, model);
     }
-    if (caps?.effortFlag && options.reasoning) {
+    // Antigravity catalog model labels already encode their reasoning tier
+    // (e.g. "Gemini 3.8 Flash (Low)"), and `agy` rejects `--effort` when
+    // combined with a concrete `--model`. Only pass `--effort` when using
+    // the default model.
+    if (caps?.effortFlag && options.reasoning && !model) {
       args.push(ANTIGRAVITY_EFFORT_FLAG, options.reasoning);
     }
     if (caps?.disableSlashCommands) {
