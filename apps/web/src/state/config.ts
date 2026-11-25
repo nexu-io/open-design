@@ -145,6 +145,9 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
     preferredModels: ['claude-sonnet-4-6', 'claude-opus-4-5', 'claude-haiku-4-5'],
+    // Sonnet 4.5 retires on the Claude API on 2026-11-30, and the retirement
+    // covers the undated alias as well as the dated snapshot.
+    retiredModels: ['claude-sonnet-4-5', 'claude-sonnet-4-5-20250929'],
   },
   {
     label: 'DeepSeek — Anthropic',

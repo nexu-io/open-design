@@ -3,11 +3,24 @@ import {
   FAST_MODEL_BY_PROTOCOL,
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../../src/state/apiProtocols';
-import { KNOWN_PROVIDERS } from '../../src/state/config';
+import { defaultKnownProviderModel, KNOWN_PROVIDERS } from '../../src/state/config';
 
 describe('apiProtocols table consistency', () => {
   it('FAST_MODEL_BY_PROTOCOL.google is one of the live suggested models', () => {
     expect(SUGGESTED_MODELS_BY_PROTOCOL.google).toContain(FAST_MODEL_BY_PROTOCOL.google);
+  });
+
+  it('offers the Anthropic preset default in the dropdown and no retired Anthropic model', () => {
+    const anthropicPreset = KNOWN_PROVIDERS.find(
+      (provider) => provider.label === 'Anthropic (Claude)',
+    );
+
+    expect(SUGGESTED_MODELS_BY_PROTOCOL.anthropic).toContain(
+      defaultKnownProviderModel(anthropicPreset),
+    );
+    for (const retired of anthropicPreset?.retiredModels ?? []) {
+      expect(SUGGESTED_MODELS_BY_PROTOCOL.anthropic).not.toContain(retired);
+    }
   });
 
   it('keeps the Ollama Cloud picker current with recent cloud models', () => {

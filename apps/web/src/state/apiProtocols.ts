@@ -22,7 +22,7 @@ import type { ApiProtocol } from '../types';
 export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]> = {
   anthropic: [
     'claude-opus-4-5',
-    'claude-sonnet-4-5',
+    'claude-sonnet-4-6',
     'claude-haiku-4-5',
     'deepseek-chat',
     'deepseek-reasoner',

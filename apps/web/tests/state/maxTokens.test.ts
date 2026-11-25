@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import litellmData from '../../src/state/litellm-models.json';
+import { DEFAULT_CONFIG } from '../../src/state/config';
 import {
   effectiveMaxTokens,
   FALLBACK_MAX_TOKENS,
@@ -14,8 +15,17 @@ describe('modelMaxTokensDefault', () => {
     // 64k for the 4.5 line is the upstream value; this guards against the
     // sync script silently dropping or rewriting these entries.
     expect(modelMaxTokensDefault('claude-sonnet-4-5')).toBe(64000);
+    expect(modelMaxTokensDefault('claude-sonnet-4-6')).toBe(64000);
     expect(modelMaxTokensDefault('claude-opus-4-5')).toBe(64000);
     expect(modelMaxTokensDefault('claude-haiku-4-5')).toBe(64000);
+  });
+
+  it('never caps the shipped default model at the unknown-model fallback', () => {
+    // Moving the default to a model that neither LiteLLM nor OVERRIDES knows
+    // would silently shrink max_tokens for every new install to 8192.
+    expect(modelMaxTokensDefault(DEFAULT_CONFIG.model)).toBeGreaterThan(
+      FALLBACK_MAX_TOKENS,
+    );
   });
 
   it('lets OVERRIDES win over LiteLLM data', () => {
