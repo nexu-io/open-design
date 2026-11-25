@@ -17,6 +17,8 @@ describe('modelMaxTokensDefault', () => {
     expect(modelMaxTokensDefault('claude-sonnet-4-5')).toBe(64000);
     expect(modelMaxTokensDefault('claude-sonnet-4-6')).toBe(64000);
     expect(modelMaxTokensDefault('claude-opus-4-5')).toBe(64000);
+    expect(modelMaxTokensDefault('claude-sonnet-5-5')).toBe(128000);
+    expect(modelMaxTokensDefault('claude-opus-5-5')).toBe(128000);
     expect(modelMaxTokensDefault('claude-haiku-4-5')).toBe(64000);
   });
 

@@ -81,7 +81,7 @@ describe('KNOWN_PROVIDERS', () => {
       (provider) => provider.label === 'Anthropic (Claude)',
     );
 
-    expect(defaultKnownProviderModel(anthropic)).toBe('claude-sonnet-4-6');
+    expect(defaultKnownProviderModel(anthropic)).toBe('claude-sonnet-5-5');
     // A fresh install and the Anthropic quick fill must start on the same model.
     expect(DEFAULT_CONFIG.model).toBe(defaultKnownProviderModel(anthropic));
     expect(anthropic?.retiredModels).toEqual([
@@ -1155,17 +1155,17 @@ describe('loadConfig', () => {
 
     const config = loadConfig();
 
-    expect(config.model).toBe('claude-sonnet-4-6');
+    expect(config.model).toBe('claude-sonnet-5-5');
     expect(config.apiKey).toBe('sk-ant-test');
-    expect(config.apiProtocolConfigs?.anthropic?.model).toBe('claude-sonnet-4-6');
+    expect(config.apiProtocolConfigs?.anthropic?.model).toBe('claude-sonnet-5-5');
     expect(
       config.byokProviderConfigDrafts?.[`anthropic:${anthropicBaseUrl}`]?.apiConfig.model,
-    ).toBe('claude-sonnet-4-6');
+    ).toBe('claude-sonnet-5-5');
     // Other protocols keep their own saved model.
     expect(config.apiProtocolConfigs?.openai?.model).toBe('gpt-4o');
     // The retired id is rewritten in storage, not just in the returned value.
     expect(JSON.parse(store.get('open-design:config') ?? '{}').model).toBe(
-      'claude-sonnet-4-6',
+      'claude-sonnet-5-5',
     );
   });
 
@@ -1186,7 +1186,7 @@ describe('loadConfig', () => {
     expect(loadConfig()).toMatchObject({
       mode: 'daemon',
       agentId: 'claude-code',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
     });
   });
 
@@ -1204,7 +1204,7 @@ describe('loadConfig', () => {
     expect(loadConfig()).toMatchObject({
       apiProtocol: 'anthropic',
       apiKey: 'sk-ant-legacy',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
     });
   });
 
@@ -1244,7 +1244,7 @@ describe('loadConfig', () => {
 
     expect(loadConfig()).toMatchObject({
       baseUrl,
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5-5',
     });
   });
 
@@ -1279,8 +1279,10 @@ describe('loadConfig', () => {
   );
 
   it.each([
+    'claude-sonnet-5-5',
     'claude-sonnet-4-6',
     'claude-haiku-4-5',
+    'claude-opus-5-5',
     'claude-opus-4-5',
   ])('keeps the supported Anthropic model %s the user chose', (model) => {
     store.set('open-design:config', JSON.stringify({
@@ -1314,7 +1316,7 @@ describe('loadConfig', () => {
     const writesAfterFirst = vi.mocked(localStorage.setItem).mock.calls.length;
     const second = loadConfig();
 
-    expect(first.model).toBe('claude-sonnet-4-6');
+    expect(first.model).toBe('claude-sonnet-5-5');
     expect(writesAfterFirst).toBe(writesBefore + 1);
     expect(vi.mocked(localStorage.setItem).mock.calls.length).toBe(writesAfterFirst);
     expect(second).toEqual(first);

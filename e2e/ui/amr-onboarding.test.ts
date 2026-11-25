@@ -584,7 +584,7 @@ test('[P0] completed BYOK setup stays usable while the unrelated Cloud session i
     mode: 'api',
     apiKey: 'persisted-byok-key',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5-5',
     onboardingCompleted: true,
   });
 });
@@ -1048,7 +1048,7 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
 
   await fillInlineField(page, 'Base URL', 'https://api.anthropic.com');
   const byokPanel = onboardingByokPanel(page);
-  await selectOnboardingOption(byokPanel, 'Model', 'claude-sonnet-4-6');
+  await selectOnboardingOption(byokPanel, 'Model', 'claude-sonnet-5-5');
   await page.getByRole('button', { name: /^Test$/i }).click();
   await expectConnectionSuccess(page);
 
@@ -1057,7 +1057,7 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
     protocol: 'anthropic',
     apiKey: 'anthropic-test-key',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5-5',
   });
 
   await page.getByRole('button', { name: /^Continue$/i }).click();
@@ -1067,7 +1067,7 @@ test('[P0] onboarding BYOK path supports Anthropic model selection and API key v
     apiProtocol: 'anthropic',
     apiKey: 'anthropic-test-key',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5-5',
     onboardingCompleted: true,
   });
 });

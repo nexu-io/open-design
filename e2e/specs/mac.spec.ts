@@ -1377,7 +1377,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('Anthropic API');
       expect(snapshot.quickFillProvider).toBe('Anthropic (Claude)');
       expect(snapshot.baseUrl).toBe('https://api.anthropic.com');
-      expect(snapshot.model).toBe('claude-sonnet-4-6');
+      expect(snapshot.model).toBe('claude-sonnet-5-5');
     });
   }, 45_000);
 
