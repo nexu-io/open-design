@@ -119,7 +119,8 @@ export function invalidateAmrFundingFeedback(): void {
 }
 
 /** Cacheable/recovery observations remain fenced by billing invalidation;
- * an older response must not restore a retired Home block or reusable hint. */
+ * an older response must not restore a retired Home block or reusable hint.
+ * They keep the short display budget so a hung CLI cannot stall Home paint. */
 export function readFreshAmrFundingEvidence(
   scope: AmrBalanceGateScope,
   modelId: string | null,
@@ -130,22 +131,28 @@ export function readFreshAmrFundingEvidence(
     isCurrent() && requestGeneration === cacheGeneration);
 }
 
+/** Wall-clock budget for an explicit Send's funding observation. Matches the
+ * daemon `vela billing` funding-check budget so a slow confirmation is not
+ * classified as unavailable before the CLI can answer. */
+export const SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS = 60_000;
+
 /** Each explicit Send makes its own no-store HTTP request for the current
  * account/member/model, without reusing client display positives. Display-cache
  * refreshes cannot supersede it. The caller fences route/draft changes; Link
- * still owns final admission. */
+ * still owns final admission. A timeout at the end of this budget stays unknown. */
 export function readSendTimeAmrFundingEvidence(
   scope: AmrBalanceGateScope,
   modelId: string | null,
   isCurrent: () => boolean = () => true,
 ): Promise<FundingEvidence> {
-  return readAmrFundingObservation(scope, modelId, isCurrent);
+  return readAmrFundingObservation(scope, modelId, isCurrent, SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS);
 }
 
 async function readAmrFundingObservation(
   scope: AmrBalanceGateScope,
   modelId: string | null,
   isCurrent: () => boolean,
+  timeoutMs = 5_000,
 ): Promise<FundingEvidence> {
   const unknown = { kind: 'unknown' as const, preflight: null };
   if (!isCurrent()) return unknown;
@@ -154,7 +161,7 @@ async function readAmrFundingObservation(
     const query = new URLSearchParams({ workspaceId: scope.workspaceId });
     if (modelId) query.set('modelId', modelId);
     const response = await fetch(`/api/workspace/billing/preflight?${query}`, {
-      cache: 'no-store', signal: AbortSignal.timeout(5_000),
+      cache: 'no-store', signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) return unknown;
     const { preflight } = await response.json() as WorkspaceBillingPreflightResponse;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceBillingPreflight } from '@open-design/contracts';
-import { cachedHomeAmrFundingBlock, invalidateAmrFundingFeedback, checkAmrFundingFeedback, checkAmrFundingEvidence, noteHomeAmrFundingBlockPresented, readFreshAmrFundingEvidence, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, takeHomeAmrFundingFastBlock } from '../../src/runtime/amr-funding-feedback';
+import { cachedHomeAmrFundingBlock, invalidateAmrFundingFeedback, checkAmrFundingFeedback, checkAmrFundingEvidence, noteHomeAmrFundingBlockPresented, readFreshAmrFundingEvidence, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS, takeHomeAmrFundingFastBlock } from '../../src/runtime/amr-funding-feedback';
 import { advanceWorkspaceAccountGeneration, resetWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 
 let sequence = 0;
@@ -361,6 +361,19 @@ describe('same funding observation also explains the plan', () => {
 
 
 describe('explicit Send funding observations', () => {
+  it('waits out a slow Cloud confirmation on Send and keeps the display read at five seconds', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => new AbortController().signal);
+    try {
+      const { scope, preflight } = fixture('available');
+      expect(await readSendTimeAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'available', preflight });
+      expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'available', preflight });
+      expect(timeout).toHaveBeenNthCalledWith(1, SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS);
+      expect(timeout).toHaveBeenNthCalledWith(2, 5_000);
+      expect(SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS).toBe(60_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
   it.each([1, 8, 99])('accepts its own fresh server proof after %s display invalidations', async (invalidations) => {
     const { scope, preflight, fetchMock } = fixture('available');
     let finish!: (response: Response) => void;
