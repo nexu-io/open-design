@@ -2033,6 +2033,18 @@ export function ChatPane({
   const [conversationSearch, setConversationSearch] = useState('');
   const deferredConversationSearch = useDeferredValue(conversationSearch);
   const [scrolledFromBottom, setScrolledFromBottom] = useState(false);
+  // Mirror `scrolledFromBottom` in a ref so `syncFollowState` and
+  // `settleFollowAfterPredictedScroll` can short-circuit unchanged values
+  // before calling `setScrolledFromBottom`. Relying on React's functional
+  // updater bailout (`prev === next ? prev : next`) still marks
+  // `didScheduleUpdateDuringPassiveEffects` whenever the fiber has pending
+  // lanes during streaming, tripping "Maximum update depth exceeded" (#9250).
+  const scrolledFromBottomRef = useRef(false);
+  function updateScrolledFromBottom(next: boolean) {
+    if (scrolledFromBottomRef.current === next) return;
+    scrolledFromBottomRef.current = next;
+    setScrolledFromBottom(next);
+  }
   // SDF liquid-glass refraction on the jump pill (frosted fallback via CSS).
   const jumpBtnGlassRef = useLiquidGlass<HTMLButtonElement>({ strength: 0.2 });
   // Resolved in the initializer, not in an effect: with the target known at
@@ -3241,9 +3253,8 @@ export function ChatPane({
       // 用户上滑背书 —— 那是把跟随焊死,比它要修的 bug 更糟。
       resetWheelWitness();
       snapshot(target);
-      // `syncFollowState` 里的函数式更新在值没变时原地返回,所以流式期间那一串
-      // scroll 事件不会每一跳都排一次重渲,也就不会撞上 React 的
-      // "Maximum update depth exceeded"。
+      // `syncFollowState` 短路未变化的值(通过 `scrolledFromBottomRef`),不派发空转
+      // `setScrolledFromBottom`,避免流式期间撞上 React 的 "Maximum update depth exceeded" (#9250)。
       syncFollowState();
       /*
        * 用户的手停在贴近底部的位置时,那块冻住的预留空白要开始收。
@@ -3774,16 +3785,14 @@ export function ChatPane({
      * (`shouldShowJumpToLatest` 的 `scrollHeight <= clientHeight + 1`),不需要在这里
      * 反过来改意图。
      */
-    setScrolledFromBottom((prev) => {
-      const next = shouldShowJumpToLatest({
-        distance: Math.max(0, sample.scrollHeight - sample.scrollTop - sample.clientHeight),
-        clientHeight: sample.clientHeight,
-        scrollHeight: sample.scrollHeight,
-        shown: prev,
-        following: isFollowingTail(),
-      });
-      return prev === next ? prev : next;
+    const next = shouldShowJumpToLatest({
+      distance: Math.max(0, sample.scrollHeight - sample.scrollTop - sample.clientHeight),
+      clientHeight: sample.clientHeight,
+      scrollHeight: sample.scrollHeight,
+      shown: scrolledFromBottomRef.current,
+      following: isFollowingTail(),
     });
+    updateScrolledFromBottom(next);
   }
 
   function handleQuoteSelectionActivityChange(active: boolean) {
@@ -3830,15 +3839,14 @@ export function ChatPane({
       ? { following: true, escaped: false }
       : { following: false, escaped: true };
     // 浮标仍然按「底下还有没有内容」算 —— 预留空白不是内容。
-    setScrolledFromBottom((prev) =>
-      shouldShowJumpToLatest({
-        distance,
-        clientHeight,
-        scrollHeight: Math.max(clientHeight, el.scrollHeight - reservedTailHeight()),
-        shown: prev,
-        following: isFollowingTail(),
-      }),
-    );
+    const next = shouldShowJumpToLatest({
+      distance,
+      clientHeight,
+      scrollHeight: Math.max(clientHeight, el.scrollHeight - reservedTailHeight()),
+      shown: scrolledFromBottomRef.current,
+      following: isFollowingTail(),
+    });
+    updateScrolledFromBottom(next);
   }
 
   /** 显式动作(展开折叠块、anchor-to-top 接管)松开跟随。 */
