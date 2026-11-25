@@ -1355,7 +1355,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'api',
       apiKey: 'sk-test',
       baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-4-5',
       apiProtocol: 'anthropic',
       apiProviderBaseUrl: 'https://api.anthropic.com',
       agentId: null,

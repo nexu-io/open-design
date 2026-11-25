@@ -1228,6 +1228,57 @@ describe('loadConfig', () => {
   });
 
   it.each([
+    'https://api.anthropic.com/',
+    'https://api.anthropic.com/v1',
+    'https://api.anthropic.com/v1/',
+  ])('migrates native Anthropic endpoint %s without a provider marker', (baseUrl) => {
+    store.set('open-design:config', JSON.stringify({
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiKey: 'sk-ant-test',
+      baseUrl,
+      model: 'claude-sonnet-4-5-20250929',
+      apiProviderBaseUrl: null,
+      configMigrationVersion: 3,
+    } satisfies Partial<AppConfig>));
+
+    expect(loadConfig()).toMatchObject({
+      baseUrl,
+      model: 'claude-sonnet-4-6',
+    });
+  });
+
+  it.each([undefined, 'https://api.anthropic.com'])(
+    'keeps custom endpoints with provider marker %s',
+    (apiProviderBaseUrl) => {
+      const customConfig = {
+        apiKey: 'sk-custom',
+        baseUrl: 'https://gateway.example.com/anthropic',
+        model: 'claude-sonnet-4-5',
+        ...(apiProviderBaseUrl ? { apiProviderBaseUrl } : {}),
+      };
+      store.set('open-design:config', JSON.stringify({
+        mode: 'api',
+        apiProtocol: 'anthropic',
+        ...customConfig,
+        apiProtocolConfigs: { anthropic: { ...customConfig } },
+        byokProviderConfigDrafts: {
+          'anthropic:https://api.anthropic.com': { apiConfig: { ...customConfig } },
+        },
+        configMigrationVersion: 3,
+      } satisfies Partial<AppConfig>));
+
+      const config = loadConfig();
+
+      expect(config.model).toBe(customConfig.model);
+      expect(config.apiProtocolConfigs?.anthropic?.model).toBe(customConfig.model);
+      expect(
+        config.byokProviderConfigDrafts?.['anthropic:https://api.anthropic.com']?.apiConfig.model,
+      ).toBe(customConfig.model);
+    },
+  );
+
+  it.each([
     'claude-sonnet-4-6',
     'claude-haiku-4-5',
     'claude-opus-4-5',

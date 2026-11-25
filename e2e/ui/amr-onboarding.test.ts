@@ -564,7 +564,8 @@ test('[P0] completed BYOK setup stays usable while the unrelated Cloud session i
     mode: 'api',
     apiKey: 'persisted-byok-key',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-6',
+    // Startup must migrate an older saved model without disrupting BYOK.
+    model: 'claude-sonnet-4-5',
     agentId: null,
     onboardingCompleted: true,
   } satisfies Partial<OnboardingConfig>);

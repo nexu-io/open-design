@@ -670,8 +670,13 @@ function migrateRetiredKnownProviderModel(
   const provider = KNOWN_PROVIDERS.find((candidate) =>
     candidate.protocol === protocol &&
     (
-      candidate.baseUrl === config.apiProviderBaseUrl ||
-      candidate.baseUrl === config.baseUrl
+      // Native retirement dates apply to the serving endpoint. A provider
+      // marker can be stale or inherited from DEFAULT_CONFIG on older saves.
+      candidate.baseUrl === 'https://api.anthropic.com'
+        ? typeof config.baseUrl === 'string' &&
+          config.baseUrl.trim().replace(/\/+$/, '').replace(/\/v1$/, '') === candidate.baseUrl
+        : candidate.baseUrl === config.apiProviderBaseUrl ||
+          candidate.baseUrl === config.baseUrl
     ),
   );
   if (!provider?.retiredModels?.includes(config.model)) return false;
