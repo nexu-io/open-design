@@ -941,6 +941,42 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(maxTokensInput.value).toBe('');
   });
 
+  it.each([
+    { savedMaxTokens: 16000, expectedInput: '16000' },
+    { savedMaxTokens: undefined, expectedInput: '' },
+  ])('shows the restored Max tokens override ($savedMaxTokens) when switching providers with the same model', async ({ savedMaxTokens, expectedInput }) => {
+    const { onPersist } = renderSettingsDialog({
+      apiProtocol: 'openai',
+      apiKey: 'sk-custom',
+      apiProviderBaseUrl: null,
+      baseUrl: 'https://custom.example.com/v1',
+      model: 'gpt-4o',
+      maxTokens: 12000,
+      byokProviderConfigDrafts: {
+        'openai:https://api.openai.com/v1': {
+          apiConfig: {
+            apiKey: 'sk-openai',
+            apiProviderBaseUrl: 'https://api.openai.com/v1',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4o',
+          },
+          maxTokens: savedMaxTokens,
+        },
+      },
+    });
+    const maxTokensInput = screen.getByRole('spinbutton', { name: /Max tokens/ }) as HTMLInputElement;
+    expect(maxTokensInput.value).toBe('12000');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
+
+    await waitForPersist(onPersist, expect.objectContaining({
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      maxTokens: savedMaxTokens,
+    }));
+    expect(maxTokensInput.value).toBe(expectedInput);
+  });
+
   it('lets Anthropic and Google users customize the default base URL', () => {
     renderSettingsDialog();
 

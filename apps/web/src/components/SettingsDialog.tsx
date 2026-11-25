@@ -2275,14 +2275,17 @@ export function SettingsDialog({
       const persistedDraft = nextProviderDraftKey
         ? current.byokProviderConfigDrafts?.[nextProviderDraftKey]
         : undefined;
-      const applyDraftUiState = (draft: ByokProviderFormDraft | undefined) => {
+      const applyDraftUiState = (
+        draft: ByokProviderFormDraft | undefined,
+        nextConfig = switched,
+      ) => {
         setShowApiKey(draft?.showApiKey ?? false);
         setApiModelCustomEditing(draft?.apiModelCustomEditing ?? false);
         apiModelUserSelectedRef.current = draft?.apiModelUserSelected ?? false;
         setMaxTokensInput(
           draft
             ? draft.maxTokensInput
-            : switched.maxTokens == null ? '' : String(switched.maxTokens),
+            : nextConfig.maxTokens == null ? '' : String(nextConfig.maxTokens),
         );
         setProviderModelsCommittedKey(draft?.providerModelsCommittedKey ?? null);
         setProviderModelsState(draft?.providerModelsState ?? { status: 'idle' });
@@ -2303,8 +2306,7 @@ export function SettingsDialog({
         );
       }
       if (persistedDraft) {
-        applyDraftUiState(undefined);
-        return applyApiProtocolConfig(
+        const restored = applyApiProtocolConfig(
           persistByokProviderConfigDraft(
             {
               ...switched,
@@ -2316,6 +2318,8 @@ export function SettingsDialog({
           provider.protocol,
           persistedDraft.apiConfig,
         );
+        applyDraftUiState(undefined, restored);
+        return restored;
       }
       const switchedWithCurrentDraft = persistByokProviderConfigDraft(
         switched,
