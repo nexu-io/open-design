@@ -1355,7 +1355,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'api',
       apiKey: 'sk-test',
       baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       apiProtocol: 'anthropic',
       apiProviderBaseUrl: 'https://api.anthropic.com',
       agentId: null,
@@ -1377,7 +1377,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('Anthropic API');
       expect(snapshot.quickFillProvider).toBe('Anthropic (Claude)');
       expect(snapshot.baseUrl).toBe('https://api.anthropic.com');
-      expect(snapshot.model).toBe('claude-sonnet-4-5');
+      expect(snapshot.model).toBe('claude-sonnet-4-6');
     });
   }, 45_000);
 
