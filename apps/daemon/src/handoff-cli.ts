@@ -8,6 +8,8 @@
 // without triggering cli.ts's import-time SUBCOMMAND_MAP dispatch —
 // mirrors artifacts-cli.ts / runArtifactsCli.
 
+import { readFileSync } from 'node:fs';
+
 import type { HandoffRequest, HandoffResponse } from '@open-design/contracts/api/handoff';
 import { resolveDaemonUrl } from './daemon-url.js';
 
@@ -35,7 +37,8 @@ function isHandoffResponse(value: unknown): value is HandoffResponse {
 }
 
 const USAGE = `Usage:
-  od project handoff <projectId> --conversation <id> --api-key <key> --model <model>
+  od project handoff <projectId> --conversation <id> --model <model>
+                     (--api-key-file <path|-> | ANTHROPIC_API_KEY | --api-key <key>)
                      [--base-url <url>] [--max-tokens <n>]
                      [--workspace <id> --workspace-member <id>]
                      [--daemon-url <url>] [--json]
@@ -43,6 +46,10 @@ const USAGE = `Usage:
 Synthesizes a "resume conversation" handoff prompt from one conversation's
 transcript via the local daemon. Prints the prompt to stdout; --json emits
 the full response (prompt + model + token usage).
+
+API key resolution, highest precedence first: --api-key, --api-key-file,
+ANTHROPIC_API_KEY. Prefer --api-key-file or the environment variable:
+--api-key exposes the key in shell history and process listings.
 `;
 
 function writeJson(value: unknown, stream: NodeJS.WriteStream = process.stdout): void {
@@ -65,6 +72,7 @@ interface ParsedHandoffOptions {
   projectId?: string;
   conversationId?: string;
   apiKey?: string;
+  apiKeyFile?: string;
   model?: string;
   baseUrl?: string;
   maxTokens?: number;
@@ -92,6 +100,10 @@ function parseOptions(args: string[]): ParsedHandoffOptions | { error: string } 
       const value = args[++index];
       if (!value) return { error: '--api-key requires a value' };
       options.apiKey = value;
+    } else if (arg === '--api-key-file') {
+      const value = args[++index];
+      if (!value) return { error: '--api-key-file requires a value' };
+      options.apiKeyFile = value;
     } else if (arg === '--model') {
       const value = args[++index];
       if (!value) return { error: '--model requires a value' };
@@ -131,6 +143,45 @@ function parseOptions(args: string[]): ParsedHandoffOptions | { error: string } 
   return options;
 }
 
+const ARGV_KEY_WARNING =
+  '[handoff] warning: --api-key exposes the key in shell history and process listings; prefer --api-key-file <path|-> or ANTHROPIC_API_KEY';
+
+/**
+ * Resolve the Anthropic BYOK key without forcing it onto argv. Precedence
+ * mirrors memory-llm.ts and standard CLI convention (aws/gh/gcloud):
+ * --api-key (back-compat, warns) > --api-key-file <path|-> > ANTHROPIC_API_KEY.
+ */
+function resolveApiKey(options: ParsedHandoffOptions): { apiKey: string } | { error: string } {
+  if (options.apiKey !== undefined) {
+    process.stderr.write(`${ARGV_KEY_WARNING}\n`);
+    if (options.apiKey.trim() === '') return { error: '--api-key must not be empty' };
+    return { apiKey: options.apiKey };
+  }
+  if (options.apiKeyFile !== undefined) {
+    let raw: string;
+    try {
+      raw = options.apiKeyFile === '-'
+        ? readFileSync(0, 'utf8')
+        : readFileSync(options.apiKeyFile, 'utf8');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const source = options.apiKeyFile === '-' ? 'stdin' : options.apiKeyFile;
+      return { error: `cannot read API key from ${source}: ${detail}` };
+    }
+    const key = raw.trim();
+    if (key === '') {
+      const source = options.apiKeyFile === '-' ? 'stdin' : options.apiKeyFile;
+      return { error: `API key read from ${source} is empty` };
+    }
+    return { apiKey: key };
+  }
+  const envKey = process.env.ANTHROPIC_API_KEY;
+  if (typeof envKey === 'string' && envKey.trim() !== '') return { apiKey: envKey };
+  return {
+    error: 'handoff requires an API key: pass --api-key-file <path|-> or set ANTHROPIC_API_KEY (or --api-key <key>)',
+  };
+}
+
 export async function runProjectHandoff(args: string[]): Promise<HandoffCliResult> {
   const options = parseOptions(args);
   if ('error' in options) return fail(options.error);
@@ -140,11 +191,13 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
   }
   if (!options.projectId) return fail('handoff requires <projectId>');
   if (!options.conversationId) return fail('handoff requires --conversation <id>');
-  if (!options.apiKey) return fail('handoff requires --api-key <key>');
   if (!options.model) return fail('handoff requires --model <model>');
   if (Boolean(options.workspaceId) !== Boolean(options.workspaceMemberId)) {
     return fail('pass --workspace <id> and --workspace-member <id> together');
   }
+
+  const resolvedKey = resolveApiKey(options);
+  if ('error' in resolvedKey) return fail(resolvedKey.error);
 
   try {
     const daemonUrl = (
@@ -152,7 +205,7 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
     ).replace(/\/$/, '');
     const body: HandoffRequest = {
       conversationId: options.conversationId,
-      apiKey: options.apiKey,
+      apiKey: resolvedKey.apiKey,
       model: options.model,
       ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
       ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
