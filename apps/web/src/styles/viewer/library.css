@@ -407,6 +407,13 @@
   overflow-y: auto;
   scroll-padding-block: 6px;
 }
+.slash-popover-empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+}
 .slash-item {
   display: flex;
   align-items: flex-start;
