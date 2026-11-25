@@ -10,10 +10,10 @@
 //      unmount drops queued tasks, but a slot whose request already started
 //      stays held until the request settles — real network concurrency must
 //      never exceed the cap, even across unmount/remount navigation churn;
-//   3. the page-card grid and image masonry render incrementally behind an
-//      invisible end-of-grid sentinel (no visible UI change);
+//   3. file cards, file rows, and folder rows render incrementally behind an
+//      invisible sentinel, without changing category counts;
 //   4. the root directory still lists every nested file (semantics guard).
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 
@@ -336,6 +336,82 @@ describe("DesignFilesPanel incremental grid rendering", () => {
     for (const button of Array.from(grid.querySelectorAll("button"))) {
       expect(button.closest(".df-card")).not.toBeNull();
     }
+  });
+});
+
+describe("DesignFilesPanel incremental row rendering", () => {
+  it("reveals folders and text files in batches while keeping the full category counts", () => {
+    const files: ProjectFile[] = Array.from({ length: 120 }, (_, index) => {
+      const name = `folder-${String(index).padStart(3, "0")}/notes.txt`;
+      return { ...htmlFile(name, index), kind: "text", mime: "text/plain" };
+    });
+    const { container } = renderPanel(files);
+
+    expect(screen.getByTestId("design-files-tab-folders").textContent).toContain("120");
+    expect(container.querySelectorAll(".df-dir-row")).toHaveLength(48);
+    act(() => fireIntersection(screen.getByTestId("design-files-grid-sentinel")));
+    expect(container.querySelectorAll(".df-dir-row")).toHaveLength(96);
+
+    const textTab = screen.getByTestId("design-files-tab-cat:text");
+    expect(textTab.textContent).toContain("120");
+    fireEvent.click(textTab);
+    expect(container.querySelectorAll(".df-file-row")).toHaveLength(48);
+    expect(screen.queryByTestId("design-file-row-folder-119/notes.txt")).toBeNull();
+
+    drainGridSentinel();
+    expect(container.querySelectorAll(".df-file-row")).toHaveLength(120);
+    expect(screen.getByTestId("design-file-row-folder-119/notes.txt")).toBeTruthy();
+  });
+
+  it("ignores a queued observation from the category the user left", () => {
+    const files: ProjectFile[] = Array.from({ length: 120 }, (_, index) => ({
+      ...htmlFile(`folder-${String(index).padStart(3, "0")}/notes.txt`, index),
+      kind: "text",
+      mime: "text/plain",
+    }));
+    const { container } = renderPanel(files);
+    const previousSentinel = screen.getByTestId("design-files-grid-sentinel");
+    const previousObserver = FakeIntersectionObserver.instances.find((observer) =>
+      observer.observed.has(previousSentinel),
+    )!;
+
+    fireEvent.click(screen.getByTestId("design-files-tab-cat:text"));
+    expect(previousObserver.observed.has(previousSentinel)).toBe(false);
+    // The browser may already have queued the entry before disconnect().
+    act(() => previousObserver.callback(
+      [{ isIntersecting: true, target: previousSentinel } as unknown as IntersectionObserverEntry],
+      previousObserver as unknown as IntersectionObserver,
+    ));
+
+    expect(container.querySelectorAll(".df-file-row")).toHaveLength(48);
+    act(() => fireIntersection(screen.getByTestId("design-files-grid-sentinel")));
+    expect(container.querySelectorAll(".df-file-row")).toHaveLength(96);
+  });
+
+  it("does not prepare distant rows when switching from a deeply scrolled category", () => {
+    const readDistantFileSize = vi.fn(() => 4096);
+    const textFiles: ProjectFile[] = Array.from({ length: 192 }, (_, index) => ({
+      ...htmlFile(`notes-${index}.txt`, index), kind: "text", mime: "text/plain",
+    }));
+    const codeFiles: ProjectFile[] = Array.from({ length: 192 }, (_, index) => ({
+      ...htmlFile(`script-${index}.js`, index), kind: "code", mime: "text/javascript",
+    }));
+    // A row reads its size while generating its content, even if React then
+    // discards that render. Counting committed DOM rows alone misses that work.
+    Object.defineProperty(codeFiles[144]!, "size", { get: readDistantFileSize });
+
+    const { container } = renderPanel([...textFiles, ...codeFiles]);
+    fireEvent.click(screen.getByTestId("design-files-tab-cat:text"));
+    drainGridSentinel();
+    expect(container.querySelectorAll(".df-file-row")).toHaveLength(192);
+    readDistantFileSize.mockClear();
+
+    fireEvent.click(screen.getByTestId("design-files-tab-cat:code"));
+    expect(container.querySelectorAll(".df-file-row")).toHaveLength(48);
+    expect(readDistantFileSize).not.toHaveBeenCalled();
+    drainGridSentinel();
+    expect(screen.getByTestId("design-file-row-script-144.js")).toBeTruthy();
+    expect(readDistantFileSize).toHaveBeenCalled();
   });
 });
 
