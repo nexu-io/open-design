@@ -131,10 +131,14 @@ export function readFreshAmrFundingEvidence(
     isCurrent() && requestGeneration === cacheGeneration);
 }
 
-/** Wall-clock budget for an explicit Send's funding observation. Matches the
- * daemon `vela billing` funding-check budget so a slow confirmation is not
- * classified as unavailable before the CLI can answer. */
-export const SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS = 60_000;
+// Mirrors BILLING_PREFLIGHT_TIMEOUT_MS in the daemon's vela-billing.ts.
+const DAEMON_FUNDING_CHECK_BUDGET_MS = 60_000;
+const SEND_TIME_FUNDING_TRANSPORT_MARGIN_MS = 5_000;
+
+/** Send waits past the daemon deadline so a response produced at that deadline
+ * still has time to reach the client. */
+export const SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS =
+  DAEMON_FUNDING_CHECK_BUDGET_MS + SEND_TIME_FUNDING_TRANSPORT_MARGIN_MS;
 
 /** Each explicit Send makes its own no-store HTTP request for the current
  * account/member/model, without reusing client display positives. Display-cache

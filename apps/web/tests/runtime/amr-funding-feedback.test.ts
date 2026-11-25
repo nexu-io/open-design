@@ -369,9 +369,36 @@ describe('explicit Send funding observations', () => {
       expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'available', preflight });
       expect(timeout).toHaveBeenNthCalledWith(1, SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS);
       expect(timeout).toHaveBeenNthCalledWith(2, 5_000);
-      expect(SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS).toBe(60_000);
+      expect(SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS).toBe(65_000);
     } finally {
       timeout.mockRestore();
+    }
+  });
+  it('accepts a funding response that arrives just after the daemon deadline', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation((timeoutMs) => {
+      setTimeout(() => controller.abort(), timeoutMs);
+      return controller.signal;
+    });
+    try {
+      const { scope, preflight, fetchMock } = fixture('available');
+      fetchMock.mockImplementationOnce(() => new Promise((resolve, reject) => {
+        const responseTimer = setTimeout(() => {
+          preflight.generatedAt = new Date().toISOString();
+          resolve(new Response(JSON.stringify({ preflight })));
+        }, 60_100);
+        controller.signal.addEventListener('abort', () => {
+          clearTimeout(responseTimer);
+          reject(controller.signal.reason);
+        }, { once: true });
+      }));
+      const result = readSendTimeAmrFundingEvidence(scope, 'model');
+      await vi.advanceTimersByTimeAsync(60_100);
+      expect(await result).toEqual({ kind: 'available', preflight });
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
     }
   });
   it.each([1, 8, 99])('accepts its own fresh server proof after %s display invalidations', async (invalidations) => {
