@@ -2252,7 +2252,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
           latencyMs: 10,
           models: [
             { id: 'upstream-first', label: 'Upstream First' },
-            { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+            { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
           ],
         });
       }
@@ -2272,7 +2272,7 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     fireEvent.click(screen.getByRole('button', { name: /Fetch models/i }));
 
     await waitFor(() => {
-      expect(props.onApiModelChange).toHaveBeenCalledWith('claude-sonnet-4-5');
+      expect(props.onApiModelChange).toHaveBeenCalledWith('claude-sonnet-4-6');
     });
     expect(props.onApiModelChange).not.toHaveBeenCalledWith('upstream-first');
   });

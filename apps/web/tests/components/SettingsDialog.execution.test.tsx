@@ -1275,7 +1275,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiKey: 'sk-ant-active',
       apiProtocol: 'anthropic',
       baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       apiProviderBaseUrl: 'https://api.anthropic.com',
     });
 
@@ -1288,13 +1288,13 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       mode: 'api',
       apiKey: 'sk-ant-active',
       baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       byokProviderConfigDrafts: {
         'anthropic:https://api.anthropic.com': {
           apiConfig: {
             apiKey: '',
             baseUrl: 'https://api.anthropic.com',
-            model: 'claude-sonnet-4-5',
+            model: 'claude-sonnet-4-6',
           },
         },
       },
@@ -1307,7 +1307,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiKey: 'sk-ant-active',
       apiProtocol: 'anthropic',
       baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       apiProviderBaseUrl: 'https://api.anthropic.com',
     });
     const apiKeyInput = screen.getByLabelText('API key');
@@ -1321,7 +1321,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
           mode: 'api',
           apiKey: '',
           baseUrl: 'https://api.anthropic.com',
-          model: 'claude-sonnet-4-5',
+          model: 'claude-sonnet-4-6',
         }),
         expect.any(Object),
       ),
