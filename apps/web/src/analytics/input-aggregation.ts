@@ -15,7 +15,8 @@ interface Snapshot {
 }
 const HOUR = 3_600_000;
 const MAX_RAW = 1024, MAX_SUMMARIES = 512, MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const encoder = new TextEncoder();
+const bytes = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
 const maximum = (a: number | null, b: number | null) => a === null ? b : b === null ? a : Math.max(a, b);
 const identityOf = (raw: Raw) => JSON.stringify([raw.device_id, raw.app_session_id, raw.user_id, raw.app_version,
   raw.client_version, raw.channel, raw.env, raw.client_type, raw.platform, raw.os_version, raw.arch, raw.capture_source,
@@ -167,8 +168,8 @@ export class InputAggregation {
     await this.drain();
   }
   private snapshot(): Snapshot {
-    return { version: 2, collecting: [...this.collecting.values()].map(s => ({ ...s })), rawPending: this.rawPending.map(s => ({ ...s })),
-      completed: [...this.completed], active: [...this.active.values()].map(s => ({ ...s })), pending: this.pending.map(s => ({ ...s })),
+    return { version: 2, collecting: [...this.collecting.values()].map(s => ({ ...s })), rawPending: [...this.rawPending],
+      completed: [...this.completed], active: [...this.active.values()].map(s => ({ ...s })), pending: [...this.pending],
       identity: this.identity, lastTime: this.lastTime, nextSendAt: this.nextSendAt, stopped: this.stopped,
       rawPassthrough: this.rawPassthrough };
   }
@@ -199,9 +200,9 @@ export class InputAggregation {
       return parsed as ClientMetricProps<T>;
     };
     const collecting = state.collecting.map(s => parse('client_input_responsiveness', s));
-    const rawPending = state.rawPending.map(s => parse('client_input_responsiveness', s));
+    const rawPending = state.rawPending.map(s => Object.freeze(parse('client_input_responsiveness', s)));
     const active = state.active.map(s => parse('client_input_responsiveness_summary', s));
-    const pending = state.pending.map(s => parse('client_input_responsiveness_summary', s));
+    const pending = state.pending.map(s => Object.freeze(parse('client_input_responsiveness_summary', s)));
     const ids = [...collecting, ...rawPending, ...active, ...pending].map(s => s.event_id);
     if (new Set(ids).size !== ids.length || new Set(active.map(s => `${s.period_ms}:${s.area}`)).size !== active.length) throw new Error('duplicate stored id');
     if (state.rawPassthrough !== undefined && typeof state.rawPassthrough !== 'boolean') throw new Error('invalid delivery mode');
@@ -217,8 +218,15 @@ export class InputAggregation {
     if (!this.store) return;
     const snapshot = this.snapshot(), encoded = JSON.stringify({ ...snapshot, lastTime: 0 });
     if (encoded === this.savedState) return;
-    if (bytes(snapshot) > MAX_SNAPSHOT_BYTES) throw new Error('queue_limit');
+    if (encoded.length * 3 >= MAX_SNAPSHOT_BYTES - 64 && bytes(snapshot) > MAX_SNAPSHOT_BYTES) throw new Error('queue_limit');
     await this.store.write(snapshot); this.savedState = encoded;
+  }
+  private read<T>(action: () => T): Promise<T | null> {
+    const next = this.operation.then(() => {
+      if (this.closed) return null;
+      return action();
+    });
+    this.operation = next.then(() => undefined, () => undefined); return next;
   }
   private update<T>(action: () => T | Promise<T>): Promise<T | null> {
     const next = this.operation.then(async () => {
@@ -257,13 +265,16 @@ export class InputAggregation {
   }
   private async drainLoop() {
     while (!this.closed && this.mode !== 'paused' && this.stopped !== 'storage_error' && Date.now() >= this.retryAt) {
-      const batch = await this.update(() => {
+      const batch = await this.read(() => {
         const events: InputTelemetryEvent[] = this.rawPending.map(properties => ({ event: 'client_input_responsiveness', properties }));
         if (this.urgent || Date.now() >= this.nextSendAt) events.push(...this.pending.map(properties => ({ event: 'client_input_responsiveness_summary' as const, properties })));
         const selected: InputTelemetryEvent[] = [];
+        let selectedBytes = 2; // "[]"
         for (const event of events) {
-          if (bytes([...selected, event]) > 24 * 1024) break;
+          const nextBytes = selectedBytes + bytes(event) + (selected.length > 0 ? 1 : 0);
+          if (nextBytes > 24 * 1024) break;
           selected.push(event);
+          selectedBytes = nextBytes;
         }
         return selected;
       });
