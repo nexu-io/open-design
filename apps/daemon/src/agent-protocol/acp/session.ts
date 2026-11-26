@@ -86,6 +86,20 @@ const NON_DISPLAYABLE_ACP_SESSION_UPDATES = new Set([
   'available_commands_update',
 ]);
 
+// Per the ACP spec, `session/load` replays prior turns as `session/update`
+// notifications before resolving its RPC response. Suppress those history
+// frames while `session/load` is in flight so resumed turns do not duplicate
+// prior output, while keeping load-time state updates (`available_commands_update`,
+// `usage_update`, mode/config updates) flowing.
+const ACP_SESSION_LOAD_REPLAY_UPDATES = new Set([
+  'user_message_chunk',
+  'agent_message_chunk',
+  'agent_thought_chunk',
+  'tool_call',
+  'tool_call_update',
+  'plan',
+]);
+
 /**
  * Out-of-band provenance for a single `send` from this bridge.
  *
@@ -261,10 +275,12 @@ export function attachAcpSession({
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
   // The durable upstream session handle reported by the agent on session/new or
-  // session/load (vela's `openCodeSessionId`). The caller stores it per
-  // conversation to resume next turn. Distinct from `sessionId`, which is the
-  // ACP wrapper id ("vela-opencode-1").
+  // session/load (vela's `openCodeSessionId`, or the ACP `sessionId` for
+  // standard `loadSession`-capable ACP agents like Hermes). The caller stores it
+  // per conversation to resume next turn.
   let durableSessionId: string | null = null;
+  let agentSupportsLoadSession = false;
+  let loadingSession = false;
   let nativeContinuationSupported = false;
   let continuationRecovery: AmrContinuationRecovery | null = null;
   let activeModel: string | null = null;
@@ -1115,6 +1131,13 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (
+        loadingSession &&
+        typeof update.sessionUpdate === 'string' &&
+        ACP_SESSION_LOAD_REPLAY_UPDATES.has(update.sessionUpdate)
+      ) {
+        return;
+      }
       if (modelUnavailableErrorCode) {
         const promotedPayload = promotedAmrRetryStatusPayload(update);
         if (promotedPayload) {
@@ -1379,45 +1402,51 @@ export function attachAcpSession({
           ...negotiation,
         });
       }
+      const agentCapabilities = asObject(result.agentCapabilities);
+      agentSupportsLoadSession = agentCapabilities?.loadSession === true;
       expectedId = nextId;
+      // The build that just answered `initialize` is the one about to parse
+      // `session/new` / `session/load`, so the version it reports for itself is
+      // the authority on which MCP transports this payload may carry. Preferred
+      // over any earlier `--version` probe, which can be stale by the time a
+      // run starts (upgrade between probe and run, PATH shim, detection refresh).
+      const agentInfo = (result as { agentInfo?: { version?: unknown } }).agentInfo;
+      const reportedVersion =
+        typeof agentInfo?.version === 'string' ? agentInfo.version : null;
+      const sessionMcp = mcpServers
+        ? withholdStdioMcpServersForBuild(mcpServers, {
+            reportedVersion,
+            removedInVersion: stdioMcpRemovedInVersion,
+          })
+        : null;
+      if (sessionMcp && sessionMcp.withheldNames.length > 0) {
+        // Daemon-log only: the transcript is user-facing and localized, and a
+        // withheld MCP server is an operator-diagnostic detail, not something
+        // the user can act on mid-turn.
+        console.warn(
+          `[acp] agent build ${reportedVersion ?? 'unknown'} does not accept stdio MCP servers; withheld ${sessionMcp.withheldNames.join(', ')}`,
+        );
+      }
+      const sessionBaseParams = buildAcpSessionNewParams(
+        effectiveCwd,
+        sessionMcp ? { mcpServers: sessionMcp.servers, envFormat } : { envFormat },
+      );
       if (resumeSessionId) {
         // Resume the prior upstream session instead of creating a fresh one.
+        // Include `mcpServers` (matching `session/new`) because strict ACP
+        // validators such as Hermes require the field on `session/load`.
+        loadingSession = true;
         writeRpc(
           nextId,
           'session/load',
-          { sessionId: resumeSessionId, cwd: effectiveCwd },
+          { sessionId: resumeSessionId, ...sessionBaseParams },
           'session/load',
         );
       } else {
-        // The build that just answered `initialize` is the one about to parse
-        // `session/new`, so the version it reports for itself is the authority
-        // on which MCP transports this payload may carry. Preferred over any
-        // earlier `--version` probe, which can be stale by the time a run
-        // starts (upgrade between probe and run, PATH shim, detection refresh).
-        const agentInfo = (result as { agentInfo?: { version?: unknown } }).agentInfo;
-        const reportedVersion =
-          typeof agentInfo?.version === 'string' ? agentInfo.version : null;
-        const sessionMcp = mcpServers
-          ? withholdStdioMcpServersForBuild(mcpServers, {
-              reportedVersion,
-              removedInVersion: stdioMcpRemovedInVersion,
-            })
-          : null;
-        if (sessionMcp && sessionMcp.withheldNames.length > 0) {
-          // Daemon-log only: the transcript is user-facing and localized, and a
-          // withheld MCP server is an operator-diagnostic detail, not something
-          // the user can act on mid-turn.
-          console.warn(
-            `[acp] agent build ${reportedVersion ?? 'unknown'} does not accept stdio MCP servers; withheld ${sessionMcp.withheldNames.join(', ')}`,
-          );
-        }
         writeRpc(
           nextId,
           'session/new',
-          buildAcpSessionNewParams(
-            effectiveCwd,
-            sessionMcp ? { mcpServers: sessionMcp.servers, envFormat } : { envFormat },
-          ),
+          sessionBaseParams,
           'session/new',
         );
       }
@@ -1425,10 +1454,27 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 2) {
-      sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
+      loadingSession = false;
+      const responseSessionId =
+        typeof result.sessionId === 'string' && result.sessionId.trim()
+          ? result.sessionId
+          : null;
+      // ACP's `LoadSessionResponse` omits `sessionId` (`_meta`, `models`,
+      // `modes`, `configOptions` only); fall back to the loaded handle.
+      sessionId = responseSessionId ?? (resumeSessionId || null);
       // The durable handle for resuming this session on the next turn.
+      // AMR/vela reports a separate `openCodeSessionId` (its wrapper `sessionId`
+      // is ephemeral), whereas standard `loadSession`-capable ACP agents reuse
+      // the ACP `sessionId` directly.
+      const explicitDurableSessionId =
+        typeof result.openCodeSessionId === 'string' && result.openCodeSessionId.trim()
+          ? result.openCodeSessionId
+          : null;
       durableSessionId =
-        typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
+        explicitDurableSessionId ??
+        (!modelUnavailableErrorCode && (agentSupportsLoadSession || Boolean(resumeSessionId))
+          ? sessionId
+          : null);
       if (nativeContinuation && durableSessionId !== resumeSessionId) {
         fail('The agent loaded a different native session.', { retryable: false,
           details: { kind: 'native_continuation_rejected', reason: 'session_mismatch' } });
@@ -1447,7 +1493,7 @@ export function attachAcpSession({
         return;
       }
       if (!sessionId) {
-        fail(`invalid session/new response: ${rawLine}`);
+        fail(`invalid ${resumeSessionId ? 'session/load' : 'session/new'} response: ${rawLine}`);
         return;
       }
       sendPrompt();

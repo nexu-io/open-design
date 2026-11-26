@@ -3898,6 +3898,7 @@ test('attachAcpSession resumes via session/load when resumeSessionId is set', ()
   assert.deepEqual(loadReq?.params, {
     sessionId: 'oc-prev',
     cwd: path.resolve('/tmp/od-project'),
+    mcpServers: [],
   });
   assert.equal(requests.some((entry) => entry.method === 'session/new'), false);
 });

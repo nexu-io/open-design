@@ -42,10 +42,10 @@ For `streamFormat: 'acp-json-rpc'`, OpenDesign currently drives a session with t
    - Includes OpenDesign client metadata and `clientCapabilities`.
 2. `session/new` or `session/load`
    - Creates a working session, or resumes the durable upstream session from a
-     prior turn when OpenDesign has a saved session handle.
-   - Includes the project working directory.
-   - `session/new` may include MCP server descriptors when the runtime is
-     allowed to use OpenDesign-provided tools.
+     prior turn when OpenDesign has a saved session handle (`resumesSessionViaAcpLoad: true`).
+   - Both include the project working directory (`cwd`) and normalized `mcpServers`
+     array (`[]` when no MCP servers are attached). `session/load` also includes
+     `sessionId`.
 3. `session/set_config_option` or `session/set_model` *(optional)*
    - Sent when the user selected a non-default model.
    - OpenDesign prefers `session/set_config_option` when `session/new` reports a model config option; otherwise it falls back to `session/set_model`.
@@ -61,10 +61,22 @@ For `streamFormat: 'acp-json-rpc'`, OpenDesign currently drives a session with t
 The runtime should support the corresponding JSON-RPC responses and notifications:
 
 1. Response to `initialize`.
+   - Set `agentCapabilities.loadSession: true` if the agent supports resuming
+     sessions via `session/load` using the ACP `sessionId`.
 2. Response to `session/new` or `session/load`.
-   - Must include a usable `sessionId`.
-   - A new session may also return the durable upstream session handle that
-     OpenDesign records for the next turn.
+   - Response shape by method:
+
+     | Method | `sessionId` in result | Durable handle captured by OpenDesign |
+     |---|---|---|
+     | `session/new` | Required | `openCodeSessionId` (AMR/vela) if present; otherwise `sessionId` when `agentCapabilities.loadSession` is `true` |
+     | `session/load` | Optional (strict ACP `LoadSessionResponse` returns `_meta` / `models` / `modes` / `configOptions` only) | `openCodeSessionId` if present; otherwise the loaded `sessionId` |
+
+   - While `session/load` is in flight (before its response resolves), OpenDesign
+     suppresses spec-mandated history replay notifications (`user_message_chunk`,
+     `agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`,
+     `plan`) so prior turns are not duplicated, while keeping load-time state
+     updates (`available_commands_update`, `usage_update`, mode/config updates)
+     flowing.
    - Should report the current model if available.
    - Should report model config options if model selection is supported through config options.
 3. Notifications using `session/update`.
