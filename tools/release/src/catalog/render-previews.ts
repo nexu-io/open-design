@@ -288,7 +288,7 @@ function deterministicRandomInitScript(stableId: string): string {
  * Individual example.html failures still return fallback bytes + warning.
  */
 type PlaywrightModule = {
-  chromium: { launch(options: { headless: boolean }): Promise<PlaywrightBrowser> };
+  chromium: { launch(options: { headless: boolean; args?: string[] }): Promise<PlaywrightBrowser> };
 };
 
 type ImportedPlaywrightModule = Partial<PlaywrightModule> & {
@@ -334,7 +334,7 @@ export function createPlaywrightPreviewRenderer(
           const playwright = options.importPlaywright
             ? unwrapPlaywrightModule(await options.importPlaywright())
             : await importPlaywrightPackage();
-          return await playwright.chromium.launch({ headless: true });
+          return await playwright.chromium.launch({ headless: true, args: ['--use-mock-keychain'] });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw new SystemicPreviewError(
