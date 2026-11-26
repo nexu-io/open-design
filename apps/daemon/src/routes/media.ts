@@ -16,7 +16,7 @@ import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
 import { findMediaModel, type MediaModel } from '../media/models.js';
-import { fetchVelaVideoModels } from '../media/vela.js';
+import { fetchVelaImageModels, fetchVelaVideoModels } from '../media/vela.js';
 import type { CloudVideoModelsResponse } from '@open-design/contracts';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
@@ -699,10 +699,14 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       } else if (!await ctx.authorizeProjectRequest(req, res, projectId, { mode: 'read' })) return;
       try {
         const workspaceId = getWorkspaceProjectByProjectId(db, projectId)?.workspaceId?.trim() || undefined;
-        const available = await fetchVelaVideoModels(workspaceId);
+        const [available, imageModels] = await Promise.all([
+          fetchVelaVideoModels(workspaceId),
+          fetchVelaImageModels(workspaceId),
+        ]);
         const catalogue: CloudVideoModelsResponse = {
           video: VIDEO_MODELS.filter((model: MediaModel) => model.provider === 'vela'
             && available.includes(model.id.replace(/^vela\//, ''))),
+          image: imageModels,
           source: 'account_workspace_catalogue',
         };
         return res.json(catalogue);

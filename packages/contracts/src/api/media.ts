@@ -13,10 +13,11 @@ export const MEDIA_SURFACES = [
 
 export type MediaSurface = (typeof MEDIA_SURFACES)[number];
 
-/** Available supported Cloud video models for the authenticated project workspace. */
+/** Available supported Cloud models for the authenticated project workspace. */
 export interface CloudVideoModelsResponse {
   source: 'account_workspace_catalogue';
   video: Array<{ id: string; label: string; hint: string; provider: string; caps: string[]; default?: boolean }>;
+  image?: Array<{ id: string; label: string; hint: string; provider: string; caps: string[]; default?: boolean }>;
 }
 
 export const MEDIA_TASK_STATUSES = [

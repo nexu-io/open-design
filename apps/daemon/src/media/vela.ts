@@ -2,6 +2,7 @@ import { copyFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { IMAGE_MODELS, type MediaModel } from './models.js';
 import {
   runVelaCommand,
   velaCommandStderr,
@@ -18,6 +19,8 @@ export type VelaMediaImageRef = {
 
 export interface VelaImageRenderInput {
   aspect: string | undefined;
+  /** True when `aspect` came from the caller rather than `defaultAspectFor(surface)`. */
+  aspectExplicit?: boolean;
   imageRefs: VelaMediaImageRef[];
   model: string;
   prompt: string;
@@ -180,6 +183,7 @@ interface VelaImageOutputProfile {
 
 interface VelaPublishedImageCapabilities {
   profiles: VelaImageOutputProfile[];
+  defaultAspectRatio: string | null;
   defaultResolution: string | null;
   /**
    * The tiers this model publishes, or null when it publishes no quality
@@ -188,6 +192,8 @@ interface VelaPublishedImageCapabilities {
    * tier is rejected by both the CLI and the server.
    */
   qualityValues: string[] | null;
+  editsSupported: boolean | null;
+  maxInputImages: number | null;
 }
 
 function parsePublishedProfiles(
@@ -198,10 +204,20 @@ function parsePublishedProfiles(
   const response = parseJsonObject(stdout, 'media models');
   const models = Array.isArray(response.models) ? response.models : [];
   const entry = models.find(
-    (item): item is JsonRecord => isRecord(item) && item.model === model && item.kind === 'image',
+    (item): item is JsonRecord =>
+      isRecord(item) && item.model === model && item.kind === 'image' && item.enabled !== false,
   );
   if (!entry) return null;
   const capabilities = isRecord(entry.capabilities) ? entry.capabilities : null;
+  const editsSupported =
+    capabilities && typeof capabilities.edits === 'boolean' ? capabilities.edits : null;
+  const maxInputImages =
+    capabilities &&
+    typeof capabilities.max_input_images === 'number' &&
+    Number.isInteger(capabilities.max_input_images) &&
+    capabilities.max_input_images >= 0
+      ? capabilities.max_input_images
+      : null;
   // Quality is published per model, not per request kind, so it is read from
   // the capability root rather than from the generations/edits envelope.
   const qualityValues = capabilities && isRecord(capabilities.quality)
@@ -211,17 +227,32 @@ function parsePublishedProfiles(
     : null;
   const byRequestKind = capabilities && isRecord(capabilities.profiles) ? capabilities.profiles : null;
   const envelope = byRequestKind?.[edits ? 'edits' : 'generations'];
-  if (!isRecord(envelope)) return null;
-  const rawProfiles = Array.isArray(envelope.profiles) ? envelope.profiles : [];
   const profiles: VelaImageOutputProfile[] = [];
-  for (const item of rawProfiles) {
-    if (!isRecord(item)) continue;
-    const aspectRatio = nonEmptyString(item.aspect_ratio);
-    const resolution = nonEmptyString(item.resolution);
-    if (aspectRatio && resolution) profiles.push({ aspectRatio, resolution });
+  if (isRecord(envelope)) {
+    const rawProfiles = Array.isArray(envelope.profiles) ? envelope.profiles : [];
+    for (const item of rawProfiles) {
+      if (!isRecord(item)) continue;
+      const aspectRatio = nonEmptyString(item.aspect_ratio);
+      const resolution = nonEmptyString(item.resolution);
+      if (aspectRatio && resolution) profiles.push({ aspectRatio, resolution });
+    }
   }
-  const fallback = isRecord(envelope.default) ? nonEmptyString(envelope.default.resolution) : null;
-  return { profiles, defaultResolution: fallback, qualityValues };
+  const defaultAspectRatio =
+    isRecord(envelope) && isRecord(envelope.default)
+      ? nonEmptyString(envelope.default.aspect_ratio)
+      : null;
+  const fallback =
+    isRecord(envelope) && isRecord(envelope.default)
+      ? nonEmptyString(envelope.default.resolution)
+      : null;
+  return {
+    profiles,
+    defaultAspectRatio,
+    defaultResolution: fallback,
+    qualityValues,
+    editsSupported,
+    maxInputImages,
+  };
 }
 
 /**
@@ -306,20 +337,43 @@ async function fetchPublishedImageCapabilities(
 function selectImageOutputProfile(
   published: VelaPublishedImageCapabilities | null,
   aspect: string | undefined,
+  aspectExplicit: boolean,
   requestedResolution: string | undefined,
   wireModel: string,
 ): VelaImageOutputProfile | undefined {
-  if (!aspect) return undefined;
+  const effectiveAspect = aspectExplicit ? aspect : undefined;
+  if (!effectiveAspect && !requestedResolution) {
+    if (!aspect || !published || published.profiles.length === 0) return undefined;
+    // Implicit default aspect (`1:1`) keeps existing CLI output shape when published,
+    // or falls back to the catalogue default when the model only publishes other ratios.
+    const defaultAspect = published.profiles.some((p) => p.aspectRatio === aspect)
+      ? aspect
+      : published.defaultAspectRatio ?? published.profiles[0]!.aspectRatio;
+    const matching = published.profiles.filter((p) => p.aspectRatio === defaultAspect);
+    return matching.find((p) => p.resolution === published.defaultResolution) ?? matching[0];
+  }
   if (!published || published.profiles.length === 0) {
+    const requested = effectiveAspect ? `aspect ${effectiveAspect}` : `resolution ${requestedResolution}`;
     throw new Error(
-      `Vela model ${wireModel} does not publish output profiles, so aspect ${aspect} cannot be requested`,
+      `Vela model ${wireModel} does not publish output profiles, so ${requested} cannot be requested`,
     );
   }
-  const matching = published.profiles.filter((profile) => profile.aspectRatio === aspect);
+  if (!effectiveAspect && requestedResolution) {
+    const supported = [...new Set(published.profiles.map((profile) => profile.resolution))];
+    const publishedResolution = matchPublishedValue(requestedResolution, supported);
+    if (!publishedResolution) {
+      throw new Error(
+        `Vela model ${wireModel} does not publish resolution ${requestedResolution}; supported: ${supported.join(', ')}`,
+      );
+    }
+    const matchingByRes = published.profiles.filter((profile) => profile.resolution === publishedResolution);
+    return matchingByRes.find((profile) => profile.aspectRatio === published.defaultAspectRatio) ?? matchingByRes[0];
+  }
+  const matching = published.profiles.filter((profile) => profile.aspectRatio === effectiveAspect);
   if (matching.length === 0) {
     const supported = [...new Set(published.profiles.map((profile) => profile.aspectRatio))];
     throw new Error(
-      `Vela model ${wireModel} does not publish aspect ${aspect}; supported: ${supported.join(', ')}`,
+      `Vela model ${wireModel} does not publish aspect ${effectiveAspect}; supported: ${supported.join(', ')}`,
     );
   }
   if (requestedResolution) {
@@ -362,27 +416,46 @@ export async function renderVelaImage(
   assertInputImageCount(input.imageRefs);
   const wireModel = wireModelForVela(input.model, input.wireModel);
   const edits = input.imageRefs.length > 0;
+  const requestedAspect = input.aspect?.trim() || undefined;
+  const aspectExplicit = input.aspectExplicit ?? Boolean(requestedAspect);
+  const requestedResolution = input.resolution?.trim() || undefined;
   const requestedQuality = input.quality?.trim();
-  // One catalogue read serves both the output profile and the quality tier.
-  // Skip it entirely when the caller named neither, so an unqualified request
-  // still costs exactly one CLI spawn.
-  const published = input.aspect?.trim() || requestedQuality
+  const isStaticVelaImage = IMAGE_MODELS.some(
+    (model) => model.provider === 'vela' && (model.id === input.model || model.id === `vela/${input.model}`),
+  );
+  // Read live capabilities whenever parameters, image editing, or a dynamic
+  // catalogue model are in play; unqualified static requests stay single-spawn.
+  const needsCatalogue = Boolean(
+    (aspectExplicit && requestedAspect) || requestedResolution || requestedQuality || edits || !isStaticVelaImage,
+  );
+  const published = needsCatalogue
     ? await fetchPublishedImageCapabilities(input, edits, wireModel, runCommand)
     : null;
+  if (needsCatalogue && !published) {
+    throw new Error(
+      `Vela model ${wireModel} is not in the published image catalogue${requestedQuality ? `, so quality ${requestedQuality} cannot be requested` : ''}`,
+    );
+  }
+  if (edits && published) {
+    if (published.editsSupported === false) {
+      throw new Error(`Vela model ${wireModel} does not support image editing`);
+    }
+    if (published.maxInputImages !== null && input.imageRefs.length > published.maxInputImages) {
+      throw new Error(
+        `Vela model ${wireModel} accepts at most ${published.maxInputImages} input image(s); received ${input.imageRefs.length}`,
+      );
+    }
+  }
   const profile = selectImageOutputProfile(
     published,
-    input.aspect?.trim() || undefined,
-    input.resolution?.trim() || undefined,
+    requestedAspect,
+    aspectExplicit,
+    requestedResolution,
     wireModel,
   );
   const quality = requestedQuality && published
     ? qualityArgs(requestedQuality, published, wireModel)
     : [];
-  if (requestedQuality && !published) {
-    throw new Error(
-      `Vela model ${wireModel} is not in the published image catalogue, so quality ${requestedQuality} cannot be requested`,
-    );
-  }
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'open-design-vela-image-'));
   const outputPath = path.join(tempDir, 'result.bin');
   try {
@@ -743,4 +816,50 @@ async function fetchVelaVideoCatalogue(
 /** Account/workspace-filtered catalogue. Never treat a failed read as an empty catalogue. */
 export async function fetchVelaVideoModels(workspaceId?: string, runCommand: VelaCommandRunner = runVelaCommand): Promise<string[]> {
   return (await fetchVelaVideoCatalogue(workspaceId, runCommand)).map((entry) => entry.model);
+}
+
+/** Account/workspace-filtered image catalogue. Never treat a failed read as an empty catalogue. */
+export async function fetchVelaImageModels(
+  workspaceId?: string,
+  runCommand: VelaCommandRunner = runVelaCommand,
+): Promise<MediaModel[]> {
+  const raw = await runCommand(['media', 'models', '--json'], {
+    ...velaWorkspaceCommandOptions(workspaceId),
+    timeoutMs: VELA_MODELS_TIMEOUT_MS,
+  });
+  const response = parseJsonObject(raw, 'media models');
+  if (!Array.isArray(response.models)) {
+    throw new Error('Vela media catalogue is unavailable: missing models');
+  }
+  const staticByWire = new Map(
+    IMAGE_MODELS.filter((model) => model.provider === 'vela').map((model) => [
+      model.id.replace(/^vela\//, ''),
+      model,
+    ]),
+  );
+  const seen = new Set<string>();
+  const models: MediaModel[] = [];
+  for (const entry of response.models) {
+    if (!isRecord(entry) || entry.kind !== 'image' || entry.enabled === false) continue;
+    const wire = nonEmptyString(entry.model);
+    if (!wire || seen.has(wire)) continue;
+    seen.add(wire);
+    const known = staticByWire.get(wire);
+    const capabilities = isRecord(entry.capabilities) ? entry.capabilities : null;
+    const edits = capabilities && typeof capabilities.edits === 'boolean' ? capabilities.edits : null;
+    const baseCaps = known?.caps ?? ['t2i', 'i2i'];
+    const caps = edits === false ? baseCaps.filter((cap) => cap !== 'i2i') : baseCaps;
+    models.push({
+      id: known?.id ?? `vela/${wire}`,
+      label: known?.label ?? `${wire} (Cloud)`,
+      hint: known?.hint ?? 'OpenDesign Cloud · managed image generation and editing',
+      provider: 'vela',
+      caps,
+      ...(known?.default ? { default: true } : {}),
+    });
+  }
+  if (models.length > 0 && !models.some((model) => model.default)) {
+    models[0] = { ...models[0]!, default: true };
+  }
+  return models;
 }
