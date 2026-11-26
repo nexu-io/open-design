@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildWindowsFolderDialogCommand,
   parseLinuxFolderDialogResult,
-  parseFolderDialogStdout,
+  parseMacFolderDialogResult,
+  parseWindowsFolderDialogResult,
 } from '../src/native-folder-dialog.js';
 
 function dialogError(message: string, code: string | number): Error & { code: string | number } {
@@ -39,16 +40,58 @@ describe('native folder dialog helpers', () => {
     expect(script).toContain('$owner.Dispose();');
   });
 
-  it('parses a selected folder path from stdout', () => {
-    expect(parseFolderDialogStdout(null, 'C:\\Users\\Ada\\Project\r\n')).toBe('C:\\Users\\Ada\\Project');
+  it('parses a selected Windows folder path from stdout', () => {
+    expect(parseWindowsFolderDialogResult(null, 'C:\\Users\\Ada\\Project\r\n', '')).toBe('C:\\Users\\Ada\\Project');
   });
 
-  it('returns null when the dialog is cancelled', () => {
-    expect(parseFolderDialogStdout(null, '\r\n')).toBeNull();
+  it('returns null when the Windows dialog is cancelled (exit 0, empty stdout)', () => {
+    expect(parseWindowsFolderDialogResult(null, '\r\n', '')).toBeNull();
   });
 
-  it('returns null when the native dialog command fails', () => {
-    expect(parseFolderDialogStdout(new Error('cancelled'), 'C:\\Users\\Ada\\Project\r\n')).toBeNull();
+  it('throws when powershell.exe is missing', () => {
+    const err = dialogError('spawn powershell.exe ENOENT', 'ENOENT');
+
+    expect(() => parseWindowsFolderDialogResult(err, '', '')).toThrow(
+      'Could not open folder picker: powershell.exe is not available',
+    );
+  });
+
+  it('throws with stderr when the Windows dialog command fails', () => {
+    const err = dialogError('Command failed: powershell.exe', 1);
+
+    expect(() => parseWindowsFolderDialogResult(err, '', 'Add-Type : blocked by policy\n')).toThrow(
+      'Could not open folder picker: Add-Type : blocked by policy',
+    );
+  });
+
+  it('throws a timeout error when the Windows dialog is killed', () => {
+    const err = Object.assign(dialogError('Command failed: powershell.exe', 1), { killed: true });
+
+    expect(() => parseWindowsFolderDialogResult(err, '', '')).toThrow(
+      'Could not open folder picker: the dialog timed out',
+    );
+  });
+
+  it('parses a selected macOS folder path and strips the trailing slash', () => {
+    expect(parseMacFolderDialogResult(null, '/Users/ada/project/\n', '')).toBe('/Users/ada/project');
+  });
+
+  it('keeps macOS cancel quiet', () => {
+    const err = dialogError('Command failed: osascript', 1);
+
+    expect(parseMacFolderDialogResult(err, '', '0:46: execution error: User canceled. (-128)\n')).toBeNull();
+  });
+
+  it('throws for macOS osascript failures that are not a cancel', () => {
+    const missing = dialogError('spawn osascript ENOENT', 'ENOENT');
+    const failed = dialogError('Command failed: osascript', 1);
+
+    expect(() => parseMacFolderDialogResult(missing, '', '')).toThrow(
+      'Could not open folder picker: osascript is not available',
+    );
+    expect(() => parseMacFolderDialogResult(failed, '', 'execution error: Not authorized (-1743)')).toThrow(
+      'Could not open folder picker: execution error: Not authorized (-1743)',
+    );
   });
 
   it('parses a selected Linux folder path from stdout', () => {

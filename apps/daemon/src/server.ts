@@ -349,7 +349,8 @@ import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import {
   buildWindowsFolderDialogCommand,
-  parseFolderDialogStdout,
+  parseMacFolderDialogResult,
+  parseWindowsFolderDialogResult,
   parseLinuxFolderDialogResult,
 } from './native-folder-dialog.js';
 import {
@@ -2800,10 +2801,12 @@ function openNativeFolderDialog() {
         'osascript',
         ['-e', 'POSIX path of (choose folder with prompt "Select a code folder to link")'],
         { timeout: 120_000 },
-        (err, stdout) => {
-          if (err) return resolve(null);
-          const p = stdout.trim().replace(/\/$/, '');
-          resolve(p || null);
+        (err, stdout, stderr) => {
+          try {
+            resolve(parseMacFolderDialogResult(err, stdout, stderr));
+          } catch (folderDialogError) {
+            reject(folderDialogError);
+          }
         },
       );
     } else if (platform === 'linux') {
@@ -2821,8 +2824,12 @@ function openNativeFolderDialog() {
       );
     } else if (platform === 'win32') {
       const command = buildWindowsFolderDialogCommand();
-      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout) => {
-        resolve(parseFolderDialogStdout(err, stdout));
+      execFile(command.command, command.args, { timeout: 120_000 }, (err, stdout, stderr) => {
+        try {
+          resolve(parseWindowsFolderDialogResult(err, stdout, stderr));
+        } catch (folderDialogError) {
+          reject(folderDialogError);
+        }
       });
     } else {
       resolve(null);
