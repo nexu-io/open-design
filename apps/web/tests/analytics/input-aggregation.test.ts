@@ -13,7 +13,7 @@ const raw = (patch: Record<string, unknown> = {}) => ({
 });
 const disk = () => {
   let value: unknown;
-  return { read: async () => structuredClone(value), write: vi.fn(async (next: unknown) => { value = structuredClone(next); }), close: vi.fn() };
+  return { read: async () => structuredClone(value), write: vi.fn(async (next: unknown) => { value = next; }), close: vi.fn() };
 };
 const setup = () => {
   vi.useFakeTimers(); vi.setSystemTime(start);
