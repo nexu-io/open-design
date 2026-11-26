@@ -73,6 +73,15 @@ describe('MEDIA_USER_REPLY_CONTRACT mirrors', () => {
     expect(daemonBody).not.toContain('图片生成服务暂时不可用');
   });
 
+  it('requires paid resubmission consent on the OD Next strategy path too', () => {
+    const core = readFileSync(new URL(
+      '../../../../plugins/_official/scenarios/od-next-strategy/assets/core-system-prompt.md',
+      import.meta.url,
+    ), 'utf8').replace(/\s+/g, ' ');
+    expect(core).toContain('`error.nextStep: confirm-paid-resubmission`');
+    expect(core).toContain('Stop image dispatch until the user explicitly confirms that paid request.');
+  });
+
   it('routes an unspecified image model through the managed Cloud default', () => {
     expect(generationBody).toContain('otherwise use \\`vela/gpt-image-2\\`');
     expect(generationBody).not.toContain('otherwise use \\`gpt-image-2\\`');

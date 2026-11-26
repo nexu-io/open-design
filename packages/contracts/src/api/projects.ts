@@ -269,6 +269,8 @@ export interface ProjectMetadata {
   userWorkingDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;
+  imageResolution?: string;
+  imageQuality?: string;
   imageStyle?: string;
   videoModel?: string;
   videoLength?: number;

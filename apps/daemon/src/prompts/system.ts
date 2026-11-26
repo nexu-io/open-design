@@ -172,6 +172,8 @@ type ProjectMetadata = {
   examplePromptBrief?: Record<string, string> | null;
   imageModel?: string | null;
   imageAspect?: string | null;
+  imageResolution?: string | null;
+  imageQuality?: string | null;
   imageStyle?: string | null;
   videoModel?: string | null;
   videoLength?: number | null;
@@ -1882,6 +1884,12 @@ function renderMetadataBlock(
     lines.push(
       `- **aspectRatio**: ${metadata.imageAspect ?? '(not provided; common choices include 1:1, 16:9, or 9:16)'}`,
     );
+    if (metadata.imageResolution) {
+      lines.push(`- **resolution**: ${metadata.imageResolution}`);
+    }
+    if (metadata.imageQuality) {
+      lines.push(`- **quality**: ${metadata.imageQuality}`);
+    }
     if (metadata.imageStyle) {
       lines.push(`- **styleNotes**: ${metadata.imageStyle}`);
     }

@@ -16,6 +16,7 @@ vi.mock('../../src/integrations/vela-command.js', async (importOriginal) => {
 });
 
 import { generateMedia } from '../../src/media/index.js';
+import { fetchVelaImageModels } from '../../src/media/vela.js';
 
 const IMAGE_BYTES = Buffer.from('real-image-output');
 const VIDEO_BYTES = Buffer.from('real-video-output');
@@ -121,6 +122,7 @@ describe('Vela media provider', () => {
           kind: 'image',
           capabilities: {
             profiles: {
+              generations: envelope([profile('1:1', '2K')], '2K'),
               // 16:9 exists at both tiers; the default tier must win.
               edits: envelope(
                 [profile('1:1', '2K'), profile('16:9', '1K'), profile('16:9', '2K')],
@@ -129,6 +131,13 @@ describe('Vela media provider', () => {
             },
           },
         },
+        ...['seedream-5.0', 'seedream-5.5'].map((model) => ({
+          model,
+          kind: 'image',
+          capabilities: {
+            profiles: { generations: envelope([profile('1:1', '2K')], '2K') },
+          },
+        })),
         {
           model: 'seedream-5.0-pro',
           kind: 'image',
@@ -208,6 +217,32 @@ describe('Vela media provider', () => {
       VELA_WORKSPACE_ID: 'workspace-team',
     });
     await expect(stat(tempOutputDirs[0]!)).rejects.toThrow();
+  });
+
+  it.each([
+    'gpt-image-2',
+    'nano-banana-2',
+    'seedream-5.0',
+    'seedream-5.5',
+  ])('routes the Cloud image model %s to Vela image generation', async (model) => {
+    mockReadyImage();
+
+    const result = await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: `vela/${model}`,
+      workspaceId: 'workspace-team',
+    });
+
+    expect(result.providerId).toBe('vela');
+    expect(result.usedStubFallback).toBe(false);
+    const [args, options] = imageCall();
+    expect(args.slice(0, 2)).toEqual(['image', 'gen']);
+    expect(valueAfter(args, '--model')).toBe(model);
+    expect(options.configuredEnv).toEqual({
+      VELA_INVOCATION_SOURCE: 'open-design',
+      VELA_WORKSPACE_ID: 'workspace-team',
+    });
   });
 
   it('routes the removed Codex image model id through Vela for existing projects', async () => {
@@ -345,6 +380,28 @@ describe('Vela media provider', () => {
     const [args] = imageCall();
     expect(valueAfter(args, '--aspect-ratio')).toBe('16:9');
     expect(valueAfter(args, '--resolution')).toBe('2K');
+  });
+
+  it('prefers the published default aspect for a resolution-only request', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({ models: [{
+          model: 'wide-default', kind: 'image', capabilities: { profiles: { generations: {
+            profiles: [{ aspect_ratio: '1:1', resolution: '2K' }, { aspect_ratio: '16:9', resolution: '2K' }],
+            default: { aspect_ratio: '16:9', resolution: '2K' },
+          } } },
+        }] });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_wide', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({ ...baseArgs(), surface: 'image', model: 'vela/wide-default', resolution: '2K', output: 'wide.png' });
+
+    expect(valueAfter(imageCall()[0], '--aspect-ratio')).toBe('16:9');
+    expect(valueAfter(imageCall()[0], '--resolution')).toBe('2K');
   });
 
   // Tiers are priced apart by more than an order of magnitude, so what an
@@ -558,7 +615,7 @@ describe('Vela media provider', () => {
   it('submits and polls video with first-frame/references, progress heartbeats, and one terminal download', async () => {
     const progress: string[] = [];
     runVelaCommandMock.mockImplementation(async (args: string[]) => {
-      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]});
+      if (args[0] === 'media') return JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video',capabilities:{durations:[5,10]}}]});
       if (args[0] === 'video' && args[1] === 'gen') {
         return JSON.stringify({ task_id: 'mt_test', status: 'queued' });
       }
@@ -622,7 +679,7 @@ describe('Vela media provider', () => {
 
   it('preserves a failed video status and provider error', async () => {
     runVelaCommandMock
-      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video'}]}))
+      .mockResolvedValueOnce(JSON.stringify({models:[{model:'doubao-seedance-2-0-260128',kind:'video',capabilities:{durations:[5,10]}}]}))
       .mockResolvedValueOnce(JSON.stringify({ task_id: 'mt_failed', status: 'queued' }))
       .mockResolvedValueOnce(JSON.stringify({
         task_id: 'mt_failed',
@@ -662,9 +719,9 @@ describe('Vela media provider', () => {
 
   it.each([
     ['4:3', 5, 'only supports aspect ratios'],
-    ['16:9', 6, 'only supports durations of 5 or 10'],
-    ['16:9', 8, 'only supports durations of 5 or 10'],
-  ])('rejects unsupported video capability %s/%ss before spawning', async (aspect, length, message) => {
+    ['16:9', 0, 'duration must be a positive integer'],
+    ['16:9', 5.5, 'duration must be a positive integer'],
+  ])('rejects invalid video capability %s/%ss before spawning', async (aspect, length, message) => {
     await expect(generateMedia({
       ...baseArgs(),
       surface: 'video',
@@ -674,5 +731,224 @@ describe('Vela media provider', () => {
       output: 'unsupported.mp4',
     })).rejects.toThrow(message);
     expect(runVelaCommandMock).not.toHaveBeenCalled();
+  });
+
+  it('supports static vela/seedream-5.5 and dynamic vela/* image catalogue bypass', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            {
+              model: 'seedream-5.5',
+              kind: 'image',
+              capabilities: {
+                edits: true,
+                max_input_images: 1,
+                profiles: {
+                  generations: {
+                    profiles: [{ aspect_ratio: '1:1', resolution: '1K' }, { aspect_ratio: '1:1', resolution: '2K' }],
+                    default: { aspect_ratio: '1:1', resolution: '2K' },
+                  },
+                },
+              },
+            },
+            {
+              model: 'future-image-pro',
+              kind: 'image',
+              capabilities: { edits: true, max_input_images: 3 },
+            },
+          ],
+        });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_dyn', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/seedream-5.5',
+      resolution: '1K',
+      output: 'seedream55.png',
+    });
+    expect(valueAfter(imageCall()[0], '--model')).toBe('seedream-5.5');
+    expect(valueAfter(imageCall()[0], '--aspect-ratio')).toBe('1:1');
+    expect(valueAfter(imageCall()[0], '--resolution')).toBe('1K');
+
+    runVelaCommandMock.mockClear();
+    await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/future-image-pro',
+      output: 'future.png',
+    });
+    expect(valueAfter(imageCall()[0], '--model')).toBe('future-image-pro');
+  });
+
+  it('fails closed when dynamic image model is absent, edits are disabled, or input images exceed max_input_images', async () => {
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({
+      models: [
+        {
+          model: 't2i-only-image',
+          kind: 'image',
+          capabilities: { edits: false, quality: { values: ['high'], default: 'high' } },
+        },
+        {
+          model: 'single-ref-image',
+          kind: 'image',
+          capabilities: { edits: true, max_input_images: 1 },
+        },
+      ],
+    }));
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/not-in-catalogue',
+      output: 'missing.png',
+    })).rejects.toThrow(/not in the published image catalogue/);
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/t2i-only-image',
+      images: refs.slice(0, 1),
+      output: 'no-edits.png',
+    })).rejects.toThrow(/does not support image editing/);
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/single-ref-image',
+      images: refs.slice(0, 2),
+      output: 'too-many-for-model.png',
+    })).rejects.toThrow(/accepts at most 1 input image/);
+    expect(runVelaCommandMock.mock.calls.every(([args]) => args[0] !== 'image')).toBe(true);
+  });
+
+  it('accepts live image models without capabilities.profiles for quality and fetches live image catalogue', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            { model: 'disabled-image', kind: 'image', enabled: false },
+            { model: 'seedream-5.5', kind: 'image', capabilities: { edits: true, max_input_images: 1 } },
+            {
+              model: 't2i-tiered-no-profiles',
+              kind: 'image',
+              capabilities: { edits: false, quality: { values: ['low', 'high'], default: 'low' } },
+            },
+          ],
+        });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_noprof', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/t2i-tiered-no-profiles',
+      quality: 'high',
+      output: 'tiered.png',
+    });
+    expect(valueAfter(imageCall()[0], '--quality')).toBe('high');
+
+    const liveImages = await fetchVelaImageModels('team-ws', runVelaCommandMock as unknown as Parameters<typeof fetchVelaImageModels>[1]);
+    expect(liveImages.map((m) => m.id)).toEqual(['vela/seedream-5.5', 'vela/t2i-tiered-no-profiles']);
+    expect(liveImages[0]?.default).toBe(true);
+    expect(liveImages[1]?.caps).toEqual(['t2i']);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', []],
+    ['invalid', [0, -1, 1.5, '5']],
+  ])('rejects a requested duration when published durations are %s', async (_label, durations) => {
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({
+      models: [{ model: 'doubao-seedance-2-0-260128', kind: 'video', capabilities: { durations } }],
+    }));
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 999,
+      output: 'rejected.mp4',
+    })).rejects.toThrow(/catalogue has no usable durations.*no generation was submitted/);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video' && args[1] === 'gen')).toBe(false);
+  });
+
+  it('validates video duration dynamically against published capabilities.durations and forwards 15s', async () => {
+    const seedance25Durations = Array.from({ length: 27 }, (_, i) => i + 4);
+    const wan27Durations = Array.from({ length: 14 }, (_, i) => i + 2);
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            { model: 'doubao-seedance-2-0-260128', kind: 'video', capabilities: { durations: { values: [5, 10], default: 5 } } },
+            { model: 'doubao-seedance-2-5-260628', kind: 'video', capabilities: { durations: { values: seedance25Durations, default: 5 } } },
+            { model: 'wan-2.7', kind: 'video', capabilities: { durations: { values: wan27Durations, default: 5 } } },
+          ],
+        });
+      }
+      if (args[0] === 'video' && args[1] === 'gen') {
+        return JSON.stringify({ task_id: 'mt_15s', status: 'queued' });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, VIDEO_BYTES);
+      return JSON.stringify({ task_id: 'mt_15s', status: 'succeeded' });
+    });
+
+    // Rejects a duration outside the model's published capabilities before calling `video gen`.
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 15,
+      output: 'rejected-seedance20.mp4',
+    })).rejects.toThrow(/does not support duration 15s; supported: 5, 10/);
+    expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video')).toBe(false);
+
+    // Accepts 15s for doubao-seedance-2-5-260628 (4-30s) via alias and forwards `--duration 15`.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'vela/doubao-seedance-2-0-260128': 'doubao-seedance-2-5-260628',
+    });
+    const result = await generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 15,
+      output: 'clip-15s.mp4',
+    });
+    expect(result.name).toBe('clip-15s.mp4');
+    const submit = runVelaCommandMock.mock.calls.find(([args]) => args[0] === 'video' && args[1] === 'gen')![0] as string[];
+    expect(valueAfter(submit, '--model')).toBe('doubao-seedance-2-5-260628');
+    expect(valueAfter(submit, '--duration')).toBe('15');
+    expect(submit).toContain('--generate-audio');
+
+    // Accepts 3s for wan-2.7 (2-15s) and passes `--generate-audio` for vela-cli 0.1.10 compatibility.
+    process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
+      'vela/doubao-seedance-2-0-260128': 'wan-2.7',
+    });
+    const wanResult = await generateMedia({
+      ...baseArgs(),
+      surface: 'video',
+      model: 'vela/doubao-seedance-2-0-260128',
+      length: 3,
+      output: 'clip-wan-3s.mp4',
+    });
+    expect(wanResult.name).toBe('clip-wan-3s.mp4');
+    const wanSubmit = runVelaCommandMock.mock.calls
+      .filter(([args]) => args[0] === 'video' && args[1] === 'gen')
+      .at(-1)![0] as string[];
+    expect(valueAfter(wanSubmit, '--model')).toBe('wan-2.7');
+    expect(valueAfter(wanSubmit, '--duration')).toBe('3');
+    expect(wanSubmit).toContain('--generate-audio');
   });
 });

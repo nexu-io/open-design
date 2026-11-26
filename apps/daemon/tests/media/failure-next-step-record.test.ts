@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   getMediaTask,
@@ -8,7 +8,7 @@ import {
   updateMediaTask,
 } from '../../src/media/tasks.js';
 import { mediaTaskErrorFromFailure } from '../../src/routes/media.js';
-import { VelaMediaError } from '../../src/media/vela.js';
+import { VelaMediaError, renderVelaImage } from '../../src/media/vela.js';
 
 /** Shape of `StubProviderDisabledError` (apps/daemon/src/media/index.ts), which is module-private. */
 function stubProviderDisabled(model: string): Error {
@@ -119,6 +119,37 @@ describe('recorded media failures carry a next step', () => {
     expect(restored.subject).toBe('input_image');
     expect(restored.code).toBe('safety_rejection');
   });
+
+  it.each(['image_generation_waiver_unavailable', 'IMAGE_GENERATION_WAIVER_UNAVAILABLE'])(
+    'preserves a non-retryable paid-resubmission decision from Vela task JSON (%s)',
+    async (code) => {
+      const message = 'The image generation benefit is no longer available.';
+      const commandError = Object.assign(new Error('Vela image command failed'), {
+        stdout: JSON.stringify({ status: 'failed', error: { code, message } }),
+      });
+      const runCommand = vi.fn().mockRejectedValue(commandError);
+      const decoded = await renderVelaImage({
+        aspect: undefined,
+        imageRefs: [],
+        model: 'vela/seedream-5.5',
+        prompt: 'A fixture prompt',
+        quality: undefined,
+        resolution: undefined,
+        wireModel: 'vela/seedream-5.5',
+        workspaceId: 'workspace-team',
+      }, runCommand).catch((error: unknown) => error);
+
+      expect(runCommand).toHaveBeenCalledTimes(1);
+      expect(runCommand.mock.calls[0]?.[0].slice(0, 2)).toEqual(['image', 'gen']);
+      expect(decoded).toBeInstanceOf(VelaMediaError);
+      expect(roundTrip(decoded)).toMatchObject({
+        code,
+        message,
+        nextStep: 'confirm-paid-resubmission',
+        retryable: false,
+      });
+    },
+  );
 
   it('never persists an unknown value smuggled through the JSON column', () => {
     const db = freshDb();
