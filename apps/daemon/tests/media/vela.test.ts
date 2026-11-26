@@ -16,6 +16,7 @@ vi.mock('../../src/integrations/vela-command.js', async (importOriginal) => {
 });
 
 import { generateMedia } from '../../src/media/index.js';
+import { fetchVelaImageModels } from '../../src/media/vela.js';
 
 const IMAGE_BYTES = Buffer.from('real-image-output');
 const VIDEO_BYTES = Buffer.from('real-video-output');
@@ -347,6 +348,28 @@ describe('Vela media provider', () => {
     expect(valueAfter(args, '--resolution')).toBe('2K');
   });
 
+  it('prefers the published default aspect for a resolution-only request', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({ models: [{
+          model: 'wide-default', kind: 'image', capabilities: { profiles: { generations: {
+            profiles: [{ aspect_ratio: '1:1', resolution: '2K' }, { aspect_ratio: '16:9', resolution: '2K' }],
+            default: { aspect_ratio: '16:9', resolution: '2K' },
+          } } },
+        }] });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_wide', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({ ...baseArgs(), surface: 'image', model: 'vela/wide-default', resolution: '2K', output: 'wide.png' });
+
+    expect(valueAfter(imageCall()[0], '--aspect-ratio')).toBe('16:9');
+    expect(valueAfter(imageCall()[0], '--resolution')).toBe('2K');
+  });
+
   // Tiers are priced apart by more than an order of magnitude, so what an
   // unqualified request sends is a billing decision, not a formatting one.
   it('sends no quality tier when the caller asked for none, leaving the model default in charge', async () => {
@@ -674,6 +697,137 @@ describe('Vela media provider', () => {
       output: 'unsupported.mp4',
     })).rejects.toThrow(message);
     expect(runVelaCommandMock).not.toHaveBeenCalled();
+  });
+
+  it('supports static vela/seedream-5.5 and dynamic vela/* image catalogue bypass', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            {
+              model: 'seedream-5.5',
+              kind: 'image',
+              capabilities: {
+                edits: true,
+                max_input_images: 1,
+                profiles: {
+                  generations: {
+                    profiles: [{ aspect_ratio: '1:1', resolution: '1K' }, { aspect_ratio: '1:1', resolution: '2K' }],
+                    default: { aspect_ratio: '1:1', resolution: '2K' },
+                  },
+                },
+              },
+            },
+            {
+              model: 'future-image-pro',
+              kind: 'image',
+              capabilities: { edits: true, max_input_images: 3 },
+            },
+          ],
+        });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_dyn', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/seedream-5.5',
+      resolution: '1K',
+      output: 'seedream55.png',
+    });
+    expect(valueAfter(imageCall()[0], '--model')).toBe('seedream-5.5');
+    expect(valueAfter(imageCall()[0], '--aspect-ratio')).toBe('1:1');
+    expect(valueAfter(imageCall()[0], '--resolution')).toBe('1K');
+
+    runVelaCommandMock.mockClear();
+    await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/future-image-pro',
+      output: 'future.png',
+    });
+    expect(valueAfter(imageCall()[0], '--model')).toBe('future-image-pro');
+  });
+
+  it('fails closed when dynamic image model is absent, edits are disabled, or input images exceed max_input_images', async () => {
+    runVelaCommandMock.mockResolvedValue(JSON.stringify({
+      models: [
+        {
+          model: 't2i-only-image',
+          kind: 'image',
+          capabilities: { edits: false, quality: { values: ['high'], default: 'high' } },
+        },
+        {
+          model: 'single-ref-image',
+          kind: 'image',
+          capabilities: { edits: true, max_input_images: 1 },
+        },
+      ],
+    }));
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/not-in-catalogue',
+      output: 'missing.png',
+    })).rejects.toThrow(/not in the published image catalogue/);
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/t2i-only-image',
+      images: refs.slice(0, 1),
+      output: 'no-edits.png',
+    })).rejects.toThrow(/does not support image editing/);
+
+    await expect(generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/single-ref-image',
+      images: refs.slice(0, 2),
+      output: 'too-many-for-model.png',
+    })).rejects.toThrow(/accepts at most 1 input image/);
+    expect(runVelaCommandMock.mock.calls.every(([args]) => args[0] !== 'image')).toBe(true);
+  });
+
+  it('accepts live image models without capabilities.profiles for quality and fetches live image catalogue', async () => {
+    runVelaCommandMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'media' && args[1] === 'models') {
+        return JSON.stringify({
+          models: [
+            { model: 'disabled-image', kind: 'image', enabled: false },
+            { model: 'seedream-5.5', kind: 'image', capabilities: { edits: true, max_input_images: 1 } },
+            {
+              model: 't2i-tiered-no-profiles',
+              kind: 'image',
+              capabilities: { edits: false, quality: { values: ['low', 'high'], default: 'low' } },
+            },
+          ],
+        });
+      }
+      const output = valueAfter(args, '--output');
+      tempOutputDirs.push(path.dirname(output));
+      await writeFile(output, IMAGE_BYTES);
+      return JSON.stringify({ asset_id: 'ma_noprof', status: 'ready', kind: 'image', mime_type: 'image/png' });
+    });
+
+    await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'vela/t2i-tiered-no-profiles',
+      quality: 'high',
+      output: 'tiered.png',
+    });
+    expect(valueAfter(imageCall()[0], '--quality')).toBe('high');
+
+    const liveImages = await fetchVelaImageModels('team-ws', runVelaCommandMock as unknown as Parameters<typeof fetchVelaImageModels>[1]);
+    expect(liveImages.map((m) => m.id)).toEqual(['vela/seedream-5.5', 'vela/t2i-tiered-no-profiles']);
+    expect(liveImages[0]?.default).toBe(true);
+    expect(liveImages[1]?.caps).toEqual(['t2i']);
   });
 
   it.each([
