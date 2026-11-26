@@ -8,7 +8,7 @@ import {
   updateMediaTask,
 } from '../../src/media/tasks.js';
 import { mediaTaskErrorFromFailure } from '../../src/routes/media.js';
-import { VelaMediaError } from '../../src/media/vela.js';
+import { velaMediaErrorFromFailure, VelaMediaError } from '../../src/media/vela.js';
 
 /** Shape of `StubProviderDisabledError` (apps/daemon/src/media/index.ts), which is module-private. */
 function stubProviderDisabled(model: string): Error {
@@ -104,6 +104,18 @@ describe('recorded media failures carry a next step', () => {
         model: 'senseaudio-image',
       }).nextStep,
     ).toBe('open-settings');
+  });
+
+  it('maps a signed-out Vela profile to a sign-in action', () => {
+    const failure = Object.assign(new Error('Command failed: vela media models --json'), {
+      stderr: 'Error: profile "prod" is not logged in; run vela login',
+    });
+    const error = velaMediaErrorFromFailure(failure, 'media models');
+
+    expect(error).toMatchObject({ code: 'AMR_AUTH_REQUIRED', retryable: false });
+    expect(
+      mediaTaskErrorFromFailure(error, { model: 'vela/gpt-image-2' }).nextStep,
+    ).toBe('sign-in');
   });
 
   it('survives the SQLite round-trip the way code and retryable do', () => {
