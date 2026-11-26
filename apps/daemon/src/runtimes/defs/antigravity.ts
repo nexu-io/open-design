@@ -10,9 +10,38 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
+const ANTIGRAVITY_MODEL_FLAG = '--model';
+
+// Parses `agy models` output into OpenDesign picker options.
+// Piped output emits one `<slug>\t<Display Label>` line per model after a
+// `Fetching available models...` header; TTY output separates columns with
+// spaces and may include ANSI escape sequences / spinner carriage returns.
+// We keep the display label as `id` so it stays compatible with both
+// `agy --model <label>`, `~/.gemini/antigravity-cli/settings.json`, and
+// `waitForAgyToReadModel` (which matches `label="<id>"` in agy's log).
+export function parseAntigravityModelsOutput(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const models: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>([DEFAULT_MODEL_OPTION.id]);
+  for (const rawLine of stdout.split(/\r?\n/)) {
+    const line = rawLine
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+      .replace(/^.*\r/, '')
+      .trim();
+    if (!line || /^Fetching available models/i.test(line)) continue;
+    const match = /^([a-z0-9][a-z0-9._-]*)(?:\t+|\s{2,})(.+)$/i.exec(line);
+    if (!match) continue;
+    const label = match[2]?.trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    models.push({ id: label, label });
+  }
+  return models.length > 1 ? models : null;
+}
 
 // Headless runs use agy's documented stdin channel (agy >= 1.1.15):
 //   agy --input-format stream-json --output-format stream-json
@@ -199,6 +228,12 @@ export const antigravityAgentDef = {
   helpArgs: ['--help'],
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    [ANTIGRAVITY_MODEL_FLAG]: 'modelFlag',
+  },
+  listModels: {
+    args: ['models'],
+    timeoutMs: 10_000,
+    parse: parseAntigravityModelsOutput,
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
@@ -252,6 +287,13 @@ export const antigravityAgentDef = {
     // diagnostics (model override / auth / quota) land in the log.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
+    }
+    if (
+      options.model
+      && options.model !== DEFAULT_MODEL_OPTION.id
+      && agentCapabilities.get('antigravity')?.modelFlag
+    ) {
+      args.push(ANTIGRAVITY_MODEL_FLAG, options.model);
     }
     // Daemon-managed headless runs have no interactive approval channel.
     if (agentCapabilities.get('antigravity')?.skipPermissions) {

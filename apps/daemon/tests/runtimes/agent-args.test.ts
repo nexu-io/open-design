@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import {
+  parseAntigravityModelsOutput,
+  writeAntigravityModelSelection,
+} from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
@@ -782,6 +785,7 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
   assert.deepEqual(antigravity.helpArgs, ['--help']);
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
+    '--model': 'modelFlag',
   });
   assert.deepEqual(antigravity.buildArgs('', [], [], {}), AGY_STREAM_JSON_ARGS);
 
@@ -793,6 +797,50 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
     ]);
   } finally {
     agentCapabilities.delete('antigravity');
+  }
+});
+
+test('antigravity parses live `agy models` output and passes --model when supported', () => {
+  const parsed = parseAntigravityModelsOutput(
+    [
+      'Fetching available models...',
+      'gemini-4-neon-high\tGemini 4 Neon (High)',
+      'claude-opus-5-5-medium\tClaude Opus 5.5 (Medium)',
+      'gpt-oss-120b-medium\tGPT-OSS 120B (Medium)',
+    ].join('\n'),
+  );
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'Gemini 4 Neon (High)', label: 'Gemini 4 Neon (High)' },
+    { id: 'Claude Opus 5.5 (Medium)', label: 'Claude Opus 5.5 (Medium)' },
+    { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
+  ]);
+  assert.equal(parseAntigravityModelsOutput('Fetching available models...\n'), null);
+
+  const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-model-flag-'));
+  agentCapabilities.set('antigravity', { modelFlag: true, skipPermissions: true });
+  try {
+    const args = antigravity.buildArgs(
+      'hi',
+      [],
+      [],
+      { model: 'Gemini 4 Neon (High)' },
+      {
+        agentLogFilePath: '/tmp/od-agy-test.log',
+        antigravitySettingsPath: join(settingsDir, 'settings.json'),
+      },
+    );
+    assert.deepEqual(args, [
+      '--log-file',
+      '/tmp/od-agy-test.log',
+      '--model',
+      'Gemini 4 Neon (High)',
+      '--dangerously-skip-permissions',
+      ...AGY_STREAM_JSON_ARGS,
+    ]);
+  } finally {
+    agentCapabilities.delete('antigravity');
+    rmSync(settingsDir, { recursive: true, force: true });
   }
 });
 
