@@ -167,7 +167,27 @@ it('H04 retains over two offline hours of both areas and periods instead of hitt
   expect(delivered.pending).toHaveLength(0); expect(delivered.rawPending).toHaveLength(0);
 });
 it('H05 bounds a prolonged offline raw outbox without deleting already committed facts', async () => {
-  const { a, send } = setup(); send.mockResolvedValue(false);
-  for (let i = 0; i < 1025; i++) await a.observe(raw({ event_id: `raw-${i}` }));
-  expect(a.stopped).toBe('queue_limit');
+  const { a, store, send } = setup();
+  send.mockResolvedValue(false);
+  await a.observe(raw({ event_id: 'raw-0' }));
+  await a.close();
+
+  // Restore an existing offline backlog so only the two boundary writes
+  // need to checkpoint the growing outbox.
+  const saved = await store.read() as { rawPending: Array<{ event_id: string }> };
+  const rawPending = Array.from({ length: 1023 }, (_, i) => ({
+    ...saved.rawPending[0]!,
+    event_id: `raw-${i}`,
+  }));
+  await store.write({ ...saved, rawPending, completed: rawPending.map(event => event.event_id) });
+
+  const restored = new InputAggregation(send, store);
+  expect(await restored.observe(raw({ event_id: 'raw-1023' }))).not.toBeNull();
+  const atCapacity = await store.read() as typeof saved;
+  expect(atCapacity.rawPending).toEqual([...rawPending, expect.objectContaining({ event_id: 'raw-1023' })]);
+
+  expect(await restored.observe(raw({ event_id: 'raw-1024' }))).toBeNull();
+  expect(restored.stopped).toBe('queue_limit');
+  expect(await store.read()).toEqual(atCapacity);
+  await restored.close();
 });
