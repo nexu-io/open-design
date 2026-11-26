@@ -279,6 +279,25 @@ export type ConnectionTestRequest =
   | ({ mode: 'provider' } & ProviderTestRequest)
   | ({ mode: 'agent' } & AgentTestRequest);
 
+/**
+ * Stable codes for connection-test failures that clients render with their own
+ * localized guidance instead of the English `detail`.
+ *
+ * A code names the agent whose remedy differs, so a further agent with its own
+ * remedy gets its own code.
+ *
+ * - `opencode_zen_outdated_byok`: OpenCode Zen's free tier rejected the OpenCode
+ *   runtime OpenDesign launched for `byok-opencode` as too old. The remedy is an
+ *   API provider with the user's own key; updating OpenCode Desktop does not
+ *   change that runtime.
+ * - `opencode_zen_outdated_cli`: the same rejection for the user's own
+ *   `opencode` CLI. The remedy is a model from a provider configured in
+ *   OpenCode with the user's own key.
+ */
+export type ConnectionTestErrorCode =
+  | 'opencode_zen_outdated_byok'
+  | 'opencode_zen_outdated_cli';
+
 export interface ConnectionTestResponse {
   ok: boolean;
   kind: ConnectionTestKind;
@@ -294,8 +313,14 @@ export interface ConnectionTestResponse {
   // Display name of the resolved agent (CLI tests).
   agentName?: string;
   // Free-form, redacted detail line — surfaced in the `unknown`,
-  // `agent_spawn_failed`, and `upstream_unavailable` copy.
+  // `agent_spawn_failed`, and `upstream_unavailable` copy. English only.
+  // When `errorCode` is present, clients should prefer their own localized
+  // copy for that code; `detail` stays as the fallback for clients that do
+  // not know the code.
   detail?: string;
+  // Stable machine code for a failure that clients render with localized,
+  // agent-specific guidance. Absent for failures without a dedicated code.
+  errorCode?: ConnectionTestErrorCode;
   // Optional executable-path diagnostics for Local CLI tests. Used by
   // Settings to explain whether a saved custom path worked, was ignored,
   // or required a PATH fallback.

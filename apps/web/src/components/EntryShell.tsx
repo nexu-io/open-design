@@ -77,6 +77,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import { agentIdToTracking } from '@open-design/contracts/analytics';
 import { useI18n, useT } from '../i18n';
+import { agentSpawnFailedMessage } from '../providers/connection-test-message';
 import { navigate, useRoute } from '../router';
 import type {
   AgentInfo,
@@ -4797,10 +4798,7 @@ function renderOnboardingAgentTestMessage(
     case 'agent_auth_required':
       return result.detail || 'Agent authentication is required.';
     case 'agent_spawn_failed':
-      return t('settings.testAgentSpawn', {
-        agentName,
-        detail: result.detail ?? '',
-      });
+      return agentSpawnFailedMessage(t, result, agentName);
     case 'rate_limited':
       return t('settings.testRateLimited');
     case 'timeout':

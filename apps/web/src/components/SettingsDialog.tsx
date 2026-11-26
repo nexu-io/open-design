@@ -40,6 +40,7 @@ import {
 } from '../analytics/events';
 import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
+import { agentSpawnFailedMessage } from '../providers/connection-test-message';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
@@ -3033,10 +3034,7 @@ export function SettingsDialog({
       case 'agent_auth_required':
         return result.detail || 'Agent authentication is required.';
       case 'agent_spawn_failed':
-        return t('settings.testAgentSpawn', {
-          agentName,
-          detail: result.detail ?? '',
-        });
+        return agentSpawnFailedMessage(t, result, agentName);
       default:
         return t('settings.testUnknown', { detail: result.detail ?? '' });
     }

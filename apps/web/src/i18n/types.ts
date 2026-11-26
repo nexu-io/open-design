@@ -508,6 +508,8 @@ export interface Dict {
   'settings.testTimeout': string;
   'settings.testAgentMissing': string;
   'settings.testAgentSpawn': string;
+  'settings.testAgentZenOutdatedByok': string;
+  'settings.testAgentZenOutdatedCli': string;
   'settings.testUnknown': string;
   'settings.agentInstall.install': string;
   'settings.agentInstall.docs': string;

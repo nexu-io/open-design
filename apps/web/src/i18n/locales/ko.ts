@@ -632,6 +632,8 @@ export const ko: Dict = {
   'settings.testTimeout': '{ms} ms 후에 테스트가 시간 초과되었습니다.',
   'settings.testAgentMissing': '{agentName}이(가) 설치되어 있지 않거나 PATH에 없습니다.',
   'settings.testAgentSpawn': '{agentName}을(를) 시작할 수 없습니다: {detail}.',
+  'settings.testAgentZenOutdatedByok': '{agentName}을(를) 시작할 수 없습니다: OpenCode Zen 무료 등급이 OpenDesign이 실행한 OpenCode 런타임을 너무 오래된 버전이라는 이유로 거부했습니다. 기본적으로 이는 OpenDesign에 번들된 런타임이므로 OpenCode Desktop을 업데이트해도 바뀌지 않습니다. 본인의 API 키로 API 제공자를 설정하고 해당 제공자의 모델을 선택하세요.',
+  'settings.testAgentZenOutdatedCli': '{agentName}을(를) 시작할 수 없습니다: OpenCode Zen 무료 등급이 이 OpenCode CLI를 너무 오래된 버전이라는 이유로 거부했습니다. OpenCode에 본인의 API 키로 설정한 제공자의 모델을 선택한 뒤 테스트를 다시 실행하세요.',
   'settings.testUnknown': '테스트 실패: {detail}',
   'settings.agentInstall.install': '설치',
   'settings.agentInstall.docs': '문서',

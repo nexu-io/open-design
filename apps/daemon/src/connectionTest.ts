@@ -74,6 +74,7 @@ import {
   type BaseUrlValidationResult,
   type ValidateBaseUrlOptions,
   type ConnectionTestDiagnostics,
+  type ConnectionTestErrorCode,
   type ConnectionTestKind,
   type ConnectionTestPhase,
   type ConnectionTestProtocol,
@@ -102,6 +103,7 @@ import {
 import {
   detectOpenCodeZenOutdatedClient,
   openCodeZenOutdatedDetail,
+  openCodeZenOutdatedErrorCode,
 } from './runtimes/opencode-zen.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
@@ -2118,13 +2120,17 @@ function openCodeOutdatedCliDetail(output: string): string | null {
     : null;
 }
 
-function openCodeZenOutdatedClientResultDetail(
+function openCodeZenOutdatedClientResult(
   agentId: string,
   output: string,
-): string | null {
+): { detail: string; errorCode: ConnectionTestErrorCode } | null {
   if (agentId !== 'opencode' && agentId !== 'byok-opencode') return null;
   const zen = detectOpenCodeZenOutdatedClient(output);
-  return zen ? openCodeZenOutdatedDetail(agentId, zen.requiredVersion) : null;
+  if (!zen) return null;
+  return {
+    detail: openCodeZenOutdatedDetail(agentId, zen.requiredVersion),
+    errorCode: openCodeZenOutdatedErrorCode(agentId),
+  };
 }
 
 function openCodeProviderConnectivityDetail(output: string): string | null {
@@ -2518,8 +2524,8 @@ async function testAgentConnectionInternal(
         diagnostics: buildDiagnostics(),
       };
     }
-    const zenDetail = openCodeZenOutdatedClientResultDetail(input.agentId, detail);
-    if (zenDetail) {
+    const zenResult = openCodeZenOutdatedClientResult(input.agentId, detail);
+    if (zenResult) {
       console.warn(`[test:agent] ${def.name} → zen_outdated_client: ${detail}`);
       return {
         ok: false,
@@ -2527,7 +2533,8 @@ async function testAgentConnectionInternal(
         latencyMs,
         model,
         agentName: def.name,
-        detail: zenDetail,
+        detail: zenResult.detail,
+        errorCode: zenResult.errorCode,
         diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
       };
     }
@@ -2583,11 +2590,11 @@ async function testAgentConnectionInternal(
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
     if (kind === 'timeout') {
-      const zenDetail = openCodeZenOutdatedClientResultDetail(
+      const zenResult = openCodeZenOutdatedClientResult(
         input.agentId,
         `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`,
       );
-      if (zenDetail) {
+      if (zenResult) {
         console.warn(`[test:agent] ${def.name} → zen_outdated_client (timeout)`);
         return {
           ok: false,
@@ -2595,7 +2602,8 @@ async function testAgentConnectionInternal(
           latencyMs: Date.now() - start,
           model,
           agentName: def.name,
-          detail: zenDetail,
+          detail: zenResult.detail,
+          errorCode: zenResult.errorCode,
           diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
         };
       }
@@ -2973,11 +2981,11 @@ async function testAgentConnectionInternal(
       ]
         .filter(Boolean)
         .join(' · ');
-      const zenDetail = openCodeZenOutdatedClientResultDetail(
+      const zenResult = openCodeZenOutdatedClientResult(
         input.agentId,
         `${stderrTail}\n${rawStdoutTail || buffered}`,
       );
-      if (zenDetail) {
+      if (zenResult) {
         console.warn(
           `[test:agent] ${def.name} → zen_outdated_client: ${redactSecrets(rawDetail)}`,
         );
@@ -2987,7 +2995,8 @@ async function testAgentConnectionInternal(
           latencyMs,
           model,
           agentName: def.name,
-          detail: zenDetail,
+          detail: zenResult.detail,
+          errorCode: zenResult.errorCode,
           diagnostics: buildDiagnostics({
             phase: 'connection_smoke_test',
             exitCode: winner.code,

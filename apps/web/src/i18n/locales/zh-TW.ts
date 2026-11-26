@@ -625,6 +625,8 @@ export const zhTW: Dict = {
   "settings.testTimeout": "測試在 {ms} 毫秒後逾時。",
   "settings.testAgentMissing": "{agentName} 未安裝，或不在 PATH 中。",
   "settings.testAgentSpawn": "無法啟動 {agentName}：{detail}。",
+  "settings.testAgentZenOutdatedByok": "無法啟動 {agentName}：OpenCode Zen 免費額度拒絕了 OpenDesign 啟動的 OpenCode 執行環境，因為其版本過舊。預設情況下這是 OpenDesign 內建的執行環境，因此更新 OpenCode Desktop 不會改變它。請使用自己的 API Key 設定 API 提供方，並選擇其中的模型。",
+  "settings.testAgentZenOutdatedCli": "無法啟動 {agentName}：OpenCode Zen 免費額度拒絕了此 OpenCode CLI，因為其版本過舊。請選擇在 OpenCode 中使用自己的 API Key 設定的供應商的模型，然後重新執行測試。",
   "settings.testUnknown": "測試失敗：{detail}",
   "settings.agentInstall.install": "安裝",
   "settings.agentInstall.docs": "查看文件",

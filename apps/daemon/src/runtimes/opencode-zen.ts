@@ -4,6 +4,8 @@
 // daemon recognizes it and replaces the opaque string with actionable guidance.
 // (#9627)
 
+import type { ConnectionTestErrorCode } from '@open-design/contracts';
+
 const OPENCODE_ZEN_OUTDATED_CLIENT_RE =
   /OpenCode\s+(?:v?(\d+(?:\.\d+){1,2})\s+)?or newer is required to use the free tier/iu;
 
@@ -28,4 +30,13 @@ export function openCodeZenOutdatedDetail(
     return `OpenCode Zen's free tier rejected the OpenCode runtime OpenDesign launched for BYOK OpenCode${versionClause}. By default this is the runtime bundled with OpenDesign, so updating OpenCode Desktop does not change it. Set up an API provider with your own API key in Settings and choose one of its models instead.`;
   }
   return `OpenCode Zen's free tier rejected this OpenCode CLI${versionClause}. Choose a model from a provider configured in OpenCode with your own API key, then retry the OpenCode connection test.`;
+}
+
+// Stable code the web UI keys localized guidance on; `detail` stays English.
+export function openCodeZenOutdatedErrorCode(
+  agentId: 'opencode' | 'byok-opencode',
+): ConnectionTestErrorCode {
+  return agentId === 'byok-opencode'
+    ? 'opencode_zen_outdated_byok'
+    : 'opencode_zen_outdated_cli';
 }

@@ -981,6 +981,47 @@ describe('EntryShell onboarding OpenDesign AMR runtime', () => {
     });
   });
 
+  it('shows localized OpenCode Zen guidance instead of the raw detail on a coded spawn failure', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          loggedIn: true,
+          profile: 'prod',
+          configPath: '/x',
+          user: { id: 'u', email: 'user@example.com' },
+        });
+      }
+      if (url.endsWith('/api/test/connection') && init?.method === 'POST') {
+        return jsonResponse({
+          ok: false,
+          kind: 'agent_spawn_failed',
+          errorCode: 'opencode_zen_outdated_cli',
+          latencyMs: 12,
+          model: 'sonnet',
+          agentName: 'Claude Code',
+          detail: 'RAW_ENGLISH_ZEN_DETAIL',
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    const props = renderOnboarding({
+      config: baseConfig({
+        agentId: 'claude-code',
+        agentModels: { 'claude-code': { model: 'sonnet' } },
+      }),
+    });
+
+    await openLocalRuntimeSetup();
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/i }));
+    expect(
+      await screen.findByText(/rejected this OpenCode CLI because it is too old/i),
+    ).toBeTruthy();
+    expect(screen.queryByText(/RAW_ENGLISH_ZEN_DETAIL/)).toBeNull();
+    expect(props.onCompleteOnboarding).not.toHaveBeenCalled();
+  });
+
   it('drops a Local Agent validation that lands after the user goes Back', async () => {
     // Continue awaits a network round trip before it persists. Back stays
     // enabled through that wait, so a late success must not resurrect the

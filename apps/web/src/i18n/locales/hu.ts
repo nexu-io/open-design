@@ -632,6 +632,8 @@ export const hu: Dict = {
   'settings.testTimeout': 'A teszt {ms} ms után időtúllépéssel megszakadt.',
   'settings.testAgentMissing': 'A(z) {agentName} nincs telepítve vagy nincs a PATH-ban.',
   'settings.testAgentSpawn': 'Nem sikerült elindítani: {agentName} — {detail}.',
+  'settings.testAgentZenOutdatedByok': 'Nem sikerült elindítani: {agentName} — az OpenCode Zen ingyenes szintje elutasította az OpenDesign által indított OpenCode futtatókörnyezetet, mert túl régi. Alapértelmezés szerint ez az OpenDesignnal csomagolt futtatókörnyezet, ezért az OpenCode Desktop frissítése nem változtat rajta. Ehelyett állíts be egy API-szolgáltatót a saját API key-eddel, és válaszd annak egyik modelljét.',
+  'settings.testAgentZenOutdatedCli': 'Nem sikerült elindítani: {agentName} — az OpenCode Zen ingyenes szintje elutasította ezt az OpenCode CLI-t, mert túl régi. Válassz egy modellt az OpenCode-ban a saját API key-eddel beállított szolgáltatótól, majd futtasd újra a tesztet.',
   'settings.testUnknown': 'Sikertelen teszt: {detail}',
   'settings.agentInstall.install': 'Telepítés',
   'settings.agentInstall.docs': 'Dokumentáció',

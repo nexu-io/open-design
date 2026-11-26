@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import type { ConnectionTestErrorCode } from '@open-design/contracts';
+
 import {
   detectOpenCodeZenOutdatedClient,
   openCodeZenOutdatedDetail,
+  openCodeZenOutdatedErrorCode,
 } from '../../src/runtimes/opencode-zen.js';
 
 describe('detectOpenCodeZenOutdatedClient (#9627)', () => {
@@ -71,5 +74,14 @@ describe('openCodeZenOutdatedDetail', () => {
       expect(detail).not.toContain('null');
       expect(detail).not.toContain('undefined');
     }
+  });
+});
+
+describe('openCodeZenOutdatedErrorCode (#9639)', () => {
+  it('maps each OpenCode agent to its stable error code', () => {
+    const byok: ConnectionTestErrorCode = openCodeZenOutdatedErrorCode('byok-opencode');
+    const cli: ConnectionTestErrorCode = openCodeZenOutdatedErrorCode('opencode');
+    expect(byok).toBe('opencode_zen_outdated_byok');
+    expect(cli).toBe('opencode_zen_outdated_cli');
   });
 });

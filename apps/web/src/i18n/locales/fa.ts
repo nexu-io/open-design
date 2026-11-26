@@ -632,6 +632,8 @@ export const fa: Dict = {
   'settings.testTimeout': 'آزمایش پس از {ms} میلی‌ثانیه به پایان زمان رسید.',
   'settings.testAgentMissing': '{agentName} نصب نشده یا در PATH نیست.',
   'settings.testAgentSpawn': '{agentName} اجرا نشد: {detail}.',
+  'settings.testAgentZenOutdatedByok': '{agentName} اجرا نشد: لایه رایگان OpenCode Zen محیط اجرایی OpenCode را که OpenDesign راه‌اندازی کرده بود رد کرد، چون بیش از حد قدیمی است. به‌طور پیش‌فرض این همان محیط اجرایی همراه OpenDesign است، پس به‌روزرسانی OpenCode Desktop آن را تغییر نمی‌دهد. به‌جای آن یک ارائه‌دهنده API با API key خودتان تنظیم کنید و یکی از مدل‌هایش را انتخاب کنید.',
+  'settings.testAgentZenOutdatedCli': '{agentName} اجرا نشد: لایه رایگان OpenCode Zen این OpenCode CLI را رد کرد، چون بیش از حد قدیمی است. مدلی را از ارائه‌دهنده‌ای که در OpenCode با API key خودتان پیکربندی شده انتخاب کنید و دوباره آزمایش را اجرا کنید.',
   'settings.testUnknown': 'آزمایش ناموفق بود: {detail}',
   'settings.agentInstall.install': 'نصب',
   'settings.agentInstall.docs': 'مستندات',

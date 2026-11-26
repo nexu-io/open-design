@@ -4043,6 +4043,7 @@ ${body}
           expect(result.detail).toContain('own API key');
           expect(result.detail).toContain('1.18.0');
           expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+          expect(result.errorCode).toBe('opencode_zen_outdated_cli');
         },
       );
     });
@@ -4068,6 +4069,7 @@ ${body}
         expect(result.detail).toContain('bundled with OpenDesign');
         expect(result.detail).toContain('own API key');
         expect(result.detail).toContain('1.18.0');
+        expect(result.errorCode).toBe('opencode_zen_outdated_byok');
         expect(result.diagnostics?.phase).toBe('connection_smoke_test');
         expect(JSON.stringify(result.diagnostics)).toContain('free tier');
       } finally {
@@ -4095,6 +4097,7 @@ setInterval(() => {}, 1000);
             expect(result.kind).toBe('agent_spawn_failed');
             expect(result.detail).toContain('free tier');
             expect(result.detail).toContain('own API key');
+            expect(result.errorCode).toBe('opencode_zen_outdated_cli');
             expect(result.diagnostics?.phase).toBe('connection_smoke_test');
           },
         );
@@ -4105,6 +4108,21 @@ setInterval(() => {}, 1000);
           process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = previousTimeout;
         }
       }
+    });
+
+    it('does not set an error code when a non-OpenCode agent prints the Zen sentence', async () => {
+      await withFakeClaude(
+        `
+console.error(${JSON.stringify(ZEN_TEXT)});
+process.exit(1);
+`,
+        async () => {
+          const result = await testAgentConnection({ agentId: 'claude' });
+          expect(result.ok).toBe(false);
+          expect(result.detail).not.toContain('own API key');
+          expect(result.errorCode).toBeUndefined();
+        },
+      );
     });
   });
 
@@ -4131,6 +4149,7 @@ setInterval(() => {}, 1000);
         expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
         expect(result.detail).toContain('Cannot connect to API');
         expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
+        expect(result.errorCode).toBeUndefined();
         expect(result.diagnostics?.phase).toBe('connection_smoke_test');
         expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
       },

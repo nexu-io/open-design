@@ -632,6 +632,8 @@ export const tr: Dict = {
   'settings.testTimeout': 'Test {ms} ms sonra zaman aşımına uğradı.',
   'settings.testAgentMissing': '{agentName} yüklü değil veya PATH\'te yok.',
   'settings.testAgentSpawn': '{agentName} başlatılamadı: {detail}.',
+  'settings.testAgentZenOutdatedByok': '{agentName} başlatılamadı: OpenCode Zen ücretsiz katmanı, OpenDesign tarafından başlatılan OpenCode çalışma zamanını çok eski olduğu için reddetti. Varsayılan olarak bu, OpenDesign ile birlikte gelen çalışma zamanıdır; bu yüzden OpenCode Desktop\'ı güncellemek onu değiştirmez. Kendi API anahtarınızla bir API sağlayıcısı kurun ve onun modellerinden birini seçin.',
+  'settings.testAgentZenOutdatedCli': '{agentName} başlatılamadı: OpenCode Zen ücretsiz katmanı bu OpenCode CLI\'ı çok eski olduğu için reddetti. OpenCode\'da kendi API anahtarınızla yapılandırılmış bir sağlayıcıdan model seçin, ardından testi yeniden çalıştırın.',
   'settings.testUnknown': 'Test başarısız: {detail}',
   'settings.agentInstall.install': 'Yükle',
   'settings.agentInstall.docs': 'Dokümanlar',

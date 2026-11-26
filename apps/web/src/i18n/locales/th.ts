@@ -632,6 +632,8 @@ export const th: Dict = {
   'settings.testTimeout': 'การทดสอบหมดเวลาหลังจาก {ms} มิลลิวินาที',
   'settings.testAgentMissing': 'ยังไม่ได้ติดตั้ง {agentName} หรือไม่ได้อยู่ใน PATH',
   'settings.testAgentSpawn': 'ไม่สามารถเริ่ม {agentName} ได้: {detail}',
+  'settings.testAgentZenOutdatedByok': 'ไม่สามารถเริ่ม {agentName} ได้: แพ็กเกจฟรีของ OpenCode Zen ปฏิเสธรันไทม์ OpenCode ที่ OpenDesign เปิดใช้ เพราะเก่าเกินไป โดยค่าเริ่มต้นนี้คือรันไทม์ที่มาพร้อมกับ OpenDesign ดังนั้นการอัปเดต OpenCode Desktop จึงไม่เปลี่ยนแปลงสิ่งนี้ ให้ตั้งค่าผู้ให้บริการ API ด้วย API Key ของคุณเอง แล้วเลือกโมเดลจากผู้ให้บริการนั้น',
+  'settings.testAgentZenOutdatedCli': 'ไม่สามารถเริ่ม {agentName} ได้: แพ็กเกจฟรีของ OpenCode Zen ปฏิเสธ OpenCode CLI นี้ เพราะเก่าเกินไป ให้เลือกโมเดลจากผู้ให้บริการที่ตั้งค่าไว้ใน OpenCode ด้วย API Key ของคุณเอง แล้วรันการทดสอบอีกครั้ง',
   'settings.testUnknown': 'การทดสอบล้มเหลว: {detail}',
   'settings.agentInstall.install': 'ติดตั้ง',
   'settings.agentInstall.docs': 'เอกสาร',
