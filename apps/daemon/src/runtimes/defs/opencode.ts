@@ -1,10 +1,13 @@
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
+  OPENCODE_STANDALONE_FLAG,
   appendOpenCodePermissionBypass,
+  appendOpenCodeStandalone,
   appendOpenCodeWorkspaceDir,
   isOpenCode2xCapabilities,
   shouldUseOpenCodeVariantFlag,
+  supportsOpenCodeStandalone,
 } from '../opencode-permissions.js';
 import { execAgentFile } from '../invocation.js';
 import { getRememberedLiveModels } from '../models.js';
@@ -200,12 +203,15 @@ export const opencodeAgentDef = {
           if (verbose) return verbose;
           return readModels(['models']);
         }
-        const plain = await readModels(['models']);
+        const standaloneArgs = supportsOpenCodeStandalone(caps)
+          ? [OPENCODE_STANDALONE_FLAG]
+          : [];
+        const plain = await readModels(['models', ...standaloneArgs]);
         if (!plain) return null;
         try {
           const { stdout } = await execAgentFile(
             resolvedBin,
-            ['api', 'GET', '/api/model'],
+            ['api', 'GET', '/api/model', ...standaloneArgs],
             options,
           );
           return withCatalogVariants(plain, parseOpenCodeVariantCatalog(String(stdout)));
@@ -234,6 +240,7 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
+      appendOpenCodeStandalone(args, 'opencode');
       appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the

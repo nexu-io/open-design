@@ -298,6 +298,11 @@ authentication, and the boundary between REST and MCP.
   folds it into `-m provider/model#variant`.
 - The CLI line is decided from the `run --help` capability probe (`--auto`
   present and `--variant` absent means 2.x).
+- Builds that advertise `--standalone` in `run --help` (OpenCode 2.2+) receive
+  `--standalone` on `run`, `models`, `api GET /api/model`, and `session export`
+  so per-invocation `OPENCODE_CONFIG_CONTENT` (BYOK provider, MCP servers,
+  permissions) and isolated env vars are honored rather than bypassed by the
+  shared background `opencode service`.
 - Model discovery is version-aware: 1.x reads `opencode models --verbose`,
   which carries variant metadata inline. 2.x reads the plain `opencode models`
   list and enriches it from `opencode api GET /api/model` (`providerID`,

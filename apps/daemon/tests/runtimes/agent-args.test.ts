@@ -94,6 +94,7 @@ test('opencode args pass model-supported variants without changing the default a
   assert.deepEqual(opencode.capabilityFlags?.['--dir'], 'workspaceDir');
   assert.deepEqual(opencode.capabilityFlags?.['--variant'], 'variantFlag');
   assert.deepEqual(opencode.capabilityFlags?.['--pure'], 'pureMode');
+  assert.deepEqual(opencode.capabilityFlags?.['--standalone'], 'standalone');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -303,6 +304,110 @@ test('opencode 2.x uses --auto for non-interactive runs', () => {
     assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
   } finally {
     agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x appends --standalone only when advertised in capabilities', () => {
+  try {
+    agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, standalone: true });
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+      '--standalone',
+    ]);
+
+    agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, standalone: false });
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+    ]);
+
+    agentCapabilities.set('opencode', { workspaceDir: true, autoApprove: false });
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode fetchModels forwards --standalone to models and api GET /api/model when advertised', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-opencode-models-standalone-'));
+  const previousRemembered = getRememberedLiveModels('opencode');
+  try {
+    const logFile = join(dir, 'invocations.jsonl');
+    const script = join(dir, 'fake-opencode.cjs');
+    writeFileSync(
+      script,
+      `const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(args) + '\\n');
+if (args[0] === 'models') {
+  process.stdout.write('open-design-byok/test-model\\n');
+  process.exit(0);
+}
+if (args[0] === 'api' && args[1] === 'GET' && args[2] === '/api/model') {
+  process.stdout.write(JSON.stringify([{
+    providerID: 'open-design-byok',
+    modelID: 'test-model',
+    variants: [{ id: 'high' }],
+  }]));
+  process.exit(0);
+}
+process.exit(1);
+`,
+    );
+    const bin = join(dir, process.platform === 'win32' ? 'opencode.cmd' : 'opencode');
+    if (process.platform === 'win32') {
+      writeFileSync(bin, `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`);
+    } else {
+      writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+      chmodSync(bin, 0o755);
+    }
+    assert.ok(opencode.fetchModels, 'opencode must define fetchModels');
+
+    const modelsWithStandalone = await opencode.fetchModels(
+      bin,
+      {},
+      Promise.resolve({ autoApprove: true, variantFlag: false, standalone: true }),
+    );
+    const withStandaloneTarget = modelsWithStandalone?.find(
+      (model) => model.id === 'open-design-byok/test-model',
+    );
+    assert.ok(withStandaloneTarget, 'expected open-design-byok/test-model in catalog');
+    assert.ok(
+      withStandaloneTarget.reasoningOptions?.some((option) => option.id === 'high'),
+      'expected high variant from /api/model',
+    );
+
+    const modelsWithoutStandalone = await opencode.fetchModels(
+      bin,
+      {},
+      Promise.resolve({ autoApprove: true, variantFlag: false, standalone: false }),
+    );
+    assert.ok(
+      modelsWithoutStandalone?.some((model) => model.id === 'open-design-byok/test-model'),
+    );
+
+    const invocations = readFileSync(logFile, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as string[]);
+    assert.deepEqual(invocations, [
+      ['models', '--standalone'],
+      ['api', 'GET', '/api/model', '--standalone'],
+      ['models'],
+      ['api', 'GET', '/api/model'],
+    ]);
+  } finally {
+    rememberLiveModels('opencode', previousRemembered);
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

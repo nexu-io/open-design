@@ -19,6 +19,7 @@ describe('byok-opencode runtime config', () => {
       '--dir': 'workspaceDir',
       '--variant': 'variantFlag',
       '--pure': 'pureMode',
+      '--standalone': 'standalone',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',
@@ -61,6 +62,36 @@ describe('byok-opencode runtime config', () => {
         '--format',
         'json',
         '--auto',
+        '-m',
+        'open-design-byok/gpt-5.5',
+      ]);
+    } finally {
+      agentCapabilities.delete('byok-opencode');
+    }
+  });
+
+  it('appends --standalone on 2.x BYOK runs when advertised in capabilities', () => {
+    agentCapabilities.set('byok-opencode', {
+      autoApprove: true,
+      workspaceDir: false,
+      skipPermissions: false,
+      pureMode: false,
+      variantFlag: false,
+      standalone: true,
+    });
+    try {
+      expect(byokOpenCodeAgentDef.buildArgs(
+        '',
+        [],
+        [],
+        { model: 'gpt-5.5' },
+        { cwd: '/projects/p1' },
+      )).toEqual([
+        'run',
+        '--format',
+        'json',
+        '--auto',
+        '--standalone',
         '-m',
         'open-design-byok/gpt-5.5',
       ]);

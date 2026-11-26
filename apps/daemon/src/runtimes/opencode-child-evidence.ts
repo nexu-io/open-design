@@ -14,7 +14,9 @@ import {
 import { execAgentFile } from './invocation.js';
 import {
   OPENCODE_PURE_FLAG,
+  OPENCODE_STANDALONE_FLAG,
   classifyOpenCodeCliLine,
+  supportsOpenCodeStandalone,
   type OpenCodeCliLine,
 } from './opencode-permissions.js';
 import type { RuntimeCapabilityMap } from './types.js';
@@ -411,8 +413,11 @@ function rejectsUnknownFlag(err: unknown, flag: string): boolean {
 function openCodeExportAttempts(
   childSessionId: string,
   cliLine: OpenCodeCliLine,
+  standalone: boolean,
 ): Attempt[] {
-  const twoXArgv = ['session', 'export', childSessionId, '--sanitize'];
+  const twoXArgv = standalone
+    ? ['session', 'export', childSessionId, '--sanitize', OPENCODE_STANDALONE_FLAG]
+    : ['session', 'export', childSessionId, '--sanitize'];
   const oneXIsolated: Attempt = {
     argv: ['export', childSessionId, '--sanitize', '--pure'],
     mayRetry: (err) => rejectsUnknownFlag(err, OPENCODE_PURE_FLAG),
@@ -440,7 +445,9 @@ function openCodeExportAttempts(
  *
  * OpenCode 1.x serves this as `opencode export <id> --sanitize --pure`;
  * OpenCode 2.x moved it to `opencode session export <id> --sanitize` with no
- * `--pure` flag (verified on 2.0.24). The `run --help` capability map selects
+ * `--pure` flag (verified on 2.0.24), appending `--standalone` when advertised
+ * so the export inherits the Run's isolated env instead of hitting a shared
+ * background service. The `run --help` capability map selects
  * the shape so a 1.x run never pays for a rejected `session export` probe.
  * Callers without a resolved map keep the tolerant 2.x-then-1.x order.
  *
@@ -474,6 +481,7 @@ export function createOpenCodeSanitizedExportLoader(input: {
     const attempts = openCodeExportAttempts(
       childSessionId,
       classifyOpenCodeCliLine(input.capabilities),
+      supportsOpenCodeStandalone(input.capabilities),
     );
     let lastError: unknown = null;
     for (const attempt of attempts) {

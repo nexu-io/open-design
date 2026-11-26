@@ -2,6 +2,7 @@ import { opencodeByokModelId } from '../byok-opencode.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
+  appendOpenCodeStandalone,
   appendOpenCodeWorkspaceDir,
 } from '../opencode-permissions.js';
 import { DEFAULT_MODEL_OPTION } from './shared.js';
@@ -18,6 +19,7 @@ export const byokOpenCodeAgentDef = {
   buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
     const args = ['run', '--format', 'json'];
     appendOpenCodePermissionBypass(args, 'byok-opencode');
+    appendOpenCodeStandalone(args, 'byok-opencode');
     appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'byok-opencode');
     const model = opencodeByokModelId(options.model);
     if (model) args.push('-m', model);

@@ -4111,6 +4111,71 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('cold-start connection test appends --standalone when run --help advertises --auto and --standalone', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-cold-2x-standalone-'));
+    const argvFile = path.join(markerDir, 'argv.json');
+    const previousCaps = agentCapabilities.get('opencode');
+    agentCapabilities.delete('opencode');
+    try {
+      await withFakeOpenCode(
+        `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args.includes('--help')) {
+  console.log('Usage: opencode run [options]');
+  console.log('  --auto        Auto-approve permissions');
+  console.log('  --standalone  Run with a private server instead of the background service');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('github-copilot/gpt-4o');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(args));
+let stdin = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { stdin += chunk; });
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'text', part: { text: 'ok' } }));
+});
+`,
+        async () => {
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'opencode',
+              model: 'github-copilot/gpt-4o',
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'OpenCode',
+          });
+          const argv = JSON.parse(await fsp.readFile(argvFile, 'utf8')) as string[];
+          expect(argv).toEqual([
+            'run',
+            '--format',
+            'json',
+            '--auto',
+            '--standalone',
+            '-m',
+            'github-copilot/gpt-4o',
+            '--title',
+            'Connection test',
+          ]);
+        },
+      );
+    } finally {
+      if (previousCaps === undefined) agentCapabilities.delete('opencode');
+      else agentCapabilities.set('opencode', previousCaps);
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
   it('does not reuse another OpenCode binary variant catalog for an OPENCODE_BIN connection test', async () => {
     const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-opencode-variant-scope-'));
     const bin = path.join(markerDir, 'opencode-other');

@@ -9,6 +9,7 @@ export const OPENCODE_AUTO_APPROVE_FLAG = '--auto';
 export const OPENCODE_WORKSPACE_DIR_FLAG = '--dir';
 export const OPENCODE_VARIANT_FLAG = '--variant';
 export const OPENCODE_PURE_FLAG = '--pure';
+export const OPENCODE_STANDALONE_FLAG = '--standalone';
 
 export const OPENCODE_PERMISSION_CAPABILITY = {
   helpArgs: ['run', '--help'],
@@ -18,6 +19,7 @@ export const OPENCODE_PERMISSION_CAPABILITY = {
     [OPENCODE_WORKSPACE_DIR_FLAG]: 'workspaceDir',
     [OPENCODE_VARIANT_FLAG]: 'variantFlag',
     [OPENCODE_PURE_FLAG]: 'pureMode',
+    [OPENCODE_STANDALONE_FLAG]: 'standalone',
   },
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
@@ -268,4 +270,31 @@ export function shouldUseOpenCodePureFlag(agentId: string): boolean {
   const caps = agentCapabilities.get(agentId) ?? {};
   if (caps.pureMode === undefined && caps.autoApprove === true) return false;
   return caps.pureMode !== false;
+}
+
+/**
+ * Whether this OpenCode executable advertises `--standalone` in `run --help`.
+ *
+ * OpenCode 2.2+ defaults CLI invocations to a shared background `opencode
+ * service`, which runs in its own environment and never sees per-invocation
+ * `OPENCODE_CONFIG_CONTENT` (BYOK provider, MCP servers, external-directory
+ * permissions), `OPEN_DESIGN_BYOK_API_KEY`, or isolated config/home env vars.
+ * Passing `--standalone` launches a private per-invocation server that
+ * inherits the child process environment. Gated strictly on `caps?.standalone
+ * === true` so 1.x and earlier 2.x builds without `--standalone` stay unchanged.
+ */
+export function supportsOpenCodeStandalone(
+  caps: RuntimeCapabilityMap | null | undefined,
+): boolean {
+  return caps?.standalone === true;
+}
+
+/**
+ * Append `--standalone` to OpenCode CLI invocations when advertised so the
+ * child runs against a private server with the daemon-injected environment.
+ */
+export function appendOpenCodeStandalone(args: string[], agentId: string): void {
+  if (supportsOpenCodeStandalone(agentCapabilities.get(agentId))) {
+    args.push(OPENCODE_STANDALONE_FLAG);
+  }
 }

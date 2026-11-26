@@ -953,6 +953,52 @@ describe('native OpenCode child evidence', () => {
     expect(execAgentFileMock).toHaveBeenCalledTimes(2);
   });
 
+  it('appends --standalone to 2.x session export when advertised in capabilities', async () => {
+    const data = fixture();
+    execAgentFileMock.mockResolvedValue({
+      stdout: JSON.stringify(data.sanitizedChildExport),
+      stderr: '',
+    });
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+      capabilities: { autoApprove: true, variantFlag: false, standalone: true },
+    });
+
+    await expect(load('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
+    });
+    expect(execAgentFileMock).toHaveBeenCalledTimes(1);
+    expect(execAgentFileMock).toHaveBeenCalledWith(
+      '/opt/open-design/opencode',
+      ['session', 'export', 'ses_child_synthetic', '--sanitize', '--standalone'],
+      expect.anything(),
+    );
+  });
+
+  it('omits --standalone from 2.x session export when standalone capability is false', async () => {
+    const data = fixture();
+    execAgentFileMock.mockResolvedValue({
+      stdout: JSON.stringify(data.sanitizedChildExport),
+      stderr: '',
+    });
+    const load = createOpenCodeSanitizedExportLoader({
+      launchPath: '/opt/open-design/opencode',
+      env: { XDG_DATA_HOME: '/run/od/share' },
+      capabilities: { autoApprove: true, variantFlag: false, standalone: false },
+    });
+
+    await expect(load('ses_child_synthetic')).resolves.toMatchObject({
+      info: { id: 'ses_child_synthetic', parentID: 'ses_root_synthetic' },
+    });
+    expect(execAgentFileMock).toHaveBeenCalledTimes(1);
+    expect(execAgentFileMock).toHaveBeenCalledWith(
+      '/opt/open-design/opencode',
+      ['session', 'export', 'ses_child_synthetic', '--sanitize'],
+      expect.anything(),
+    );
+  });
+
   it('labels the fixture contract-only so it cannot become production evidence', () => {
     expect(fixture().fixtureKind).toBe('contract_only');
   });
