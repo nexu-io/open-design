@@ -82,6 +82,7 @@ async function discoverDaemonUrlFromToolsDev(
         cwd: REPO_ROOT,
         env,
         stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
       });
     } catch {
       resolve(null);

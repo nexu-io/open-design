@@ -4189,7 +4189,7 @@ function encodeHyperFramesMp4(
         '+faststart',
         outputPath,
       ],
-      { stdio: ['ignore', 'ignore', 'pipe'] },
+      { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true },
     );
     let stderr = '';
     child.stderr.on('data', (chunk) => {
@@ -4262,6 +4262,7 @@ function runHyperFramesRender(compAbs: string, tmpOutput: string, onProgress?: P
           OD_HYPERFRAMES_BIN: hyperFramesCli,
         },
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
       },
     );
 

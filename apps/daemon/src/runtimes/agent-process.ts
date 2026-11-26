@@ -245,6 +245,7 @@ export type SpawnAgentProcessRequest = {
   args: readonly string[];
   env: NodeJS.ProcessEnv;
   cwd: string;
+  windowsHide?: boolean | undefined;
   windowsVerbatimArguments?: boolean | undefined;
   /**
    * `'pipe'` for runtimes that speak a framed protocol on stdin (stream-json,
@@ -288,6 +289,7 @@ export function spawnAgentProcess(request: SpawnAgentProcessRequest): SpawnedAge
       cwd: request.cwd,
       shell: false,
       detached,
+      windowsHide: request.windowsHide ?? process.platform === 'win32',
       // Required when invocation wraps a Windows .cmd/.bat shim through
       // cmd.exe; without this, Node re-escapes the inner command line and
       // breaks paths containing spaces (issue #315).

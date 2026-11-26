@@ -44,6 +44,7 @@ export function execAgentFile(
     killSignal: 'SIGKILL',
     ...options,
     cwd: options.cwd ?? os.tmpdir(),
+    windowsHide: options.windowsHide ?? process.platform === 'win32',
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
