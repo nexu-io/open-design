@@ -2528,7 +2528,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: zenDetail,
-        diagnostics: buildDiagnostics({ phase: 'spawn' }),
+        diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
       };
     }
     if (detail && isLikelyModelErrorText(detail)) {
@@ -2596,7 +2596,7 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: zenDetail,
-          diagnostics: buildDiagnostics({ phase: 'spawn' }),
+          diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
         };
       }
     }
@@ -2989,7 +2989,7 @@ async function testAgentConnectionInternal(
           agentName: def.name,
           detail: zenDetail,
           diagnostics: buildDiagnostics({
-            phase: 'spawn',
+            phase: 'connection_smoke_test',
             exitCode: winner.code,
             signal: winner.signal,
           }),

@@ -4042,6 +4042,7 @@ ${body}
           expect(result.detail).toContain('free tier');
           expect(result.detail).toContain('own API key');
           expect(result.detail).toContain('1.18.0');
+          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
         },
       );
     });
@@ -4067,9 +4068,42 @@ ${body}
         expect(result.detail).toContain('bundled with OpenDesign');
         expect(result.detail).toContain('own API key');
         expect(result.detail).toContain('1.18.0');
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
         expect(JSON.stringify(result.diagnostics)).toContain('free tier');
       } finally {
         await fsp.rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('explains the rejection when the runtime hangs until the test times out', async () => {
+      const previousTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+      process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
+      try {
+        await withFakeOpenCode(
+          `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('opencode/big-pickle');
+  process.exit(0);
+}
+console.error(${JSON.stringify(ZEN_TEXT)});
+setInterval(() => {}, 1000);
+`,
+          async () => {
+            const result = await testAgentConnection({ agentId: 'opencode' });
+            expect(result.ok).toBe(false);
+            expect(result.kind).toBe('agent_spawn_failed');
+            expect(result.detail).toContain('free tier');
+            expect(result.detail).toContain('own API key');
+            expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+          },
+        );
+      } finally {
+        if (previousTimeout === undefined) {
+          delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+        } else {
+          process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = previousTimeout;
+        }
       }
     });
   });
