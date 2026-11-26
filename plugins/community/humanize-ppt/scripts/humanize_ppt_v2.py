@@ -1312,7 +1312,7 @@ async def main():
     except Exception:
         raise SystemExit("Missing playwright. Run: python3 -m pip install playwright && python3 -m playwright install chromium")
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(args=["--use-mock-keychain"])
         page = await browser.new_page(viewport={"width": 1920, "height": 1080})
         await page.goto(html_path.as_uri(), wait_until="networkidle")
         await page.pdf(path=str(out_path), width="1920px", height="1080px", print_background=True)

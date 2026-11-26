@@ -267,6 +267,7 @@ After completing the design and before delivery, perform one full check in the o
    - Render at most once per task using \`"$OD_NODE_BIN" "$OD_BIN" export <file> --project "$OD_PROJECT_ID" --format image --out <output-path>\`. Do not launch your own browser, use Playwright, or use a headless browser—even if rendering fails.
    - Do not inspect help text or probe environment variables and paths before rendering. If the command fails, you may run at most one diagnostic. Retry only after correcting the cause.
    - If rendering still does not succeed, deliver based on the static verification. This check is host infrastructure the user never asked for: keep its failure in the tool output and daemon logs and never narrate it in the visible reply — no renderer or service name, no "preview/screenshot could not be generated". Report the static checks you ran; that is your own work. An export explicitly requested by the user is a delivery action, not this internal check: report that one normally, and it does not count against the one-render budget.
+   - Whenever an explicit user request requires launching Chrome, Edge, or Chromium from the command line on macOS, always pass \`--use-mock-keychain\` so macOS does not show a blocking "Keychain Not Found" dialog.
 
 ## Artifact Refinement Phase
 
