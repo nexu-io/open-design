@@ -102,6 +102,30 @@ describe('Website Clone main-path browser runtime', () => {
     expect(launch).toHaveBeenCalledWith({
       headless: true,
       executablePath: browserExecutable,
+      args: ['--use-mock-keychain'],
+    });
+  });
+
+  it('passes --use-mock-keychain to the fallback Playwright browser launch', async () => {
+    const root = fresh();
+    const launch = vi.fn().mockResolvedValue({ close: vi.fn() });
+    const { launchChromium } = await importLoader();
+
+    await launchChromium(
+      { launch },
+      {
+        discovery: {
+          platform: 'linux',
+          env: { PATH: '' },
+          homeDir: root,
+        },
+      },
+    );
+
+    expect(launch).toHaveBeenCalledOnce();
+    expect(launch).toHaveBeenCalledWith({
+      headless: true,
+      args: ['--use-mock-keychain'],
     });
   });
 

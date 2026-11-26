@@ -124,7 +124,7 @@ export async function launchChromium(chromium, options = {}) {
   let systemBrowserError = null;
   if (executablePath) {
     try {
-      return await chromium.launch({ headless: true, executablePath });
+      return await chromium.launch({ headless: true, executablePath, args: ["--use-mock-keychain"] });
     } catch (error) {
       systemBrowserError = error;
     }
@@ -133,7 +133,7 @@ export async function launchChromium(chromium, options = {}) {
   // Source checkouts may already have a Playwright-managed browser. Trying it
   // is safe: launch never downloads a browser; it only uses an existing one.
   try {
-    return await chromium.launch({ headless: true });
+    return await chromium.launch({ headless: true, args: ["--use-mock-keychain"] });
   } catch (error) {
     throw new Error(
       "No compatible Chrome, Edge, or Chromium executable is available. " +
