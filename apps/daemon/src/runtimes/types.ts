@@ -238,12 +238,16 @@ export type RuntimeAgentDef = {
   docsUrl?: string;
   // When `false`, the Settings model picker hides the "Custom (fill below)"
   // option and the associated free-text input. Use this for agents whose
-  // CLI does not actually accept a model id (e.g. `agy` v1.0.3 has no
-  // `--model` flag yet — upstream issue #35 — and the model is chosen
-  // server-side; AMR routes model selection through ACP's
-  // `session/set_model` and rejects free-form ids). Defaults to allowing
-  // custom input (undefined === true) so most adapters keep today's UX.
+  // CLI does not actually accept a model id (e.g. AMR routes model
+  // selection through ACP's `session/set_model` and rejects free-form
+  // ids). Defaults to allowing custom input (undefined === true) so most
+  // adapters keep today's UX.
   supportsCustomModel?: boolean;
+  // Map a persisted or requested model id to this adapter's current
+  // canonical id (e.g. a legacy display label to its slug) before the
+  // shared known-model / custom-model validation runs. Return the id
+  // unchanged when no mapping applies.
+  normalizeModelId?: (modelId: string) => string;
   // When `true`, the daemon trusts this adapter's CLI to carry its own
   // multi-turn conversation memory across spawn invocations (today only
   // `agy -c`). The chat composer skips the rendered web transcript on

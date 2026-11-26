@@ -352,6 +352,11 @@ export const antigravityAgentDef = {
     timeoutMs: 15_000,
   },
   fallbackModels: ANTIGRAVITY_FALLBACK_MODELS,
+  // Saved picks from the pre-slug picker are display labels; map them
+  // to slugs before shared validation so chat and connection tests
+  // keep the selection instead of rejecting it for its spaces.
+  normalizeModelId: (modelId: string) =>
+    resolveAntigravityModelSlug(modelId) ?? modelId.trim(),
   // We deliberately do NOT opt into `resumesSessionViaCli` / agy's `-c`
   // resume flag on follow-up turns. Tested both shapes; `-c` activates
   // agy's internal agentic loop (multi-step model retries, tool calls,

@@ -25,6 +25,7 @@ export {
 } from './runtimes/prompt-budget.js';
 export {
   rememberLiveModels,
+  normalizeModelIdForDef,
   isKnownModel,
   isKnownReasoningEffort,
   isKnownServiceTier,

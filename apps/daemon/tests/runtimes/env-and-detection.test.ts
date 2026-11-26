@@ -1051,8 +1051,9 @@ test('detectAgents records Antigravity permission capability from stderr help ou
       writeFileSync(
         bin,
         '#!/bin/sh\n' +
-          'if [ "$1" = "--version" ]; then echo "agy 1.0.3"; exit 0; fi\n' +
-          'if [ "$1" = "--help" ]; then echo "--dangerously-skip-permissions" >&2; exit 0; fi\n' +
+          'if [ "$1" = "--version" ]; then echo "agy 1.5.18"; exit 0; fi\n' +
+          'if [ "$1" = "--help" ]; then echo "--dangerously-skip-permissions --model" >&2; exit 0; fi\n' +
+          'if [ "$1" = "models" ]; then printf "Fetching available models...\ngemini-4-neon-high\tGemini 4 Neon (High)\n"; exit 0; fi\n' +
           'exit 0\n',
       );
       chmodSync(bin, 0o755);
@@ -1066,7 +1067,15 @@ test('detectAgents records Antigravity permission capability from stderr help ou
       assert.equal(detected?.available, true);
       assert.deepEqual(agentCapabilities.get('antigravity'), {
         skipPermissions: true,
+        modelFlag: true,
       });
+      // Live discovery: the picker list comes from `agy models`, not
+      // the static fallback.
+      assert.equal(detected?.modelsSource, 'live');
+      assert.deepEqual(
+        detected?.models.map((model) => model.id),
+        ['default', 'gemini-4-neon-high'],
+      );
       assert.ok(
         antigravity.buildArgs('', [], [], {}).includes('--dangerously-skip-permissions'),
       );

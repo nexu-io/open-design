@@ -3,12 +3,21 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import {
+  parseAntigravityModels,
+  resolveAntigravityModelSlug,
+  resolveAntigravitySettingsLabel,
+  writeAntigravityModelSelection,
+} from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
   getRememberedLiveModels,
+  isKnownModel,
+  normalizeModelIdForDef,
   rememberLiveModels,
+  resetLiveModelsForTests,
+  sanitizeCustomModel,
 } from '../../src/runtimes/models.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
@@ -681,24 +690,65 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
     message: { content: 'write hello world' },
   });
 
-  // The model is chosen through agy's settings.json (see below), never
-  // through argv. Pass a temp antigravitySettingsPath so buildArgs does not
-  // touch the real ~/.gemini/antigravity-cli/settings.json in a unit test.
+  // With the `--model` capability confirmed, a slug pick rides argv
+  // and settings.json is left alone. Pass a temp
+  // antigravitySettingsPath so a regression cannot touch the real
+  // ~/.gemini/antigravity-cli/settings.json in a unit test.
   const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-argv-'));
   try {
+    agentCapabilities.set('antigravity', { modelFlag: true });
+    const settingsPath = join(settingsDir, 'settings.json');
     const withModel = antigravity.buildArgs('hi', [], [], {
-      model: 'Gemini 3.1 Pro (High)',
+      model: 'gemini-4-neon-high',
     }, {
       agentLogFilePath: '/tmp/od-agy-test.log',
-      antigravitySettingsPath: join(settingsDir, 'settings.json'),
+      antigravitySettingsPath: settingsPath,
     });
-    assert.equal(withModel.includes('--model'), false);
     assert.deepEqual(withModel, [
+      '--log-file',
+      '/tmp/od-agy-test.log',
+      '--model',
+      'gemini-4-neon-high',
+      ...AGY_STREAM_JSON_ARGS,
+    ]);
+    assert.equal(existsSync(settingsPath), false);
+
+    // A legacy display-label pick (saved by an older OD version)
+    // resolves to its slug on the same argv path.
+    const withLegacyLabel = antigravity.buildArgs('hi', [], [], {
+      model: 'Gemini 3.1 Pro (High)',
+    }, {
+      antigravitySettingsPath: settingsPath,
+    });
+    assert.deepEqual(withLegacyLabel, [
+      '--model',
+      'gemini-3.1-pro-high',
+      ...AGY_STREAM_JSON_ARGS,
+    ]);
+    assert.equal(existsSync(settingsPath), false);
+
+    // Without a confirmed `--model` flag the pick routes through
+    // settings.json as a display label instead of risking an
+    // unknown-option exit on an old build.
+    agentCapabilities.delete('antigravity');
+    const withSettingsModel = antigravity.buildArgs('hi', [], [], {
+      model: 'gemini-4-neon-high',
+    }, {
+      agentLogFilePath: '/tmp/od-agy-test.log',
+      antigravitySettingsPath: settingsPath,
+    });
+    assert.equal(withSettingsModel.includes('--model'), false);
+    assert.deepEqual(withSettingsModel, [
       '--log-file',
       '/tmp/od-agy-test.log',
       ...AGY_STREAM_JSON_ARGS,
     ]);
+    assert.equal(
+      JSON.parse(readFileSync(settingsPath, 'utf8')).model,
+      'Gemini 4 Neon (High)',
+    );
   } finally {
+    agentCapabilities.delete('antigravity');
     rmSync(settingsDir, { recursive: true, force: true });
   }
 
@@ -720,31 +770,38 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
   // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // The picker discovers the account's live catalog via `agy models`;
+  // the static fallback only covers signed-out/offline detection and
+  // carries slug ids with display labels, mirroring Google's model
+  // table as of 2026-11-26 (rows marked for 2026-11-30 removal and
+  // Enterprise-only rows are left to live discovery).
+  assert.deepEqual(antigravity.listModels?.args, ['models']);
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
-      'Gemini 3.1 Pro (High)',
-      'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
-      'Claude Sonnet 4.6 (Thinking)',
-      'Claude Opus 4.6 (Thinking)',
-      'GPT-OSS 120B (Medium)',
+      'gemini-4-neon-high',
+      'gemini-4-neon-medium',
+      'gemini-4-neon-low',
+      'gemini-4-neon-xhigh',
+      'gemini-4-carbon-high',
+      'gemini-4-carbon-medium',
+      'gemini-4-carbon-low',
+      'gemini-4-hydrogen-high',
+      'gemini-4-hydrogen-medium',
+      'gemini-4-hydrogen-low',
+      'gemini-4-hydrogen-xhigh',
+      'gemini-pro-orchestrator-neon',
+      'gemini-pro-orchestrator',
+      'gemini-pro-orchestrator-argon',
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
-  assert.equal(antigravity.supportsCustomModel, false);
+  // Modern agy accepts `--model <slug>` and rejects an unknown slug
+  // loudly, so a user-typed slug is a supported picker shape again.
+  assert.equal(antigravity.supportsCustomModel, undefined);
 });
 
 // OPEND-3495: on Windows the composed OD prompt (system prompt + skills +
@@ -782,6 +839,7 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
   assert.deepEqual(antigravity.helpArgs, ['--help']);
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
+    '--model': 'modelFlag',
   });
   assert.deepEqual(antigravity.buildArgs('', [], [], {}), AGY_STREAM_JSON_ARGS);
 
@@ -886,6 +944,132 @@ test('antigravity persists model selection to agy settings.json', () => {
     assert.equal(recovered.model, 'Gemini 3.5 Flash (Low)');
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// `agy models` prints `<slug>\t<label>` rows under a
+// `Fetching available models...` progress line. The parser must keep
+// the slug as the picker id (that is what `--model` takes), keep the
+// label for display, and refuse prose so signed-out/error output
+// falls back instead of becoming selectable models.
+test('antigravity parses agy models tab-separated output', () => {
+  const parsed = parseAntigravityModels(
+    [
+      'Fetching available models...',
+      'gemini-4-neon-high\tGemini 4 Neon (High)',
+      'gemini-4-neon-xhigh\tGemini 4 Neon (XHigh)',
+      'gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)',
+      'claude-sonnet-5-5\tClaude Sonnet 5.5 (Thinking)',
+      'gemini-4-neon-high\tGemini 4 Neon (High)',
+      '',
+    ].join('\n'),
+  );
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'gemini-4-neon-high', label: 'Gemini 4 Neon (High)' },
+    { id: 'gemini-4-neon-xhigh', label: 'Gemini 4 Neon (XHigh)' },
+    { id: 'gemini-3.8-flash-medium', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (Thinking)' },
+  ]);
+
+  // Space-aligned captures of the same listing parse identically.
+  assert.deepEqual(
+    parseAntigravityModels(
+      'gemini-4-hydrogen-low      Gemini 4 Hydrogen (Low)\n',
+    ),
+    [
+      { id: 'default', label: 'Default (CLI config)' },
+      { id: 'gemini-4-hydrogen-low', label: 'Gemini 4 Hydrogen (Low)' },
+    ],
+  );
+
+  // Signed-out and error output carries no model rows.
+  assert.equal(
+    parseAntigravityModels(
+      'Fetching available models...\nError: Please sign in to view available models. Launch the CLI without arguments to sign in.\n',
+    ),
+    null,
+  );
+  assert.equal(parseAntigravityModels(''), null);
+});
+
+// Shared validation (chat runs and connection tests) must see the
+// normalized slug, not the legacy display label: the label fails
+// isKnownModel against slug ids and sanitizeCustomModel rejects its
+// spaces, which used to drop the saved pick before buildArgs ran.
+test('antigravity legacy labels normalize before shared model validation', () => {
+  resetLiveModelsForTests();
+  try {
+    rememberLiveModels('antigravity', [
+      { id: 'gemini-3.1-pro-high', label: 'Gemini 3.1 Pro (High)' },
+    ]);
+    const normalized = normalizeModelIdForDef(
+      antigravity,
+      'Gemini 3.1 Pro (High)',
+    );
+    assert.equal(normalized, 'gemini-3.1-pro-high');
+    assert.equal(isKnownModel(antigravity, 'Gemini 3.1 Pro (High)'), true);
+    assert.equal(sanitizeCustomModel(normalized), 'gemini-3.1-pro-high');
+    // A legacy label whose slug left the catalog still normalizes to a
+    // valid custom slug instead of an invalid_model_id rejection.
+    assert.equal(
+      sanitizeCustomModel(
+        normalizeModelIdForDef(antigravity, 'Gemini 3.5 Flash (Low)'),
+      ),
+      'gemini-3.5-flash-low',
+    );
+    assert.equal(normalizeModelIdForDef(antigravity, 'default'), 'default');
+    assert.equal(normalizeModelIdForDef(antigravity, null), null);
+  } finally {
+    resetLiveModelsForTests();
+  }
+});
+
+test('antigravity resolves slugs, legacy labels, and settings routing', () => {
+  agentCapabilities.delete('antigravity');
+  try {
+    assert.equal(resolveAntigravityModelSlug('default'), null);
+    assert.equal(resolveAntigravityModelSlug(null), null);
+    assert.equal(
+      resolveAntigravityModelSlug('gemini-4-carbon-low'),
+      'gemini-4-carbon-low',
+    );
+    assert.equal(
+      resolveAntigravityModelSlug('GPT-OSS 120B (Medium)'),
+      'gpt-oss-120b-medium',
+    );
+    assert.equal(resolveAntigravityModelSlug('Some Future Label'), null);
+
+    // No confirmed `--model` flag: known slugs route to settings.json
+    // by label; an unknown slug has no label to write and must not
+    // produce a settings value agy would silently miss on.
+    assert.equal(resolveAntigravitySettingsLabel('default'), null);
+    assert.equal(
+      resolveAntigravitySettingsLabel('gemini-4-carbon-low'),
+      'Gemini 4 Carbon (Low)',
+    );
+    assert.equal(
+      resolveAntigravitySettingsLabel('gemini-9-future-high'),
+      null,
+    );
+    assert.equal(
+      resolveAntigravitySettingsLabel('Gemini 3.5 Flash (Low)'),
+      'Gemini 3.5 Flash (Low)',
+    );
+
+    // Confirmed `--model` flag: slug picks stay on argv, so no
+    // settings label (and no settings lock) is needed.
+    agentCapabilities.set('antigravity', { modelFlag: true });
+    assert.equal(
+      resolveAntigravitySettingsLabel('gemini-4-carbon-low'),
+      null,
+    );
+    assert.equal(
+      resolveAntigravitySettingsLabel('Gemini 3.5 Flash (Low)'),
+      null,
+    );
+  } finally {
+    agentCapabilities.delete('antigravity');
   }
 });
 
