@@ -71,6 +71,8 @@ interface Props {
    * of mistake the `downloadPending` branch below already guards (OPEND-2283).
    */
   filesAuthoritative?: boolean;
+  /** Indicates that the file list fetch failed (not a genuine empty directory) */
+  filesError?: boolean;
   /**
    * Before the first authoritative read, draw the empty state instead of
    * "Loading…" -- inert, so none of its CTAs can act on a guess. For a project
@@ -489,6 +491,7 @@ export function DesignFilesPanel({
   viewerOnly = false,
   downloadPending = false,
   filesAuthoritative = true,
+  filesError = false,
   emptyLookBeforeFirstListing = false,
   rootDirName,
   reloading,
@@ -1714,6 +1717,15 @@ export function DesignFilesPanel({
                 steps={runSteps ?? []}
                 workspaceContext={workspaceContext}
               />
+            </div>
+          ) : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && filesError ? (
+            // The file list fetch failed (not a genuine empty directory).
+            // Show a syncing/error state instead of the empty state with CTAs.
+            <div className="df-empty df-empty-syncing" data-testid="design-files-syncing">
+              <div className="df-empty-pill">
+                <FileSyncBadge state="downloading" size={20} />
+                <span className="df-empty-title">{t('designFiles.syncing')}</span>
+              </div>
             </div>
           ) : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && !filesAuthoritative ? (
             emptyLookBeforeFirstListing ? renderEmptyState(true) : (

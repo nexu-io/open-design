@@ -110,7 +110,7 @@ export function createBrowserSessionService() {
     }
     const id = randomUUID();
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-browser-session-'));
-    const child = spawn(executablePath, [
+    const launchArgs = [
       '--headless=new',
       '--remote-debugging-port=0',
       '--remote-allow-origins=*',
@@ -123,7 +123,12 @@ export function createBrowserSessionService() {
       '--disable-sync',
       '--metrics-recording-only',
       'about:blank',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    ];
+    // macOS: prevent "Keychain Not Found" dialogs for Edge/Chromium in headless mode
+    if (process.platform === 'darwin') {
+      launchArgs.push('--use-mock-keychain');
+    }
+    const child = spawn(executablePath, launchArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
 
     let output = '';
     const websocketUrl = await new Promise<string>((resolve, reject) => {

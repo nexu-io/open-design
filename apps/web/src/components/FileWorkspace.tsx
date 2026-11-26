@@ -398,6 +398,8 @@ interface Props {
   materializationPending?: boolean;
   /** See DesignFilesPanel's `filesAuthoritative`. */
   filesAuthoritative?: boolean;
+  /** Indicates that the file list fetch failed (not a genuine empty directory) */
+  filesError?: boolean;
   /**
    * The project row does not exist on the daemon yet (a Home send whose create
    * has not answered, OPEND-3334): this workspace reads nothing of its own
@@ -1430,6 +1432,7 @@ export function FileWorkspace({
   viewerOnly = false,
   materializationPending = false,
   filesAuthoritative = true,
+  filesError = false,
   emptyLookBeforeFirstListing = false,
   projectReadsHeld = false,
   readonlyNotice,
@@ -1563,6 +1566,27 @@ export function FileWorkspace({
     name: string;
     edge: TabDropEdge;
   } | null>(null);
+  const [isDesignFilesTabHidden, setIsDesignFilesTabHidden] = useState(false);
+  const designFilesTabHidden = isDesignFilesTabHidden;
+  const handleReopenDesignFilesTab = useCallback(() => {
+    setIsDesignFilesTabHidden(false);
+    setPersistedActive(DESIGN_FILES_TAB);
+  }, []);
+
+  // Persist the Design Files tab hidden state across sessions so users don't
+  // have to re-hide it every time they open a project.
+  useEffect(() => {
+    if (designFilesTabHidden) {
+      localStorage.setItem(
+        `open-design:design-files-hidden:${projectId}`,
+        'true'
+      );
+    } else {
+      localStorage.removeItem(
+        `open-design:design-files-hidden:${projectId}`
+      );
+    }
+  }, [projectId, designFilesTabHidden]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
   const projectShareRef = useRef<HTMLDivElement | null>(null);
@@ -1606,6 +1630,18 @@ export function FileWorkspace({
   );
   const protectedHtmlViewerFileNamesRef = useRef(protectedHtmlViewerFileNames);
   protectedHtmlViewerFileNamesRef.current = protectedHtmlViewerFileNames;
+
+  // Initialize Design Files tab hidden state from localStorage so users don't
+  // have to re-hide it every time they open a project.
+  const savedHiddenState = useMemo(() => {
+    const stored = localStorage.getItem(`open-design:design-files-hidden:${projectId}`);
+    return stored === 'true';
+  }, [projectId]);
+
+  useEffect(() => {
+    setIsDesignFilesTabHidden(savedHiddenState);
+  }, [projectId, savedHiddenState]);
+
   const manualEditExitHandlersRef = useRef<Map<string, () => Promise<boolean>>>(new Map());
   const manualEditExitInFlightRef = useRef<Map<string, Promise<boolean>>>(new Map());
   const requestedActivationSequenceRef = useRef(0);
@@ -4155,26 +4191,47 @@ export function FileWorkspace({
               <span className="ws-tab-label">{t('dsManager.tabDesignSystem')}</span>
             </button>
           ) : null}
-          <button
-            type="button"
-            className={`ws-tab design-files-tab ${initialMaterializationPending || designFilesTabActive ? 'active' : ''}`}
-            role="tab"
-            aria-selected={initialMaterializationPending || designFilesTabActive}
-            aria-label={designFilesTabTitle}
-            tabIndex={0}
-            data-testid="design-files-tab"
-            onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-            title={designFilesTabTitle}
-          >
-            <span className="tab-icon" aria-hidden>
-              {fileSyncBadge ? (
-                <FileSyncBadge state={fileSyncBadge} size={14} />
-              ) : (
-                <Icon name="grid" size={14} />
-              )}
-            </span>
-            <span className="ws-tab-label">{designFilesTabLabel}</span>
-          </button>
+          <div className="ws-tab-design-files-container">
+            <button
+              type="button"
+              className={`ws-tab design-files-tab ${initialMaterializationPending || designFilesTabActive ? 'active' : ''}`}
+              role="tab"
+              aria-selected={initialMaterializationPending || designFilesTabActive}
+              aria-label={designFilesTabTitle}
+              tabIndex={0}
+              data-testid="design-files-tab"
+              onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
+              title={designFilesTabTitle}
+            >
+              <span className="tab-icon" aria-hidden>
+                {fileSyncBadge ? (
+                  <FileSyncBadge state={fileSyncBadge} size={14} />
+                ) : (
+                  <Icon name="grid" size={14} />
+                )}
+              </span>
+              <span className="ws-tab-label">{designFilesTabLabel}</span>
+            </button>
+            <button
+              type="button"
+              className="ws-tab-close design-files-tab-close od-tooltip"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDesignFilesTabHidden(true);
+                if (designFilesTabActive) {
+                  const nextTabs = persistedTabs.filter((n) => n !== DESIGN_FILES_TAB);
+                  const nextActive = nextTabs[nextTabs.length - 1] ?? null;
+                  onTabsStateChange(workspaceTabsState(nextTabs, nextActive));
+                  setActiveTab(nextActive ?? DESIGN_FILES_TAB);
+                }
+              }}
+              title={t('common.close')}
+              data-tooltip={t('common.close')}
+              aria-label={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
           {!initialMaterializationPending ? visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
@@ -4321,6 +4378,8 @@ export function FileWorkspace({
             })
           }
           onClose={() => setLauncherOpen(false)}
+          onReopenDesignFiles={() => handleReopenDesignFilesTab()}
+          isDesignFilesTabHidden={designFilesTabHidden}
         />
       ) : null}
       {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
@@ -4467,7 +4526,7 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : designFilesTabActive ? (
+        ) : designFilesTabActive && !designFilesTabHidden ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
@@ -4476,6 +4535,7 @@ export function FileWorkspace({
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             filesAuthoritative={filesAuthoritative}
+            filesError={filesError}
             emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
             rootDirName={rootDirName}
             reloading={reloading}

@@ -22,9 +22,14 @@ const LIMIT = Number(process.env.MIRROR_LIMIT ?? '0');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
+const launchArgs = ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
   `--remote-debugging-port=${PORT}`, `--user-data-dir=/tmp/od-mirror-shot-${PORT}`,
-  '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank'], { stdio: 'ignore' });
+  '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank'];
+// macOS: prevent "Keychain Not Found" dialogs for Edge/Chromium in headless mode
+if (process.platform === 'darwin') {
+  launchArgs.push('--use-mock-keychain');
+}
+const chrome = spawn(CHROME, launchArgs, { stdio: 'ignore' });
 
 async function target() {
   for (let i = 0; i < 40; i++) {

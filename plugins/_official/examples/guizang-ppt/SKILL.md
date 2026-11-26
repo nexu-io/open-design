@@ -1,5 +1,5 @@
 ---
-name: magazine-web-ppt
+name: guizang-ppt
 en_name: "Write a Brand-to-Revenue Story like a Growth Strategy Lead"
 zh_name: "像增长策略负责人一样写品牌到收入故事"
 description: |

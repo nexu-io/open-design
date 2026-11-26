@@ -2293,7 +2293,13 @@ export async function fetchProjectFiles(
       return [];
     }
     if (options?.requireAuthoritative) throw error;
-    return [];
+    
+    // Return a special error object instead of an empty array to distinguish
+    // between a genuinely empty directory and a failed request.
+    // This allows the UI to show a "syncing" or "error" state instead of
+    // an empty state when the request fails.
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error('Project files request failed: ' + errorMessage);
   }
 }
 

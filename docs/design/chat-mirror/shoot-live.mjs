@@ -30,6 +30,15 @@ const PORT = 9561;
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const launchArgs = ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
+  `--remote-debugging-port=${PORT}`, `--user-data-dir=/tmp/od-live-cells-${PORT}`,
+  '--force-color-profile=srgb', '--window-size=900,1400', 'about:blank'];
+// macOS: prevent "Keychain Not Found" dialogs for Edge/Chromium in headless mode
+if (process.platform === 'darwin') {
+  launchArgs.push('--use-mock-keychain');
+}
+const chrome = spawn(CHROME, launchArgs, { stdio: 'ignore' });
+
 const cells = JSON.parse(fs.readFileSync(path.join(DIR, 'cells.json'), 'utf-8'))
   .filter((c) => c.kind === 'events' && Array.isArray(c.events) && c.events.length > 0);
 console.log(`能种的格子:${cells.length}`);
@@ -66,10 +75,6 @@ async function seed(cell) {
   });
   return cid;
 }
-
-const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
-  `--remote-debugging-port=${PORT}`, `--user-data-dir=/tmp/od-live-cells-${PORT}`,
-  '--force-color-profile=srgb', '--window-size=900,1400', 'about:blank'], { stdio: 'ignore' });
 
 async function target() {
   for (let i = 0; i < 40; i++) {

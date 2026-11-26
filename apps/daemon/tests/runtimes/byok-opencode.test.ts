@@ -65,6 +65,12 @@ describe('byok-opencode runtime config', () => {
     expect(opencodeByokModelId('default')).toBeNull();
   });
 
+  it('strips provider prefix for OpenRouter models', () => {
+    expect(opencodeByokModelId('cohere/north-mini-code:free', { stripProviderPrefix: true })).toBe('cohere/north-mini-code:free');
+    expect(opencodeByokModelId('openrouter/cohere/north-mini-code:free', { stripProviderPrefix: true })).toBe('cohere/north-mini-code:free');
+    expect(opencodeByokModelId('open-design-byok/cohere/north-mini-code:free', { stripProviderPrefix: true })).toBe('open-design-byok/cohere/north-mini-code:free');
+  });
+
   it('builds OpenAI-compatible provider config without embedding the secret in JSON', () => {
     const out = buildOpenCodeByokProviderConfig(
       {
@@ -146,6 +152,14 @@ describe('byok-opencode runtime config', () => {
     )?.config).toMatchObject({
       provider: { [BYOK_OPENCODE_PROVIDER_ID]: { npm: '@ai-sdk/openai' } },
     });
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-openrouter', baseUrl: 'https://openrouter.ai/api/v1' },
+      'cohere/north-mini-code:free',
+    )?.modelId).toBe('cohere/north-mini-code:free');
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-openrouter', baseUrl: 'https://openrouter.ai/api/v1' },
+      'openrouter/cohere/north-mini-code:free',
+    )?.modelId).toBe('cohere/north-mini-code:free');
   });
 
   it('normalizes origin-only native provider base URLs for OpenCode provider packages', () => {

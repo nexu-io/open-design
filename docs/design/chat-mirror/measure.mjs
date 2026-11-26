@@ -21,9 +21,13 @@ const BASE = process.env.MEASURE_BASE ?? 'http://127.0.0.1:17699';
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
+const launchArgs = ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
   `--remote-debugging-port=${PORT}`, `--user-data-dir=/tmp/od-measure-${PORT}`,
-  '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank'], { stdio: 'ignore' });
+  '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank'];
+if (process.platform === 'darwin') {
+  launchArgs.push('--use-mock-keychain');
+}
+const chrome = spawn(CHROME, launchArgs, { stdio: 'ignore' });
 
 async function target() {
   for (let i = 0; i < 40; i++) {

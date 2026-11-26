@@ -272,9 +272,13 @@ const PROBE = (selector, inner) => `JSON.stringify([...document.querySelectorAll
   return out;
 }))`;
 
-const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
+const launchArgs = ['--headless=new', '--disable-gpu', '--no-first-run', '--hide-scrollbars',
   `--remote-debugging-port=${PORT}`, `--user-data-dir=/tmp/od-diffcells-${PORT}`,
-  '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank'], { stdio: 'ignore' });
+  '--force-color-profile=srgb', '--window-size=980,1200', 'about:blank'];
+if (process.platform === 'darwin') {
+  launchArgs.push('--use-mock-keychain');
+}
+const chrome = spawn(CHROME, launchArgs, { stdio: 'ignore' });
 
 async function target() {
   for (let i = 0; i < 40; i++) {

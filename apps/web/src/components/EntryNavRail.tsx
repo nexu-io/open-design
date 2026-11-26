@@ -2475,11 +2475,7 @@ export function EntryNavRail({
 
         {context ? (
           <div className="entry-nav-rail__team-section">
-            {/* 全部项目 is the ONE project destination (OPEND-3108): the page
-                splits into 最近浏览过 / 个人项目 / 团队项目 tabs, so a team
-                workspace no longer gets a second 团队项目 entry here. The
-                legacy `all-projects` view (the `/all-projects` deep link)
-                opens that page on its 团队项目 tab, so it lights this item. */}
+            {/* signed-in drafts entry — leads to drafts/all-projects listing */}
             <NavButton
               active={view === 'drafts' || view === 'all-projects'}
               ariaLabel={t('entry.navDrafts')}
@@ -2488,6 +2484,18 @@ export function EntryNavRail({
               testId="entry-nav-drafts"
             >
               <Icon name="file" size={16} />
+            </NavButton>
+            {/* 新建项目是“新建项目”在导航条上的唯一落点：HomeHero 的
+                composer 担任首页建新入口，ProjectView/ProjectDetail 的“新建”
+                不走此路径，所以导航条的"+"按钮在这里才是可达入口。*/}
+            <NavButton
+              active={false}
+              ariaLabel={t('entry.blankCreate')}
+              label={t('entry.blankCreate')}
+              onClick={onNewProject}
+              testId="entry-nav-new-project"
+            >
+              <Icon name="plus" size={16} />
             </NavButton>
             <NavButton
               active={view === 'design-systems'}
@@ -2557,11 +2565,7 @@ export function EntryNavRail({
              the two destination lists read the same. The name is historical —
              nothing in it is team-specific. */
           <div className="entry-nav-rail__team-section">
-            {/* 项目 is a destination on BOTH branches (OPEND-3140): the local
-                shell's project list is the same page the signed-in 项目 item
-                opens — 草稿 folds to the whole local catalog without a
-                workspace — so the destination list reads the same either way.
-                No 团队项目 here: that grid is team-scoped. */}
+            {/* signed-out drafts entry — leads to local project list */}
             <NavButton
               active={view === 'drafts'}
               ariaLabel={t('entry.navDrafts')}
@@ -2570,6 +2574,18 @@ export function EntryNavRail({
               testId="entry-nav-drafts"
             >
               <Icon name="file" size={16} />
+            </NavButton>
+            {/* 新建项目是"新建项目"在导航条上的唯一落点：HomeHero 的
+                composer 担任首页建新入口，ProjectView/ProjectDetail 的"新建"
+                不走此路径，所以导航条的"+"按钮在这里才是可达入口。*/}
+            <NavButton
+              active={false}
+              ariaLabel={t('entry.blankCreate')}
+              label={t('entry.blankCreate')}
+              onClick={onNewProject}
+              testId="entry-nav-new-project"
+            >
+              <Icon name="plus" size={16} />
             </NavButton>
             <NavButton
               active={view === 'design-systems'}

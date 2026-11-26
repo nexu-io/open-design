@@ -3192,6 +3192,8 @@ export const zhTW: Dict = {
   "workspace.noFilesMatch": "沒有符合的檔案",
   "workspace.allFiles": "全部",
   "workspace.createNew": "新增",
+  "workspace.reopenDesignFiles": "重新打開設計檔案",
+  "workspace.reopenDesignFilesLabel": "設計檔案",
   "workspace.tabOpen": "已開啟",
   "workspace.sideChatContextBanner": "已整合目前對話的上下文",
   "workspace.sideChatDefaultTitle": "側邊對話",
