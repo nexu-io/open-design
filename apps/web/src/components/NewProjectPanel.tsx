@@ -47,6 +47,7 @@ import {
   IMAGE_MODELS,
   MEDIA_ASPECTS,
   type MediaModel,
+  velaImageModelOptions,
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
@@ -364,6 +365,8 @@ export function NewProjectPanel({
   const [startTemplateId, setStartTemplateId] = useState<string | null>(null);
   const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
+  const [imageResolution, setImageResolution] = useState('');
+  const [imageQuality, setImageQuality] = useState('');
   const [videoModel, setVideoModel] = useState(DEFAULT_VIDEO_MODEL);
   const [videoModelTouched, setVideoModelTouched] = useState(false);
   const [videoAspect, setVideoAspect] = useState<MediaAspect>('16:9');
@@ -579,10 +582,34 @@ export function NewProjectPanel({
     const m = normalizedModel;
     // Accept catalogued ids plus any live AIHubMix catalogue id (aihubmix-*),
     // which renders dynamically and won't appear in the static IMAGE_MODELS.
-    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) setImageModel(m);
+    if (m && (IMAGE_MODELS.some((x) => x.id === m) || m.startsWith('aihubmix-'))) handleImageModel(m);
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
-      setImageAspect(a as MediaAspect);
+      const targetModel = m ?? imageModel;
+      const velaOptions = velaImageModelOptions(targetModel);
+      if (!velaOptions || velaOptions.aspects.includes(a as MediaAspect)) {
+        handleImageAspect(a as MediaAspect);
+      }
+    }
+  }
+  function handleImageModel(id: string) {
+    setImageModel(id);
+    const options = velaImageModelOptions(id);
+    const nextAspect =
+      options && !options.aspects.includes(imageAspect)
+        ? (options.defaultAspect ?? options.aspects[0] ?? '1:1')
+        : imageAspect;
+    if (nextAspect !== imageAspect) setImageAspect(nextAspect);
+    const allowedResolutions = options?.aspectResolutions?.[nextAspect] ?? options?.resolutions;
+    if (!options || !allowedResolutions?.includes(imageResolution)) setImageResolution('');
+    if (!options?.qualities?.includes(imageQuality)) setImageQuality('');
+  }
+  function handleImageAspect(aspect: MediaAspect) {
+    setImageAspect(aspect);
+    const options = velaImageModelOptions(imageModel);
+    const allowedResolutions = options?.aspectResolutions?.[aspect] ?? options?.resolutions;
+    if (imageResolution && (!options || !allowedResolutions?.includes(imageResolution))) {
+      setImageResolution('');
     }
   }
   function handleVideoPromptTemplate(pick: PromptTemplatePick | null) {
@@ -748,6 +775,8 @@ export function NewProjectPanel({
       templates,
       imageModel,
       imageAspect,
+      imageResolution,
+      imageQuality,
       videoModel,
       videoAspect,
       videoLength,
@@ -1072,9 +1101,13 @@ export function NewProjectPanel({
             surface="image"
             imageModel={imageModel}
             imageAspect={imageAspect}
+            imageResolution={imageResolution}
+            imageQuality={imageQuality}
             mediaProviders={mediaProviders}
-            onImageModel={setImageModel}
-            onImageAspect={setImageAspect}
+            onImageModel={handleImageModel}
+            onImageAspect={handleImageAspect}
+            onImageResolution={setImageResolution}
+            onImageQuality={setImageQuality}
           />
         ) : null}
 
@@ -2643,9 +2676,13 @@ function MediaProjectOptions(props:
       surface: 'image';
       imageModel: string;
       imageAspect: MediaAspect;
+      imageResolution: string;
+      imageQuality: string;
       mediaProviders?: Record<string, MediaProviderCredentials>;
       onImageModel: (value: string) => void;
       onImageAspect: (value: MediaAspect) => void;
+      onImageResolution: (value: string) => void;
+      onImageQuality: (value: string) => void;
     }
   | {
       surface: 'video';
@@ -2676,6 +2713,9 @@ function MediaProjectOptions(props:
   const aihubmixAudioModels = useAIHubMixAudioModels();
 
   if (props.surface === 'image') {
+    const velaOptions = velaImageModelOptions(props.imageModel);
+    const allowedResolutions =
+      velaOptions?.aspectResolutions?.[props.imageAspect] ?? velaOptions?.resolutions;
     return (
       <div className="newproj-media-options">
         <MediaModelCards
@@ -2687,9 +2727,32 @@ function MediaProjectOptions(props:
         />
         <AspectCards
           label={t('newproj.aspectLabel')}
+          aspects={velaOptions?.aspects}
           value={props.imageAspect}
           onChange={props.onImageAspect}
         />
+        {allowedResolutions && allowedResolutions.length > 0 ? (
+          <OptionCards
+            label={t('homeHero.footer.resolution')}
+            value={props.imageResolution}
+            onChange={props.onImageResolution}
+            options={[
+              { value: '', title: t('common.default') },
+              ...allowedResolutions.map((res) => ({ value: res, title: res })),
+            ]}
+          />
+        ) : null}
+        {velaOptions?.qualities && velaOptions.qualities.length > 0 ? (
+          <OptionCards
+            label={t('automations.filterQuality')}
+            value={props.imageQuality}
+            onChange={props.onImageQuality}
+            options={[
+              { value: '', title: t('common.default') },
+              ...velaOptions.qualities.map((tier) => ({ value: tier, title: tier })),
+            ]}
+          />
+        ) : null}
       </div>
     );
   }
@@ -3009,10 +3072,12 @@ function MediaModelCards({
 
 function AspectCards({
   label,
+  aspects,
   value,
   onChange,
 }: {
   label: string;
+  aspects?: readonly MediaAspect[];
   value: MediaAspect;
   onChange: (value: MediaAspect) => void;
 }) {
@@ -3027,7 +3092,7 @@ function AspectCards({
     <div className="newproj-media-field">
       <div className="newproj-label">{label}</div>
       <div className="newproj-aspect-segmented" role="radiogroup" aria-label={label}>
-        {MEDIA_ASPECTS.map((aspect) => {
+        {(aspects ?? MEDIA_ASPECTS).map((aspect) => {
           const active = value === aspect;
           return (
             <button
@@ -3097,6 +3162,8 @@ function buildMetadata(input: {
   templates: ProjectTemplate[];
   imageModel: string;
   imageAspect: MediaAspect;
+  imageResolution?: string;
+  imageQuality?: string;
   videoModel: string;
   videoAspect: MediaAspect;
   videoLength: number;
@@ -3161,10 +3228,14 @@ function buildMetadata(input: {
   if (input.tab === 'media') {
     if (input.mediaSurface === 'image') {
       const imageModel = input.imageModel.trim();
+      const imageResolution = input.imageResolution?.trim();
+      const imageQuality = input.imageQuality?.trim();
       return {
         kind,
         ...(imageModel ? { imageModel } : {}),
         imageAspect: input.imageAspect,
+        ...(imageResolution ? { imageResolution } : {}),
+        ...(imageQuality ? { imageQuality } : {}),
         ...buildPromptTemplateMetadata(input.promptTemplate),
         ...inspirations,
       };
