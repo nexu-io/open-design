@@ -476,6 +476,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         image: req.body?.image,
         images: Array.isArray(req.body?.images) ? req.body.images : undefined,
         workspaceId,
+        isCancelled: () => Boolean(options.grant?.runId && design.runs.get(options.grant.runId)?.cancelRequested),
         // Strong capture path (spec §5.1.1): freeze the provider's own bytes
         // the moment they land, so a later turn overwriting the same output
         // name can never rewrite this message's history. Bound to THIS run and
@@ -544,6 +545,13 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
           await attachLateOutputToRunMessage(meta);
         })
         .catch((err: any) => {
+          if (err?.code === 'media_wait_stopped') {
+            task.status = 'interrupted';
+            task.endedAt = Date.now();
+            persistMediaTask(task);
+            notifyTaskWaiters(task);
+            return;
+          }
           task.status = 'failed';
           task.error = mediaTaskErrorFromFailure(err, { model });
           task.endedAt = Date.now();
