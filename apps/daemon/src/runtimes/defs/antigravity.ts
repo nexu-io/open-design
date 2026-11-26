@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import { getRememberedLiveModels } from '../models.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -36,33 +37,172 @@ export function encodeAntigravityStdinPrompt(prompt: string): string {
   return `${JSON.stringify({ event: 'user', message: { content: prompt } })}\n`;
 }
 
-// `agy` v1.0.3 still has no `--model` flag (upstream issue #35), but the
-// TUI's Switch-Model picker writes the choice to its settings.json, and
-// every headless `agy` invocation re-reads that file on startup — verified by
-// capturing the `--log-file` line `Propagating selected model override to
-// backend: label="<model>"`. So we can route OD's model picker through
-// settings.json: when the user picks a concrete model in Settings, the
-// daemon writes the label into agy's settings.json right before spawn,
-// and the resulting headless run uses that model.
+// Model selection. Modern `agy` builds (>= 1.1.2; verified on 1.5.18)
+// expose both halves of a programmatic model contract:
 //
-// Two ids the picker exposes are special:
-//   - 'default'         : leave settings.json untouched, so agy keeps
-//                         whatever the user last picked in its own TUI.
-//                         (Respects user choice when they switch models
-//                         from `agy` directly.)
-//   - any other id      : the literal display label agy expects (e.g.
-//                         "Gemini 3.1 Pro (High)", "Claude Sonnet 4.6
-//                         (Thinking)"). We persist it before spawn.
+//   - `agy models` prints the account's live catalog as
+//     `<slug>\t<Display Label>` rows (e.g.
+//     `gemini-4-neon-high\tGemini 4 Neon (High)`), preceded by a
+//     `Fetching available models...` progress line. Unauthenticated it
+//     exits 1 with `Please sign in to view available models`, which the
+//     detection layer treats as "no live list" and falls back below.
+//   - `--model <slug>` selects a model for one session. Current builds
+//     also accept the display label, but the slug is the canonical form
+//     Google's docs use (`--model gemini-4-neon-xhigh`), and an unknown
+//     slug fails loudly listing the valid ones instead of the silent
+//     `availableModels` cache miss the old settings-only path produced.
 //
-// `supportsCustomModel: false` because the label set is a server-side
-// enum — a typed id agy doesn't recognise resolves to a silent
-// `availableModels` cache miss + empty headless output, which surfaces
-// to the user as a generic "empty response" error.
+// So the picker now discovers models live (`listModels` below) and the
+// spawn passes the chosen slug via `--model`, gated on the `--help`
+// capability probe so a pre-`--model` build never receives an unknown
+// flag. Two shapes still route through `settings.json`:
 //
-// The 8 model labels mirror what `Switch Model` in agy's TUI lists for
-// consumer-tier accounts as of 2026-05-28. The set is small and stable
-// enough to ship statically until upstream adds a programmatic
-// `agy models` subcommand (also tracked under issue #35).
+//   - 'default'          : leave settings.json untouched and pass no
+//                          `--model`, so agy keeps whatever the user
+//                          last picked in its own TUI.
+//   - label-shaped picks : display labels saved by older OD versions
+//                          (or a slug on a build whose `--model` flag
+//                          the probe could not confirm). The TUI's
+//                          Switch-Model picker writes the label to
+//                          settings.json and every headless invocation
+//                          re-reads it — verified via the `--log-file`
+//                          line `Propagating selected model override to
+//                          backend: label="<model>"`. We resolve the
+//                          slug to its label and persist that before
+//                          spawn, under the serialization lock below.
+//
+// The fallback list is only a hint for when live discovery cannot run
+// (signed out, offline, ancient build). It mirrors the durable rows of
+// Google's model table as of 2026-11-26; rows Google marked for
+// removal on 2026-11-30 (Gemini 4 Argon, Gemini 3.8 Flash, Claude 4.6,
+// GPT-OSS-120b) and Enterprise-only rows (Gemini 3.7/3.6 Flash, 3.1
+// Pro) are deliberately absent — live discovery surfaces them for
+// accounts that still have them.
+const ANTIGRAVITY_FALLBACK_MODELS: RuntimeModelOption[] = [
+  DEFAULT_MODEL_OPTION,
+  { id: 'gemini-4-neon-high', label: 'Gemini 4 Neon (High)' },
+  { id: 'gemini-4-neon-medium', label: 'Gemini 4 Neon (Medium)' },
+  { id: 'gemini-4-neon-low', label: 'Gemini 4 Neon (Low)' },
+  { id: 'gemini-4-neon-xhigh', label: 'Gemini 4 Neon (XHigh)' },
+  { id: 'gemini-4-carbon-high', label: 'Gemini 4 Carbon (High)' },
+  { id: 'gemini-4-carbon-medium', label: 'Gemini 4 Carbon (Medium)' },
+  { id: 'gemini-4-carbon-low', label: 'Gemini 4 Carbon (Low)' },
+  { id: 'gemini-4-hydrogen-high', label: 'Gemini 4 Hydrogen (High)' },
+  { id: 'gemini-4-hydrogen-medium', label: 'Gemini 4 Hydrogen (Medium)' },
+  { id: 'gemini-4-hydrogen-low', label: 'Gemini 4 Hydrogen (Low)' },
+  { id: 'gemini-4-hydrogen-xhigh', label: 'Gemini 4 Hydrogen (XHigh)' },
+  { id: 'gemini-pro-orchestrator-neon', label: 'Orchestrator (Neon)' },
+  { id: 'gemini-pro-orchestrator', label: 'Orchestrator (Carbon)' },
+  { id: 'gemini-pro-orchestrator-argon', label: 'Orchestrator (Argon)' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5 (Thinking)' },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5 (Thinking)' },
+];
+
+// Display labels the pre-`agy models` picker persisted as model ids,
+// mapped to the slug the same row carries today. Lets a saved pick
+// from an older OD version keep routing to the same model instead of
+// being dropped to the CLI default at validation time.
+const ANTIGRAVITY_LEGACY_LABEL_SLUGS: Record<string, string> = {
+  'Gemini 3.1 Pro (High)': 'gemini-3.1-pro-high',
+  'Gemini 3.1 Pro (Low)': 'gemini-3.1-pro-low',
+  'Gemini 3.5 Flash (High)': 'gemini-3.5-flash-high',
+  'Gemini 3.5 Flash (Medium)': 'gemini-3.5-flash-medium',
+  'Gemini 3.5 Flash (Low)': 'gemini-3.5-flash-low',
+  'Claude Sonnet 4.6 (Thinking)': 'claude-sonnet-4-6',
+  'Claude Opus 4.6 (Thinking)': 'claude-opus-4-6-thinking',
+  'GPT-OSS 120B (Medium)': 'gpt-oss-120b-medium',
+};
+
+const ANTIGRAVITY_MODEL_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+// `agy models` rows are `<slug>` + tab (or alignment spaces) + label.
+// Slugs are lowercase and hyphenated; requiring that shape keeps prose
+// lines (`Fetching available models...`, sign-in errors) from parsing
+// as models when a future build prints them on stdout with exit 0.
+const ANTIGRAVITY_MODEL_ROW =
+  /^([a-z0-9][a-z0-9._-]*-[a-z0-9._-]*)(?:\t|\s{2,}|\s+)(\S.*)$/;
+
+/**
+ * Parse `agy models` stdout into picker options. Returns null when no
+ * usable row is present so detection falls back to the static hint
+ * instead of surfacing an empty picker.
+ */
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const models: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>([DEFAULT_MODEL_OPTION.id]);
+  for (const rawLine of String(stdout || '').split('\n')) {
+    const match = rawLine.trim().match(ANTIGRAVITY_MODEL_ROW);
+    if (!match) continue;
+    const id = match[1]!;
+    const label = match[2]!.trim();
+    if (!label || seen.has(id)) continue;
+    seen.add(id);
+    models.push({ id, label });
+  }
+  return models.length > 1 ? models : null;
+}
+
+function antigravityLabelForSlug(slug: string): string | null {
+  const live = getRememberedLiveModels('antigravity').find(
+    (model) => model.id === slug,
+  );
+  if (live) return live.label;
+  const fallback = ANTIGRAVITY_FALLBACK_MODELS.find(
+    (model) => model.id === slug,
+  );
+  if (fallback) return fallback.label;
+  for (const [label, legacySlug] of Object.entries(
+    ANTIGRAVITY_LEGACY_LABEL_SLUGS,
+  )) {
+    if (legacySlug === slug) return label;
+  }
+  return null;
+}
+
+/**
+ * Resolve a picker value (slug, legacy display label, or a label from
+ * the live catalog) to the `agy --model` slug. Returns null for
+ * 'default'/empty and for label-shaped values no catalog maps.
+ */
+export function resolveAntigravityModelSlug(
+  model: string | null | undefined,
+): string | null {
+  if (typeof model !== 'string') return null;
+  const trimmed = model.trim();
+  if (!trimmed || trimmed === DEFAULT_MODEL_OPTION.id) return null;
+  if (ANTIGRAVITY_MODEL_SLUG.test(trimmed)) return trimmed;
+  const legacy = ANTIGRAVITY_LEGACY_LABEL_SLUGS[trimmed];
+  if (legacy) return legacy;
+  const live = getRememberedLiveModels('antigravity').find(
+    (entry) => entry.label === trimmed,
+  );
+  return live?.id ?? null;
+}
+
+/**
+ * The settings.json label a spawn for `model` must write (and the
+ * spawn pipeline must serialize + wait on), or null when the spawn
+ * selects its model another way: 'default' (leave agy's own choice
+ * alone) or a slug on a build whose `--model` flag the capability
+ * probe confirmed (per-process argv needs no shared-file lock).
+ * A slug with no known label on an unconfirmed build also returns
+ * null: writing an unrecognised value into settings.json resolves to
+ * a silent upstream cache miss, so the run keeps agy's default
+ * instead of pretending the pick applied.
+ */
+export function resolveAntigravitySettingsLabel(
+  model: string | null | undefined,
+): string | null {
+  if (typeof model !== 'string') return null;
+  const trimmed = model.trim();
+  if (!trimmed || trimmed === DEFAULT_MODEL_OPTION.id) return null;
+  const slug = resolveAntigravityModelSlug(trimmed);
+  if (!slug) return trimmed;
+  if (agentCapabilities.get('antigravity')?.modelFlag) return null;
+  return antigravityLabelForSlug(slug);
+}
+
 const ANTIGRAVITY_SETTINGS_PATH = join(
   homedir(),
   '.gemini',
@@ -93,15 +233,16 @@ export function writeAntigravityModelSelection(
 
 // Per-process serialization for write-settings → spawn → agy-reads
 // cycles on antigravity. `~/.gemini/antigravity-cli/settings.json` is
-// process-global, so two OD runs that both pick concrete (non-default)
-// models can race: run A writes model A, spawn A starts, run B writes
-// model B before A's agy has read settings.json — A then executes on
-// model B. The daemon serialises non-default antigravity spawns
-// through this chain: each acquire awaits the previous release, and
-// each release fires only after the spawned agy actually emits
-// `Propagating selected model override to backend: label="<X>"` in
-// its `--log-file` (which is the upstream signal that settings.json
-// has been read).
+// process-global, so two OD runs that both route their model through
+// settings.json (see resolveAntigravitySettingsLabel) can race: run A
+// writes model A, spawn A starts, run B writes model B before A's agy
+// has read settings.json — A then executes on model B. The daemon
+// serialises those spawns through this chain: each acquire awaits the
+// previous release, and each release fires only after the spawned agy
+// actually emits `Propagating selected model override to backend:
+// label="<X>"` in its `--log-file` (which is the upstream signal that
+// settings.json was read). Spawns that select via `--model` argv skip
+// the chain entirely — argv is per-process, nothing shared to race.
 let antigravityLockChain: Promise<void> = Promise.resolve();
 
 export async function acquireAntigravityModelLock(): Promise<() => void> {
@@ -199,22 +340,18 @@ export const antigravityAgentDef = {
   helpArgs: ['--help'],
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    '--model': 'modelFlag',
   },
-  fallbackModels: [
-    DEFAULT_MODEL_OPTION,
-    { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
-    { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
-    {
-      id: 'Claude Sonnet 4.6 (Thinking)',
-      label: 'Claude Sonnet 4.6 (Thinking)',
-    },
-    { id: 'Claude Opus 4.6 (Thinking)', label: 'Claude Opus 4.6 (Thinking)' },
-    { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
-  ],
-  supportsCustomModel: false,
+  // `agy models` prints the signed-in account's live catalog
+  // (`<slug>\t<label>` rows) and does a network fetch to build it, so
+  // allow the same 15s budget the other network-backed listings use.
+  // Signed out it exits 1, detection falls back to the static hint.
+  listModels: {
+    args: ['models'],
+    parse: parseAntigravityModels,
+    timeoutMs: 15_000,
+  },
+  fallbackModels: ANTIGRAVITY_FALLBACK_MODELS,
   // We deliberately do NOT opt into `resumesSessionViaCli` / agy's `-c`
   // resume flag on follow-up turns. Tested both shapes; `-c` activates
   // agy's internal agentic loop (multi-step model retries, tool calls,
@@ -236,15 +373,16 @@ export const antigravityAgentDef = {
     options = {},
     runtimeContext = {},
   ) => {
-    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
+    const settingsLabel = resolveAntigravitySettingsLabel(options.model);
+    if (settingsLabel) {
       writeAntigravityModelSelection(
-        options.model,
+        settingsLabel,
         runtimeContext.antigravitySettingsPath,
       );
     }
     const args: string[] = [];
     // Always opt into `--log-file` when the daemon supplied a path: the
-    // model lock in server.ts waits for agy to log the settings.json model
+    // settings.json lock in server.ts waits for agy to log the model
     // override there, and the connection test folds its tail into auth /
     // quota classification.
     //
@@ -252,6 +390,17 @@ export const antigravityAgentDef = {
     // diagnostics (model override / auth / quota) land in the log.
     if (runtimeContext.agentLogFilePath) {
       args.push('--log-file', runtimeContext.agentLogFilePath);
+    }
+    // Per-session model selection. Only when the settings.json path
+    // above did not claim the pick and the capability probe confirmed
+    // this build accepts `--model` — passing it to a build without the
+    // flag is a hard unknown-option exit, while omitting it on the
+    // settings path would double-select.
+    const modelSlug = settingsLabel
+      ? null
+      : resolveAntigravityModelSlug(options.model);
+    if (modelSlug && agentCapabilities.get('antigravity')?.modelFlag) {
+      args.push('--model', modelSlug);
     }
     // Daemon-managed headless runs have no interactive approval channel.
     if (agentCapabilities.get('antigravity')?.skipPermissions) {
