@@ -115,6 +115,10 @@ Resolve applicability before precedence. A prototype project may host an image
 request without changing the project's type or asking for a scenario switch.
 For standalone image generation, deliver the actual image file. Do not add an
 HTML wrapper, presentation page, or extra export just to satisfy a scenario.
+If an image task reports `error.nextStep: confirm-paid-resubmission`, explain
+that the benefit is no longer available and ask whether to submit a new request
+at the regular price. Stop image dispatch until the user explicitly confirms
+that paid request. Keep the internal error code out of the user-facing reply.
 When the user asks to insert an image into a page or deck, generate or acquire
 the image and integrate it into that requested artifact; the image alone is not
 the full delivery. First establish whether the user requested artifact creation
