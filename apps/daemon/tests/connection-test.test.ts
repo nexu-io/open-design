@@ -4010,6 +4010,70 @@ process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: {
     }
   });
 
+  describe('OpenCode Zen free-tier client rejection (#9627)', () => {
+    const ZEN_TEXT = 'OpenCode 1.18.0 or newer is required to use the free tier.';
+    const shapes: Array<[string, string]> = [
+      [
+        'stdout JSON error event',
+        `console.log(JSON.stringify({ type: 'error', error: { data: { message: ${JSON.stringify(ZEN_TEXT)} } } }));
+setTimeout(() => process.exit(0), 50);`,
+      ],
+      [
+        'plain stderr and exit 1',
+        `console.error(${JSON.stringify(ZEN_TEXT)});
+process.exit(1);`,
+      ],
+    ];
+
+    it.each(shapes)('explains the rejection for opencode (%s)', async (_name, body) => {
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('opencode/big-pickle');
+  process.exit(0);
+}
+${body}
+`,
+        async () => {
+          const result = await testAgentConnection({ agentId: 'opencode' });
+          expect(result.ok).toBe(false);
+          expect(result.kind).toBe('agent_spawn_failed');
+          expect(result.detail).toContain('free tier');
+          expect(result.detail).toContain('own API key');
+          expect(result.detail).toContain('1.18.0');
+        },
+      );
+    });
+
+    it.each(shapes)('explains the rejection for byok-opencode (%s)', async (_name, body) => {
+      const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-byok-zen-'));
+      const bin = path.join(dir, 'opencode-byok');
+      try {
+        await fsp.writeFile(
+          bin,
+          `#!/usr/bin/env node
+process.stdin.resume();
+${body}
+`,
+        );
+        await fsp.chmod(bin, 0o755);
+        const result = await testAgentConnection({
+          agentId: 'byok-opencode',
+          agentCliEnv: { opencode: { OPENCODE_BIN: bin } },
+        });
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('agent_spawn_failed');
+        expect(result.detail).toContain('bundled with OpenDesign');
+        expect(result.detail).toContain('own API key');
+        expect(result.detail).toContain('1.18.0');
+        expect(JSON.stringify(result.diagnostics)).toContain('free tier');
+      } finally {
+        await fsp.rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('surfaces OpenCode provider connectivity errors captured before timeout (#4999)', async () => {
     await withFakeOpenCode(
       `

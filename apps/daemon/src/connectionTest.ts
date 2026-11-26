@@ -99,6 +99,10 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import {
+  detectOpenCodeZenOutdatedClient,
+  openCodeZenOutdatedDetail,
+} from './runtimes/opencode-zen.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2114,6 +2118,15 @@ function openCodeOutdatedCliDetail(output: string): string | null {
     : null;
 }
 
+function openCodeZenOutdatedClientResultDetail(
+  agentId: string,
+  output: string,
+): string | null {
+  if (agentId !== 'opencode' && agentId !== 'byok-opencode') return null;
+  const zen = detectOpenCodeZenOutdatedClient(output);
+  return zen ? openCodeZenOutdatedDetail(agentId, zen.requiredVersion) : null;
+}
+
 function openCodeProviderConnectivityDetail(output: string): string | null {
   for (const rawLine of output.split(/\r?\n/u)) {
     const line = rawLine.replace(/\s+/gu, ' ').trim();
@@ -2505,6 +2518,19 @@ async function testAgentConnectionInternal(
         diagnostics: buildDiagnostics(),
       };
     }
+    const zenDetail = openCodeZenOutdatedClientResultDetail(input.agentId, detail);
+    if (zenDetail) {
+      console.warn(`[test:agent] ${def.name} → zen_outdated_client: ${detail}`);
+      return {
+        ok: false,
+        kind: 'agent_spawn_failed',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail: zenDetail,
+        diagnostics: buildDiagnostics({ phase: 'spawn' }),
+      };
+    }
     if (detail && isLikelyModelErrorText(detail)) {
       console.warn(
         `[test:agent] ${def.name} → not_found_model: ${detail}`,
@@ -2556,6 +2582,24 @@ async function testAgentConnectionInternal(
   const resultFromCancellation = (
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
+    if (kind === 'timeout') {
+      const zenDetail = openCodeZenOutdatedClientResultDetail(
+        input.agentId,
+        `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`,
+      );
+      if (zenDetail) {
+        console.warn(`[test:agent] ${def.name} → zen_outdated_client (timeout)`);
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs: Date.now() - start,
+          model,
+          agentName: def.name,
+          detail: zenDetail,
+          diagnostics: buildDiagnostics({ phase: 'spawn' }),
+        };
+      }
+    }
     if (kind === 'timeout' && input.agentId === 'opencode') {
       const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
       const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
@@ -2929,6 +2973,28 @@ async function testAgentConnectionInternal(
       ]
         .filter(Boolean)
         .join(' · ');
+      const zenDetail = openCodeZenOutdatedClientResultDetail(
+        input.agentId,
+        `${stderrTail}\n${rawStdoutTail || buffered}`,
+      );
+      if (zenDetail) {
+        console.warn(
+          `[test:agent] ${def.name} → zen_outdated_client: ${redactSecrets(rawDetail)}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail: zenDetail,
+          diagnostics: buildDiagnostics({
+            phase: 'spawn',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
       if (input.agentId === 'opencode') {
         const outdatedCliDetail = openCodeOutdatedCliDetail(rawDetail);
         if (outdatedCliDetail) {
