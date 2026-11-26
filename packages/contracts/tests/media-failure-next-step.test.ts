@@ -27,12 +27,21 @@ describe('mediaFailureNextStep', () => {
       'open-settings',
       'sign-in',
       'add-credit',
+      'confirm-paid-resubmission',
       'retry-later',
       'update-app',
       'unsupported',
       'contact-support',
     ]);
   });
+
+  it.each(['image_generation_waiver_unavailable', 'IMAGE_GENERATION_WAIVER_UNAVAILABLE'])(
+    'requires user confirmation before paid resubmission for %s',
+    (code) => {
+      expect(mediaFailureNextStep({ code, status: 409, retryable: true }))
+        .toBe('confirm-paid-resubmission');
+    },
+  );
 
   describe('the user can fix this themselves', () => {
     it('sends a content refusal back to the request', () => {

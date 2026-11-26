@@ -11,9 +11,9 @@ import type { MediaTaskError } from './tasks.js';
  * policy objected to, and `retryable` so the UI can stop inviting a retry that
  * cannot succeed. Absent fields stay absent rather than being defaulted —
  * `retryable: false` invented here would tell a user a transient outage is
- * permanent.
+ * permanent. A paid resubmission requires confirmation, so it is never retryable.
  *
- * `nextStep` is the one field this function derives rather than copies, and it
+ * This function derives `nextStep`, and it
  * is the field a reader is meant to act on. Everything else describes the
  * failure; only `nextStep` answers "so what now?". It is computed from the RAW
  * failure, before `status` is defaulted to 400, so a missing upstream status
@@ -29,11 +29,19 @@ export function mediaTaskErrorFromFailure(
   context: { model?: string | undefined } = {},
 ): MediaTaskError {
   const subject = err?.subject;
-  const retryable = err?.retryable;
+  const retryable = typeof err?.retryable === 'boolean' ? err.retryable : undefined;
   const code = typeof err?.code === 'string' && err.code.trim()
     ? err.code.trim()
     : undefined;
   const message = String(err && err.message ? err.message : err);
+  const nextStep = mediaFailureNextStep({
+    code,
+    status: typeof err?.status === 'number' ? err.status : undefined,
+    message,
+    retryable,
+    model: context.model,
+  });
+  const taskRetryable = nextStep === 'confirm-paid-resubmission' ? false : retryable;
   return {
     message,
     status: typeof err?.status === 'number' ? err.status : 400,
@@ -41,13 +49,7 @@ export function mediaTaskErrorFromFailure(
     ...(subject === 'prompt' || subject === 'input_image' || subject === 'output_image'
       ? { subject }
       : {}),
-    ...(typeof retryable === 'boolean' ? { retryable } : {}),
-    nextStep: mediaFailureNextStep({
-      code,
-      status: typeof err?.status === 'number' ? err.status : undefined,
-      message,
-      retryable: typeof retryable === 'boolean' ? retryable : undefined,
-      model: context.model,
-    }),
+    ...(taskRetryable !== undefined ? { retryable: taskRetryable } : {}),
+    nextStep,
   };
 }

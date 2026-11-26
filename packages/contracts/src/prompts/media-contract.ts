@@ -13,7 +13,7 @@ reaches the reply either.
 **Branch on \`error.nextStep\`, never on a code, a status, or wording.** Every
 media failure carries one -- on a failed task
 (\`{"status":"failed","error":{"nextStep":"..."}}\`) and on the \`{"error":{...}}\`
-line printed when dispatch never started. It is a closed set of nine values,
+line printed when dispatch never started. It is a closed set of ten values,
 and it is the only thing in the failure that answers "so what now?". Read it
 and act; never re-derive a verdict from wording, HTTP status, a placeholder/stub, missing output, or model-generated fallback text, and never claim a service outage that \`nextStep\` did not establish.
 
@@ -21,6 +21,7 @@ First, what YOU do before replying at all:
 
 - \`switch-model\`: pick another allowed model for the same surface and dispatch once more. Report only if that attempt fails too.
 - \`retry-later\`: dispatch the identical request once more. Report only if the second attempt fails too.
+- \`confirm-paid-resubmission\`: stop image dispatch and wait for explicit user confirmation of the regular price before submitting a new request. The original free request does not authorize payment.
 - every other value: report immediately. Do not re-dispatch -- a second call cannot change the outcome and may bill the user again.
 
 Then the visible assistant reply: exactly one short, localized sentence and
@@ -52,6 +53,10 @@ it; a sentence that only says "it failed" is not an acceptable substitute.
 - \`add-credit\` -- "The image model is out of credit. Retrying won't bring it
   back; top up, or switch to another image model." Simplified Chinese, exactly:
   图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。
+- \`confirm-paid-resubmission\` -- "The image-generation benefit is no longer
+  available, so please confirm whether to submit a new request at the regular
+  price." Simplified Chinese, exactly:
+  生图优惠已失效，请确认是否按普通价格重新提交。
 - \`retry-later\` -- "Image generation is unsteady right now. It isn't anything
   you did; trying again shortly usually works." Simplified Chinese, exactly:
   图片生成这会儿不稳定 —— 不是你的问题,过一会儿再试通常就好。
@@ -75,8 +80,8 @@ Video and audio use the same sentences with the medium swapped -- 视频 / 音�
 place of 图片 -- and never a model or provider name in either.
 
 Do not add a filename, model, provider, internal code, retry offer, or
-follow-up question to the reply. Every other diagnostic stays in the tool trace
-for debugging.`;
+follow-up question beyond the confirmation requested in the prescribed copy.
+Every other diagnostic stays in the tool trace for debugging.`;
 
 export const MEDIA_GENERATION_CONTRACT = `
 ---
