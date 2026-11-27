@@ -279,16 +279,22 @@ export async function listProjects(options?: {
   throwOnError?: boolean;
   workspaceContext?: WorkspaceCollabContext | null;
   workspaceView?: WorkspaceProjectListView;
+  includeDeviceProjects?: boolean;
 }): Promise<Project[]> {
   const context = options?.workspaceContext ?? null;
   if (context) {
-    const summaries = await listWorkspaceProjectSummaries({
-      context,
-      workspaceView: options?.workspaceView,
-      throwOnError: options?.throwOnError,
-    });
+    const [summaries, deviceProjects] = await Promise.all([
+      listWorkspaceProjectSummaries({
+        context,
+        workspaceView: options?.workspaceView,
+        throwOnError: options?.throwOnError,
+      }),
+      options?.includeDeviceProjects && options.workspaceView !== 'team'
+        ? listProjects()
+        : [],
+    ]);
     const seenProjectIds = new Set<string>();
-    return summaries.flatMap((summary) => {
+    const workspaceProjects = summaries.flatMap((summary) => {
       // Workspace list responses carry the authoritative scope on the summary
       // wrapper. Remote catalog projects can omit it from the nested project,
       // and a stale nested value must not leak another Workspace into a card.
@@ -306,12 +312,14 @@ export async function listProjects(options?: {
       seenProjectIds.add(project.id);
       return [project];
     });
+    return [...workspaceProjects, ...deviceProjects.filter((project) =>
+      project.metadata?.deviceOnly === true && !seenProjectIds.has(project.id)
+    )];
   }
   // No resolved workspace identity at all — either the context has not landed
   // yet or this daemon has no workspace plane. The key is a constant on
-  // purpose: it caches the ONE unscoped `/api/projects` answer, and it is
-  // unreachable once a context exists (the workspace branch above returns
-  // first), so it can never serve one workspace's rows to another. The
+  // purpose: it caches the one unscoped `/api/projects` answer. The server
+  // excludes bound projects from that answer. The
   // workspace-scoped read's own key is built in
   // `listWorkspaceProjectSummaries` below and carries the full wire identity
   // plus the requested view.
@@ -752,6 +760,7 @@ export async function createProject(
     /** Optional caller-minted id used for an optimistic route handoff. */
     id?: string;
     name: string;
+    deviceOnly?: boolean;
     projectLocationId?: string;
     skillId: string | null;
     skillCatalogScope?: LocalCatalogScope | null;
@@ -807,6 +816,7 @@ export async function createProject(
         body: JSON.stringify({ id, ...omitWorkspaceContext(input) }),
       });
       if (resp.ok) {
+        if (input.deviceOnly) evictCoalescedGet('local-projects');
         const created = (await resp.json()) as {
           project: Project;
           conversationId: string;

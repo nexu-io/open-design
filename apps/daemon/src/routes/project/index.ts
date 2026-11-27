@@ -2970,6 +2970,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const asserted = workspaceProjectContextFromRequest(req);
     if (asserted === null || asserted === 'missing') return;
     if (getWorkspaceProjectByProjectId(db, projectId)) return;
+    if (getProject(db, projectId)?.metadata?.deviceOnly === true) return;
     if (!home) return;
     // The resolver and parser must agree on the exact local attribution pair.
     if (
@@ -3026,7 +3027,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   ) {
     for (const id of projectIds) {
       const project = getProject(db, id);
-      if (ctx.workspaceType === 'personal' && project && projectVisibleForLocations(project, locations)) {
+      if (ctx.workspaceType === 'personal' && project && project.metadata?.deviceOnly !== true
+          && projectVisibleForLocations(project, locations)) {
         ensureWorkspaceProjection(project, ctx, 'personal');
       }
     }
@@ -3077,7 +3079,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     // make the owner's local drafts visible in a shared workspace.
     if (ctx.workspaceType !== 'personal' || ctx.role !== 'owner') return;
     for (const project of listProjects(db).filter((item: any) => projectVisibleForLocations(item, locations))) {
-      if (getWorkspaceProjectByProjectId(db, project.id)) continue;
+      if (project.metadata?.deviceOnly === true || getWorkspaceProjectByProjectId(db, project.id)) continue;
       ensureWorkspaceProjection(project, ctx, 'personal');
     }
   }
@@ -3725,6 +3727,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           );
         }
       }
+      if (project.metadata?.deviceOnly === true) {
+        return sendApiError(res, 409, 'WORKSPACE_PROJECT_PERMISSION_DENIED', 'project is stored only on this device');
+      }
       const wp = ensureWorkspaceProjection(project, ctx, 'personal');
       const row = listWorkspaceProjects(db, ctx.workspaceId).find((item: any) => item.id === project.id);
       if (!row || !wp) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
@@ -3940,11 +3945,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // sequence of merely slow reads outlive the Web's optimistic route.
       const projectCreatePreparationDeadline =
         Date.now() + projectCreatePreparationTimeoutMs;
+      const deviceOnly = req.body?.deviceOnly === true;
+      if (req.body?.deviceOnly !== undefined && typeof req.body.deviceOnly !== 'boolean') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'deviceOnly must be a boolean');
+      }
+      if (deviceOnly && workspaceProjectContextFromRequest(req) !== null) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'deviceOnly cannot be combined with a workspace');
+      }
       // A complete Workspace attribution must still name a currently active
       // member before we bind the new private project to that Workspace.
       // Headerless/partial local creates remain unbound.
       const createWorkspace = {
-        context: await resolveCreatedProjectHome(req),
+        context: deviceOnly ? null : await resolveCreatedProjectHome(req),
       };
       learnAssertedWorkspaceType(createWorkspace.context);
       const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
@@ -4154,7 +4166,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const clientMetadata = metadata && typeof metadata === 'object'
         ? Object.fromEntries(
             Object.entries(metadata).filter(([key]) => (
-              key !== 'localCatalogScopes'
+              key !== 'deviceOnly'
+              && key !== 'localCatalogScopes'
               && key !== 'scenarioBinding'
               && key !== 'strategyBinding'
               && key !== 'exampleBinding'
@@ -4334,9 +4347,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           'automaticStrategyTaskProfile does not match this automatic Design route',
         );
       }
-      const projectMetadata = automaticStrategyBinding || exampleBinding
+      const projectMetadata = deviceOnly || automaticStrategyBinding || exampleBinding
         ? {
+            ...(deviceOnly ? { kind: 'prototype' } : {}),
             ...(baseProjectMetadata ?? {}),
+            ...(deviceOnly ? { deviceOnly: true } : {}),
             ...(automaticStrategyBinding
               ? { strategyBinding: automaticStrategyBinding }
               : {}),
