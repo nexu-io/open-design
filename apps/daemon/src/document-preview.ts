@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { load } from 'cheerio';
 import JSZip from 'jszip';
 import { kindFor } from './projects.js';
 
@@ -112,9 +113,7 @@ async function previewDocx(zip: JSZip): Promise<PreviewSection[]> {
 }
 
 async function previewPptx(zip: JSZip): Promise<PreviewSection[]> {
-  const slideNames = Object.keys(zip.files)
-    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/i.test(name))
-    .sort(numericPathSort);
+  const slideNames = await readPresentationSlides(zip);
   const sections: PreviewSection[] = [];
   for (let i = 0; i < slideNames.length; i += 1) {
     const xml = await readZipText(zip, slideNames[i] ?? '');
@@ -127,6 +126,66 @@ async function previewPptx(zip: JSZip): Promise<PreviewSection[]> {
   return sections.length > 0
     ? sections
     : [{ title: 'Presentation', lines: ['No readable slides found.'] }];
+}
+
+/** Slide part names are stable identifiers, not the authored presentation order. */
+async function readPresentationSlides(zip: JSZip): Promise<string[]> {
+  const presentation = load(await readZipText(zip, 'ppt/presentation.xml'), { xmlMode: true });
+  const root = presentation.root().children();
+  if (root.length !== 1 || xmlLocalName(root[0]?.name ?? '') !== 'presentation') {
+    throw new PreviewHttpError('invalid presentation metadata', 400);
+  }
+  const lists = root.children().filter((_index, element) => xmlLocalName(element.name) === 'sldIdLst');
+  if (lists.length > 1) throw new PreviewHttpError('invalid presentation slide list', 400);
+  const slideIds = lists.children().filter((_index, element) => xmlLocalName(element.name) === 'sldId');
+  if (slideIds.length === 0) return [];
+
+  const relationships = load(await readZipText(zip, 'ppt/_rels/presentation.xml.rels'), { xmlMode: true });
+  const relationshipsRoot = relationships.root().children();
+  if (relationshipsRoot.length !== 1 || xmlLocalName(relationshipsRoot[0]?.name ?? '') !== 'Relationships') {
+    throw new PreviewHttpError('invalid presentation relationships', 400);
+  }
+  const byId = new Map<string, XmlAttrs>();
+  for (const element of relationshipsRoot.children().toArray()) {
+    if (xmlLocalName(element.name) !== 'Relationship') continue;
+    const id = element.attribs.Id;
+    if (!id) continue;
+    if (byId.has(id)) throw new PreviewHttpError('duplicate presentation relationship', 400);
+    byId.set(id, element.attribs);
+  }
+  const slideTypes = new Set([
+    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide',
+    'http://purl.oclc.org/ooxml/officeDocument/relationships/slide',
+  ]);
+  return slideIds.toArray().map((element) => {
+    const id = Object.entries(element.attribs)
+      .find(([name]) => !name.startsWith('xmlns:') && name.includes(':') && xmlLocalName(name) === 'id')?.[1];
+    const relationship = id ? byId.get(id) : undefined;
+    if (!relationship?.Target || !slideTypes.has(relationship.Type ?? '')
+      || (relationship.TargetMode !== undefined && relationship.TargetMode !== 'Internal')) {
+      throw new PreviewHttpError('invalid presentation slide relationship', 400);
+    }
+    return resolvePresentationSlide(zip, relationship.Target);
+  });
+}
+
+/** Resolve only package-internal parts; URLs are never fetched for a preview. */
+function resolvePresentationSlide(zip: JSZip, target: string): string {
+  try {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(target) || target.includes('\\')) throw new Error('external target');
+    const resolved = new URL(target, 'https://pptx.invalid/ppt/presentation.xml');
+    if (resolved.origin !== 'https://pptx.invalid' || resolved.search || resolved.hash) throw new Error('invalid part URI');
+    const partName = resolved.pathname.slice(1);
+    const name = zip.file(partName) ? partName : decodeURIComponent(partName);
+    if (!zip.file(name)) throw new Error('missing slide part');
+    return name;
+  } catch {
+    throw new PreviewHttpError('invalid or missing presentation slide part', 400);
+  }
+}
+
+function xmlLocalName(name: string): string {
+  return name.slice(name.lastIndexOf(':') + 1);
 }
 
 async function previewXlsx(zip: JSZip): Promise<PreviewSection[]> {
