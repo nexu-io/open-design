@@ -10155,6 +10155,7 @@ function HtmlViewer({
             const fullText = await fetchProjectFileText(projectId, file.name, {
               cache: 'no-store',
               cacheBustKey,
+              preserveRelativeAssetPaths: true,
               workspaceContext,
             });
             if (fullText !== null) {
@@ -10174,6 +10175,7 @@ function HtmlViewer({
       : fetchProjectFileText(projectId, file.name, {
           cache: 'no-store',
           cacheBustKey,
+          preserveRelativeAssetPaths: true,
           workspaceContext,
         }).then((text) => ({
         text,
@@ -14113,6 +14115,7 @@ function HtmlViewer({
     const persisted = await fetchProjectFileText(projectId, file.name, {
       cache: 'no-store',
       cacheBustKey: Date.now(),
+      preserveRelativeAssetPaths: true,
       workspaceContext,
     });
     if (persisted == null || persisted === expectedSource) return true;
