@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { deflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
 import { importClaudeDesignZip } from '../src/design/index.js';
 
@@ -17,8 +17,7 @@ function buildZip(
     const nameBuf = Buffer.from(entry.name, 'utf8');
     const compressed = method === 0 ? entry.body : deflateRawSync(entry.body);
     const crcBuf = Buffer.alloc(4);
-    // CRC isn't validated by the importer; zero is fine for this test fixture.
-    crcBuf.writeUInt32LE(0, 0);
+    crcBuf.writeUInt32LE(crc32(entry.body), 0);
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { inflateRawSync } from 'node:zlib';
+import { crc32, inflateRawSync } from 'node:zlib';
 import { validateProjectPath } from '../projects.js';
 
 const EOCD_SIG = 0x06054b50;
@@ -16,6 +16,7 @@ type ZipEntry = {
   method: number;
   compressedSize: number;
   uncompressedSize: number;
+  checksum: number;
   localOffset: number;
   isDirectory: boolean;
 };
@@ -46,6 +47,11 @@ export async function importClaudeDesignZip(zipPath: string, projectDir: string)
     }
     if (entry.uncompressedSize > 0 && body.length !== entry.uncompressedSize) {
       throw new Error(`zip entry size mismatch: ${relPath}`);
+    }
+    // Streaming ZIPs can leave the local CRC at zero; the central directory
+    // records the checksum of the complete, unmodified file contents.
+    if (crc32(body) !== entry.checksum) {
+      throw new Error(`zip entry CRC-32 mismatch: ${relPath}`);
     }
     totalBytes += body.length;
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
@@ -199,6 +205,7 @@ function readCentralDirectory(zip: Buffer): ZipEntry[] {
     const method = zip.readUInt16LE(offset + 10);
     const compressedSize = zip.readUInt32LE(offset + 20);
     const uncompressedSize = zip.readUInt32LE(offset + 24);
+    const checksum = zip.readUInt32LE(offset + 16);
     const nameLen = zip.readUInt16LE(offset + 28);
     const extraLen = zip.readUInt16LE(offset + 30);
     const commentLen = zip.readUInt16LE(offset + 32);
@@ -213,6 +220,7 @@ function readCentralDirectory(zip: Buffer): ZipEntry[] {
       method,
       compressedSize,
       uncompressedSize,
+      checksum,
       localOffset,
       isDirectory: name.endsWith('/'),
     });
