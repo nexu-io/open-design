@@ -56,7 +56,7 @@ This file is the single source of truth for agents entering this repository. Rea
 
 - macOS, Linux, and WSL2 are the primary supported paths. Windows native is best-effort — file an issue if it doesn't work.
 - Historical Windows-specific friction is documented in closed issues #10, #96, #100, #203, and #315; check the issue tracker for the current state before filing new reports.
-- Install Node 24. Either `winget install OpenJS.NodeJS.LTS` (currently Node 24.x) or download from https://nodejs.org. After install, verify with `node --version` — the WinGet LTS pointer rolls to the next major in October 2026, so re-verify if you re-run the install command later. Do not use Node 22 — see FAQ.
+- Install a supported LTS Node (`24.x` or `26.x`). Either `winget install OpenJS.NodeJS.LTS` (Node 26 Active LTS as of October 2026) or download from https://nodejs.org. After install, verify with `node --version`. Do not use Node 22 or odd-numbered non-LTS releases (Node 25) — see FAQ.
 - `corepack enable` fails with EPERM on Windows (cannot write shims to `Program Files`). Use `npm install -g pnpm@10.33.2` instead.
 - `better-sqlite3` has no prebuilt binary for win32/Node 24; `pnpm install` will compile it from source via node-gyp (~2 min). Requires Visual Studio Build Tools 2022 or newer. This is expected — not a sign of version incompatibility.
 - For `tools-dev` start/stop/status usage, see "Local lifecycle" below.
@@ -491,9 +491,10 @@ Desktop queries runtime status through its sidecar client. The web URL comes fro
 
 Run `pnpm install` after changing package manifests, workspace layout, command entrypoints, bin/link-related content, or after adding/removing workspace packages.
 
-## Can I use Node 22 instead of Node 24?
+## Can I use Node 22 or Node 26 instead of Node 24?
 
-No. `package.json#engines` specifies `node: "~24"`, which is the only supported runtime. The current lockfile pins `better-sqlite3@11.10.0`; on Windows it has no prebuilt binary for Node 24 and is built from source via node-gyp (see the Windows native section). Older Node versions are not tested and may hit lockfile or dependency incompatibilities.
+- **Node 22:** No. `package.json#engines` specifies `node: "^24 || ^26"`, and older Node versions are not tested and may hit lockfile or dependency incompatibilities.
+- **Node 26 (Active LTS):** Yes, for local dev and daemon runs (`engines.node: "^24 || ^26"`, `tools/dev`). `.node-version` remains `24` for packaged/Docker builds. If switching between Node 24 and Node 26 in an existing worktree, rebuild `better-sqlite3` (`pnpm --filter @open-design/daemon rebuild better-sqlite3 --pending`).
 
 ## Environment-consistent product links and localization
 

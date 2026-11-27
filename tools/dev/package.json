@@ -28,6 +28,6 @@
     "@powerformer/vela-cli": "0.1.11"
   },
   "engines": {
-    "node": "~24"
+    "node": "^24 || ^26"
   }
 }

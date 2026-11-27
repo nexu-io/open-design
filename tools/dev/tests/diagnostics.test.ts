@@ -28,7 +28,7 @@ describe("tools-dev diagnostics", () => {
     assert.match(diagnostics[0].recommendation, /corepack pnpm install --frozen-lockfile/);
   });
 
-  it("points ABI mismatches under unsupported Node at Node 24 first", () => {
+  it("points ABI mismatches under unsupported Node at Node 24 or 26 LTS first", () => {
     const diagnostics = detectLogDiagnostics(
       [
         "Error: better_sqlite3.node was compiled against a different Node.js version using",
@@ -40,16 +40,18 @@ describe("tools-dev diagnostics", () => {
 
     assert.equal(diagnostics.length, 1);
     assert.match(diagnostics[0].recommendation, /Current tools-dev runtime: Node v22\.22\.3/);
-    assert.match(diagnostics[0].recommendation, /Switch to Node 24 first/);
-    assert.match(diagnostics[0].recommendation, /nvm use 24/);
+    assert.match(diagnostics[0].recommendation, /Switch to Node 24 or 26 LTS first/);
+    assert.match(diagnostics[0].recommendation, /nvm use 26/);
   });
 
   it("formats unsupported Node runtime errors before startup", () => {
     assert.equal(isSupportedNodeRuntime("v24.15.0"), true);
+    assert.equal(isSupportedNodeRuntime("v26.13.0"), true);
+    assert.equal(isSupportedNodeRuntime("v25.0.0"), false);
     assert.equal(isSupportedNodeRuntime("v22.22.3"), false);
 
     const message = formatUnsupportedNodeRuntimeMessage({ nodeModuleVersion: "127", nodeVersion: "v22.22.3" });
-    assert.match(message, /tools-dev must run with Node ~24/);
+    assert.match(message, /tools-dev must run with Node 24 or 26 \(LTS\)/);
     assert.match(message, /Current runtime: Node v22\.22\.3 \(NODE_MODULE_VERSION 127\)/);
     assert.match(message, /corepack pnpm install --frozen-lockfile/);
   });
