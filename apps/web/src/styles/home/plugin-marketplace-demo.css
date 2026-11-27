@@ -793,6 +793,58 @@
   gap: var(--spacing-10);
 }
 
+.plugin-marketplace__batch-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.plugin-marketplace__batch-results-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.plugin-marketplace__batch-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.plugin-marketplace__batch-result-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.plugin-marketplace__batch-result-status {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.plugin-marketplace__batch-result-status.is-imported {
+  color: var(--green);
+}
+
+.plugin-marketplace__batch-result-status.is-skipped {
+  color: var(--text-muted);
+}
+
+.plugin-marketplace__batch-result-status.is-failed {
+  color: var(--red);
+}
+
 .plugin-marketplace__create-options input,
 .plugin-marketplace__skill-form input,
 .plugin-marketplace__skill-form textarea {
