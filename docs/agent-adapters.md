@@ -317,7 +317,17 @@ authentication, and the boundary between REST and MCP.
   `--attachment <absolute-image-path>` per image. The composed prompt is
   delivered over stdin, and print mode exits after the turn.
 - Streaming: `--output-format stream-json` emits JSONL records such as `system/init`, `assistant`, and `result`. `apps/daemon/src/runtimes/qoder-stream.ts` maps assistant content blocks to text deltas, maps assistant errors without text to typed error events, and preserves result usage, model usage, cost, duration, stop reason, and unknown records as raw events.
-- Models: ships fallback hints for `default`, `lite`, `efficient`, `auto`, `performance`, and `ultimate`. Selecting `default` omits `--model` so Qoder's own CLI configuration remains authoritative.
+- Models: discovered live from `qodercli --list-models`, which prints a `MODEL`
+  header followed by one model id per line; every id is passed verbatim as
+  `--model`. Selecting `default` omits `--model` so Qoder's own CLI
+  configuration remains authoritative. When the probe fails the picker offers
+  only `default` instead of unverified ids — the previous static tier hints
+  (`lite`, `efficient`, `auto`, `performance`, `ultimate`) are not accepted by
+  Qoder and made runs fail. The header row is required: headerless output (an
+  older CLI's status or usage text) is rejected rather than reported as a
+  catalog. Stored picks of those retired ids are dropped when
+  `app-config.json` is read or written, so an upgrade stops failing without the
+  user re-picking a model.
 - Skills use the shared §4 path. `--add-dir` is repeatable for absolute
   external roots; relative entries are not forwarded.
 - Permission: `--yolo` avoids headless approval prompts. Treat this as the

@@ -185,6 +185,16 @@ const AGENT_MODEL_KEYS: ReadonlySet<string> = new Set([
 ]);
 const RETIRED_AGENT_IDS: ReadonlySet<string> = new Set(['gemini']);
 
+// Model ids that an adapter once shipped as static picker hints but that the
+// CLI never accepted as `--model` values. A stored pick outlives the adapter
+// fix and reaches `buildArgs` unchanged, so every later run keeps failing; the
+// key is therefore dropped when the config is read or written. Dropping it (as
+// opposed to storing 'default') keeps "no explicit choice" as the single
+// representation of the CLI-configured default.
+const RETIRED_AGENT_MODEL_IDS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['qoder', new Set(['lite', 'efficient', 'auto', 'performance', 'ultimate'])],
+]);
+
 const TELEMETRY_KEYS: ReadonlySet<string> = new Set([
   'metrics',
   'content',
@@ -498,6 +508,18 @@ function normalizeRetiredAgentPrefs(prefs: AppConfigPrefs): AppConfigPrefs {
       if (!Object.prototype.hasOwnProperty.call(nextAgentModels, agentId)) continue;
       if (nextAgentModels === next.agentModels) nextAgentModels = { ...next.agentModels };
       delete nextAgentModels[agentId];
+      changed = true;
+    }
+    for (const [agentId, retiredModelIds] of RETIRED_AGENT_MODEL_IDS) {
+      const stored = nextAgentModels[agentId]?.model;
+      if (typeof stored !== 'string' || !retiredModelIds.has(stored)) continue;
+      if (nextAgentModels === next.agentModels) nextAgentModels = { ...next.agentModels };
+      const { model: _retiredModel, ...remaining } = nextAgentModels[agentId]!;
+      if (Object.keys(remaining).length > 0) {
+        nextAgentModels[agentId] = remaining;
+      } else {
+        delete nextAgentModels[agentId];
+      }
       changed = true;
     }
     const normalizedAgentModels = Object.keys(nextAgentModels).length > 0 ? nextAgentModels : undefined;
