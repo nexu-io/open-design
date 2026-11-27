@@ -41,6 +41,33 @@ const designSystems: DesignSystemSummary[] = [
   },
 ];
 
+const bundledDesignSystems: DesignSystemSummary[] = [
+  {
+    id: 'agentic',
+    title: 'Agentic',
+    summary:
+      'Bundled Open Design package for Agentic, derived from curated DESIGN.md, tokens.css, and components.html fixtures.',
+    category: 'Themed & Unique',
+    source: 'built-in',
+  },
+  {
+    id: 'mission-control',
+    title: 'Mission Control Design System',
+    summary:
+      'Bundled Open Design package for Mission Control Design System, derived from curated DESIGN.md, tokens.css, and components.html fixtures.',
+    category: 'Professional & Corporate',
+    source: 'built-in',
+  },
+  {
+    id: 'airbnb',
+    title: 'Airbnb',
+    summary:
+      'Bundled Open Design package for Airbnb, derived from curated DESIGN.md, tokens.css, and components.html fixtures.',
+    category: 'E-Commerce & Retail',
+    source: 'built-in',
+  },
+];
+
 beforeEach(() => {
   fetchDesignSystemMock.mockImplementation(async (id) => ({
     id,
@@ -122,6 +149,71 @@ describe('DesignSystemPicker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('drops the sticky hover preview when the user moves to the search input (#2695)', async () => {
+    renderPicker();
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    await screen.findByTestId('project-ds-picker-preview-kit-view');
+
+    // Hover a non-selected system so the preview targets it.
+    fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
+    await waitFor(() => {
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('clay', null);
+    });
+    expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
+
+    // Typing in the search input must drop the stale hover target and fall back
+    // to the selected system ('noir'), not keep previewing the hovered 'clay'.
+    fireEvent.change(screen.getByTestId('project-ds-picker-search'), {
+      target: { value: 'e' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('High-contrast editorial system.')).toBeTruthy();
+    });
+    expect(screen.queryByText('Friendly tactile product UI.')).toBeNull();
+
+    // Clearing on typing must be transient: hovering a (still-filtered) result
+    // after searching should update the preview to it as usual.
+    fireEvent.mouseEnter(screen.getByTestId('project-ds-picker-option-clay'));
+    await waitFor(() => {
+      expect(screen.getByText('Friendly tactile product UI.')).toBeTruthy();
+    });
+  });
+
+  it('ignores bundled manifest boilerplate when filtering picker results', async () => {
+    renderPicker({ designSystems: [...designSystems, ...bundledDesignSystems] });
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    fireEvent.change(screen.getByTestId('project-ds-picker-search'), {
+      target: { value: 'design' },
+    });
+
+    expect(screen.getByTestId('project-ds-picker-option-mission-control')).toBeTruthy();
+    expect(screen.queryByTestId('project-ds-picker-option-agentic')).toBeNull();
+    expect(screen.queryByTestId('project-ds-picker-option-clay')).toBeNull();
+    expect(screen.queryByTestId('project-ds-picker-option-noir')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('project-ds-picker-search'), {
+      target: { value: 'tactile' },
+    });
+
+    expect(screen.getByTestId('project-ds-picker-option-clay')).toBeTruthy();
+    expect(screen.queryByTestId('project-ds-picker-option-agentic')).toBeNull();
+  });
+
+  it('keeps curated localized summaries searchable for bundled systems', async () => {
+    renderPicker({ designSystems: [...designSystems, ...bundledDesignSystems] }, 'fr');
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    fireEvent.change(screen.getByTestId('project-ds-picker-search'), {
+      target: { value: 'voyage' },
+    });
+
+    expect(screen.getByTestId('project-ds-picker-option-airbnb')).toBeTruthy();
+    expect(screen.queryByTestId('project-ds-picker-option-agentic')).toBeNull();
   });
 
   it('selects a design system option with keyboard activation', async () => {
