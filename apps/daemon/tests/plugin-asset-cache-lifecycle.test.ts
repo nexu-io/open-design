@@ -33,9 +33,12 @@ describe('plugin asset cache response lifecycle', () => {
     },
   ])('closes the upstream connection after rejecting $name', async (scenario) => {
     const dir = await mkdtemp(path.join(tmpdir(), 'od-asset-lifecycle-'));
-    const upstreamClosed = Promise.withResolvers<void>();
+    let notifyUpstreamClosed = () => {};
+    const upstreamClosed = new Promise<void>((resolve) => {
+      notifyUpstreamClosed = resolve;
+    });
     const upstream = createServer((_request, response) => {
-      response.once('close', () => upstreamClosed.resolve());
+      response.once('close', notifyUpstreamClosed);
       response.writeHead(scenario.status, scenario.headers);
       response.write('x');
       // Keep sending eligible: returning the cache error must abort this fetch.
@@ -54,14 +57,14 @@ describe('plugin asset cache response lifecycle', () => {
         // fetch/AbortSignal response lifecycle. SSRF policy has separate tests.
         fetchImpl: (_url, init) => {
           signal = init?.signal;
-          return fetch(`http://127.0.0.1:${address.port}/fixture`, { signal });
+          return fetch(`http://127.0.0.1:${address.port}/fixture`, { signal: signal ?? null });
         },
       });
 
       await expect(cache.get(scenario.url)).rejects.toMatchObject({ status: scenario.expected });
 
       expect(signal?.aborted).toBe(true);
-      await upstreamClosed.promise;
+      await upstreamClosed;
       expect(await readdir(dir)).toEqual([]);
     } finally {
       upstream.closeAllConnections();
