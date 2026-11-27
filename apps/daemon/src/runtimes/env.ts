@@ -344,6 +344,7 @@ function finalizeRuntimeEnv(
 ): NodeJS.ProcessEnv {
   const finalizedEnv = reapplySandboxRuntimeEnv(env, sandboxRuntime);
   applyWindowsUserCacheEnv(finalizedEnv);
+  applyWindowsStructuralEnv(finalizedEnv);
   return finalizedEnv;
 }
 
@@ -381,6 +382,35 @@ function applyWindowsUserCacheEnv(env: NodeJS.ProcessEnv): void {
   const tempDir = path.win32.join(localAppData, 'Temp');
   setEnvIfMissing(env, 'TEMP', tempDir);
   setEnvIfMissing(env, 'TMP', tempDir);
+}
+
+/** Default PATHEXT mirroring a stock Windows install; kept in sync with the
+ * run-path normalization in server.ts (createAgentRuntimeEnv). */
+const WINDOWS_DEFAULT_PATH_EXT =
+  '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
+
+function applyWindowsStructuralEnv(env: NodeJS.ProcessEnv): void {
+  if (process.platform !== 'win32') return;
+
+  // The packaged app spawns the daemon through a child-env allowlist
+  // (apps/packaged/src/sidecars.ts) that historically forwarded only proxy,
+  // locale, and home variables. A daemon started that way lacks PATHEXT,
+  // COMSPEC, and PROGRAMDATA, and its children inherit the gap: npm .cmd
+  // shims stop resolving (issue #6934 saw a broken PATHEXT such as `.CPL`
+  // synthesized downstream), cmd.exe chains refuse to start, and CLIs that
+  // resolve %PROGRAMDATA% misbehave. Backfill the structural trio here so
+  // every spawnEnvForAgent consumer — connection tests, detection probes,
+  // and chat runs — receives a launchable environment.
+  const pathextKey =
+    Object.keys(env).find((key) => key.toLowerCase() === 'pathext') ?? 'PATHEXT';
+  const pathextValue = typeof env[pathextKey] === 'string' ? (env[pathextKey] as string) : '';
+  if (!/\.exe/i.test(pathextValue)) {
+    env[pathextKey] = WINDOWS_DEFAULT_PATH_EXT;
+  }
+  const systemRoot = envValue(env, 'SYSTEMROOT') || 'C:\\WINDOWS';
+  setEnvIfMissing(env, 'COMSPEC', path.win32.join(systemRoot, 'System32', 'cmd.exe'));
+  const systemDrive = envValue(env, 'SYSTEMDRIVE') || 'C:';
+  setEnvIfMissing(env, 'PROGRAMDATA', path.win32.join(systemDrive, 'ProgramData'));
 }
 
 function envValue(env: NodeJS.ProcessEnv, key: string): string | null {

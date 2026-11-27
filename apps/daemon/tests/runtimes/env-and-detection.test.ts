@@ -103,6 +103,46 @@ test('spawnEnvForAgent backfills Windows cache directory env for Trae CLI launch
   assert.equal(env.TMP, 'C:\\Users\\ai\\AppData\\Local\\Temp');
 });
 
+test('spawnEnvForAgent normalizes a broken Windows PATHEXT and backfills COMSPEC/PROGRAMDATA', () => {
+  const env = withPlatform('win32', () =>
+    spawnEnvForAgent(
+      'claude',
+      {
+        Path: 'C:\\Windows\\System32',
+        PATHEXT: '.CPL',
+        SYSTEMROOT: 'C:\\Windows',
+        SYSTEMDRIVE: 'D:',
+        USERPROFILE: 'C:\\Users\\ai',
+      },
+      {},
+      {},
+    ),
+  );
+
+  assert.equal(env.PATHEXT, '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC');
+  assert.equal(env.COMSPEC, 'C:\\Windows\\System32\\cmd.exe');
+  assert.equal(env.PROGRAMDATA, 'D:\\ProgramData');
+});
+
+test('spawnEnvForAgent preserves a valid Windows PATHEXT and existing COMSPEC', () => {
+  const env = withPlatform('win32', () =>
+    spawnEnvForAgent(
+      'claude',
+      {
+        Path: 'C:\\Windows\\System32',
+        PATHEXT: '.COM;.EXE;.BAT;.CMD',
+        COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+        USERPROFILE: 'C:\\Users\\ai',
+      },
+      {},
+      {},
+    ),
+  );
+
+  assert.equal(env.PATHEXT, '.COM;.EXE;.BAT;.CMD');
+  assert.equal(env.COMSPEC, 'C:\\Windows\\System32\\cmd.exe');
+});
+
 test('spawnEnvForAgent keeps Windows cache directory env inside sandbox roots', () => {
   const dataDir = mkdtempSync(join(tmpdir(), 'od-agent-env-sandbox-win-cache-'));
   try {
