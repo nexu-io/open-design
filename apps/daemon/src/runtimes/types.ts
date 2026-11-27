@@ -99,6 +99,12 @@ export type RuntimeCapabilityMap = Record<string, boolean>;
 
 export type RuntimeListModels = {
   args: string[];
+  /**
+   * Args to retry with when the primary invocation is rejected by the CLI.
+   * OpenCode 2 rejects `models --verbose` outright while still answering the
+   * plain form; without this the whole catalog degraded to static hints.
+   */
+  fallbackArgs?: string[];
   timeoutMs?: number;
   parse: (stdout: string) => RuntimeModelOption[] | null;
 };

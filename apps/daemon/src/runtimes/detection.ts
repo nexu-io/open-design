@@ -241,7 +241,27 @@ async function fetchModels(
     }
     return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
   } catch {
-    return { models: def.fallbackModels, source: 'fallback' };
+    // A CLI that rejected the primary args (e.g. `opencode models --verbose`
+    // in OpenCode 2, which exits 1) may still answer the plain form. Only a
+    // rejected invocation retries here; an empty parse above does not, so a
+    // transiently empty catalog cannot trigger a second network call.
+    if (!def.listModels.fallbackArgs) {
+      return { models: def.fallbackModels, source: 'fallback' };
+    }
+    try {
+      const { stdout } = await execAgentFile(resolvedBin, def.listModels.fallbackArgs, {
+        env,
+        timeout: def.listModels.timeoutMs ?? 5000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      const parsed = def.listModels.parse(String(stdout));
+      if (!parsed || parsed.length === 0) {
+        return { models: def.fallbackModels, source: 'fallback' };
+      }
+      return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
+    } catch {
+      return { models: def.fallbackModels, source: 'fallback' };
+    }
   }
 }
 
