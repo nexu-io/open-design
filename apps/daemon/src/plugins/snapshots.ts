@@ -351,8 +351,17 @@ export function pruneExpiredSnapshots(
   // Dedupe — a row might match both expires_at and retentionDays.
   const unique = Array.from(new Set(ids));
   if (unique.length === 0) return { removed: 0, ids: [] };
-  const placeholders = unique.map(() => '?').join(', ');
-  db.prepare(`DELETE FROM applied_plugin_snapshots WHERE id IN (${placeholders})`).run(...unique);
+  // A large expired set can exceed SQLite's bind-variable limit. Keep the
+  // batches in one transaction so a later failure still rolls back the whole
+  // sweep, matching the previous single DELETE's atomic behavior.
+  db.transaction(() => {
+    const batchSize = 500;
+    for (let offset = 0; offset < unique.length; offset += batchSize) {
+      const batch = unique.slice(offset, offset + batchSize);
+      const placeholders = batch.map(() => '?').join(', ');
+      db.prepare(`DELETE FROM applied_plugin_snapshots WHERE id IN (${placeholders})`).run(...batch);
+    }
+  })();
   return { removed: unique.length, ids: unique };
 }
 
