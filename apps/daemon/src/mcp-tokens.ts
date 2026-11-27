@@ -180,7 +180,7 @@ async function writeTokensFile(
   const file = tokensFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
+  await writeFile(tmp, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
   await rename(tmp, file);
   // Best-effort lockdown of file mode. Bearer tokens can hand someone
   // posting-as-you against the upstream MCP, so we restrict to owner-only
