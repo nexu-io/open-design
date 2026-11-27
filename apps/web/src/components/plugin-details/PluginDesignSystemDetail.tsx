@@ -13,17 +13,19 @@
 // upstream design system (some bundles ship DESIGN.md only): the
 // tabs collapse and the modal renders the spec sidebar by default.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type {
   InstalledPluginRecord,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { workspaceAccountScopedCacheKey } from '../../collab/workspace-identity';
 import { useI18n } from '../../i18n';
 import { localizePluginChrome } from '../../i18n/plugin-content';
 import { localizePluginDescription, localizePluginTitle } from '../plugins-home/localization';
 import {
   fetchDesignSystemPreview,
   fetchDesignSystemShowcase,
+  type DesignSystemShowcaseDocument,
   fetchPluginAssetText,
 } from '../../providers/registry';
 import { DesignSpecView } from '../DesignSpecView';
@@ -91,41 +93,51 @@ export function PluginDesignSystemDetail({
   const dsRef = designSystemRef(record);
   const assetPath = specAssetPath(record);
 
-  const [showcaseHtml, setShowcaseHtml] = useState<string | null | undefined>(undefined);
+  const [showcase, setShowcase] = useState<DesignSystemShowcaseDocument | null | undefined>(undefined);
   const [tokensHtml, setTokensHtml] = useState<string | null | undefined>(undefined);
   const [specBody, setSpecBody] = useState<string | null | undefined>(undefined);
 
-  // Reset caches when the modal swaps to a different plugin.
-  useEffect(() => {
-    setShowcaseHtml(undefined);
+  const scopeKey = JSON.stringify([
+    record.id, dsRef, assetPath, workspaceAccountScopedCacheKey(workspaceContext),
+  ]);
+  const [readScope, setReadScope] = useState(() => ({ key: scopeKey }));
+  const readScopeRef = useRef(readScope);
+  readScopeRef.current = readScope;
+  if (readScope.key !== scopeKey) {
+    setReadScope({ key: scopeKey });
+    setShowcase(undefined);
     setTokensHtml(undefined);
     setSpecBody(undefined);
-  }, [record.id]);
+  }
 
   const handleView = useCallback(
     (viewId: string) => {
       if (!dsRef) return;
-      if (viewId === 'showcase' && showcaseHtml === undefined) {
-        setShowcaseHtml(null);
-        void fetchDesignSystemShowcase(dsRef, workspaceContext).then((html) => setShowcaseHtml(html));
+      if (viewId === 'showcase' && showcase === undefined) {
+        setShowcase(null);
+        void fetchDesignSystemShowcase(dsRef, workspaceContext).then((html) => {
+          if (readScopeRef.current === readScope) setShowcase(html);
+        });
       }
       if (viewId === 'tokens' && tokensHtml === undefined) {
         setTokensHtml(null);
-        void fetchDesignSystemPreview(dsRef, workspaceContext).then((html) => setTokensHtml(html));
+        void fetchDesignSystemPreview(dsRef, workspaceContext).then((html) => {
+          if (readScopeRef.current === readScope) setTokensHtml(html);
+        });
       }
     },
-    [dsRef, showcaseHtml, tokensHtml, workspaceContext],
+    [dsRef, showcase, tokensHtml, workspaceContext, readScope],
   );
 
   const handleSidebarToggle = useCallback(
     (open: boolean) => {
       if (!open || specBody !== undefined) return;
       setSpecBody(null);
-      void fetchPluginAssetText(record.id, assetPath, workspaceContext).then((body) =>
-        setSpecBody(body),
-      );
+      void fetchPluginAssetText(record.id, assetPath, workspaceContext).then((body) => {
+        if (readScopeRef.current === readScope) setSpecBody(body);
+      });
     },
-    [record.id, assetPath, specBody, workspaceContext],
+    [record.id, assetPath, specBody, workspaceContext, readScope],
   );
 
   // When no upstream design system is referenced we still need a view
@@ -135,7 +147,7 @@ export function PluginDesignSystemDetail({
   // from the primary CTA.
   const views: PreviewView[] = dsRef
     ? [
-        { id: 'showcase', label: t('ds.showcase'), html: showcaseHtml },
+        { id: 'showcase', label: t('ds.showcase'), html: showcase?.html, baseHref: showcase?.baseHref },
         { id: 'tokens', label: t('ds.tokens'), html: tokensHtml },
       ]
     : [
@@ -164,7 +176,7 @@ export function PluginDesignSystemDetail({
         label: pluginInfoLabel,
         defaultOpen: true,
         onToggle: handleSidebarToggle,
-        contentKey: record.id,
+        contentKey: scopeKey,
         // Design-system plugins are still plugins, so the inspector
         // comes first. DESIGN.md remains available in the same sidebar,
         // but as a spec section below the plugin-common metadata.

@@ -1,3 +1,4 @@
+import { Parser } from 'htmlparser2';
 import { buildPreviewStorageBridge } from './preview-storage';
 import { injectMotionSourcePlayer, markMotionHostedPreview } from '@open-design/contracts/runtime/motion-source-player';
 /**
@@ -1516,7 +1517,30 @@ export function htmlHasAuthoredBase(doc: string): boolean {
 }
 
 function injectBaseHref(doc: string, baseHref: string): string {
-  if (htmlHasAuthoredBase(doc)) return doc;
+  let cursor = 0;
+  while (cursor < doc.length) {
+    const offset = findRealTagOffset(doc.slice(cursor), HTML_TAG_PATTERNS.baseOpen);
+    if (offset < 0) break;
+    const start = cursor + offset;
+    const end = endOfTag(doc, start + 5);
+    if (end < 0) break;
+    let attrs: Record<string, string> = {};
+    new Parser({ onopentag: (_name, attributes) => { attrs = attributes; } })
+      .end(doc.slice(start, end + 1));
+    if (Object.hasOwn(attrs, 'href')) {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(attrs.href!)) return doc;
+      try {
+        attrs.href = new URL(attrs.href!, baseHref).href;
+      } catch {
+        return doc;
+      }
+      const tag = `<base${Object.entries(attrs).map(([name, value]) =>
+        ` ${escapeAttr(name)}="${escapeAttr(value)}"`,
+      ).join('')}>`;
+      return doc.slice(0, start) + tag + doc.slice(end + 1);
+    }
+    cursor = end + 1;
+  }
   const safeHref = escapeAttr(baseHref);
   const tag = `<base href="${safeHref}" data-od-project-preview-base>`;
   const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);

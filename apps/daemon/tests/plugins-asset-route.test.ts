@@ -153,7 +153,33 @@ describe('GET /api/plugins/:id/asset/*', () => {
     const response = await fetch(`${baseUrl}/api/plugins/${asset}`, { headers: { origin: 'null' } });
     expect(response.status).toBe(403);
     expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(await response.json()).toEqual({ error: 'Origin: null requires a declared bundled asset' });
   });
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])(
+    'does not permit opaque-origin %s requests to plugin assets',
+    async (method) => {
+      const response = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/display.ttf`, {
+        method,
+        headers: { origin: 'null' },
+      });
+      expect(response.status).toBe(403);
+      expect(response.headers.get('access-control-allow-origin')).toBeNull();
+      expect(await response.json()).toEqual({ error: 'Origin: null not allowed for this route' });
+    },
+  );
+
+  it.each(['asset', 'assets/display.ttf', 'preview', 'uninstall'])(
+    'does not permit opaque-origin reads through asset-like plugin paths: %s',
+    async (suffix) => {
+      const response = await fetch(`${baseUrl}/api/plugins/asset-plugin/${suffix}`, {
+        headers: { origin: 'null' },
+      });
+      expect(response.status).toBe(403);
+      expect(response.headers.get('access-control-allow-origin')).toBeNull();
+      expect(await response.json()).toEqual({ error: 'Origin: null not allowed for this route' });
+    },
+  );
 
   it('does not expose bundled assets to arbitrary web origins', async () => {
     const response = await fetch(`${baseUrl}/api/plugins/example-open-design-homepage/asset/assets/model/hello.gltf`, {
@@ -161,6 +187,7 @@ describe('GET /api/plugins/:id/asset/*', () => {
     });
     expect(response.status).toBe(403);
     expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(await response.json()).toEqual({ error: 'Cross-origin requests are not allowed' });
   });
 
   it('returns 404 for an unknown plugin', async () => {
