@@ -93,6 +93,15 @@ function isValidOverride(value: number | undefined): value is number {
   );
 }
 
+/**
+ * The user's own Max tokens override, or undefined when it is unset or out of
+ * range. For runtimes that keep their own default instead of the per-model
+ * table `effectiveMaxTokens` falls back to.
+ */
+export function maxTokensOverride(cfg: Pick<AppConfig, 'maxTokens'>): number | undefined {
+  return isValidOverride(cfg.maxTokens) ? cfg.maxTokens : undefined;
+}
+
 export function effectiveMaxTokens(cfg: Pick<AppConfig, 'maxTokens' | 'model'>): number {
   // Out-of-range or non-integer overrides (stale localStorage, hand-edited
   // config, future schema drift) fall back to the model default rather

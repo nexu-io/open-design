@@ -6,6 +6,7 @@ import {
   eventsEndedByAskingUser,
   eventsEndedWithUnfinishedWork,
   isTodoWriteToolName,
+  stopReasonIsTruncation,
   turnEndedByAskingUser,
   todoSnapshotHasUnfinishedWork,
   todoStatusIsUnfinished,
@@ -91,6 +92,16 @@ describe('eventsEndedWithUnfinishedWork', () => {
     ];
     expect(eventsHaveAuthenticatedDoneConclusion(events)).toBe(true);
     expect(eventsEndedWithUnfinishedWork(events)).toBe(true);
+  });
+
+  it('treats an OpenCode `length` finish as a truncation, like max_tokens (#9363)', () => {
+    expect(stopReasonIsTruncation('length')).toBe(true);
+    expect(stopReasonIsTruncation('stop')).toBe(false);
+    expect(stopReasonIsTruncation('tool-calls')).toBe(false);
+    expect(eventsEndedWithUnfinishedWork([
+      { kind: 'text', text: 'partial answer' },
+      { kind: 'usage', stopReason: 'length' },
+    ])).toBe(true);
   });
 
   it('does not trust mismatched, legacy, implicit, fenced, or empty done markers', () => {

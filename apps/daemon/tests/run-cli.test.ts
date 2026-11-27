@@ -295,10 +295,30 @@ describe('od run CLI', () => {
     });
   });
 
+  it('submits --byok-max-tokens as the run-scoped BYOK output limit (#9363)', async () => {
+    stub = await startRunStubServer(true);
+    const result = await runCli([
+      'run', 'start', '--project', 'project-1',
+      '--byok-protocol', 'openai', '--byok-key-env', 'OD_TEST_BYOK_KEY',
+      '--byok-max-tokens', '32000',
+      '--model', 'custom-model', '--json', '--daemon-url', stub.baseUrl,
+    ], { OD_TEST_BYOK_KEY: 'dummy-cli-byok-api-key' });
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[0]!.body).byokProvider).toEqual({
+      protocol: 'openai',
+      apiKey: 'dummy-cli-byok-api-key',
+      maxTokens: 32000,
+    });
+  });
+
   it.each([
     { args: ['--byok-base-url', 'http://127.0.0.1:8000/v1'], error: '--byok-protocol must be' },
     { args: ['--byok-protocol', 'bedrock'], error: '--byok-protocol must be' },
     { args: ['--byok-protocol', 'openai', '--byok-key-env', 'OD_TEST_BYOK_KEY'], error: '--byok-key-env must name' },
+    { args: ['--byok-max-tokens', '32000'], error: '--byok-protocol must be' },
+    { args: ['--byok-protocol', 'openai', '--byok-keyless', '--byok-max-tokens', '0'], error: '--byok-max-tokens must be a positive integer' },
+    { args: ['--byok-protocol', 'openai', '--byok-keyless', '--byok-max-tokens', 'lots'], error: '--byok-max-tokens must be a positive integer' },
   ])('reports invalid BYOK input without submitting a Run: $args', async ({ args, error }) => {
     stub = await startRunStubServer(true);
     const result = await runCli([
