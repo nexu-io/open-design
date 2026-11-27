@@ -205,4 +205,23 @@ describe('parseFrontmatter', () => {
     const { data } = parseFrontmatter('---\ntext: |\n  a\n    b\n---\n');
     expect(data['text']).toBe('a\n  b');
   });
+
+  it('keeps quoted block-sequence items containing a colon as strings', () => {
+    const { data } = parseFrontmatter('---\ntriggers:\n  - "1:1 notes"\n  - \'1:1 figma\'\n  - "Q3: review deck"\n---\n');
+    expect(data.triggers).toEqual(['1:1 notes', '1:1 figma', 'Q3: review deck']);
+  });
+
+  it('still parses quoted-key and plain single-line mappings in a sequence', () => {
+    const quoted = parseFrontmatter('---\nitems:\n  - "name": foo\n---\n').data.items as Array<Record<string, unknown>>;
+    expect(Object.values(quoted[0] ?? {})).toEqual(['foo']);
+    const { data } = parseFrontmatter("---\nitems:\n  - k: v\n  - don't: x\n---\n");
+    expect(data.items).toEqual([{ k: 'v' }, { "don't": 'x' }]);
+  });
+
+  it('skips escaped quotes inside a quoted key before looking for the colon', () => {
+    const dq = parseFrontmatter('---\nitems:\n  - "a\\"b": c\n---\n').data.items as Array<Record<string, unknown>>;
+    expect(Object.values(dq[0] ?? {})).toEqual(['c']);
+    const sq = parseFrontmatter("---\nitems:\n  - 'it''s': x\n---\n").data.items as Array<Record<string, unknown>>;
+    expect(Object.values(sq[0] ?? {})).toEqual(['x']);
+  });
 });
