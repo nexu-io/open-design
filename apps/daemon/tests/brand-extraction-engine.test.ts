@@ -44,7 +44,7 @@ import {
   imageSize,
   type ImagerySlot,
 } from '../src/brands/imagery-fallback.js';
-import { isChallengePage, type PrefetchResult } from '../src/brands/prefetch.js';
+import { extractColors, isChallengePage, type PrefetchResult } from '../src/brands/prefetch.js';
 
 // Real repo skills root so the bundled brand-kit template resolves.
 const SKILLS_ROOT = path.resolve(
@@ -414,6 +414,136 @@ describe('agent-driven brand extraction engine', () => {
 
     expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#04070d');
     expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#0e9f77');
+  });
+
+  it('does not register stock framework colors as the brand when the site has its own', () => {
+    const laravelStarter = {
+      ...programmaticPrefetchResult('https://laravel-site.test/'),
+      colors: [
+        { hex: '#3097d1', count: 48, sources: ['prop:background-color selector:.btn-primary', 'prop:color selector:a'] },
+        { hex: '#2ab27b', count: 14, sources: ['prop:background-color selector:.btn-success'] },
+        { hex: '#bf5329', count: 12, sources: ['prop:background-color selector:.btn-danger'] },
+        { hex: '#636b6f', count: 20, sources: ['prop:color selector:body'] },
+        { hex: '#e4572e', count: 5, sources: ['prop:background-color selector:.site-header'] },
+        { hex: '#ffffff', count: 40, extreme: true, sources: ['prop:background-color selector:body'] },
+      ],
+    };
+    const laravel = brandFromMaterial(laravelStarter, 'https://laravel-site.test/');
+    expect(laravel.colors.find((color) => color.role === 'accent')?.hex).toBe('#e4572e');
+    expect(laravel.colors.find((color) => color.role === 'accent-secondary')).toBeUndefined();
+
+    const bootstrap5 = brandFromMaterial({
+      ...programmaticPrefetchResult('https://bootstrap-site.test/'),
+      colors: [
+        { hex: '#0d6efd', count: 30, sources: ['css-var:--bs-primary', 'css-var:--bs-link-color'] },
+        { hex: '#dc3545', count: 12, sources: ['css-var:--bs-danger'] },
+        { hex: '#7a3cff', count: 3, sources: ['css-var:--brand'] },
+        { hex: '#ffffff', count: 40, extreme: true, sources: ['css-var:--bs-body-bg'] },
+      ],
+    }, 'https://bootstrap-site.test/');
+    expect(bootstrap5.colors.find((color) => color.role === 'accent')?.hex).toBe('#7a3cff');
+  });
+
+  it('keeps a stock framework color when the page measures no other chromatic color', () => {
+    const brand = brandFromMaterial({
+      ...programmaticPrefetchResult('https://stock-laravel.test/'),
+      colors: [
+        { hex: '#3097d1', count: 48, sources: ['prop:background-color selector:.btn-primary'] },
+        { hex: '#2ab27b', count: 14, sources: ['prop:background-color selector:.btn-success'] },
+        { hex: '#636b6f', count: 20, sources: ['prop:color selector:body'] },
+        { hex: '#ffffff', count: 40, extreme: true },
+      ],
+    }, 'https://stock-laravel.test/');
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#3097d1');
+    expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#2ab27b');
+  });
+
+  it.each([
+    ['--primary', '#e4572e'],
+    ['--color-primary', '#e4572e'],
+    ['--primary-color', '#e4572e'],
+    ['--primary', '#dc3545'],
+    ['--color-primary', '#007bff'],
+  ])(
+    'prefers a site-defined %s of %s over Bootstrap 5 defaults',
+    (token, hex) => {
+      const url = 'https://bootstrap-site.test/';
+      const brand = brandFromMaterial({
+        ...programmaticPrefetchResult(url),
+        colors: [
+          { hex: '#0d6efd', count: 39, sources: ['css-var:--bs-primary', 'css-var:--bs-link-color'] },
+          { hex, count: 3, sources: [`css-var:${token}`] },
+        ],
+      }, url);
+
+      expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe(hex);
+    },
+  );
+
+  it.each(['#007bff', '#3490dc'])('allows a brand token to replace stock --primary %s', (hex) => {
+    const url = 'https://bootstrap4-site.test/';
+    const brand = brandFromMaterial({
+      ...programmaticPrefetchResult(url),
+      colors: [
+        { hex, count: 39, sources: ['css-var:--primary', 'prop:background-color selector:.btn-primary'] },
+        { hex: '#e4572e', count: 3, sources: ['css-var:--brand'] },
+      ],
+    }, url);
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#e4572e');
+  });
+
+  it.each([
+    ['#dc3545', ''],
+    ['#007bff', ''],
+    ['#e4572e', '--accent:#0d6efd;'],
+  ])('extracts site primary %s from CSS with many framework colors', (hex, extraCss) => {
+    const url = 'https://bootstrap-site.test/';
+    const frameworkCss = [
+      ':root{--bs-primary:#0d6efd;--bs-link-color:#0d6efd;--bs-danger:#dc3545}',
+      ...Array.from({length: 15}, (_, i) =>
+        `.palette-${i}{--bs-accent:#${(0x18489f + i).toString(16)};color:#dc3545}`,
+      ),
+    ].join('\n');
+    const colors = extractColors(`${frameworkCss}\n:root{${extraCss}--primary:${hex}}`);
+    const brand = brandFromMaterial({ ...programmaticPrefetchResult(url), colors }, url);
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe(hex);
+  });
+
+  it.each([
+    {
+      name: 'only framework styles',
+      blueSources: ['css-var:--bs-primary', 'css-var:--bs-link-color'],
+      additionalColors: [],
+    },
+    {
+      name: 'an unrelated colorful ornament',
+      blueSources: ['css-var:--bs-primary', 'css-var:--bs-link-color'],
+      additionalColors: [{ hex: '#7a3cff', count: 4, sources: ['prop:fill selector:.status-dot'] }],
+    },
+    {
+      name: 'an explicit brand token using the framework blue',
+      blueSources: ['css-var:--bs-primary', 'css-var:--brand'],
+      additionalColors: [{ hex: '#7a3cff', count: 4, sources: ['css-var:--accent'] }],
+    },
+  ])('keeps Bootstrap blue as the primary with $name', ({ blueSources, additionalColors, name }) => {
+    const url = 'https://bootstrap-defaults.test/';
+    const brand = brandFromMaterial({
+      ...programmaticPrefetchResult(url),
+      colors: [
+        { hex: '#0d6efd', count: 39, sources: blueSources },
+        { hex: '#212529', count: 20, sources: ['css-var:--bs-gray-900'] },
+        { hex: '#0a58ca', count: 3, sources: ['css-var:--bs-link-hover-color', 'prop:background-color selector:.btn-primary:hover'] },
+        ...additionalColors,
+      ],
+    }, url);
+
+    expect(brand.colors.find((color) => color.role === 'accent')?.hex).toBe('#0d6efd');
+    if (name === 'only framework styles') {
+      expect(brand.colors.find((color) => color.role === 'accent-secondary')?.hex).toBe('#0a58ca');
+    }
   });
 
   it('startBrandExtraction reserves the brand and seeds a live brand.html tab', async () => {
