@@ -87,9 +87,30 @@ export function buildAcpSessionNewParams(cwd: string, { mcpServers, envFormat = 
   };
 }
 /**
+ * Derives the human-readable `name` that the ACP v1 `resource_link` content
+ * block requires, from the resource URI.
+ *
+ * The ACP v1 schema marks both `uri` and `name` as required on a
+ * `resource_link`. Agents that validate the prompt payload strictly (MiniMax
+ * Code / `mcode`, for instance) reject a `resource_link` that carries only
+ * `uri` with JSON-RPC -32602 "Invalid params", which aborts the whole run
+ * before the agent ever sees the prompt. Deriving the name from the URI's
+ * last path segment keeps the block spec-compliant for every agent.
+ *
+ * @param uri - The resource URI (absolute path or `file://` URI).
+ * @returns The last non-empty path segment, or the URI itself as a fallback.
+ */
+function resourceLinkName(uri: string): string {
+  const withoutQuery = uri.split(/[?#]/)[0] ?? uri;
+  const segments = withoutQuery.split(/[\\/]/);
+  const last = segments[segments.length - 1]?.trim();
+  return last && last.length > 0 ? last : uri;
+}
+
+/**
  * Assembles the `prompt` array for a `session/prompt` ACP call. Always
  * includes a leading `{ type: 'text', text: prompt }` block, followed by
- * one `{ type: 'resource_link', uri: resourcePath }` block per non-empty
+ * one `{ type: 'resource_link', uri: resourcePath, name }` block per non-empty
  * attachment path. Empty and non-string paths are skipped. Duplicate paths
  * retain their caller-provided order for ordinary ACP compatibility.
  *
@@ -101,7 +122,11 @@ export function buildPromptBlocks(prompt: string, resourcePaths: string[]): Arra
   const blocks: Array<Record<string, string>> = [{ type: 'text', text: prompt }];
   for (const resourcePath of resourcePaths) {
     if (typeof resourcePath !== 'string' || resourcePath.trim().length === 0) continue;
-    blocks.push({ type: 'resource_link', uri: resourcePath });
+    blocks.push({
+      type: 'resource_link',
+      uri: resourcePath,
+      name: resourceLinkName(resourcePath),
+    });
   }
   return blocks;
 }
