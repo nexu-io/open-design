@@ -53,8 +53,24 @@ docker compose version
 
 ### Start OpenDesign
 
+1. Change to the deploy directory and copy the environment template:
+
+   ```bash
+   cd deploy
+   cp .env.example .env
+   ```
+
+2. Generate a secure token:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+3. Open `.env` in your editor, find `OD_API_TOKEN=`, and paste the generated token there.
+
+Then start the service:
+
 ```bash
-cd deploy
 docker compose up -d
 ```
 
@@ -63,6 +79,8 @@ Open in your browser:
 ```text
 http://127.0.0.1:7456
 ```
+
+When prompted, sign in with username `open-design` and your `OD_API_TOKEN` value as the password.
 
 ### Common Commands
 
@@ -83,7 +101,7 @@ docker compose up -d
 
 ### Optional Environment Overrides
 
-Create a `deploy/.env` file:
+Edit the existing `deploy/.env` file, keeping your `OD_API_TOKEN` value:
 
 ```env
 OPEN_DESIGN_PORT=7456
