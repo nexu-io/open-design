@@ -323,7 +323,7 @@ describe('FileViewer image export', () => {
 
     renderHtmlPreview();
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
-    fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
+    fireEvent.click(screen.getByRole('option', { name: /^iPhone 15\s*390 × 844$/i }));
     await openImageExportDialog();
     await clickSave();
 
@@ -334,6 +334,68 @@ describe('FileViewer image export', () => {
         deck: false,
         width: 390,
         height: 844,
+      }));
+    });
+  });
+
+  it('passes rotated fixed viewport dimensions to the off-screen image exporter', async () => {
+    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    exportProjectImageDataUrlMock
+      .mockResolvedValueOnce({
+        ok: true,
+        snapshot: {
+          dataUrl: 'data:image/png;base64,mobile-rotated',
+          w: 844,
+          h: 390,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        snapshot: {
+          dataUrl: 'data:image/png;base64,tablet-rotated',
+          w: 1180,
+          h: 820,
+        },
+      });
+    imageDataUrlToBlobMock.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+    prepareImageExportTargetMock.mockResolvedValue({
+      filename: 'workspace.png',
+      method: 'download',
+      save: saveImageBlobMock,
+    });
+
+    renderHtmlPreview();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: /^iPhone 15\s*390 × 844$/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate orientation' }));
+
+    await openImageExportDialog();
+    await clickSave();
+
+    await waitFor(() => {
+      expect(exportProjectImageDataUrlMock).toHaveBeenCalledWith(expect.objectContaining({
+        projectId: 'project-1',
+        fileName: 'workspace.html',
+        deck: false,
+        width: 844,
+        height: 390,
+      }));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
+    fireEvent.click(screen.getByRole('option', { name: /iPad Air/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate orientation' }));
+
+    await openImageExportDialog();
+    await clickSave();
+
+    await waitFor(() => {
+      expect(exportProjectImageDataUrlMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        projectId: 'project-1',
+        fileName: 'workspace.html',
+        deck: false,
+        width: 1180,
+        height: 820,
       }));
     });
   });
@@ -352,7 +414,7 @@ describe('FileViewer image export', () => {
 
     renderHtmlPreview();
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
-    fireEvent.click(screen.getByRole('option', { name: /desktop/i }));
+    fireEvent.click(screen.getByRole('option', { name: /^Desktop$/i }));
     await openImageExportDialog();
     await clickSave();
 
@@ -386,7 +448,7 @@ describe('FileViewer image export', () => {
       'srcdoc',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Preview viewport' }));
-    fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
+    fireEvent.click(screen.getByRole('option', { name: /^iPhone 15\s*390 × 844$/i }));
     await openImageExportDialog();
     await clickSave();
 
