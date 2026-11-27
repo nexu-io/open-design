@@ -386,8 +386,17 @@ export function listLibraryAssets(db: SqliteDb, filter: LibraryAssetFilter = {})
     args.push(like, like, like, like, like);
   }
   if (filter.tag) {
-    where.push('a.tags_json LIKE ?');
-    args.push(`%"${filter.tag}"%`);
+    // Compare decoded tag values so LIKE wildcards and JSON escaping do not
+    // change membership. Keep the previous ASCII case-insensitive matching.
+    where.push(
+      `EXISTS (
+        SELECT 1 FROM json_each(
+          CASE WHEN json_valid(a.tags_json) THEN a.tags_json ELSE '[]' END
+        ) AS tag
+        WHERE tag.type = 'text' AND tag.value = ? COLLATE NOCASE
+      )`,
+    );
+    args.push(filter.tag);
   }
   if (filter.source) {
     where.push('EXISTS (SELECT 1 FROM library_asset_sources s WHERE s.asset_id = a.id AND s.source_kind = ?)');
