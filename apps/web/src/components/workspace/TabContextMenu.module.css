@@ -1,0 +1,34 @@
+/* Right-click menu for workspace tabs, portaled with fixed positioning. */
+.menu {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  gap: 2px;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.item {
+  justify-content: flex-start;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.item:hover:not(:disabled),
+.item:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+
+.item:disabled {
+  opacity: 0.5;
+}

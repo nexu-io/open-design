@@ -2971,6 +2971,11 @@ export const fa: Dict = {
   'workspace.focusMode': 'تمرکز بر فضای کاری',
   'workspace.showChat': 'نمایش گفت‌وگو',
   'workspace.closeTab': 'بستن تب',
+  'workspace.closeOtherTabs': 'بستن تب‌های دیگر',
+  // The tab strip mirrors in RTL, so tabs before the clicked one sit on its right.
+  'workspace.closeTabsToLeft': 'بستن تب‌های سمت راست',
+  'workspace.closeTabsToRight': 'بستن تب‌های سمت چپ',
+  'workspace.closeAllTabs': 'بستن همه تب‌ها',
   'workspace.fileSyncDownloading': 'در حال دانلود از تیم…',
   'workspace.fileSyncUploading': 'در حال همگام‌سازی با تیم…',
   'workspace.deleteFileConfirm': 'آیا «{name}» از پوشه پروژه حذف شود؟',

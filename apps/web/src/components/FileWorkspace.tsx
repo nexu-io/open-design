@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
   type CSSProperties,
   type ReactNode,
 } from 'react';
@@ -141,6 +142,7 @@ import { activeFileSharesBeforeDelete } from './project-actions/activeFileShares
 import { ProjectDeleteConfirmDialog } from './project-actions/ProjectDeleteConfirmDialog';
 import { useProjectShareHistoryState } from './share/useProjectShareHistory';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
+import { TabContextMenu } from './workspace/TabContextMenu';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TerminalViewer } from './workspace/TerminalViewer';
@@ -1540,6 +1542,7 @@ export function FileWorkspace({
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [tabMenu, setTabMenu] = useState<{ id: string; x: number; y: number; tab: HTMLElement } | null>(null);
   const [projectShareMenuOpen, setProjectShareMenuOpen] = useState(false);
   const [projectShareAccess, setProjectShareAccess] = useState<'private' | 'workspace'>('private');
   const [, setProjectShareAccessMenuOpen] = useState(false);
@@ -2380,15 +2383,7 @@ export function FileWorkspace({
     // reattach cheaply). An explicit Close is the one place we terminate it —
     // kill the LIVE session (which may differ from the tab's original id after
     // a Restart), falling back to the tab id when the surface never reported.
-    if (isTerminalTabId(name)) {
-      const originalId = terminalIdFromTabId(name);
-      const liveId = terminalLiveSessionsRef.current.get(originalId) ?? originalId;
-      void killTerminal(projectId, liveId, {
-        keepalive: true,
-        workspaceContext,
-      });
-      terminalLiveSessionsRef.current.delete(originalId);
-    }
+    killTerminalTab(name);
     const sketchEntry = sketches[name];
     const isPending = sketchEntry && !sketchEntry.persisted;
     const hasUnsavedStrokes = sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted);
@@ -2422,6 +2417,53 @@ export function FileWorkspace({
       }
       return next;
     });
+  }
+
+  function killTerminalTab(name: string) {
+    if (!isTerminalTabId(name)) return;
+    const originalId = terminalIdFromTabId(name);
+    const liveId = terminalLiveSessionsRef.current.get(originalId) ?? originalId;
+    void killTerminal(projectId, liveId, {
+      keepalive: true,
+      workspaceContext,
+    });
+    terminalLiveSessionsRef.current.delete(originalId);
+  }
+
+  // Tab context menu batch close (#9567). One commit, like openFileReplacing:
+  // looping closeTab() would replay stale tab state and the last call wins.
+  // The clicked tab (`keepId`) takes focus when the active tab is closed.
+  function closeWorkspaceTabs(ids: string[], keepId: string) {
+    const closing = new Set(ids);
+    const run = () => {
+      const unsaved = ids.some((id) => sketches[id] && (sketches[id].dirty || !sketches[id].persisted));
+      if (unsaved && !confirm(t('sketch.closeConfirm'))) return;
+      ids.forEach(killTerminalTab);
+      setSketches((curr) => {
+        const next = { ...curr };
+        for (const id of ids) {
+          if (next[id] && !next[id].persisted) {
+            clearSketchAutosave(id);
+            sketchSceneRevisionRef.current.delete(id);
+            delete next[id];
+          }
+        }
+        return next;
+      });
+      const nextBrowserTabs = browserTabs.filter((tab) => !closing.has(tab.id));
+      setBrowserTabs(nextBrowserTabs);
+      const nextTabs = tabsStateRef.current.tabs.filter((name) => !closing.has(name));
+      const fallback = closing.has(keepId) ? nextTabs[nextTabs.length - 1] ?? DESIGN_FILES_TAB : keepId;
+      const persistedActive = tabsStateRef.current.active;
+      if (closing.has(activeTabRef.current)) setActiveTab(fallback);
+      commitTabsState(workspaceTabsState(
+        nextTabs,
+        persistedActive && closing.has(persistedActive) ? fallback : persistedActive,
+        nextBrowserTabs,
+      ));
+    };
+    if (closing.has(activeTabRef.current)) afterActiveManualEditSettles(run);
+    else run();
   }
 
   function reorderPersistedTab(
@@ -3762,6 +3804,18 @@ export function FileWorkspace({
     dragEnd() {
       clearTabDragState();
     },
+    contextMenu(key: string, event: ReactMouseEvent<HTMLDivElement>) {
+      event.preventDefault();
+      const rect = event.currentTarget.getBoundingClientRect();
+      // Shift+F10 / the context-menu key reports (0, 0): anchor under the tab.
+      const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+      setTabMenu({
+        id: key,
+        x: fromKeyboard ? rect.left : event.clientX,
+        y: fromKeyboard ? rect.bottom : event.clientY,
+        tab: event.currentTarget,
+      });
+    },
   };
   const tabItemActionsRef = useRef(tabItemActions);
   useEffect(() => {
@@ -3780,6 +3834,7 @@ export function FileWorkspace({
         onDragLeave: () => tabItemActionsRef.current.dragLeave(key),
         onDrop: (event) => tabItemActionsRef.current.drop(key, event),
         onDragEnd: () => tabItemActionsRef.current.dragEnd(),
+        onContextMenu: (event) => tabItemActionsRef.current.contextMenu(key, event),
       };
       map.set(key, handlers);
     }
@@ -4191,6 +4246,7 @@ export function FileWorkspace({
                   active={activeTab === browserTab.id}
                   onActivate={browserHandlers.onActivate}
                   onClose={browserHandlers.onClose}
+                  onContextMenu={browserHandlers.onContextMenu}
                   kind="browser"
                 />
               );
@@ -4259,6 +4315,7 @@ export function FileWorkspace({
                 onDragLeave={handlers.onDragLeave}
                 onDrop={handlers.onDrop}
                 onDragEnd={handlers.onDragEnd}
+                onContextMenu={handlers.onContextMenu}
               />
             );
           }) : null}
@@ -4323,6 +4380,44 @@ export function FileWorkspace({
           onClose={() => setLauncherOpen(false)}
         />
       ) : null}
+      {tabMenu ? (() => {
+        const closable = workspaceTabIds.filter((id) => id !== DESIGN_FILES_TAB && id !== DESIGN_SYSTEM_TAB);
+        const index = closable.indexOf(tabMenu.id);
+        const batch = (label: string, ids: string[]) => ({
+          label,
+          disabled: ids.length === 0,
+          onSelect: () => {
+            setTabMenu(null);
+            tabMenu.tab.focus();
+            closeWorkspaceTabs(ids, tabMenu.id);
+          },
+        });
+        return (
+          <TabContextMenu
+            x={tabMenu.x}
+            y={tabMenu.y}
+            onClose={(restoreFocus) => {
+              setTabMenu(null);
+              if (restoreFocus) tabMenu.tab.focus();
+            }}
+            items={[
+              {
+                label: t('workspace.closeTab'),
+                disabled: false,
+                onSelect: () => {
+                  setTabMenu(null);
+                  tabMenu.tab.focus();
+                  tabItemActions.close(tabMenu.id);
+                },
+              },
+              batch(t('workspace.closeOtherTabs'), closable.filter((id) => id !== tabMenu.id)),
+              batch(t('workspace.closeTabsToLeft'), index < 0 ? [] : closable.slice(0, index)),
+              batch(t('workspace.closeTabsToRight'), index < 0 ? [] : closable.slice(index + 1)),
+              batch(t('workspace.closeAllTabs'), closable),
+            ]}
+          />
+        );
+      })() : null}
       {/* Workspace-owned toasts anchor to this pane's bottom-center instead of
           the viewport's: a bare fixed .od-toast centers across the whole
           window, drifting over the chat pane and covering the composer send
@@ -8583,6 +8678,7 @@ interface WorkspaceTabItemHandlers {
   onDragLeave: () => void;
   onDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
+  onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }
 
 // Memoized: the strip re-renders on every FileWorkspace state change, but an
@@ -8607,6 +8703,7 @@ const Tab = memo(function Tab({
   onDragLeave,
   onDrop,
   onDragEnd,
+  onContextMenu,
 }: {
   label: string;
   meta?: string;
@@ -8630,6 +8727,7 @@ const Tab = memo(function Tab({
   onDragLeave?: () => void;
   onDrop?: (event: ReactDragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const t = useT();
   const iconName = iconNameOverride ?? kindIconName(kind);
@@ -8672,6 +8770,7 @@ const Tab = memo(function Tab({
       onDragLeave={draggable ? onDragLeave : undefined}
       onDrop={draggable ? onDrop : undefined}
       onDragEnd={draggable ? onDragEnd : undefined}
+      onContextMenu={onContextMenu}
     >
       {syncBadge ? (
         <span className="tab-icon">
