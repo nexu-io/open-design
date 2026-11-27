@@ -4,13 +4,26 @@ export const RUN_TELEMETRY_DELIVERY_STATE_VERSION = 1 as const;
 
 export type RunTelemetryDeliveryTerminalStatus =
   | 'accepted'
-  | 'not_expected';
+  | 'not_expected'
+  | 'dropped';
+
+/**
+ * Failed delivery passes, live or at boot, after which a delivery is dropped.
+ * Each boot replay reads the whole run event log, so an unreachable relay must
+ * cost a bounded number of boots rather than every boot.
+ */
+export const MAX_RUN_TELEMETRY_DELIVERY_FAILURES = 4;
 
 export interface RunTelemetryDeliveryStateV1 {
   version: typeof RUN_TELEMETRY_DELIVERY_STATE_VERSION;
   idempotencyKey: string;
   status: 'in_flight' | 'failed' | RunTelemetryDeliveryTerminalStatus;
   attemptCount: number;
+  /**
+   * Delivery passes that ended `failed`. Unlike `attemptCount`, which counts
+   * network requests, it also counts failures that never reached the network.
+   */
+  failureCount?: number;
   crashWindow: boolean;
   startedAt: number;
   dropReason?: string;
@@ -43,12 +56,22 @@ function previousAttemptCount(
     : 0;
 }
 
-export function beginRunTelemetryDelivery(
+/** A `failed` state written before `failureCount` existed counts as one failure. */
+function previousFailureCount(
+  state: RunTelemetryDeliveryStateV1 | null | undefined,
+): number {
+  if (Number.isSafeInteger(state?.failureCount) && state!.failureCount! >= 0) {
+    return state!.failureCount!;
+  }
+  return state?.status === 'failed' ? 1 : 0;
+}
+
+function inFlightRunTelemetryDelivery(
   previous: RunTelemetryDeliveryStateV1 | null | undefined,
   runId: string,
-  now = Date.now(),
+  now: number,
+  failureCount: number,
 ): RunTelemetryDeliveryStateV1 {
-  if (typeof previous?.finalizedAt === 'number') return previous;
   return {
     version: RUN_TELEMETRY_DELIVERY_STATE_VERSION,
     idempotencyKey:
@@ -57,8 +80,56 @@ export function beginRunTelemetryDelivery(
         : runTelemetryDeliveryIdempotencyKey(runId),
     status: 'in_flight',
     attemptCount: previousAttemptCount(previous),
+    ...(failureCount > 0 ? { failureCount } : {}),
     crashWindow: true,
     startedAt: now,
+  };
+}
+
+/**
+ * Failed passes so far. A pass still in its crash window never finished, for
+ * example because the daemon quit mid-delivery, so it counts as failed.
+ */
+function failedPassCount(
+  state: RunTelemetryDeliveryStateV1 | null | undefined,
+): number {
+  return previousFailureCount(state)
+    + (isRunTelemetryDeliveryCrashWindow(state) ? 1 : 0);
+}
+
+export function beginRunTelemetryDelivery(
+  previous: RunTelemetryDeliveryStateV1 | null | undefined,
+  runId: string,
+  now = Date.now(),
+): RunTelemetryDeliveryStateV1 {
+  if (typeof previous?.finalizedAt === 'number') return previous;
+  return inFlightRunTelemetryDelivery(
+    previous,
+    runId,
+    now,
+    failedPassCount(previous),
+  );
+}
+
+/**
+ * Drop an unfinished delivery whose failed passes already reached the limit,
+ * so that no further pass starts. Passes that never finish cannot drop the
+ * delivery themselves. Any other state is returned unchanged.
+ */
+export function dropExhaustedRunTelemetryDelivery(
+  state: RunTelemetryDeliveryStateV1,
+  now = Date.now(),
+): RunTelemetryDeliveryStateV1 {
+  if (typeof state.finalizedAt === 'number') return state;
+  const failureCount = failedPassCount(state);
+  if (failureCount < MAX_RUN_TELEMETRY_DELIVERY_FAILURES) return state;
+  return {
+    ...state,
+    status: 'dropped',
+    failureCount,
+    crashWindow: false,
+    dropReason: state.dropReason ?? 'network_error',
+    finalizedAt: now,
   };
 }
 
@@ -67,8 +138,13 @@ export function recordRunTelemetryDeliveryAttempt(
   runId: string,
   now = Date.now(),
 ): RunTelemetryDeliveryStateV1 {
-  const inFlight = beginRunTelemetryDelivery(previous, runId, now);
-  if (typeof inFlight.finalizedAt === 'number') return inFlight;
+  if (typeof previous?.finalizedAt === 'number') return previous;
+  const inFlight = inFlightRunTelemetryDelivery(
+    previous,
+    runId,
+    now,
+    previousFailureCount(previous),
+  );
   return {
     ...inFlight,
     attemptCount: previousAttemptCount(inFlight) + 1,
@@ -101,14 +177,19 @@ export function finalizeRunTelemetryDelivery(
 ): RunTelemetryDeliveryStateV1 {
   if (typeof previous?.finalizedAt === 'number') return previous;
   const persistedAttempts = previousAttemptCount(previous);
-  const status = resultStatus(result);
+  const reported = resultStatus(result);
+  const failed = reported === 'failed';
+  const failureCount = previousFailureCount(previous) + (failed ? 1 : 0);
+  const status = failed && failureCount >= MAX_RUN_TELEMETRY_DELIVERY_FAILURES
+    ? 'dropped'
+    : reported;
   const dropReason = typeof result.langfuse_drop_reason === 'string'
     && result.langfuse_drop_reason
     ? result.langfuse_drop_reason
-    : status === 'failed'
+    : failed
       ? 'network_error'
       : undefined;
-  const terminal = status === 'accepted' || status === 'not_expected';
+  const terminal = status !== 'failed';
   return {
     version: RUN_TELEMETRY_DELIVERY_STATE_VERSION,
     idempotencyKey:
@@ -117,12 +198,25 @@ export function finalizeRunTelemetryDelivery(
         : runTelemetryDeliveryIdempotencyKey(runId),
     status,
     attemptCount: Math.max(persistedAttempts, resultAttemptCount(result)),
+    ...(failureCount > 0 ? { failureCount } : {}),
     crashWindow: false,
     startedAt:
       typeof previous?.startedAt === 'number' ? previous.startedAt : now,
     ...(dropReason ? { dropReason } : {}),
     ...(terminal ? { finalizedAt: now } : {}),
   };
+}
+
+/**
+ * The status a finalized delivery reports to analytics. The tracking contract
+ * has no `dropped`: a delivery that ran out of failures reports as `failed`.
+ */
+export function runTelemetryDeliveryReportedStatus(
+  state: RunTelemetryDeliveryStateV1,
+): RunTelemetryDeliveryResult['langfuse_delivery_status'] {
+  return state.status === 'dropped' || state.status === 'in_flight'
+    ? 'failed'
+    : state.status;
 }
 
 export function isRunTelemetryDeliveryCrashWindow(
