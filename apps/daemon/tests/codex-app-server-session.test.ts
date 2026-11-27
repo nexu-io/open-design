@@ -193,6 +193,14 @@ describe('codex app-server session', () => {
       expect(params.effort).toBe('high');
     });
 
+    it.each(['low', 'medium', 'high', 'xhigh'])('carries Sol 6.1 effort %s to turn/start', (reasoning) => {
+      const { child } = harness({ model: 'gpt-6.1-sol', reasoning });
+      completeHandshake(child);
+      const params = child.sent('turn/start')?.params;
+      expect(params.model).toBe('gpt-6.1-sol');
+      expect(params.effort).toBe(reasoning);
+    });
+
     it('omits model and effort when the run did not pin them', () => {
       const { child } = harness({ model: null, reasoning: null });
       completeHandshake(child);
