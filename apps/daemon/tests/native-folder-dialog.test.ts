@@ -69,6 +69,16 @@ describe('native folder dialog helpers', () => {
     );
   });
 
+  it('throws for GTK4 zenity display failures, which exit 1 like a user cancel', () => {
+    const err = dialogError('Command failed: zenity', 1);
+
+    expect(() =>
+      parseLinuxFolderDialogResult(err, '', '(zenity:123): Gtk-WARNING **: 23:18:02.983: Failed to open display'),
+    ).toThrow(
+      'Could not open folder picker: (zenity:123): Gtk-WARNING **: 23:18:02.983: Failed to open display',
+    );
+  });
+
   it('throws a stable message when zenity is missing', () => {
     const err = dialogError('spawn zenity ENOENT', 'ENOENT');
 
