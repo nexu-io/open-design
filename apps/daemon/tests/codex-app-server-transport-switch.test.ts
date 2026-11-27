@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   CODEX_APP_SERVER_MIN_VERSION,
   CODEX_APP_SERVER_STREAM_FORMAT,
@@ -23,6 +25,23 @@ import {
  *     code edit, and both transports stay reachable.
  */
 describe('codex transport switch', () => {
+  describe('image attachments', () => {
+    const images = ['first image.png', 'second.png'].map((name) => path.join(tmpdir(), name));
+
+    it.each([null, 'codex-thread-id'])('forwards images to exec with thread %s', (resumeSessionId) => {
+      const args = codexAgentDef.buildArgs('prompt', images, [], {}, { resumeSessionId });
+      expect(args.flatMap((arg, index) => arg === '--image' ? [args[index + 1]] : [])).toEqual(images);
+      expect(codexAgentDef.supportsImagePaths).toBe(true);
+      if (resumeSessionId) expect(args.at(-1)).toBe(resumeSessionId);
+    });
+
+    it('advertises app-server image support while keeping images off its argv', () => {
+      const def = withCodexTransport(codexAgentDef, 'app-server');
+      expect(def.supportsImagePaths).toBe(true);
+      expect(def.buildArgs('prompt', images)).not.toContain('--image');
+    });
+  });
+
   describe('codexTransportPreference', () => {
     it('defaults to app-server when unset or empty', () => {
       expect(codexTransportPreference({})).toBe('app-server');

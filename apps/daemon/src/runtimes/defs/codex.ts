@@ -326,7 +326,7 @@ export const codexAgentDef = {
     // is sufficient for stdin delivery.
     buildArgs: (
       _prompt,
-      _imagePaths,
+      imagePaths,
       extraAllowedDirs = [],
       options = {},
       runtimeContext = {},
@@ -415,16 +415,17 @@ export const codexAgentDef = {
       if (options.serviceTier && options.serviceTier !== 'default') {
         args.push('-c', `service_tier="${options.serviceTier}"`);
       }
-      // The resume thread id is the positional SESSION_ID argument of
-      // `codex exec resume`; it must come after the flags. The prompt is
-      // delivered via stdin (promptViaStdin), so the thread id is the final
-      // argv entry.
+      for (const imagePath of imagePaths) {
+        args.push('--image', imagePath);
+      }
+      // The resume thread ID is last because the prompt is read from stdin.
       if (resumeSessionId) {
         args.push(resumeSessionId);
       }
       return args;
     },
     promptViaStdin: true,
+    supportsImagePaths: true,
     // Codex's CLI carries its own session across spawns: on a follow-up turn
     // the daemon resumes the captured thread id instead of re-sending the
     // flattened transcript, so the first upstream call reuses the warm prefix
