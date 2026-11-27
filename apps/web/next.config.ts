@@ -195,11 +195,28 @@ export function cmsHostReleaseFingerprint(
   ).digest('hex')}`;
 }
 
+/**
+ * Whether this checkout still carries the workspace sources the CMS host release
+ * fingerprint reads.
+ *
+ * Ask this question about the inputs themselves. A packaged web payload ships
+ * `apps/web` sources inside `node_modules/@open-design/web`, so probing
+ * `WEB_ROOT/src` reports "present" for a layout that has no workspace root to
+ * read `apps/web/app/layout.tsx` from, and loading this config then dies with
+ * ENOENT before the server can start.
+ */
+export function hasCmsHostReleaseInputs(
+  workspaceRoot: string,
+  exists: (file: string) => boolean = existsSync,
+): boolean {
+  return CMS_HOST_RELEASE_INPUTS.every((file) => exists(resolve(workspaceRoot, file)));
+}
+
 const nextConfig: NextConfig = {
   env: {
     // Embedded in the client at build time. Packaged servers use the already
     // compiled client and need not retain source files to load this config.
-    NEXT_PUBLIC_CMS_HOST_RELEASE: existsSync(resolve(WEB_ROOT, 'src/components/touchpoint-component.ts'))
+    NEXT_PUBLIC_CMS_HOST_RELEASE: hasCmsHostReleaseInputs(WORKSPACE_ROOT)
       ? cmsHostReleaseFingerprint((file) => readFileSync(resolve(WORKSPACE_ROOT, file)))
       : undefined,
   },
