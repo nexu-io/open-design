@@ -424,8 +424,8 @@ describe('OPEND-2614 · funded Home handoff precedes the remaining AMR sign-in g
     }
   });
 
-  it.each(['insufficient', 'unknown', 'forbidden', 'timeout'] as const)(
-    'VIEW-015 keeps the draft without creating after explicit %s proof during display refresh', async (result) => {
+  it.each(['insufficient', 'unknown', 'forbidden', 'unauthorized', 'timeout', 'unavailable'] as const)(
+    'uses the %s funding hint without treating uncertainty as a refusal during display refresh', async (result) => {
       const context = personalContext();
       const h = harness('amr');
       await screen.findByTestId('home-hero-input');
@@ -441,10 +441,22 @@ describe('OPEND-2614 · funded Home handoff precedes the remaining AMR sign-in g
         window.dispatchEvent(new Event('od:workspace-billing-refresh'));
         let response: Response | Error;
         if (result === 'forbidden') response = new Response(null, { status: 403 });
+        else if (result === 'unauthorized') response = new Response(null, { status: 401 });
+        else if (result === 'unavailable') response = new Response(null, { status: 503 });
         else if (result === 'timeout') response = new DOMException('funding timeout', 'TimeoutError');
         else response = jsonResponse({ preflight: { ...homeFunding(context), fundingCheck: result } });
         finish(response);
       });
+      if (result === 'unknown' || result === 'timeout' || result === 'unavailable') {
+        await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
+        expect(h.onBeginProjectCreation).toHaveBeenCalledTimes(1);
+        expect(h.onCreateProject.mock.calls[0]![0]).toMatchObject({
+          pendingPrompt: 'Keep this draft until this click has valid funds.',
+        });
+        expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+        expect(screen.queryByText("Couldn't confirm your OpenDesign Cloud balance. Try sending again.")).toBeNull();
+        return;
+      }
       if (result === 'insufficient') await screen.findByTestId('amr-balance-dialog');
       else await screen.findByText("Couldn't confirm your OpenDesign Cloud balance. Try sending again.");
       expect(h.onBeginProjectCreation).not.toHaveBeenCalled();
@@ -1005,6 +1017,20 @@ describe('Home memory funding gate', () => {
     // insufficiency hint. This click must use its own fresh preflight.
     h.setServerVerdict('available');
     await submitHome('Retry this draft after funding returns.');
+    await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
+    expect(h.onBeginProjectCreation).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+  });
+
+  it('defers an unknown send-time hint to Link even with an older insufficient wallet cache', async () => {
+    const h = await primeHomeFunding();
+    const context = personalContext();
+    expect(cachedHomeAmrFundingBlock(context, 'default')).not.toBeNull();
+    const original = globalThis.fetch;
+    globalThis.fetch = vi.fn((input, init) => String(input).includes('/billing/preflight?')
+      ? Promise.resolve(jsonResponse({ preflight: { ...homeFunding(context), fundingCheck: 'unknown' } }))
+      : original(input, init));
+    await submitHome('Let Link decide this explicit send.');
     await waitFor(() => expect(h.onCreateProject).toHaveBeenCalledTimes(1));
     expect(h.onBeginProjectCreation).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
