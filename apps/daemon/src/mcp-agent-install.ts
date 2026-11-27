@@ -403,6 +403,65 @@ function claudeDesktopConfigPath(home: string, platform: NodeJS.Platform): strin
   return path.join(appData, 'Claude', 'claude_desktop_config.json');
 }
 
+// --- Re-install preservation --------------------------------------------
+
+/**
+ * Carry a daemon URL the user pinned on an existing registration into the
+ * launch spec that is about to replace it.
+ *
+ * The install payload never writes `OD_DAEMON_URL`: the daemon cannot tell a
+ * port the user fixed from one tools-dev picked for this launch, and pinning
+ * the latter would break the next start. A user who fixes the port
+ * (`tools-dev run daemon --daemon-port <port>`) adds the variable by hand so
+ * `od mcp` skips discovery, and an installer that rewrites the whole entry
+ * must not silently drop it (#8853).
+ *
+ * A registration that can launch the packaged app re-discovers its own
+ * runtime, and an explicit URL would switch that discovery off, so a pinned
+ * URL is never carried into one.
+ */
+export function withPreservedDaemonUrl(
+  spec: McpLaunchSpec,
+  existingEnv: Record<string, string> | null,
+): McpLaunchSpec {
+  const pinned = existingEnv?.OD_DAEMON_URL;
+  if (pinned == null || pinned.length === 0) return spec;
+  if (spec.env.OD_DAEMON_URL != null && spec.env.OD_DAEMON_URL.length > 0) return spec;
+  const command = spec.env.OD_MCP_BOOTSTRAP_COMMAND;
+  if (command != null && command.length > 0) return spec;
+  return { ...spec, env: { ...spec.env, OD_DAEMON_URL: pinned } };
+}
+
+/**
+ * The string env of the server entry `plan` would replace, or null when the
+ * file, the entry, or its env is absent or unreadable. Reads both the `env`
+ * key and OpenCode's `environment` key.
+ */
+export function existingJsonInstallEnv(
+  existingText: string | null,
+  plan: JsonInstallPlan,
+): Record<string, string> | null {
+  let cursor: unknown;
+  try {
+    cursor = parseJsonObject(existingText, plan.configPath);
+  } catch {
+    return null;
+  }
+  for (const key of [...plan.keyPath, plan.serverKey]) {
+    if (cursor == null || typeof cursor !== 'object' || Array.isArray(cursor)) return null;
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  if (cursor == null || typeof cursor !== 'object' || Array.isArray(cursor)) return null;
+  const entry = cursor as Record<string, unknown>;
+  const raw = entry.env ?? entry.environment;
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string') env[key] = value;
+  }
+  return env;
+}
+
 // --- Pure JSON merge / removal (the heart of the 'json' strategy) -------
 
 /**

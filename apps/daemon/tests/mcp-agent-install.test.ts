@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_SLUGS,
   applyJsonInstall,
+  existingJsonInstallEnv,
   isAgentSlug,
   planAgentInstall,
   removeJsonInstall,
+  withPreservedDaemonUrl,
   type JsonInstallPlan,
   type McpLaunchSpec,
 } from '../src/mcp-agent-install.js';
@@ -250,6 +252,64 @@ describe('applyJsonInstall', () => {
 
   it('throws on an unparseable existing config rather than clobbering it', () => {
     expect(() => applyJsonInstall('{not json', plan)).toThrow(/not valid JSON/);
+  });
+});
+
+// #8853: a user running the daemon on a fixed port pins OD_DAEMON_URL so
+// `od mcp` skips discovery. Re-running the install must not drop it.
+describe('re-install keeps a pinned daemon URL', () => {
+  const PINNED = 'http://127.0.0.1:7456';
+  const FRESH: McpLaunchSpec = {
+    command: '/usr/local/bin/node',
+    args: ['/opt/open-design/cli.js', 'mcp'],
+    env: { OD_DATA_DIR: '/home/u/.open-design', OD_TEST_SIDECAR_CAPABILITY: 'cap' },
+  };
+
+  it('keeps OD_DAEMON_URL across a JSON re-install', () => {
+    const firstPlan = planAgentInstall('cursor', FRESH, ctx()) as JsonInstallPlan;
+    const pinnedByHand = JSON.parse(applyJsonInstall(null, firstPlan));
+    pinnedByHand.mcpServers['open-design'].env.OD_DAEMON_URL = PINNED;
+    const existingText = JSON.stringify(pinnedByHand);
+
+    const spec = withPreservedDaemonUrl(FRESH, existingJsonInstallEnv(existingText, firstPlan));
+    const reinstalled = JSON.parse(
+      applyJsonInstall(existingText, planAgentInstall('cursor', spec, ctx()) as JsonInstallPlan),
+    );
+
+    expect(reinstalled.mcpServers['open-design'].env).toEqual({ ...FRESH.env, OD_DAEMON_URL: PINNED });
+  });
+
+  it("reads OpenCode's `environment` key", () => {
+    const plan = planAgentInstall('opencode', FRESH, ctx()) as JsonInstallPlan;
+    const existing = JSON.parse(applyJsonInstall(null, plan));
+    existing.mcp['open-design'].environment.OD_DAEMON_URL = PINNED;
+    expect(existingJsonInstallEnv(JSON.stringify(existing), plan)).toMatchObject({ OD_DAEMON_URL: PINNED });
+  });
+
+  it('changes nothing when no URL was pinned', () => {
+    expect(withPreservedDaemonUrl(FRESH, null)).toBe(FRESH);
+    expect(withPreservedDaemonUrl(FRESH, { OD_DATA_DIR: '/x' })).toBe(FRESH);
+    expect(withPreservedDaemonUrl(FRESH, { OD_DAEMON_URL: '' })).toBe(FRESH);
+  });
+
+  it('never carries a pinned URL into a registration that can launch the app', () => {
+    const bootstrap: McpLaunchSpec = {
+      ...FRESH,
+      env: { ...FRESH.env, OD_MCP_BOOTSTRAP_COMMAND: '/usr/bin/open', OD_MCP_BOOTSTRAP_ARGS: '["--headless"]' },
+    };
+    expect(withPreservedDaemonUrl(bootstrap, { OD_DAEMON_URL: PINNED })).toBe(bootstrap);
+  });
+
+  it('does not override a URL the fresh spec already carries', () => {
+    const explicit: McpLaunchSpec = { ...FRESH, env: { ...FRESH.env, OD_DAEMON_URL: 'http://127.0.0.1:9000' } };
+    expect(withPreservedDaemonUrl(explicit, { OD_DAEMON_URL: PINNED })).toBe(explicit);
+  });
+
+  it('ignores an existing config it cannot read', () => {
+    const plan = planAgentInstall('cursor', FRESH, ctx()) as JsonInstallPlan;
+    expect(existingJsonInstallEnv('{not json', plan)).toBeNull();
+    expect(existingJsonInstallEnv(null, plan)).toBeNull();
+    expect(existingJsonInstallEnv(JSON.stringify({ mcpServers: { other: {} } }), plan)).toBeNull();
   });
 });
 
