@@ -36,6 +36,7 @@ type CopyLease = {
  */
 type CopyLeaseState = {
   clearRequested: boolean;
+  clearing: Promise<void> | null;
   count: number;
   removeOptions: RemoveManagedDownloadOptions | null;
 };
@@ -53,12 +54,48 @@ function errorMessage(error: unknown): string {
 /**
  * @internal Acquire (reference-count) a copy lease for a target.
  */
-function acquireCopyLease(target: NormalizedTarget): CopyLease {
+async function acquireCopyLease(target: NormalizedTarget, signal: AbortSignal | undefined): Promise<CopyLease> {
   const key = targetActiveKey(target);
-  const state = copyLeases.get(key) ?? { clearRequested: false, count: 0, removeOptions: null };
+  let state = copyLeases.get(key);
+  while (state?.clearing != null) {
+    await waitForCopyCleanup(state.clearing, signal);
+    state = copyLeases.get(key);
+  }
+  state ??= { clearRequested: false, clearing: null, count: 0, removeOptions: null };
   state.count += 1;
   copyLeases.set(key, state);
   return { key };
+}
+
+/** Wait for an earlier cleanup without cancelling it when this caller aborts. */
+async function waitForCopyCleanup(clearing: Promise<void>, signal: AbortSignal | undefined): Promise<void> {
+  await new Promise<void>((resolveWait, rejectWait) => {
+    const onAbort = () => {
+      signal?.removeEventListener("abort", onAbort);
+      rejectWait(new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.ABORTED, "download wait was aborted"));
+    };
+    if (signal?.aborted) { onAbort(); return; }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const onSettled = () => {
+      signal?.removeEventListener("abort", onAbort);
+      resolveWait();
+    };
+    // A failed cleanup is reported to its owner; the next caller can retry.
+    clearing.then(onSettled, onSettled);
+  });
+}
+
+/** Publish the cleanup barrier before starting any asynchronous removal. */
+async function clearCopyTarget(state: CopyLeaseState, options: RemoveManagedDownloadOptions): Promise<void> {
+  state.clearRequested = false;
+  state.removeOptions = null;
+  const clearing = Promise.resolve().then(async () => { await removeManagedDownload(options); });
+  state.clearing = clearing;
+  try {
+    await clearing;
+  } finally {
+    state.clearing = null;
+  }
 }
 
 /**
@@ -74,7 +111,11 @@ async function requestClearAfterCopy(target: NormalizedTarget): Promise<"deferre
     state.removeOptions = { basePath: target.basePath, bucket: target.bucket, fileName: target.fileName };
     return "deferred";
   }
-  await removeManagedDownload({ basePath: target.basePath, bucket: target.bucket, fileName: target.fileName });
+  if (state != null) {
+    await clearCopyTarget(state, { basePath: target.basePath, bucket: target.bucket, fileName: target.fileName });
+  } else {
+    await removeManagedDownload({ basePath: target.basePath, bucket: target.bucket, fileName: target.fileName });
+  }
   return "removed";
 }
 
@@ -87,9 +128,12 @@ async function releaseCopyLease(lease: CopyLease): Promise<void> {
   if (state == null) return;
   state.count -= 1;
   if (state.count > 0) return;
-  copyLeases.delete(lease.key);
   if (state.clearRequested && state.removeOptions != null) {
-    await removeManagedDownload(state.removeOptions).catch(() => undefined);
+    await clearCopyTarget(state, state.removeOptions).catch(() => undefined);
+  }
+  // A caller waiting for cleanup may already have acquired the same state.
+  if (state.count === 0 && copyLeases.get(lease.key) === state) {
+    copyLeases.delete(lease.key);
   }
 }
 
@@ -110,7 +154,7 @@ export async function downloadCopyAndClear(options: DownloadCopyAndClearOptions)
   if (!isAbsolute(outputPath)) {
     throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.INVALID_TARGET, `outputPath must resolve to an absolute path: ${options.outputPath}`);
   }
-  const lease = acquireCopyLease(target);
+  const lease = await acquireCopyLease(target, options.signal);
   try {
     const downloaded = await managedDownload(options);
     const existingOutput = await statFileSize(outputPath);
