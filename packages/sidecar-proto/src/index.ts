@@ -338,6 +338,9 @@ export type DesktopRenderSlidesResult = {
   errorCode?: DesktopRenderSlidesErrorCode;
   height?: number;
   mode?: "deck" | "page";
+  // Deck mode: one speaker note per returned slide, aligned with `slideFiles` /
+  // `slides` ("" for a slide without one). Omitted when the deck has no notes.
+  notes?: string[];
   ok: boolean;
   // Absolute path to the written editable .pptx (set when the request was
   // `editable` with an `outputDir`).
