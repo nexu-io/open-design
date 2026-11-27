@@ -1286,6 +1286,84 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.sample).toBe('valid completion (length)');
   });
 
+  it('accepts a gateway-normalized response model', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'http://localhost:1234/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'ag/gemini-3.8-flash', object: 'model' }],
+        });
+      }
+      return jsonResponse({
+        id: 'chatcmpl-gateway',
+        object: 'chat.completion',
+        model: 'gemini-3.8-flash',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'ok' },
+            finish_reason: 'stop',
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://localhost:1234/v1',
+        apiKey: 'gateway-key',
+        model: 'ag/gemini-3.8-flash',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+    expect(body.model).toBe('ag/gemini-3.8-flash');
+  });
+
+  it('rejects a multi-segment gateway echo mismatch', async () => {
+    const fetchMock = passThroughOrUpstream((url) => {
+      if (url === 'http://localhost:1234/v1/models') {
+        return jsonResponse({
+          data: [{ id: 'gateway/openai/gpt-4o', object: 'model' }],
+        });
+      }
+      return jsonResponse({
+        id: 'chatcmpl-gateway-mismatch',
+        object: 'chat.completion',
+        model: 'gpt-4o',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'ok' },
+            finish_reason: 'stop',
+          },
+        ],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://localhost:1234/v1',
+        apiKey: 'gateway-key',
+        model: 'gateway/openai/gpt-4o',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('not_found_model');
+    expect(body.model).toBe('gateway/openai/gpt-4o');
+  });
+
   it('rejects an unloaded local OpenAI-compatible model before completion', async () => {
     const fetchMock = passThroughOrUpstream((url) => {
       if (url === 'http://localhost:1234/v1/models') {
