@@ -45,7 +45,7 @@
    * 守护:`tests/components/chat/chat-overlay-layer.test.ts`(按目录扫描,
    * 不是钉死某个文件 —— 这个缺陷当初就是因为守护只守 `SupportDialog` 一个文件才漏的)。
    */
-  z-index: 1500;
+  z-index: 2000;
   display: grid;
   place-items: center;
   padding: 16px;

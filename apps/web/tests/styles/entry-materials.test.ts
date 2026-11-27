@@ -91,7 +91,7 @@ describe('app scrim material (styles/material.css)', () => {
     const backdrop = declarations(dialogModuleCss, '.backdrop');
     expect(backdrop).toMatch(/background:\s*var\(--scrim-tint\)/);
     expect(backdrop).toMatch(/backdrop-filter:\s*var\(--scrim-backdrop\)/);
-    expect(backdrop).toMatch(/z-index:\s*1500/);
+    expect(backdrop).toMatch(/z-index:\s*2000/);
   });
 
   it('is what every app-owned overlay backdrop reads (no per-component tints left)', () => {
