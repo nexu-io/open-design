@@ -1216,6 +1216,54 @@ process.stdin.on('end', () => {
     expect(calls[1]!.stdin).not.toContain(firstKey!);
   }, 45_000);
 
+  // #9230: a "Send to chat" comment reached the Agent as `comments: { count: 1 }`
+  // only, so it edited whichever element the history pointed at.
+  it('delivers preview comment targets through task inputs on the first and the resumed request', async () => {
+    const fixture = await createPublicRolloutFixture('marker-question', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const commentOn = (elementId: string, selector: string) => ({
+      id: elementId, order: 1, filePath: 'invoices.html', elementId, selector,
+      label: 'td.p-2.align-middle', comment: 'Change to My Best company', commentContext: 'query',
+      currentText: 'Globex Corporation', htmlHint: '<td data-slot="table-cell">',
+      pagePosition: { x: 10, y: 20, width: 200, height: 40 },
+    });
+    const first = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Change to My Best company', 'comment-first'),
+      commentAttachments: [commentOn('cell-first', '#FIRST_COMMENT_SELECTOR_SENTINEL')],
+    });
+    await waitForRunTerminal(started.url, first.runId as string);
+    await waitForTask(first.strategyTask!.taskExecutionId, 'completed');
+    const second = await postRun(started.url, {
+      ...publicRunRequest(fixture, 'Change to My Best company', 'comment-second'),
+      commentAttachments: [commentOn('cell-second', '#SECOND_COMMENT_SELECTOR_SENTINEL')],
+    });
+    expect((await waitForRunTerminal(started.url, second.runId as string)).status).toBe('succeeded');
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls).toHaveLength(2);
+    const feedbackOf = (call: Invocation) => {
+      const reference = /"reference":"(task-input:attachments\/attachment-\d{3}\.json)","role":"current_user_preview_feedback"/
+        .exec(call.stdin)?.[1];
+      const name = reference?.slice('task-input:attachments/'.length);
+      return { reference, content: call.taskInputFiles?.find(file => file.name === name)?.content };
+    };
+
+    const initial = feedbackOf(calls[0]!);
+    expect(calls[0]!.stdin).toContain('<open_design_prompt_bundle');
+    expect(initial.reference).toBeDefined();
+    expect(initial.content).toContain('#FIRST_COMMENT_SELECTOR_SENTINEL');
+    expect(calls[0]!.stdin).not.toContain('#FIRST_COMMENT_SELECTOR_SENTINEL');
+
+    const resumed = feedbackOf(calls[1]!);
+    expect(calls[1]!.argv).toContain('resume');
+    expect(calls[1]!.stdin).toContain('Workspace input references updated');
+    expect(resumed.reference).toBeDefined();
+    expect(resumed.reference).not.toBe(initial.reference);
+    expect(resumed.content).toContain('#SECOND_COMMENT_SELECTOR_SENTINEL');
+    expect(resumed.content).not.toContain('#FIRST_COMMENT_SELECTOR_SENTINEL');
+    expect(calls[1]!.stdin).not.toContain('#SECOND_COMMENT_SELECTOR_SENTINEL');
+  }, 45_000);
+
   it('automatically produces again after a resumed request with its new marker key', async () => {
     const fixture = await createPublicRolloutFixture('marker-production', 'design');
     started = fixture.started; binDir = fixture.binDir;
@@ -3143,6 +3191,7 @@ async function writePublicRolloutCodex(
   const logPath = path.join(dir, `codex-public-${label}.jsonl`);
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
+const path = require('node:path');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 if (argv.includes('--version')) { console.log(${JSON.stringify(agentCliVersion)}); process.exit(0); }
@@ -3154,7 +3203,14 @@ let stdin = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });
 process.stdin.on('end', () => {
-  fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now() }) + '\\n');
+  const taskInputAttachments = process.env.OD_TASK_INPUT_DIR && path.join(process.env.OD_TASK_INPUT_DIR, 'attachments');
+  const taskInputFiles = taskInputAttachments && fs.existsSync(taskInputAttachments)
+    ? fs.readdirSync(taskInputAttachments).sort().map((name) => ({
+        name,
+        content: fs.readFileSync(path.join(taskInputAttachments, name), 'utf8'),
+      }))
+    : [];
+  fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now(), taskInputFiles }) + '\\n');
   if (['marker-expired-session', 'marker-expired-side-effect', 'marker-request-expired'].includes(${JSON.stringify(label)}) && argv.includes('resume')) {
     if (${JSON.stringify(label)} === 'marker-expired-side-effect') {
       console.log(JSON.stringify({ type: 'item.completed', item: {

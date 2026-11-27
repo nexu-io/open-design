@@ -378,7 +378,7 @@ export const OD_NEXT_EXACT_INPUT_MAP_V1 = [
     classification: 'excluded',
     source: 'loadOdNextTaskInputSnapshot().requestInputText',
     owner: 'Task 04 immutable attachment snapshot',
-    note: 'Live comment bodies and paths are excluded; only a path/body-free count is emitted.',
+    note: 'The rendered comment block, its bodies and paths are excluded from Bundle text; the targets travel as the frozen preview-feedback task input instead.',
   },
   {
     id: 'image_references',
@@ -608,7 +608,7 @@ export const OD_NEXT_SEMANTIC_REQUEST_FACT_MAP_V1 = [
     producer: 'request',
     source: 'ChatRequest.commentAttachments -> normalizeCommentAttachments()',
     owner: 'Task 04 immutable attachment snapshot',
-    note: 'Raw comment bodies and screenshot paths remain excluded; the Bundle carries only the canonical comment count.',
+    note: 'Normalized comment targets and screenshot digests are frozen as one open-design.preview-feedback/v1 task input; the Bundle carries its count, logical reference and role, never raw bodies or screenshot paths.',
   },
   {
     id: 'image_attachment_selection',
