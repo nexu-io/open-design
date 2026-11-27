@@ -132,6 +132,10 @@ Keep prose and compiled values synchronized. If `DESIGN.md` names an accent,
 type scale, spacing rhythm, or motion duration, the corresponding binding in
 `tokens.css` must express the same decision.
 
+When you paste a `DESIGN.md` to create a design system, you can declare font
+families in the frontmatter or use plain lines such as `Display: Barlow Condensed`
+and `Body: Barlow` under a `## Typography` or `## Brand tokens` heading.
+
 ## 4. Authoring `tokens.css`
 
 `tokens.css` is the canonical compiled token stylesheet that agents can consume

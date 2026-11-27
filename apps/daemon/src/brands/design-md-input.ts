@@ -259,6 +259,15 @@ function collectFonts(frontmatter: Record<string, unknown>, body: string): FontC
     out.push({ key, family: clean });
   };
   collectFontValues(frontmatter.typography ?? frontmatter.fonts ?? frontmatter.type, [], add);
+
+  const roleSections = [
+    firstSection(body, ['typography']),
+    firstSection(body, ['brand tokens']),
+  ].join('\n');
+  for (const [, role, family] of roleSections.matchAll(/^[ \t]*(Display|Body):[ \t]*(.+)$/gm)) {
+    add(role!, family!);
+  }
+
   for (const line of body.split('\n')) {
     const familyMatch =
       /(?:font-family|fontFamily|family)\s*[:=-]\s*`?["']?([^`"',;()]+(?:\s+[^`"',;()]+){0,3})/i.exec(line) ??
