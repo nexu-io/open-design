@@ -10,9 +10,12 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
+const ANTIGRAVITY_MODEL_FLAG = '--model';
+const ANTIGRAVITY_EFFORT_FLAG = '--effort';
+const ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG = '--disable-slash-commands';
 
 // Headless runs use agy's documented stdin channel (agy >= 1.1.15):
 //   agy --input-format stream-json --output-format stream-json
@@ -191,6 +194,33 @@ export async function waitForAgyToReadModel(
   return false;
 }
 
+// `agy models` prints a "Fetching available models..." progress line
+// followed by one TSV row per model:
+//
+//   gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+//
+// Rows are keyed by the *label*, not the slug, because OD's antigravity
+// model id IS the display label: `writeAntigravityModelSelection`
+// persists `options.model` verbatim into settings.json (where agy
+// accepts either form), and `waitForAgyToReadModel` greps the
+// `--log-file` for `label="<model id>"` to release the model lock early.
+// Emitting the slug as id would still resolve, but agy logs the resolved
+// label, so the watcher would never match `label="<slug>"` and every
+// model-locked run would hold the lock until process exit.
+export function parseAgyModels(stdout: string): RuntimeModelOption[] | null {
+  const seen = new Set<string>();
+  const models: RuntimeModelOption[] = [];
+  for (const rawLine of stdout.split('\n')) {
+    const separator = rawLine.indexOf('\t');
+    if (separator < 0) continue;
+    const label = rawLine.slice(separator + 1).trim();
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    models.push({ id: label, label });
+  }
+  return models.length > 0 ? [DEFAULT_MODEL_OPTION, ...models] : null;
+}
+
 export const antigravityAgentDef = {
   id: 'antigravity',
   name: 'Antigravity',
@@ -199,14 +229,31 @@ export const antigravityAgentDef = {
   helpArgs: ['--help'],
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    [ANTIGRAVITY_MODEL_FLAG]: 'modelFlag',
+    [ANTIGRAVITY_EFFORT_FLAG]: 'effortFlag',
+    [ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG]: 'disableSlashCommands',
+  },
+  // `agy models` fetches the live catalog over the network (~2s warm,
+  // slower cold); 15s matches the listModels budget the other defs with
+  // remote fetches use (opencode et al).
+  listModels: {
+    args: ['models'],
+    parse: parseAgyModels,
+    timeoutMs: 15_000,
   },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Gemini 3.7 Flash (Medium)', label: 'Gemini 3.7 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (Low)', label: 'Gemini 3.7 Flash (Low)' },
+    { id: 'Gemini 3.6 Flash (High)', label: 'Gemini 3.6 Flash (High)' },
+    { id: 'Gemini 3.6 Flash (Medium)', label: 'Gemini 3.6 Flash (Medium)' },
+    { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
     { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',
@@ -236,9 +283,18 @@ export const antigravityAgentDef = {
     options = {},
     runtimeContext = {},
   ) => {
-    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
+    const caps = agentCapabilities.get('antigravity');
+    const model =
+      options.model && options.model !== DEFAULT_MODEL_OPTION.id
+        ? options.model
+        : null;
+
+    // Modern agy (v1.2.6+) supports native --model via CLI args without mutating
+    // global settings.json on disk. Only fallback to mutating settings.json when
+    // running an older agy build that lacks the --model capability flag.
+    if (!caps?.modelFlag && model) {
       writeAntigravityModelSelection(
-        options.model,
+        model,
         runtimeContext.antigravitySettingsPath,
       );
     }
@@ -254,8 +310,21 @@ export const antigravityAgentDef = {
       args.push('--log-file', runtimeContext.agentLogFilePath);
     }
     // Daemon-managed headless runs have no interactive approval channel.
-    if (agentCapabilities.get('antigravity')?.skipPermissions) {
+    if (caps?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
+    }
+    if (caps?.modelFlag && model) {
+      args.push(ANTIGRAVITY_MODEL_FLAG, model);
+    }
+    // Antigravity catalog model labels already encode their reasoning tier
+    // (e.g. "Gemini 3.8 Flash (Low)"), and `agy` rejects `--effort` when
+    // combined with a concrete `--model`. Only pass `--effort` when using
+    // the default model.
+    if (caps?.effortFlag && options.reasoning && !model) {
+      args.push(ANTIGRAVITY_EFFORT_FLAG, options.reasoning);
+    }
+    if (caps?.disableSlashCommands) {
+      args.push(ANTIGRAVITY_DISABLE_SLASH_COMMANDS_FLAG);
     }
     args.push(...ANTIGRAVITY_STREAM_JSON_ARGS);
     return args;
