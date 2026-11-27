@@ -28,7 +28,7 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(17);
+    expect(AGENT_SLUGS).toHaveLength(18);
     expect(isAgentSlug('kiro')).toBe(true);
     expect(isAgentSlug('reasonix')).toBe(true);
     expect(isAgentSlug('raven')).toBe(true);
@@ -36,6 +36,18 @@ describe('agent slug guard', () => {
 });
 
 describe('CLI-driven agents', () => {
+  it('octop installs a built-in connector with launch credentials on stdin', () => {
+    const spec = { ...SPEC, env: { TOKEN: 'test-secret' } };
+    const plan = planAgentInstall('octop', spec, { ...ctx(), serverName: 'design studio' });
+    if (plan.kind !== 'cli') throw new Error('expected cli');
+    expect(plan.bin).toBe('octop');
+    expect(plan.addArgv).toEqual(['--json', 'connector', 'install', 'open-design', '--name', 'design studio', '--config-file', '-']);
+    expect(plan.removeArgv).toEqual(['--json', 'connector', 'remove', 'open-design', '--name', 'design studio']);
+    expect(plan.getArgv).toEqual(['--json', 'connector', 'get', 'open-design', '--name', 'design studio']);
+    expect(JSON.parse(plan.stdin!)).toEqual(spec);
+    expect(plan.addArgv.join(' ')).not.toContain('test-secret');
+  });
+
   it('claude registers via `claude mcp add --scope user` with env flags', () => {
     const plan = planAgentInstall('claude', SPEC, ctx());
     expect(plan.kind).toBe('cli');
