@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { isProcessAlive, waitForProcessExit } from '@open-design/platform';
 
 import { execAgentFile } from '../../src/runtimes/invocation.js';
 
@@ -55,5 +56,36 @@ describe('execAgentFile probe termination', () => {
       execAgentFile(process.execPath, ['-e', TRAP], { timeout: 750 }),
     ).rejects.toThrow();
     expect(Date.now() - startedAt).toBeLessThan(10_000);
+  });
+
+  it('reaps the CLI a wrapper launched when the probe times out', async () => {
+    // npm installs agent CLIs on Windows as `.cmd` shims, so a probe's direct
+    // child is cmd.exe and the CLI runs as its child. Killing only the direct
+    // child on timeout left every hung CLI running with no parent (#9347).
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'exec-agent-tree-'));
+    const pidFile = path.join(dir, 'cli.pid');
+    const cli = path.join(dir, 'cli.cjs');
+    fs.writeFileSync(
+      cli,
+      "require('node:fs').writeFileSync(process.argv[2], String(process.pid)); setInterval(() => {}, 1000);\n",
+    );
+    let wrapper: string;
+    if (process.platform === 'win32') {
+      wrapper = path.join(dir, 'cli.cmd');
+      fs.writeFileSync(wrapper, `@echo off\r\n"${process.execPath}" "${cli}" "${pidFile}"\r\n`);
+    } else {
+      wrapper = path.join(dir, 'cli');
+      fs.writeFileSync(wrapper, `#!/bin/sh\n"${process.execPath}" "${cli}" "${pidFile}" &\nwait\n`);
+      fs.chmodSync(wrapper, 0o755);
+    }
+    let cliPid: number | null = null;
+    try {
+      await expect(execAgentFile(wrapper, [], { timeout: 2_000 })).rejects.toThrow();
+      cliPid = Number(fs.readFileSync(pidFile, 'utf8'));
+      expect(await waitForProcessExit(cliPid, 5_000)).toBe(true);
+    } finally {
+      if (cliPid && isProcessAlive(cliPid)) process.kill(cliPid, 'SIGKILL');
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
