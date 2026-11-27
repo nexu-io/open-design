@@ -249,8 +249,11 @@ describe('ToolRow', () => {
     expect(screen.queryByText('执行')).toBeNull();
   });
 
-  it('失败行两种写法:有原因跟在名字后面,没原因给「失败」', () => {
+  it('失败文件有原因时按需展开,没原因时仅显示失败标记', () => {
     const { unmount } = render(<ToolRow row={row({ tool: 'write', failed: true, file: { path: 'dist/x', label: 'x' }, failReason: '目录只读' })} />);
+    expect(document.querySelector('details')?.open).toBe(false);
+    expect(screen.queryByText(/目录只读/)).toBeNull();
+    fireEvent.click(screen.getByTestId('chat-foldable-summary-content'));
     expect(screen.getByText(/目录只读/)).toBeTruthy();
     unmount();
     render(<ToolRow row={row({ tool: 'write', failed: true, file: { path: 'dist/x', label: 'x' } })} />);
@@ -329,10 +332,14 @@ describe('命令折叠块(组件 11)', () => {
     expect(document.querySelector('details')?.open).toBe(false);
   });
 
-  it('失败默认展开 —— 报错原文是这时候唯一要读的东西', () => {
+  it('失败默认收起,按需手动展开报错原文', () => {
     render(<ToolRow row={cmd({ failed: true, terminal: '✗ Could not resolve "./ProductCard"' })} />);
-    expect(document.querySelector('details')?.open).toBe(true);
+    expect(document.querySelector('details')?.open).toBe(false);
     expect(screen.getByText('失败')).toBeTruthy();
+    expect(screen.queryByText('✗ Could not resolve "./ProductCard"')).toBeNull();
+    fireEvent.click(screen.getByText('构建产物,看能不能跑通'));
+    expect(document.querySelector('details')?.open).toBe(true);
+    expect(screen.getByText('✗ Could not resolve "./ProductCard"')).toBeTruthy();
   });
 
   it('输出行按行首符号分绿红,认不出来的按普通行画', () => {
