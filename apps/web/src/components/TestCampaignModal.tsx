@@ -48,6 +48,7 @@ import {
 	type TestCampaignPlacement,
 	type TestDeployment,
 	sameTestDeployment,
+	testWorkspaceHeaders,
 	useTestDeploymentSelection,
 } from "./test-deployment-selection";
 export {
@@ -71,6 +72,7 @@ export type TestDecision = TestRuntimeDecision<
 	TouchpointStaticAction[]
 >;
 export type TestRuntimeSession = Readonly<{
+	workspaceId?: string;
 	selectionKey: string;
 	deployment: TestDeployment;
 	context: TestContext;
@@ -89,6 +91,12 @@ let retainedTestScope: string | null = null;
 function invalidateRetainedTestRuntime(): void {
 	retainedTestRuntime = null;
 	retainedTestEpoch += 1;
+}
+
+/** Keep the authenticated account and its selected workspace membership in one lease scope. */
+export function testCampaignOwner(account: string | null, workspaceId?: string, memberId?: string): string | null {
+	if (!workspaceId && !memberId) return account;
+	return account && workspaceId && memberId ? JSON.stringify([account, workspaceId, memberId]) : null;
 }
 
 /** The shell observes identity even while the home-only Test hosts are absent. */
@@ -529,6 +537,7 @@ export async function recordTestAcceptance(
 		locale: string;
 		scenario: Scenario;
 		hostVersion?: string;
+		workspaceId?: string;
 	}>,
 	signal?: AbortSignal,
 ): Promise<unknown> {
@@ -537,7 +546,7 @@ export async function recordTestAcceptance(
 		{
 			method: "POST",
 			signal,
-			headers: { "content-type": "application/json" },
+			headers: { "content-type": "application/json", ...testWorkspaceHeaders(input.workspaceId) },
 			body: JSON.stringify({
 				placementKey: input.placementKey,
 				hostVersion: input.hostVersion ?? String(OPEN_DESIGN_HOST_VERSION),
@@ -618,6 +627,7 @@ export function recordVisibleTestTouchpoint(
 	void deliverTestAcceptance(
 		{
 			deploymentId: session.deployment.id,
+			workspaceId: session.workspaceId,
 			snapshotHash,
 			placementKey,
 			locale: decision.content.locale,
@@ -915,13 +925,17 @@ function validIso(value: unknown): value is string {
 export function TestCampaignModal({
 	authenticated,
 	sessionSubject,
+	workspaceId,
+	workspaceMemberId,
 }: {
 	authenticated: boolean;
 	sessionSubject?: string | null;
+	workspaceId?: string;
+	workspaceMemberId?: string;
 }) {
 	const { locale } = useI18n();
 	const compatible = supportsHost(authenticated);
-	const owner = sessionSubject ?? null;
+	const owner = testCampaignOwner(sessionSubject ?? null, workspaceId, workspaceMemberId);
 	// Render-time authority fences even a transport that ignores abort, before effects run.
 	const selectionAuthority = useRef({ compatible, owner, locale });
 	selectionAuthority.current = { compatible, owner, locale };
@@ -955,6 +969,7 @@ export function TestCampaignModal({
 	} = useTestDeploymentSelection({
 		enabled: compatible,
 		owner,
+		workspaceId,
 		manual: showControls,
 		initialSelection: retained?.deployment,
 		onSelection: selectionChanged,
@@ -1032,7 +1047,7 @@ export function TestCampaignModal({
 		const fetchContext = async (signal: AbortSignal, ownsRequest: () => boolean): Promise<TestContext | null> => {
 			const response = await fetch("/api/touchpoints/test-runtime/context", {
 				method: "POST",
-				headers: { "content-type": "application/json" },
+				headers: { "content-type": "application/json", ...testWorkspaceHeaders(workspaceId) },
 				body: JSON.stringify({
 					deploymentId: selected.id,
 					scenario: "realtime",
@@ -1049,6 +1064,7 @@ export function TestCampaignModal({
 			if (!ownsRequest()) return null;
 			const mode = testContextMode(next);
 			if (!(next && next.deploymentId === selected.id && next.scenario === "realtime" &&
+				(!workspaceMemberId || next.testerMemberId === workspaceMemberId) &&
 				!("simulatedAt" in next) && validIso(next.updatedAt) && mode !== "invalid" &&
 				(negotiatedMode === null || mode === negotiatedMode) &&
 				(mode !== "immutable" || (!!owner && keepsTester(next)))))
@@ -1214,6 +1230,7 @@ export function TestCampaignModal({
 					// Server time precedes its awaited reads; request and body latency consume the grant.
 					const received = testClock();
 					const response = await fetch("/api/touchpoints/test-runtime?" + query, {
+						headers: testWorkspaceHeaders(workspaceId),
 						cache: "no-store",
 						signal: requestSignal,
 					});
@@ -1476,7 +1493,7 @@ export function TestCampaignModal({
 			};
 		};
 		return { selectionKey, independent, load, ownsSelection, recover: () => failedPresentations.clear() };
-	}, [deployment, locale, owner]);
+	}, [deployment, locale, owner, workspaceId, workspaceMemberId]);
 	useEffect(() => {
 		const recover = () => { if (!document.hidden) adapter?.recover(); };
 		for (const event of ["online", "focus", "pageshow"]) window.addEventListener(event, recover);
@@ -1580,10 +1597,11 @@ export function TestCampaignModal({
 		const keys = liveKey ? (liveKey.split("\n") as TestCampaignPlacement[]) : [];
 		return Object.freeze<TestRuntimeSession>({
 			...current,
+			workspaceId,
 			decisions: new Map(keys.map((key) => [key, current.decisions.get(key)!])),
 			isAuthorized: isSessionAuthorized,
 		});
-	}, [currentValue, liveKey, isSessionAuthorized]);
+	}, [currentValue, liveKey, isSessionAuthorized, workspaceId]);
 	useEffect(() => {
 		if (!deployment) {
 			publishedSession.current = null;

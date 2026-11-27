@@ -642,6 +642,12 @@ function proxyTouchpointRuntimeRequest(
     res.status(500).json({ error: 'invalid_vela_api_url' });
     return;
   }
+  const workspaceId = runtime === 'test' ? req.headers['x-vela-workspace-id'] : undefined;
+  if (workspaceId !== undefined && (typeof workspaceId !== 'string' || !VELA_WORKSPACE_ID_PATTERN.test(workspaceId)
+    || connectionHeaderTokens(req.headers.connection).has('x-vela-workspace-id'))) {
+    res.status(400).json({ error: 'invalid_workspace_id' });
+    return;
+  }
   const body = req.method === 'POST' ? velaProxyRequestBody(req) : null;
   // Content assembly applies to exactly one route: the read-only production
   // decision. Everything else keeps the verbatim streaming path.
@@ -760,6 +766,7 @@ function proxyTouchpointRuntimeRequest(
       accept: 'application/json',
       authorization: `Bearer ${controlKey}`,
     };
+    if (workspaceId) headers['x-vela-workspace-id'] = workspaceId;
     // Touchpoint decisions carry base64 content and run to megabytes, and this
     // proxy pipes the upstream body through verbatim. Building the request
     // headers from scratch dropped the caller's `accept-encoding`, so every

@@ -3159,6 +3159,7 @@ describe('Test touchpoint runtime proxy', () => {
       url: string;
       method: string;
       authorization: string | undefined;
+      workspaceId: string | string[] | undefined;
       body: string;
     }> = [];
     const upstream = createServer((req, res) => {
@@ -3172,6 +3173,7 @@ describe('Test touchpoint runtime proxy', () => {
           url: req.url ?? '',
           method: req.method ?? '',
           authorization: req.headers.authorization,
+          workspaceId: req.headers['x-vela-workspace-id'],
           body,
         });
         res.setHeader('content-type', 'application/json');
@@ -3186,7 +3188,7 @@ describe('Test touchpoint runtime proxy', () => {
       const accepted = await postJson(
         `${baseUrl}/api/touchpoints/test-runtime/context`,
         { deploymentId: 'deployment-1', scenario: 'realtime' },
-        { authorization: 'Bearer browser-supplied-key' },
+        { authorization: 'Bearer browser-supplied-key', 'x-vela-workspace-id': 'workspace-a' },
       );
       expect(accepted.status).toBe(201);
       expect(requests).toEqual([
@@ -3194,6 +3196,7 @@ describe('Test touchpoint runtime proxy', () => {
           url: '/api/v1/touchpoints/runtime/test-context',
           method: 'POST',
           authorization: 'Bearer ck-seeded-key',
+          workspaceId: 'workspace-a',
           body: JSON.stringify({
             deploymentId: 'deployment-1',
             scenario: 'realtime',
@@ -3217,6 +3220,7 @@ describe('Test touchpoint runtime proxy', () => {
           url: '/api/v1/touchpoints/runtime/test-context',
           method: 'POST',
           authorization: 'Bearer ck-seeded-key',
+          workspaceId: 'workspace-a',
           body: JSON.stringify({
             deploymentId: 'deployment-1',
             scenario: 'realtime',
