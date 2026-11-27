@@ -1,0 +1,34 @@
+# Escape hatch for Docker installed via snap (common on Ubuntu).
+#
+# Snap's AppArmor confinement rejects the base compose hardening:
+#   read_only: true
+#   security_opt: [no-new-privileges:true]
+# which then fails the image ENTRYPOINT with:
+#   exec /sbin/tini: operation not permitted
+#
+# Plain `docker run` often still works because it does not apply those
+# Compose security defaults. Prefer installing Docker Engine from Docker's
+# apt repository when you can; only use this override when compose
+# crash-loops with the tini error above.
+#
+# Usage (from deploy/):
+#   docker compose -f docker-compose.yml -f docker-compose.snap.yml up -d --no-build
+#
+# With the Linux host-network override:
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.linux.yml \
+#     -f docker-compose.snap.yml \
+#     up -d --no-build
+#
+# install.sh / update.sh auto-apply this file when they detect snap Docker.
+# Requires Docker Compose v2.17+ for the `!reset` YAML tag (same as the
+# Linux host-network override).
+name: open-design
+
+services:
+  open-design:
+    # Writable root FS so /sbin/tini and node can exec under snap AppArmor.
+    read_only: false
+    # Clear base security_opt entries (including the no-new-privileges flag).
+    security_opt: !reset []
