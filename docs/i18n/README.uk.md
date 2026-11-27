@@ -102,6 +102,7 @@ OpenDesign — **перший спільний робочий простір і�
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Підтримується | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Підтримується | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Підтримується | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Підтримується | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Підтримується | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Підтримується | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Підтримується | `od mcp install cline` |

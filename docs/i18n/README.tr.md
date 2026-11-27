@@ -102,6 +102,7 @@ Bu iş akışı açık ve genişletilebilir. OpenDesign, Apache 2.0 lisansıyla 
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Destekleniyor | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Destekleniyor | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Destekleniyor | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Destekleniyor | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Destekleniyor | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Destekleniyor | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Destekleniyor | `od mcp install cline` |

@@ -104,6 +104,7 @@ Ce processus est ouvert et extensible. OpenDesign est sous licence Apache 2.0 et
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Pris en charge | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Pris en charge | `od mcp install copilot` |
 | [OpenCode](https://opencode.ai/) | ✅ Pris en charge | `od mcp install opencode` |
+| [ZCode](https://zcode.z.ai) | ✅ Pris en charge | `od mcp install zcode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Pris en charge | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Pris en charge | `od mcp install antigravity` |
 | [Cline](https://github.com/cline/cline) | ✅ Pris en charge | `od mcp install cline` |
