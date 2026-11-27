@@ -10,7 +10,7 @@ import {
 } from "node:http";
 import { Agent as HttpsAgent, request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import {
   createConnection,
@@ -19,7 +19,7 @@ import {
   type Server as TcpServer,
   type Socket,
 } from "node:net";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
@@ -891,15 +891,14 @@ function shouldStartStandaloneBackendInProcess(): boolean {
   return process.env.ELECTRON_RUN_AS_NODE === "1" && process.versions.electron != null;
 }
 
-async function startStandaloneBackendInProcess(entryPath: string, port: number, origin: string): Promise<StandaloneBackend> {
+export async function startStandaloneBackendInProcess(entryPath: string, port: number, origin: string): Promise<StandaloneBackend> {
   Object.assign(process.env, createStandaloneBackendEnv({ port }));
   console.log(`[open-design web] starting in-process standalone Next.js server from ${entryPath}`);
-  const restoreChdir = await installInProcessStandaloneChdirAlias(dirname(entryPath));
-  try {
-    await import(pathToFileURL(entryPath).href);
-  } finally {
-    restoreChdir();
-  }
+  // Next resolves its own project directory through realpath, so on Windows the standalone
+  // server always works from the real path behind a junction. Rewriting cwd back to the alias
+  // made Next join two absolute paths together and every request 500'd (see #9157); leaving
+  // cwd alone keeps the server on one canonical real path.
+  await import(pathToFileURL(entryPath).href);
   await waitForInProcessStandaloneBackendReady(origin);
 
   return {
@@ -915,34 +914,6 @@ async function startStandaloneBackendInProcess(entryPath: string, port: number, 
       // Electron-as-Node mode. Process shutdown is the close boundary.
     },
   };
-}
-
-async function installInProcessStandaloneChdirAlias(aliasRoot: string): Promise<() => void> {
-  if (process.platform !== "win32") return () => {};
-
-  const realRoot = await realpath(aliasRoot).catch(() => null);
-  if (realRoot == null || normalizeWindowsPath(realRoot) === normalizeWindowsPath(aliasRoot)) return () => {};
-
-  const originalChdir = process.chdir.bind(process);
-  process.chdir = ((directory: string): void => {
-    const mapped = mapWindowsPathIntoAlias(directory, realRoot, aliasRoot);
-    originalChdir(mapped ?? directory);
-  }) as typeof process.chdir;
-
-  return () => {
-    process.chdir = originalChdir as typeof process.chdir;
-  };
-}
-
-function mapWindowsPathIntoAlias(candidate: string, realRoot: string, aliasRoot: string): string | null {
-  const normalizedCandidate = normalizeWindowsPath(candidate);
-  const normalizedRealRoot = normalizeWindowsPath(realRoot);
-  if (normalizedCandidate !== normalizedRealRoot && !normalizedCandidate.startsWith(`${normalizedRealRoot}\\`)) return null;
-  return join(aliasRoot, relative(realRoot, candidate));
-}
-
-function normalizeWindowsPath(path: string): string {
-  return path.replaceAll("/", "\\").replace(/[\\]+$/, "").toLowerCase();
 }
 
 async function startStandaloneBackend(webRoot: string | null): Promise<StandaloneBackend> {
