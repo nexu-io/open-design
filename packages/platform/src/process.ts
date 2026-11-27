@@ -317,18 +317,18 @@ export async function spawnLoggedProcess(request: SpawnProcessRequest): Promise<
   return child;
 }
 
-/**
- * Probe whether a process is alive via a signal-0 `process.kill`. Treats
- * `ESRCH` as dead and any other error (e.g. `EPERM`) as alive.
- *
- * @param pid - The PID to probe (non-number values are treated as dead).
- * @returns `true` when the process appears to exist.
- */
 /** @internal Individual PIDs must not select a process group or overflow Node's signed PID range. */
 function isIndividualPid(pid: number | null | undefined): pid is number {
   return typeof pid === "number" && Number.isInteger(pid) && pid > 0 && pid <= 0x7fffffff;
 }
 
+/**
+ * Probe whether a process is alive via a signal-0 `process.kill`. Treats
+ * `ESRCH` as dead and any other error (e.g. `EPERM`) as alive.
+ *
+ * @param pid - The PID to probe (invalid individual PIDs are treated as dead).
+ * @returns `true` when the process appears to exist.
+ */
 export function isProcessAlive(pid: number | null | undefined): boolean {
   if (!isIndividualPid(pid)) return false;
   try {
