@@ -193,6 +193,68 @@ describe('packaged web URL registration', () => {
       [daemonStamp, 'register-web-url', { url: 'http://127.0.0.1:53421' }, { timeoutMs: 1200 }],
     ]);
   });
+
+  // Issue #9245: a daemon whose event loop is busy for a few seconds at boot
+  // (large run history) answered its status poll but missed the single 1.2s
+  // registration attempt, and the whole packaged launch exited.
+  const ipcTimeout = () => new Error('IPC request timed out: /tmp/open-design/ipc/test/daemon.sock');
+
+  it('keeps registering while a busy daemon times out, then succeeds', async () => {
+    let calls = 0;
+    const invoke = async () => {
+      calls += 1;
+      if (calls < 3) throw ipcTimeout();
+      return { accepted: true };
+    };
+    await expect(registerPackagedWebUrl(testStamp(), 'http://127.0.0.1:64248', invoke as never, {
+      budgetMs: 10_000,
+      sleep: async () => {},
+    })).resolves.toBeUndefined();
+    expect(calls).toBe(3);
+  });
+
+  it('fails fast on errors other than a timeout', async () => {
+    let calls = 0;
+    const invoke = async () => {
+      calls += 1;
+      throw new Error('connect ENOENT /tmp/open-design/ipc/test/daemon.sock');
+    };
+    await expect(registerPackagedWebUrl(testStamp(), 'http://127.0.0.1:64248', invoke as never, {
+      budgetMs: 10_000,
+      sleep: async () => {},
+    })).rejects.toThrow('connect ENOENT');
+    expect(calls).toBe(1);
+  });
+
+  it('does not retry a daemon that answered and rejected the URL', async () => {
+    let calls = 0;
+    const invoke = async () => {
+      calls += 1;
+      return { accepted: false };
+    };
+    await expect(registerPackagedWebUrl(testStamp(), 'http://127.0.0.1:64248', invoke as never, {
+      budgetMs: 10_000,
+      sleep: async () => {},
+    })).rejects.toThrow('daemon rejected packaged web URL registration');
+    expect(calls).toBe(1);
+  });
+
+  it('gives up with the timeout once the registration budget is spent', async () => {
+    let now = 0;
+    let calls = 0;
+    const invoke = async () => {
+      calls += 1;
+      now += 1_200;
+      throw ipcTimeout();
+    };
+    await expect(registerPackagedWebUrl(testStamp(), 'http://127.0.0.1:64248', invoke as never, {
+      budgetMs: 5_000,
+      now: () => now,
+      sleep: async (ms) => { now += ms; },
+    })).rejects.toThrow('IPC request timed out');
+    expect(calls).toBeGreaterThan(1);
+    expect(now).toBeLessThanOrEqual(5_000 + 1_200);
+  });
 });
 
 describe('packaged stale sidecar retirement', () => {
