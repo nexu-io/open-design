@@ -1902,6 +1902,7 @@ export function FileWorkspace({
   ): OpenTabsState {
     const state: OpenTabsState = { tabs, active };
     if (nextBrowserTabs.length > 0) state.browserTabs = nextBrowserTabs;
+    if (tabsState.designFilesTabHidden) state.designFilesTabHidden = true;
     return state;
   }
 
@@ -1914,10 +1915,26 @@ export function FileWorkspace({
 
   function setPersistedActive(name: string | null) {
     const nextActive = name ?? defaultRootTab;
-    if (nextActive === activeTab) return;
+    const reopeningDesignFiles =
+      nextActive === DESIGN_FILES_TAB && tabsState.designFilesTabHidden === true;
+    if (nextActive === activeTab && !reopeningDesignFiles) return;
     afterActiveManualEditSettles(() => {
       setActiveTab(nextActive);
-      commitTabsState(workspaceTabsState(persistedTabs, name));
+      commitTabsState({
+        ...workspaceTabsState(persistedTabs, name),
+        ...(reopeningDesignFiles ? { designFilesTabHidden: false } : {}),
+      });
+    });
+  }
+
+  function closeDesignFilesTab() {
+    afterActiveManualEditSettles(() => {
+      const fallback = persistedTabs[persistedTabs.length - 1] ?? DESIGN_FILES_TAB;
+      setActiveTab(fallback);
+      commitTabsState({
+        ...workspaceTabsState(persistedTabs, fallback),
+        designFilesTabHidden: true,
+      });
     });
   }
 
@@ -2090,6 +2107,7 @@ export function FileWorkspace({
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
     const latestPersistedTabs = tabsStateRef.current.tabs;
+    if (tabsStateRef.current.designFilesTabHidden) return;
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
@@ -3468,7 +3486,8 @@ export function FileWorkspace({
   // open Design Files. Treat the root as the display fallback without erasing
   // persisted state: an in-flight file refresh may still restore the target.
   const designFilesTabActive =
-    activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+    !tabsState.designFilesTabHidden
+    && (activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface);
 
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
@@ -4155,26 +4174,31 @@ export function FileWorkspace({
               <span className="ws-tab-label">{t('dsManager.tabDesignSystem')}</span>
             </button>
           ) : null}
-          <button
-            type="button"
-            className={`ws-tab design-files-tab ${initialMaterializationPending || designFilesTabActive ? 'active' : ''}`}
-            role="tab"
-            aria-selected={initialMaterializationPending || designFilesTabActive}
-            aria-label={designFilesTabTitle}
-            tabIndex={0}
-            data-testid="design-files-tab"
-            onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-            title={designFilesTabTitle}
-          >
-            <span className="tab-icon" aria-hidden>
-              {fileSyncBadge ? (
-                <FileSyncBadge state={fileSyncBadge} size={14} />
-              ) : (
-                <Icon name="grid" size={14} />
-              )}
-            </span>
-            <span className="ws-tab-label">{designFilesTabLabel}</span>
-          </button>
+          {tabsState.designFilesTabHidden ? (
+            <Tab
+              label={designFilesTabLabel}
+              title={designFilesTabTitle}
+              ariaLabel={designFilesTabTitle}
+              testId="design-files-tab-reopen"
+              className="design-files-tab"
+              active={false}
+              onActivate={() => setPersistedActive(DESIGN_FILES_TAB)}
+              iconNameOverride="grid"
+            />
+          ) : (
+            <Tab
+              label={designFilesTabLabel}
+              title={designFilesTabTitle}
+              ariaLabel={designFilesTabTitle}
+              testId="design-files-tab"
+              className="design-files-tab"
+              active={initialMaterializationPending || designFilesTabActive}
+              onActivate={() => setPersistedActive(DESIGN_FILES_TAB)}
+              onClose={closeDesignFilesTab}
+              iconNameOverride={fileSyncBadge ? undefined : 'grid'}
+              syncBadge={fileSyncBadge}
+            />
+          )}
           {!initialMaterializationPending ? visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
@@ -4692,7 +4716,7 @@ export function FileWorkspace({
               href="#"
               onClick={(e) => {
                 e.preventDefault();
-                setActiveTab(DESIGN_FILES_TAB);
+                setPersistedActive(DESIGN_FILES_TAB);
               }}
             >
               {t('workspace.designFiles')}
@@ -8591,6 +8615,9 @@ const Tab = memo(function Tab({
   label,
   meta,
   title,
+  ariaLabel,
+  testId,
+  className,
   active,
   onActivate,
   onClose,
@@ -8611,6 +8638,9 @@ const Tab = memo(function Tab({
   label: string;
   meta?: string;
   title?: string;
+  ariaLabel?: string;
+  testId?: string;
+  className?: string;
   active: boolean;
   onActivate: () => void;
   onClose?: () => void;
@@ -8644,6 +8674,7 @@ const Tab = memo(function Tab({
     <div
       className={[
         'ws-tab',
+        className ?? '',
         'od-tooltip',
         meta ? 'has-meta' : '',
         kind === 'live-artifact' ? 'live-artifact-tab' : '',
@@ -8662,6 +8693,8 @@ const Tab = memo(function Tab({
       }}
       role="tab"
       aria-selected={active}
+      aria-label={ariaLabel}
+      data-testid={testId}
       tabIndex={0}
       title={tabTooltip}
       data-tooltip={tabTooltip}
