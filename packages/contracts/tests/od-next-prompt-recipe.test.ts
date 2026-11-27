@@ -653,5 +653,13 @@ it('keeps planning progress in the user language without exposing host protocol 
   expect(prompt).toContain('<od-production-ready key="a1b2" />');
   expect(prompt).toContain('FIRST progress sentence');
   expect(prompt).toContain('Keep the visible plan brief and result-focused');
+  expect(prompt).toContain('For cloud image or video generation, verify current account/workspace availability');
+  expect(prompt).toContain('media models --cloud --json');
   expect(renderOdNextProductionReadyInstructions('invalid key')).toBe('');
+});
+
+it('instructs API/BYOK image prompts to check the --cloud catalogue and avoid silent substitution', () => {
+  const prompt = composeSystemPrompt({ metadata: { kind: 'image' } as any });
+  expect(prompt).toContain('media models --cloud --json');
+  expect(prompt).toContain('never silently\nsubstitute an explicitly requested or user-selected model');
 });

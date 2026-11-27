@@ -24,4 +24,24 @@ describe('image model defaults', () => {
     expect(canonicalMediaModelId('gpt-image-2')).toBe('gpt-image-2');
     expect(findMediaModel('gpt-image-2')?.provider).toBe('openai');
   });
+
+  it('registers all nine OpenDesign Cloud (Vela) image models', () => {
+    const velaImageIds = IMAGE_MODELS
+      .filter((model) => model.provider === 'vela')
+      .map((model) => model.id);
+    expect(velaImageIds).toEqual(
+      expect.arrayContaining([
+        'vela/gpt-image-2',
+        'vela/gpt-image-2.6-flare',
+        'vela/gpt-image-2.6-sunburst',
+        'vela/nano-banana-2',
+        'vela/nano-banana-2-lite',
+        'vela/seedream-5.0',
+        'vela/seedream-5.0-flash',
+        'vela/seedream-5.0-pro',
+        'vela/seedream-5.5',
+      ]),
+    );
+    expect(velaImageIds).toHaveLength(9);
+  });
 });

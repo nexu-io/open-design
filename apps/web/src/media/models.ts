@@ -332,6 +332,9 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'vela/seedream-5.0', label: 'seedream-5.0 (Cloud)', hint: 'OpenDesign Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   { id: 'vela/seedream-5.0-pro', label: 'seedream-5.0-pro (Cloud)', hint: 'OpenDesign Cloud · high-quality managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   { id: 'vela/seedream-5.5', label: 'seedream-5.5 (Cloud)', hint: 'OpenDesign Cloud · high-quality managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/gpt-image-2.6-flare', label: 'gpt-image-2.6-flare (Cloud)', hint: 'OpenDesign Cloud · managed image generation', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/gpt-image-2.6-sunburst', label: 'gpt-image-2.6-sunburst (Cloud)', hint: 'OpenDesign Cloud · managed image generation', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/seedream-5.0-flash', label: 'seedream-5.0-flash (Cloud)', hint: 'OpenDesign Cloud · fast managed image generation', provider: 'vela', caps: ['t2i', 'i2i'] },
   // OpenAI — fully integrated path.
   {
     id: 'gpt-image-2',

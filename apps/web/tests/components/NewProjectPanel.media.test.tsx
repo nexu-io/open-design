@@ -130,8 +130,13 @@ describe('NewProjectPanel media provider badges', () => {
     for (const id of [
       'vela/gpt-image-2',
       'vela/nano-banana-2',
+      'vela/nano-banana-2-lite',
       'vela/seedream-5.0',
+      'vela/seedream-5.0-pro',
       'vela/seedream-5.5',
+      'vela/gpt-image-2.6-flare',
+      'vela/gpt-image-2.6-sunburst',
+      'vela/seedream-5.0-flash',
     ]) {
       expect(screen.getByTestId(`model-picker-option-${id}`)).toBeDefined();
     }
