@@ -3964,3 +3964,43 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 .fork-sep.is-new {
   animation: fork-in var(--duration-normal) var(--ease-out) both;
 }
+
+/* Voice dictation toggle in the composer row. Quiet at rest; while listening
+   it turns accent-colored and pulses so it is obvious the mic is live. */
+.composer-voice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-soft);
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.composer-voice:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.composer-voice:focus-visible {
+  outline: var(--stroke-thin) solid var(--blue);
+  outline-offset: 2px;
+}
+.composer-voice[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--bg-subtle);
+  animation: composer-voice-pulse 1.4s ease-in-out infinite;
+}
+@keyframes composer-voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-voice[aria-pressed='true'] { animation: none; }
+}
+.composer-voice[data-error='true'] { color: var(--red, #c0392b); }
+.composer-voice[aria-busy='true'] { color: var(--accent); opacity: 0.7; cursor: progress; animation: composer-voice-pulse 1s ease-in-out infinite; }
+.composer-voice:disabled:not([aria-busy='true']) { opacity: 0.5; }

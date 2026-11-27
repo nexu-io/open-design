@@ -23,6 +23,8 @@ export type {
   OpenDesignHostFailure,
   OpenDesignHostActionResult,
   OpenDesignHostDownloadResult,
+  OpenDesignHostSpeechEvent,
+  OpenDesignHostSpeechStartOptions,
   OpenDesignHostWorkspaceContext,
   OpenDesignHostProjectImportInit,
   OpenDesignHostProjectImportSuccess,

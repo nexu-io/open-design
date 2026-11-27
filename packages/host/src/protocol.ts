@@ -381,6 +381,23 @@ export type OpenDesignHostUpdaterOpenDialogRequest = {
 
 export type OpenDesignHostUpdaterOpenDialogListener = (request: OpenDesignHostUpdaterOpenDialogRequest) => void;
 
+/** Options for starting Apple-native speech recognition on the desktop host. */
+export type OpenDesignHostSpeechStartOptions = {
+  /** UI locale or BCP-47 tag (`de`, `pt-BR`, `en-US`); the host resolves it. */
+  locale: string;
+};
+
+/**
+ * Events from the desktop host's native speech recognizer (macOS: Apple's
+ * Speech framework). `text` is cumulative for the whole session, not a delta.
+ */
+export type OpenDesignHostSpeechEvent =
+  | { type: "ready"; locale: string; onDevice: boolean }
+  | { type: "partial"; text: string }
+  | { type: "final"; text: string }
+  | { type: "error"; code: string; message?: string }
+  | { type: "ended" };
+
 export type OpenDesignHostDownloadResult = {
   url: string;
   state: "completed" | "cancelled" | "interrupted";
@@ -399,6 +416,17 @@ export type OpenDesignHostBridge = {
   /** Optional on older hosts. Reports actual disk completion, never initiation. */
   downloads?: {
     subscribe(listener: (result: OpenDesignHostDownloadResult) => void): () => void;
+  };
+  // Desktop only, and only where the host ships a native recognizer (macOS).
+  // Absent in Web and old clients; callers must feature-detect. Lets dictation
+  // use the platform's own streaming speech recognition.
+  speech?: {
+    /** True when this host can run native speech recognition right now. */
+    isAvailable(): Promise<boolean>;
+    start(options: OpenDesignHostSpeechStartOptions): Promise<OpenDesignHostActionResult>;
+    /** Ask the recognizer to finish; it then emits `final` and `ended`. */
+    stop(): Promise<OpenDesignHostActionResult>;
+    subscribe(listener: (event: OpenDesignHostSpeechEvent) => void): () => void;
   };
   // Optional so older host builds still satisfy the bridge shape; callers
   // must feature-detect before invoking.
