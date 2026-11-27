@@ -4,11 +4,15 @@ import { SidecarFactory, type SidecarClient } from "@open-design/sidecar";
 import { startDaemonSidecar, type DaemonSidecarHandle } from "./server.js";
 import {
   executeLegacyPayloadDesktopHandoff,
+  launchUnsupervisedPayloadDesktop,
   prepareLegacyPayloadDesktopHandoff,
 } from "./payload-desktop-handoff.js";
 import { waitForParentMonitorRelease } from "./parent-monitor-gate.js";
 
 async function main(): Promise<void> {
+  if (await launchUnsupervisedPayloadDesktop({ outerPid: process.ppid })) {
+    return;
+  }
   let runtimeHandle: DaemonSidecarHandle | null = null;
   const invoke = async (action: string, input: unknown) => {
     if (runtimeHandle == null) throw new Error("daemon sidecar is not running");

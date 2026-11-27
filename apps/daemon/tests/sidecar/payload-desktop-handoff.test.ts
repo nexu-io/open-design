@@ -7,11 +7,13 @@ import {
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
 } from "@open-design/launcher-proto";
+import type { SidecarLaunchRequest, SpawnedSidecar } from "@open-design/sidecar";
 import { SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   executeLegacyPayloadDesktopHandoff,
+  launchUnsupervisedPayloadDesktop,
   prepareLegacyPayloadDesktopHandoff,
 } from "../../src/sidecar/payload-desktop-handoff.js";
 import { isParentMonitorExitHeld } from "../../src/sidecar/parent-monitor-gate.js";
@@ -64,6 +66,59 @@ async function fixture() {
 }
 
 describe("legacy payload desktop handoff", () => {
+  it("bridges an unsupervised legacy launcher and preserves rollback selection", async () => {
+    const value = await fixture();
+    const env = {
+      OD_APP_VERSION: value.version,
+      OD_INSTALLATION_DIR: value.root,
+      OD_SIDECAR_NAMESPACE: value.namespace,
+      OD_SIDECAR_BASE: value.runtimeRoot,
+      OD_DATA_DIR: join(value.root, "data"),
+      OD_SIDECAR_SOURCE: "packaged",
+    };
+    const stop = vi.fn(async () => ({ remainingPids: [] }));
+    const spawn = vi.fn(async (_request: SidecarLaunchRequest) => ({ stop }) as unknown as SpawnedSidecar);
+    try {
+      const stopOuter = vi.fn();
+      const inspectOuter = vi.fn(async () => [{ pid: 4321, ppid: 1, command: `${value.outerExecutablePath} opendesign://workspace/open?example=1` }]);
+      const options = { env, outerPid: 4321, platform: "darwin" as const, spawn, stopOuter, inspectOuter };
+      expect(await launchUnsupervisedPayloadDesktop(options)).toBe(true);
+      expect(stopOuter).toHaveBeenCalledWith(4321);
+      expect(spawn.mock.calls[0]?.[0]).toMatchObject({ command: value.payloadExecutablePath, detached: true });
+      expect(spawn.mock.calls[0]?.[0]?.args).toContain("--od-launcher-delegated-generation");
+      expect(spawn.mock.calls[0]?.[0]?.args).toContain("opendesign://workspace/open?example=1");
+
+      await writeFile(value.launcherPaths.runtimePath, JSON.stringify({
+        active: { generation: 1, version: value.version }, channel: "beta",
+        lastSuccessful: { generation: 1, version: value.version }, namespace: value.namespace,
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      }));
+      expect(await launchUnsupervisedPayloadDesktop(options)).toBe(true);
+
+      await writeFile(value.launcherPaths.runtimePath, JSON.stringify({
+        active: { generation: 2, version: "1.2.3-beta.6" }, channel: "beta",
+        lastSuccessful: { generation: 1, version: value.version }, namespace: value.namespace,
+        schemaVersion: LAUNCHER_SCHEMA_VERSION,
+      }));
+      await writeFile(value.launcherPaths.attemptsPath, JSON.stringify({
+        channel: "beta", generation: 2, namespace: value.namespace,
+        schemaVersion: LAUNCHER_SCHEMA_VERSION, version: "1.2.3-beta.6",
+      }));
+      expect(await launchUnsupervisedPayloadDesktop(options)).toBe(true);
+      expect(spawn.mock.calls[2]?.[0]?.args).not.toContain("--od-launcher-delegated-generation");
+      expect(await launchUnsupervisedPayloadDesktop({ ...options, env: { ...env, OD_SIDECAR_SUPERVISED_CONTEXT: "present" } })).toBe(false);
+      expect(await launchUnsupervisedPayloadDesktop({ ...options, inspectOuter: async () => [{ pid: 4321, ppid: 1, command: "/unrelated" }] })).toBe(false);
+      stopOuter.mockClear();
+      await expect(launchUnsupervisedPayloadDesktop({ ...options, spawn: async () => { throw new Error("cannot spawn"); } })).rejects.toThrow("cannot spawn");
+      expect(stopOuter).not.toHaveBeenCalled();
+      await expect(launchUnsupervisedPayloadDesktop({ ...options, stopOuter: () => { throw new Error("cannot stop"); } })).rejects.toThrow("cannot stop");
+      expect(stop).toHaveBeenCalledWith({ termGraceMs: 0 });
+      await rm(value.launcherPaths.attemptsPath);
+      expect(await launchUnsupervisedPayloadDesktop(options)).toBe(false);
+    } finally {
+      await rm(value.root, { force: true, recursive: true });
+    }
+  });
   it("uses the explicit outer owner identity rather than inferring it from process ancestry", async () => {
     const value = await fixture();
     try {

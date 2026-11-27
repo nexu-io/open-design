@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import {
   LAUNCHER_SCHEMA_VERSION,
   buildLauncherAfterQuitArgs,
+  buildLauncherDelegatedArgs,
   buildLauncherHandoffResumeArgs,
   normalizeLauncherVersion,
   resolveLauncherPaths,
@@ -20,6 +21,7 @@ import {
   type LauncherVersionPointer,
 } from "@open-design/launcher-proto";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
+import { captureProcessSnapshotsByPids } from "@open-design/platform";
 import { spawnSidecar } from "@open-design/sidecar";
 import {
   APP_KEYS,
@@ -205,6 +207,72 @@ async function readAttempt(
   } catch {
     return null;
   }
+}
+
+/** Bridge launchers that predate supervised daemon processes. */
+export async function launchUnsupervisedPayloadDesktop(options: {
+  env?: NodeJS.ProcessEnv;
+  outerPid: number;
+  platform?: NodeJS.Platform;
+  spawn?: typeof spawnSidecar;
+  stopOuter?: (pid: number) => void;
+  inspectOuter?: typeof captureProcessSnapshotsByPids;
+}): Promise<boolean> {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const { OD_INSTALLATION_DIR: root, OD_APP_VERSION: version, OD_SIDECAR_NAMESPACE: namespace,
+    OD_SIDECAR_BASE: runtimeRoot, OD_DATA_DIR: dataRoot } = env;
+  if (env.OD_SIDECAR_SUPERVISED_CONTEXT != null || env.OD_SIDECAR_SOURCE !== SIDECAR_SOURCES.PACKAGED ||
+      (platform !== "darwin" && platform !== "win32") || !root || !isAbsolute(root) ||
+      !version || !namespace || !runtimeRoot || !dataRoot || options.outerPid <= 0) return false;
+
+  let appVersion: string;
+  try { appVersion = normalizeLauncherVersion(version); } catch { return false; }
+  const channel = releaseChannelFromVersion(appVersion)
+    ?? releaseChannelFromNamespace(namespace, "default") ?? "stable";
+  const launcherPaths = resolveLauncherPaths({ channel, namespace, root });
+  const [runtime, attempt, outer, payloadExecutablePath] = await Promise.all([
+    readRuntime(launcherPaths), readAttempt(launcherPaths),
+    resolveInstalledOuterIdentity({ launcherPaths, outerPid: options.outerPid, platform }),
+    resolvePayloadExecutable({ appVersion, launcherPaths, namespace, platform }),
+  ]);
+  if (runtime?.active == null || runtime.lastSuccessful == null || outer == null ||
+      payloadExecutablePath == null || !samePointer(attempt, runtime.active)) return false;
+  const [outerProcess] = await (options.inspectOuter ?? captureProcessSnapshotsByPids)([outer.pid]);
+  const expected = platform === "win32" ? outer.executablePath.toLowerCase() : outer.executablePath;
+  const command = platform === "win32" ? outerProcess?.command.toLowerCase() : outerProcess?.command;
+  if (command == null || ![expected, `"${expected}"`].some((prefix) =>
+    command === prefix || command.startsWith(`${prefix} `))) return false;
+  const deepLink = outerProcess?.command.match(/(?:^|\s)["']?(opendesign:\/\/[^\s"']+)/)?.[1];
+  const selected = runtime.active.version === appVersion ? runtime.active
+    : runtime.lastSuccessful.version === appVersion ? runtime.lastSuccessful : null;
+  if (selected == null) return false;
+  const generation = await (options.spawn ?? spawnSidecar)({
+    args: [
+      ...buildLauncherAfterQuitArgs({ targetPid: outer.pid, timeoutMs: HANDOFF_PAYLOAD_WAIT_TIMEOUT_MS }),
+      ...(samePointer(selected, runtime.active) ? buildLauncherDelegatedArgs(selected) : []),
+      ...(deepLink == null ? [] : [deepLink]),
+    ],
+    command: payloadExecutablePath,
+    cwd: dirname(payloadExecutablePath),
+    detached: true,
+    env: desktopProcessEnv(env, runtimeRoot),
+    logFd: null,
+    resources: { dataRoot, ownerPid: null, port: 0, runtimeRoot },
+    stamp: { app: APP_KEYS.DESKTOP, channel, mode: SIDECAR_MODES.RUNTIME, namespace, source: SIDECAR_SOURCES.PACKAGED },
+  });
+  try {
+    // The legacy outer is still waiting for this daemon, before desktop or web
+    // startup. Ask it to exit only after the replacement has been spawned.
+    (options.stopOuter ?? ((pid) => process.kill(pid, "SIGTERM")))(outer.pid);
+  } catch (error) {
+    const cleanup = await generation.stop({ termGraceMs: 0 });
+    if (cleanup.remainingPids.length > 0) {
+      throw new Error(`payload desktop handoff rollback left generation: ${cleanup.remainingPids.join(", ")}`, { cause: error });
+    }
+    throw error;
+  }
+  return true;
 }
 
 async function resolveInstalledOuterIdentity(options: {
