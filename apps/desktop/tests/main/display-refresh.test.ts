@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { attachDisplayRefresh } from '../../src/main/display-refresh.js';
 
-function fixture(platform = 'darwin', rendererScale?: () => number) {
+function fixture(platform = 'darwin', rendererScale?: () => number | Promise<number>) {
   const screen = Object.assign(new EventEmitter(), {
     getDisplayMatching: vi.fn(() => ({ scaleFactor: 2 })),
     getAllDisplays: () => [{}, {}],
@@ -10,6 +10,7 @@ function fixture(platform = 'darwin', rendererScale?: () => number) {
   const powerMonitor = new EventEmitter();
   let bounds = { x: 100, y: 200, width: 1280, height: 900 };
   const window = Object.assign(new EventEmitter(), {
+    webContents: new EventEmitter(),
     isDestroyed: vi.fn(() => false),
     isVisible: vi.fn(() => true),
     isMinimized: vi.fn(() => false),
@@ -25,11 +26,12 @@ function fixture(platform = 'darwin', rendererScale?: () => number) {
     showInactive: vi.fn(),
   });
   const notify = vi.fn();
+  const observeScale = vi.fn();
   const dispose = attachDisplayRefresh({ platform, screen, powerMonitor,
-    getWindows: () => [window], notify, setTimeout, clearTimeout,
+    getWindows: () => [window], notify, observeScale, setTimeout, clearTimeout,
     ...(rendererScale ? { readRendererScale: async () => rendererScale(), now: () => Date.now() } : {}) });
   const nativeResize = (next: typeof bounds) => { bounds = { ...next }; };
-  return { screen, powerMonitor, window, notify, dispose, nativeResize };
+  return { screen, powerMonitor, window, notify, observeScale, dispose, nativeResize };
 }
 
 describe('macOS display refresh', () => {
@@ -231,6 +233,212 @@ describe('macOS display refresh', () => {
 
   describe('scale guard', () => {
     const reasonsOf = (f: ReturnType<typeof fixture>) => f.notify.mock.calls.map((call) => call[1].reasons);
+
+    it('checks the first visible window without a focus or display event', async () => {
+      const readScale = vi.fn(() => 1);
+      const f = fixture('darwin', readScale);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(1000 + 16);
+      expect(readScale).toHaveBeenCalledOnce();
+      expect(reasonsOf(f)).toEqual([['scale-recheck']]);
+      f.dispose();
+    });
+
+    it('replays a focus check deferred by a gesture', async () => {
+      const readScale = vi.fn(() => 1);
+      const f = fixture('darwin', readScale);
+      f.window.emit('focus');
+      await vi.advanceTimersByTimeAsync(900);
+      f.window.emit('will-resize');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(readScale).not.toHaveBeenCalled();
+      f.window.emit('resized');
+      await vi.advanceTimersByTimeAsync(1000 + 16);
+      expect(readScale).toHaveBeenCalledOnce();
+      expect(reasonsOf(f)).toEqual([['scale-recheck']]);
+      f.dispose();
+    });
+
+    it('replays a pending scale check when the window is shown after being hidden', async () => {
+      const readScale = vi.fn(() => 1);
+      const f = fixture('darwin', readScale);
+      f.window.emit('focus');
+      f.window.isVisible.mockReturnValue(false);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(readScale).not.toHaveBeenCalled();
+      f.window.isVisible.mockReturnValue(true);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(1000 + 16);
+      expect(readScale).toHaveBeenCalledOnce();
+      f.dispose();
+    });
+
+    it('samples the renderer again after re-show even without a new focus event', async () => {
+      const readScale = vi.fn(() => 1);
+      const f = fixture('darwin', readScale);
+      f.window.isFocused.mockReturnValue(false);
+      f.window.emit('focus');
+      await vi.advanceTimersByTimeAsync(1000 + 16 + 1000);
+      expect(f.window.showInactive).toHaveBeenCalledOnce();
+      readScale.mockReturnValue(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(readScale).toHaveBeenCalledTimes(3);
+      expect(f.observeScale.mock.calls.map(([entry]) => entry)).toEqual([
+        { reason: 'focus', phase: 'initial', nativeScale: 2, rendererScale: 1, outcome: 'refresh' },
+        { reason: 'focus', phase: 'after-refresh', nativeScale: 2, rendererScale: 1, outcome: 'reshow' },
+        { reason: 'focus', phase: 'after-reshow', nativeScale: 2, rendererScale: 2, outcome: 'ok' },
+      ]);
+      expect(f.window.hide).toHaveBeenCalledOnce();
+      f.dispose();
+    });
+
+    it('records a persistent mismatch after one re-show without starting another recovery', async () => {
+      const f = fixture('darwin', () => 1);
+      f.window.show.mockImplementation(() => {
+        f.window.emit('show');
+        f.window.emit('focus');
+      });
+      f.window.webContents.emit('did-finish-load');
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(f.observeScale).toHaveBeenLastCalledWith({
+        reason: 'renderer-load',
+        phase: 'after-reshow',
+        nativeScale: 2,
+        rendererScale: 1,
+        outcome: 'still-low',
+      });
+      expect(f.window.hide).toHaveBeenCalledOnce();
+      expect(f.window.setBounds).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+      f.dispose();
+    });
+
+    it('retries an unavailable renderer sample once and records when no sample was available', async () => {
+      const readScale = vi.fn(() => { throw new Error('renderer unavailable'); });
+      const f = fixture('darwin', readScale);
+      f.window.webContents.emit('did-finish-load');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(readScale).toHaveBeenCalledTimes(2);
+      expect(f.observeScale).toHaveBeenCalledExactlyOnceWith({
+        reason: 'renderer-load',
+        phase: 'initial',
+        nativeScale: 2,
+        rendererScale: null,
+        outcome: 'unavailable',
+      });
+      expect(f.window.setBounds).not.toHaveBeenCalled();
+      f.dispose();
+    });
+
+    it('ignores a pre-minimize renderer result and checks the restored window', async () => {
+      const old = Promise.withResolvers<number>();
+      const readScale = vi.fn((): number | Promise<number> => 1).mockReturnValueOnce(old.promise);
+      const f = fixture('darwin', readScale);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(1000);
+      f.window.isMinimized.mockReturnValue(true);
+      f.window.emit('minimize');
+      f.window.isMinimized.mockReturnValue(false);
+      f.window.emit('restore');
+      old.resolve(2);
+      await vi.advanceTimersByTimeAsync(1000 + 16);
+      expect(readScale).toHaveBeenCalledTimes(2);
+      expect(f.observeScale).toHaveBeenCalledExactlyOnceWith({
+        reason: 'show', phase: 'initial', nativeScale: 2, rendererScale: 1, outcome: 'refresh',
+      });
+      f.dispose();
+    });
+
+    it('ends a recovery check after two renderer reads miss their deadline', async () => {
+      const stalled = Promise.withResolvers<number>();
+      const readScale = vi.fn((): number | Promise<number> => stalled.promise).mockReturnValueOnce(1);
+      const f = fixture('darwin', readScale);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(16 + 5000);
+      expect(readScale).toHaveBeenCalledTimes(3);
+      expect(f.observeScale).toHaveBeenLastCalledWith({
+        reason: 'show', phase: 'after-refresh', nativeScale: 2, rendererScale: null, outcome: 'unavailable',
+      });
+      stalled.resolve(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(f.window.hide).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      f.dispose();
+    });
+
+    it('finishes an interrupted refresh before it can escalate to re-show', async () => {
+      const f = fixture('darwin', () => 1);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(1000);
+      f.window.emit('will-resize');
+      f.window.emit('resized');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(f.window.invalidateShadow).toHaveBeenCalledOnce();
+      expect(f.window.hide).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(16);
+      expect(f.window.hide).toHaveBeenCalledOnce();
+      f.dispose();
+    });
+
+    it('coalesces a display refresh during a scale recovery pulse without changing the baseline width', async () => {
+      const f = fixture('darwin', () => 1);
+      const bounds = f.window.getBounds();
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(505);
+      f.powerMonitor.emit('resume');
+      await vi.advanceTimersByTimeAsync(500);
+      expect(f.window.getBounds().width).toBe(bounds.width + 1);
+      await vi.advanceTimersByTimeAsync(32);
+      expect(f.window.getBounds()).toEqual(bounds);
+      expect(reasonsOf(f)).toEqual([['scale-recheck'], ['resume']]);
+      f.dispose();
+    });
+
+    it('rejects a renderer read that started before a wake refresh', async () => {
+      const old = Promise.withResolvers<number>();
+      const readScale = vi.fn((): number | Promise<number> => 1).mockReturnValueOnce(old.promise);
+      const f = fixture('darwin', readScale);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(505);
+      f.powerMonitor.emit('resume');
+      await vi.advanceTimersByTimeAsync(516);
+      old.resolve(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(readScale).toHaveBeenCalledTimes(2);
+      expect(f.observeScale).toHaveBeenCalledExactlyOnceWith({
+        reason: 'show', phase: 'initial', nativeScale: 2, rendererScale: 1, outcome: 'refresh',
+      });
+      f.dispose();
+    });
+
+    it('drops an interrupted scale correction when a new renderer becomes ready', async () => {
+      const readScale = vi.fn(() => 2).mockReturnValueOnce(1);
+      const f = fixture('darwin', readScale);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(1000);
+      f.window.emit('will-resize');
+      f.window.webContents.emit('did-finish-load');
+      f.window.emit('resized');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(f.window.invalidateShadow).not.toHaveBeenCalled();
+      expect(f.observeScale).toHaveBeenLastCalledWith({
+        reason: 'renderer-load', phase: 'initial', nativeScale: 2, rendererScale: 2, outcome: 'ok',
+      });
+      f.dispose();
+    });
+
+    it('waits for an attached macOS sheet to close before re-showing the window', async () => {
+      const f = fixture('darwin', () => 1);
+      f.window.emit('show');
+      await vi.advanceTimersByTimeAsync(1000 + 16);
+      f.window.emit('sheet-begin');
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(f.window.hide).not.toHaveBeenCalled();
+      f.window.emit('sheet-end');
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(f.window.hide).toHaveBeenCalledOnce();
+      f.dispose();
+    });
 
     it('leaves a window alone when the renderer draws at the display scale', async () => {
       const f = fixture('darwin', () => 2);

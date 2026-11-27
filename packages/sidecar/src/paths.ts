@@ -119,7 +119,7 @@ export function resolveNamespaceRoot<TStamp extends RuntimeLayoutStampShape>({
  *   pre-namespace source runtime root (see `tools/dev/src/config.ts`), so the
  *   namespace root is `base/<namespace>` — exactly what `resolveNamespaceRoot`
  *   computes.
- * - **packaged (runtime mode):** the orchestrator launches every child with
+ * - **packaged (interactive or headless):** the orchestrator launches every child with
  *   `base = <namespaceRoot>/runtime` (see `apps/packaged/src/paths.ts` →
  *   `runtimeRoot`, wired in `apps/packaged/src/sidecars.ts`), while the actual
  *   logs live as a sibling at `<namespaceRoot>/logs`. Re-appending the
@@ -128,20 +128,19 @@ export function resolveNamespaceRoot<TStamp extends RuntimeLayoutStampShape>({
  *   resolved that way is an ENOENT — which is why packaged diagnostics bundles
  *   used to capture none of them.
  *
- * Callers pass their contract's runtime-mode constant (e.g.
- * `SIDECAR_MODES.RUNTIME`) so this generic helper does not have to hardcode
- * OpenDesign's mode strings.
+ * The launch source identifies the layout even when a packaged daemon keeps
+ * its headless stamp after the desktop window opens.
  */
 export function resolveRuntimeNamespaceRoot<TStamp extends RuntimeLayoutStampShape>({
   contract,
   runtime,
-  runtimeMode,
+  packagedSources,
 }: {
   contract: SidecarContractDescriptor<TStamp>;
-  runtime: Pick<SidecarRuntimeContext<TStamp>, "base" | "mode" | "namespace">;
-  runtimeMode: TStamp["mode"] | string;
+  runtime: Pick<SidecarRuntimeContext, "base" | "namespace" | "source">;
+  packagedSources: readonly string[];
 }): string {
-  if (runtime.mode === runtimeMode) {
+  if (packagedSources.includes(runtime.source)) {
     // packaged: `base` already points INTO the namespace tree
     // (`<namespaceRoot>/runtime`), so the namespace root is its parent.
     return dirname(resolve(runtime.base));

@@ -2287,6 +2287,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       const ratio: unknown = await window.webContents.executeJavaScript("window.devicePixelRatio");
       return Number(ratio) / window.webContents.getZoomFactor();
     },
+    observeScale: (observation) => {
+      console.info("[open-design desktop] main window display scale", observation);
+    },
     notify: (_window, refresh) => {
       if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
         window.webContents.send("od:appearance:display-refreshed", {

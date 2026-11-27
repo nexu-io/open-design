@@ -16,7 +16,7 @@ import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
-  SIDECAR_MODES,
+  SIDECAR_SOURCES,
   isSidecarMode,
   isSidecarSource,
   normalizeDesktopSidecarMessage,
@@ -872,7 +872,7 @@ async function runDesktopMainWithTiming(
   const namespaceRoot = resolveRuntimeNamespaceRoot({
     contract: OPEN_DESIGN_SIDECAR_CONTRACT,
     runtime,
-    runtimeMode: SIDECAR_MODES.RUNTIME,
+    packagedSources: [SIDECAR_SOURCES.PACKAGED, SIDECAR_SOURCES.TOOLS_PACK],
   });
   const desktopLogPath = resolveLogFilePath({
     app: APP_KEYS.DESKTOP,

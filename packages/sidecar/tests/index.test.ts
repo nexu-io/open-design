@@ -291,8 +291,8 @@ describe("resolveRuntimeNamespaceRoot", () => {
   it("appends the namespace for pre-namespace (dev) bases", () => {
     const namespaceRoot = resolveRuntimeNamespaceRoot({
       contract: fakeContract,
-      runtime: { base: "/runtime/base", mode: "dev", namespace: "alpha" },
-      runtimeMode: "prod",
+      runtime: { base: "/runtime/base", source: "tool", namespace: "alpha" },
+      packagedSources: ["installer"],
     });
     expect(namespaceRoot).toBe(join(resolve("/runtime/base"), "alpha"));
   });
@@ -302,11 +302,11 @@ describe("resolveRuntimeNamespaceRoot", () => {
   // `<namespaceRoot>/logs/...`. Re-appending the namespace (the old bug) would
   // point at `<namespaceRoot>/runtime/<namespace>/logs/...` → ENOENT.
   it("walks up out of the runtime dir for packaged bases", () => {
-    const runtime = { base: "/data/ns/alpha/runtime", mode: "prod", namespace: "alpha" } as const;
+    const runtime = { base: "/data/ns/alpha/runtime", source: "installer", namespace: "alpha" } as const;
     const namespaceRoot = resolveRuntimeNamespaceRoot({
       contract: fakeContract,
       runtime,
-      runtimeMode: "prod",
+      packagedSources: ["installer"],
     });
     expect(namespaceRoot).toBe(resolve("/data/ns/alpha"));
     expect(
