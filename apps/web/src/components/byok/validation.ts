@@ -1,5 +1,6 @@
 import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import type { ApiProtocol, ProviderModelOption } from '../../types';
+import { isSuggestedTextModel } from '../providerModelsCache';
 
 export type ByokDraftField = 'api_key' | 'base_url' | 'model';
 
@@ -236,7 +237,7 @@ export function resolveByokModelPreference({
   const explicit = currentModel.trim();
   if (explicit) return { model: explicit, source: 'explicit' };
   const enabledAccountModels = accountModels.filter(
-    (model) => model.enabled !== false && model.id.trim(),
+    (model) => model.enabled !== false && model.id.trim() && isSuggestedTextModel(model.id),
   );
   const enabledAccountModelIds = new Set(
     enabledAccountModels.map((model) => model.id.trim()),
