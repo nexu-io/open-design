@@ -171,10 +171,13 @@ export async function discoverAuthServer(
   ])];
   for (const url of candidates) {
     const json = await fetchJson<AuthorizationServerMetadata>(url, fetchImpl);
-    if (json && typeof json.authorization_endpoint === 'string' && typeof json.token_endpoint === 'string') {
-      // Spread first so the explicit issuer wins (otherwise duplicate-key
-      // assignments under exactOptionalPropertyTypes complain).
-      return { ...json, issuer: json.issuer ?? issuer };
+    if (json === null) continue;
+    // OIDC Discovery 1.0 §4.3 and RFC 8414 §3.3 require exact issuer
+    // identity. Trimming the discovery URL's path must not change it.
+    // Do not try another candidate after a missing or mismatched issuer.
+    if (json.issuer !== issuer) return null;
+    if (typeof json.authorization_endpoint === 'string' && typeof json.token_endpoint === 'string') {
+      return json;
     }
   }
   return null;

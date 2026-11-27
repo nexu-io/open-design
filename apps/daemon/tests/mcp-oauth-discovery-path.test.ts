@@ -49,7 +49,7 @@ describe('MCP OAuth issuer-path discovery', () => {
     };
   }
 
-  it.each(['/realms/design', '/realms/design/', '/tenants/%E5%9B%A2%E9%98%9F'])(
+  it.each(['', '/', '/realms/design', '/realms/design/', '/tenants/%E5%9B%A2%E9%98%9F'])(
     'discovers the OIDC configuration appended to issuer path %s',
     async (issuerPath) => {
       const issuer = `${origin}${issuerPath}`;
@@ -86,6 +86,97 @@ describe('MCP OAuth issuer-path discovery', () => {
     routes.set('/.well-known/openid-configuration/realms/design', document);
 
     expect(await discoverAuthServer(issuer)).toEqual(document);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['non-string', 42],
+    ['empty', ''],
+    ['another origin', 'https://other.example/realms/design'],
+    ['another tenant', '/realms/other'],
+    ['a trailing slash', '/realms/design/'],
+    ['different percent encoding', '/realms/%64esign'],
+  ] as const)('rejects an OIDC document with %s issuer without trying another document', async (_label, returnedIssuer) => {
+    const issuer = `${origin}/realms/design`;
+    const value = typeof returnedIssuer === 'string' && returnedIssuer.startsWith('/')
+      ? `${origin}${returnedIssuer}`
+      : returnedIssuer;
+    routes.set('/realms/design/.well-known/openid-configuration', { ...metadata(issuer), issuer: value });
+    routes.set('/.well-known/oauth-authorization-server', metadata(issuer));
+    routes.set('/.well-known/openid-configuration', metadata(issuer));
+
+    expect(await discoverAuthServer(issuer)).toBeNull();
+    expect(requests.map((request) => request.path)).toEqual([
+      '/.well-known/oauth-authorization-server/realms/design',
+      '/.well-known/openid-configuration/realms/design',
+      '/realms/design/.well-known/openid-configuration',
+    ]);
+  });
+
+  it.each(['oauth-authorization-server', 'openid-configuration'])(
+    'also rejects an RFC 8414 %s document with a different issuer',
+    async (suffix) => {
+      const issuer = `${origin}/realms/design`;
+      const metadataPath = `/.well-known/${suffix}/realms/design`;
+      routes.set(metadataPath, metadata(`${origin}/other`));
+      routes.set('/realms/design/.well-known/openid-configuration', metadata(issuer));
+
+      expect(await discoverAuthServer(issuer)).toBeNull();
+      expect(requests.at(-1)?.path).toBe(metadataPath);
+    },
+  );
+
+  it.each(['/', '/realms/design/'])('distinguishes issuer %s from the same URL without its final slash', async (issuerPath) => {
+    const issuer = `${origin}${issuerPath}`;
+    const trimmed = issuerPath.replace(/\/+$/, '');
+    routes.set(`${trimmed}/.well-known/openid-configuration`, metadata(`${origin}${trimmed}`));
+
+    expect(await discoverAuthServer(issuer)).toBeNull();
+  });
+
+  it('preserves a trailing slash in a valid RFC 8414 issuer', async () => {
+    const issuer = `${origin}/realms/design/`;
+    const document = metadata(issuer);
+    routes.set('/.well-known/oauth-authorization-server/realms/design', document);
+
+    expect(await discoverAuthServer(issuer)).toEqual(document);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('accepts an origin-level fallback only when it identifies the requested issuer', async () => {
+    const issuer = `${origin}/realms/design`;
+    const document = metadata(issuer);
+    routes.set('/.well-known/openid-configuration', document);
+
+    expect(await discoverAuthServer(issuer)).toEqual(document);
+  });
+
+  it('validates issuer identity when the OIDC and RFC layouts share an origin-level URL', async () => {
+    routes.set('/.well-known/openid-configuration', metadata(`${origin}/other`));
+
+    expect(await discoverAuthServer(origin)).toBeNull();
+  });
+
+  it.each(['missing', 'mismatched'])('stops beginAuth before registering a client for a %s issuer', async (kind) => {
+    const issuer = `${origin}/realms/design`;
+    routes.set('/.well-known/oauth-protected-resource/mcp', {
+      resource: `${origin}/mcp`,
+      authorization_servers: [issuer],
+    });
+    routes.set('/realms/design/.well-known/openid-configuration', {
+      ...metadata(`${origin}/other`),
+      issuer: kind === 'missing' ? undefined : `${origin}/other`,
+    });
+    routes.set('/other/register', { client_id: 'wrong-client' });
+    routes.set('/.well-known/openid-configuration', metadata(issuer));
+    routes.set('/realms/design/register', { client_id: 'fallback-client' });
+
+    await expect(beginAuth({
+      serverId: 'test-mcp', serverUrl: `${origin}/mcp`, redirectUri: `${origin}/callback`, dataDir,
+    })).rejects.toThrow(/could not discover OAuth metadata/);
+    expect(requests.some((request) => request.method === 'POST')).toBe(false);
+    expect(requests.some((request) => request.path === '/.well-known/openid-configuration')).toBe(false);
   });
 
   it('requests each metadata URL only once for an origin-only issuer', async () => {
