@@ -391,7 +391,15 @@ async function writeVersionManifest(
   if (typeof options.deletedAt === 'number' && Number.isFinite(options.deletedAt)) {
     manifest.deletedAt = options.deletedAt;
   }
-  await writeFile(path.join(root, VERSION_MANIFEST), JSON.stringify(manifest, null, 2));
+  const manifestPath = path.join(root, VERSION_MANIFEST);
+  const temporaryPath = `${manifestPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, JSON.stringify(manifest, null, 2));
+    await rename(temporaryPath, manifestPath);
+  } finally {
+    // Keep the last complete manifest readable if writing or publishing fails.
+    await rm(temporaryPath, { force: true }).catch(() => {});
+  }
 }
 
 function publicVersion(entry: VersionEntry, currentId: string | null): ProjectFileVersion {
