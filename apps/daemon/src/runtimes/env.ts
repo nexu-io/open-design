@@ -206,6 +206,30 @@ export function spawnEnvForAgent(
     if (!env.OPENCODE_DISABLE_PROJECT_CONFIG?.trim()) {
       env.OPENCODE_DISABLE_PROJECT_CONFIG = 'true';
     }
+    if (agentId === 'byok-opencode') {
+      // BYOK OpenCode receives its entire provider, MCP, and permission config
+      // via OPENCODE_CONFIG_CONTENT. Isolate it from the user's global OpenCode
+      // configuration (~/.config/opencode/opencode.json[c] or OPENCODE_CONFIG*)
+      // so an incompatible standalone CLI config cannot make the bundled
+      // runtime exit before generation (issue #9365).
+      stripKeysCaseInsensitive(env, [
+        'OPENCODE_CONFIG',
+        'OPENCODE_CONFIG_DIR',
+      ]);
+      const dataDir = envValue(env, 'OD_DATA_DIR')?.trim();
+      if (dataDir) {
+        const byokHome = path.join(dataDir, 'byok-opencode', 'opencode-home');
+        const byokConfigHome = path.join(byokHome, '.config');
+        if (!envValue(expandedConfiguredEnv, 'OPENCODE_TEST_HOME')) {
+          stripKeysCaseInsensitive(env, ['OPENCODE_TEST_HOME']);
+          env.OPENCODE_TEST_HOME = byokHome;
+        }
+        if (!envValue(expandedConfiguredEnv, 'XDG_CONFIG_HOME')) {
+          stripKeysCaseInsensitive(env, ['XDG_CONFIG_HOME']);
+          env.XDG_CONFIG_HOME = byokConfigHome;
+        }
+      }
+    }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'mimo') {
