@@ -503,8 +503,14 @@ child.on('exit', (code) => {
     }
   });
 
-  it('does not retry credential failures from `vela model list --format json`', async () => {
-    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-invalid-key-'));
+  // The retry check used to scan the whole execFile error message, which starts
+  // with the command path. A path (or temp dir) that happened to contain "502",
+  // "503", "504" or "timeout" turned a 401 into three attempts.
+  it.each([
+    ['a plain install path', 'od-amr-invalid-key-'],
+    ['an install path containing a 5xx-looking number', 'od-amr-invalid-key-503-timeout-'],
+  ])('does not retry credential failures from `vela model list --format json` (%s)', async (_label, prefix) => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), prefix));
     const stateFile = path.join(tempDir, 'invalid-key-state.json');
     const wrapperPath = path.join(tempDir, 'vela-wrapper');
     const wrapperSource = `#!/usr/bin/env node
@@ -536,6 +542,30 @@ process.exit(2);
       expect(existsSync(stateFile)).toBe(true);
       const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
       expect(attempts.attempts).toBe(1);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('still retries an upstream 503 reported by `vela model list --format json`', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'od-amr-upstream-503-'));
+    const stateFile = path.join(tempDir, 'upstream-503-state.json');
+    const wrapperPath = path.join(tempDir, 'vela-wrapper');
+    writeFileSync(wrapperPath, `#!/usr/bin/env node
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const stateFile = process.env.RETRY_STATE_FILE;
+const state = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : { attempts: 0 };
+state.attempts += 1;
+writeFileSync(stateFile, JSON.stringify(state), 'utf8');
+process.stderr.write('Error: list Link models: API request failed with status 503: unavailable\\n');
+process.exit(1);
+`, 'utf8');
+    chmodSync(wrapperPath, 0o755);
+    try {
+      await expect(amrAgentDef.fetchModels?.(wrapperPath, { ...process.env, RETRY_STATE_FILE: stateFile }))
+        .rejects.toThrow(/status 503/);
+      const attempts = JSON.parse(readFileSync(stateFile, 'utf8')) as { attempts: number };
+      expect(attempts.attempts).toBe(3);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
