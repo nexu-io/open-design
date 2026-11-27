@@ -24,6 +24,9 @@ export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT
 export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
 export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
+// Mutable directory for the standalone web server's runtime cache. Read by
+// apps/web/next-cache-handler.cjs so Next never writes into the app bundle.
+export const PACKAGED_WEB_CACHE_DIR_ENV = "OD_WEB_CACHE_DIR";
 
 export type PackagedWebOutputMode = "server" | "standalone";
 export type PackagedAmrProfile = "prod" | "test" | "feature-test" | "local";

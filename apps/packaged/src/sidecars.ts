@@ -34,7 +34,12 @@ import {
 } from "@open-design/platform";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
-import type { PackagedWebOutputMode } from "./config.js";
+import {
+  PACKAGED_WEB_CACHE_DIR_ENV,
+  PACKAGED_WEB_OUTPUT_MODE_ENV,
+  PACKAGED_WEB_STANDALONE_ROOT_ENV,
+  type PackagedWebOutputMode,
+} from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 import {
   prewarmPackagedFiles,
@@ -748,6 +753,34 @@ export function buildPackagedDaemonSpawnEnv(
   };
 }
 
+/**
+ * Pure helper: assemble the web sidecar spawn env for a packaged runtime.
+ *
+ * The standalone web server runs from the read-only, code-signed app bundle,
+ * so its runtime cache must live in namespace-scoped mutable app data. The
+ * cache dir is passed for standalone output only; the server output mode is
+ * left unchanged.
+ */
+export function buildPackagedWebSpawnEnv(
+  paths: Pick<PackagedNamespacePaths, "cacheRoot">,
+  options: {
+    daemonPort: string;
+    webOutputMode: PackagedWebOutputMode;
+    webStandaloneRoot: string | null;
+  },
+): NodeJS.ProcessEnv {
+  return {
+    [SIDECAR_ENV.DAEMON_PORT]: options.daemonPort,
+    [SIDECAR_ENV.WEB_PORT]: "0",
+    ...(options.webStandaloneRoot == null ? {} : { [PACKAGED_WEB_STANDALONE_ROOT_ENV]: options.webStandaloneRoot }),
+    ...(options.webOutputMode === "standalone"
+      ? { [PACKAGED_WEB_CACHE_DIR_ENV]: join(paths.cacheRoot, "web") }
+      : {}),
+    [PACKAGED_WEB_OUTPUT_MODE_ENV]: options.webOutputMode,
+    PORT: "0",
+  };
+}
+
 function pickPackagedDesktopHandoffEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const selected: NodeJS.ProcessEnv = {};
   for (const key of PACKAGED_DESKTOP_HANDOFF_ENV_KEYS) {
@@ -1092,13 +1125,11 @@ export async function startPackagedSidecars(
         app: APP_KEYS.WEB,
         channel,
         entryPath: webSidecarEntry,
-        env: {
-          [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
-          [SIDECAR_ENV.WEB_PORT]: "0",
-          ...(options.webStandaloneRoot == null ? {} : { OD_WEB_STANDALONE_ROOT: options.webStandaloneRoot }),
-          OD_WEB_OUTPUT_MODE: options.webOutputMode,
-          PORT: "0",
-        },
+        env: buildPackagedWebSpawnEnv(paths, {
+          daemonPort,
+          webOutputMode: options.webOutputMode,
+          webStandaloneRoot: options.webStandaloneRoot,
+        }),
         electronNodeCommand: options.electronNodeCommand,
         nodeCommand: options.nodeCommand,
         paths,

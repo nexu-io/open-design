@@ -80,6 +80,8 @@ function resolveDistDir(defaultValue: string) {
   return toPosixPath(isAbsolute(configured) ? relative(WEB_ROOT, configured) || '.' : configured);
 }
 
+const STANDALONE_CACHE_HANDLER = resolve(WEB_ROOT, 'next-cache-handler.cjs');
+
 const DIST_DIR = shouldStaticExport && !process.env.OD_WEB_DIST_DIR
   ? null
   : resolveDistDir('.next');
@@ -237,6 +239,14 @@ const nextConfig: NextConfig = {
     : webOutputMode === 'standalone'
       ? {
         output: 'standalone' as const,
+        // Packaged desktop builds run the standalone server from a signed,
+        // read-only app bundle, so no runtime write may target the build
+        // directory (#7284). ISR/fetch cache entries go through a handler
+        // that honors OD_WEB_CACHE_DIR; the image optimizer's disk cache
+        // (`<distDir>/cache/images`) is disabled since the app does not use
+        // next/image and Next offers no relocatable image cache directory.
+        cacheHandler: STANDALONE_CACHE_HANDLER,
+        images: { maximumDiskCacheSize: 0 },
       }
       : !isProd
       ? {
