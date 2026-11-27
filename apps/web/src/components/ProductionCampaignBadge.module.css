@@ -8,4 +8,5 @@
 .badge > :global(opend-touchpoint) {
   display: block;
   max-width: 100%;
+  background: transparent;
 }

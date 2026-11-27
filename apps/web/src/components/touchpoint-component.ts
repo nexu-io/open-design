@@ -300,8 +300,10 @@ export class OpenDesignTouchpointElement extends TouchpointElementBase {
 		if (!style && this.shadowRoot) {
 			style = document.createElement("style");
 			style.dataset.velaTouchpointHost = "";
+			// Propagate --background via CSS custom properties above, but keep :host
+			// transparent so rounded/circular materials never show rectangular corner blocks.
 			style.textContent =
-				":host { color-scheme: var(--vela-touchpoint-theme); font-family: var(--vela-touchpoint-font-family); color: var(--foreground); background: var(--background); } *, *::before, *::after { box-sizing: border-box; }";
+				":host { color-scheme: var(--vela-touchpoint-theme); font-family: var(--vela-touchpoint-font-family); color: var(--foreground); background: transparent; } *, *::before, *::after { box-sizing: border-box; }";
 			this.shadowRoot.prepend(style);
 		}
 	}

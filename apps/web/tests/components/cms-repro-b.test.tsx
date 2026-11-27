@@ -190,13 +190,15 @@ describe("visual investigation witnesses (not pixel reproductions)", () => {
 		// traversal. With no layout rectangles/RAF paint, these mounts record no
 		// impression.
 	});
-	it("OPEND-3310 the custom-element host propagates background even outside component content", async () => {
+	it("OPEND-3310 the custom-element host propagates --background without painting an opaque host box", async () => {
 		const read = vi.spyOn(component, "readWebTouchpointHostContext");
 		read.mockReturnValue({ locale: "en-US", theme: "light", fontFamily: "sans-serif", cssVariables: { "--background": "#eee" } });
 		await show();
 		const host = document.querySelector("opend-touchpoint") as HTMLElement;
 		expect(host.style.getPropertyValue("--background")).toBe("#eee");
-		expect(host.shadowRoot?.querySelector("style[data-vela-touchpoint-host]")?.textContent).toContain("background: var(--background)");
+		const hostCss = host.shadowRoot?.querySelector("style[data-vela-touchpoint-host]")?.textContent;
+		expect(hostCss).toContain("background: transparent");
+		expect(hostCss).not.toContain("background: var(--background)");
 	});
 	it.each([1, 2])("OPEND-3323 hover positioning uses CSS coordinates at DPR %s without scaling content", async (dpr) => {
 		vi.stubGlobal("devicePixelRatio", dpr);
