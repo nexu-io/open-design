@@ -1275,6 +1275,21 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   }
 }
 
+/**
+ * Whether boot hydration may PUT the local config back to the daemon.
+ *
+ * A failed or aborted daemon read is non-authoritative: `fetchDaemonConfig`
+ * returns null when the GET fails, is aborted, or yields no config, and in
+ * that case the in-memory copy is likely client defaults (telemetry on,
+ * empty daemon-owned keys) that must not be PUT over the daemon's stored
+ * config. See #8560.
+ */
+export function shouldSyncBootConfigToDaemon(
+  daemonConfig: AppConfigPrefs | null,
+): boolean {
+  return daemonConfig != null;
+}
+
 export async function syncConfigToDaemon(
   config: AppConfig,
   options?: {
