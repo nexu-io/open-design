@@ -777,6 +777,7 @@ export async function createProject(
      */
     exampleReference?: CreateProjectExampleReference;
     workspaceContext?: WorkspaceCollabContext | null;
+    workspaceTarget?: { workspaceId: string };
   },
   retryOptions: CreateProjectRetryOptions = {},
 ): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string }> {

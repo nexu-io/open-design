@@ -1,3 +1,6 @@
+import { randomUUID } from '../utils/uuid';
+import { amrSendRejectionMessageKey, checkAmrSendPreflight, type SendAttempt } from '../runtime/amr-send-preflight';
+import { currentWorkspaceSendTarget } from '../collab/useWorkspaceContext';
 import { useRegistrationInvite } from './useRegistrationInvite';
 // EntryShell — the centered-hero entry layout.
 //
@@ -25,8 +28,6 @@ import {
 import {
   automaticStrategyTaskProfileForProjectMetadata,
   defaultScenarioPluginIdForProjectMetadata,
-  type AmrWalletSnapshot,
-  type WorkspaceBillingPreflight,
   type ChatSessionMode,
   type ConnectorDetail,
   type CreateProjectExampleReference,
@@ -118,14 +119,10 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import type { HomeAmrBalanceGateBlock } from './HomeAmrBalanceGateDialogs';
-import { AmrConcurrencyDialog } from './AmrConcurrencyDialog';
-import { readAmrRequestConcurrency } from '../runtime/amr-request-concurrency';
 import {
   amrBalanceBlockedDialog,
   amrBalanceDialogUpgradeIntent,
   resolveAmrBalanceBranch,
-  resolveAmrConcurrencyPresentation,
-  withAmrFundingPlan,
 } from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import {
@@ -134,7 +131,6 @@ import {
   retryUnavailableAmrBalanceGate,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { cachedHomeAmrFundingBlock, checkAmrFundingFeedback, confirmHomeAmrFundingAvailable, invalidateAmrFundingFeedback, noteHomeAmrFundingBlockPresented, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, takeHomeAmrFundingFastBlock } from '../runtime/amr-funding-feedback';
 import { ReferralNotice } from './ReferralNotice';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { HomeInviteSurface, HomeInviteTrigger } from './HomeInviteSurface';
@@ -164,12 +160,10 @@ import { TeamSlotPlaceholder } from './TeamSlotPlaceholder';
 import {
   notifyTeamProjectsChanged,
   notifyWorkspaceBillingRefresh,
-  shouldRefreshWorkspaceBilling,
   notifyWorkspaceContextRefresh,
   currentWorkspaceAccountGeneration,
   useTeamProjects,
   useWorkspaceBillingResponse,
-  WORKSPACE_BILLING_REFRESH_EVENT,
   useWorkspaceContext,
   workspaceResourceReadContext,
   workspaceBillingBalanceUsd,
@@ -367,6 +361,8 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   autoSendFirstMessage?: boolean;
   /** Exact workspace/member authority checked by the Home AMR preflight. */
   amrGatePrecheckWitness?: AmrBalanceGateScope;
+  amrSendAttempt?: SendAttempt;
+  workspaceTarget?: { workspaceId: string };
   /**
    * The optimistic project already flushed by `onBeginProjectCreation`. The
    * create reuses this id (the daemon accepts a caller-minted id) instead of
@@ -775,129 +771,13 @@ export function EntryShell({
   const homeFundingModelId = config.mode === 'daemon' && config.agentId === 'amr'
     ? effectiveAgentModelId(agents.find((agent) => agent.id === 'amr'), config.agentModels?.amr) ?? null
     : null;
+  const homeSendEpochRef = useRef(0);
+  const homeSendAbortRef = useRef<AbortController | null>(null);
+  const homeSendModelRef = useRef(homeFundingModelId);
+  homeSendModelRef.current = homeFundingModelId;
+  useEffect(() => () => { homeSendEpochRef.current++; homeSendAbortRef.current?.abort(); }, []);
   const homeFundingContext = workspaceContextState.failure === 'unsupported'
     ? null : workspaceResourceReadContext(workspaceContextState);
-  const homeFundingScope = amrBalanceGateScopeForWorkspaceContext(homeFundingContext);
-  const homeFundingIdentity = view === 'home' && config.mode === 'daemon' && config.agentId === 'amr' && homeFundingScope
-    ? JSON.stringify([currentWorkspaceAccountGeneration(), homeFundingScope, homeFundingModelId]) : null;
-  const homeFundingIdentityRef = useRef(homeFundingIdentity);
-  homeFundingIdentityRef.current = homeFundingIdentity;
-  const homeFundingWarmRef = useRef<{
-    identity: string; running: boolean; dirty: boolean; walletRevision: string | null;
-  } | null>(null);
-  const homeFundingBalanceRef = useRef<{ identity: string; balance: number } | null>(null);
-  const homeFundingAliveRef = useRef(true);
-  useEffect(() => {
-    homeFundingAliveRef.current = true;
-    return () => {
-      homeFundingAliveRef.current = false;
-      homeFundingWarmRef.current = null;
-    };
-  }, []);
-  const warmHomeFunding = (walletRevision: string | null = null) => {
-    if (!homeFundingIdentity || !homeFundingScope) return;
-    const identity = homeFundingIdentity;
-    const current = homeFundingWarmRef.current;
-    if (current?.identity === identity && current.running) {
-      // A wallet SSE and its billing projection carry the same opaque Vela
-      // revision. Only that exact pair shares a read; a distinct/legacy event
-      // still schedules a second authoritative preflight.
-      if (!walletRevision || current.walletRevision !== walletRevision) current.dirty = true;
-      return;
-    }
-    const state = { identity, running: true, dirty: false, walletRevision };
-    homeFundingWarmRef.current = state;
-    const read = () => {
-      if (!homeFundingAliveRef.current || homeFundingIdentityRef.current !== identity) return;
-      invalidateAmrFundingFeedback();
-      void checkAmrFundingFeedback(homeFundingScope, homeFundingModelId,
-        () => homeFundingAliveRef.current && homeFundingIdentityRef.current === identity)
-        .finally(() => {
-          if (homeFundingWarmRef.current !== state) return;
-          if (state.dirty) {
-            state.dirty = false;
-            read();
-          } else {
-            state.running = false;
-          }
-        });
-    };
-    read();
-  };
-  const cancelHomeFundingDialogRef = useRef<(() => void) | null>(null);
-  const homeConcurrencyPendingRef = useRef(false);
-  const homeConcurrencyEpochRef = useRef(0);
-  const [homeConcurrencyBlock, setHomeConcurrencyBlock] = useState<{
-    identity: string | null;
-    attempt: number;
-    preflight: WorkspaceBillingPreflight | null;
-    workspaceContext: ReturnType<typeof workspaceResourceReadContext>;
-  } | null>(null);
-  const homeConcurrencyPresentation = homeConcurrencyBlock
-    ? resolveAmrConcurrencyPresentation({
-        context: homeConcurrencyBlock.workspaceContext,
-        billing: workspaceBillingSummaryForContext(workspaceBillingResponse, homeConcurrencyBlock.workspaceContext),
-        preflight: homeConcurrencyBlock.preflight,
-      })
-    : null;
-  useEffect(() => {
-    homeConcurrencyEpochRef.current++;
-    return () => { homeConcurrencyEpochRef.current++; };
-  }, [homeFundingIdentity]);
-  useEffect(() => {
-    if (!homeFundingIdentity) return;
-    // Warm for display/recovery only. Home sends still require their own
-    // uncached evidence before handing the draft to project creation.
-    void checkAmrFundingFeedback(homeFundingScope, homeFundingModelId,
-      () => homeFundingAliveRef.current && homeFundingIdentityRef.current === homeFundingIdentity);
-    const refresh = () => {
-      if (cachedHomeAmrFundingBlock(homeFundingScope, homeFundingModelId)) warmHomeFunding();
-      else invalidateAmrFundingFeedback();
-    };
-    const invalidate = () => invalidateAmrFundingFeedback();
-    const invalidateOnVisible = () => {
-      if (document.visibilityState === 'visible') invalidateAmrFundingFeedback();
-    };
-    window.addEventListener(WORKSPACE_BILLING_REFRESH_EVENT, refresh);
-    window.addEventListener('focus', invalidate);
-    document.addEventListener('visibilitychange', invalidateOnVisible);
-    return () => {
-      window.removeEventListener(WORKSPACE_BILLING_REFRESH_EVENT, refresh);
-      window.removeEventListener('focus', invalidate);
-      document.removeEventListener('visibilitychange', invalidateOnVisible);
-      cancelHomeFundingDialogRef.current?.();
-    };
-    // The identity contains all scope/model fields; object allocation must not
-    // trigger more requests on unrelated composer renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeFundingIdentity]);
-  useEffect(() => {
-    // Billing publications may arrive after Home mounted with available funds.
-    // A zero-wallet projection asks for a model-specific preflight; it never
-    // decides insufficiency itself (the plan window may still cover the run).
-    const balance = workspaceBillingResponse
-      ? workspaceBillingBalanceUsd(workspaceBillingResponse, homeFundingContext) : null;
-    if (!homeFundingIdentity || balance == null || !Number.isFinite(Number(balance))) return;
-    const previous = homeFundingBalanceRef.current;
-    const numericBalance = Number(balance);
-    homeFundingBalanceRef.current = { identity: homeFundingIdentity, balance: numericBalance };
-    // Initial Home warm handles its first snapshot. A changed wallet projection
-    // rechecks the exact model, without treating wallet zero as insufficiency.
-    // The matching consumption SSE may already have started this read. Its
-    // following wallet projection is the same publication, not a second reason
-    // to invalidate a freshly confirmed shortfall between two reads.
-    if (previous?.identity === homeFundingIdentity && previous.balance !== numericBalance) {
-      const walletRevision = workspaceBillingResponse?.workspaceSnapshot?.revisions.wallet ?? null;
-      const sameConfirmedZero = numericBalance <= 0 && walletRevision
-        && homeFundingWarmRef.current?.identity === homeFundingIdentity
-        && homeFundingWarmRef.current.walletRevision === walletRevision
-        && recentHomeAmrFundingInsufficiency(homeFundingScope, homeFundingModelId);
-      if (!sameConfirmedZero) warmHomeFunding(walletRevision);
-    }
-    // Billing response identity changes only when the shared hook publishes a
-    // new read. Unrelated composer renders must not schedule recovery requests.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeFundingIdentity, workspaceBillingResponse]);
   const [goPlanSunsetMessagePending, setGoPlanSunsetMessagePending] = useState(false);
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
   // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`.
@@ -1129,29 +1009,7 @@ export function EntryShell({
     workspaceContext?.workspaceId,
     workspaceContext?.workspaceType,
   ]);
-  const invalidateHomeFunding = (event: Parameters<typeof shouldRefreshWorkspaceBilling>[0]) => {
-    if (!shouldRefreshWorkspaceBilling(event, homeFundingContext)) return;
-    if (event.type === 'wallet-balance-changed' || event.type === 'coding-plan-usage-changed') {
-      const warm = homeFundingWarmRef.current;
-      if (event.type === 'wallet-balance-changed' && event.revision
-        && warm?.identity === homeFundingIdentity && warm.walletRevision === event.revision
-        && recentHomeAmrFundingInsufficiency(homeFundingScope, homeFundingModelId)) {
-        // The same revision was already confirmed insufficient, even if its
-        // SSE arrived after the billing-triggered read completed.
-        return;
-      }
-      warmHomeFunding(event.type === 'wallet-balance-changed' ? event.revision ?? null : null);
-    } else {
-      invalidateAmrFundingFeedback();
-    }
-  };
   useWorkspaceInvalidation({
-    // Consumption may exhaust a wallet after Home mounted with available funds.
-    // A model-specific warm read provides the exact reason for the next click.
-    'billing-changed': invalidateHomeFunding,
-    'billing-subscription-changed': invalidateHomeFunding,
-    'wallet-balance-changed': invalidateHomeFunding,
-    'coding-plan-usage-changed': invalidateHomeFunding,
     'team-project-content-ready': ({ projectId, workspaceId }) => {
       const currentWorkspaceId = workspaceContext?.workspaceId;
       const currentWorkspaceMemberId = workspaceContext?.workspaceMemberId;
@@ -1614,162 +1472,33 @@ export function EntryShell({
           config.agentModels?.amr,
         )
       : undefined;
+    let sendAttempt: SendAttempt | undefined;
     if (isAmrSend) {
-      const scope = amrBalanceGateScopeForWorkspaceContext(
-        workspaceContextStateRef.current.failure === 'unsupported'
-          ? null : workspaceResourceReadContext(workspaceContextStateRef.current),
-      );
-      if (!scope && (workspaceContextStateRef.current.loading || workspaceContextStateRef.current.failure === 'unavailable')) {
-        throw new Error(t('home.amrGateUnavailable'));
-      }
-      if (homeConcurrencyPendingRef.current) return 'blocked' as const;
-      const hintEpoch = ++homeConcurrencyEpochRef.current;
-      const hintIdentity = homeFundingIdentityRef.current;
-      const hintAccountGeneration = currentWorkspaceAccountGeneration();
-      homeConcurrencyPendingRef.current = true;
-      const fundingIsCurrent = () => isSubmitCurrent() && hintEpoch === homeConcurrencyEpochRef.current
-        && hintIdentity === homeFundingIdentityRef.current
-        && hintAccountGeneration === currentWorkspaceAccountGeneration();
-      const showFundingBlock = async (
-        snapshot: AmrWalletSnapshot,
-        preflight: WorkspaceBillingPreflight | null,
-        sendEvidence?: Promise<{ kind: 'available' | 'insufficient' | 'unknown'; preflight: WorkspaceBillingPreflight | null }>,
-      ): Promise<boolean> => {
-        const identity = homeFundingIdentityRef.current;
+      const target = currentWorkspaceSendTarget();
+      if (target) {
+        const epoch = ++homeSendEpochRef.current;
         const accountGeneration = currentWorkspaceAccountGeneration();
-        const branch = withAmrFundingPlan(
-          resolveAmrBalanceBranch({ context: homeFundingContext, billing: workspaceBilling }),
-          homeFundingContext, preflight,
-        );
-        const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
-          let settled = false;
-          const finish = (value: 'retry' | 'dismiss') => {
-            if (settled) return;
-            settled = true;
-            cancelHomeFundingDialogRef.current = null;
-            resolve(value);
-          };
-          cancelHomeFundingDialogRef.current = () => finish('dismiss');
-          noteHomeAmrFundingBlockPresented(scope, amrModelId ?? null);
-          onAmrBalanceGateBlockChange({
-            reason: 'insufficient', dialog: amrBalanceBlockedDialog(branch),
-            upgradeIntent: amrBalanceDialogUpgradeIntent(branch), snapshot: { ...snapshot, profile: amrProfile ?? snapshot.profile },
-            modelId: amrModelId, fundingScope: scope, resolve: finish,
-          });
-          const refreshForNextSend = () => {
-            void checkAmrFundingFeedback(scope, amrModelId ?? null, fundingIsCurrent).then(() => {
-              if (identity !== homeFundingIdentityRef.current || accountGeneration !== currentWorkspaceAccountGeneration()) finish('dismiss');
-            });
-          };
-          if (sendEvidence) {
-            void sendEvidence.then((evidence) => {
-              if (!fundingIsCurrent()) return finish('dismiss');
-              // The pending same-click recovery updates the next attempt's
-              // cache; it never submits a dialog that was already dismissed.
-              if (evidence.kind === 'available' && evidence.preflight && scope) {
-                confirmHomeAmrFundingAvailable(scope, amrModelId ?? null, evidence.preflight);
-              } else {
-                refreshForNextSend();
-              }
-            });
-          } else {
-            refreshForNextSend();
-          }
-        });
-        onAmrBalanceGateBlockChange(null);
-        if (!isSubmitCurrent() || decision === 'dismiss' || identity !== homeFundingIdentityRef.current
-          || accountGeneration !== currentWorkspaceAccountGeneration()) return false;
-        invalidateAmrFundingFeedback();
-        return true;
-      };
-      // Both reads are side-effect free. Start fresh funds proof
-      // now, but never wait for it when the counter already proves full.
-      // Consume late failures even if an identity change or full counter exits.
-      const fundingEvidence = scope
-        ? readSendTimeAmrFundingEvidence(scope, amrModelId ?? null, fundingIsCurrent)
-          .catch(() => ({ kind: 'unknown' as const, preflight: null }))
-        : null;
-      const hintRequest = readAmrRequestConcurrency(scope);
-      // Either current, exact-scope refusal can settle this click. A confirmed
-      // funding refusal need not spend the rest of its 500ms budget waiting for
-      // a non-decisive Link hint; a full hint still wins when it arrives first.
-      const firstDecision = fundingEvidence
-        ? await Promise.race([
-          hintRequest.then((hint) => ({ source: 'hint' as const, hint })),
-          fundingEvidence.then((evidence) => ({ source: 'funding' as const, evidence })),
-        ])
-        : { source: 'hint' as const, hint: await hintRequest };
-      const hint = firstDecision.source === 'hint' ? firstDecision.hint
-        : firstDecision.evidence.kind === 'insufficient' ? null : await hintRequest;
-      homeConcurrencyPendingRef.current = false;
-      // A workspace, model, identity, route change or unmount while reading must
-      // never dispatch the earlier payload under the new principal.
-      if (!isSubmitCurrent() || hintEpoch !== homeConcurrencyEpochRef.current || hintIdentity !== homeFundingIdentityRef.current
-        || hintAccountGeneration !== currentWorkspaceAccountGeneration()) return 'blocked' as const;
-      if (hint?.status === 'full') {
-        setHomeConcurrencyBlock({
-          identity: hintIdentity, attempt: hintEpoch, preflight: null,
-          workspaceContext: homeFundingContext,
-        });
-        // The full hint never waits for funding. A late same-send read can
-        // explain the tier, but cannot send, reopen a dismissed dialog, or
-        // change a subsequent attempt's actions.
-        void fundingEvidence?.then((evidence) => {
-          if (!fundingIsCurrent()) return;
-          setHomeConcurrencyBlock((current) => current?.attempt === hintEpoch
-            ? { ...current, preflight: evidence.preflight } : current);
-        });
-        return 'blocked' as const;
-      }
-      const fastBlock = firstDecision.source === 'hint'
-        ? takeHomeAmrFundingFastBlock(scope, amrModelId ?? null) : null;
-      if (fastBlock && fundingEvidence) {
-        // Link has ruled out full for this click. A remembered, exact-member
-        // shortfall may paint once while fresh funds are still being checked.
-        // The next explicit click cannot replay this old negative.
-        if (!await showFundingBlock(fastBlock.snapshot, fastBlock.preflight, fundingEvidence)) return 'blocked' as const;
-      }
-      // Unknown is not proof of an available slot. Preserve the existing real
-      // Link request path and named-rejection fallback rather than inventing a
-      // client quota or blocking legitimate old CLI deployments.
-      // client VIEW-015/RUN-003: a current scoped Home draft must not create
-      // even an optimistic project while its funds remain unconfirmed. This is
-      // independent of the immediately expirable concurrency hint above. A
-      // recent insufficiency hint cannot block a new explicit click until this
-      // click's fresh read confirms it; funding may have recovered meanwhile.
-      let cachedBlock: AmrWalletSnapshot | null = null;
-      let fundingPreflight: WorkspaceBillingPreflight | null = null;
-      if (scope) {
-        const evidence = await fundingEvidence!;
-        if (!fundingIsCurrent()) return 'blocked' as const;
-        if (evidence.kind === 'unknown' || !evidence.preflight) throw new Error(t('home.amrGateUnavailable'));
-        fundingPreflight = evidence.preflight;
-        if (evidence.kind === 'insufficient') {
-          cachedBlock = {
-            status: 'available', profile: amrProfile ?? 'default', user: null,
-            balanceUsd: evidence.preflight.balanceUsd, updatedAt: evidence.preflight.generatedAt,
-            fetchedAt: new Date().toISOString(), stale: false, source: 'daemon_cache',
-          };
-        } else {
-          retireHomeAmrFundingBlock(scope, amrModelId ?? null, evidence.preflight);
+        sendAttempt = { workspaceId: target.workspaceId, modelId: amrModelId ?? null, clientRequestId: randomUUID(), accountGeneration, targetRevision: target.selectionRevision };
+        homeSendAbortRef.current?.abort();
+        const controller = new AbortController();
+        homeSendAbortRef.current = controller;
+        const attempt = sendAttempt;
+        const result = await checkAmrSendPreflight(attempt, { signal: controller.signal, isCurrent: () => {
+          const current = currentWorkspaceSendTarget();
+          return isSubmitCurrent() && homeSendEpochRef.current === epoch && currentWorkspaceAccountGeneration() === accountGeneration
+            && current?.workspaceId === attempt.workspaceId && current.selectionRevision === attempt.targetRevision
+            && homeSendModelRef.current === attempt.modelId;
+        } });
+        if (result.action === 'cancelled') return 'blocked' as const;
+        if (result.action === 'reject') {
+          if (result.rejection === 'unauthenticated') navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+          else throw new Error(t(amrSendRejectionMessageKey(result.rejection)));
+          return 'blocked' as const;
         }
       }
-      if (cachedBlock) {
-        if (!await showFundingBlock(cachedBlock, fundingPreflight!)) return 'blocked' as const;
-      }
     }
-    // A scoped AMR Home send reaches this point only after fresh funds proof;
-    // other local creation/legacy paths keep their existing handoff. Everything
-    // below runs behind that frame —
-    // this shell is unmounted the moment the hand-off navigates, so nothing
-    // after this line may rely on this instance's state or DOM. App owns the
-    // hand-off and the way back.
     if (!isSubmitCurrent()) return 'blocked' as const;
     const handoff = onBeginProjectCreation(createInput);
-    // Confirm sign-in behind the pending frame. The earlier Home observation
-    // can expire: Link still admits funding when the run starts, and
-    // ProjectView presents any live funding rejection without waiting on a
-    // display-wallet read. Dismissing a sign-in block restores the Home draft.
     let amrGatePrecheckWitness: AmrBalanceGateScope | undefined;
     let amrGatePrecheckPassed = false;
     if (isAmrSend) {
@@ -1847,15 +1576,12 @@ export function EntryShell({
         // result kind here to consider handling. `empty_not_blocked` also falls
         // through on purpose: it is a stood-down hard block, and Home has no
         // conversation to hang its card on. Do not re-add a branch here.
-        if (
-          currentWorkspaceAccountGeneration() !== gateAccountGeneration
-          || workspaceIdentityCacheKey(
-            workspaceContextStateRef.current.failure === 'unsupported'
-              ? null
-              : workspaceResourceReadContext(workspaceContextStateRef.current),
-          ) !== gateWorkspaceIdentity
-        ) {
-          continue;
+        const currentTarget = currentWorkspaceSendTarget();
+        if (currentWorkspaceAccountGeneration() !== gateAccountGeneration
+          || (sendAttempt ? currentTarget?.workspaceId !== sendAttempt.workspaceId || currentTarget.selectionRevision !== sendAttempt.targetRevision
+            : workspaceIdentityCacheKey(workspaceResourceReadContext(workspaceContextStateRef.current)) !== gateWorkspaceIdentity)) {
+          handoff.rollback();
+          return 'blocked' as const;
         }
         amrGatePrecheckWitness = gateScope;
         amrGatePrecheckPassed = true;
@@ -1870,6 +1596,7 @@ export function EntryShell({
       ...createInput,
       optimisticProjectId: handoff.projectId,
       ...(amrGatePrecheckWitness ? { amrGatePrecheckWitness } : {}),
+      ...(sendAttempt ? { amrSendAttempt: sendAttempt, workspaceTarget: { workspaceId: sendAttempt.workspaceId } } : {}),
     }));
     try {
       return await create();
@@ -2165,14 +1892,6 @@ export function EntryShell({
 
   return (
     <div className={`entry-shell entry-shell--no-header${['home', 'all-projects', 'projects', 'drafts'].includes(view) ? ` ${styles.memberFrame}` : ''}`}>
-      {homeConcurrencyBlock && homeConcurrencyPresentation && homeConcurrencyBlock.identity === homeFundingIdentity ? (
-        <AmrConcurrencyDialog pageName="home" stage="before_run" branch={homeConcurrencyPresentation.branch}
-          upgradeAllowed={homeConcurrencyPresentation.upgradeAllowed}
-          workspaceContext={homeConcurrencyBlock.workspaceContext}
-          profile={amrRegistrationStatus?.profile?.trim() || amrProfile}
-          consoleOrigin={amrRegistrationStatus?.consoleOrigin}
-          onClose={() => setHomeConcurrencyBlock(null)} />
-      ) : null}
       <div
         className={`entry${railOpen ? ' entry--rail-open' : ''}`}
         // The team/local shell is a labeled Manus-style rail, so widen the rail

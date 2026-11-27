@@ -1992,3 +1992,22 @@ describe('GET /api/workspace/members', () => {
     });
   });
 });
+
+describe('POST unified send preflight forwarding', () => {
+  it('does not read Workspace directory or display billing before forwarding', async () => {
+    const fetchSendPreflight = vi.fn(async () => ({ status: 200, body: { schemaVersion: 1, requestId: 'upstream', workspaceId: 'target', modelId: null, clientRequestId: 'attempt', decision: 'proceed' } }));
+    const fetchBilling = vi.fn();
+    const api = await startContextServer({ fetchSendPreflight, fetchBilling });
+    const body = { workspaceId: 'target', modelId: null, clientRequestId: 'attempt' };
+    expect(await api.req('/api/workspace/billing/send-preflight', { method: 'POST', body })).toMatchObject({ status: 200, body: { ...body, decision: 'proceed' } });
+    expect(fetchSendPreflight).toHaveBeenCalledWith(body, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(fetchBilling).not.toHaveBeenCalled();
+  });
+  it('validates request before upstream and leaves technical failure distinguishable', async () => {
+    const fetchSendPreflight = vi.fn(async () => { throw new Error('technical'); });
+    const api = await startContextServer({ fetchSendPreflight });
+    expect((await api.req('/api/workspace/billing/send-preflight', { method: 'POST', body: { workspaceId: 'target' } })).status).toBe(400);
+    expect(fetchSendPreflight).not.toHaveBeenCalled();
+    expect(await api.req('/api/workspace/billing/send-preflight', { method: 'POST', body: { workspaceId: 'target', modelId: null, clientRequestId: 'attempt' } })).toMatchObject({ status: 503, body: { error: 'send_preflight_unavailable' } });
+  });
+});

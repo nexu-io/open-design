@@ -39,7 +39,6 @@ import {
 import { I18nProvider } from '../../src/i18n';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
 import { resolveAmrPlan } from '../../src/runtime/amr-low-balance-plan';
-import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import type { AgentInfo, AppConfig } from '../../src/types';
 import { setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 import { workspaceDirectoryFixture } from '../helpers/workspace-context';
@@ -197,7 +196,7 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
-    invalidateAmrFundingFeedback();
+
     fundingVerdict = 'available';
     fundingBalance = REPORTED_BALANCE;
     const workspace = personalContext();
@@ -255,7 +254,7 @@ describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
-    invalidateAmrFundingFeedback();
+
   });
 
   // T66 之后余额低于原来那条线的人拿到的就是一个 `allow` —— 首页对它必须

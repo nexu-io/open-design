@@ -16,7 +16,6 @@ import {
   resetWorkspaceContextCache,
 } from '../../src/collab/useWorkspaceContext';
 import { I18nProvider } from '../../src/i18n';
-import { invalidateAmrFundingFeedback } from '../../src/runtime/amr-funding-feedback';
 import { checkAmrBalanceGate } from '../../src/runtime/amr-balance-gate';
 import { ProjectCreateError } from '../../src/state/projects';
 import type { AgentInfo, AppConfig } from '../../src/types';
@@ -135,7 +134,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
-    invalidateAmrFundingFeedback();
+
   });
 
   afterEach(() => {
@@ -148,11 +147,11 @@ describe('EntryShell AMR workspace precheck race', () => {
     resetWorkspaceContextCache();
     resetWorkspaceBillingCache();
     resetTeamProjectsCache();
-    invalidateAmrFundingFeedback();
+
   });
 
   it.each(['get', 'set'] as const)(
-    'preserves the draft until exact funding identity is ready when sessionStorage %sItem fails',
+    'preserves the selected target through display loading when sessionStorage %sItem fails',
     async (blockedOperation) => {
       window.history.replaceState(null, '', '/');
       if (blockedOperation === 'get') {
@@ -247,16 +246,11 @@ describe('EntryShell AMR workspace precheck race', () => {
       setHomeHeroPrompt('Create a launch poster without waiting for account chrome.');
       fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
-      await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
-      expect(mockedCheckAmrBalanceGate).not.toHaveBeenCalled();
-      expect(onCreateProject).not.toHaveBeenCalled();
-      expect(screen.getByTestId('home-hero-input')).toHaveTextContent('Create a launch poster without waiting for account chrome.');
-      await act(async () => { contextRead.resolve(jsonResponse({ context: workspace })); });
-      await waitFor(() => expect(fundingReads).toBeGreaterThan(0));
-      expect(onCreateProject).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByTestId('home-hero-submit'));
-      await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalled());
       await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+      expect(onCreateProject).toHaveBeenCalledWith(expect.objectContaining({ workspaceTarget: { workspaceId: workspace.workspaceId } }));
+      // The selected target remains usable while display context is pending.
+      await act(async () => { contextRead.resolve(jsonResponse({ context: workspace })); });
+      expect(fundingReads).toBe(0);
       expect(directoryReads).toBe(1);
     },
   );
@@ -842,7 +836,7 @@ describe('EntryShell AMR workspace precheck race', () => {
     );
   });
 
-  it('rechecks workspace B when the workspace switches after workspace A passes the gate', async () => {
+  it('cancels workspace A when the target changes during login, then a manual send uses B', async () => {
     window.history.replaceState(null, '', '/');
     const workspaceA = teamContext('workspace-a', 'member-a');
     const workspaceB = teamContext('workspace-b', 'member-b');
@@ -944,6 +938,9 @@ describe('EntryShell AMR workspace precheck race', () => {
       await gateA.promise;
     });
 
+    await waitFor(() => expect(screen.getByTestId('home-hero-submit')).toBeEnabled());
+    expect(onCreateProject).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
     await waitFor(() => {
       expect(mockedCheckAmrBalanceGate).toHaveBeenNthCalledWith(2, {
         workspaceType: 'team',

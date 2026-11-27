@@ -2682,3 +2682,15 @@ describe('listTemplates request coalescing', () => {
     expect(reads).toBe(2);
   });
 });
+
+describe('target-only project create', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('carries exact selected target in the body without inventing member headers', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ project: { id: 'target-only', name: 'task', workspaceId: 'selected-team' }, conversationId: 'conversation' }));
+    vi.stubGlobal('fetch', fetch);
+    await createProject({ name: 'task', skillId: null, designSystemId: null, workspaceTarget: { workspaceId: 'selected-team' } });
+    const init = fetch.mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toMatchObject({ workspaceTarget: { workspaceId: 'selected-team' } });
+    expect(init.headers).not.toHaveProperty('x-od-workspace-member-id');
+  });
+});

@@ -1,3 +1,5 @@
+import { validSendPreflightRequest } from '@open-design/contracts';
+import { fetchVelaSendPreflight } from '../integrations/vela-send-preflight.js';
 import { getDiagnosticsEvidence, recordDiagnosticFailure } from '../services/diagnostics-evidence.js';
 import type { Express, Request, Response } from 'express';
 import type {
@@ -150,6 +152,7 @@ export interface RegisterCollabContextRoutesDeps {
   createInvite?: (input: CreateWorkspaceInviteInput) => Promise<CreateInviteOutcome>;
   /** Injectable for tests; defaults to the vela billing CLI 收口. */
   fetchBilling?: () => Promise<WorkspaceBillingSummary | null>;
+  fetchSendPreflight?: typeof fetchVelaSendPreflight;
   fetchRequestConcurrency?: typeof fetchVelaRequestConcurrency;
   fetchBillingFundingCheck?: (workspaceId: string, modelId: string | null) => Promise<WorkspaceBillingPreflight | null>;
   fetchBillingPreflight?: (workspaceId: string, modelId: string | null) => Promise<WorkspaceBillingPreflight | null>;
@@ -879,6 +882,25 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
 
   // This upstream call authorizes the current member itself. It must not wait
   // for the display-billing projection or spawn an agent run.
+  app.post('/api/workspace/billing/send-preflight', async (req, res) => {
+    if (!validSendPreflightRequest(req.body)) return res.status(400).json({ error: 'invalid_send_preflight' });
+    const controller = new AbortController();
+    const disconnected = () => { if (!res.writableEnded) controller.abort(); };
+    req.once('aborted', disconnected);
+    res.once('close', disconnected);
+    try {
+      const result = await (deps.fetchSendPreflight ?? fetchVelaSendPreflight)(req.body, { configuredEnv: configuredEnv(), signal: controller.signal });
+      if (controller.signal.aborted) return;
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(result.status).json(result.body);
+    } catch {
+      if (!controller.signal.aborted) return res.status(503).json({ error: 'send_preflight_unavailable' });
+    } finally {
+      req.off('aborted', disconnected);
+      res.off('close', disconnected);
+    }
+  });
+
   app.get('/api/workspace/billing/request-concurrency', async (req, res) => {
     const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId.trim() : '';
     if (!workspaceId) return res.status(400).json({ error: 'invalid_billing_scope' });
