@@ -67,6 +67,7 @@ import {
 } from '../providers/daemon';
 import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
+import { byokProviderRequiresApiKey } from '../utils/byokProvider';
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { AgentIcon } from './AgentIcon';
 import { Icon } from './Icon';
@@ -1012,9 +1013,14 @@ export function InlineModelSwitcher({
           p.protocol === apiProtocol &&
           (config.apiProviderBaseUrl
             ? p.baseUrl === config.apiProviderBaseUrl
-            : false),
+            : p.baseUrl === config.baseUrl),
       ) ?? KNOWN_PROVIDERS.find((p) => p.protocol === apiProtocol),
-    [apiProtocol, config.apiProviderBaseUrl],
+    [apiProtocol, config.apiProviderBaseUrl, config.baseUrl],
+  );
+  const byokRequiresApiKey = byokProviderRequiresApiKey(
+    apiProtocol,
+    providerForProtocol,
+    config.baseUrl,
   );
   const providerModelsKey = useMemo(
     () =>
@@ -1032,14 +1038,15 @@ export function InlineModelSwitcher({
   // picker otherwise depends on Settings/onboarding having fetched first, so on
   // a fresh load the BYOK list shows only the small static seed list instead of
   // the live catalogue. We fetch when the panel is open in BYOK mode and the
-  // preconditions for the active protocol are met (AIHubMix's catalogue is
-  // public, so it needs no key; every other protocol needs one). Results are
-  // keyed identically to Settings (`providerModelsKey`), so a single fetch
-  // serves both surfaces and replaces any stale slot.
+  // preconditions for the active protocol are met (AIHubMix's catalogue and
+  // keyless local providers such as oMLX/vLLM need no key; every other
+  // protocol needs one). Results are keyed identically to Settings
+  // (`providerModelsKey`), so a single fetch serves both surfaces and replaces
+  // any stale slot.
   useEffect(() => {
     if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    if (apiProtocol !== 'aihubmix' && byokRequiresApiKey && !config.apiKey.trim()) return;
     const baseUrl = config.baseUrl.trim();
     if (!/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
@@ -1051,6 +1058,7 @@ export function InlineModelSwitcher({
       protocol: apiProtocol,
       baseUrl,
       apiKey: config.apiKey,
+      ...(byokRequiresApiKey ? {} : { requiresApiKey: false }),
     })
       .then((result) => {
         if (active && result.ok && result.models?.length) {
@@ -1075,6 +1083,7 @@ export function InlineModelSwitcher({
     config.apiKey,
     config.baseUrl,
     apiProtocol,
+    byokRequiresApiKey,
     providerModelsKey,
     fetchedApiModelOptions.length,
     onProviderModelsCacheChange,
@@ -1441,7 +1450,7 @@ export function InlineModelSwitcher({
                 )}
               </div>
 
-              {!config.apiKey ? (
+              {byokRequiresApiKey && !config.apiKey ? (
                 <div className="inline-switcher__warn" role="status">
                   {t('inlineSwitcher.missingApiKey')}
                 </div>

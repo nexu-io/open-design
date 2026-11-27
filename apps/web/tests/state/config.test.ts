@@ -97,6 +97,27 @@ describe('KNOWN_PROVIDERS', () => {
       'anthropic/claude-3.5-sonnet',
     ]);
   });
+
+  it('includes keyless oMLX preset distinct from vLLM', () => {
+    const omlx = KNOWN_PROVIDERS.find((provider) => provider.label === 'oMLX');
+    const vllm = KNOWN_PROVIDERS.find((provider) => provider.label === 'vLLM');
+    const omlxPreset = BYOK_PROVIDER_PRESETS.find((preset) => preset.id === 'omlx');
+
+    expect(omlx).toMatchObject({
+      label: 'oMLX',
+      protocol: 'openai',
+      baseUrl: 'http://localhost:8000/v1',
+      requiresApiKey: false,
+      preferredModels: expect.arrayContaining(['model', 'qwen3', 'gemma4']),
+    });
+    expect(omlx?.baseUrl).not.toBe(vllm?.baseUrl);
+    expect(omlxPreset).toMatchObject({
+      id: 'omlx',
+      title: 'oMLX',
+      protocol: 'openai',
+      baseUrl: 'http://localhost:8000/v1',
+    });
+  });
 });
 
 vi.stubGlobal('localStorage', {

@@ -260,7 +260,7 @@ function providerModelsHeaders(
   apiKey: string,
 ): Record<string, string> {
   if (protocol === 'openai' || protocol === 'senseaudio') {
-    return { authorization: `Bearer ${apiKey}` };
+    return apiKey.trim() ? { authorization: `Bearer ${apiKey.trim()}` } : {};
   }
   if (protocol === 'aihubmix') {
     // The catalogue is public — only attach Bearer auth (+ APP-Code) when the
