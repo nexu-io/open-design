@@ -71,7 +71,9 @@ import {
 import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
+import { asRecord, numberField, stringField } from "./record-fields.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
+import { formatStatusSummary } from "./status-summary.js";
 import { resolveDevVelaEnv } from "./vela-runtime.js";
 
 type CliOptions = ToolDevOptions & {
@@ -86,6 +88,13 @@ type CliOptions = ToolDevOptions & {
 };
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
+const WEB_DEV_BUNDLER_ENV = "OD_WEB_DEV_BUNDLER";
+/**
+ * The dev web sidecar resolves webpack when this is absent, so the dev runtime a
+ * contributor starts locally would not be the one the e2e harness exercises.
+ * An explicit value in the caller's environment still wins.
+ */
+const DEFAULT_WEB_DEV_BUNDLER = "turbopack";
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -127,20 +136,6 @@ function colorizeLink(url: string): string {
   return `${cyan}${underline}${url}${reset}`;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value != null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
-function stringField(record: Record<string, unknown>, key: string): string | null {
-  const value = record[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function numberField(record: Record<string, unknown>, key: string): number | null {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function numberArrayField(record: Record<string, unknown> | null, key: string): number[] {
   const value = record?.[key];
   return Array.isArray(value) ? value.filter((entry): entry is number => typeof entry === "number" && Number.isFinite(entry)) : [];
@@ -150,23 +145,6 @@ function formatProcessList(pids: readonly number[]): string | null {
   if (pids.length === 0) return null;
   const visible = pids.slice(0, 5).join(", ");
   return pids.length > 5 ? `${visible}, +${pids.length - 5} more` : visible;
-}
-
-function formatStatusSummary(status: unknown): string {
-  const record = asRecord(status);
-  if (record == null) return "status unavailable";
-
-  const parts = [stringField(record, "state") ?? "unknown"];
-  const url = stringField(record, "url");
-  const pid = numberField(record, "pid");
-  const title = stringField(record, "title");
-  const windowVisible = record.windowVisible;
-  if (url != null) parts.push(url);
-  if (pid != null) parts.push(`pid ${pid}`);
-  if (title != null) parts.push(`title ${JSON.stringify(title)}`);
-  if (typeof windowVisible === "boolean") parts.push(`window ${windowVisible ? "visible" : "hidden"}`);
-
-  return parts.join(" · ");
 }
 
 function printStatusEntries(apps: Record<string, unknown>): void {
@@ -477,7 +455,7 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(options.prod === true
           ? { NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "server", OD_WEB_PROD: "1" }
-          : {}),
+          : { [WEB_DEV_BUNDLER_ENV]: process.env[WEB_DEV_BUNDLER_ENV] ?? DEFAULT_WEB_DEV_BUNDLER }),
       },
       logHandle,
     });
