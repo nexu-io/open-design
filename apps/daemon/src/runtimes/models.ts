@@ -133,15 +133,29 @@ export function mergeFallbackModelMetadata(
   );
 }
 
+// Canonicalize a persisted/requested model id through the adapter's
+// optional normalizeModelId hook (legacy label -> current slug) so
+// shared validation sees the id the spawn layer will actually use.
+export function normalizeModelIdForDef(
+  def: RuntimeAgentDef,
+  modelId: string | null | undefined,
+): string | null {
+  if (typeof modelId !== 'string') return null;
+  const trimmed = modelId.trim();
+  if (!trimmed) return null;
+  return def.normalizeModelId ? def.normalizeModelId(trimmed) : trimmed;
+}
+
 export function findKnownModel(
   def: RuntimeAgentDef,
   modelId: string | null | undefined,
   scope?: string | null,
 ): RuntimeModelOption | null {
-  if (!modelId) return null;
+  const normalized = normalizeModelIdForDef(def, modelId);
+  if (!normalized) return null;
   const live = liveModelCache.get(liveModelCacheKey(def.id, scope));
-  const liveModel = live?.get(modelId);
-  const fallbackModel = findFallbackModel(def, modelId);
+  const liveModel = live?.get(normalized);
+  const fallbackModel = findFallbackModel(def, normalized);
   if (liveModel) {
     return mergeMissingFallbackModelMetadata(liveModel, fallbackModel);
   }

@@ -68,7 +68,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
   const { readAppConfig } = ctx.appConfig;
-  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;
+  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, normalizeModelIdForDef, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
     handleCritiqueInterrupt,
@@ -354,8 +354,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             def && typeof appConfig.agentModels?.[def.id]?.model === 'string'
               ? appConfig.agentModels[def.id].model
               : undefined;
-          const requestedModel =
-            typeof body.model === 'string' ? body.model : configuredModel;
+          const requestedModel = def
+            ? normalizeModelIdForDef(
+                def,
+                typeof body.model === 'string' ? body.model : configuredModel,
+              ) ?? undefined
+            : typeof body.model === 'string'
+              ? body.model
+              : configuredModel;
           let safeModel =
             def && typeof requestedModel === 'string'
               ? isKnownModel(def, requestedModel)

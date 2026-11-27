@@ -40,19 +40,19 @@ const DEEPSEEK_HARNESS_AUTH_GUIDANCE =
 const ANTIGRAVITY_AUTH_GUIDANCE =
   'Antigravity needs to sign in. The agy CLI\'s keyring entry has expired or been cleared, and `-p` print mode cannot complete OAuth on its own (it has no field to paste the auth code into).\n\nFix: open a terminal and run `agy` once — it will open Google sign-in in your browser, accept the redirect, and store the token in your system keyring. After you finish, return here and retry this chat. You only need to do this once; the keyring entry persists across both terminal and OpenDesign runs.';
 
-// agy's account-level quota is per-model (consumer accounts get a
-// separate quota for Gemini 3 Pro vs Flash vs Claude vs GPT-OSS), and
+// agy's account-level quota is per-model (the selector shows separate
+// limits for Gemini models and for partner Claude/GPT models), and
 // when exhausted the upstream returns
 //   RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact
 //   your administrator to enable overages. Resets in <H>h<M>m<S>s.
 // to the `--log-file`. Print mode emits nothing on stdout/stderr, so
 // without log inspection the daemon misreads it as missing-OAuth.
-// Guidance points the user at agy's TUI Switch-Model picker because
-// (a) different models have separate quotas, and (b) we can't drive
-// the picker from OD until upstream issue #35 ships a `--model`
-// flag — see antigravity.ts notes.
+// Guidance points the user at a different model because quotas are
+// per-model: OD's Settings picker now drives `agy --model` directly,
+// and agy's TUI Switch-Model picker remains the fallback when the OD
+// picker is left on "Default".
 const ANTIGRAVITY_QUOTA_GUIDANCE =
-  'Antigravity returned "RESOURCE_EXHAUSTED: Individual quota reached" for the current model. Each Antigravity model (Gemini 3 Pro / Flash, Claude 4.6, GPT-OSS) has its own quota.\n\nFix: open `agy` in a terminal and use its Switch Model picker (the menu at the bottom of the TUI) to pick a model with available quota, then retry here. OpenDesign uses whatever model you pick in agy\'s TUI when the Settings model picker is left on "Default". Quotas reset automatically on Antigravity\'s schedule.';
+  'Antigravity returned "RESOURCE_EXHAUSTED: Individual quota reached" for the current model. Each Antigravity model has its own quota.\n\nFix: pick a model with available quota in OpenDesign Settings, or open `agy` in a terminal and use its Switch Model picker (the menu at the bottom of the TUI), then retry here. OpenDesign uses whatever model you pick in agy\'s TUI when the Settings model picker is left on "Default". Quotas reset automatically on Antigravity\'s schedule.';
 
 const REASONIX_AUTH_GUIDANCE =
   'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the OpenDesign daemon process, then retry. If OpenDesign is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
