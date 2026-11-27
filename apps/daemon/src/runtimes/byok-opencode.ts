@@ -39,6 +39,14 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
   return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
 }
 
+/** Inverse of `opencodeByokModelId`: the model id the upstream provider expects. */
+export function opencodeByokProviderModelId(model: string | null | undefined): string | null {
+  const trimmed = typeof model === 'string' ? model.trim() : '';
+  const prefix = `${BYOK_OPENCODE_PROVIDER_ID}/`;
+  const bare = trimmed.startsWith(prefix) ? trimmed.slice(prefix.length).trim() : trimmed;
+  return bare || null;
+}
+
 export function buildOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
