@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
@@ -39,16 +39,15 @@ export async function importGitHubDesignSystemProject(
   options: GitHubDesignSystemImportOptions = {},
 ): Promise<LocalDesignSystemImportResult> {
   const parsed = parseGitHubRepoUrl(githubUrl);
+  const branch = cleanBranch(options.branch);
   const importedAt = (options.now ?? new Date()).toISOString();
   const cloneRoot = path.join(tmpRoot, 'github-design-system-imports');
   await mkdir(cloneRoot, { recursive: true });
-  const cloneDir = path.join(
-    cloneRoot,
-    `${parsed.owner}-${parsed.repo}-${importedAt.replace(/[^0-9a-z]/gi, '')}`,
-  );
+  // Own a unique scratch directory so a failed clone cannot remove another
+  // import's files, even when both requests have the same source timestamp.
+  const cloneDir = await mkdtemp(path.join(cloneRoot, `${parsed.owner}-${parsed.repo}-`));
   const gitBin = options.gitBin ?? 'git';
   const cloneArgs = ['clone', '--depth', '1'];
-  const branch = cleanBranch(options.branch);
   if (branch) cloneArgs.push('--branch', branch);
   cloneArgs.push(parsed.cloneUrl, cloneDir);
 
@@ -85,12 +84,13 @@ export async function importGitHubDesignSystemProject(
       },
     });
   } catch (err) {
-    await rm(cloneDir, { recursive: true, force: true });
     if (err instanceof LocalDesignSystemImportError) throw err;
     throw new LocalDesignSystemImportError(
       'BAD_REQUEST',
       `could not import public GitHub repository: ${formatGitError(err)}`,
     );
+  } finally {
+    await rm(cloneDir, { recursive: true, force: true });
   }
 }
 
