@@ -119,12 +119,29 @@ async function ensureStoreDirs(basePath: string): Promise<void> {
   await mkdir(join(basePath, LOCK_DIR), { recursive: true });
 }
 
+const pendingInitializations = new Map<string, Promise<void>>();
+
 /**
  * Ensure `basePath` is an OpenDesign-owned managed base: create it if missing,
  * claim an empty unmarked directory, reject foreign/non-empty or invalid-marker
  * directories, and guarantee the scratch layout exists.
  */
 export async function ensureManagedBase(basePath: string): Promise<void> {
+  const pending = pendingInitializations.get(basePath);
+  if (pending != null) return await pending;
+
+  // Different targets can share a new base. Finish its ownership marker and
+  // scratch directories once before any of those callers inspect them again.
+  const initialization = initializeManagedBase(basePath);
+  pendingInitializations.set(basePath, initialization);
+  try {
+    await initialization;
+  } finally {
+    if (pendingInitializations.get(basePath) === initialization) pendingInitializations.delete(basePath);
+  }
+}
+
+async function initializeManagedBase(basePath: string): Promise<void> {
   await mkdir(basePath, { recursive: true });
   const entry = await lstat(basePath);
   if (!entry.isDirectory() || entry.isSymbolicLink()) {
