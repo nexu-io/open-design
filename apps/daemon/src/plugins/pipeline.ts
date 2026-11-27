@@ -234,7 +234,7 @@ export function recordIteration(db: SqliteDb, input: RecordIterationInput): Devl
 
 export function listIterationsForRun(db: SqliteDb, runId: string): DevloopIterationRow[] {
   const rows = db.prepare(
-    `SELECT * FROM run_devloop_iterations WHERE run_id = ? ORDER BY iteration ASC, ended_at ASC`,
+    `SELECT * FROM run_devloop_iterations WHERE run_id = ? ORDER BY ended_at ASC, rowid ASC`,
   ).all(runId) as Array<{
     id: string; run_id: string; stage_id: string; iteration: number;
     artifact_diff_summary: string | null; critique_summary: string | null;
