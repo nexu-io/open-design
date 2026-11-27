@@ -23,7 +23,7 @@ vi.mock('@open-design/platform', async (importOriginal) => ({
 import { createVelaCliCollabClient } from '../../src/collab/vela-cli-collab-client.js';
 import type { CollabCloudComment } from '@open-design/contracts';
 import * as diagnosticEvidence from '../../src/services/diagnostics-evidence.js';
-import { runVelaCommand } from '../../src/integrations/vela-command.js';
+import { redactVelaCommandError, runVelaCommand } from '../../src/integrations/vela-command.js';
 import {
   runVelaResourceBatchCommand,
   runVelaResourceCommand,
@@ -703,5 +703,59 @@ describe('runVelaCommand', () => {
     };
     expect(options.env.VELA_RESOURCE_PULL_PROFILE).not.toBe('1');
     expect(info).not.toHaveBeenCalled();
+  });
+});
+
+describe('redactVelaCommandError', () => {
+  const failedCommand = (args: readonly string[]): Error & { cmd?: string; stderr?: string } => {
+    const line = ['vela', ...args].join(' ');
+    const error = new Error(`Command failed: ${line}`) as Error & { cmd?: string; stderr?: string };
+    error.cmd = line;
+    error.stderr = 'API request failed with status 422';
+    return error;
+  };
+
+  it('redacts a --prompt value in the spaced form from message, cmd and stack', () => {
+    const args = ['media', 'image', 'gen', '--prompt', 'a private photo of a cat', '--model', 'vela-3', '--json'];
+    const error = failedCommand(args);
+
+    redactVelaCommandError(error, args);
+
+    for (const text of [error.message, error.cmd ?? '', error.stack ?? '']) {
+      expect(text).not.toContain('private photo');
+      expect(text).toContain('--prompt [REDACTED]');
+    }
+    expect(error.message).toContain('--model vela-3');
+  });
+
+  it('redacts a --prompt value in the equals form and a --ref path', () => {
+    const args = ['media', 'video', 'gen', '--prompt=a sunset over the harbour', '--ref=/Users/ana/Pictures/ref one.png', '--json'];
+    const error = failedCommand(args);
+
+    redactVelaCommandError(error, args);
+
+    expect(error.message).not.toContain('sunset over the harbour');
+    expect(error.message).not.toContain('ref one.png');
+    expect(error.message).toContain('--prompt=[REDACTED]');
+    expect(error.message).toContain('--ref=[REDACTED]');
+  });
+
+  it('redacts the image and first-frame paths the media flows pass', () => {
+    const args = ['media', 'video', 'gen', '--image', '/Users/ana/Pictures/still.png', '--first-frame=/Users/ana/Pictures/frame.png', '--json'];
+    const error = failedCommand(args);
+
+    redactVelaCommandError(error, args);
+
+    expect(error.message).not.toContain('still.png');
+    expect(error.message).not.toContain('frame.png');
+  });
+
+  it('leaves stderr alone so the failure keeps its classification signal', () => {
+    const args = ['media', 'image', 'gen', '--prompt', 'a private photo of a cat', '--json'];
+    const error = failedCommand(args);
+
+    redactVelaCommandError(error, args);
+
+    expect(error.stderr).toBe('API request failed with status 422');
   });
 });
