@@ -1,0 +1,6 @@
+.notice {
+  margin: 8px 0 0;
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  color: var(--chat-text-muted);
+}

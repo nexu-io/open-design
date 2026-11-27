@@ -1,6 +1,7 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCharReveal } from "./chat/useCharReveal";
 import { ExecutionShell } from "./chat/ExecutionShell";
+import { ArtifactSummaryNotice } from "./chat/ArtifactSummaryNotice";
 import { TaskExecutionRecord } from "./chat/TaskExecutionRecord";
 import { automaticTaskProse, taskDisplayWithDeliveryState, type TaskPresentation, type TaskRecordContext } from "../runtime/chat/task-presentation";
 import { effectiveTurnRunStatus } from "../runtime/chat/turn-status";
@@ -1443,6 +1444,9 @@ function AssistantMessageImpl({
              */
             artifactRefs={messageArtifactRefs(message)}
           />
+        ) : null}
+        {runSucceeded && !message.content.trim() && turnArtifactPanelEntries.length > 0 ? (
+          <ArtifactSummaryNotice />
         ) : null}
         {showCompletionRow ? (
           <div className="assistant-completion-row">

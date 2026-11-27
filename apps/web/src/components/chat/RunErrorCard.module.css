@@ -48,6 +48,18 @@
   height: 16px;
 }
 
+.warning .title {
+  color: var(--chat-amber);
+}
+
+.availableArtifacts {
+  margin-top: 8px;
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  color: var(--chat-text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* 稿子 `.errb .d { margin-top: 8px; font-size: var(--t-mini);
    line-height: var(--lh-body); color: var(--text-muted) }` */
 .description {
@@ -55,6 +67,7 @@
   font-size: var(--chat-t-mini);
   line-height: var(--chat-lh-body);
   color: var(--chat-text-muted);
+  overflow-wrap: anywhere;
 }
 
 /* 稿子 `.errb .ops { display:flex; flex-wrap:wrap; justify-content:flex-end;

@@ -1,6 +1,10 @@
 import type { Dict } from "../types";
 
 export const zhTW: Dict = {
+  'chat.runError.title.artifactsWithoutSummary': "產物已生成，缺少最終說明",
+  'chat.runError.artifactsWithoutSummaryMessage': "可用檔案：{files}。AI 未提供最終說明，你可以開啟或下載上方的檔案。",
+  'chat.runError.availableArtifacts': "可用檔案：{files}。你可以開啟或下載上方的檔案。",
+  'chat.artifact.missingSummary': "產物已生成，但 AI 未提供最終說明。",
   "referral.notice.label": "重設卡邀請提示",
   "referral.notice.registered": "48 小時內首次訂閱，即可獲得一張重設卡",
   "referral.notice.pending": "首次訂閱已完成，重設卡等待發放。",
