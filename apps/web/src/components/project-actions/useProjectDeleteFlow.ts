@@ -40,8 +40,8 @@ export function useProjectDeleteFlow(input: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const accountGeneration = currentWorkspaceAccountGeneration();
   const { history, status } = useProjectShareHistoryState(target && workspaceContext ? target.id : undefined, workspaceContext, 'delete-confirmation');
-  const shareReadStatus = target && !workspaceContext ? 'error' : status;
-  const activeShareCount = history ? history.publications.filter(publication => publication.status === 'active').length : null;
+  const shareReadStatus = target && !workspaceContext ? 'ready' : status;
+  const activeShareCount = !workspaceContext ? 0 : (history ? history.publications.filter(publication => publication.status === 'active').length : null);
 
   const request = useCallback((project: Project) => {
     setFailed(false);

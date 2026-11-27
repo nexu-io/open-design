@@ -4917,10 +4917,11 @@ function DesignSystemProjectPanel({
     deleteRequest && workspaceContext ? deleteRequest.projectId : undefined,
     workspaceContext, 'delete-confirmation',
   );
-  const deleteShareStatus = deleteRequest && (!workspaceContext || deleteRequest.projectId !== projectId
-    || deleteRequest.generation !== currentWorkspaceAccountGeneration()) ? 'error' : deleteHistoryStatus;
-  const deleteActiveShareCount = deleteShareHistory
-    ? deleteShareHistory.publications.filter(publication => publication.status === 'active').length : null;
+  const isDeleteOutOfSync = deleteRequest && (deleteRequest.projectId !== projectId
+    || deleteRequest.generation !== currentWorkspaceAccountGeneration());
+  const deleteShareStatus = isDeleteOutOfSync ? 'error' : (!workspaceContext ? 'ready' : deleteHistoryStatus);
+  const deleteActiveShareCount = !workspaceContext ? 0 : (deleteShareHistory
+    ? deleteShareHistory.publications.filter(publication => publication.status === 'active').length : null);
   // Transient feedback for kit edits (upload / refresh / reset / delete) so an
   // action that previously fired-and-forgot now reports success or failure.
   const [kitToast, setKitToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);

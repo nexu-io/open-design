@@ -203,8 +203,8 @@ export async function uninstallById(id, userDir, builtInDir, kind) {
     return { ok: false, error: 'Not found in user-installed items', status: 404 };
   }
 
-  // item.dir points to the filesystem directory
-  const target = item.dir;
+  // item.dir points to the filesystem directory, fallback to userDir + id
+  const target = item.dir ?? path.join(userDir, id.replace(/^user:/, ''));
   try {
     const stat = fs.lstatSync(target);
     if (stat.isSymbolicLink()) {
