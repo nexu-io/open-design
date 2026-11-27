@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 
-import { redactJsonValue, type RedactionOptions } from "./redaction.js";
+import { redactJsonValue, redactText, type RedactionOptions } from "./redaction.js";
 import { buildManifest, buildMachineInfo, type DiagnosticsContext, type DiagnosticsManifest, type MachineInfo } from "./manifest.js";
 import { collectLogSources, findCrashDumps, findMacOSCrashReports, type CollectedFile, type CrashDumpLookup, type CrashReportLookup, type LogSource } from "./sources.js";
 
@@ -24,8 +24,8 @@ export interface DiagnosticsExportResult {
   machineInfo: MachineInfo;
 }
 
-function placeholderForMissing(file: CollectedFile): string {
-  return `${PLACEHOLDER_PREFIX}${file.error ?? "unknown error"}\n`;
+function placeholderForMissing(file: CollectedFile, redaction: RedactionOptions): string {
+  return `${PLACEHOLDER_PREFIX}${redactText(file.error ?? "unknown error", redaction)}\n`;
 }
 
 export async function buildDiagnosticsZip(input: DiagnosticsExportInput): Promise<DiagnosticsExportResult> {
@@ -48,7 +48,7 @@ export async function buildDiagnosticsZip(input: DiagnosticsExportInput): Promis
 
   const zip = new JSZip();
   for (const file of collected) {
-    zip.file(file.name, file.content ?? placeholderForMissing(file));
+    zip.file(file.name, file.content ?? placeholderForMissing(file, redaction));
   }
   zip.file("summary/manifest.json", JSON.stringify(redactJsonValue(manifest, redaction), null, 2));
   zip.file("summary/machine-info.json", JSON.stringify(redactJsonValue(machineInfo, redaction), null, 2));

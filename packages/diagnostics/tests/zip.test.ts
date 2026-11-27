@@ -82,4 +82,38 @@ describe("buildDiagnosticsZip", () => {
     expect(placeholder).toContain("file unavailable");
     expect(result.manifest.warnings.length).toBe(1);
   });
+
+  it.each(["text", "json", "binary"] as const)("redacts unavailable %s source errors in the ZIP placeholder", async (kind) => {
+    const result = await buildDiagnosticsZip({
+      context: { app: { name: "open-design" }, source: "test" },
+      sources: [{
+        name: "logs/unavailable.log",
+        absolutePath: join(tempDir, "Users", "alice", "missing.log"),
+        kind,
+      }],
+      redaction: { username: "alice" },
+    });
+
+    const zip = await JSZip.loadAsync(result.zip);
+    const placeholder = await zip.file("logs/unavailable.log")!.async("string");
+    expect(placeholder).toContain("file unavailable: ENOENT");
+    expect(placeholder).toContain(join("Users", "<USER>", "missing.log"));
+    expect(placeholder).not.toContain(join("Users", "alice"));
+
+    const manifest = await zip.file("summary/manifest.json")!.async("string");
+    expect(manifest).not.toContain("alice");
+  });
+
+  it("preserves readable binary source bytes without text redaction", async () => {
+    const data = Buffer.from("binary\u0000/Users/alice/crash\u00ff");
+    const dump = join(tempDir, "crash.dmp");
+    await writeFile(dump, data);
+    const result = await buildDiagnosticsZip({
+      context: { app: { name: "open-design" }, source: "test" },
+      sources: [{ name: "crash-dumps/crash.dmp", absolutePath: dump, kind: "binary" }],
+      redaction: { username: "alice" },
+    });
+    const zip = await JSZip.loadAsync(result.zip);
+    expect(await zip.file("crash-dumps/crash.dmp")!.async("nodebuffer")).toEqual(data);
+  });
 });
