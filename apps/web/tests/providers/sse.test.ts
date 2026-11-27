@@ -783,16 +783,17 @@ describe('streamViaDaemon', () => {
     expect(latestUserPromptFromHistory(history)).toBe('same text');
   });
 
-  it('truncates oversized prior messages before composing daemon context', () => {
+  it('sends oversized user turns whole and truncates oversized assistant turns', () => {
     const transcript = buildDaemonTranscript([
       { id: '1', role: 'user', content: 'x'.repeat(13_000) },
-      { id: '2', role: 'assistant', content: 'small answer' },
+      { id: '2', role: 'assistant', content: 'y'.repeat(13_000) },
+      { id: '3', role: 'user', content: 'last turn' },
     ]);
 
-    expect(transcript).toContain('## user');
+    expect(transcript).toContain('## user\n' + 'x'.repeat(13_000));
     expect(transcript).toContain('[OpenDesign truncated 1000 chars from this prior message');
-    expect(transcript).not.toContain('x'.repeat(13_000));
-    expect(transcript).toContain('small answer');
+    expect(transcript).not.toContain('y'.repeat(13_000));
+    expect(transcript).toContain('last turn');
   });
 
   // Historical forms are context, not reusable UI templates or proof that the
