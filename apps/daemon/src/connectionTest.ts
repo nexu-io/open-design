@@ -2657,10 +2657,19 @@ async function testAgentConnectionInternal(
           model,
         ).catch(() => null)
       : null;
-    const env = applyAgentLaunchEnv({
-      ...baseEnv,
-      ...(mmdRouteLaunchEnv || {}),
-    }, executableResolution);
+    const env = applyAgentLaunchEnv(
+      {
+        ...baseEnv,
+        ...(mmdRouteLaunchEnv || {}),
+      },
+      executableResolution,
+    );
+    // Reasonix persists probe sessions under REASONIX_STATE_HOME; redirect it
+    // into the throwaway temp dir so every "Test connection" click does not
+    // deposit ghost conversations into the user's real state home (#8572).
+    if (input.agentId === 'reasonix') {
+      env.REASONIX_STATE_HOME = tempDir;
+    }
     model = await resolveConnectionTestModelForAgent(
       def,
       model,
