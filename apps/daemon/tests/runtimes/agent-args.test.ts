@@ -3,7 +3,10 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
+import {
+  parseAntigravityModels,
+  writeAntigravityModelSelection,
+} from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
 import {
@@ -720,31 +723,71 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
   // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Picker exposes the synthetic Default + the current agy model catalog,
+  // and dynamically refreshes via `agy models` (`listModels`).
+  assert.deepEqual(antigravity.listModels?.args, ['models']);
+  assert.equal(antigravity.listModels?.timeoutMs, 15_000);
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
-      'Gemini 3.1 Pro (High)',
-      'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
-      'Claude Sonnet 4.6 (Thinking)',
-      'Claude Opus 4.6 (Thinking)',
+      'Gemini 4 Argon (High)',
+      'Gemini 4 Argon (Medium)',
+      'Gemini 4 Argon (Low)',
+      'Gemini 4 Hydrogen (XHigh)',
+      'Gemini 4 Hydrogen (High)',
+      'Gemini 4 Hydrogen (Medium)',
+      'Gemini 4 Hydrogen (Low)',
+      'Orchestrator (Argon)',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Claude Opus 5.5 (High)',
+      'Claude Opus 5.5 (Medium)',
+      'Claude Opus 5.5 (Low)',
+      'Claude Sonnet 5.5 (High)',
+      'Claude Sonnet 5.5 (Medium)',
+      'Claude Sonnet 5.5 (Low)',
       'GPT-OSS 120B (Medium)',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
   assert.equal(antigravity.supportsCustomModel, false);
+});
+
+test('parseAntigravityModels parses both piped TSV and TTY-padded agy models output', () => {
+  const pipedStdout = [
+    'gemini-4-argon-medium\tGemini 4 Argon (Medium)',
+    'gemini-4-argon-high\tGemini 4 Argon (High)',
+    'gemini-pro-orchestrator-g1-pro\tOrchestrator (Argon)',
+    'gemini-3.8-flash-high\tGemini 3.8 Flash (High)',
+    'claude-sonnet-5-5-high\tClaude Sonnet 5.5 (High)',
+    'gpt-oss-120b-medium\tGPT-OSS 120B (Medium)',
+  ].join('\n');
+
+  assert.deepEqual(parseAntigravityModels(pipedStdout), [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'Gemini 4 Argon (Medium)', label: 'Gemini 4 Argon (Medium)' },
+    { id: 'Gemini 4 Argon (High)', label: 'Gemini 4 Argon (High)' },
+    { id: 'Orchestrator (Argon)', label: 'Orchestrator (Argon)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Claude Sonnet 5.5 (High)', label: 'Claude Sonnet 5.5 (High)' },
+    { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
+  ]);
+
+  const ttyStdout = [
+    '\r⠋ Fetching available models...\r⠙ Fetching available models...\rgemini-4-argon-high             Gemini 4 Argon (High)',
+    'gemini-3.8-flash-high           Gemini 3.8 Flash (High)',
+  ].join('\n');
+
+  assert.deepEqual(parseAntigravityModels(ttyStdout), [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'Gemini 4 Argon (High)', label: 'Gemini 4 Argon (High)' },
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+  ]);
+
+  assert.equal(parseAntigravityModels(''), null);
+  assert.equal(parseAntigravityModels('\r⠋ Fetching available models...\n'), null);
 });
 
 // OPEND-3495: on Windows the composed OD prompt (system prompt + skills +
