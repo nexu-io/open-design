@@ -948,8 +948,6 @@ export async function uninstallPlugin(
   return { ok: removed || removedFolder !== undefined, removedFolder };
 }
 
-// Recursive copy with budget tracking. Symlinks anywhere in the tree fail
-// the copy outright; we never reach upstream paths through a clever link.
 // Keep the previous tree until the validated replacement is in place. Both
 // paths live under the registry root so publication uses same-filesystem renames.
 async function publishPluginFolder(stagedFolder: string, destFolder: string): Promise<void> {
@@ -983,6 +981,8 @@ async function publishPluginFolder(stagedFolder: string, destFolder: string): Pr
   }
 }
 
+// Recursive copy with budget tracking. Symlinks anywhere in the tree fail
+// the copy outright; we never reach upstream paths through a clever link.
 async function safeCopyTree(src: string, dest: string, maxBytes: number): Promise<void> {
   let bytesCopied = 0;
   const queue: Array<{ src: string; dest: string }> = [{ src, dest }];
