@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackFileManagerClick } from '../analytics/events';
@@ -170,12 +170,12 @@ const SECTION_ORDER: FileCategory[] = [
 const STYLESHEET_EXTENSIONS = new Set(['css', 'scss', 'sass', 'less']);
 const HTML_THUMBNAIL_INLINE_MAX_BYTES = 512 * 1024;
 
-// Incremental grid rendering: the page-card grid and the image masonry start
-// with this many entries and reveal the next batch when the invisible
-// end-of-grid sentinel nears the viewport. Root views intentionally list every
-// nested file (see dirsAtCurrentDir), so a web-clone project can put 4000+
-// HTML files in one section — rendering them all at once froze the client.
-const GRID_RENDER_BATCH = 48;
+// Root views intentionally include nested files. Render the current file or
+// folder category in batches so even a large directory does not mount every
+// row or card at once.
+const ENTRY_RENDER_BATCH = 48;
+// Prepare the next compact batch before keyboard focus reaches the last row.
+const ROW_RENDER_ROOT_MARGIN = '0px 0px 96px 0px';
 
 // At most this many thumbnail content fetches run concurrently. Each visible
 // card fetches its HTML to build a srcDoc preview; without a cap, a large
@@ -708,36 +708,32 @@ export function DesignFilesPanel({
     return (pages ?? availableTabs[0])?.id ?? null;
   }, [activeTab, availableTabs]);
 
-  // Incremental grid rendering (see GRID_RENDER_BATCH). Only one card grid is
-  // on screen at a time (one active tab), so a single revealed-count state
-  // serves both the page-card grid and the image masonry. Environments
-  // without IntersectionObserver (jsdom) render every entry at once, matching
-  // the previous behavior.
-  const canLazyRenderGrids = typeof IntersectionObserver !== 'undefined';
-  const [gridRenderLimit, setGridRenderLimit] = useState(GRID_RENDER_BATCH);
-  const gridScopeKey = `${currentDir}\u0000${resolvedTab ?? ''}`;
-  const [gridScope, setGridScope] = useState(gridScopeKey);
-  if (gridScope !== gridScopeKey) {
-    // Adjust-during-render reset: navigating directories or switching tabs
-    // must drop the revealed count back to the initial batch BEFORE the new
-    // list paints, or one throwaway frame would render it at the old count.
-    setGridScope(gridScopeKey);
-    setGridRenderLimit(GRID_RENDER_BATCH);
+  // Only one category is active, so its rows and cards share a render limit.
+  // Without IntersectionObserver, render the full category so it stays usable.
+  const filesScrollRef = useRef<HTMLDivElement>(null);
+  const canRenderIncrementally = typeof IntersectionObserver !== 'undefined';
+  const [entryRenderLimit, setEntryRenderLimit] = useState(ENTRY_RENDER_BATCH);
+  const entryScopeKey = `${currentDir}\u0000${resolvedTab ?? ''}`;
+  const [entryScope, setEntryScope] = useState(entryScopeKey);
+  // React retries a render-phase update, but this pass still computes its
+  // JSX. Use the first batch immediately when the category or folder changes.
+  const limitForScope = entryScope === entryScopeKey ? entryRenderLimit : ENTRY_RENDER_BATCH;
+  if (entryScope !== entryScopeKey) {
+    setEntryScope(entryScopeKey);
+    setEntryRenderLimit(ENTRY_RENDER_BATCH);
   }
-  const revealNextGridBatch = useCallback(() => {
-    setGridRenderLimit((limit) => limit + GRID_RENDER_BATCH);
+  const revealNextEntryBatch = useCallback(() => {
+    setEntryRenderLimit((limit) => limit + ENTRY_RENDER_BATCH);
   }, []);
-  const limitGridEntries = (sectionFiles: ProjectFile[]): ProjectFile[] =>
-    canLazyRenderGrids ? sectionFiles.slice(0, gridRenderLimit) : sectionFiles;
-  const renderGridSentinel = (sectionFiles: ProjectFile[]) =>
-    canLazyRenderGrids && sectionFiles.length > gridRenderLimit ? (
-      <GridRenderSentinel
-        // Keyed by the revealed count so each batch re-observes from scratch:
-        // a fresh observation always reports the current intersection state,
-        // so a sentinel still inside the extended viewport after a batch
-        // keeps revealing until it leaves it or the list is exhausted.
-        key={`grid-sentinel:${gridRenderLimit}`}
-        onReveal={revealNextGridBatch}
+  const visibleEntries = <Entry,>(entries: Entry[]): Entry[] =>
+    canRenderIncrementally ? entries.slice(0, limitForScope) : entries;
+  const renderEntrySentinel = (count: number, scrollRoot?: RefObject<HTMLDivElement>) =>
+    canRenderIncrementally && count > limitForScope ? (
+      <EntryRenderSentinel
+        // Each new batch needs a fresh intersection observation.
+        key={`${entryScopeKey}:${limitForScope}`}
+        onReveal={revealNextEntryBatch}
+        scrollRoot={scrollRoot}
       />
     ) : null;
 
@@ -1621,6 +1617,7 @@ export function DesignFilesPanel({
           </div>
         </div>
         <div
+          ref={filesScrollRef}
           className="df-body"
           onDragEnter={(ev) => {
             ev.preventDefault();
@@ -1876,7 +1873,8 @@ export function DesignFilesPanel({
               ) : null}
               {resolvedTab === 'folders' ? (
                 <div className="df-section" key="folders">
-                  {dirsAtCurrentDir.map((d) => renderDirRow(d))}
+                  {visibleEntries(dirsAtCurrentDir).map((d) => renderDirRow(d))}
+                  {renderEntrySentinel(dirsAtCurrentDir.length, filesScrollRef)}
                 </div>
               ) : null}
               {sections.map(([category, sectionFiles]) =>
@@ -1886,18 +1884,21 @@ export function DesignFilesPanel({
                       // Page cards are self-describing — a straight grid
                       // under the tab bar.
                       <div className="df-card-grid">
-                        {limitGridEntries(sectionFiles).map((f) => renderPageCard(f, category))}
-                        {renderGridSentinel(sectionFiles)}
+                        {visibleEntries(sectionFiles).map((f) => renderPageCard(f, category))}
+                        {renderEntrySentinel(sectionFiles.length)}
                       </div>
                     ) : category === 'image' ? (
                       // Images read as their own preview — a masonry waterfall
                       // of natural-aspect thumbnails instead of list rows.
                       <div className="df-image-masonry" data-testid="design-files-image-masonry">
-                        {limitGridEntries(sectionFiles).map((f) => renderImageCard(f, category))}
-                        {renderGridSentinel(sectionFiles)}
+                        {visibleEntries(sectionFiles).map((f) => renderImageCard(f, category))}
+                        {renderEntrySentinel(sectionFiles.length)}
                       </div>
                     ) : (
-                      sectionFiles.map((f) => renderFileRow(f, category))
+                      <>
+                        {visibleEntries(sectionFiles).map((f) => renderFileRow(f, category))}
+                        {renderEntrySentinel(sectionFiles.length, filesScrollRef)}
+                      </>
                     )}
                   </div>
                 ) : null,
@@ -1994,35 +1995,39 @@ export function DesignFilesPanel({
   );
 }
 
-// Invisible end-of-grid marker that reveals the next render batch when it
-// nears the viewport. Deliberately renders no visible UI — no button, no
-// loading copy — so an incrementally rendered grid reads exactly like a fully
-// rendered one. The 1200px bottom rootMargin reveals the next batch well
-// before the user reaches the end of the rendered cards.
-function GridRenderSentinel({ onReveal }: { onReveal: () => void }) {
+// Reveal the next batch shortly before the user reaches the end of the
+// rendered list or grid, without adding a visible control.
+function EntryRenderSentinel({ onReveal, scrollRoot }: {
+  onReveal: () => void;
+  scrollRoot?: RefObject<HTMLDivElement>;
+}) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const node = sentinelRef.current;
-    // The parent only renders the sentinel when IntersectionObserver exists
-    // (environments without it fall back to rendering the full grid), so this
-    // guard is for safety, not a jsdom fallback path.
     if (!node || typeof IntersectionObserver === 'undefined') return;
+    let observing = true;
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            onReveal();
-            observer.disconnect();
-            break;
-          }
+        // Entries queued before disconnect can still reach this callback.
+        if (!observing || sentinelRef.current !== node) return;
+        if (entries.some((entry) => entry.isIntersecting)) {
+          stopObserving();
+          onReveal();
         }
       },
-      { rootMargin: '0px 0px 1200px 0px' },
+      {
+        root: scrollRoot?.current ?? null,
+        rootMargin: scrollRoot ? ROW_RENDER_ROOT_MARGIN : '0px 0px 1200px 0px',
+      },
     );
+    function stopObserving() {
+      observing = false;
+      observer.disconnect();
+    }
     observer.observe(node);
-    return () => observer.disconnect();
-  }, [onReveal]);
+    return stopObserving;
+  }, [onReveal, scrollRoot]);
 
   return (
     <div
