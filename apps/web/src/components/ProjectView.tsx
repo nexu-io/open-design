@@ -2866,6 +2866,7 @@ export function ProjectView({
     }
   }, [project.id, projectRunAuthorityKey]);
   const projectFilesRequestSeqRef = useRef(0);
+  const [projectFilesError, setProjectFilesError] = useState<Error | null>(null);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
@@ -4893,16 +4894,20 @@ export function ProjectView({
     const requestedRefreshKey = filesRefreshRequestKeyRef.current;
     let next: ProjectFile[];
     try {
+      setProjectFilesError(null);
       next = await fetchProjectFiles(project.id, {
         workspaceContext: projectRunWorkspaceContextRef.current,
         requireAuthoritative: true,
         ...(options?.fresh ? { fresh: true } : {}),
         ...(options?.afterChange ? { afterChange: true } : {}),
       });
-    } catch {
+    } catch (error) {
       // A transport/HTTP failure is not an authoritative empty directory.
       // Keep the last accepted snapshot and generation, while preserving the
       // refresh helper's historical resolved-list contract for its callers.
+      if (requestSeq === projectFilesRequestSeqRef.current) {
+        setProjectFilesError(error instanceof Error ? error : new Error(String(error)));
+      }
       return projectFilesRef.current;
     }
     if (requestSeq === projectFilesRequestSeqRef.current) {
@@ -15149,6 +15154,7 @@ export function ProjectView({
           viewerOnly={projectMutationReadOnly}
           materializationPending={projectCollab.materializationPending}
           filesAuthoritative={committedFilesGeneration > 0}
+          projectFilesError={projectFilesError}
           emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
           projectReadsHeld={projectReadsHeld}
           readonlyNotice={
