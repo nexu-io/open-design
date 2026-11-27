@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { randomUUID } from '../../utils/uuid';
 import { useI18n } from "../i18n";
 import { getOpenDesignHost } from "@open-design/host";
 import { openExternalUrl } from "../providers/registry";
@@ -147,7 +148,7 @@ export async function dispatchProductionCampaignAction(
 				touchpointDecisionId: decision.touchpointDecisionId,
 				activityId: decision.activityId,
 				placementKey: decision.placementKey,
-				eventId: crypto.randomUUID(),
+				eventId: randomUUID(),
 				kind: "click",
 			}),
 		});

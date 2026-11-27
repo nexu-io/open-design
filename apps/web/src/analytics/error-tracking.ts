@@ -1,4 +1,5 @@
 import { getOpenDesignHost } from '@open-design/host';
+import { randomUUID } from '../utils/uuid';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 // Direct-fetch safety telemetry transport.
 //
@@ -825,7 +826,7 @@ function defaultMessage(error: unknown): string {
 
 function randomId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+    return randomUUID();
   }
   // Fallback for older browsers / SSR — collision risk is negligible
   // because $insert_id only needs to dedupe within a single user-session
