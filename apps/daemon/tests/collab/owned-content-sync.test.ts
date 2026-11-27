@@ -249,6 +249,8 @@ describe('owner content overwrite authority', () => {
       });
       const first = f.controller.request(scope, { action: 'accept', version: 4 });
       await vi.waitFor(() => expect(f.apply).toHaveBeenCalledTimes(1));
+      // The event only wakes the check; the root head itself must have moved.
+      f.head(5);
       const newer = f.controller.request(scope, { action: 'check' }, 5);
       release();
       await first;

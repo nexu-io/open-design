@@ -39,6 +39,10 @@ export interface ProactiveContentPullEvent {
   projectId?: string | undefined;
   workspaceId?: string | undefined;
   version?: number | undefined;
+  /** Hub resource whose version moved. A project can own non-root resources
+   * (e.g. single-file public shares); only the root's version is a project
+   * content version. */
+  resourceId?: string | undefined;
   /** Internal diagnostic origin; never serialized to the hub or web. */
   profileReceivedAtMs?: number | undefined;
 }
@@ -216,6 +220,11 @@ export interface ProactiveContentPullTarget {
 export interface ProactiveContentPullDeps {
   /** Owner content goes through explicit overwrite authority, not member receipts. */
   observeOwnedContent?: (scope: ProactiveContentPullTarget, version?: number) => Promise<void>;
+  /** The project's root hub resource for this exact team scope. When wired,
+   *  events for any other resource of the project are not content changes;
+   *  an unresolvable root drops the event. Events without resourceId are
+   *  unaffected. */
+  resolveProjectRootResourceId?: (target: ProactiveContentPullTarget) => Promise<string | null>;
   /** This daemon's own `workspace_projects` row for the project, or null when
    *  it was never bound locally. */
   getLocalBinding: (
@@ -481,6 +490,8 @@ type PullDecision =
         | 'identity-error'
         | 'owner-missing'
         | 'owner-error'
+        | 'root-unavailable'
+        | 'non-root-resource'
         | 'self-owner'
         | 'owner-handled';
     };
@@ -752,17 +763,6 @@ export function createProactiveContentPull(
         reason: 'owner-missing',
       };
     }
-    if (owner === identity.workspaceMemberId) {
-      if (deps.observeOwnedContent) {
-        await deps.observeOwnedContent({
-          projectId: event.projectId!, workspaceId: targetWorkspaceId,
-          resourceTeamId: identity.resourceTeamId, viewerMemberId: identity.workspaceMemberId,
-          ownerMemberId: owner,
-        }, event.version);
-        return { kind: 'skip', retryable: false, reason: 'owner-handled' };
-      }
-      return { kind: 'skip', retryable: false, reason: 'self-owner' };
-    }
     const scope = {
       projectId,
       workspaceId: targetWorkspaceId,
@@ -770,6 +770,33 @@ export function createProactiveContentPull(
       viewerMemberId: identity.workspaceMemberId,
       ownerMemberId: owner,
     };
+    // AMR emits this event for every project-kind resource version, including
+    // single-file shares with their own version counter. Such a version must
+    // never become the whole-project version an owner or member converges on.
+    const eventResourceId = event.resourceId?.trim();
+    if (eventResourceId && deps.resolveProjectRootResourceId) {
+      // Fail closed without a retry lane: the root can be gone for good
+      // (tombstoned/unshared), and polling/catch-up re-read the root head.
+      let rootResourceId: string | null = null;
+      try {
+        rootResourceId = await deps.resolveProjectRootResourceId(scope);
+      } catch (error) {
+        deps.onError?.(error);
+      }
+      if (!rootResourceId) {
+        return { kind: 'skip', retryable: false, reason: 'root-unavailable' };
+      }
+      if (rootResourceId !== eventResourceId) {
+        return { kind: 'skip', retryable: false, reason: 'non-root-resource' };
+      }
+    }
+    if (owner === identity.workspaceMemberId) {
+      if (deps.observeOwnedContent) {
+        await deps.observeOwnedContent(scope, event.version);
+        return { kind: 'skip', retryable: false, reason: 'owner-handled' };
+      }
+      return { kind: 'skip', retryable: false, reason: 'self-owner' };
+    }
     return {
       kind: 'target',
       target: {
