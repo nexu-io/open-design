@@ -30,7 +30,10 @@
   flex-direction: column;
   width: 100%;
   max-width: 100%;
-  height: var(--cfl-max-h, 460px);
+  /* Height stays content-derived (capped by max-height): a pinned height
+     never resizes when a tab switch swaps the list, so the #3849
+     ResizeObserver in CaretFloatingLayer would never deliver and the picker
+     would keep its stale anchor. */
   max-height: var(--cfl-max-h, 460px);
   background: var(--bg-panel);
   border: 1px solid var(--border);

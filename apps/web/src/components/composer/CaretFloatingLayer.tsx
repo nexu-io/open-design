@@ -105,6 +105,30 @@ export function CaretFloatingLayer({
     if (open && caret) reposition();
   }, [open, caret, reposition]);
 
+  // Hold the latest reposition so the observer subscription below survives
+  // caret changes without re-attaching on every keystroke.
+  const repositionRef = useRef(reposition);
+  useEffect(() => {
+    repositionRef.current = reposition;
+  }, [reposition]);
+
+  // Re-anchor when the popover's own size changes while open (#3849). A tab
+  // switch inside the mention picker swaps the content list: the height the
+  // placement was computed from no longer matches, and because the box is
+  // pinned by its top edge the bottom lifted away from the composer — the
+  // picker "floated" mid-panel until the next scroll or keystroke. The
+  // observer fires an initial entry on observe(), which doubles as the
+  // post-mount correction for content that sized after the measured pass.
+  const hasCaret = caret !== null;
+  useEffect(() => {
+    if (!open || !hasCaret) return;
+    const el = layerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => repositionRef.current());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open, hasCaret]);
+
   // Keep pinned while open. rAF-throttle scroll/resize. Reposition (not close)
   // so a small chat-log scroll doesn't feel broken; capture:true catches
   // ancestor scroll.
