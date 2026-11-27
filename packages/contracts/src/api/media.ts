@@ -13,10 +13,11 @@ export const MEDIA_SURFACES = [
 
 export type MediaSurface = (typeof MEDIA_SURFACES)[number];
 
-/** Available supported Cloud video models for the authenticated project workspace. */
+/** Available supported Cloud models for the authenticated project workspace. */
 export interface CloudVideoModelsResponse {
   source: 'account_workspace_catalogue';
   video: Array<{ id: string; label: string; hint: string; provider: string; caps: string[]; default?: boolean }>;
+  image?: Array<{ id: string; label: string; hint: string; provider: string; caps: string[]; default?: boolean }>;
 }
 
 export const MEDIA_TASK_STATUSES = [
@@ -56,7 +57,7 @@ export interface ProjectMediaTaskFile {
  *   `switch-model`, `open-settings`, `sign-in`
  * - rung 2 · nothing to fix, it may just work next time — `retry-later`
  * - rung 3 · this path cannot work; take a different one — `add-credit`,
- *   `update-app`, `unsupported`
+ *   `confirm-paid-resubmission`, `update-app`, `unsupported`
  * - rung 4 · retrying is futile and we have no other lever — `contact-support`
  *
  * Two failures that put the user in the same place get the SAME value on
@@ -74,6 +75,8 @@ export const MEDIA_FAILURE_NEXT_STEPS = [
   'sign-in',
   /** Credit is spent. Retrying cannot bring it back. */
   'add-credit',
+  /** The free benefit ended before dispatch. A new paid request needs confirmation. */
+  'confirm-paid-resubmission',
   /** Transient: upstream wobble, throttling, timeout, local restart. */
   'retry-later',
   /** The installed app/runtime is too old to place the request at all. */
@@ -224,6 +227,9 @@ function statusFromMessage(message: string): number | undefined {
  */
 export function mediaFailureNextStep(signal: MediaFailureSignal): MediaFailureNextStep {
   const code = typeof signal.code === 'string' ? signal.code.trim() : '';
+  if (code.toLowerCase() === 'image_generation_waiver_unavailable') {
+    return 'confirm-paid-resubmission';
+  }
   const byCode = code ? MEDIA_FAILURE_NEXT_STEP_BY_CODE[code] : undefined;
   if (byCode) return byCode;
 

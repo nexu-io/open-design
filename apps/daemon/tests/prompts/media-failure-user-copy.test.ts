@@ -34,6 +34,7 @@ const USER_SENTENCES: Record<string, string> = {
   'open-settings': '图片模型的 API key 还没填 —— 在设置里填好就能用。',
   'sign-in': '登录已过期,图片没生成 —— 重新登录后再试一次。',
   'add-credit': '图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。',
+  'confirm-paid-resubmission': '生图优惠已失效，请确认是否按普通价格重新提交。',
   'retry-later': '图片生成这会儿不稳定 —— 不是你的问题,过一会儿再试通常就好。',
   'update-app': '需要更新 Open Design 才能生成图片。',
   'unsupported': '这次任务里不能生成图片 —— 需要图片的话,新建一个图片项目再试。',
@@ -89,6 +90,9 @@ describe('media failure copy the user actually reads', () => {
     const prompt = imagePrompt();
     expect(prompt).toContain('`switch-model`: pick another allowed model');
     expect(prompt).toContain('`retry-later`: dispatch the identical request once more');
+    expect(prompt).toContain(
+      '`confirm-paid-resubmission`: stop image dispatch and wait for explicit user confirmation of the regular price',
+    );
     expect(prompt).toContain('every other value: report immediately');
   });
 

@@ -216,23 +216,61 @@ export function deriveFileOps(
 }
 
 /**
- * True when the run attempted any file mutation (write/edit/delete tool call,
- * or a simple Bash rm/unlink), regardless of whether the attempt succeeded.
+ * True when the run attempted a project file mutation (write/edit/delete tool
+ * call, or a simple Bash rm/unlink), regardless of whether it succeeded.
+ * With a resolved project directory, exclude only scratch paths: absolute
+ * paths under a well-known temp directory that the project is not itself in.
+ * Any other external path may alias a project file through a symlink, so it
+ * stays conservative, as do missing scope/paths and relative paths.
  * Tool names must stay aligned with the daemon's cross-runtime
  * `WRITE_OR_EDIT_TOOL_NAMES` set in `apps/daemon/src/runtimes/run-artifacts.ts`.
  */
-export function hasFileMutationToolUse(events: AgentEvent[] | undefined): boolean {
+export function hasFileMutationToolUse(
+  events: AgentEvent[] | undefined,
+  scope?: FileOpProjectScope,
+): boolean {
   for (const ev of events ?? []) {
     if (ev.kind !== 'tool_use') continue;
     if (ev.name === 'Bash') {
-      if (extractSimpleBashDeletes(ev.input).length > 0) return true;
+      if (extractSimpleBashDeletes(ev.input).some((file) => mayMutateProjectFile(file, scope))) return true;
       continue;
     }
     const kind = classify(ev.name);
-    if (kind === 'write' || kind === 'edit' || kind === 'delete') return true;
+    if ((kind === 'write' || kind === 'edit' || kind === 'delete')
+      && mayMutateProjectFile(extractPath(ev.input), scope)) return true;
   }
   return false;
 }
+
+function mayMutateProjectFile(file: string | null, scope: FileOpProjectScope | undefined): boolean {
+  if (!file || !scope?.resolvedDir) return true;
+  let candidate = file.replace(/\\/g, '/');
+  let root = scope.resolvedDir.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+  const absolute = (value: string) => value.startsWith('/') || /^[a-z]:\//i.test(value);
+  if (!absolute(candidate) || !absolute(root)) return true;
+  // Do not infer ownership for unnormalized paths: traversal or symlinks can
+  // change their destination. Unknown paths must not hide a delivery failure.
+  if ([candidate, root].some((value) => value.split('/').some((part) => part === '.' || part === '..'))) return true;
+  if (/^[a-z]:\//i.test(root) || root.startsWith('//')) {
+    candidate = candidate.toLowerCase();
+    root = root.toLowerCase();
+  }
+  const within = (value: string, dir: string) => value === dir || value.startsWith(dir.endsWith('/') ? dir : `${dir}/`);
+  if (within(candidate, root)) return true;
+  // The Web client only sees path strings: neither the project root nor the
+  // tool path is canonicalized, so lexical containment cannot rule out a
+  // symlink alias. Only temp scratch space is safe to treat as not-project.
+  const inTemp = (value: string) => TEMP_DIR_PATTERNS.some((pattern) => pattern.test(value));
+  return !inTemp(candidate) || inTemp(root);
+}
+
+/** Well-known scratch roots (lowercased for Windows; POSIX roots are exact). */
+const TEMP_DIR_PATTERNS = [
+  /^(?:\/private)?\/(?:var\/)?tmp(?:\/|$)/,
+  /^(?:\/private)?\/var\/folders(?:\/|$)/,
+  /^[a-z]:\/(?:windows\/)?temp(?:\/|$)/,
+  /^[a-z]:\/users\/[^/]+\/appdata\/local\/temp(?:\/|$)/,
+];
 
 export type FileOpCounts = Record<FileOpKind, number>;
 

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/tools-pack",
-  "version": "0.27.2",
+  "version": "0.27.3",
   "private": true,
   "type": "module",
   "bin": {
@@ -27,7 +27,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.1.9"
+    "@powerformer/vela-cli": "0.1.11"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

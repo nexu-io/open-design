@@ -102,6 +102,30 @@ describe('Website Clone main-path browser runtime', () => {
     expect(launch).toHaveBeenCalledWith({
       headless: true,
       executablePath: browserExecutable,
+      args: ['--use-mock-keychain'],
+    });
+  });
+
+  it('passes --use-mock-keychain to the fallback Playwright browser launch', async () => {
+    const root = fresh();
+    const launch = vi.fn().mockResolvedValue({ close: vi.fn() });
+    const { launchChromium } = await importLoader();
+
+    await launchChromium(
+      { launch },
+      {
+        discovery: {
+          platform: 'linux',
+          env: { PATH: '' },
+          homeDir: root,
+        },
+      },
+    );
+
+    expect(launch).toHaveBeenCalledOnce();
+    expect(launch).toHaveBeenCalledWith({
+      headless: true,
+      args: ['--use-mock-keychain'],
     });
   });
 
@@ -160,6 +184,17 @@ describe('Website Clone main-path browser runtime', () => {
       { cssContentSize: { width: 1600, height: 700 } },
       { width: 1440, height: 900 },
     )).toMatchObject({ width: 1600, height: 900 });
+  });
+
+  it('passes --use-mock-keychain when launching a fallback system browser directly', async () => {
+    const systemBrowser = await import(pathToFileURL(systemBrowserPath).href) as {
+      buildSystemBrowserLaunchArgs: (profileDir: string) => string[];
+    };
+
+    const args = systemBrowser.buildSystemBrowserLaunchArgs('/tmp/od-web-clone-browser-test');
+    expect(args).toContain('--headless=new');
+    expect(args).toContain('--user-data-dir=/tmp/od-web-clone-browser-test');
+    expect(args).toContain('--use-mock-keychain');
   });
 
   it('forbids project-local Playwright installation and documents navigation timeout separately', () => {

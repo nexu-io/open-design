@@ -38,7 +38,11 @@ to continue editing it, and probing its technical form and design language,
 are Build inputs and outside this section's scope; routine code reading and
 modification during Build writing are Build itself. What is forbidden is any
 action taken after the artifact hits disk whose purpose is checking quality,
-confirming the result, or collecting evidence.
+confirming the result, or collecting evidence. Whenever an explicit user
+request requires launching Chrome, Edge, or Chromium from the command line on
+macOS (for example headless export or screenshot), always pass
+`--use-mock-keychain` so macOS does not show a blocking "Keychain Not Found"
+dialog.
 
 Quality is not guaranteed by post-generation checks but by generation-time
 discipline: every quality requirement in the Task Profile, Design Spec,

@@ -80,6 +80,24 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
   ]);
 }
 
+export function buildSystemBrowserLaunchArgs(profileDir: string): string[] {
+  return [
+    '--headless=new',
+    '--remote-debugging-port=0',
+    '--remote-allow-origins=*',
+    `--user-data-dir=${profileDir}`,
+    '--use-mock-keychain',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-background-networking',
+    '--disable-component-update',
+    '--disable-default-apps',
+    '--disable-sync',
+    '--metrics-recording-only',
+    'about:blank',
+  ];
+}
+
 export function createBrowserSessionService() {
   const sessions = new Map<string, BrowserSession>();
 
@@ -110,20 +128,7 @@ export function createBrowserSessionService() {
     }
     const id = randomUUID();
     const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-browser-session-'));
-    const child = spawn(executablePath, [
-      '--headless=new',
-      '--remote-debugging-port=0',
-      '--remote-allow-origins=*',
-      `--user-data-dir=${profileDir}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--disable-background-networking',
-      '--disable-component-update',
-      '--disable-default-apps',
-      '--disable-sync',
-      '--metrics-recording-only',
-      'about:blank',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(executablePath, buildSystemBrowserLaunchArgs(profileDir), { stdio: ['ignore', 'pipe', 'pipe'] });
 
     let output = '';
     const websocketUrl = await new Promise<string>((resolve, reject) => {
