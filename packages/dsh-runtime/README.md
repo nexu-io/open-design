@@ -28,6 +28,13 @@ The probe prints exactly one JSON object. OpenDesign starts one short-lived
 `dsh --profile open-design --stdio` process per run; Harness session storage
 provides cold resume across later processes.
 
+For tool shells, the profile forwards only the run's `OD_TOOL_TOKEN` through
+Harness's managed `DSH_OD_TOOL_TOKEN` environment entry. The `od` CLI accepts
+that entry in a Harness shell (`DSH_SHELL=1`) when `OD_TOOL_TOKEN` is absent;
+an explicit `OD_TOOL_TOKEN` takes precedence. Other credentials remain subject
+to Harness's environment filtering, and token values are not listed in the
+profile's environment metadata.
+
 The models command prints the provider-qualified catalog assembled by the
 user's Harness profile. OpenDesign refreshes this read-only catalog during
 agent detection; credentials and secret values are never included.
