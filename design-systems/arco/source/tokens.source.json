@@ -1,0 +1,1963 @@
+{
+  "schemaVersion": 1,
+  "sourceScope": "upstream-npm-packages",
+  "brandId": "arco",
+  "packages": [
+    {
+      "name": "@arco-design/web-react",
+      "version": "2.66.18",
+      "license": "MIT",
+      "tarball": "https://registry.npmjs.org/@arco-design/web-react/-/web-react-2.66.18.tgz"
+    },
+    {
+      "name": "@arco-design/color",
+      "version": "0.4.0",
+      "license": "MIT",
+      "tarball": "https://registry.npmjs.org/@arco-design/color/-/color-0.4.0.tgz"
+    }
+  ],
+  "note": "Values copied verbatim from the published npm packages; hex values are converted from the compiled RGB triplets in compiled-colors.less. Line numbers refer to files inside the extracted tarballs.",
+  "tokens": [
+    {
+      "upstream": "--arcoblue-1",
+      "mode": "light",
+      "value": "#e8f3ff",
+      "raw": "rgb(232, 243, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:92"
+    },
+    {
+      "upstream": "--arcoblue-2",
+      "mode": "light",
+      "value": "#bedaff",
+      "raw": "rgb(190, 218, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:93"
+    },
+    {
+      "upstream": "--arcoblue-3",
+      "mode": "light",
+      "value": "#94bfff",
+      "raw": "rgb(148, 191, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:94"
+    },
+    {
+      "upstream": "--arcoblue-4",
+      "mode": "light",
+      "value": "#6aa1ff",
+      "raw": "rgb(106, 161, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:95"
+    },
+    {
+      "upstream": "--arcoblue-5",
+      "mode": "light",
+      "value": "#4080ff",
+      "raw": "rgb(64, 128, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:96"
+    },
+    {
+      "upstream": "--arcoblue-6",
+      "mode": "light",
+      "value": "#165dff",
+      "raw": "rgb(22, 93, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:97"
+    },
+    {
+      "upstream": "--arcoblue-7",
+      "mode": "light",
+      "value": "#0e42d2",
+      "raw": "rgb(14, 66, 210)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:98"
+    },
+    {
+      "upstream": "--arcoblue-8",
+      "mode": "light",
+      "value": "#072ca6",
+      "raw": "rgb(7, 44, 166)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:99"
+    },
+    {
+      "upstream": "--arcoblue-9",
+      "mode": "light",
+      "value": "#031a79",
+      "raw": "rgb(3, 26, 121)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:100"
+    },
+    {
+      "upstream": "--arcoblue-10",
+      "mode": "light",
+      "value": "#000d4d",
+      "raw": "rgb(0, 13, 77)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:101"
+    },
+    {
+      "upstream": "--arcoblue-1",
+      "mode": "dark",
+      "value": "#000d4d",
+      "raw": "rgb(0, 13, 77)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:237"
+    },
+    {
+      "upstream": "--arcoblue-2",
+      "mode": "dark",
+      "value": "#041b79",
+      "raw": "rgb(4, 27, 121)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:238"
+    },
+    {
+      "upstream": "--arcoblue-3",
+      "mode": "dark",
+      "value": "#0e32a6",
+      "raw": "rgb(14, 50, 166)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:239"
+    },
+    {
+      "upstream": "--arcoblue-4",
+      "mode": "dark",
+      "value": "#1d4dd2",
+      "raw": "rgb(29, 77, 210)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:240"
+    },
+    {
+      "upstream": "--arcoblue-5",
+      "mode": "dark",
+      "value": "#306eff",
+      "raw": "rgb(48, 110, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:241"
+    },
+    {
+      "upstream": "--arcoblue-6",
+      "mode": "dark",
+      "value": "#3c7eff",
+      "raw": "rgb(60, 126, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:242"
+    },
+    {
+      "upstream": "--arcoblue-7",
+      "mode": "dark",
+      "value": "#689fff",
+      "raw": "rgb(104, 159, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:243"
+    },
+    {
+      "upstream": "--arcoblue-8",
+      "mode": "dark",
+      "value": "#93beff",
+      "raw": "rgb(147, 190, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:244"
+    },
+    {
+      "upstream": "--arcoblue-9",
+      "mode": "dark",
+      "value": "#bedaff",
+      "raw": "rgb(190, 218, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:245"
+    },
+    {
+      "upstream": "--arcoblue-10",
+      "mode": "dark",
+      "value": "#eaf4ff",
+      "raw": "rgb(234, 244, 255)",
+      "role": "primary + link palette (@primary-*, @link-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:246"
+    },
+    {
+      "upstream": "--green-1",
+      "mode": "light",
+      "value": "#e8ffea",
+      "raw": "rgb(232, 255, 234)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:62"
+    },
+    {
+      "upstream": "--green-2",
+      "mode": "light",
+      "value": "#aff0b5",
+      "raw": "rgb(175, 240, 181)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:63"
+    },
+    {
+      "upstream": "--green-3",
+      "mode": "light",
+      "value": "#7be188",
+      "raw": "rgb(123, 225, 136)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:64"
+    },
+    {
+      "upstream": "--green-4",
+      "mode": "light",
+      "value": "#4cd263",
+      "raw": "rgb(76, 210, 99)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:65"
+    },
+    {
+      "upstream": "--green-5",
+      "mode": "light",
+      "value": "#23c343",
+      "raw": "rgb(35, 195, 67)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:66"
+    },
+    {
+      "upstream": "--green-6",
+      "mode": "light",
+      "value": "#00b42a",
+      "raw": "rgb(0, 180, 42)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:67"
+    },
+    {
+      "upstream": "--green-7",
+      "mode": "light",
+      "value": "#009a29",
+      "raw": "rgb(0, 154, 41)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:68"
+    },
+    {
+      "upstream": "--green-8",
+      "mode": "light",
+      "value": "#008026",
+      "raw": "rgb(0, 128, 38)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:69"
+    },
+    {
+      "upstream": "--green-9",
+      "mode": "light",
+      "value": "#006622",
+      "raw": "rgb(0, 102, 34)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:70"
+    },
+    {
+      "upstream": "--green-10",
+      "mode": "light",
+      "value": "#004d1c",
+      "raw": "rgb(0, 77, 28)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:71"
+    },
+    {
+      "upstream": "--green-1",
+      "mode": "dark",
+      "value": "#004d1c",
+      "raw": "rgb(0, 77, 28)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:207"
+    },
+    {
+      "upstream": "--green-2",
+      "mode": "dark",
+      "value": "#046625",
+      "raw": "rgb(4, 102, 37)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:208"
+    },
+    {
+      "upstream": "--green-3",
+      "mode": "dark",
+      "value": "#0a802d",
+      "raw": "rgb(10, 128, 45)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:209"
+    },
+    {
+      "upstream": "--green-4",
+      "mode": "dark",
+      "value": "#129a37",
+      "raw": "rgb(18, 154, 55)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:210"
+    },
+    {
+      "upstream": "--green-5",
+      "mode": "dark",
+      "value": "#1db440",
+      "raw": "rgb(29, 180, 64)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:211"
+    },
+    {
+      "upstream": "--green-6",
+      "mode": "dark",
+      "value": "#27c346",
+      "raw": "rgb(39, 195, 70)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:212"
+    },
+    {
+      "upstream": "--green-7",
+      "mode": "dark",
+      "value": "#50d266",
+      "raw": "rgb(80, 210, 102)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:213"
+    },
+    {
+      "upstream": "--green-8",
+      "mode": "dark",
+      "value": "#7ee18b",
+      "raw": "rgb(126, 225, 139)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:214"
+    },
+    {
+      "upstream": "--green-9",
+      "mode": "dark",
+      "value": "#b2f0b7",
+      "raw": "rgb(178, 240, 183)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:215"
+    },
+    {
+      "upstream": "--green-10",
+      "mode": "dark",
+      "value": "#ebffec",
+      "raw": "rgb(235, 255, 236)",
+      "role": "success palette (@success-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:216"
+    },
+    {
+      "upstream": "--orange-1",
+      "mode": "light",
+      "value": "#fff7e8",
+      "raw": "rgb(255, 247, 232)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:22"
+    },
+    {
+      "upstream": "--orange-2",
+      "mode": "light",
+      "value": "#ffe4ba",
+      "raw": "rgb(255, 228, 186)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:23"
+    },
+    {
+      "upstream": "--orange-3",
+      "mode": "light",
+      "value": "#ffcf8b",
+      "raw": "rgb(255, 207, 139)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:24"
+    },
+    {
+      "upstream": "--orange-4",
+      "mode": "light",
+      "value": "#ffb65d",
+      "raw": "rgb(255, 182, 93)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:25"
+    },
+    {
+      "upstream": "--orange-5",
+      "mode": "light",
+      "value": "#ff9a2e",
+      "raw": "rgb(255, 154, 46)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:26"
+    },
+    {
+      "upstream": "--orange-6",
+      "mode": "light",
+      "value": "#ff7d00",
+      "raw": "rgb(255, 125, 0)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:27"
+    },
+    {
+      "upstream": "--orange-7",
+      "mode": "light",
+      "value": "#d25f00",
+      "raw": "rgb(210, 95, 0)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:28"
+    },
+    {
+      "upstream": "--orange-8",
+      "mode": "light",
+      "value": "#a64500",
+      "raw": "rgb(166, 69, 0)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:29"
+    },
+    {
+      "upstream": "--orange-9",
+      "mode": "light",
+      "value": "#792e00",
+      "raw": "rgb(121, 46, 0)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:30"
+    },
+    {
+      "upstream": "--orange-10",
+      "mode": "light",
+      "value": "#4d1b00",
+      "raw": "rgb(77, 27, 0)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:31"
+    },
+    {
+      "upstream": "--orange-1",
+      "mode": "dark",
+      "value": "#4d1b00",
+      "raw": "rgb(77, 27, 0)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:167"
+    },
+    {
+      "upstream": "--orange-2",
+      "mode": "dark",
+      "value": "#793004",
+      "raw": "rgb(121, 48, 4)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:168"
+    },
+    {
+      "upstream": "--orange-3",
+      "mode": "dark",
+      "value": "#a64b0a",
+      "raw": "rgb(166, 75, 10)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:169"
+    },
+    {
+      "upstream": "--orange-4",
+      "mode": "dark",
+      "value": "#d26913",
+      "raw": "rgb(210, 105, 19)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:170"
+    },
+    {
+      "upstream": "--orange-5",
+      "mode": "dark",
+      "value": "#ff8b1f",
+      "raw": "rgb(255, 139, 31)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:171"
+    },
+    {
+      "upstream": "--orange-6",
+      "mode": "dark",
+      "value": "#ff9626",
+      "raw": "rgb(255, 150, 38)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:172"
+    },
+    {
+      "upstream": "--orange-7",
+      "mode": "dark",
+      "value": "#ffb357",
+      "raw": "rgb(255, 179, 87)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:173"
+    },
+    {
+      "upstream": "--orange-8",
+      "mode": "dark",
+      "value": "#ffcd87",
+      "raw": "rgb(255, 205, 135)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:174"
+    },
+    {
+      "upstream": "--orange-9",
+      "mode": "dark",
+      "value": "#ffe3b8",
+      "raw": "rgb(255, 227, 184)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:175"
+    },
+    {
+      "upstream": "--orange-10",
+      "mode": "dark",
+      "value": "#fff7e8",
+      "raw": "rgb(255, 247, 232)",
+      "role": "warning palette (@warning-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:176"
+    },
+    {
+      "upstream": "--red-1",
+      "mode": "light",
+      "value": "#ffece8",
+      "raw": "rgb(255, 236, 232)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:2"
+    },
+    {
+      "upstream": "--red-2",
+      "mode": "light",
+      "value": "#fdcdc5",
+      "raw": "rgb(253, 205, 197)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:3"
+    },
+    {
+      "upstream": "--red-3",
+      "mode": "light",
+      "value": "#fbaca3",
+      "raw": "rgb(251, 172, 163)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:4"
+    },
+    {
+      "upstream": "--red-4",
+      "mode": "light",
+      "value": "#f98981",
+      "raw": "rgb(249, 137, 129)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:5"
+    },
+    {
+      "upstream": "--red-5",
+      "mode": "light",
+      "value": "#f76560",
+      "raw": "rgb(247, 101, 96)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:6"
+    },
+    {
+      "upstream": "--red-6",
+      "mode": "light",
+      "value": "#f53f3f",
+      "raw": "rgb(245, 63, 63)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:7"
+    },
+    {
+      "upstream": "--red-7",
+      "mode": "light",
+      "value": "#cb272d",
+      "raw": "rgb(203, 39, 45)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:8"
+    },
+    {
+      "upstream": "--red-8",
+      "mode": "light",
+      "value": "#a1151e",
+      "raw": "rgb(161, 21, 30)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:9"
+    },
+    {
+      "upstream": "--red-9",
+      "mode": "light",
+      "value": "#770813",
+      "raw": "rgb(119, 8, 19)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:10"
+    },
+    {
+      "upstream": "--red-10",
+      "mode": "light",
+      "value": "#4d000a",
+      "raw": "rgb(77, 0, 10)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:11"
+    },
+    {
+      "upstream": "--red-1",
+      "mode": "dark",
+      "value": "#4d000a",
+      "raw": "rgb(77, 0, 10)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:147"
+    },
+    {
+      "upstream": "--red-2",
+      "mode": "dark",
+      "value": "#770611",
+      "raw": "rgb(119, 6, 17)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:148"
+    },
+    {
+      "upstream": "--red-3",
+      "mode": "dark",
+      "value": "#a1161f",
+      "raw": "rgb(161, 22, 31)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:149"
+    },
+    {
+      "upstream": "--red-4",
+      "mode": "dark",
+      "value": "#cb2e34",
+      "raw": "rgb(203, 46, 52)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:150"
+    },
+    {
+      "upstream": "--red-5",
+      "mode": "dark",
+      "value": "#f54e4e",
+      "raw": "rgb(245, 78, 78)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:151"
+    },
+    {
+      "upstream": "--red-6",
+      "mode": "dark",
+      "value": "#f76965",
+      "raw": "rgb(247, 105, 101)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:152"
+    },
+    {
+      "upstream": "--red-7",
+      "mode": "dark",
+      "value": "#f98d86",
+      "raw": "rgb(249, 141, 134)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:153"
+    },
+    {
+      "upstream": "--red-8",
+      "mode": "dark",
+      "value": "#fbb0a7",
+      "raw": "rgb(251, 176, 167)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:154"
+    },
+    {
+      "upstream": "--red-9",
+      "mode": "dark",
+      "value": "#fdd1ca",
+      "raw": "rgb(253, 209, 202)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:155"
+    },
+    {
+      "upstream": "--red-10",
+      "mode": "dark",
+      "value": "#fff0ec",
+      "raw": "rgb(255, 240, 236)",
+      "role": "danger palette (@danger-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:156"
+    },
+    {
+      "upstream": "--gray-1",
+      "mode": "light",
+      "value": "#f7f8fa",
+      "raw": "rgb(247, 248, 250)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:132"
+    },
+    {
+      "upstream": "--gray-2",
+      "mode": "light",
+      "value": "#f2f3f5",
+      "raw": "rgb(242, 243, 245)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:133"
+    },
+    {
+      "upstream": "--gray-3",
+      "mode": "light",
+      "value": "#e5e6eb",
+      "raw": "rgb(229, 230, 235)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:134"
+    },
+    {
+      "upstream": "--gray-4",
+      "mode": "light",
+      "value": "#c9cdd4",
+      "raw": "rgb(201, 205, 212)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:135"
+    },
+    {
+      "upstream": "--gray-5",
+      "mode": "light",
+      "value": "#a9aeb8",
+      "raw": "rgb(169, 174, 184)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:136"
+    },
+    {
+      "upstream": "--gray-6",
+      "mode": "light",
+      "value": "#86909c",
+      "raw": "rgb(134, 144, 156)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:137"
+    },
+    {
+      "upstream": "--gray-7",
+      "mode": "light",
+      "value": "#6b7785",
+      "raw": "rgb(107, 119, 133)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:138"
+    },
+    {
+      "upstream": "--gray-8",
+      "mode": "light",
+      "value": "#4e5969",
+      "raw": "rgb(78, 89, 105)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:139"
+    },
+    {
+      "upstream": "--gray-9",
+      "mode": "light",
+      "value": "#272e3b",
+      "raw": "rgb(39, 46, 59)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:140"
+    },
+    {
+      "upstream": "--gray-10",
+      "mode": "light",
+      "value": "#1d2129",
+      "raw": "rgb(29, 33, 41)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:141"
+    },
+    {
+      "upstream": "--gray-1",
+      "mode": "dark",
+      "value": "#17171a",
+      "raw": "rgb(23, 23, 26)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:277"
+    },
+    {
+      "upstream": "--gray-2",
+      "mode": "dark",
+      "value": "#2e2e30",
+      "raw": "rgb(46, 46, 48)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:278"
+    },
+    {
+      "upstream": "--gray-3",
+      "mode": "dark",
+      "value": "#484849",
+      "raw": "rgb(72, 72, 73)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:279"
+    },
+    {
+      "upstream": "--gray-4",
+      "mode": "dark",
+      "value": "#5f5f60",
+      "raw": "rgb(95, 95, 96)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:280"
+    },
+    {
+      "upstream": "--gray-5",
+      "mode": "dark",
+      "value": "#78787a",
+      "raw": "rgb(120, 120, 122)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:281"
+    },
+    {
+      "upstream": "--gray-6",
+      "mode": "dark",
+      "value": "#929293",
+      "raw": "rgb(146, 146, 147)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:282"
+    },
+    {
+      "upstream": "--gray-7",
+      "mode": "dark",
+      "value": "#ababac",
+      "raw": "rgb(171, 171, 172)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:283"
+    },
+    {
+      "upstream": "--gray-8",
+      "mode": "dark",
+      "value": "#c5c5c5",
+      "raw": "rgb(197, 197, 197)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:284"
+    },
+    {
+      "upstream": "--gray-9",
+      "mode": "dark",
+      "value": "#dfdfdf",
+      "raw": "rgb(223, 223, 223)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:285"
+    },
+    {
+      "upstream": "--gray-10",
+      "mode": "dark",
+      "value": "#f6f6f6",
+      "raw": "rgb(246, 246, 246)",
+      "role": "neutral palette (--color-neutral-*)",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/compiled-colors.less:286"
+    },
+    {
+      "upstream": "@primary-6",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-arcoblue-6'))",
+      "role": "semantic alias",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/colors.less:320"
+    },
+    {
+      "upstream": "@success-6",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-green-6'))",
+      "role": "semantic alias",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/colors.less:343"
+    },
+    {
+      "upstream": "@warning-6",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-orange-6'))",
+      "role": "semantic alias",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/colors.less:389"
+    },
+    {
+      "upstream": "@danger-6",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-red-6'))",
+      "role": "semantic alias",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/colors.less:366"
+    },
+    {
+      "upstream": "@link-6",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-arcoblue-6'))",
+      "role": "semantic alias",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/colors.less:411"
+    },
+    {
+      "upstream": "@gray-6",
+      "mode": "light",
+      "value": "#86909c",
+      "role": "semantic alias",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/color/colors.less:152"
+    },
+    {
+      "upstream": "@color-bg-1",
+      "mode": "light",
+      "value": "#fff",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:291"
+    },
+    {
+      "upstream": "@color-bg-2",
+      "mode": "light",
+      "value": "#fff",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:292"
+    },
+    {
+      "upstream": "@color-bg-3",
+      "mode": "light",
+      "value": "#fff",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:293"
+    },
+    {
+      "upstream": "@color-bg-4",
+      "mode": "light",
+      "value": "#fff",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:294"
+    },
+    {
+      "upstream": "@color-bg-5",
+      "mode": "light",
+      "value": "#fff",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:295"
+    },
+    {
+      "upstream": "@color-text-1",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-10')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:297"
+    },
+    {
+      "upstream": "@color-text-2",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-8')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:298"
+    },
+    {
+      "upstream": "@color-text-3",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-6')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:299"
+    },
+    {
+      "upstream": "@color-text-4",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-4')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:300"
+    },
+    {
+      "upstream": "@color-fill-1",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-1')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:301"
+    },
+    {
+      "upstream": "@color-fill-2",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-2')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:302"
+    },
+    {
+      "upstream": "@color-fill-3",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-3')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:303"
+    },
+    {
+      "upstream": "@color-fill-4",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-4')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:304"
+    },
+    {
+      "upstream": "@color-border",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-gray-3'))",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:289"
+    },
+    {
+      "upstream": "@color-border-1",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-2')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:305"
+    },
+    {
+      "upstream": "@color-border-2",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-3')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:306"
+    },
+    {
+      "upstream": "@color-border-3",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-4')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:307"
+    },
+    {
+      "upstream": "@color-border-4",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-6')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:308"
+    },
+    {
+      "upstream": "@color-secondary",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-2')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:313"
+    },
+    {
+      "upstream": "@color-secondary-hover",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-3')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:314"
+    },
+    {
+      "upstream": "@color-secondary-active",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-4')",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:315"
+    },
+    {
+      "upstream": "@dark-color-border",
+      "mode": "dark",
+      "value": "#333335",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:355"
+    },
+    {
+      "upstream": "@dark-color-bg-1",
+      "mode": "dark",
+      "value": "#17171a",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:356"
+    },
+    {
+      "upstream": "@dark-color-bg-2",
+      "mode": "dark",
+      "value": "#232324",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:357"
+    },
+    {
+      "upstream": "@dark-color-bg-3",
+      "mode": "dark",
+      "value": "#2a2a2b",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:358"
+    },
+    {
+      "upstream": "@dark-color-bg-4",
+      "mode": "dark",
+      "value": "#313132",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:359"
+    },
+    {
+      "upstream": "@dark-color-bg-5",
+      "mode": "dark",
+      "value": "#373739",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:360"
+    },
+    {
+      "upstream": "@dark-color-text-1",
+      "mode": "dark",
+      "value": "fade(#fff, 90%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:362"
+    },
+    {
+      "upstream": "@dark-color-text-2",
+      "mode": "dark",
+      "value": "fade(#fff, 70%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:363"
+    },
+    {
+      "upstream": "@dark-color-text-3",
+      "mode": "dark",
+      "value": "fade(#fff, 50%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:364"
+    },
+    {
+      "upstream": "@dark-color-text-4",
+      "mode": "dark",
+      "value": "fade(#fff, 30%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:365"
+    },
+    {
+      "upstream": "@dark-color-fill-1",
+      "mode": "dark",
+      "value": "fade(#fff, 4%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:366"
+    },
+    {
+      "upstream": "@dark-color-fill-2",
+      "mode": "dark",
+      "value": "fade(#fff, 8%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:367"
+    },
+    {
+      "upstream": "@dark-color-fill-3",
+      "mode": "dark",
+      "value": "fade(#fff, 12%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:368"
+    },
+    {
+      "upstream": "@dark-color-fill-4",
+      "mode": "dark",
+      "value": "fade(#fff, 16%)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:369"
+    },
+    {
+      "upstream": "@mask-color-bg",
+      "mode": "light",
+      "value": "rgba(@gray-10, @mask-bg-opacity)",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:272"
+    },
+    {
+      "upstream": "@mask-bg-opacity",
+      "mode": "light",
+      "value": "@opacity-6",
+      "role": "global semantic color",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:271"
+    },
+    {
+      "upstream": "@font-size-display-3",
+      "mode": "light",
+      "value": "56px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:169"
+    },
+    {
+      "upstream": "@font-size-display-2",
+      "mode": "light",
+      "value": "48px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:170"
+    },
+    {
+      "upstream": "@font-size-display-1",
+      "mode": "light",
+      "value": "36px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:171"
+    },
+    {
+      "upstream": "@font-size-title-3",
+      "mode": "light",
+      "value": "24px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:172"
+    },
+    {
+      "upstream": "@font-size-title-2",
+      "mode": "light",
+      "value": "20px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:173"
+    },
+    {
+      "upstream": "@font-size-title-1",
+      "mode": "light",
+      "value": "16px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:174"
+    },
+    {
+      "upstream": "@font-size-body-3",
+      "mode": "light",
+      "value": "14px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:175"
+    },
+    {
+      "upstream": "@font-size-body-2",
+      "mode": "light",
+      "value": "13px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:176"
+    },
+    {
+      "upstream": "@font-size-body-1",
+      "mode": "light",
+      "value": "12px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:177"
+    },
+    {
+      "upstream": "@font-size-caption",
+      "mode": "light",
+      "value": "12px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:178"
+    },
+    {
+      "upstream": "@font-weight-400",
+      "mode": "light",
+      "value": "400",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:184"
+    },
+    {
+      "upstream": "@font-weight-500",
+      "mode": "light",
+      "value": "500",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:185"
+    },
+    {
+      "upstream": "@font-weight-600",
+      "mode": "light",
+      "value": "600",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:186"
+    },
+    {
+      "upstream": "@border-radius-none",
+      "mode": "light",
+      "value": "0",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:20"
+    },
+    {
+      "upstream": "@border-radius-small",
+      "mode": "light",
+      "value": "2px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:21"
+    },
+    {
+      "upstream": "@border-radius-medium",
+      "mode": "light",
+      "value": "4px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:22"
+    },
+    {
+      "upstream": "@border-radius-large",
+      "mode": "light",
+      "value": "8px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:23"
+    },
+    {
+      "upstream": "@border-radius-circle",
+      "mode": "light",
+      "value": "50%",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:24"
+    },
+    {
+      "upstream": "@spacing-none",
+      "mode": "light",
+      "value": "0",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:95"
+    },
+    {
+      "upstream": "@spacing-1",
+      "mode": "light",
+      "value": "2px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:96"
+    },
+    {
+      "upstream": "@spacing-2",
+      "mode": "light",
+      "value": "4px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:97"
+    },
+    {
+      "upstream": "@spacing-3",
+      "mode": "light",
+      "value": "6px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:98"
+    },
+    {
+      "upstream": "@spacing-4",
+      "mode": "light",
+      "value": "8px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:99"
+    },
+    {
+      "upstream": "@spacing-5",
+      "mode": "light",
+      "value": "10px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:100"
+    },
+    {
+      "upstream": "@spacing-6",
+      "mode": "light",
+      "value": "12px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:101"
+    },
+    {
+      "upstream": "@spacing-7",
+      "mode": "light",
+      "value": "16px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:102"
+    },
+    {
+      "upstream": "@spacing-8",
+      "mode": "light",
+      "value": "20px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:103"
+    },
+    {
+      "upstream": "@spacing-9",
+      "mode": "light",
+      "value": "24px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:104"
+    },
+    {
+      "upstream": "@spacing-10",
+      "mode": "light",
+      "value": "32px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:105"
+    },
+    {
+      "upstream": "@spacing-11",
+      "mode": "light",
+      "value": "36px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:106"
+    },
+    {
+      "upstream": "@spacing-12",
+      "mode": "light",
+      "value": "40px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:107"
+    },
+    {
+      "upstream": "@spacing-13",
+      "mode": "light",
+      "value": "48px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:108"
+    },
+    {
+      "upstream": "@spacing-14",
+      "mode": "light",
+      "value": "56px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:109"
+    },
+    {
+      "upstream": "@spacing-15",
+      "mode": "light",
+      "value": "60px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:110"
+    },
+    {
+      "upstream": "@spacing-16",
+      "mode": "light",
+      "value": "64px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:111"
+    },
+    {
+      "upstream": "@spacing-17",
+      "mode": "light",
+      "value": "72px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:112"
+    },
+    {
+      "upstream": "@spacing-18",
+      "mode": "light",
+      "value": "80px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:113"
+    },
+    {
+      "upstream": "@spacing-19",
+      "mode": "light",
+      "value": "84px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:114"
+    },
+    {
+      "upstream": "@spacing-20",
+      "mode": "light",
+      "value": "96px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:115"
+    },
+    {
+      "upstream": "@spacing-21",
+      "mode": "light",
+      "value": "100px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:116"
+    },
+    {
+      "upstream": "@spacing-22",
+      "mode": "light",
+      "value": "120px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:117"
+    },
+    {
+      "upstream": "@shadow1-down",
+      "mode": "light",
+      "value": "0 2px 5px rgba(0, 0, 0, 0.1)",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:127"
+    },
+    {
+      "upstream": "@shadow2-down",
+      "mode": "light",
+      "value": "0 4px 10px rgba(0, 0, 0, 0.1)",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:136"
+    },
+    {
+      "upstream": "@shadow3-down",
+      "mode": "light",
+      "value": "0 8px 20px rgba(0, 0, 0, 0.1)",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:145"
+    },
+    {
+      "upstream": "@shadow-special",
+      "mode": "light",
+      "value": "0 0 1px rgba(0, 0, 0, 0.3)",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:124"
+    },
+    {
+      "upstream": "@size-mini",
+      "mode": "light",
+      "value": "@size-6",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:88"
+    },
+    {
+      "upstream": "@size-small",
+      "mode": "light",
+      "value": "@size-7",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:89"
+    },
+    {
+      "upstream": "@size-default",
+      "mode": "light",
+      "value": "@size-8",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:90"
+    },
+    {
+      "upstream": "@size-large",
+      "mode": "light",
+      "value": "@size-9",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:91"
+    },
+    {
+      "upstream": "@border-1",
+      "mode": "light",
+      "value": "1px",
+      "role": "global theme token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/global.less:6"
+    },
+    {
+      "upstream": "@font-family",
+      "mode": "light",
+      "value": "Inter,-apple-system,BlinkMacSystemFont,PingFang SC,Hiragino Sans GB,noto sans,Microsoft YaHei,Helvetica Neue,Helvetica,Arial,sans-serif",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:13"
+    },
+    {
+      "upstream": "@code-family",
+      "mode": "light",
+      "value": "Consolas, Menlo",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:15"
+    },
+    {
+      "upstream": "@font-size-body",
+      "mode": "light",
+      "value": "14px",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:18"
+    },
+    {
+      "upstream": "@line-height-base",
+      "mode": "light",
+      "value": "1.5715",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:47"
+    },
+    {
+      "upstream": "@transition-duration-1",
+      "mode": "light",
+      "value": "0.1s",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:20"
+    },
+    {
+      "upstream": "@transition-duration-2",
+      "mode": "light",
+      "value": "0.2s",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:21"
+    },
+    {
+      "upstream": "@transition-duration-3",
+      "mode": "light",
+      "value": "0.3s",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:22"
+    },
+    {
+      "upstream": "@transition-duration-4",
+      "mode": "light",
+      "value": "0.4s",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:23"
+    },
+    {
+      "upstream": "@transition-duration-5",
+      "mode": "light",
+      "value": "0.5s",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:24"
+    },
+    {
+      "upstream": "@transition-timing-function-linear",
+      "mode": "light",
+      "value": "cubic-bezier(0, 0, 1, 1)",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:28"
+    },
+    {
+      "upstream": "@transition-timing-function-standard",
+      "mode": "light",
+      "value": "cubic-bezier(0.34, 0.69, 0.1, 1)",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:30"
+    },
+    {
+      "upstream": "@transition-timing-function-overshoot",
+      "mode": "light",
+      "value": "cubic-bezier(0.3, 1.3, 0.3, 1)",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:32"
+    },
+    {
+      "upstream": "@transition-timing-function-decelerate",
+      "mode": "light",
+      "value": "cubic-bezier(0.4, 0.8, 0.74, 1)",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:34"
+    },
+    {
+      "upstream": "@transition-timing-function-accelerate",
+      "mode": "light",
+      "value": "cubic-bezier(0.26, 0, 0.6, 0.2)",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:36"
+    },
+    {
+      "upstream": "@popup-box-shadow-base",
+      "mode": "light",
+      "value": "@shadow1-down",
+      "role": "global default token",
+      "source": "@arco-design/web-react@2.66.18/es/style/theme/default.less:49"
+    },
+    {
+      "upstream": "@btn-font-weight",
+      "mode": "light",
+      "value": "@font-weight-400",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:3"
+    },
+    {
+      "upstream": "@btn-border-radius",
+      "mode": "light",
+      "value": "@radius-small",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:4"
+    },
+    {
+      "upstream": "@btn-size-default-height",
+      "mode": "light",
+      "value": "@size-default",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:9"
+    },
+    {
+      "upstream": "@btn-size-default-padding-horizontal",
+      "mode": "light",
+      "value": "15px",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:34"
+    },
+    {
+      "upstream": "@btn-primary-color-bg",
+      "mode": "light",
+      "value": "@color-primary-6",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:102"
+    },
+    {
+      "upstream": "@btn-primary-color-bg_hover",
+      "mode": "light",
+      "value": "@color-primary-5",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:104"
+    },
+    {
+      "upstream": "@btn-primary-color-bg_active",
+      "mode": "light",
+      "value": "@color-primary-7",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:105"
+    },
+    {
+      "upstream": "@btn-primary-color-bg_disabled",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-primary-light-3')",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:103"
+    },
+    {
+      "upstream": "@btn-secondary-color-bg",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-secondary')",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:157"
+    },
+    {
+      "upstream": "@btn-secondary-color-bg_hover",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-secondary-hover')",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:159"
+    },
+    {
+      "upstream": "@btn-secondary-color-bg_active",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-secondary-active')",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:160"
+    },
+    {
+      "upstream": "@btn-outline-color-border",
+      "mode": "light",
+      "value": "@color-primary-6",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:51"
+    },
+    {
+      "upstream": "@btn-box-shadow-radius",
+      "mode": "light",
+      "value": "2px",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:318"
+    },
+    {
+      "upstream": "@btn-primary-color-box-shadow",
+      "mode": "light",
+      "value": "@color-primary-3",
+      "role": "button component token",
+      "source": "@arco-design/web-react@2.66.18/es/Button/style/token.less:319"
+    },
+    {
+      "upstream": "@input-color-bg",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-fill-2')",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:6"
+    },
+    {
+      "upstream": "@input-color-bg_hover",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-fill-3')",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:7"
+    },
+    {
+      "upstream": "@input-color-bg_focus",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-bg-2')",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:8"
+    },
+    {
+      "upstream": "@input-color-border",
+      "mode": "light",
+      "value": "@color-transparent",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:62"
+    },
+    {
+      "upstream": "@input-color-border_focus",
+      "mode": "light",
+      "value": "@color-primary-6",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:15"
+    },
+    {
+      "upstream": "@input-color-shadow_focus",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-primary-light-2')",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:16"
+    },
+    {
+      "upstream": "@input-size-shadow_focus",
+      "mode": "light",
+      "value": "@shadow-distance-none",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:17"
+    },
+    {
+      "upstream": "@input-color-bg_error",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-danger-light-1')",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:36"
+    },
+    {
+      "upstream": "@input-color-border_error_focus",
+      "mode": "light",
+      "value": "@color-danger-6",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:39"
+    },
+    {
+      "upstream": "@input-border-radius",
+      "mode": "light",
+      "value": "@radius-small",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:52"
+    },
+    {
+      "upstream": "@input-padding-horizontal",
+      "mode": "light",
+      "value": "@spacing-6",
+      "role": "input component token",
+      "source": "@arco-design/web-react@2.66.18/es/Input/style/token.less:102"
+    },
+    {
+      "upstream": "@card-color-border",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-3')",
+      "role": "card component token",
+      "source": "@arco-design/web-react@2.66.18/es/Card/style/token.less:26"
+    },
+    {
+      "upstream": "@card-color-box-shadow",
+      "mode": "light",
+      "value": "rgb(var(~'@{arco-cssvars-prefix}-gray-2'))",
+      "role": "card component token",
+      "source": "@arco-design/web-react@2.66.18/es/Card/style/token.less:32"
+    },
+    {
+      "upstream": "@card-color-box-shadow_dark",
+      "mode": "light",
+      "value": "rgba(var(~'@{arco-cssvars-prefix}-gray-1'), 40%)",
+      "role": "card component token",
+      "source": "@arco-design/web-react@2.66.18/es/Card/style/token.less:33"
+    },
+    {
+      "upstream": "@card-border-radius",
+      "mode": "light",
+      "value": "@radius-small",
+      "role": "card component token",
+      "source": "@arco-design/web-react@2.66.18/es/Card/style/token.less:37"
+    },
+    {
+      "upstream": "@card-size-default-padding-horizontal-body",
+      "mode": "light",
+      "value": "@spacing-7",
+      "role": "card component token",
+      "source": "@arco-design/web-react@2.66.18/es/Card/style/token.less:16"
+    },
+    {
+      "upstream": "@typography-font-size-h1",
+      "mode": "light",
+      "value": "36px",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:3"
+    },
+    {
+      "upstream": "@typography-font-size-h2",
+      "mode": "light",
+      "value": "32px",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:4"
+    },
+    {
+      "upstream": "@typography-font-size-h3",
+      "mode": "light",
+      "value": "28px",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:5"
+    },
+    {
+      "upstream": "@typography-font-size-h4",
+      "mode": "light",
+      "value": "24px",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:6"
+    },
+    {
+      "upstream": "@typography-font-size-h5",
+      "mode": "light",
+      "value": "20px",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:7"
+    },
+    {
+      "upstream": "@typography-font-size-h6",
+      "mode": "light",
+      "value": "16px",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:8"
+    },
+    {
+      "upstream": "@typography-heading-font-weight",
+      "mode": "light",
+      "value": "@font-weight-500",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:12"
+    },
+    {
+      "upstream": "@typography-paragraph-line-height",
+      "mode": "light",
+      "value": "@line-height-base",
+      "role": "typography component token",
+      "source": "@arco-design/web-react@2.66.18/es/Typography/style/token.less:33"
+    },
+    {
+      "upstream": "@table-color-bg-header-cell",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-2')",
+      "role": "table component token",
+      "source": "@arco-design/web-react@2.66.18/es/Table/style/token.less:34"
+    },
+    {
+      "upstream": "@table-color-border",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-neutral-3')",
+      "role": "table component token",
+      "source": "@arco-design/web-react@2.66.18/es/Table/style/token.less:30"
+    },
+    {
+      "upstream": "@table-border-radius",
+      "mode": "light",
+      "value": "@radius-medium",
+      "role": "table component token",
+      "source": "@arco-design/web-react@2.66.18/es/Table/style/token.less:31"
+    },
+    {
+      "upstream": "@table-size-default-padding-horizontal",
+      "mode": "light",
+      "value": "@spacing-7",
+      "role": "table component token",
+      "source": "@arco-design/web-react@2.66.18/es/Table/style/token.less:3"
+    },
+    {
+      "upstream": "@table-size-default-padding-vertical",
+      "mode": "light",
+      "value": "9px",
+      "role": "table component token",
+      "source": "@arco-design/web-react@2.66.18/es/Table/style/token.less:4"
+    },
+    {
+      "upstream": "@table-color-bg-body-row_hover",
+      "mode": "light",
+      "value": "var(~'@{arco-cssvars-prefix}-color-fill-1')",
+      "role": "table component token",
+      "source": "@arco-design/web-react@2.66.18/es/Table/style/token.less:49"
+    },
+    {
+      "upstream": "@modal-border-radius",
+      "mode": "light",
+      "value": "@radius-medium",
+      "role": "modal component token",
+      "source": "@arco-design/web-react@2.66.18/es/Modal/style/token.less:3"
+    },
+    {
+      "upstream": "@modal-default-padding-horizontal",
+      "mode": "light",
+      "value": "@spacing-8",
+      "role": "modal component token",
+      "source": "@arco-design/web-react@2.66.18/es/Modal/style/token.less:21"
+    },
+    {
+      "upstream": "@tag-size-default",
+      "mode": "light",
+      "value": "@size-6",
+      "role": "tag component token",
+      "source": "@arco-design/web-react@2.66.18/es/Tag/style/token.less:12"
+    },
+    {
+      "upstream": "@tag-border-radius",
+      "mode": "light",
+      "value": "@radius-small",
+      "role": "tag component token",
+      "source": "@arco-design/web-react@2.66.18/es/Tag/style/token.less:9"
+    },
+    {
+      "upstream": "@tag-padding-horizontal",
+      "mode": "light",
+      "value": "8px",
+      "role": "tag component token",
+      "source": "@arco-design/web-react@2.66.18/es/Tag/style/token.less:5"
+    },
+    {
+      "upstream": "@select-popup-box-shadow",
+      "mode": "light",
+      "value": "@shadow2-down",
+      "role": "select component token",
+      "source": "@arco-design/web-react@2.66.18/es/Select/style/token.less:85"
+    },
+    {
+      "upstream": "colorList.red",
+      "mode": "seed",
+      "value": "#f53f3f",
+      "role": "palette generation seed (step 6)",
+      "source": "@arco-design/color@0.4.0/src/index.js:8"
+    },
+    {
+      "upstream": "colorList.orange",
+      "mode": "seed",
+      "value": "#ff7d00",
+      "role": "palette generation seed (step 6)",
+      "source": "@arco-design/color@0.4.0/src/index.js:10"
+    },
+    {
+      "upstream": "colorList.green",
+      "mode": "seed",
+      "value": "#00b42a",
+      "role": "palette generation seed (step 6)",
+      "source": "@arco-design/color@0.4.0/src/index.js:14"
+    },
+    {
+      "upstream": "colorList.blue",
+      "mode": "seed",
+      "value": "#3491fa",
+      "role": "palette generation seed (step 6)",
+      "source": "@arco-design/color@0.4.0/src/index.js:16"
+    },
+    {
+      "upstream": "colorList.arcoblue",
+      "mode": "seed",
+      "value": "#165dff",
+      "role": "palette generation seed (step 6)",
+      "source": "@arco-design/color@0.4.0/src/index.js:17"
+    }
+  ]
+}

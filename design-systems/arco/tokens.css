@@ -1,0 +1,129 @@
+/* Arco Design — OpenDesign semantic bindings.
+ * Official sources (see source/evidence.md for file:line provenance):
+ * - npm @arco-design/web-react 2.66.18 (MIT), es/style/theme/default.less,
+ *   global.less, css-variables.less, color/compiled-colors.less, and the
+ *   component token.less files for Button, Input, Card, and Typography.
+ * - npm @arco-design/color 0.4.0 (MIT), src/index.js palette seeds.
+ * - https://github.com/arco-design/arco-design/tree/84504beeaf68e8dd8a5fba7a74b45f4ca71c76f2/site/docs_spec
+ *
+ * Upstream values are adapted from Arco Design, Copyright (c) 2021
+ * Bytedance, Inc. and its affiliates, licensed under the MIT License. This is an OpenDesign
+ * curated integration, not an official ByteDance package.
+ */
+
+:root {
+  /* --color-bg-1 / --color-bg-2 are both white in light mode; --color-fill-2 is the input and secondary-button fill. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-warm: #f2f3f5;
+
+  /* --color-text-1 (gray-10), --color-text-2 (gray-8), --color-text-3 (gray-6). */
+  --fg: #1d2129;
+  --fg-2: #4e5969;
+  --muted: #86909c;
+  --meta: var(--muted);
+
+  /* --color-border-2 (gray-3, Card and Table borders) and --color-border-1 (gray-2). */
+  --border: #e5e6eb;
+  --border-soft: #f2f3f5;
+
+  /* arcoblue-6 primary; Button primary hover is primary-5 and active is primary-7. */
+  --accent: #165dff;
+  --accent-on: #ffffff;
+  --accent-hover: #4080ff;
+  --accent-active: #0e42d2;
+
+  /* success = green-6, warning = orange-6, danger = red-6. */
+  --success: #00b42a;
+  --warn: #ff7d00;
+  --danger: #f53f3f;
+
+  /* @font-family and @code-family from default.less; generic monospace appended. */
+  --font-display: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "noto sans", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "noto sans", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: Consolas, Menlo, monospace;
+
+  /* body-1 12, body-2 13, body-3 14, title-1 16, title-2 20, title-3 24, display-1 36, display-2 48. */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
+  --leading-body: 1.5715;
+  --leading-tight: 1.25;
+  --tracking-display: 0;
+
+  /* Arco @spacing-2/4/6/7/8/9/10/13. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* OpenDesign compatibility bindings picked from Arco @spacing-16/13/10; Arco publishes no section token. */
+  --section-y-desktop: 64px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* @border-radius-small/medium/large; pill is an OpenDesign binding for Arco's round and circle shapes. */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+
+  /* Card border ring, @shadow2-down for popups and hover, Button focus = 2px primary-3. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 4px 10px rgba(0, 0, 0, 0.1);
+  --focus-ring: 0 0 0 2px #94bfff;
+
+  /* @transition-duration-1/2 and @transition-timing-function-standard. */
+  --motion-fast: 100ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.34, 0.69, 0.1, 1);
+
+  /* OpenDesign compatibility bindings: 1200px is Arco Grid's xl breakpoint; 24px is the spec's recommended gutter. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}
+
+/* Arco switches themes with body[arco-theme="dark"]. The data-theme selector
+ * keeps generated OpenDesign artifacts compatible with the repository's
+ * standard theme hook. Dark palette values come from the dark block of
+ * compiled-colors.less; surfaces, text, and fills from global.less @dark-*. */
+[data-theme="dark"],
+[arco-theme="dark"] {
+  --bg: #17171a;
+  --surface: #232324;
+  --surface-warm: rgba(255, 255, 255, 0.08);
+  --fg: rgba(255, 255, 255, 0.9);
+  --fg-2: rgba(255, 255, 255, 0.7);
+  --muted: rgba(255, 255, 255, 0.5);
+  --meta: var(--muted);
+  --border: #484849;
+  --border-soft: #2e2e30;
+  --accent: #3c7eff;
+  --accent-on: #ffffff;
+  --accent-hover: #306eff;
+  --accent-active: #689fff;
+  --success: #27c346;
+  --warn: #ff9626;
+  --danger: #f76965;
+  --elev-raised: 0 4px 10px rgba(23, 23, 26, 0.4);
+  --focus-ring: 0 0 0 2px #0e32a6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}

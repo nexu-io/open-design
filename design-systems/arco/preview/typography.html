@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arco Design typography</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: 800px; margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      h1 { margin: 0; font-size: var(--text-2xl); font-weight: 500; line-height: var(--leading-tight); }
+      .intro { margin: var(--space-2) 0 var(--space-8); color: var(--fg-2); font-size: var(--text-base); }
+      .samples { display: grid; gap: var(--space-4); }
+      .sample { display: grid; grid-template-columns: 112px 1fr; align-items: baseline; gap: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border); }
+      .label { color: var(--fg-2); font: 400 var(--text-xs) / 1.5 var(--font-mono); }
+      .text { margin: 0; font-size: var(--size); line-height: var(--leading-body); }
+      .heading { font-weight: 500; line-height: var(--leading-tight); }
+      .code { font-family: var(--font-mono); font-size: var(--text-sm); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Type hierarchy</h1>
+      <p class="intro">Inter with PingFang SC / Microsoft YaHei fallbacks, a 14px body, weights 400 and 500, and no added tracking.</p>
+      <section class="samples" aria-label="Typography samples">
+        <div class="sample"><span class="label">12px / xs</span><p class="text" style="--size: var(--text-xs)">Caption, tag, and helper text — 最小可读字号</p></div>
+        <div class="sample"><span class="label">13px / sm</span><p class="text" style="--size: var(--text-sm)">Dense secondary text in tables and lists</p></div>
+        <div class="sample"><span class="label">14px / base</span><p class="text" style="--size: var(--text-base)">Body text, buttons, inputs, and table cells — 正文默认字号</p></div>
+        <div class="sample"><span class="label">16px / lg</span><p class="text heading" style="--size: var(--text-lg)">Card title</p></div>
+        <div class="sample"><span class="label">20px / xl</span><p class="text heading" style="--size: var(--text-xl)">Section title</p></div>
+        <div class="sample"><span class="label">24px / 2xl</span><p class="text heading" style="--size: var(--text-2xl)">Page title</p></div>
+        <div class="sample"><span class="label">36px / 3xl</span><p class="text heading" style="--size: var(--text-3xl)">Display 1</p></div>
+        <div class="sample"><span class="label">48px / 4xl</span><p class="text heading" style="--size: var(--text-4xl)">12,480</p></div>
+        <div class="sample"><span class="label">mono</span><p class="text code">npm install @arco-design/web-react</p></div>
+      </section>
+    </main>
+  </body>
+</html>

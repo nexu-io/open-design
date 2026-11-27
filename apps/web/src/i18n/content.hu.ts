@@ -941,6 +941,7 @@ export const HU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'apple': 'Szórakoztató elektronika. Prémium üres terek, SF Pro, filmszerű képi világ.',
   'application': 'Alkalmazás-irányítópult lila témájú esztétikával, felső sávos navigációval, kártyaalapú elrendezésekkel és fejlesztőközpontú munkafolyamatokkal.',
   'arc': '„A böngésző, amely helyetted böngészik.” Áttetsző felületek, színátmenetes melegség, oldalsáv-központú elrendezés.',
+  'arco': 'A ByteDance nyílt forráskódú vállalati dizájnrendszere admin- és back-office termékekhez: arcoblue elsődleges műveletek, hideg szürke semleges színek, kompakt 14px-es tipográfia, kis lekerekítések, keret nélküli kitöltött beviteli mezők és hivatalos világos/sötét paletták.',
   'artistic': 'Nagy kontrasztú, expresszív stílus kreatív tipográfiával és merész színválasztással a vizuálisan feltűnő felületekhez.',
   'atelier-zero': 'Magazinszínvonalú, kollázs-vezérelt vizuális rendszer: meleg papírvászon, szürreális\nvakolat-és-építészet képi világ, túlméretezett kijelzőbetűtípus, hajszálvékony vonalak,\nrómai számos szakaszjelölők és apró szerkesztői jegyzetek.\nA produkciós v ihlette',
   'bento': 'Moduláris rácselrendezés kártyaszerű blokkokkal, világos hierarchiával, lágy térközökkel és finom vizuális kontraszttal a rendezett, átfutható felületekhez.',

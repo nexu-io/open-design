@@ -941,6 +941,7 @@ export const PL_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'apple': 'Elektronika użytkowa. Luksusowa biała przestrzeń, SF Pro, kinowe obrazy.',
   'application': 'Pulpit aplikacji z estetyką w odcieniach fioletu, nawigacją w górnym pasku, układami opartymi na kartach i przepływami pracy stawiającymi programistów na pierwszym miejscu.',
   'arc': '„Przeglądarka, która przegląda za Ciebie”. Półprzezroczyste powierzchnie, gradientowe ciepło, układ z paskiem bocznym na pierwszym planie.',
+  'arco': 'Otwartoźródłowy system projektowy ByteDance dla produktów administracyjnych i back-office: główne akcje w kolorze arcoblue, chłodne szarości, zwarta typografia 14px, małe zaokrąglenia, wypełnione pola bez obramowania i oficjalne palety jasna oraz ciemna.',
   'artistic': 'Wysokokontrastowy, ekspresyjny styl z kreatywną typografią i odważnymi wyborami kolorystycznymi dla efektownych wizualnie interfejsów.',
   'atelier-zero': 'Wizualny system na poziomie magazynu, oparty na kolażu: ciepłe papierowe tło, surrealistyczne\nobrazy z gipsu i architektury, ponadwymiarowa typografia displejowa, włoskowate linie,\noznaczenia sekcji cyframi rzymskimi oraz drobne edytorskie adnotacje.\nInspirowany produkcyjną wersją v',
   'bento': 'Modułowy układ siatki z blokami przypominającymi karty, jasną hierarchią, miękkimi odstępami i subtelnym kontrastem wizualnym dla uporządkowanych, łatwych do przeskanowania interfejsów.',
