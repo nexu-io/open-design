@@ -65,6 +65,7 @@ import {
   desktopUpdateMenuItemKey,
   type DesktopUpdateMenuLabels,
 } from "./update-menu.js";
+import { deriveViewZoomMenuItems } from "./view-menu.js";
 import {
   createDesktopUpdater,
   createDesktopUpdaterScheduler,
@@ -610,9 +611,7 @@ function installDesktopMenu(
             click: toggleDevelopMenu,
           },
           { type: "separator" },
-          { role: "resetZoom" },
-          { role: "zoomIn" },
-          { role: "zoomOut" },
+          ...deriveViewZoomMenuItems({ platform: process.platform }),
           { type: "separator" },
           { role: "togglefullscreen" },
         ],
