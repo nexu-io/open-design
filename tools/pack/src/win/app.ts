@@ -14,6 +14,7 @@ import {
   validateNodePtyRuntime,
 } from "../node-pty-runtime.js";
 import { hashPackageSourcePath } from "../package-source-hash.js";
+import { productionInstallEnv } from "../production-install.js";
 import { electronBuilderVersionForAppVersion } from "../versioning/index.js";
 import {
   WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER,
@@ -69,7 +70,7 @@ async function runNpmInstall(appRoot: string): Promise<void> {
   });
   await execFileAsync(invocation.command, invocation.args, {
     cwd: appRoot,
-    env: process.env,
+    env: productionInstallEnv(process.env),
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
