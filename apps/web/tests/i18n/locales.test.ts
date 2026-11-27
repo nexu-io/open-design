@@ -47,6 +47,18 @@ describe('i18n locales', () => {
       }
     }
   });
+  it('localizes the OpenCode Zen outdated-runtime guidance in every non-English language', async () => {
+    const keys = ['settings.testAgentZenOutdatedByok', 'settings.testAgentZenOutdatedCli'] as const;
+    for (const locale of LOCALES) {
+      if (locale === 'en') continue;
+      const dict = await loadDict(locale);
+      for (const key of keys) {
+        expect(dict[key], `${locale}.${key}`).toBeTruthy();
+        expect(dict[key], `${locale}.${key}`).not.toBe(en[key]);
+        expect(placeholders(dict[key]), `${locale}.${key} placeholders`).toEqual(placeholders(en[key]));
+      }
+    }
+  });
   it('resolves the initial locale from browser language preferences', () => {
     expect(resolveSystemLocale(['zh-Hans-CN', 'en-US'])).toBe('zh-CN');
     expect(resolveSystemLocale(['zh-Hant-HK', 'en-US'])).toBe('zh-TW');

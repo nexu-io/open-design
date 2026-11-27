@@ -632,6 +632,8 @@ export const ja: Dict = {
   'settings.testTimeout': '{ms} ms 後にテストがタイムアウトしました。',
   'settings.testAgentMissing': '{agentName} がインストールされていないか、PATH にありません。',
   'settings.testAgentSpawn': '{agentName} を起動できませんでした: {detail}。',
+  'settings.testAgentZenOutdatedByok': '{agentName} を起動できませんでした: OpenCode Zen の無料枠が、OpenDesign が起動した OpenCode ランタイムを古すぎるとして拒否しました。既定ではこれは OpenDesign に同梱されたランタイムのため、OpenCode Desktop を更新しても変わりません。代わりに、自分の API key で API プロバイダーを設定し、そのモデルを選択してください。',
+  'settings.testAgentZenOutdatedCli': '{agentName} を起動できませんでした: OpenCode Zen の無料枠が、この OpenCode CLI を古すぎるとして拒否しました。自分の API key で OpenCode に設定したプロバイダーのモデルを選択し、もう一度テストを実行してください。',
   'settings.testUnknown': 'テストに失敗しました: {detail}',
   'settings.agentInstall.install': 'インストール',
   'settings.agentInstall.docs': 'ドキュメント',

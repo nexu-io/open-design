@@ -632,6 +632,8 @@ export const ru: Dict = {
   'settings.testTimeout': 'Тест прерван по таймауту через {ms} мс.',
   'settings.testAgentMissing': '{agentName} не установлен или отсутствует в PATH.',
   'settings.testAgentSpawn': 'Не удалось запустить {agentName}: {detail}.',
+  'settings.testAgentZenOutdatedByok': 'Не удалось запустить {agentName}: бесплатный тариф OpenCode Zen отклонил среду выполнения OpenCode, запущенную OpenDesign, потому что она слишком устарела. По умолчанию это среда, встроенная в OpenDesign, поэтому обновление OpenCode Desktop её не меняет. Настройте API-провайдер со своим ключом API и выберите одну из его моделей.',
+  'settings.testAgentZenOutdatedCli': 'Не удалось запустить {agentName}: бесплатный тариф OpenCode Zen отклонил этот OpenCode CLI, потому что он слишком устарел. Выберите модель провайдера, настроенного в OpenCode с вашим ключом API, и запустите тест снова.',
   'settings.testUnknown': 'Тест не пройден: {detail}',
   'settings.agentInstall.install': 'Установить',
   'settings.agentInstall.docs': 'Документация',

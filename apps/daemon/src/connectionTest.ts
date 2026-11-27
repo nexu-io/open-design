@@ -74,6 +74,7 @@ import {
   type BaseUrlValidationResult,
   type ValidateBaseUrlOptions,
   type ConnectionTestDiagnostics,
+  type ConnectionTestErrorCode,
   type ConnectionTestKind,
   type ConnectionTestPhase,
   type ConnectionTestProtocol,
@@ -99,6 +100,11 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import {
+  detectOpenCodeZenOutdatedClient,
+  openCodeZenOutdatedDetail,
+  openCodeZenOutdatedErrorCode,
+} from './runtimes/opencode-zen.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2114,6 +2120,19 @@ function openCodeOutdatedCliDetail(output: string): string | null {
     : null;
 }
 
+function openCodeZenOutdatedClientResult(
+  agentId: string,
+  output: string,
+): { detail: string; errorCode: ConnectionTestErrorCode } | null {
+  if (agentId !== 'opencode' && agentId !== 'byok-opencode') return null;
+  const zen = detectOpenCodeZenOutdatedClient(output);
+  if (!zen) return null;
+  return {
+    detail: openCodeZenOutdatedDetail(agentId, zen.requiredVersion),
+    errorCode: openCodeZenOutdatedErrorCode(agentId),
+  };
+}
+
 function openCodeProviderConnectivityDetail(output: string): string | null {
   for (const rawLine of output.split(/\r?\n/u)) {
     const line = rawLine.replace(/\s+/gu, ' ').trim();
@@ -2505,6 +2524,20 @@ async function testAgentConnectionInternal(
         diagnostics: buildDiagnostics(),
       };
     }
+    const zenResult = openCodeZenOutdatedClientResult(input.agentId, detail);
+    if (zenResult) {
+      console.warn(`[test:agent] ${def.name} → zen_outdated_client: ${detail}`);
+      return {
+        ok: false,
+        kind: 'agent_spawn_failed',
+        latencyMs,
+        model,
+        agentName: def.name,
+        detail: zenResult.detail,
+        errorCode: zenResult.errorCode,
+        diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
+      };
+    }
     if (detail && isLikelyModelErrorText(detail)) {
       console.warn(
         `[test:agent] ${def.name} → not_found_model: ${detail}`,
@@ -2556,6 +2589,25 @@ async function testAgentConnectionInternal(
   const resultFromCancellation = (
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
+    if (kind === 'timeout') {
+      const zenResult = openCodeZenOutdatedClientResult(
+        input.agentId,
+        `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`,
+      );
+      if (zenResult) {
+        console.warn(`[test:agent] ${def.name} → zen_outdated_client (timeout)`);
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs: Date.now() - start,
+          model,
+          agentName: def.name,
+          detail: zenResult.detail,
+          errorCode: zenResult.errorCode,
+          diagnostics: buildDiagnostics({ phase: 'connection_smoke_test' }),
+        };
+      }
+    }
     if (kind === 'timeout' && input.agentId === 'opencode') {
       const rawDetail = `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`;
       const providerDetail = openCodeProviderConnectivityDetail(rawDetail);
@@ -2929,6 +2981,29 @@ async function testAgentConnectionInternal(
       ]
         .filter(Boolean)
         .join(' · ');
+      const zenResult = openCodeZenOutdatedClientResult(
+        input.agentId,
+        `${stderrTail}\n${rawStdoutTail || buffered}`,
+      );
+      if (zenResult) {
+        console.warn(
+          `[test:agent] ${def.name} → zen_outdated_client: ${redactSecrets(rawDetail)}`,
+        );
+        return {
+          ok: false,
+          kind: 'agent_spawn_failed',
+          latencyMs,
+          model,
+          agentName: def.name,
+          detail: zenResult.detail,
+          errorCode: zenResult.errorCode,
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
+        };
+      }
       if (input.agentId === 'opencode') {
         const outdatedCliDetail = openCodeOutdatedCliDetail(rawDetail);
         if (outdatedCliDetail) {

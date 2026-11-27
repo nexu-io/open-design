@@ -632,6 +632,8 @@ export const fr: Dict = {
   'settings.testTimeout': 'Le test a expiré après {ms} ms.',
   'settings.testAgentMissing': '{agentName} n’est pas installé ou pas dans le PATH.',
   'settings.testAgentSpawn': 'Impossible de démarrer {agentName} : {detail}.',
+  'settings.testAgentZenOutdatedByok': 'Impossible de démarrer {agentName} : l’offre gratuite d’OpenCode Zen a refusé le runtime OpenCode lancé par OpenDesign, car il est trop ancien. Par défaut, il s’agit du runtime fourni avec OpenDesign : mettre à jour OpenCode Desktop ne le modifie donc pas. Configurez plutôt un fournisseur API avec votre propre clé API et choisissez l’un de ses modèles.',
+  'settings.testAgentZenOutdatedCli': 'Impossible de démarrer {agentName} : l’offre gratuite d’OpenCode Zen a refusé cette CLI OpenCode, car elle est trop ancienne. Choisissez un modèle d’un fournisseur configuré dans OpenCode avec votre propre clé API, puis relancez le test.',
   'settings.testUnknown': 'Échec du test : {detail}',
   'settings.agentInstall.install': 'Installer',
   'settings.agentInstall.docs': 'Documentation',

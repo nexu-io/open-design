@@ -632,6 +632,8 @@ export const ar: Dict = {
   'settings.testTimeout': 'انتهت مهلة الاختبار بعد {ms} مللي ثانية.',
   'settings.testAgentMissing': '{agentName} غير مثبت أو ليس في PATH.',
   'settings.testAgentSpawn': 'تعذّر تشغيل {agentName}: {detail}.',
+  'settings.testAgentZenOutdatedByok': 'تعذّر تشغيل {agentName}: رفضت الطبقة المجانية من OpenCode Zen بيئة تشغيل OpenCode التي شغّلها OpenDesign لأنها قديمة جدًا. افتراضيًا هذه هي البيئة المضمّنة مع OpenDesign، لذا لا يغيّرها تحديث OpenCode Desktop. أعدّ مزود API باستخدام API key الخاص بك واختر أحد نماذجه بدلًا من ذلك.',
+  'settings.testAgentZenOutdatedCli': 'تعذّر تشغيل {agentName}: رفضت الطبقة المجانية من OpenCode Zen أداة OpenCode CLI هذه لأنها قديمة جدًا. اختر نموذجًا من مزود مُكوَّن في OpenCode باستخدام API key الخاص بك، ثم أعد تشغيل الاختبار.',
   'settings.testUnknown': 'فشل الاختبار: {detail}',
   'settings.agentInstall.install': 'تثبيت',
   'settings.agentInstall.docs': 'الوثائق',

@@ -3462,6 +3462,55 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     ).toBeTruthy();
   });
 
+  it('shows localized Zen outdated-CLI guidance instead of raw detail for a failed Local CLI test', async () => {
+    const opencodeAgent: AgentInfo = {
+      id: 'opencode',
+      name: 'OpenCode',
+      bin: 'opencode',
+      available: true,
+      version: '1.0.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/test/connection') {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            kind: 'agent_spawn_failed',
+            latencyMs: 1,
+            agentName: 'OpenCode',
+            errorCode: 'opencode_zen_outdated_cli',
+            detail: 'RAW ENGLISH DETAIL SENTINEL',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }));
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'opencode' },
+      { agents: [opencodeAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    const expected = en['settings.testAgentZenOutdatedCli'].replace(
+      '{agentName}',
+      'OpenCode',
+    );
+    expect(await screen.findByText(expected)).toBeTruthy();
+    expect(screen.queryByText(/RAW ENGLISH DETAIL SENTINEL/)).toBeNull();
+  });
+
   it('renders the AMR local agent without vela branding and with the Local CLI test action', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();

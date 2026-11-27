@@ -632,6 +632,8 @@ export const id: Dict = {
   'settings.testTimeout': 'Tes melewati batas waktu setelah {ms} md.',
   'settings.testAgentMissing': '{agentName} tidak terpasang atau tidak ada di PATH.',
   'settings.testAgentSpawn': 'Tidak dapat memulai {agentName}: {detail}.',
+  'settings.testAgentZenOutdatedByok': 'Tidak dapat memulai {agentName}: tingkat gratis OpenCode Zen menolak runtime OpenCode yang dijalankan OpenDesign karena sudah terlalu lama. Secara default ini adalah runtime yang dibundel dengan OpenDesign, jadi memperbarui OpenCode Desktop tidak mengubahnya. Siapkan penyedia API dengan API key milik Anda sendiri, lalu pilih salah satu modelnya.',
+  'settings.testAgentZenOutdatedCli': 'Tidak dapat memulai {agentName}: tingkat gratis OpenCode Zen menolak CLI OpenCode ini karena sudah terlalu lama. Pilih model dari penyedia yang dikonfigurasi di OpenCode dengan API key milik Anda sendiri, lalu jalankan pengujian lagi.',
   'settings.testUnknown': 'Tes gagal: {detail}',
   'settings.agentInstall.install': 'Instal',
   'settings.agentInstall.docs': 'Dokumentasi',

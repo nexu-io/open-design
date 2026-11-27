@@ -1206,6 +1206,13 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     });
 
     expect(
+      classify(null, 'OpenCode 1.18.0 or newer is required to use the free tier.'),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+    });
+
+    expect(
       classify(
         'AGENT_EXECUTION_FAILED',
         "The 'gpt-5.6-terra' model requires a newer version of Codex.",

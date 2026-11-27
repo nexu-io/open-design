@@ -632,6 +632,8 @@ export const it: Dict = {
   'settings.testTimeout': 'Il test è scaduto dopo {ms} ms.',
   'settings.testAgentMissing': '{agentName} non è installato o non è nel PATH.',
   'settings.testAgentSpawn': 'Impossibile avviare {agentName}: {detail}.',
+  'settings.testAgentZenOutdatedByok': 'Impossibile avviare {agentName}: il livello gratuito di OpenCode Zen ha rifiutato il runtime di OpenCode avviato da OpenDesign perché è troppo vecchio. Per impostazione predefinita è il runtime incluso in OpenDesign, quindi aggiornare OpenCode Desktop non lo modifica. Configura invece un provider API con la tua API key e scegli uno dei suoi modelli.',
+  'settings.testAgentZenOutdatedCli': 'Impossibile avviare {agentName}: il livello gratuito di OpenCode Zen ha rifiutato questa CLI di OpenCode perché è troppo vecchia. Scegli un modello di un provider configurato in OpenCode con la tua API key, poi esegui di nuovo il test.',
   'settings.testUnknown': 'Test fallito: {detail}',
   'settings.agentInstall.install': 'Installa',
   'settings.agentInstall.docs': 'Documentazione',
