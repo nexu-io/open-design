@@ -288,6 +288,11 @@ export function spawnAgentProcess(request: SpawnAgentProcessRequest): SpawnedAge
       cwd: request.cwd,
       shell: false,
       detached,
+      // A Windows agent shim is a `.cmd`/`.bat` file, so every run reaches the
+      // OS through cmd.exe — a console application. The daemon has no console
+      // of its own to host it, so without this the console is created visible
+      // and a window pops up in front of the user on every message.
+      windowsHide: true,
       // Required when invocation wraps a Windows .cmd/.bat shim through
       // cmd.exe; without this, Node re-escapes the inner command line and
       // breaks paths containing spaces (issue #315).
