@@ -9,6 +9,7 @@ import {
   velaCommandStdout,
   velaWorkspaceCommandOptions,
 } from '../integrations/vela-command.js';
+import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
 
 type VelaCommandRunner = typeof runVelaCommand;
 type ProgressFn = (message: string) => void;
@@ -627,6 +628,15 @@ export function velaMediaErrorFromFailure(
       },
     );
   }
+  const stderr = velaCommandStderr(error);
+  const failureText = [commandMessage, stderr].filter(Boolean).join('\n');
+  const accountFailure = classifyAmrAccountFailure(failureText);
+  if (accountFailure) {
+    return new VelaMediaError(accountFailure.message, {
+      code: accountFailure.code,
+      retryable: false,
+    });
+  }
   const stdout = velaCommandStdout(error).trim();
   if (!stdout) return undefined;
   let parsed: unknown;
@@ -716,10 +726,15 @@ export async function renderVelaVideo(
       '--no-wait',
       '--json',
     ];
-    const submitStdout = await runCommand(submitArgs, {
-      ...velaWorkspaceCommandOptions(input.workspaceId),
-      timeoutMs: VELA_VIDEO_SUBMIT_TIMEOUT_MS,
-    });
+    let submitStdout: string;
+    try {
+      submitStdout = await runCommand(submitArgs, {
+        ...velaWorkspaceCommandOptions(input.workspaceId),
+        timeoutMs: VELA_VIDEO_SUBMIT_TIMEOUT_MS,
+      });
+    } catch (error) {
+      throw velaMediaErrorFromFailure(error, 'video gen') ?? error;
+    }
     const submitted = parseJsonObject(submitStdout, 'video gen');
     const taskId = nonEmptyString(submitted.task_id);
     if (!taskId) throw new Error('Vela video gen response is missing task_id');
@@ -730,13 +745,18 @@ export async function renderVelaVideo(
       await wait(Math.min(pollIntervalMs, Math.max(1, totalTimeoutMs - (Date.now() - startedAt))));
       if (Date.now() - startedAt >= totalTimeoutMs) break;
 
-      const pollStdout = await runCommand(
-        ['video', 'get', taskId, '--output', outputPath, '--json'],
-        {
-          ...velaWorkspaceCommandOptions(input.workspaceId),
-          timeoutMs: pollCommandTimeoutMs,
-        },
-      );
+      let pollStdout: string;
+      try {
+        pollStdout = await runCommand(
+          ['video', 'get', taskId, '--output', outputPath, '--json'],
+          {
+            ...velaWorkspaceCommandOptions(input.workspaceId),
+            timeoutMs: pollCommandTimeoutMs,
+          },
+        );
+      } catch (error) {
+        throw velaMediaErrorFromFailure(error, 'video get') ?? error;
+      }
       const task = parseJsonObject(pollStdout, 'video get');
       const returnedTaskId = nonEmptyString(task.task_id);
       if (returnedTaskId !== taskId) {
