@@ -61,6 +61,8 @@ export interface ParsedDesignMd {
   voice: ParsedVoice;
   imagery: ParsedImagery;
   layout: ParsedLayout;
+  /** Optional mono type sample line declared via frontmatter `mono_specimen:` (empty when absent). */
+  monoSpecimen: string;
 }
 
 interface Section {
@@ -417,5 +419,6 @@ export function parseDesignMd(body: string): ParsedDesignMd {
     voice,
     imagery,
     layout,
+    monoSpecimen: frontmatterScalar(frontmatter, 'mono_specimen'),
   };
 }

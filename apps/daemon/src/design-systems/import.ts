@@ -56,6 +56,7 @@ type ProjectScan = {
   packageDescription: string | undefined;
   packageTech: string[];
   readmeExcerpt: string | undefined;
+  monoSpecimen: string | undefined;
   cssVariables: CssVariable[];
   tailwindSignals: string[];
   assets: AssetCandidate[];
@@ -203,9 +204,10 @@ export class LocalDesignSystemImportError extends Error {
 }
 
 async function scanProject(sourceRoot: string): Promise<ProjectScan> {
-  const [packageJson, readmeExcerpt, files] = await Promise.all([
+  const [packageJson, readmeExcerpt, monoSpecimen, files] = await Promise.all([
     readPackageJson(sourceRoot),
     readReadme(sourceRoot),
+    readMonoSpecimen(sourceRoot),
     walkProject(sourceRoot),
   ]);
   const styleFiles = files
@@ -220,6 +222,7 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
     packageDescription: packageJson.description,
     packageTech: packageJson.tech,
     readmeExcerpt,
+    monoSpecimen,
     cssVariables,
     tailwindSignals: await readTailwindSignals(sourceRoot),
     assets: await findAssets(sourceRoot, files),
@@ -259,6 +262,23 @@ async function readReadme(sourceRoot: string): Promise<string | undefined> {
       return compactMarkdown(raw).slice(0, 1400);
     } catch {
       // Try the next common readme name.
+    }
+  }
+  return undefined;
+}
+
+// Optional mono type specimen declared in the source package's DESIGN.md
+// frontmatter; carried through so the kit view can show the design system's
+// own monospace sample line instead of OpenDesign's default.
+async function readMonoSpecimen(sourceRoot: string): Promise<string | undefined> {
+  for (const name of ['DESIGN.md', 'design.md']) {
+    try {
+      const raw = await readFile(path.join(sourceRoot, name), 'utf8');
+      const frontmatter = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      const match = (frontmatter?.[1] ?? raw).match(/^mono_specimen:\s*(.+)$/m);
+      return match?.[1]?.trim().replace(/^["']|["']$/g, '') || undefined;
+    } catch {
+      // Try the next common design doc name.
     }
   }
   return undefined;
@@ -514,6 +534,17 @@ function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
   const components = scan.components.map((component) => `- ${component.name}: \`${component.relPath}\``);
   const assets = scan.assets.map((asset) => `- \`${asset.relPath}\``);
   return [
+    ...(scan.monoSpecimen
+      ? [
+          '---',
+          `name: "${name.replace(/"/g, '\\"')}"`,
+          'category: Imported',
+          'surface: web',
+          `mono_specimen: "${scan.monoSpecimen.replace(/"/g, '\\"')}"`,
+          '---',
+          '',
+        ]
+      : []),
     `# ${name}`,
     '',
     '> Category: Imported',
