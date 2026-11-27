@@ -27,6 +27,7 @@ import { readTaskTelemetrySinkConfig } from '../../src/langfuse-trace.js';
 import { buildStructuredMainRunObservationV1 } from '../../src/observability/main-run-observation.js';
 import { createEmptyFrozenSkillPackage } from '../../src/strategies/od-next/frozen-skill-package.js';
 import type { StrategyTaskExecutionRecord } from '../../src/strategies/task-store.js';
+import { projectTaskTrace } from '../../src/observability/task-trace-projection.js';
 
 const RUN_ID = 'run-production';
 const TASK_ID = 'task-otlp-fixture';
@@ -1182,6 +1183,46 @@ describe('task observation OTLP exporter', () => {
     );
   });
 
+  it.each([true, false, undefined])('merges projected metadata with unique canonical OTLP attributes (packaged=%s)', (packaged) => {
+    const source = aggregate();
+    source.root.planContractHash = null;
+    source.traceProjection = projectTaskTrace([{
+      runId: RUN_ID,
+      input: 'safe input',
+      output: 'safe output',
+      metadata: {
+        packaged,
+        outcome: 'physical-run-status',
+        plan_contract_hash: 'physical-run-contract',
+        custom_flag: false,
+        custom_count: 0,
+        custom_details: { phase: 'fixture' },
+      },
+    }], 1_000);
+    const context = { environment: 'test', tag: 'test', ...(packaged === undefined ? {} : { packaged }) };
+    const payload = buildOtlpTaskObservationPayload(source, context);
+    expect(legacyAndOtlpTaskMappingsMatch(source, buildLegacyTaskObservationPayload(source, context), payload, context)).toBe(true);
+    for (const span of spans(payload)) {
+      expect(new Set(span.attributes.map(attribute => attribute.key)).size).toBe(span.attributes.length);
+      expect(stringAttribute(span, 'langfuse.trace.metadata.packaged')).toBe(packaged === undefined ? undefined : String(packaged));
+      expect(span.attributes.some(attribute => attribute.key === 'langfuse.trace.metadata.plan_contract_hash')).toBe(false);
+      expect(stringAttribute(span, 'langfuse.trace.metadata.outcome')).toBe(source.root.status);
+      expect(span.attributes).toEqual(expect.arrayContaining([
+        { key: 'langfuse.trace.metadata.custom_flag', value: { boolValue: false } },
+        { key: 'langfuse.trace.metadata.custom_count', value: { intValue: '0' } },
+        { key: 'langfuse.trace.metadata.custom_details', value: { stringValue: '{"phase":"fixture"}' } },
+      ]));
+    }
+  });
+
+  it('rejects duplicate OTLP attributes even when their values agree', () => {
+    const source = aggregate();
+    const payload = buildOtlpTaskObservationPayload(source);
+    const child = spanFor(payload, 'child-fixture');
+    child.attributes.push(structuredClone(child.attributes[0]!));
+    expect(legacyAndOtlpTaskMappingsMatch(source, buildLegacyTaskObservationPayload(source), payload)).toBe(false);
+  });
+
   it('sends OTLP/JSON with Basic Auth, ingestion v4, and the durable idempotency identity', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -1221,15 +1262,19 @@ describe('task observation OTLP exporter', () => {
       return new Response(JSON.stringify({ successes: [], errors: [] }), { status: 207 });
     }) as unknown as typeof fetch;
     const source = aggregate();
+    source.traceProjection = projectTaskTrace([{ runId: RUN_ID, metadata: { packaged: true } }], 1_000);
+    const context = { environment: 'test', tag: 'test', packaged: true };
     const dual = await exportTaskObservationAggregate(source, {
       prefs: { metrics: true, content: true, artifactManifest: true },
       config: config('dual'),
       fetchImpl,
+      context,
     });
     const rollback = await exportTaskObservationAggregate(source, {
       prefs: { metrics: true, content: true, artifactManifest: true },
       config: config('legacy'),
       fetchImpl,
+      context,
     });
     expect(dual).toMatchObject({
       exporter_mode: 'dual',
