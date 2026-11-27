@@ -23,6 +23,7 @@ export interface PreviewView {
   // Optional only when the view is a custom ReactNode stage —
   // see `custom` below.
   html?: string | null | undefined;
+  baseHref?: string;
   // When set, the modal renders an error affordance with a Retry
   // button that re-fires onView for this view id, instead of sitting
   // at the loading state forever. Issue #860.
@@ -444,10 +445,11 @@ export function PreviewModal({
   const activeError = activeView?.error ?? null;
   const activeUnavailable = activeView?.unavailable ?? null;
   const activeDeck = activeView?.deck ?? false;
+  const activeBaseHref = activeView?.baseHref;
   const isCustomView = activeCustom !== null && activeCustom !== undefined;
   const srcDoc = useMemo(
-    () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck }) : ''),
-    [activeHtml, activeDeck],
+    () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck, baseHref: activeBaseHref }) : ''),
+    [activeHtml, activeDeck, activeBaseHref],
   );
   const exportTitle = exportTitleFor(activeView?.id ?? '');
   const canExportFiles = Boolean(activeHtml);
@@ -495,7 +497,7 @@ export function PreviewModal({
 
   function openInNewTab() {
     if (!activeHtml) return;
-    openSandboxedPreviewInNewTab(activeHtml, exportTitle, { deck: activeDeck });
+    openSandboxedPreviewInNewTab(activeHtml, exportTitle, { deck: activeDeck, baseHref: activeBaseHref });
   }
 
   function enterFullscreen() {
@@ -820,7 +822,7 @@ export function PreviewModal({
                               onSharePopoverItemClick?.('pdf');
                               setTemplateShareOpen(false);
                               if (activeHtml) {
-                                exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
+                                exportAsPdf(activeHtml, exportTitle, { deck: activeDeck, baseHref: activeBaseHref });
                               }
                             }}
                           >

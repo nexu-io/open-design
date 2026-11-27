@@ -1,3 +1,5 @@
+export { isSandboxedPreviewRead } from '@open-design/contracts';
+
 export interface ParsedHostHeader {
   hostname: string;
   host: string;

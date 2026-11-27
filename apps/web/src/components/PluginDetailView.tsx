@@ -8,6 +8,7 @@
 // a collapsed disclosure.
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { useHostResolvedPreview } from '../hooks/useHostResolvedPreview';
 import { Button } from '@open-design/components';
 import type {
   InstalledPluginRecord,
@@ -247,6 +248,11 @@ export function PluginDetailView(props: Props) {
     return () => controller.abort();
   }, [plugin, props.pluginId, pluginWorkspaceContext, pluginWorkspaceContextReady]);
 
+  const hasPreview = typeof plugin?.manifest.od?.preview?.entry === 'string' && plugin.manifest.od.preview.entry.length > 0;
+  const previewDocument = useHostResolvedPreview(pluginWorkspaceContextReady && plugin?.id === props.pluginId && hasPreview
+    ? workspaceResourceUrl(`/api/plugins/${encodeURIComponent(plugin.id)}/preview`, pluginWorkspaceContext)
+    : null);
+
   if (error) {
     return (
       <section className="plugin-marketplace plugin-suite-detail" data-testid="plugin-detail">
@@ -278,7 +284,6 @@ export function PluginDetailView(props: Props) {
   const od = plugin.manifest.od ?? {};
   const connections = connectionRowsFor(plugin);
   const skills = knowledgeSkillsFor(plugin);
-  const hasPreview = typeof od.preview?.entry === 'string' && od.preview.entry.length > 0;
   const examples = od.useCase?.exampleOutputs ?? [];
   const sourceLinks = derivePluginSourceLinks(plugin);
   const official = isOfficialPlugin(plugin);
@@ -414,10 +419,7 @@ export function PluginDetailView(props: Props) {
           >
             <iframe
               title={`${localizedTitle} preview`}
-              src={workspaceResourceUrl(
-                `/api/plugins/${encodeURIComponent(plugin.id)}/preview`,
-                pluginWorkspaceContext,
-              )}
+              srcDoc={previewDocument ?? ''}
               sandbox="allow-scripts"
               className="plugin-detail__preview-frame"
               data-testid="plugin-detail-preview-iframe"

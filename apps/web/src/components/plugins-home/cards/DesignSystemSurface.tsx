@@ -6,6 +6,7 @@
 // website thumbnails rather than synthetic color swatches. The iframe
 // uses native lazy loading so off-screen cards do not eagerly render.
 
+import { useHostResolvedPreview } from '../../../hooks/useHostResolvedPreview';
 import { useEffect, useState } from 'react';
 import { isVisualStabilityMode } from '../../../utils/visualStability';
 import { workspaceResourceUrl } from '../../../collab/workspace-identity';
@@ -33,6 +34,10 @@ export function DesignSystemSurface({ preview, inView }: Props) {
     return () => window.clearTimeout(id);
   }, [inView, preview.designSystemId]);
 
+  const previewDocument = useHostResolvedPreview(ready && preview.designSystemId
+    ? workspaceResourceUrl(`/api/design-systems/${encodeURIComponent(preview.designSystemId)}/showcase`, preview.workspaceContext)
+    : null);
+
   if (preview.designSystemId) {
     return (
       <div className="plugins-home__design plugins-home__design--showcase">
@@ -40,10 +45,7 @@ export function DesignSystemSurface({ preview, inView }: Props) {
           {ready ? (
             <iframe
               title={`${preview.brand} showcase preview`}
-              src={workspaceResourceUrl(
-                `/api/design-systems/${encodeURIComponent(preview.designSystemId)}/showcase`,
-                preview.workspaceContext,
-              )}
+              srcDoc={previewDocument ?? ''}
               sandbox="allow-scripts"
               loading="lazy"
               tabIndex={-1}

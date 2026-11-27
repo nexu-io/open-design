@@ -1233,6 +1233,20 @@ describe('sandboxed preview Blob exports', () => {
     expect(wrapper).not.toContain('allow-same-origin');
   });
 
+  it('retains the document base in the browser PDF capture iframe', async () => {
+    let capturedHtml = '';
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        style: {}, setAttribute() {},
+        set srcdoc(value: string) { capturedHtml = value; },
+      }),
+      body: { appendChild() { throw new Error('capture fixture complete'); } },
+    });
+    const baseHref = 'https://open-design.test/api/design-systems/demo/static/files/system/kit.html';
+    await exportAsPdf('<link href="../tokens.css">', 'Package PDF', { baseHref });
+    expect(capturedHtml).toContain(`<base href="${baseHref}"`);
+  });
+
   it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {
     await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'PDF');
 

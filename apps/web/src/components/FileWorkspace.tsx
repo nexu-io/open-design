@@ -1,3 +1,4 @@
+import { useHostResolvedPreview } from '../hooks/useHostResolvedPreview';
 import { useExperienceError } from '../observability/use-experience-error';
 import type { RecoveryActionBlockReason } from '../runtime/chat/recovery-gating';
 import {
@@ -8051,6 +8052,7 @@ function PageCreatorPresetFrame({
 }) {
   const preview = preset.pluginPreview;
   const { ref, inView } = useInView<HTMLSpanElement>({ rootMargin: '520px', once: false });
+  const previewDocument = useHostResolvedPreview(inView && preview?.kind === 'html' ? preview.src : null);
   // Decks preview at a fixed 1280×720 logical viewport (DECK_PREVIEW_DESIGN_WIDTH)
   // that is visually scaled down to the 16:9 frame. The fixed 480×300 scale-0.4
   // crop below is tuned for tall webpage previews and would clip a deck to a
@@ -8114,7 +8116,7 @@ function PageCreatorPresetFrame({
     return (
       <span ref={ref} className={frameClass} aria-hidden>
         {inView ? (
-          <iframe title="" src={preview.src} sandbox="allow-scripts" loading="lazy" tabIndex={-1} />
+          <iframe title="" srcDoc={previewDocument ?? ''} sandbox="allow-scripts" loading="lazy" tabIndex={-1} />
         ) : (
           <span className="page-creator-preview-skeleton" />
         )}

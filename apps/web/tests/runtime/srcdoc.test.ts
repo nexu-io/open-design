@@ -797,3 +797,23 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('<div id="named" data-od-id=');
   });
 });
+
+
+describe('fetched package document bases', () => {
+  const baseHref = 'http://localhost/api/design-systems/demo/static/workspaces/w/members/m/files/system/kit.html';
+  it.each([
+    ['<base target="_blank">', '../tokens.css'],
+    ['<base href="../" target="_blank">', 'tokens.css'],
+  ])('anchors %s to the package without losing its target', (base, href) => {
+    const dom = new JSDOM(buildSrcdoc(`<head>${base}<link href="${href}"></head>`, { baseHref }), { url: 'http://localhost/design-systems' });
+    expect(dom.window.document.querySelector('link')!.href).toBe('http://localhost/api/design-systems/demo/static/workspaces/w/members/m/files/tokens.css');
+    expect(dom.window.document.querySelector('base[target]')!.getAttribute('target')).toBe('_blank');
+    dom.window.close();
+  });
+  it('retains a later authored absolute href after a target-only base', () => {
+    const html = '<head><base target="_blank"><base href="https://cdn.example/assets/"><link href="tokens.css"></head>';
+    const dom = new JSDOM(buildSrcdoc(html, { baseHref }));
+    expect(dom.window.document.querySelector('link')!.href).toBe('https://cdn.example/assets/tokens.css');
+    dom.window.close();
+  });
+});

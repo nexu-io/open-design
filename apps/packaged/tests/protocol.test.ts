@@ -21,6 +21,16 @@
 // runtime.
 import { vi } from 'vitest';
 
+const beforeRequest = vi.hoisted(() => vi.fn<(
+  filter: { urls: string[] },
+  listener: (
+    details: { url: string; method: string; frame: { readonly origin: string } | null },
+    callback: (response: { cancel: boolean }) => void,
+  ) => void,
+) => void>());
+
+const beforeSendHeaders = vi.hoisted(() => vi.fn());
+
 vi.mock('electron', () => ({
   // `registerOdProtocol` resolves its proxy fetch through `net.fetch`
   // (Chromium's network stack). Stubbed here so the registration tests can
@@ -28,6 +38,7 @@ vi.mock('electron', () => ({
   net: {
     fetch: vi.fn(),
   },
+  session: { defaultSession: { webRequest: { onBeforeRequest: beforeRequest, onBeforeSendHeaders: beforeSendHeaders } } },
   protocol: {
     registerSchemesAsPrivileged: vi.fn(),
     handle: vi.fn(),
@@ -44,6 +55,19 @@ afterEach(() => {
 });
 
 describe('od:// protocol proxy', () => {
+  it('preserves canonical content location when wrapping a followed redirect', async () => {
+    const location = '/api/design-systems/demo/static/previews/scope/files/system/kit.html';
+    const upstream = new Response('<h1>Preview</h1>', { headers: { 'Content-Location': location } });
+    Object.defineProperty(upstream, 'url', { value: `http://127.0.0.1:17579${location}` });
+    const response = await handleOdRequest(
+      new Request('od://app/api/design-systems/demo/showcase'),
+      'http://127.0.0.1:17579/',
+      async () => upstream,
+    );
+    expect(response.headers.get('content-location')).toBe(location);
+    expect(await response.text()).toBe('<h1>Preview</h1>');
+  });
+
   it('proxies the request through fetchImpl with the rewritten target URL', async () => {
     const captured: Request[] = [];
     const fetchImpl: typeof fetch = async (input) => {
@@ -890,5 +914,217 @@ describe('od:// protocol target resolution', () => {
     await expect(
       handleOdRequest(new Request('od://app/'), 'not-a-url', fetchImpl, { delay: async () => {} }),
     ).resolves.toBeInstanceOf(Response);
+  });
+});
+
+
+describe('packaged API initiator isolation', () => {
+  it('fails closed when the browser frame has detached', () => {
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const listener = beforeRequest.mock.calls.at(-1)![1]!;
+    const callback = vi.fn();
+    listener({
+      url: 'od://app/api/design-systems', method: 'GET',
+      frame: { get origin(): string { throw new Error('Frame detached'); } },
+    }, callback);
+    expect(callback).toHaveBeenCalledWith({ cancel: true });
+  });
+
+  it('does not proxy another custom-scheme authority into the app', () => {
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const listener = beforeRequest.mock.calls.at(-1)![1]!;
+    const callback = vi.fn();
+    listener({ url: 'od://other/api/design-systems', method: 'GET', frame: { origin: 'od://app' } }, callback);
+    expect(callback).toHaveBeenCalledWith({ cancel: true });
+  });
+
+  it.each([
+    ['null', 'GET', '/api/design-systems', true],
+    ['null', 'GET', '//api/design-systems', true],
+    ['null', 'POST', '//api/design-systems/install', true],
+    ['null', 'GET', String.raw`/\api/design-systems`, true],
+    ['null', 'GET', '/%61pi/design-systems', true],
+    ['null', 'POST', '/api%2fdesign-systems/install', true],
+    ['null', 'POST', '/api/design-systems/install', true],
+    ['null', 'GET', '/API/daemon/status', true],
+    ['null', 'GET', '/api/design-systems/demo/static?path=preview.html', true],
+    ['null', 'GET', '/api/design-systems/demo/static/previews/scope/files/preview.html', false],
+    ['null', 'POST', '/api/design-systems/demo/static/previews/scope/files/preview.html', true],
+    ['null', 'GET', '/api/projects/demo/raw/preview.html', false],
+    ['od://app', 'GET', '/api/design-systems', false],
+    ['od://app', 'POST', '/api/design-systems/install', false],
+    ['https://example.com', 'GET', '/api/design-systems', true],
+    [undefined, 'GET', '/api/design-systems', true],
+    [undefined, 'GET', '/', false],
+  ])('checks browser-owned origin %s for %s %s', async (origin, method, path, cancel) => {
+    registerOdProtocol(() => 'http://127.0.0.1:61424/');
+    const call = beforeRequest.mock.calls.at(-1);
+    expect(call).toBeDefined();
+    const listener = call![1]!;
+    const callback = vi.fn();
+    listener({ url: `od://app${path}`, method, frame: origin ? { origin } : null }, callback);
+    expect(callback).toHaveBeenCalledWith({ cancel });
+  });
+});
+
+describe('packaged preview response origin isolation', () => {
+  const sandbox = 'sandbox allow-scripts allow-forms allow-popups allow-downloads';
+
+  it.each([
+    '/api/projects/demo/raw/preview.html',
+    '/api/status',
+    '/api',
+    '/API/connectors/synthetic/callback',
+    '/api/plugins/synthetic/assets/preview.html',
+    '/api/projects/demo/preview/preview.html',
+    '/API/Projects/demo/Raw/preview.html',
+    '/artifacts/synthetic/index.html',
+    '/artifacts',
+    '/frames/synthetic/index.html',
+    '/api/plugin-previews/synthetic/index.html',
+    '/ARTIFACTS/synthetic/index.svg',
+    '/api/design-systems/demo/static/previews/scope/files/preview.html',
+  ])('keeps document responses opaque independently of iframe sandbox for %s', async path => {
+    const response = await handleOdRequest(new Request(`od://app${path}`), 'http://127.0.0.1:17579/',
+      async () => new Response('<script>parent.postMessage(origin, "*")</script>', {
+        headers: { 'content-type': 'text/html' },
+      }));
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+    expect(response.status).toBe(200);
+    await response.text();
+  });
+
+  it.each(['image/svg+xml', 'text/html', 'application/xhtml+xml', 'application/octet-stream'])(
+    'enforces an additional sandbox policy without replacing upstream CSP for %s', async contentType => {
+      const original = "default-src 'none'; sandbox allow-scripts allow-same-origin allow-popups-to-escape-sandbox";
+      const response = await handleOdRequest(new Request('od://app/api/projects/demo/raw/preview'),
+        'http://127.0.0.1:17579/', async () => new Response('fixture', {
+          headers: { 'content-type': contentType, 'content-security-policy': original },
+        }));
+      expect(response.headers.get('content-security-policy')).toBe(`${original}, ${sandbox}`);
+      expect(await response.text()).toBe('fixture');
+    },
+  );
+
+  it.each([
+    '/api/projects/demo/raw/preview.html',
+    '/artifacts/synthetic/index.html',
+    '/frames/synthetic/index.html',
+    '/api/plugin-previews/synthetic/index.html',
+    '/api/status',
+  ])('applies preview isolation after an internally followed redirect to %s', async path => {
+    const upstream = new Response('fixture');
+    Object.defineProperty(upstream, 'url', {
+      value: `http://127.0.0.1:17579${path}`,
+    });
+    const response = await handleOdRequest(new Request('od://app/preview-alias'),
+      'http://127.0.0.1:17579/', async () => upstream);
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+    await response.text();
+  });
+
+  it('preserves JSON bodies and API response headers', async () => {
+    const response = await handleOdRequest(new Request('od://app/api/status'),
+      'http://127.0.0.1:17579/', async () => Response.json({ ready: true }, {
+        status: 202, headers: { 'cache-control': 'no-store', 'x-fixture': 'retained' },
+      }));
+    expect(await response.json()).toEqual({ ready: true });
+    expect(response.status).toBe(202);
+    expect(response.headers.get('content-type')).toBe('application/json');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-fixture')).toBe('retained');
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+  });
+
+  it('preserves streamed API events without waiting for completion', async () => {
+    let upstreamController!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { upstreamController = controller; },
+    });
+    const response = await handleOdRequest(new Request('od://app/api/events'),
+      'http://127.0.0.1:17579/', async () => new Response(body, {
+        headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      }));
+    const reader = response.body!.getReader();
+    upstreamController.enqueue(new TextEncoder().encode('data: first\n\n'));
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: first\n\n');
+    upstreamController.enqueue(new TextEncoder().encode('data: second\n\n'));
+    upstreamController.close();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe('data: second\n\n');
+    expect((await reader.read()).done).toBe(true);
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(response.headers.get('cache-control')).toBe('no-cache');
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+  });
+
+  it('preserves binary API downloads and their disposition', async () => {
+    const bytes = new Uint8Array([0, 255, 17, 42]);
+    const response = await handleOdRequest(new Request('od://app/api/download'),
+      'http://127.0.0.1:17579/', async () => new Response(bytes, {
+        headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="fixture.zip"' },
+      }));
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="fixture.zip"');
+    expect(response.headers.get('content-type')).toBe('application/zip');
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+  });
+
+  it('retains callback HTML and permits scripts without granting a trusted origin', async () => {
+    const html = '<script>window.opener?.postMessage({type:"synthetic-callback"}, "*")</script>';
+    const response = await handleOdRequest(new Request('od://app/api/connectors/synthetic/callback'),
+      'http://127.0.0.1:17579/', async () => new Response(html, { headers: { 'content-type': 'text/html' } }));
+    expect(await response.text()).toBe(html);
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+  });
+
+  it('preserves preview isolation on bodyless responses', async () => {
+    const response = await handleOdRequest(new Request('od://app/api/projects/demo/raw/preview.html'),
+      'http://127.0.0.1:17579/', async () => new Response(null, { status: 304 }));
+    expect(response.headers.get('content-security-policy')).toBe(sandbox);
+  });
+
+  it.each(['/', '/_next/static/app.js', '/artifacts-other', '/frames-other', '/api-other', '/projects/demo', '/design-systems'])(
+    'does not sandbox trusted app content outside static preview roots: %s', async path => {
+    const response = await handleOdRequest(new Request(`od://app${path}`),
+      'http://127.0.0.1:17579/', async () => new Response('<main>App</main>'));
+    expect(response.headers.get('content-security-policy')).toBeNull();
+    await response.text();
+  });
+});
+
+
+describe('browser-owned protocol caller authority', () => {
+  it('overwrites forged frame tokens and forwards opaque callers through daemon origin enforcement', async () => {
+    vi.mocked(protocol.handle).mockClear();
+    beforeSendHeaders.mockClear();
+    vi.mocked(net.fetch).mockImplementation(async (request) => {
+      const headers = (request as Request).headers;
+      expect(headers.has('x-od-protocol-frame-token')).toBe(false);
+      return Response.json({ origin: headers.get('origin') });
+    });
+    registerOdProtocol(() => 'http://127.0.0.1:17579/');
+    const listener = beforeSendHeaders.mock.calls.at(-1)![1];
+    const handler = vi.mocked(protocol.handle).mock.calls.at(-1)![1];
+    const headersFor = (frame: unknown, requestHeaders: Record<string, string>) => {
+      let headers: Record<string, string> = {};
+      listener({ url: 'od://app/api/plugins/example/asset/font.ttf', frame, requestHeaders },
+        (result: { requestHeaders: Record<string, string> }) => { headers = result.requestHeaders; });
+      return headers;
+    };
+    const trusted = headersFor({ origin: 'od://app' }, { Origin: 'od://app' });
+    expect(trusted['x-od-protocol-frame-token']).toBeTruthy();
+    for (const frame of [null, undefined, { origin: 'null' }, { get origin() { throw new Error('detached'); } }]) {
+      const headers = headersFor(frame, {
+        'X-Od-Protocol-Frame-Token': trusted['x-od-protocol-frame-token']!,
+        Origin: 'od://app',
+      });
+      expect(Object.keys(headers).some(name => name.toLowerCase() === 'x-od-protocol-frame-token')).toBe(false);
+      const response = await handler(new Request('od://app/api/plugins/example/asset/font.ttf', { headers }));
+      expect(await response.json()).toEqual({ origin: 'null' });
+    }
+    const normal = await handler(new Request('od://app/api/plugins/example/asset/font.ttf', { headers: trusted }));
+    expect(await normal.json()).toEqual({ origin: null });
+    const missing = await handler(new Request('od://app/api/plugins/example/asset/font.ttf'));
+    expect(await missing.json()).toEqual({ origin: 'null' });
   });
 });

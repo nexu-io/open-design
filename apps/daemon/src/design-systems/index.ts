@@ -1087,6 +1087,9 @@ function designSystemStaticContentType(relativePath: string): string {
       return 'text/html; charset=utf-8';
     case '.css':
       return 'text/css; charset=utf-8';
+    case '.js':
+    case '.mjs':
+      return 'text/javascript; charset=utf-8';
     case '.json':
       return 'application/json; charset=utf-8';
     case '.svg':

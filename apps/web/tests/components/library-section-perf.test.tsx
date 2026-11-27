@@ -168,6 +168,7 @@ describe('LibrarySection lazy-mount contract', () => {
   });
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('renders placeholder cards (no img/iframe) that keep box-select targets while off-screen', async () => {
@@ -195,13 +196,21 @@ describe('LibrarySection lazy-mount contract', () => {
   });
 
   it('mounts html and design-system iframe thumbnails once cards are in view', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const response = new Response(`<html><body>${String(input)}</body></html>`, { headers: { 'content-type': 'text/html' } });
+      Object.defineProperty(response, 'url', { value: `http://localhost${String(input)}` });
+      return response;
+    }));
     lazyInView = true;
     render(<LibrarySection active onOpenProject={() => {}} />);
     await screen.findByText('A design system');
     await waitFor(() => {
-      const srcs = [...document.querySelectorAll('iframe')].map((frame) => frame.getAttribute('src'));
-      expect(srcs).toContain('/raw/html-1');
-      expect(srcs).toContain('/raw/ds-1');
+      const frames = [...document.querySelectorAll('iframe')];
+      expect(frames).toHaveLength(2);
+      expect(frames.every(frame => !frame.hasAttribute('src') && frame.getAttribute('sandbox') === '' && frame.getAttribute('loading') === 'lazy')).toBe(true);
+      const docs = frames.map(frame => frame.getAttribute('srcdoc') ?? '');
+      expect(docs.some(html => html.includes('/raw/html-1'))).toBe(true);
+      expect(docs.some(html => html.includes('/raw/ds-1'))).toBe(true);
     });
   });
 
