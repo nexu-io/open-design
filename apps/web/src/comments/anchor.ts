@@ -53,14 +53,29 @@ export function overlayBoundsFromSnapshot(
   };
 }
 
+/** Unwrap only the identity namespace; the qualified ID remains the lookup key.
+ * The caller's static frame registry owns authorization. Matching the encoded
+ * path here prevents a child UUID from being used as another file's identity. */
+export function commentLocalElementId(target: { elementId: string; filePath?: string }): string | null {
+  if (!target.elementId.startsWith('frame:')) return target.elementId;
+  try {
+    const parts: unknown = JSON.parse(decodeURIComponent(target.elementId.slice(6)));
+    if (!Array.isArray(parts) || parts.length !== 2 || typeof parts[0] !== 'string' || !parts[0]
+      || typeof parts[1] !== 'string' || !parts[1]
+      || (target.filePath !== undefined && parts[0] !== target.filePath)) return null;
+    return parts[1];
+  } catch { return null; }
+}
+
 export function resolveCommentAnchor(
   comment: PreviewComment,
   snapshots: Map<string, PreviewCommentSnapshot>,
   currentVersion?: number,
 ): CommentAnchorResolution {
   const exact = snapshots.get(comment.elementId);
-  if (comment.elementId.startsWith('cmt:') || commentSelectorClaimsIdentity(comment.selector)) {
-    const uuid = commentUuidFromElementId(comment.elementId);
+  const localElementId = commentLocalElementId(comment);
+  if (localElementId === null || localElementId.startsWith('cmt:') || commentSelectorClaimsIdentity(comment.selector)) {
+    const uuid = commentUuidFromElementId(localElementId);
     const selector = uuid ? commentIdentitySelector(uuid) : null;
     if (selector && !(typeof currentVersion === 'number' && typeof comment.anchoredVersion === 'number' && comment.anchoredVersion > currentVersion)
       && comment.selector === selector && exact && exact.selector === selector

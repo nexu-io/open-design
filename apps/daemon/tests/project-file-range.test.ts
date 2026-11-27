@@ -1403,6 +1403,10 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     const html = await bridged.text();
     expect(html).toContain('data-od-url-selection-bridge');
     expect(html).toContain("type: 'od:comment-target'");
+    expect(html).toContain("data.type === 'od:inspect-mode'");
+    expect(html).toContain("data.type === 'od:inspect-set'");
+    expect(html).toContain("data.type === 'od:inspect-reset'");
+    expect(html).toContain('function applyInspectOverride(');
     expect(html).toContain("type: 'od:preview-runtime-state-captured'");
     expect(html).toContain("type: 'od:preview-open-file'");
     expect(html).toContain('function previewHtmlFileForLink(');
@@ -1555,6 +1559,19 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
         return {scrolls:window.scrollCount,messages:window.posted};})()`);
       expect(result).toMatchObject({ scrolls: 1, messages: expect.arrayContaining([expect.objectContaining({ type: 'od:comment-location-missing', requestId: 'refused' })]) });
     } finally { dom.window.close(); }
+  });
+
+  it('instruments HTML served through a minted project preview scope', async () => {
+    const previewUrlResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=page.html`,
+    );
+    expect(previewUrlResponse.status).toBe(200);
+    const preview = await previewUrlResponse.json() as { url: string };
+    const response = await fetch(`${baseUrl}${preview.url}`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain("type: 'od:comment-target'");
   });
 
   it('injects the URL preview snapshot bridge only when requested', async () => {
