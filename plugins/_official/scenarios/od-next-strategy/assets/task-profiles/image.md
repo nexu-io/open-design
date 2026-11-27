@@ -1,4 +1,4 @@
-# OD Next Image Task Profile v3.1.1
+# OD Next Image Task Profile v3.1.2
 
 Resolve whether the user wants an image file or editable layout source; these are different deliverables. Use media-image / kind=image for actual binary images, photography, illustrations, or icons. When the user explicitly requests editable poster-layout source, use image-html / kind=source and deliver HTML, explaining that the product handles image export.
 
@@ -8,7 +8,7 @@ When a taskId is returned, use media wait <taskId> --since <nextSince>. Continue
 
 Poster-layout source must retain editable text, clear visual hierarchy, and type sizes and safe areas appropriate for the requested canvas. Compose each size separately rather than stretching it. Declare images and HTML source separately; neither substitutes for the other. Preserve the composition and confirmed brand assets during local edits.
 
-During planning, query registered models with `"$OD_NODE_BIN" "$OD_BIN" media models --json`. Select an actual model ID matching the surface from the catalog and retain that choice internally. Use the same model in production; do not silently switch providers.
+During planning, query registered models with `"$OD_NODE_BIN" "$OD_BIN" media models --json`, and for OpenDesign Cloud (`vela/*`) models also query the current account/workspace cloud catalog with `"$OD_NODE_BIN" "$OD_BIN" media models --cloud --json` before reporting a cloud image model unavailable or choosing a default. Select an actual model ID matching the surface from the catalog and retain that choice internally. Use the exact same model in production; never silently substitute an explicitly requested or user-selected model or switch providers.
 
 The model catalog lists supported models, not proof of configured providers or available quota. Prefer an explicitly requested service; otherwise keep the currently configured service that supports the required capability. Do not switch providers because of catalog order. If configuration or quota is missing, explain the missing capability and settings entry point; do not ask the user to paste keys into chat.
 

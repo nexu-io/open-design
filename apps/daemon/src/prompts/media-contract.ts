@@ -512,7 +512,12 @@ path is given.
      for OpenDesign Cloud, use \`vela/gpt-image-2\` with \`--quality high\` (or \`vela/seedream-5.5\` / \`vela/nano-banana-2\` with \`--resolution 2K\`); use \`flux-pro-ultra\` only when a BYOK Fal key is configured (tell the user it takes 60–180s)
    - **Image, default / no preference stated**: use an explicitly named model
      in the current user message, then the run-scoped BYOK image default, then the project metadata's
-     \`imageModel\` if set; otherwise use \`vela/gpt-image-2\`
+     \`imageModel\` if set; otherwise use \`vela/gpt-image-2\`. Before reporting a
+     requested OpenDesign Cloud (\`vela/*\`) image model unavailable or choosing a
+     default, read the current account/workspace catalogue using
+     \`"$OD_NODE_BIN" "$OD_BIN" media models --cloud --json\`. Never silently
+     substitute an explicitly named or user-selected model with \`vela/gpt-image-2\`
+     or switch billing channels.
    - **Video**: preserve an explicitly requested model and provider. Otherwise
      prefer the configured run/project default if available. Before choosing an
      OpenDesign Cloud video model, read the account/workspace catalogue using

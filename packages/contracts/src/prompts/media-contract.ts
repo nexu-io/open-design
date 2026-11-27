@@ -135,6 +135,10 @@ ask, in any language — "2K", "1k", "high quality", "高质量" — so map it o
 the flag; restating it inside the prompt text does not reach the provider.
 
 OpenDesign Cloud image and video models use the \`vela/*\` catalogue prefix.
+Before reporting a cloud image or video model unavailable or choosing a default,
+query the current account/workspace cloud catalogue with
+\`"$OD_NODE_BIN" "$OD_BIN" media models --cloud --json\`, and never silently
+substitute an explicitly requested or user-selected model.
 Always invoke those models through \`"$OD_NODE_BIN" "$OD_BIN" media generate\`.
 Never invoke the \`vela\` CLI directly and never call its remote media API.
 The daemon owns model routing, trusted Workspace attribution, task polling,
