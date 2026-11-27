@@ -160,6 +160,9 @@ export const IMAGE_MODELS: MediaModel[] = [
 
 export const VIDEO_MODELS: MediaModel[] = [
   { id: 'vela/doubao-seedance-2-0-260128', label: 'seedance-2.0 (Cloud)', hint: 'OpenDesign Cloud · managed text/image-to-video · 720p default', provider: 'vela', caps: ['t2v', 'i2v'] },
+  { id: 'vela/doubao-seedance-2-5-260628', label: 'seedance-2.5 (Cloud)', hint: 'OpenDesign Cloud · managed text/image-to-video · 720p default', provider: 'vela', caps: ['t2v', 'i2v'] },
+  { id: 'vela/doubao-seedance-2-5-flash-261115', label: 'seedance-2.5-flash (Cloud)', hint: 'OpenDesign Cloud · managed text/image-to-video · 720p default', provider: 'vela', caps: ['t2v', 'i2v'] },
+  { id: 'vela/wan-2.7', label: 'wan-2.7 (Cloud)', hint: 'OpenDesign Cloud · managed text/image-to-video · 720p default', provider: 'vela', caps: ['t2v', 'i2v'] },
   { id: 'doubao-seedance-2-0-260128', label: 'seedance-2.0', hint: 'ByteDance · t2v + i2v + audio', provider: 'volcengine', caps: ['t2v', 'i2v', 'audio'], default: true },
   { id: 'doubao-seedance-2-0-fast-260128', label: 'seedance-2.0-fast', hint: 'ByteDance · faster, cheaper', provider: 'volcengine', caps: ['t2v', 'i2v', 'audio'] },
   { id: 'doubao-seedance-1-0-pro-250528', label: 'seedance-1.0-pro', hint: 'ByteDance · 1.0', provider: 'volcengine', caps: ['t2v', 'i2v'] },
