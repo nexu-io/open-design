@@ -143,7 +143,7 @@ it("retries a short range body from the bytes actually retained", async () => {
 for (const failure of ["short body", "request failure"] as const) {
   it(`retains learned range metadata after a later ${failure}`, async () => {
     const ranges: string[] = [];
-    const validators: (string | undefined)[] = [];
+    const validators: IncomingMessage["headers"]["if-range"][] = [];
     let failed = false;
     const { options, target } = await fixture((request, response) => {
       ranges.push(String(request.headers.range));
@@ -201,7 +201,7 @@ it("keeps learned continuation metadata after the retry budget is exhausted", as
 
 it("restarts when a learned validator changes after a later segment fails", async () => {
   const ranges: (string | undefined)[] = [];
-  const validators: (string | undefined)[] = [];
+  const validators: IncomingMessage["headers"]["if-range"][] = [];
   const { options, target } = await fixture((request, response) => {
     ranges.push(request.headers.range);
     validators.push(request.headers["if-range"]);
