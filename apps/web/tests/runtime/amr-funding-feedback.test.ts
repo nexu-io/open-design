@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceBillingPreflight } from '@open-design/contracts';
-import { cachedHomeAmrFundingBlock, invalidateAmrFundingFeedback, checkAmrFundingFeedback, checkAmrFundingEvidence, noteHomeAmrFundingBlockPresented, readFreshAmrFundingEvidence, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, takeHomeAmrFundingFastBlock } from '../../src/runtime/amr-funding-feedback';
+import { cachedHomeAmrFundingBlock, invalidateAmrFundingFeedback, checkAmrFundingFeedback, checkAmrFundingEvidence, noteHomeAmrFundingBlockPresented, readFreshAmrFundingEvidence, readSendTimeAmrFundingEvidence, recentHomeAmrFundingInsufficiency, retireHomeAmrFundingBlock, SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS, takeHomeAmrFundingFastBlock } from '../../src/runtime/amr-funding-feedback';
 import { advanceWorkspaceAccountGeneration, resetWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 
 let sequence = 0;
@@ -361,6 +361,46 @@ describe('same funding observation also explains the plan', () => {
 
 
 describe('explicit Send funding observations', () => {
+  it('waits out a slow Cloud confirmation on Send and keeps the display read at five seconds', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => new AbortController().signal);
+    try {
+      const { scope, preflight } = fixture('available');
+      expect(await readSendTimeAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'available', preflight });
+      expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'available', preflight });
+      expect(timeout).toHaveBeenNthCalledWith(1, SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS);
+      expect(timeout).toHaveBeenNthCalledWith(2, 5_000);
+      expect(SEND_TIME_FUNDING_OBSERVATION_TIMEOUT_MS).toBe(65_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+  it('accepts a funding response that arrives just after the daemon deadline', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation((timeoutMs) => {
+      setTimeout(() => controller.abort(), timeoutMs);
+      return controller.signal;
+    });
+    try {
+      const { scope, preflight, fetchMock } = fixture('available');
+      fetchMock.mockImplementationOnce(() => new Promise((resolve, reject) => {
+        const responseTimer = setTimeout(() => {
+          preflight.generatedAt = new Date().toISOString();
+          resolve(new Response(JSON.stringify({ preflight })));
+        }, 60_100);
+        controller.signal.addEventListener('abort', () => {
+          clearTimeout(responseTimer);
+          reject(controller.signal.reason);
+        }, { once: true });
+      }));
+      const result = readSendTimeAmrFundingEvidence(scope, 'model');
+      await vi.advanceTimersByTimeAsync(60_100);
+      expect(await result).toEqual({ kind: 'available', preflight });
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
+  });
   it.each([1, 8, 99])('accepts its own fresh server proof after %s display invalidations', async (invalidations) => {
     const { scope, preflight, fetchMock } = fixture('available');
     let finish!: (response: Response) => void;
