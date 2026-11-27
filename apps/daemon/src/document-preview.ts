@@ -11,7 +11,7 @@ const MAX_COMPRESSED_PREVIEW_BYTES = 10 * 1024 * 1024;
 const MAX_UNCOMPRESSED_PREVIEW_BYTES = 50 * 1024 * 1024;
 const MAX_XML_ENTRY_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_PREVIEW_CONCURRENCY = 2;
-const pdfPreviewQueue = createLimiter(MAX_PDF_PREVIEW_CONCURRENCY);
+const pdfPreviewQueue = createLimiter<PreviewSection[]>(MAX_PDF_PREVIEW_CONCURRENCY);
 
 type PreviewKind = 'pdf' | 'document' | 'presentation' | 'spreadsheet';
 type PreviewSection = { title: string; lines: string[] };
