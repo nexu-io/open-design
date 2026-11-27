@@ -1286,6 +1286,88 @@ describe('POST /api/test/connection provider mode', () => {
     expect(body.sample).toBe('valid completion (length)');
   });
 
+  it('accepts a canonical model ID for a local OpenAI-compatible alias', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        if (url === 'http://localhost:1234/v1/models') {
+          return jsonResponse({
+            data: [{ id: 'gpt-oss-120b', object: 'model' }],
+          });
+        }
+        return jsonResponse({
+          model: 'openai/gpt-oss-120b',
+          choices: [
+            {
+              message: { role: 'assistant', content: 'ok' },
+              finish_reason: 'stop',
+            },
+          ],
+        });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://localhost:1234/v1',
+        apiKey: 'local-key',
+        model: 'gpt-oss-120b',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      ok: true,
+      kind: 'success',
+      model: 'gpt-oss-120b',
+      sample: 'ok',
+    });
+  });
+
+  it('rejects an unrelated model ID from a local OpenAI-compatible provider', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream((url) => {
+        if (url === 'http://localhost:1234/v1/models') {
+          return jsonResponse({
+            data: [{ id: 'gpt-oss-120b', object: 'model' }],
+          });
+        }
+        return jsonResponse({
+          model: 'openai/unrelated-model',
+          choices: [
+            {
+              message: { role: 'assistant', content: 'ok' },
+              finish_reason: 'stop',
+            },
+          ],
+        });
+      }),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'http://localhost:1234/v1',
+        apiKey: 'local-key',
+        model: 'gpt-oss-120b',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      ok: false,
+      kind: 'not_found_model',
+      model: 'gpt-oss-120b',
+    });
+    expect(body.detail).toContain('openai/unrelated-model');
+  });
+
   it('rejects an unloaded local OpenAI-compatible model before completion', async () => {
     const fetchMock = passThroughOrUpstream((url) => {
       if (url === 'http://localhost:1234/v1/models') {
