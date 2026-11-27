@@ -70,22 +70,24 @@ async function readMaybeTail(absolutePath: string, tailBytes: number | undefined
     const buf = await readFile(absolutePath);
     return { text: buf.toString("utf8"), bytes: buf.byteLength };
   }
-  const info = await stat(absolutePath);
-  if (info.size <= tailBytes) {
-    const buf = await readFile(absolutePath);
-    return { text: buf.toString("utf8"), bytes: buf.byteLength };
-  }
-  // For large files we do NOT want to load the whole thing into memory just
-  // to slice off the tail — open the fd and read the trailing window
-  // directly. Long-running daemon logs can be multi-GB.
+  // Read size and bytes from the same handle: a rotating log may be replaced
+  // between stat(path) and open(path), leaving an offset for a different file.
   const fd = await open(absolutePath, "r");
   try {
+    const info = await fd.stat();
     // Read one extra guard byte before the cut so alignTailToLineStart can
-    // tell an already line-aligned cut apart from a mid-line one.
-    const start = info.size - tailBytes - 1;
-    const buffer = Buffer.alloc(tailBytes + 1);
-    const { bytesRead } = await fd.read(buffer, 0, tailBytes + 1, start);
-    const aligned = alignTailToLineStart(buffer.subarray(0, bytesRead));
+    // tell an already line-aligned cut apart from a mid-line one. Bound even
+    // small files to their observed size so later appends cannot grow the read.
+    const start = Math.max(0, info.size - tailBytes - 1);
+    const buffer = Buffer.alloc(Math.min(info.size, tailBytes + 1));
+    let bytesRead = 0;
+    while (bytesRead < buffer.length) {
+      const result = await fd.read(buffer, bytesRead, buffer.length - bytesRead, start + bytesRead);
+      if (result.bytesRead === 0) break;
+      bytesRead += result.bytesRead;
+    }
+    const data = buffer.subarray(0, bytesRead);
+    const aligned = info.size > tailBytes ? alignTailToLineStart(data) : data;
     if (aligned === null) {
       throw new Error(
         `no complete line fits the ${tailBytes}-byte tail window (the trailing ` +
