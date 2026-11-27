@@ -6,10 +6,12 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../../src/server.js';
+import { piAuthGuidance } from '../../src/runtimes/auth.js';
 
 type StartedServer = { url: string; server: Server; shutdown?: () => Promise<void> | void };
-type RunStatus = { status: string; error?: string | null; exitCode?: number | null; signal?: string | null };
+type RunStatus = { status: string; error?: string | null; errorCode?: string | null; exitCode?: number | null; signal?: string | null };
 const originalShutdownMs = process.env.PI_GRACEFUL_SHUTDOWN_MS;
+const originalStrategyRollout = process.env.OD_NEXT_STRATEGY_ROLLOUT;
 let started: StartedServer | null = null;
 let binDir: string | null = null;
 
@@ -23,6 +25,8 @@ afterEach(async () => {
   binDir = null;
   if (originalShutdownMs === undefined) delete process.env.PI_GRACEFUL_SHUTDOWN_MS;
   else process.env.PI_GRACEFUL_SHUTDOWN_MS = originalShutdownMs;
+  if (originalStrategyRollout === undefined) delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+  else process.env.OD_NEXT_STRATEGY_ROLLOUT = originalStrategyRollout;
 });
 
 describe('Pi RPC public Run close', () => {
@@ -31,6 +35,8 @@ describe('Pi RPC public Run close', () => {
     { mode: 'sigterm-exit', expected: 'succeeded' },
     { mode: 'nonzero', expected: 'failed' },
     { mode: 'error', expected: 'failed' },
+    { mode: 'auth-rejected', expected: 'failed' },
+    { mode: 'prompt-rejected', expected: 'failed' },
     { mode: 'cancel', expected: 'canceled' },
   ])('keeps $mode as $expected when the Pi process remains alive after EOF', async ({ mode, expected }) => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-pi-rpc-close-'));
@@ -55,6 +61,13 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   if (command.type === 'abort') { W({ type: 'agent_end' }); process.exit(0); }
   if (command.type !== 'prompt') return;
   fs.writeFileSync(${JSON.stringify(promptAccepted)}, 'accepted');
+  if (mode === 'auth-rejected' || mode === 'prompt-rejected') {
+    const error = mode === 'auth-rejected'
+      ? 'No API key found for the selected model. Use /login to log into a provider via OAuth or API key. synthetic-sensitive-detail'
+      : 'network timeout';
+    W({ type: 'response', id: command.id, success: false, error });
+    return;
+  }
   W({ type: 'response', id: command.id, success: true });
   W({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: 'Pi fixture output.\\n' } });
   if (mode === 'cancel') return;
@@ -69,12 +82,13 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     // test-only fast shutdown belongs to the cases that exercise host teardown.
     if (mode === 'nonzero') delete process.env.PI_GRACEFUL_SHUTDOWN_MS;
     else process.env.PI_GRACEFUL_SHUTDOWN_MS = '10';
+    // Exercise Pi's Run transport without starting background strategy discovery.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     started = await startServer({ port: 0, returnServer: true }) as StartedServer;
     const config = await fetch(`${started.url}/api/app-config`, {
       method: 'PUT', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         agentId: 'pi', agentCliEnv: { pi: { PI_BIN: bin } },
-        odNextStrategyMode: 'off',
         telemetry: { metrics: false, content: false, artifactManifest: false }, privacyDecisionAt: Date.now(),
       }),
     });
@@ -117,6 +131,24 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
       expect(run.signal ?? null).toBeNull();
     } else if (mode === 'error') {
       expect(run.error).toContain('Native Pi fixture failure');
+    } else if (mode === 'auth-rejected' || mode === 'prompt-rejected') {
+      const expectedCode = mode === 'auth-rejected' ? 'AGENT_AUTH_REQUIRED' : 'AGENT_EXECUTION_FAILED';
+      const expectedMessage = mode === 'auth-rejected' ? piAuthGuidance() : 'prompt rejected: network timeout';
+      expect(run.errorCode).toBe(expectedCode);
+      // Terminal status can precede the journal flush. Public replay waits for
+      // completion instead of opening a partially written event log.
+      const replay = await fetch(`${started.url}/api/runs/${runId}/events`);
+      expect(replay.status).toBe(200);
+      const frames = (await replay.text()).trim().split('\n\n');
+      expect(frames.some(frame => frame.split('\n').includes('event: end'))).toBe(true);
+      const errors = frames.filter(frame => frame.split('\n').includes('event: error'))
+        .map(frame => ({ data: JSON.parse(frame.split('\n').find(line => line.startsWith('data: '))!.slice(6)) }));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.data).toMatchObject({
+        message: expectedMessage,
+        error: { code: expectedCode, message: expectedMessage, retryable: mode === 'auth-rejected' },
+      });
+      expect(JSON.stringify(errors)).not.toContain('synthetic-sensitive-detail');
     }
   });
 });
