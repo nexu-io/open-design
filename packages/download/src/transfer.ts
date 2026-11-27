@@ -104,7 +104,7 @@ async function writeResponseBodyToPartial(
     startBytes: number;
     totalBytes?: number;
   },
-): Promise<void> {
+): Promise<number> {
   if (response.body == null) throw new Error("download response did not include a body");
   let receivedBytes = options.startBytes;
   let sessionReceivedBytes = 0;
@@ -125,6 +125,7 @@ async function writeResponseBodyToPartial(
     meter,
     createWriteStream(target.partialPath, { flags: options.startBytes > 0 ? "a" : "w" }),
   );
+  return receivedBytes;
 }
 
 /**
@@ -146,40 +147,58 @@ async function tryResumeDownload(
   emit: (progress: ManagedDownloadProgress) => void,
   requestHeaders: Record<string, string> | undefined,
 ): Promise<DownloadAttemptResult | "restart"> {
-  const partialBytes = await statFileSize(target.partialPath);
+  let partialBytes = await statFileSize(target.partialPath);
   if (partialBytes == null || partialBytes <= 0) return "restart";
-  const response = await fetchImpl(target.url, {
-    headers: {
-      ...(requestHeaders ?? {}),
-      ...(manifest.validators?.etag == null ? {} : { "If-Range": manifest.validators.etag }),
-      Range: `bytes=${partialBytes}-`,
-    },
-  });
-  if (response.status !== 206) {
-    await discardResponseBody(response);
-    return "restart";
-  }
-  const range = parseContentRange(response.headers.get("content-range"));
-  if (range == null || range.start !== partialBytes || validatorsConflict(manifest.validators, response)) {
-    await discardResponseBody(response);
-    return "restart";
-  }
-  const totalBytes = range.totalBytes ?? manifest.totalBytes ?? partialBytes + (contentLength(response) ?? 0);
-  try {
-    await emitExistingProgress(target.partialPath, totalBytes, emit);
-    await writeJson(target.manifestPath, {
-      ...manifest,
+  const initialBytes = partialBytes;
+  let currentManifest = manifest;
+  for (;;) {
+    const response = await fetchImpl(target.url, {
+      headers: {
+        ...(requestHeaders ?? {}),
+        ...(currentManifest.validators?.etag == null ? {} : { "If-Range": currentManifest.validators.etag }),
+        Range: `bytes=${partialBytes}-`,
+      },
+    });
+    if (response.status !== 206) {
+      await discardResponseBody(response);
+      return "restart";
+    }
+    const range = parseContentRange(response.headers.get("content-range"));
+    if (range == null || range.start !== partialBytes || validatorsConflict(currentManifest.validators, response)) {
+      await discardResponseBody(response);
+      return "restart";
+    }
+    const knownTotalBytes = range.totalBytes ?? currentManifest.totalBytes;
+    const totalBytes = knownTotalBytes ?? partialBytes + (contentLength(response) ?? 0);
+    const sessionOffset = partialBytes - initialBytes;
+    const emitRange = (progress: ManagedDownloadProgress) => emit({
+      ...progress,
+      sessionReceivedBytes: progress.sessionReceivedBytes + sessionOffset,
+    });
+    const nextManifest: DownloadManifest = {
+      ...currentManifest,
       state: "partial",
       totalBytes,
       updatedAt: new Date().toISOString(),
-      validators: manifest.validators ?? validatorsFromResponse(response),
-    } satisfies DownloadManifest);
-  } catch (error) {
-    await discardResponseBody(response);
-    throw error;
+      validators: currentManifest.validators ?? validatorsFromResponse(response),
+    };
+    try {
+      await emitExistingProgress(target.partialPath, totalBytes, emitRange);
+      await writeJson(target.manifestPath, nextManifest);
+    } catch (error) {
+      await discardResponseBody(response);
+      throw error;
+    }
+    const receivedBytes = await writeResponseBodyToPartial(response, target, { emit: emitRange, startBytes: partialBytes, totalBytes });
+    if (receivedBytes !== range.end + 1) {
+      throw new Error("download response body did not match its Content-Range");
+    }
+    // A server may satisfy only part of an open-ended Range request. Successful
+    // segments are progress, not failed attempts, so continue within this retry.
+    if (knownTotalBytes == null || receivedBytes >= knownTotalBytes) return { resumed: true, totalBytes };
+    partialBytes = receivedBytes;
+    currentManifest = nextManifest;
   }
-  await writeResponseBodyToPartial(response, target, { emit, startBytes: partialBytes, totalBytes });
-  return { resumed: true, totalBytes };
 }
 
 /**
