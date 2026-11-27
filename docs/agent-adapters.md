@@ -289,9 +289,15 @@ authentication, and the boundary between REST and MCP.
   Newer builds that advertise `--dangerously-skip-permissions` from
   `opencode run --help` receive that flag; older builds keep the compatible
   argv without it.
-- The adapter discovers models with `opencode models`, parses structured JSON
-  events, and captures OpenCode's `sessionID`. Follow-up turns continue the
-  native session with `-s <session-id>`.
+- Model discovery keeps the OpenCode 1.x `models --verbose` probe. When the
+  CLI rejects `--verbose`, the adapter reads the OpenCode 2.x
+  `api model.list --standalone` catalog, retaining exact provider/model IDs and
+  reasoning variants. An unavailable API falls back to `models --standalone`
+  without advertising unverified variants. All attempts share a 15-second
+  budget; provider settings and credentials are not returned to the picker.
+- The adapter parses structured JSON events and captures OpenCode's
+  `sessionID`. Follow-up turns continue the native session with
+  `-s <session-id>`.
 - External MCP configuration is supplied per invocation through
   `OPENCODE_CONFIG_CONTENT`; selected skills still use the shared §4 path.
 
