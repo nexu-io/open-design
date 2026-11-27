@@ -207,6 +207,61 @@ describe('POST /api/runs headless fallbacks', () => {
     expect(run2Body.assistantMessageId).toBe(clientId);
   });
 
+  // #5811: a headless run that names its conversation leaves the user turn and
+  // its assistant row there, whichever route started it. `/api/chat` used to
+  // persist neither, so an external caller got the run's files next to an
+  // empty conversation.
+  for (const endpoint of ['/api/runs', '/api/chat'] as const) {
+    it(`persists the user turn and its assistant row in the named conversation: ${endpoint}`, async () => {
+      started = await startTestServer();
+      const { projectId, conversationId } = await createProject(started.url, `${endpoint} named conversation`);
+      const prompt = `Headless ${endpoint} prompt`;
+
+      const response = await fetch(`${started.url}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: `missing-agent-${randomUUID()}`,
+          projectId,
+          conversationId,
+          message: prompt,
+        }),
+      });
+      expect(response.ok).toBe(true);
+      // /api/chat streams until the run settles; /api/runs answers 202 JSON.
+      await response.text();
+
+      const messages = await listMessages(started.url, projectId, conversationId);
+      expect(messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual([prompt]);
+      expect(messages.filter((m) => m.role === 'assistant')).toHaveLength(1);
+    });
+  }
+
+  it('does not seed a second user turn when /api/chat replays the same clientRequestId', async () => {
+    started = await startTestServer();
+    const { projectId, conversationId } = await createProject(started.url, 'Chat replay');
+    const body = JSON.stringify({
+      agentId: `missing-agent-${randomUUID()}`,
+      projectId,
+      conversationId,
+      message: 'Lost-response retry',
+      clientRequestId: `client_${randomUUID()}`,
+    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await fetch(`${started.url}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      expect(response.ok).toBe(true);
+      await response.text();
+    }
+
+    const messages = await listMessages(started.url, projectId, conversationId);
+    expect(messages.filter((m) => m.role === 'user')).toHaveLength(1);
+    expect(messages.filter((m) => m.role === 'assistant')).toHaveLength(1);
+  });
+
   it('keeps a client-pinned user message before its assistant when the user PUT arrives late', async () => {
     started = await startTestServer();
     const { projectId, conversationId } = await createProject(
@@ -1026,6 +1081,19 @@ async function createProject(url: string, name: string): Promise<{
   expect(response.status).toBe(200);
   const body = await response.json() as { conversationId: string };
   return { projectId, conversationId: body.conversationId };
+}
+
+async function listMessages(
+  url: string,
+  projectId: string,
+  conversationId: string,
+): Promise<Array<{ id: string; role: string; content: string }>> {
+  const response = await fetch(
+    `${url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+  );
+  expect(response.status).toBe(200);
+  const body = await response.json() as { messages: Array<{ id: string; role: string; content: string }> };
+  return body.messages;
 }
 
 async function createConversation(
