@@ -319,6 +319,7 @@ export type TrackingRunFailureDetail =
   // reset instant makes this waitable, but it is deliberately non-retryable
   // for automation so the daemon cannot create an immediate retry storm.
   | 'membership_concurrency_limit'
+  | 'membership_rpm_limit'
   | 'workspace_credits_exhausted'
   | 'rate_limit_429'
   | 'amr_insufficient_balance'
@@ -456,6 +457,7 @@ export type TrackingRunAdmissionPhase = 'before_execution' | 'during_execution' 
 export type TrackingRunPolicyReason =
   | 'model_window_limit'
   | 'membership_concurrency_limit'
+  | 'membership_rpm_limit'
   | 'hard_quota'
   | 'workspace_credits_exhausted'
   | 'amr_insufficient_balance'

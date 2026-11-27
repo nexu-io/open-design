@@ -909,6 +909,7 @@ function classification(
     'hard_quota',
     'model_window_limit',
     'membership_concurrency_limit',
+    'membership_rpm_limit',
     'workspace_credits_exhausted',
     'amr_insufficient_balance',
     'amr_tier_upgrade_required',
@@ -1439,6 +1440,14 @@ function classifyRunFailureBase(
       'session_init',
       false,
       'login',
+    );
+  }
+
+  if (input.agentId === 'amr' && /\btier_limit_exceeded\b/i.test(text)
+      && /\bmembership rpm limit exceeded\b/i.test(text)) {
+    return classification(
+      'rate_limit', 'membership_rpm_limit', inferFailureStageFromEvents(events, 'first_token_wait'),
+      false, 'retry', { evidenceLevel: 'structured_code' },
     );
   }
 
