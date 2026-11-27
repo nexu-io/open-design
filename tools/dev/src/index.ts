@@ -71,6 +71,7 @@ import {
 import { rewriteCliArgsForDefaultStart } from "./cli-args.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 import { loadWorkspaceLocalEnv } from "./local-env.js";
+import { assertWebProductionBuild } from "./prod-build.js";
 import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 import { resolveDevVelaEnv } from "./vela-runtime.js";
 
@@ -978,6 +979,7 @@ async function restartTargets(config: ToolDevConfig, appName: string | undefined
   if (appName === APP_KEYS.DAEMON) return await restartDaemon(config, options);
   const stopTargets = resolveStopApps(appName);
   const startTargets = resolveStartApps(appName);
+  await assertWebProductionBuild(config.workspaceRoot, startTargets, options);
   await resolveSharedPortsFromRunningState(startTargets, options, {
     daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
     webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
@@ -1122,6 +1124,7 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
 async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
+  await assertWebProductionBuild(config.workspaceRoot, targets, options);
   await resolveSharedPortsFromRunningState(targets, foregroundOptions, {
     daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
     webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
@@ -1181,6 +1184,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
       const startOptions = parentPid == null ? options : { ...options, parentPid };
       const config = resolveToolDevConfig(startOptions);
       const targets = resolveStartApps(appName);
+      await assertWebProductionBuild(config.workspaceRoot, targets, startOptions);
       await resolveSharedPortsFromRunningState(targets, startOptions, {
         daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
         webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
