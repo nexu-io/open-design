@@ -144,6 +144,21 @@ export function storeShapeError(root: string, message: string, details?: unknown
   });
 }
 
+/**
+ * True when a filesystem error means the path is simply not there any more,
+ * as opposed to being unreadable for a reason that could resolve itself.
+ *
+ * A vanished path is a fact the updater can act on: whatever the store points
+ * at is gone and is not coming back, so the pointer is stale rather than the
+ * store being corrupt. Permission, I/O, and lock errors stay fatal, because
+ * discarding a downloaded release that is merely unreadable right now would
+ * silently throw away a verified update.
+ */
+export function isVanishedPathError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
 export function logStoreError(logger: DesktopUpdaterLogger, error: DesktopUpdateErrorSnapshot): void {
   logger.error("[open-design updater] invalid update store", error);
 }
