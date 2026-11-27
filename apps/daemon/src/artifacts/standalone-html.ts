@@ -136,6 +136,7 @@ class StandaloneBundler {
   private readonly countedPaths = new Set<string>();
   private readonly moduleCode = new Map<string, string>();
   private readonly moduleState = new Map<string, 'processing' | 'complete'>();
+  private readonly moduleDependencies = new Map<string, Set<string>>();
   private readonly workerUrlCache = new Map<string, Promise<string>>();
   private readonly documentUrlCache = new Map<string, Promise<string>>();
   private rawBytes: number;
@@ -678,12 +679,14 @@ class StandaloneBundler {
     const state = this.moduleState.get(projectPath);
     if (state === 'complete' || state === 'processing') return;
     this.moduleState.set(projectPath, 'processing');
+    const dependencies = new Set<string>();
+    this.moduleDependencies.set(projectPath, dependencies);
     const loaded = await this.load(projectPath, chain);
     const code = await this.rewriteJavaScript(
       loaded.buffer.toString('utf8'),
       projectPath,
       chain,
-      modulePaths,
+      dependencies,
       'module',
     );
     this.moduleCode.set(projectPath, code);
@@ -719,8 +722,17 @@ class StandaloneBundler {
   }
 
   private injectImportMap(html: string, paths: Set<string>, chain: string[]): string {
+    // Module code is cached across the export, but each iframe has its own
+    // import map. Expand cached dependency edges for every document, including
+    // cycles, without importing unrelated modules from sibling documents.
+    const closure = new Set(paths);
+    for (const projectPath of closure) {
+      for (const dependency of this.moduleDependencies.get(projectPath) ?? []) {
+        closure.add(dependency);
+      }
+    }
     const imports: Record<string, string> = {};
-    for (const projectPath of [...paths].sort()) {
+    for (const projectPath of [...closure].sort()) {
       const code = this.moduleCode.get(projectPath);
       if (code === undefined) continue;
       imports[moduleSpecifier(projectPath)] = this.checkedDataUrl(
