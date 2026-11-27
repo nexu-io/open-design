@@ -883,6 +883,42 @@ describe('Vela media provider', () => {
     expect(runVelaCommandMock.mock.calls.some(([args]) => args[0] === 'video' && args[1] === 'gen')).toBe(false);
   });
 
+  it('uses the registered Seedance 2.5 ID and enforces the workspace catalogue and durations', async () => {
+    const model = 'doubao-seedance-2-5-260628';
+    const lengths = Array.from({ length: 27 }, (_, index) => index + 4);
+    const args = {
+      ...baseArgs(),
+      surface: 'video' as const,
+      model: `vela/${model}`,
+      workspaceId: 'team-ws',
+      output: 'seedance-25.mp4',
+    };
+    runVelaCommandMock.mockResolvedValueOnce(JSON.stringify({ models: [] }));
+    await expect(generateMedia({ ...args, length: 15 })).rejects.toThrow(/unknown or unavailable video model/);
+
+    const catalogue = JSON.stringify({
+      models: [{ model, kind: 'video', capabilities: { durations: { values: lengths, default: 5 } } }],
+    });
+    runVelaCommandMock.mockResolvedValueOnce(catalogue);
+    await expect(generateMedia({ ...args, length: 31 })).rejects.toThrow(
+      `does not support duration 31s; supported: ${lengths.join(', ')}`,
+    );
+    expect(runVelaCommandMock.mock.calls.map(([command]) => command[0])).toEqual(['media', 'media']);
+
+    runVelaCommandMock
+      .mockResolvedValueOnce(catalogue)
+      .mockResolvedValueOnce(JSON.stringify({ task_id: 'mt_seedance25', status: 'queued' }))
+      .mockImplementationOnce(async (command: string[]) => {
+        await writeFile(valueAfter(command, '--output'), VIDEO_BYTES);
+        return JSON.stringify({ task_id: 'mt_seedance25', status: 'succeeded' });
+      });
+    await expect(generateMedia({ ...args, length: 15 })).resolves.toMatchObject({ name: args.output });
+    const submit = runVelaCommandMock.mock.calls[3]![0];
+    expect(submit.slice(0, 2)).toEqual(['video', 'gen']);
+    expect(valueAfter(submit, '--model')).toBe(model);
+    expect(valueAfter(submit, '--duration')).toBe('15');
+  });
+
   it('validates video duration dynamically against published capabilities.durations and forwards 15s', async () => {
     const seedance25Durations = Array.from({ length: 27 }, (_, i) => i + 4);
     const wan27Durations = Array.from({ length: 14 }, (_, i) => i + 2);
