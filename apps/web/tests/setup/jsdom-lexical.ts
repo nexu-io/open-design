@@ -85,3 +85,20 @@ if (typeof window !== 'undefined' && typeof HTMLCanvasElement !== 'undefined') {
   HTMLCanvasElement.prototype.getContext =
     (() => null) as unknown as HTMLCanvasElement['getContext'];
 }
+
+// Polyfill localStorage for tests that need it (jsdom doesn't provide it by default)
+if (typeof window !== 'undefined' && typeof window.localStorage === 'undefined') {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    value: {
+      getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+      setItem: (key: string, value: string) => { store.set(key, value); },
+      removeItem: (key: string) => { store.delete(key); },
+      clear: () => { store.clear(); },
+      key: (i: number) => Array.from(store.keys())[i] ?? null,
+      get length() { return store.size; },
+    },
+    writable: true,
+    configurable: true,
+  });
+}

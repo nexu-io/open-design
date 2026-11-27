@@ -7810,6 +7810,12 @@ function MediaProvidersSection({
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
+      // If the user is setting an API key, mark it as configured so the daemon
+      // knows to preserve the existing key when syncing. This prevents the
+      // API key from being wiped on restart (issue #9577).
+      if (next.apiKey && next.apiKey.trim() && !next.apiKeyConfigured) {
+        next.apiKeyConfigured = true;
+      }
       const map = { ...(curr.mediaProviders ?? {}) };
       if (isStoredMediaProviderEntryEmpty(next)) {
         delete map[provider.id];

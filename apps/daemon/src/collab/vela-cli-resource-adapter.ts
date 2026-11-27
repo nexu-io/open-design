@@ -14,6 +14,8 @@ import {
   sharedProjectPullProfileEnabled,
 } from './pull-profile.js';
 import type { ResourceHubPrincipal } from './resource-principal.js';
+import { promises as fs } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 
 // The `vela resource` transport for the publish/pull machinery (T7c). Instead of
 // the daemon holding an internal token and driving the hub over HTTP itself, it
@@ -141,6 +143,48 @@ export function isExcludedProjectContentEntry(name: string, isDirectory: boolean
       : name.startsWith(prefix));
 }
 
+/**
+ * Recursively find all 0-byte files in a directory, returning paths relative to the directory root.
+ * Uses the same path separator convention as the CLI (forward slash) for exclude patterns.
+ */
+async function findZeroByteFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  async function walk(currentDir: string, baseDir: string): Promise<void> {
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      // If we can't read the directory (permissions, etc.), skip it silently.
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = join(currentDir, entry.name);
+      // Skip excluded directories entirely to avoid unnecessary stat calls.
+      if (entry.isDirectory()) {
+        const dirName = entry.name;
+        const isExcludedDir = MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES.some(
+          (rule) => rule.endsWith('/') && rule.slice(0, -1) === dirName
+        ) || IGNORED_PROJECT_DIR_NAMES.has(dirName);
+        if (isExcludedDir) continue;
+        await walk(fullPath, baseDir);
+      } else if (entry.isFile()) {
+        try {
+          const stat = await fs.stat(fullPath);
+          if (stat.size === 0) {
+            const relPath = relative(baseDir, fullPath).split(sep).join('/');
+            results.push(relPath);
+          }
+        } catch {
+          // If we can't stat the file, skip it.
+        }
+      }
+      // Ignore symlinks and other file types.
+    }
+  }
+  await walk(dir, dir);
+  return results;
+}
+
 /** Run `vela resource <args>` and resolve its stdout. */
 export type RunVelaResource = (
   args: string[],
@@ -231,6 +275,13 @@ export function createVelaCliResourceAdapter(
         }
         for (const prefix of MEMBER_MIRROR_EXCLUDED_PREFIXES) {
           args.push('--exclude-prefix', prefix);
+        }
+        // Exclude 0-byte files to prevent `vela resource push` from failing
+        // with `501 blob_upload_failed`. Scan the project directory for files
+        // with size 0 and exclude each by name so the CLI never attempts to upload them.
+        const zeroByteFiles = await findZeroByteFiles(dir);
+        for (const relPath of zeroByteFiles) {
+          args.push('--exclude', relPath);
         }
         const metadata = await options.describeProject?.(projectId);
         const resourceMetadata = kind === PROJECT_KIND
