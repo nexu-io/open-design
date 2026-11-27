@@ -186,6 +186,11 @@ const MAX_FILES = 5000;
 // `artifact_count` funnel depends on.
 const MAX_OTHER_FILES = 5000;
 
+// File budgets alone do not bound a tree containing many empty directories.
+// Count directory reads separately so start/finish bookkeeping stays bounded
+// even before either class of file reaches its limit.
+const MAX_DIRECTORIES = MAX_FILES + MAX_OTHER_FILES;
+
 // Cheap fingerprint for non-tracked files: size + mtime only, no content read.
 // `files_written_count` is a boolean-ish "did the run write anything" signal,
 // so the pathological same-size-same-mtime rewrite these miss is acceptable —
@@ -208,7 +213,15 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   const markIncomplete = () => { complete = false; };
   let trackedCount = 0;
   let otherCount = 0;
+  let directoryReads = 0;
+  let directoryBudgetExceeded = false;
   const walk = (dir: string): void => {
+    if (directoryReads >= MAX_DIRECTORIES) {
+      complete = false;
+      directoryBudgetExceeded = true;
+      return;
+    }
+    directoryReads += 1;
     if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
     let entries: fs.Dirent[];
     try {
@@ -218,6 +231,7 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
       return;
     }
     for (const entry of entries) {
+      if (directoryBudgetExceeded) return;
       if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
@@ -263,7 +277,15 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
   const files: Array<{ full: string; tracked: boolean; manifestBacked: boolean }> = [];
   let trackedCount = 0;
   let otherCount = 0;
+  let directoryReads = 0;
+  let directoryBudgetExceeded = false;
   const walk = async (dir: string): Promise<void> => {
+    if (directoryReads >= MAX_DIRECTORIES) {
+      complete = false;
+      directoryBudgetExceeded = true;
+      return;
+    }
+    directoryReads += 1;
     if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
     let entries: fs.Dirent[];
     try {
@@ -273,6 +295,7 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
       return;
     }
     for (const entry of entries) {
+      if (directoryBudgetExceeded) return;
       if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) { complete = false; return; }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
