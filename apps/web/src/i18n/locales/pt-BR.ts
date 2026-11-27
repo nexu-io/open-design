@@ -2979,6 +2979,8 @@ export const ptBR: Dict = {
   'workspace.noFilesMatch': 'Nenhum arquivo corresponde',
   'workspace.allFiles': 'Todos',
   'workspace.createNew': 'Criar novo',
+  'workspace.reopenDesignFiles': 'Reabrir Design Files',
+  'workspace.reopenDesignFilesLabel': 'Design Files',
   'workspace.tabOpen': 'Aberto',
   'workspace.sideChatContextBanner': 'Contexto da conversa atual integrado',
   'workspace.sideChatDefaultTitle': 'Chat lateral',

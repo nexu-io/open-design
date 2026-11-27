@@ -2733,3 +2733,40 @@
 .designs-empty-cta:active {
   transform: scale(0.98);
 }
+
+.ws-tab-design-files-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ws-tab-close {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 2px;
+  cursor: pointer;
+  color: var(--text-strong);
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.ws-tab-close:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--bg-panel));
+}
+
+.ws-tab-close:active {
+  opacity: 0.7;
+}
+
+.ws-tab-close[aria-hidden="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
