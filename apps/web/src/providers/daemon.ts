@@ -1705,6 +1705,16 @@ export async function listProjectRunsWithScope(
  * Returns `null` when the project is unreadable or the daemon is unreachable,
  * so a caller can tell "no runs" apart from "could not ask".
  */
+export interface RunListFailure {
+  kind: 'retryable-failure';
+}
+
+/**
+ * Reads the project's run list. Returns `null` on transport error (caller
+ * will keep polling) or a `{ kind: 'retryable-failure' }` when the server
+ * returned a terminal error (e.g. 403 with retryable: false) — the caller
+ * should stop polling for that project.
+ */
 export async function listRunsForProject(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
@@ -1713,14 +1723,30 @@ export async function listRunsForProject(
   awaitingInputProjectIds: string[];
   /** `undefined` when the daemon predates the per-conversation set. */
   awaitingInputConversationIds?: string[];
-} | null> {
+} | null | RunListFailure> {
   try {
     const resp = await fetch(`/api/runs?projectId=${encodeURIComponent(projectId)}`, {
       ...(workspaceContext
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : {}),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      // Check if this is a terminal (non-retryable) failure. The server
+      // signals this with retryable: false in the error body; callers must
+      // stop polling rather than re-trying indefinitely.
+      try {
+        const body = await resp.json();
+        if (
+          body?.error?.retryable === false ||
+          body?.retryable === false
+        ) {
+          return { kind: 'retryable-failure' };
+        }
+      } catch {
+        // Not JSON or no retryable field — treat as transient retryable.
+      }
+      return null;
+    }
     const body = (await resp.json()) as ChatRunListResponse;
     return {
       runs: body.runs ?? [],

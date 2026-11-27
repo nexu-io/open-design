@@ -381,7 +381,14 @@ function uniqueIdForTab(tab: WorkspaceChromeTab): string {
 }
 
 function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
-  let sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
+  // Exclude marketplace tabs from the workspace tab dropdown (issue #8493).
+  // Plugin details accumulate as project tabs but belong in the plugins view,
+  // not cluttering the workspace navigation.
+  let sourceTabs = state.tabs.filter(
+    (tab) => tab.kind !== 'marketplace',
+  ).length > 0
+    ? state.tabs.filter((tab) => tab.kind !== 'marketplace')
+    : [createEntryTab('home')];
 
   // Deduplicate entry tabs (singleton constraint): all sidebar sections
   // (home / projects / tasks / design-systems / plugins / integrations) share
@@ -389,7 +396,7 @@ function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   // 1. Is one of them currently active?
   // 2. Otherwise, pick the one with highest lastActiveAt.
   // 3. Otherwise, pick the first one.
-  const entryTabs = sourceTabs.filter((tab) => tab.kind === 'entry');
+  const entryTabs = sourceTabs.filter((tab): tab is WorkspaceChromeTab & { kind: 'entry' } => tab.kind === 'entry');
   if (entryTabs.length > 1) {
     let canonicalEntry = entryTabs.find((tab) => tab.id === state.activeTabId);
     if (!canonicalEntry) {

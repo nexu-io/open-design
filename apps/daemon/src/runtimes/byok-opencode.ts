@@ -32,9 +32,18 @@ export interface OpenCodeByokProviderConfig {
   config: Record<string, unknown>;
 }
 
-export function opencodeByokModelId(model: string | null | undefined): string | null {
+export function opencodeByokModelId(
+  model: string | null | undefined,
+  options?: { stripProviderPrefix?: boolean },
+): string | null {
   const trimmed = typeof model === 'string' ? model.trim() : '';
   if (!trimmed || trimmed.toLowerCase() === 'default') return null;
+  if (options?.stripProviderPrefix) {
+    // For OpenRouter, strip 'openrouter/' prefix if present and don't add 'open-design-byok/'
+    return trimmed.startsWith('openrouter/')
+      ? trimmed.slice('openrouter/'.length)
+      : trimmed;
+  }
   if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
   return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
 }
@@ -62,7 +71,9 @@ export function buildOpenCodeByokProviderConfig(
   if (!rawModel || rawModel.toLowerCase() === 'default') return null;
   if (!baseUrl) return null;
 
-  const modelId = opencodeByokModelId(rawModel);
+  const modelId = opencodeByokModelId(rawModel, {
+    stripProviderPrefix: isOpenRouterProvider(baseUrl),
+  });
   if (!modelId) return null;
 
   const providerEntry = buildProviderEntry(
@@ -171,6 +182,15 @@ function isRealOpenAIHost(baseUrl: string): boolean {
     return new URL(baseUrl).hostname === 'api.openai.com';
   } catch {
     return true;
+  }
+}
+
+function isOpenRouterProvider(baseUrl: string): boolean {
+  if (!baseUrl) return false;
+  try {
+    return new URL(baseUrl).hostname === 'openrouter.ai';
+  } catch {
+    return false;
   }
 }
 
