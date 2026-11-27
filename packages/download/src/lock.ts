@@ -93,7 +93,7 @@ function isLockProcessAlive(lock: DownloadLockFile): boolean {
  * @internal Remove a lock file if it is stale (dead owner).
  * @returns `true` if a stale lock was cleared.
  */
-async function clearStaleLock(target: NormalizedTarget): Promise<boolean> {
+async function clearStaleLock(target: Pick<NormalizedTarget, "lockPath">): Promise<boolean> {
   const lock = await readJson<unknown>(target.lockPath);
   if (!isDownloadLockFile(lock) || isLockProcessAlive(lock)) return false;
   await rm(target.lockPath, { force: true }).catch(() => undefined);
@@ -105,7 +105,7 @@ async function clearStaleLock(target: NormalizedTarget): Promise<boolean> {
  * present. Throws `TARGET_LOCKED` when the target is held by a live process.
  * @returns A handle to the acquired lock.
  */
-export async function acquireLock(target: NormalizedTarget): Promise<AcquiredLock> {
+export async function acquireLock(target: Pick<NormalizedTarget, "bucket" | "fileName" | "lockPath">): Promise<AcquiredLock> {
   await mkdir(dirname(target.lockPath), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
