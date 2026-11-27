@@ -43,4 +43,21 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the Runcrate preset wired to OpenAI-compatible chat models', () => {
+    const runcrateProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.runcrate.ai/v1',
+    );
+
+    expect(runcrateProvider).toMatchObject({
+      label: 'Runcrate',
+      apiKeyConsoleLink: {
+        host: 'runcrate.ai',
+        url: 'https://runcrate.ai/dashboard/api-keys',
+      },
+    });
+    expect(runcrateProvider?.preferredModels[0]).toBe('deepseek-ai/DeepSeek-V4-Flash');
+  });
 });
