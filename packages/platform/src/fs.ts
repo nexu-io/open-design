@@ -1,14 +1,14 @@
 /**
  * @module fs
  *
- * Filesystem primitives: containment checks, atomic (temp-then-rename) file
- * copies, best-effort recursive removal, and bounded log-tail reads. All pure
+ * Filesystem primitives: containment checks, atomic file copies, best-effort
+ * recursive removal, and bounded log-tail reads. All pure
  * filesystem operations with no process, command, or proxy concerns.
  *
  * Keeps private `errorCode` / `errorMessage` copies so it owns no cross-module
  * runtime surface.
  */
-import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, link, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** @internal Extract a Node `error.code` as a string, or `null` when the value carries no code. */
@@ -65,9 +65,10 @@ function destinationExistsError(destinationPath: string): NodeJS.ErrnoException 
 
 /**
  * Copy a file atomically by writing to a unique temp file in the destination
- * directory and renaming it into place, creating parent directories as needed.
+ * directory and publishing it into place, creating parent directories as needed.
  * Refuses to clobber an existing destination unless `overwrite` is set; a same-
  * path copy is a no-op that reports the existing size.
+ * No-overwrite publication requires hard-link support on the destination filesystem.
  *
  * @param sourcePath - The file to copy from.
  * @param destinationPath - The path to copy to.
@@ -105,14 +106,16 @@ export async function atomicCopyFile(
   try {
     await copyFile(source, tempPath);
     if (options.overwrite === true) {
-      await rm(destination, { force: true });
+      await rename(tempPath, destination);
+    } else {
+      // A pre-copy stat cannot reserve the destination. Linking the completed
+      // temporary file claims an absent name without clobbering a concurrent writer.
+      await link(tempPath, destination);
     }
-    await rename(tempPath, destination);
     const copied = await stat(destination);
     return { bytesCopied: copied.size, replaced: existing != null };
-  } catch (error) {
+  } finally {
     await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
   }
 }
 
