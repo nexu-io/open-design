@@ -86,3 +86,26 @@ it.each([0, 1])('applies the byte budget to complete retained lines (extra byte:
   expect(content).toBe(extraByte ? newest : older + newest);
   expect(Buffer.byteLength(content)).toBeLessThanOrEqual(limit);
 });
+
+it('collects rendered sources with their consent boundary, a byte limit, and failures noted', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'diagnostic-auto-')); dirs.push(dir);
+  const seen: Array<number | null> = [];
+  const rows = Array.from({ length: 50 }, (_, index) => JSON.stringify({ row: index, text: 'r'.repeat(40) }));
+  const result = await buildAutomaticDiagnostics({ directory: join(dir, 'bundle'), incidentId: 'incident-r', summary: {}, sources: [
+    { name: 'db/session.jsonl', absolutePath: '', kind: 'text', tailBytes: 300, notBeforeMs: 1234,
+      render: async (notBefore) => { seen.push(notBefore); return rows.join('\n'); } },
+    { name: 'db/broken.jsonl', absolutePath: '', kind: 'text', render: async () => { throw new Error('database is locked'); } },
+  ] });
+  const chunks = await Promise.all(result.manifest.chunks.map((c) => readFile(join(dir, 'bundle', String(c.index)))));
+  const records = gunzipSync(Buffer.concat(chunks)).toString().trim().split('\n').map((line) => JSON.parse(line));
+  expect(seen).toEqual([1234]);
+  const file = records.find((record) => record.name === 'db/session.jsonl');
+  // Redaction re-serializes each JSON record, so match values, not raw bytes.
+  expect(file.content).toMatch(/"row":\s*49\b/);
+  expect(file.content).not.toMatch(/"row":\s*0\b/);
+  const notes = records.find((record) => record.type === 'collection').notes;
+  expect(notes).toEqual(expect.arrayContaining([
+    { name: 'db/session.jsonl', reason: 'tail_truncated' },
+    { name: 'db/broken.jsonl', reason: 'source_unavailable' },
+  ]));
+});
