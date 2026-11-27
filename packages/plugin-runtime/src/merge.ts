@@ -68,18 +68,16 @@ function deepClonePlain<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((entry) => deepClonePlain(entry)) as unknown as T;
   }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = deepClonePlain(v);
-  }
-  return out as T;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, deepClonePlain(entry)]),
+  ) as T;
 }
 
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const [key, val] of Object.entries(source)) {
     if (val === undefined) continue;
     if (key === 'compat') continue; // Handled separately to enforce union semantics.
-    const existing = target[key];
+    const existing = Object.hasOwn(target, key) ? target[key] : undefined;
     if (
       isPlainObject(existing) &&
       isPlainObject(val)
@@ -88,7 +86,13 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
       deepMerge(cloned as Record<string, unknown>, val);
       target[key] = cloned;
     } else if (existing === undefined) {
-      target[key] = deepClonePlain(val);
+      // JSON field names are data, including __proto__ and inherited method names.
+      Object.defineProperty(target, key, {
+        value: deepClonePlain(val),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     } else {
       // Sidecar wins; do not overwrite an existing scalar / array / null with
       // an adapter value.
