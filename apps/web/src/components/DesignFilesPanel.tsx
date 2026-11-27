@@ -71,6 +71,9 @@ interface Props {
    * of mistake the `downloadPending` branch below already guards (OPEND-2283).
    */
   filesAuthoritative?: boolean;
+  /** Error from the last file-list refresh attempt, if any. Shown as an
+   * error state instead of the empty "create new" CTAs so users can retry. */
+  projectFilesError?: Error | null;
   /**
    * Before the first authoritative read, draw the empty state instead of
    * "Loading…" -- inert, so none of its CTAs can act on a guess. For a project
@@ -489,6 +492,7 @@ export function DesignFilesPanel({
   viewerOnly = false,
   downloadPending = false,
   filesAuthoritative = true,
+  projectFilesError = null,
   emptyLookBeforeFirstListing = false,
   rootDirName,
   reloading,
@@ -522,6 +526,7 @@ export function DesignFilesPanel({
   hiddenPluginActionPaths = new Set(),
   navState,
   onNavStateChange,
+  onRefreshFiles,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
   const t = useT();
@@ -1714,6 +1719,17 @@ export function DesignFilesPanel({
                 steps={runSteps ?? []}
                 workspaceContext={workspaceContext}
               />
+            </div>
+          ) : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && projectFilesError ? (
+            <div className="df-empty df-empty-syncing" data-testid="design-files-error">
+              <div className="df-empty-pill">
+                <Icon name="alert-triangle" size={20} />
+                <span className="df-empty-title">{t('designFiles.error')}</span>
+              </div>
+              <p className="df-empty-detail">{projectFilesError?.message}</p>
+              <button type="button" className="btn" onClick={() => void onRefreshFiles()}>
+                {t('common.retry')}
+              </button>
             </div>
           ) : files.length === 0 && liveArtifacts.length === 0 && (folders?.length ?? 0) === 0 && !filesAuthoritative ? (
             emptyLookBeforeFirstListing ? renderEmptyState(true) : (

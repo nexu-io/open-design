@@ -16,8 +16,11 @@ export const FALLBACK_MAX_TOKENS = 8192;
 // for both the UI input attributes and runtime validation in
 // `effectiveMaxTokens`, so a stale or hand-edited localStorage value
 // can't sneak past the UI's promise.
+// Kept at 500k so all shipped per-model overrides (e.g. deepseek-v4-pro
+// at 384k) fit inside the user-editable range; a value above this bound
+// always falls back to the model default rather than silently capping.
 export const MIN_MAX_TOKENS = 1024;
-export const MAX_MAX_TOKENS = 200000;
+export const MAX_MAX_TOKENS = 500000;
 
 const LITELLM_MODELS = litellmData.models as Record<string, number>;
 

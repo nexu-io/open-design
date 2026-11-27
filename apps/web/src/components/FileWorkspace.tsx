@@ -398,6 +398,7 @@ interface Props {
   materializationPending?: boolean;
   /** See DesignFilesPanel's `filesAuthoritative`. */
   filesAuthoritative?: boolean;
+  projectFilesError?: Error | null;
   /**
    * The project row does not exist on the daemon yet (a Home send whose create
    * has not answered, OPEND-3334): this workspace reads nothing of its own
@@ -1430,6 +1431,7 @@ export function FileWorkspace({
   viewerOnly = false,
   materializationPending = false,
   filesAuthoritative = true,
+  projectFilesError = null,
   emptyLookBeforeFirstListing = false,
   projectReadsHeld = false,
   readonlyNotice,
@@ -4476,6 +4478,7 @@ export function FileWorkspace({
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
             filesAuthoritative={filesAuthoritative}
+            projectFilesError={projectFilesError}
             emptyLookBeforeFirstListing={emptyLookBeforeFirstListing}
             rootDirName={rootDirName}
             reloading={reloading}

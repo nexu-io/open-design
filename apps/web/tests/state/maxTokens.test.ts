@@ -62,7 +62,7 @@ describe('effectiveMaxTokens', () => {
 
 describe('effectiveMaxTokens override validation', () => {
   // Stale localStorage, hand-edited config, or future schema drift can put
-  // anything in cfg.maxTokens. The Settings UI advertises a [1024, 200000]
+  // anything in cfg.maxTokens. The Settings UI advertises a [1024, 500000]
   // integer-stepped range, and the daemon proxy already clamps `> 0`, so
   // we tighten this entry point to match the advertised contract.
 
