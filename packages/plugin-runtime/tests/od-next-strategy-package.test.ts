@@ -179,4 +179,14 @@ describe('bundled OD Next Strategy V2 package', () => {
     expect(mapping).toContain('report blocked');
     expect(mapping).toContain('Never select the nearest specialist profile by guesswork');
   });
+
+  it('requires image profile to query --cloud catalog and avoid silent substitution', () => {
+    const discovery = declaration.assets.taskProfiles.find((profile) => profile.taskType === 'discovery');
+    const imageResource = discovery?.resources?.find((resource) => resource.path.endsWith('/image.md'));
+    const imageProfile = readFileSync(`${pluginRoot}/assets/task-profiles/image.md`, 'utf8');
+
+    expect(imageResource?.version).toBe('3.1.2');
+    expect(imageProfile).toContain('media models --cloud --json');
+    expect(imageProfile).toContain('never silently substitute an explicitly requested or user-selected model');
+  });
 });

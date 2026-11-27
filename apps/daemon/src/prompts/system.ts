@@ -546,10 +546,12 @@ function renderMediaDispatchModelGuidance(defaults?: ByokMediaDefaults): string 
   const imagePart = imageModel
     ? `For image generation prefer your configured model: \`${imageModel}\`.`
     : 'For the best fal image model use `--model flux-pro-ultra`.';
+  const cloudImagePart =
+    'For OpenDesign Cloud image generation, read the current account/workspace catalogue with `od media models --cloud --json` before reporting a model unavailable or choosing a default; never silently substitute an explicitly requested model or provider.';
   const videoPart = videoModel
     ? `For video prefer your configured model: \`${videoModel}\`.`
     : 'For cloud video, read the current account/workspace catalogue with `od media models --cloud --json` before choosing a default. If it has no available video model, report the capability gap; never silently substitute an explicitly requested model or provider.';
-  return `${imagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
+  return `${imagePart} ${cloudImagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 }
 
 function renderMediaDispatchHint(

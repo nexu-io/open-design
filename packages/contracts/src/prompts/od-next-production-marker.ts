@@ -41,8 +41,9 @@ An ended turn is not proof of delivered files: never claim unwritten work is com
 export function renderOdNextProductionReadyInstructions(key: string): string {
   if (!/^[a-f0-9]+$/.test(key)) return '';
   return `Plan-to-production continuation:
-For cloud video generation, verify current account/workspace availability with
-\`"$OD_NODE_BIN" "$OD_BIN" media models --cloud --json\` before choosing a default.
+For cloud image or video generation, verify current account/workspace availability with
+\`"$OD_NODE_BIN" "$OD_BIN" media models --cloud --json\` before choosing a default
+or reporting a model unavailable.
 A static model ID is not proof of availability. Empty catalogue means unavailable;
 a failed lookup means unknown. Preserve explicit model/provider choices and report
 an unavailable choice without switching billing channels. Configured BYOK and

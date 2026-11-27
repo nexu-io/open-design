@@ -711,7 +711,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         };
         return res.json(catalogue);
       } catch {
-        return sendApiError(res, 503, 'MEDIA_CATALOG_UNAVAILABLE', 'Cloud video availability could not be verified; do not infer availability from the static catalogue.');
+        return sendApiError(res, 503, 'MEDIA_CATALOG_UNAVAILABLE', 'Cloud media availability could not be verified; do not infer availability from the static catalogue.');
       }
     }
     res.json({
