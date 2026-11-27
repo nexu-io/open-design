@@ -88,7 +88,10 @@ export function encodeOdEventForAgui(
   event: OdNativeEvent,
   ctx: EncodeContext,
 ): AGUIEvent | null {
-  const ts = ctx.now ?? Date.now();
+  const sourceTime = eventTimestamp(event);
+  const ts = typeof sourceTime === 'number' && Number.isFinite(sourceTime)
+    ? sourceTime
+    : ctx.now ?? Date.now();
   const base = { runId: ctx.runId, ts, ...(ctx.seq !== undefined ? { seq: ctx.seq } : {}) };
   switch (event.kind) {
     case 'message_chunk': {
@@ -193,6 +196,21 @@ export function encodeOdEventForAgui(
     }
     default:
       return null;
+  }
+}
+
+function eventTimestamp(event: OdNativeEvent): number | undefined {
+  switch (event.kind) {
+    case 'pipeline_stage_started':
+      return event.startedAt;
+    case 'pipeline_stage_completed':
+      return event.completedAt;
+    case 'genui_surface_request':
+      return event.requestedAt;
+    case 'genui_surface_response':
+      return event.respondedAt;
+    default:
+      return 'ts' in event ? event.ts : undefined;
   }
 }
 
