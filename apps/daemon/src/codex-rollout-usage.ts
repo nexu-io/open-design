@@ -12,7 +12,8 @@
 // at the call site (it needs CODEX_HOME + the captured session id).
 
 import os from 'node:os';
-import { lstat, readFile, readdir } from 'node:fs/promises';
+import fs from 'node:fs';
+import { lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { findIndexedCodexArchivedRolloutPath } from './codex-archived-rollout-index.js';
@@ -62,48 +63,90 @@ export function extractCodexLastTurnFirstCallUsage(
   rolloutJsonl: string,
 ): CodexFirstCallUsage | null {
   let firstCall: CodexFirstCallUsage | null = null;
-
   for (const line of rolloutJsonl.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    const record = asRecord(parsed);
-    if (!record) continue;
-    const payload = asRecord(record.payload);
-    const payloadType = payload?.type;
-
-    if (payloadType === 'task_started') {
-      // A new turn opens; reset so we capture THIS turn's opening call and let
-      // the last turn in the file win.
+    const payload = parseRolloutPayload(line);
+    if (payload?.type === 'task_started') {
       firstCall = null;
-      continue;
+    } else if (firstCall === null) {
+      firstCall = usageFromPayload(payload);
     }
-
-    if (payloadType !== 'token_count' || firstCall !== null) continue;
-
-    const info = asRecord(payload?.info);
-    const last = asRecord(info?.last_token_usage);
-    if (!last) continue;
-    const input = finiteNumber(last.input_tokens);
-    // codex's input_tokens already includes the cached subset; a zero-input
-    // token_count is a placeholder (e.g. an interrupted call) with no usable
-    // ratio, so skip it and keep scanning for the turn's real first call.
-    if (input === undefined || input <= 0) continue;
-    const cached = finiteNumber(last.cached_input_tokens) ?? 0;
-
-    firstCall = {
-      first_call_input_tokens: input,
-      first_call_cache_read_input_tokens: cached,
-      first_call_cache_hit_ratio: cached / input,
-    };
   }
-
   return firstCall;
+}
+
+function parseRolloutPayload(line: string): Record<string, unknown> | null {
+  if (!line.trim()) return null;
+  try {
+    const record = asRecord(JSON.parse(line));
+    return asRecord(record?.payload);
+  } catch {
+    return null;
+  }
+}
+
+function usageFromPayload(payload: Record<string, unknown> | null): CodexFirstCallUsage | null {
+  if (payload?.type !== 'token_count') return null;
+  const info = asRecord(payload.info);
+  const last = asRecord(info?.last_token_usage);
+  if (!last) return null;
+  const input = finiteNumber(last.input_tokens);
+  // A zero-input placeholder has no usable ratio. Keep looking for the real
+  // first call, just as the forward extractor does.
+  if (input === undefined || input <= 0) return null;
+  const cached = finiteNumber(last.cached_input_tokens) ?? 0;
+  return {
+    first_call_input_tokens: input,
+    first_call_cache_read_input_tokens: cached,
+    first_call_cache_hit_ratio: cached / input,
+  };
+}
+
+const ROLLOUT_READ_CHUNK_BYTES = 64 * 1024;
+
+/** Read only as far back as the last turn boundary, keeping complete UTF-8
+ * lines across byte chunks. A resumed session can contain a large history
+ * that is irrelevant to this run's opening call. */
+async function readLastTurnFirstCallUsage(rolloutPath: string): Promise<CodexFirstCallUsage | null> {
+  const file = await fs.promises.open(rolloutPath, 'r');
+  try {
+    let position = (await file.stat()).size;
+    let pending = Buffer.alloc(0);
+    let firstCall: CodexFirstCallUsage | null = null;
+    const observeLine = (line: string): boolean => {
+      const payload = parseRolloutPayload(line);
+      if (payload?.type === 'task_started') return true;
+      const usage = usageFromPayload(payload);
+      // We walk backwards, so each earlier usable call replaces the later one.
+      if (usage) firstCall = usage;
+      return false;
+    };
+
+    while (position > 0) {
+      const start = Math.max(0, position - ROLLOUT_READ_CHUNK_BYTES);
+      const chunk = Buffer.allocUnsafe(position - start);
+      let filled = 0;
+      while (filled < chunk.length) {
+        const { bytesRead } = await file.read(chunk, filled, chunk.length - filled, start + filled);
+        if (bytesRead === 0) break;
+        filled += bytesRead;
+      }
+      position = start;
+      const bytes = chunk.subarray(0, filled);
+      const data = pending.length ? Buffer.concat([bytes, pending]) : bytes;
+      let end = data.length;
+      while (end > 0) {
+        const newline = data.lastIndexOf(0x0a, end - 1);
+        if (newline < 0) break;
+        if (observeLine(data.subarray(newline + 1, end).toString('utf8'))) return firstCall;
+        end = newline;
+      }
+      pending = data.subarray(0, end);
+    }
+    if (pending.length) observeLine(pending.toString('utf8'));
+    return firstCall;
+  } finally {
+    await file.close();
+  }
 }
 
 // codex names each rollout `rollout-<timestamp>-<thread_id>.jsonl` under
@@ -183,8 +226,7 @@ export async function readCodexRolloutFirstCall(opts: {
       if (matches.length === 1) rolloutPath = path.join(archiveRoot, matches[0]!.name);
     }
     if (!rolloutPath) return null;
-    const contents = await readFile(rolloutPath, 'utf8');
-    return extractCodexLastTurnFirstCallUsage(contents);
+    return await readLastTurnFirstCallUsage(rolloutPath);
   } catch {
     return null;
   }
