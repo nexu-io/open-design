@@ -281,7 +281,7 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
     return true;
   }
 
-  if (obj.type === 'error') {
+  if (obj.type === 'error' || (obj.error && !obj.type)) {
     // OpenCode emits structured error frames on stdout (e.g. provider auth
     // failures, network errors, schema mismatches) and still exits 0. Surface
     // them as proper `error` events so server.ts's `sendAgentEvent` wrapper
@@ -1513,6 +1513,13 @@ export function createJsonEventStreamHandler(
     try {
       obj = JSON.parse(line);
     } catch {
+      if (
+        kind === 'opencode' &&
+        /\b(?:ECONNREFUSED|ConnectionRefused|fetch failed|Failed to connect|Failed to change directory)\b/i.test(line)
+      ) {
+        onEvent({ type: 'error', message: line, raw: line });
+        return;
+      }
       onEvent(boundedRawAgentEvent(line, null));
       return;
     }

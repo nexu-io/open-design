@@ -99,6 +99,11 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import {
+  applyOpenCodeWorkspaceEnv,
+  shouldUseOpenCodePureFlag,
+} from './runtimes/opencode-permissions.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -2581,6 +2586,7 @@ async function testAgentConnectionInternal(
     }
     let args: string[];
     try {
+      await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
       args = def.buildArgs(
         SMOKE_PROMPT,
@@ -2609,9 +2615,11 @@ async function testAgentConnectionInternal(
       // Connection tests should validate the adapter's core CLI path, not
       // fail on unrelated user-installed OpenCode plugins. `opencode run
       // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
+      // the user's full plugin environment. OpenCode 2.x removed --pure.
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
-        args.push('--pure');
+        if (input.agentId !== 'opencode' || shouldUseOpenCodePureFlag(input.agentId)) {
+          args.push('--pure');
+        }
       }
       if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
         args.push('--title', 'Connection test');
@@ -2661,6 +2669,9 @@ async function testAgentConnectionInternal(
       ...baseEnv,
       ...(mmdRouteLaunchEnv || {}),
     }, executableResolution);
+    if (input.agentId === 'opencode' || input.agentId === 'byok-opencode') {
+      applyOpenCodeWorkspaceEnv(env, tempDir, input.agentId);
+    }
     model = await resolveConnectionTestModelForAgent(
       def,
       model,

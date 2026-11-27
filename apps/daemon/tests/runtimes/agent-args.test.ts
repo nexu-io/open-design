@@ -6,6 +6,7 @@ import {
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { parseOpenCodeModels } from '../../src/runtimes/defs/opencode.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import { applyOpenCodeWorkspaceEnv } from '../../src/runtimes/opencode-permissions.js';
 import {
   getRememberedLiveModels,
   rememberLiveModels,
@@ -89,6 +90,11 @@ test('opencode args pass model-supported variants without changing the default a
   )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
   assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags?.['--auto'], 'autoApprove');
+  assert.deepEqual(opencode.capabilityFlags?.['--dir'], 'workspaceDir');
+  assert.deepEqual(opencode.capabilityFlags?.['--variant'], 'variantFlag');
+  assert.deepEqual(opencode.capabilityFlags?.['--pure'], 'pureMode');
+  assert.deepEqual(opencode.capabilityFlags?.['--standalone'], 'standalone');
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -252,6 +258,187 @@ test('opencode pins its workspace to the project cwd', () => {
 test('opencode omits --dir for a run with no project directory', () => {
   const args = opencode.buildArgs('design a dashboard', [], [], {}, {});
   assert.equal(args.includes('--dir'), false);
+});
+
+test('opencode 2.x omits --dir and relies on PWD + spawn cwd (issue: 2.0.24 Unrecognized flag --dir)', () => {
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {}, { cwd: '/projects/p1' });
+    assert.equal(args.includes('--dir'), false);
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x folds variant into -m model#variant (issue: 2.0.24 Unrecognized flag --variant)', () => {
+  const previous = getRememberedLiveModels('opencode');
+  const parsed = parseOpenCodeModels([
+    'openai/gpt-5.6-sol',
+    '{ "variants": { "high": {} } }',
+  ].join('\n'));
+  rememberLiveModels('opencode', parsed ?? []);
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, variantFlag: false });
+  try {
+    assert.deepEqual(opencode.buildArgs('', [], [], {
+      model: 'openai/gpt-5.6-sol',
+      reasoning: 'high',
+    }), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+      '-m',
+      'openai/gpt-5.6-sol#high',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+    rememberLiveModels('opencode', previous);
+  }
+});
+
+test('opencode 2.x uses --auto for non-interactive runs', () => {
+  agentCapabilities.set('opencode', { autoApprove: true });
+  try {
+    const args = opencode.buildArgs('design a dashboard', [], [], {});
+    assert.deepEqual(args, ['run', '--format', 'json', '--auto']);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode 2.x appends --standalone only when advertised in capabilities', () => {
+  try {
+    agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, standalone: true });
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+      '--standalone',
+    ]);
+
+    agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true, standalone: false });
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+    ]);
+
+    agentCapabilities.set('opencode', { workspaceDir: true, autoApprove: false });
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode fetchModels forwards --standalone to models and api GET /api/model when advertised', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-opencode-models-standalone-'));
+  const previousRemembered = getRememberedLiveModels('opencode');
+  try {
+    const logFile = join(dir, 'invocations.jsonl');
+    const script = join(dir, 'fake-opencode.cjs');
+    writeFileSync(
+      script,
+      `const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify(args) + '\\n');
+if (args[0] === 'models') {
+  process.stdout.write('open-design-byok/test-model\\n');
+  process.exit(0);
+}
+if (args[0] === 'api' && args[1] === 'GET' && args[2] === '/api/model') {
+  process.stdout.write(JSON.stringify([{
+    providerID: 'open-design-byok',
+    modelID: 'test-model',
+    variants: [{ id: 'high' }],
+  }]));
+  process.exit(0);
+}
+process.exit(1);
+`,
+    );
+    const bin = join(dir, process.platform === 'win32' ? 'opencode.cmd' : 'opencode');
+    if (process.platform === 'win32') {
+      writeFileSync(bin, `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`);
+    } else {
+      writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+      chmodSync(bin, 0o755);
+    }
+    assert.ok(opencode.fetchModels, 'opencode must define fetchModels');
+
+    const modelsWithStandalone = await opencode.fetchModels(
+      bin,
+      {},
+      Promise.resolve({ autoApprove: true, variantFlag: false, standalone: true }),
+    );
+    const withStandaloneTarget = modelsWithStandalone?.find(
+      (model) => model.id === 'open-design-byok/test-model',
+    );
+    assert.ok(withStandaloneTarget, 'expected open-design-byok/test-model in catalog');
+    assert.ok(
+      withStandaloneTarget.reasoningOptions?.some((option) => option.id === 'high'),
+      'expected high variant from /api/model',
+    );
+
+    const modelsWithoutStandalone = await opencode.fetchModels(
+      bin,
+      {},
+      Promise.resolve({ autoApprove: true, variantFlag: false, standalone: false }),
+    );
+    assert.ok(
+      modelsWithoutStandalone?.some((model) => model.id === 'open-design-byok/test-model'),
+    );
+
+    const invocations = readFileSync(logFile, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as string[]);
+    assert.deepEqual(invocations, [
+      ['models', '--standalone'],
+      ['api', 'GET', '/api/model', '--standalone'],
+      ['models'],
+      ['api', 'GET', '/api/model'],
+    ]);
+  } finally {
+    rememberLiveModels('opencode', previousRemembered);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('applyOpenCodeWorkspaceEnv pins PWD only for OpenCode 2.x and leaves 1.x / unwarmed untouched', () => {
+  const inheritedPwd = '/repo/daemon/root';
+  const projectCwd = '/repo/daemon/root/projects/p1';
+
+  // 1. Unwarmed capabilities: leave PWD alone
+  agentCapabilities.delete('opencode');
+  const envUnwarmed = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(envUnwarmed, projectCwd, 'opencode');
+  assert.equal(envUnwarmed.PWD, inheritedPwd);
+
+  // 2. OpenCode 1.x (workspaceDir allowed): leave PWD alone
+  agentCapabilities.set('opencode', { workspaceDir: true, autoApprove: false });
+  const env1x = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(env1x, projectCwd, 'opencode');
+  assert.equal(env1x.PWD, inheritedPwd);
+
+  // 3. OpenCode 2.x (workspaceDir false or autoApprove true): sets PWD = path.resolve(cwd)
+  agentCapabilities.set('opencode', { workspaceDir: false, autoApprove: true });
+  const env2x = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(env2x, projectCwd, 'opencode');
+  assert.equal(env2x.PWD, join('/repo/daemon/root/projects/p1'));
+
+  // 4. Empty cwd: leaves PWD alone
+  const envEmptyCwd = { PWD: inheritedPwd };
+  applyOpenCodeWorkspaceEnv(envEmptyCwd, '', 'opencode');
+  assert.equal(envEmptyCwd.PWD, inheritedPwd);
+
+  agentCapabilities.delete('opencode');
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
