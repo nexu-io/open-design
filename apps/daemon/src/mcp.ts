@@ -40,6 +40,7 @@ import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
+import { configureMcpDaemonAuth, mcpDaemonAuthHeaders, mcpDaemonFetch } from './mcp-daemon-auth.js';
 import {
   createLocalMcpBriefStore as createBriefStore,
   localMcpBriefResponseCopy,
@@ -79,6 +80,8 @@ type JsonObject = Record<string, unknown>;
 interface RunMcpOptions {
   daemonUrl: string | URL;
   resolveDaemonUrl?: () => Promise<string | URL>;
+  /** OD_API_TOKEN of a remote daemon; sent only to `daemonUrl`'s origin (#9019). */
+  apiToken?: string | null;
 }
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
@@ -1885,6 +1888,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
 }
 
 async function runMcpStdioImplementation(options: RunMcpOptions): Promise<void> {
+  configureMcpDaemonAuth({ token: options.apiToken, daemonUrl: options.daemonUrl });
   let closeTransportForIdle: (() => void) | null = null;
   let idleExit: ReturnType<typeof _createMcpIdleExitController> | null = null;
   try {
@@ -2402,7 +2406,7 @@ async function writeFile(
   // the default writeProjectFile path, which overwrites the target. This
   // is the exact shape `od files write` uses (see apps/daemon/src/cli.ts).
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/files`;
-  const resp = await fetch(url, {
+  const resp = await mcpDaemonFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({ name: args.path, content: args.content, encoding }),
@@ -2429,7 +2433,7 @@ async function deleteFile(
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, headers ? { method: 'DELETE', headers } : { method: 'DELETE' });
+  const resp = await mcpDaemonFetch(url, headers ? { method: 'DELETE', headers } : { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2455,7 +2459,7 @@ async function deleteProject(
   }
   const { id, resolved } = await resolveProjectArg(baseUrl, args.project, headers);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}`;
-  const resp = await fetch(url, headers ? { method: 'DELETE', headers } : { method: 'DELETE' });
+  const resp = await mcpDaemonFetch(url, headers ? { method: 'DELETE', headers } : { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
@@ -2487,7 +2491,7 @@ async function postJson<T>(
   body: unknown,
   headers: Record<string, string> = {},
 ): Promise<T> {
-  const resp = await fetch(url, {
+  const resp = await mcpDaemonFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body ?? {}),
@@ -2821,7 +2825,7 @@ async function fetchRunAgentMessage(
   headers?: Record<string, string>,
 ): Promise<string | null> {
   try {
-    const resp = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`, {
+    const resp = await mcpDaemonFetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`, {
       ...(headers ? { headers } : {}),
     });
     if (!resp.ok) return null;
@@ -3005,10 +3009,12 @@ async function createArtifact(
     args.artifactManifest
       ? args.artifactManifest
       : undefined;
+  const daemonAuth = mcpDaemonAuthHeaders(baseUrl);
+  const createHeaders = headers || daemonAuth.Authorization ? { ...headers, ...daemonAuth } : undefined;
   const payload = await postCreateArtifactRequest({
     baseUrl,
     projectId: id,
-    ...(headers ? { headers } : {}),
+    ...(createHeaders ? { headers: createHeaders } : {}),
     input: {
       name: args.name,
       content: args.content,
@@ -3149,7 +3155,7 @@ async function resolveProjectId(
 }
 
 async function getJson<T>(url: string, headers?: Record<string, string>): Promise<T> {
-  const resp = await fetch(url, headers ? { headers } : undefined);
+  const resp = await mcpDaemonFetch(url, headers ? { headers } : undefined);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
@@ -3172,7 +3178,7 @@ async function getFile(
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(project)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, headers ? { headers } : undefined);
+  const resp = await mcpDaemonFetch(url, headers ? { headers } : undefined);
   if (!resp.ok) {
     const body = await safeText(resp);
     return errorResult(
@@ -3401,7 +3407,7 @@ async function fetchProjectFile(
     .filter((s) => s.length > 0)
     .map(encodeURIComponent);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/raw/${segments.join('/')}`;
-  const resp = await fetch(url, headers ? { headers } : undefined);
+  const resp = await mcpDaemonFetch(url, headers ? { headers } : undefined);
   if (!resp.ok) {
     const body = await safeText(resp);
     throw new Error(`daemon ${resp.status} on ${url}: ${body || resp.statusText}`);
