@@ -140,6 +140,94 @@ it("retries a short range body from the bytes actually retained", async () => {
   assert.deepEqual(await readFile(result.path), payload);
 });
 
+for (const failure of ["short body", "request failure"] as const) {
+  it(`retains learned range metadata after a later ${failure}`, async () => {
+    const ranges: string[] = [];
+    const validators: (string | undefined)[] = [];
+    let failed = false;
+    const { options, target } = await fixture((request, response) => {
+      ranges.push(String(request.headers.range));
+      validators.push(request.headers["if-range"]);
+      const start = Number(/^bytes=(\d+)-$/.exec(String(request.headers.range))?.[1]);
+      if (start === 8 && !failed) {
+        failed = true;
+        if (failure === "request failure") {
+          response.destroy();
+        } else {
+          response.writeHead(206, { "content-range": "bytes 8-11/*", etag });
+          response.end(payload.subarray(8, 10));
+        }
+      } else {
+        sendRange(response, start, Math.min(start + 3, payload.length - 1), start === initialBytes ? payload.length : "*");
+      }
+    }, false);
+    await writeFile(target.manifestPath, JSON.stringify(createManifest(target, "partial")));
+
+    const result = await managedDownload({ ...options, maxAttempts: 2 });
+
+    assert.equal(result.resumed, true);
+    assert.deepEqual(await readFile(result.path), payload);
+    assert.deepEqual(ranges, failure === "short body"
+      ? ["bytes=4-", "bytes=8-", "bytes=10-", "bytes=14-", "bytes=18-", "bytes=22-"]
+      : ["bytes=4-", "bytes=8-", "bytes=8-", "bytes=12-", "bytes=16-", "bytes=20-", "bytes=24-"]);
+    assert.equal(validators[0], undefined);
+    assert.ok(validators.slice(1).every((value) => value === etag));
+    const manifest = await readManifest(target.manifestPath);
+    assert.ok(manifest && manifest !== "invalid");
+    assert.equal(manifest.totalBytes, payload.length);
+  });
+}
+
+it("keeps learned continuation metadata after the retry budget is exhausted", async () => {
+  const { options, target } = await fixture((request, response) => {
+    if (request.headers.range === "bytes=4-") {
+      sendRange(response, 4, 7);
+    } else {
+      response.writeHead(206, { "content-range": "bytes 8-11/*", etag });
+      response.end(payload.subarray(8, 10));
+    }
+  }, false);
+  await writeFile(target.manifestPath, JSON.stringify(createManifest(target, "partial")));
+
+  await assert.rejects(managedDownload(options), { code: MANAGED_DOWNLOAD_ERROR_CODES.NETWORK_EXHAUSTED });
+
+  const manifest = await readManifest(target.manifestPath);
+  assert.ok(manifest && manifest !== "invalid");
+  assert.equal(manifest.state, "partial");
+  assert.equal(manifest.totalBytes, payload.length);
+  assert.deepEqual(manifest.validators, { etag });
+  assert.deepEqual(await readFile(target.partialPath), payload.subarray(0, 10));
+});
+
+it("restarts when a learned validator changes after a later segment fails", async () => {
+  const ranges: (string | undefined)[] = [];
+  const validators: (string | undefined)[] = [];
+  const { options, target } = await fixture((request, response) => {
+    ranges.push(request.headers.range);
+    validators.push(request.headers["if-range"]);
+    if (request.headers.range === undefined) {
+      response.writeHead(200, { "content-length": payload.length, etag: '"replacement"' });
+      response.end(payload);
+    } else if (request.headers.range === "bytes=4-") {
+      sendRange(response, 4, 7);
+    } else if (request.headers.range === "bytes=8-") {
+      response.writeHead(206, { "content-range": "bytes 8-11/*", etag });
+      response.end(payload.subarray(8, 10));
+    } else {
+      response.writeHead(206, { "content-range": "bytes 10-13/*", etag: '"replacement"' });
+      response.end("bad!");
+    }
+  }, false);
+  await writeFile(target.manifestPath, JSON.stringify(createManifest(target, "partial")));
+
+  const result = await managedDownload({ ...options, maxAttempts: 2 });
+
+  assert.deepEqual(ranges, ["bytes=4-", "bytes=8-", "bytes=10-", undefined]);
+  assert.deepEqual(validators, [undefined, etag, etag, undefined]);
+  assert.equal(result.resumed, false);
+  assert.deepEqual(await readFile(result.path), payload);
+});
+
 it("bounds retries for an empty range instead of repeatedly requesting the same offset", async () => {
   let requests = 0;
   const { options, target } = await fixture((_request, response) => {
