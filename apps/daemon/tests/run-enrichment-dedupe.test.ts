@@ -12,7 +12,7 @@ import { startServer } from '../src/server.js';
  * affordance fired twice 383 ms apart and the daemon created TWO concurrent
  * design-system enrichment runs in the same conversation, both billed.
  * The daemon must admit at most one active enrichment run per conversation
- * while leaving ordinary chat turns untouched.
+ * alongside the general conversation run admission guard.
  */
 
 const FAKE_SLOW_OPENCODE = `
@@ -175,9 +175,8 @@ describe('design-system enrichment run dedupe', () => {
     });
   });
 
-  it('leaves ordinary non-strategy chat turns ungated (the composer queues those itself)', async () => {
-    // OD Next task handoff intentionally serializes an active logical task.
-    // This control exercises enrichment gating on the ordinary runtime path.
+  it('rejects overlapping ordinary chat turns with the general run conflict', async () => {
+    // Exercise the ordinary runtime path without OD Next task handoff.
     vi.stubEnv('OD_NEXT_STRATEGY_ROLLOUT', 'off');
     const { projectId, conversationId } = await createProject('Enrichment dedupe control');
     await withFakeAgent('opencode', FAKE_SLOW_OPENCODE, async () => {
@@ -195,8 +194,9 @@ describe('design-system enrichment run dedupe', () => {
         conversationId,
         message: 'second turn',
       });
-      expect(second.status).toBe(202);
-      expect((await listRuns(conversationId)).length).toBe(2);
+      expect(second.status).toBe(409);
+      expect(await second.json()).toMatchObject({ error: { code: 'RUN_IN_PROGRESS' } });
+      expect((await listRuns(conversationId)).length).toBe(1);
       await waitForQuiescence(conversationId);
     });
   });

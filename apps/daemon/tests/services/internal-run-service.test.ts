@@ -222,6 +222,18 @@ describe('internal run creation service', () => {
     expect(harness.registry.prepareRestart).toHaveBeenCalledWith(harness.run);
   });
 
+  it('checks admission before restarting an existing run without dropping it', () => {
+    const harness = createHarness({ creation: 'reused' });
+    const beforeAdmission = vi.fn(() => { throw new Error('conversation busy'); });
+    expect(() => harness.service.prepare({
+      meta: {}, beforeAdmission, resume: { requested: true, canResume: () => true },
+    })).toThrow('conversation busy');
+    expect(beforeAdmission).toHaveBeenCalledWith(harness.run);
+    expect(harness.registry.prepareRestart).not.toHaveBeenCalled();
+    expect(harness.drop).not.toHaveBeenCalled();
+    expect(harness.run.status).toBe('failed');
+  });
+
   it('preserves a reused terminal run when resume eligibility fails', () => {
     const harness = createHarness({ creation: 'reused' });
 

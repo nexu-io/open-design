@@ -87,6 +87,8 @@ export interface PrepareInternalRunInput<TMeta extends InternalRunCreateInput, T
    * id before either record becomes visible.
    */
   beforeClaimCommit?: (run: TRun) => void;
+  /** Check admission synchronously for both new runs and explicit restarts. */
+  beforeAdmission?: (run: TRun) => void;
   resume?: {
     requested: boolean;
     canResume: (run: TRun) => boolean;
@@ -151,6 +153,7 @@ export function createInternalRunCreationService<
       if (!input.resume?.requested) return { kind: 'reused', run };
       if (!input.resume.canResume(run)) return { kind: 'resume_not_allowed', run };
 
+      input.beforeAdmission?.(run);
       const claim = deps.claimAssistantMessage(run, {
         status: 'queued',
         isRunActive,
@@ -170,6 +173,7 @@ export function createInternalRunCreationService<
 
     let claim: AssistantRunClaimResult;
     try {
+      input.beforeAdmission?.(run);
       claim = deps.claimAssistantMessage(run, {
         ...(input.beforeClaimCommit
           ? { beforeClaimCommit: () => input.beforeClaimCommit?.(run) }
