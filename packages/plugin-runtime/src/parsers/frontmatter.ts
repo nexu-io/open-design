@@ -119,9 +119,9 @@ function parseYamlSubset(src: string): FrontmatterObject {
           continue;
         }
       }
-      if (value.includes(':')) {
+      const colonIdx = blockMappingColon(value);
+      if (colonIdx >= 0) {
         const obj: FrontmatterObject = {};
-        const colonIdx = value.indexOf(':');
         const key = value.slice(0, colonIdx).trim();
         const valRaw = value.slice(colonIdx + 1).trim();
         if (valRaw) obj[key] = coerce(valRaw);
@@ -202,6 +202,27 @@ function parseYamlSubset(src: string): FrontmatterObject {
   }
 
   return root;
+}
+
+/** Find a block mapping separator without treating colons inside scalars as structure. */
+function blockMappingColon(value: string): number {
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (quote) {
+      if (quote === '"' && ch === '\\') {
+        i++;
+      } else if (ch === quote) {
+        if (quote === "'" && value[i + 1] === "'") i++;
+        else quote = null;
+      }
+    } else if (i === 0 && (ch === '"' || ch === "'")) {
+      quote = ch;
+    } else if (ch === ':' && (i + 1 === value.length || /[ \t]/.test(value[i + 1] ?? ''))) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 // Split an inline-array body (`a, "b,c", 'd'`) on top-level commas only, so a
