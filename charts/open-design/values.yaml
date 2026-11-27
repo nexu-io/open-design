@@ -18,8 +18,30 @@ config:
   publicBaseUrl: ""
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
-  bindHost: "127.0.0.1"
+  # Empty auto-selects 127.0.0.1 when authProxy.enabled, 0.0.0.0 when disabled.
+  bindHost: ""
   apiToken: "secure-default-token-change-me"
+  # Set true when a trusted layer in front of the pod already authenticated the
+  # caller (ingress auth, service mesh, Cloudflare Access) and does not forward
+  # the API token.
+  disableApiAuth: false
+
+# Name of an existing Secret holding the OD_API_TOKEN key. Use this with
+# External Secrets, sealed-secrets, or any secret manager instead of letting the
+# chart render its own Secret. Empty means the chart creates one.
+existingSecret: ""
+
+# Extra environment variables for the application container. Entries use the
+# standard Kubernetes env shape.
+extraEnv: []
+
+# Extra sources (secretRef / configMapRef) for the application container.
+extraEnvFrom: []
+
+# Extra volumes and mounts for the application container - config files, skill
+# bundles, agent credentials.
+extraVolumes: []
+extraVolumeMounts: []
 
 service:
   type: ClusterIP
@@ -78,6 +100,10 @@ podSecurityContext:
   fsGroup: 1001
 
 authProxy:
+  # Disable when an external layer terminates authentication in front of the
+  # Service (ingress auth, service mesh, Cloudflare Access). The app then binds
+  # 0.0.0.0 and the Service targets the app port directly.
+  enabled: true
   image: "nginxinc/nginx-unprivileged:1.25-alpine-slim"
   port: 8080
   securityContext:

@@ -18,8 +18,12 @@ spec:
     metadata:
       annotations:
           checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+          {{- if .Values.authProxy.enabled }}
           checksum/proxy-config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
+          {{- end }}
+          {{- if not .Values.existingSecret }}
           checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+          {{- end }}
       labels:
         {{- include "open-design.selectorLabels" . | nindent 8 }}
     spec:
@@ -27,10 +31,12 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if or .Values.initContainers .Values.authProxy.enabled }}
       initContainers:
-        {{- if .Values.initContainers }}
-        {{- toYaml .Values.initContainers | nindent 8 }}
+        {{- with .Values.initContainers }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if .Values.authProxy.enabled }}
         - name: auth-proxy-init
           image: {{ .Values.authProxy.image }}
           securityContext:
@@ -45,7 +51,7 @@ spec:
             - name: PROXY_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
+                  name: {{ include "open-design.secretName" . }}
                   key: OD_API_TOKEN
           volumeMounts:
             - name: proxy-template
@@ -54,6 +60,8 @@ spec:
               mountPath: /etc/nginx/conf.d
             - name: proxy-tmp
               mountPath: /tmp
+        {{- end }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -67,16 +75,22 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "open-design.fullname" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: OD_API_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "open-design.fullname" . }}
+                  name: {{ include "open-design.secretName" . }}
                   key: OD_API_TOKEN
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             exec:
-              command: ["wget", "-qO-", "http://{{ .Values.config.bindHost }}:{{ .Values.config.webPort }}/api/health"]
+              command: ["wget", "-qO-", "http://{{ include "open-design.probeHost" . }}:{{ .Values.config.webPort }}/api/health"]
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
@@ -85,7 +99,7 @@ spec:
           {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
             exec:
-              command: ["wget", "-qO-", "http://{{ .Values.config.bindHost }}:{{ .Values.config.webPort }}/api/health"]
+              command: ["wget", "-qO-", "http://{{ include "open-design.probeHost" . }}:{{ .Values.config.webPort }}/api/health"]
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
@@ -98,6 +112,10 @@ spec:
               mountPath: /app/.od
             - name: tmp
               mountPath: /tmp
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- if .Values.authProxy.enabled }}
         - name: auth-proxy
           image: {{ .Values.authProxy.image }}
           securityContext:
@@ -128,6 +146,7 @@ spec:
               readOnly: true
             - name: proxy-tmp
               mountPath: /tmp
+        {{- end }}
         {{- if .Values.sidecars }}
         {{- toYaml .Values.sidecars | nindent 8 }}
         {{- end }}
@@ -141,6 +160,7 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- if .Values.authProxy.enabled }}
         - name: proxy-template
           configMap:
             name: {{ include "open-design.fullname" . }}-proxy
@@ -148,6 +168,10 @@ spec:
           emptyDir: {}
         - name: proxy-tmp
           emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
 {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
