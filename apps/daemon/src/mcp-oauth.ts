@@ -408,10 +408,14 @@ async function tokenRequest(
     accept: 'application/json',
   };
   if (clientSecret) {
-    // RFC 6749 §2.3.1 — confidential clients use HTTP Basic with the
-    // client_id we already put in the form. Public clients (PKCE-only)
-    // skip this branch.
-    const basic = Buffer.from(`${form.get('client_id')}:${clientSecret}`).toString('base64');
+    // RFC 6749 §2.3.1 encodes each credential as application/x-www-form-urlencoded
+    // before joining them for Basic authentication. A colon in a client id
+    // must not become the Basic username/password separator.
+    const encodeCredential = (value: string) =>
+      new URLSearchParams({ value }).toString().slice('value='.length);
+    const basic = Buffer.from(
+      `${encodeCredential(form.get('client_id') ?? '')}:${encodeCredential(clientSecret)}`,
+    ).toString('base64');
     headers['authorization'] = `Basic ${basic}`;
   }
   const res = await fetchImpl(tokenEndpoint, {
