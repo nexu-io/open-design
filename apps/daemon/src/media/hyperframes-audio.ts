@@ -62,13 +62,17 @@ export function hyperFramesAudioEncodingArgs(tracks: HyperFramesAudioTrack[], du
   // film's end, whichever comes first. A track that already ends quietly is
   // unchanged; one cut short (a remake made shorter than its music) no longer
   // stops on a click.
+  // Keep ended inputs present as silence until the film ends. Otherwise amix
+  // renormalizes at EOF while the gain below still assumes the original input
+  // count, turning up the remaining tracks.
+  const mixPadding = tracks.length > 1 ? `,apad,atrim=duration=${duration}` : '';
   const filters = tracks.map((track, index) => {
     const delayMs = Math.round(track.start * 1000);
     const audible = Math.min(track.duration, duration - track.start);
     const fade = audible > 0 ? Math.min(0.6, audible / 4) : 0;
     const fadeOut = fade > 0 ? `afade=t=out:st=${round(audible - fade)}:d=${round(fade)},` : '';
     return `[${index + 1}:a]atrim=duration=${track.duration},asetpts=PTS-STARTPTS,`
-      + `aformat=channel_layouts=stereo,${fadeOut}volume=${track.volume},adelay=${delayMs}|${delayMs}[a${index}]`;
+      + `aformat=channel_layouts=stereo,${fadeOut}volume=${track.volume},adelay=${delayMs}|${delayMs}${mixPadding}[a${index}]`;
   });
   const mixed = tracks.length === 1
     ? '[a0]'
