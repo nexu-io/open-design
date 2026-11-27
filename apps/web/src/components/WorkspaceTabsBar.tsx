@@ -2142,7 +2142,7 @@ export function WorkspaceTabsBar({
         ?? displayTabFor(activeTab, projectById, t, knownProjectNamesRef.current);
     const isEntryActive = activeTab.kind === 'entry';
     const projectTabs = orderProjectItems(
-      state.tabs.filter((tab) => tab.kind !== 'entry'),
+      state.tabs.filter((tab) => tab.kind !== 'entry' && tab.kind !== 'marketplace'),
       (tab) => tab.kind === 'project'
         ? projectById.get(tab.projectId) ?? { id: tab.projectId }
         : undefined,
