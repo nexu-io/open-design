@@ -4,8 +4,18 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import { I18nProvider } from '../../src/i18n';
 import type { AppConfig, ChatMessage } from '../../src/types';
+import { typeAndSettle } from '../helpers/lexical-composer';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Suggestions append to the composer draft, which is persisted: do not let one
+  // test's draft leak into the next.
+  try {
+    window.localStorage.clear();
+  } catch {
+    // storage unavailable
+  }
+});
 
 // OPEND-2776 body + both screenshots: Codex succeeded, delivered this PNG,
 // emitted artifact_focus, and displayed 图片已生成 without any next_steps.
@@ -122,4 +132,90 @@ test('does not offer image actions for an empty output file', () => {
   message.producedFiles![0]!.size = 0;
   renderChat(message);
   expect(screen.queryByTestId('next-step-suggestions')).toBeNull();
+});
+
+// Review findings on the multi-select toggle (#9518), end to end through the real
+// ChatPane + composer.
+test('image fallback suggestion: select, deselect and reselect leave one clean copy', async () => {
+  renderChat(deliveredImage());
+  const actions = screen.getByTestId('next-step-suggestions');
+  const row = within(actions).getByRole('button', { name: '继续优化' });
+  const draft = () => screen.getByRole('combobox').textContent ?? '';
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+  expect(draft()).toContain('继续优化');
+  expect(draft()).toContain('casual-fashion-grid.png');
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+  expect(draft()).not.toContain('继续优化');
+  expect(draft()).not.toContain('casual-fashion-grid.png');
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+  expect(draft().match(/casual-fashion-grid\.png/g)).toHaveLength(1);
+});
+
+test('a pressed suggestion un-presses when the draft is cleared by hand and re-selects in one click', async () => {
+  const message = deliveredImage();
+  const suggestion = '保留姿势并改成蓝色背景';
+  message.events?.push({ kind: 'next_steps', suggestions: [suggestion, '换成横向四宫格'] });
+  renderChat(message);
+  const row = screen.getByRole('button', { name: suggestion });
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+
+  await typeAndSettle('');
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+
+  fireEvent.click(row);
+  await waitFor(() => expect(screen.getByRole('combobox').textContent).toContain(suggestion));
+  expect(row.getAttribute('aria-pressed')).toBe('true');
+});
+
+test('deselecting removes only the suggestion line, not the same words in the user\'s own sentence', async () => {
+  const message = deliveredImage();
+  const suggestion = '换成横向四宫格';
+  message.events?.push({ kind: 'next_steps', suggestions: [suggestion, '保留服装并调整光线'] });
+  renderChat(message);
+  const row = screen.getByRole('button', { name: suggestion });
+  const typed = `先不要${suggestion}了`;
+  await typeAndSettle(typed);
+  expect(row.getAttribute('aria-pressed')).toBe('false');
+
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+  fireEvent.click(row);
+  await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+  expect(screen.getByRole('combobox').textContent).toContain(typed);
+});
+
+// Review on #9518: with a measured, non-zero slot width ChatPane first mounts the
+// composer in flow and then remounts it in a portal. The suggestion rows must keep
+// following the draft after that remount (a jsdom slot has zero width, which skips
+// the portal path in every other test).
+test('suggestion rows keep following the draft after the composer moves into its portal', async () => {
+  const rect = { x: 0, y: 0, left: 0, top: 0, right: 640, bottom: 120, width: 640, height: 120, toJSON: () => ({}) };
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect as DOMRect);
+  try {
+    const message = deliveredImage();
+    const suggestion = '保留姿势并改成蓝色背景';
+    message.events?.push({ kind: 'next_steps', suggestions: [suggestion, '换成横向四宫格'] });
+    renderChat(message);
+    // the composer really is in the portal layer
+    await waitFor(() => expect(document.querySelector('.chat-composer-fixed-layer')).not.toBeNull());
+    const row = screen.getByRole('button', { name: suggestion });
+
+    fireEvent.click(row);
+    await waitFor(() => expect(screen.getByRole('combobox').textContent).toContain(suggestion));
+    await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('true'));
+
+    fireEvent.click(row);
+    await waitFor(() => expect(row.getAttribute('aria-pressed')).toBe('false'));
+    expect(screen.getByRole('combobox').textContent).not.toContain(suggestion);
+  } finally {
+    spy.mockRestore();
+  }
 });

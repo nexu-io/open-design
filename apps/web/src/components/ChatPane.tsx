@@ -1,5 +1,6 @@
 import { openExternalUrl } from "../providers/registry";
 import { withTaskPresentation, newerTaskDisplay, type PresentedChatMessage } from '../runtime/chat/task-presentation';
+import type { SuggestionDraftStore } from '../runtime/chat/suggestion-draft';
 import { reportExperienceEvent } from '../observability/experience-diagnostics';
 import { conversationMetaLabel } from '../runtime/chat/conversation-time';
 export { conversationMetaLabel } from '../runtime/chat/conversation-time';
@@ -1842,11 +1843,32 @@ export function ChatPane({
    * 显式点击发送才会调用 `onSend`、持久化消息并创建 run。
    */
   const handleNextStepSuggestion = useCallback(
-    (text: string) => {
+    (text: string, selected: boolean) => {
       const prompt = text.trim();
       if (!prompt) return;
-      composerRef.current?.setDraft(prompt, { entryFrom: 'next_step' });
+      composerRef.current?.toggleDraftSuggestion(prompt, selected, { entryFrom: 'next_step' });
     },
+    [],
+  );
+
+  // Read-only view of the composer draft for the suggestion rows, which derive
+  // their selected state from it. Stable, so message rows stay memoized. The
+  // listeners live here, not in the composer: ChatPane remounts the composer when
+  // it moves into its portal, and subscriptions must survive that.
+  const suggestionDraftListenersRef = useRef(new Set<() => void>());
+  const handleComposerDraftChange = useCallback(() => {
+    suggestionDraftListenersRef.current.forEach((listener) => listener());
+  }, []);
+  const suggestionDraftStore = useMemo<SuggestionDraftStore>(
+    () => ({
+      subscribe: (listener) => {
+        suggestionDraftListenersRef.current.add(listener);
+        return () => {
+          suggestionDraftListenersRef.current.delete(listener);
+        };
+      },
+      getSnapshot: () => composerRef.current?.getDraftText?.() ?? '',
+    }),
     [],
   );
 
@@ -4135,6 +4157,7 @@ export function ChatPane({
           hover to expand); they no longer sit as quick pills above the input. */}
     <ChatComposer
       ref={composerRef}
+      onDraftChange={handleComposerDraftChange}
       quotes={quotes}
       onClearQuotes={clearQuotes}
       onRestoreQuotes={setQuotes}
@@ -4565,6 +4588,7 @@ export function ChatPane({
                   nextStepCreateDesignSystemBusy={createDesignSystemFromProjectBusy}
                   onPickSkill={handlePickSkill}
                   onNextStepSuggestion={handleNextStepSuggestion}
+                  suggestionDraftStore={suggestionDraftStore}
                   onArtifactDownload={onArtifactDownload}
                   nextStepSkills={skills}
                   nextStepVariant={nextStepVariant}
@@ -5329,6 +5353,7 @@ function ChatRows({
   nextStepCreateDesignSystemBusy,
   onPickSkill,
   onNextStepSuggestion,
+  suggestionDraftStore,
   onArtifactDownload,
   nextStepSkills,
   nextStepVariant,
@@ -5418,7 +5443,8 @@ function ChatRows({
   nextStepCreateDesignSystemBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
   /** 把一条「下一步引导」填入 Composer,等用户确认后发送 */
-  onNextStepSuggestion?: (text: string) => void;
+  onNextStepSuggestion?: (text: string, selected: boolean) => void;
+  suggestionDraftStore?: SuggestionDraftStore;
   /** `anchorId` 同上。 */
   onArtifactDownload?: (fileName: string, anchorId?: string) => void;
   nextStepSkills?: SkillSummary[];
@@ -5611,6 +5637,7 @@ function ChatRows({
         nextStepCreateDesignSystemBusy={nextStepCreateDesignSystemBusy}
         onPickSkill={onPickSkill}
         onNextStepSuggestion={onNextStepSuggestion}
+        suggestionDraftStore={suggestionDraftStore}
         onArtifactDownload={onArtifactDownload}
         nextStepSkills={nextStepSkills}
         nextStepVariant={nextStepVariant}

@@ -112,6 +112,7 @@ import {
   middleTruncateFileName,
   splitFileName,
 } from '../runtime/chat/attachment';
+import { toggleSuggestionInDraft } from '../runtime/chat/suggestion-draft';
 import {
   attachmentNavDelta,
   attachmentNavState,
@@ -456,6 +457,12 @@ interface Props {
   // here when a mid-chat design-system switch lands (or fails) so the user
   // has explicit confirmation without re-opening the picker.
   onShowToast?: (message: string) => void;
+  /**
+   * Called whenever the draft changes (typing, programmatic seeding, send/clear)
+   * and once when the composer mounts. The host owns the subscriptions, so they
+   * survive the composer being remounted (e.g. moved into its portal).
+   */
+  onDraftChange?: (draft: string) => void;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -478,6 +485,18 @@ export interface RejectedComposerSend {
 
 export interface ChatComposerHandle {
   setDraft: (text: string, options?: ChatComposerDraftOptions) => void;
+  /**
+   * Multi-select for next-step suggestions: `selected` appends `text` as its own
+   * line(s) in the current draft (keeping anything the user already typed);
+   * deselecting removes exactly that whole-line block again. Never sends.
+   */
+  toggleDraftSuggestion: (
+    text: string,
+    selected: boolean,
+    options?: ChatComposerDraftOptions,
+  ) => void;
+  /** Current draft text, as the editor stores it. */
+  getDraftText: () => string;
   restoreDraft: (draft: {
     /** Late server rejection must never overwrite a newer unsent draft. */
     onlyIfEmpty?: boolean;
@@ -652,6 +671,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       leadingAccessory,
       designSystemPicker,
       onShowToast,
+      onDraftChange,
       quotes,
       onClearQuotes,
       onRestoreQuotes,
@@ -1465,6 +1485,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
+    // Suggestion rows derive their selected state from the draft; tell the host
+    // when it changes (typing, seeding, send/clear) and when this instance mounts,
+    // so a remounted composer (portal move) re-syncs the rows.
+    const onDraftChangeRef = useRef(onDraftChange);
+    onDraftChangeRef.current = onDraftChange;
+    useEffect(() => {
+      onDraftChangeRef.current?.(draft);
+    }, [draft]);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -1476,6 +1505,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           editorRef.current?.focus();
           seededRef.current = true;
         },
+        toggleDraftSuggestion: (text, selected, options) => {
+          const current = editorRef.current?.getText() ?? draftRef.current ?? "";
+          const next = toggleSuggestionInDraft(current, text, selected);
+          pendingEntryFromRef.current = options?.entryFrom ?? null;
+          pendingSessionModeRef.current = options?.sessionMode ?? null;
+          setDraft(next);
+          editorRef.current?.setText(next);
+          editorRef.current?.focus();
+          seededRef.current = true;
+        },
+        getDraftText: () => editorRef.current?.getText() ?? draftRef.current ?? "",
         restoreDraft: ({ text, attachments = [], commentAttachments = [], quotes: restoredQuotes = [], meta, onlyIfEmpty }) => {
           const current = latestComposerContentRef.current;
           if (onlyIfEmpty && (
