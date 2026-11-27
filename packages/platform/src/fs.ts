@@ -8,7 +8,7 @@
  * Keeps private `errorCode` / `errorMessage` copies so it owns no cross-module
  * runtime surface.
  */
-import { copyFile, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /** @internal Extract a Node `error.code` as a string, or `null` when the value carries no code. */
@@ -138,16 +138,56 @@ export async function removePathBestEffort(
 
 /**
  * Read the last `maxLines` non-empty lines of a text file, returning an empty
- * array when the file is missing or unreadable.
+ * array when the file is missing or unreadable. Scan from the end so earlier
+ * log history does not need to be loaded into memory.
  *
  * @param filePath - The file to read.
  * @param maxLines - The maximum number of trailing lines to return (default 80).
+ * Non-positive or non-finite limits return no lines.
  * @returns The trailing non-empty lines (empty array on error).
  */
 export async function readLogTail(filePath: string, maxLines = 80): Promise<string[]> {
+  const limit = Math.trunc(maxLines);
+  if (!Number.isFinite(limit) || limit <= 0) return [];
   try {
-    const payload = await readFile(filePath, "utf8");
-    return payload.split(/\r?\n/).filter((line) => line.length > 0).slice(-maxLines);
+    const file = await open(filePath, "r");
+    try {
+      let position = (await file.stat()).size;
+      const chunks: Buffer[] = [];
+      let lines = 0;
+      let hasContent = false;
+      let skipCarriageReturn = false;
+      while (position > 0 && lines < limit) {
+        const length = Math.min(64 * 1024, position);
+        position -= length;
+        const buffer = Buffer.allocUnsafe(length);
+        const { bytesRead } = await file.read(buffer, 0, length, position);
+        if (bytesRead === 0) break;
+        let start = 0;
+        for (let index = bytesRead - 1; index >= 0; index -= 1) {
+          const byte = buffer[index];
+          if (byte === 0x0a) {
+            if (hasContent) lines += 1;
+            if (lines === limit) {
+              start = index + 1;
+              break;
+            }
+            hasContent = false;
+            skipCarriageReturn = true;
+          } else {
+            if (!skipCarriageReturn || byte !== 0x0d) hasContent = true;
+            skipCarriageReturn = false;
+          }
+        }
+        chunks.push(buffer.subarray(start, bytesRead));
+      }
+      // Decode only after joining chunks so a UTF-8 character split between
+      // reads is preserved. The selected tail begins at a newline or byte zero.
+      const payload = Buffer.concat(chunks.reverse()).toString("utf8");
+      return payload.split(/\r?\n/).filter((line) => line.length > 0).slice(-limit);
+    } finally {
+      await file.close();
+    }
   } catch {
     return [];
   }
