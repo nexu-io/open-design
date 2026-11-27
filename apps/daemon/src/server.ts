@@ -17669,8 +17669,15 @@ export async function startServer({
             console.warn('[deliverable] could not retain verified prototype entry');
           }
         }
+        // The deliverable was already resolved for this succeeded run at
+        // finish time. Store it on the run for every succeeded run, not
+        // only for strategy completions, so a later GET /api/runs/:id
+        // answers from the stored fields instead of re-running the project
+        // scan and writing state.json on a read (#9488). The lazy branch
+        // in the route stays as backfill for runs that finished before
+        // this change or ended without succeeding.
+        design.runs.setDeliverableValidation?.(run, deliverable);
         if (strategyCompletionCandidate) {
-          design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
           if (!deliverable.valid && strategyTaskAtStart) {
             console.info('[od-next-task] completion evidence rejected', {
