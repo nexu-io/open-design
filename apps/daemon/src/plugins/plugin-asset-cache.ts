@@ -403,6 +403,9 @@ export function createPluginAssetCache(opts: PluginAssetCacheOptions): PluginAss
       return result;
     } finally {
       clearTimeout(timer);
+      // Header/status validation can reject before the body reader owns it.
+      // End the fetch here so an unread response cannot outlive this request.
+      controller.abort();
     }
   }
 
