@@ -800,65 +800,74 @@ export async function* installFromLocalFolder(
 
   yield { kind: 'progress', phase: 'copying', message: `Copying to ${destFolder}` };
   await fsp.mkdir(roots.userPluginsRoot, { recursive: true });
-  if (fs.existsSync(destFolder)) {
-    await fsp.rm(destFolder, { recursive: true, force: true });
-  }
+  // Copy and validate away from the installed tree. A rejected replacement
+  // must not destroy the version still referenced by installed_plugins.
+  const stagedFolder = await fsp.mkdtemp(path.join(roots.userPluginsRoot, '.plugin-install-'));
   try {
-    await safeCopyTree(sourceFolder, destFolder, maxBytes);
-  } catch (err) {
-    yield { kind: 'error', message: `Copy failed: ${(err as Error).message}`, warnings };
-    await fsp.rm(destFolder, { recursive: true, force: true }).catch(() => undefined);
-    return;
+    try {
+      await safeCopyTree(sourceFolder, stagedFolder, maxBytes);
+    } catch (err) {
+      yield { kind: 'error', message: `Copy failed: ${(err as Error).message}`, warnings };
+      return;
+    }
+
+    yield { kind: 'progress', phase: 'parsing', message: 'Re-parsing destination' };
+    const parsedOptions = buildResolveOptions({
+      folder: stagedFolder,
+      folderId: pluginId,
+      sourceKind: recordedSourceKind,
+      source: recordedSource,
+    }, opts);
+    const parsed = await resolvePluginFolder(parsedOptions);
+    if (!parsed.ok) {
+      yield {
+        kind: 'error',
+        message: parsed.errors.join('; '),
+        warnings: [...warnings, ...parsed.warnings],
+        code: 'INVALID_MANIFEST',
+      };
+      return;
+    }
+    warnings.push(...parsed.warnings);
+    const record: InstalledPluginRecord = { ...parsed.record, fsPath: destFolder };
+
+    yield { kind: 'progress', phase: 'persisting', message: 'Writing installed_plugins row' };
+    try {
+      await publishPluginFolder(stagedFolder, destFolder);
+    } catch (err) {
+      yield { kind: 'error', message: `Publication failed: ${(err as Error).message}`, warnings };
+      return;
+    }
+    upsertInstalledPlugin(db, record);
+    if (opts.lockfilePath) {
+      await upsertPluginLockfileEntry(opts.lockfilePath, record);
+    }
+
+    // Plan §3.II1 / §3.JJ1 — emit 'plugin.installed' OR
+    // 'plugin.upgraded' (per opts.eventKind) so ops dashboards +
+    // `od plugin events tail` see the operation land in the in-
+    // memory ring buffer. Best-effort; recordPluginEvent never
+    // throws.
+    recordPluginEvent({
+      kind:     opts.eventKind === 'upgraded' ? 'plugin.upgraded' : 'plugin.installed',
+      pluginId: record.id,
+      details:  {
+        version:    record.version,
+        sourceKind: record.sourceKind,
+        source:     record.source,
+        sourceMarketplaceId: record.sourceMarketplaceId,
+        sourceMarketplaceEntryName: record.sourceMarketplaceEntryName,
+        sourceMarketplaceEntryVersion: record.sourceMarketplaceEntryVersion,
+        marketplaceTrust: record.marketplaceTrust,
+        trust:      record.trust,
+        warnings:   warnings.length,
+      },
+    });
+
+    yield { kind: 'success', plugin: record, warnings };
+  } finally {
+    await fsp.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
   }
-
-  yield { kind: 'progress', phase: 'parsing', message: 'Re-parsing destination' };
-  const parsedOptions = buildResolveOptions({
-    folder: destFolder,
-    folderId: pluginId,
-    sourceKind: recordedSourceKind,
-    source: recordedSource,
-  }, opts);
-  const parsed = await resolvePluginFolder(parsedOptions);
-  if (!parsed.ok) {
-    await fsp.rm(destFolder, { recursive: true, force: true }).catch(() => undefined);
-    yield {
-      kind: 'error',
-      message: parsed.errors.join('; '),
-      warnings: [...warnings, ...parsed.warnings],
-      code: 'INVALID_MANIFEST',
-    };
-    return;
-  }
-  warnings.push(...parsed.warnings);
-
-  yield { kind: 'progress', phase: 'persisting', message: 'Writing installed_plugins row' };
-  upsertInstalledPlugin(db, parsed.record);
-  if (opts.lockfilePath) {
-    await upsertPluginLockfileEntry(opts.lockfilePath, parsed.record);
-  }
-
-  // Plan §3.II1 / §3.JJ1 — emit 'plugin.installed' OR
-  // 'plugin.upgraded' (per opts.eventKind) so ops dashboards +
-  // `od plugin events tail` see the operation land in the in-
-  // memory ring buffer. Best-effort; recordPluginEvent never
-  // throws.
-  recordPluginEvent({
-    kind:     opts.eventKind === 'upgraded' ? 'plugin.upgraded' : 'plugin.installed',
-    pluginId: parsed.record.id,
-    details:  {
-      version:    parsed.record.version,
-      sourceKind: parsed.record.sourceKind,
-      source:     parsed.record.source,
-      sourceMarketplaceId: parsed.record.sourceMarketplaceId,
-      sourceMarketplaceEntryName: parsed.record.sourceMarketplaceEntryName,
-      sourceMarketplaceEntryVersion: parsed.record.sourceMarketplaceEntryVersion,
-      marketplaceTrust: parsed.record.marketplaceTrust,
-      trust:      parsed.record.trust,
-      warnings:   warnings.length,
-    },
-  });
-
-  yield { kind: 'success', plugin: parsed.record, warnings };
 }
 
 export interface UninstallResult {
@@ -941,6 +950,39 @@ export async function uninstallPlugin(
 
 // Recursive copy with budget tracking. Symlinks anywhere in the tree fail
 // the copy outright; we never reach upstream paths through a clever link.
+// Keep the previous tree until the validated replacement is in place. Both
+// paths live under the registry root so publication uses same-filesystem renames.
+async function publishPluginFolder(stagedFolder: string, destFolder: string): Promise<void> {
+  const backupFolder = `${stagedFolder}.previous`;
+  let backedUp = false;
+  try {
+    await fsp.rename(destFolder, backupFolder);
+    backedUp = true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+
+  try {
+    await fsp.rename(stagedFolder, destFolder);
+  } catch (err) {
+    if (backedUp) {
+      try {
+        await fsp.rename(backupFolder, destFolder);
+      } catch (restoreError) {
+        // Do not remove this backup: it is the user's last working installation.
+        throw new Error(
+          `Could not restore the previous plugin, preserved at ${backupFolder}: ${(restoreError as Error).message}`,
+          { cause: err },
+        );
+      }
+    }
+    throw err;
+  }
+  if (backedUp) {
+    await fsp.rm(backupFolder, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 async function safeCopyTree(src: string, dest: string, maxBytes: number): Promise<void> {
   let bytesCopied = 0;
   const queue: Array<{ src: string; dest: string }> = [{ src, dest }];
