@@ -160,12 +160,15 @@ export async function discoverAuthServer(
   }
   const trimmed = parsed.pathname.replace(/\/+$/u, '');
   const base = `${parsed.protocol}//${parsed.host}`;
-  const candidates = [
+  const candidates = [...new Set([
     `${base}/.well-known/oauth-authorization-server${trimmed}`,
     `${base}/.well-known/openid-configuration${trimmed}`,
+    // OIDC Discovery 1.0 appends the well-known path to the issuer, unlike
+    // RFC 8414's prefix layout. Try it before falling back to the origin.
+    `${base}${trimmed}/.well-known/openid-configuration`,
     `${base}/.well-known/oauth-authorization-server`,
     `${base}/.well-known/openid-configuration`,
-  ];
+  ])];
   for (const url of candidates) {
     const json = await fetchJson<AuthorizationServerMetadata>(url, fetchImpl);
     if (json && typeof json.authorization_endpoint === 'string' && typeof json.token_endpoint === 'string') {
