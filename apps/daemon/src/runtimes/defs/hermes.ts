@@ -47,6 +47,9 @@ export const hermesAgentDef = {
     ],
     buildArgs: () => ['acp', '--accept-hooks'],
     streamFormat: 'acp-json-rpc',
+    // Hermes advertises `agentCapabilities.loadSession: true` and resumes its
+    // persisted ACP session via `session/load` using the ACP `sessionId`.
+    resumesSessionViaAcpLoad: true,
     mcpDiscovery: 'mature-acp',
     externalMcpInjection: 'acp-merge',
 } satisfies RuntimeAgentDef;

@@ -268,13 +268,16 @@ export type RuntimeAgentDef = {
   // capture the id from a validated protocol status frame.
   capturesSessionIdFromStream?: boolean;
   // ACP-runtime analogue of capture-style resume: the agent talks `acp-json-rpc`
-  // (today only AMR/vela) and supports resuming via `session/load`. The daemon
+  // (e.g. AMR/vela, Hermes) and supports resuming via `session/load`. The daemon
   // captures the durable upstream session handle from the ACP session
-  // (`getDurableSessionId()`) and persists THAT, drives `session/load` on a
-  // resume turn, and maps the agent's structured `resume_failed` error onto the
-  // reseed path. Kept distinct from `resumesSessionViaCli` /
-  // `capturesSessionIdFromStream` because the capture + resume transport is the
-  // ACP result, not a `--session-id` flag or a stream `status` event.
+  // (`getDurableSessionId()` — `openCodeSessionId` for AMR/vela, or the ACP
+  // `sessionId` when a standard ACP agent advertises `agentCapabilities.loadSession`)
+  // and persists THAT, drives `session/load` on a resume turn, suppresses
+  // spec-mandated history replay during the load window, and maps the agent's
+  // structured `resume_failed` error onto the reseed path. Kept distinct from
+  // `resumesSessionViaCli` / `capturesSessionIdFromStream` because the capture +
+  // resume transport is the ACP result, not a `--session-id` flag or a stream
+  // `status` event.
   resumesSessionViaAcpLoad?: boolean;
   // Optional name of a daemon-process environment variable that overrides
   // the default model id when the chat run reaches the spawn layer with
