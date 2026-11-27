@@ -31,12 +31,16 @@ export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
     const record = deps.store.read(scope);
     const pending = record.latestVersion != null && record.latestVersion > (record.localVersion ?? -1);
     const suppressed = (record.promptSuppressedUntil ?? 0) > now();
+    const proposed = state ?? (pending ? suppressed ? 'suppressed'
+      : record.ignoredVersion === record.latestVersion ? 'ignored' : 'confirmation_required' : 'up_to_date');
+    // SSE may announce our version before upload returns its receipt. Defer consent
+    // until publication settles; only that receipt can identify a local version.
+    const awaitingReceipt = proposed === 'confirmation_required' && (publications.get(scope.projectId) ?? 0) > 0;
     return {
-      state: state ?? (pending ? suppressed ? 'suppressed'
-        : record.ignoredVersion === record.latestVersion ? 'ignored' : 'confirmation_required' : 'up_to_date'),
+      state: awaitingReceipt ? 'busy' : proposed,
       latestVersion: record.latestVersion, localVersion: record.localVersion,
       promptSuppressedUntil: record.promptSuppressedUntil != null && record.promptSuppressedUntil > now() ? record.promptSuppressedUntil : null,
-      updatedAt: now(), ...(errorCode ? { errorCode } : {}),
+      updatedAt: now(), ...(awaitingReceipt ? { errorCode: 'PROJECT_BUSY' as const } : errorCode ? { errorCode } : {}),
     };
   }
 
@@ -165,10 +169,10 @@ export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
     },
     async withPublication(projectId: string, principal: ResourceHubPrincipal | null | undefined, operation: () => Promise<PublishedResourceVersion | null>): Promise<PublishedResourceVersion | null> {
       if (applying.has(projectId)) throw Object.assign(new Error('project is receiving cloud content'), { code: 'PROJECT_BUSY' });
+      const scope = deps.publicationScope(projectId, principal);
+      const supported = scope && deps.isSupported(scope);
       publications.set(projectId, (publications.get(projectId) ?? 0) + 1);
       try {
-        const scope = deps.publicationScope(projectId, principal);
-        const supported = scope && deps.isSupported(scope);
         const before = supported ? await deps.fingerprint(scope) : null;
         const result = await operation();
         if (result && supported && scope) {
@@ -184,7 +188,12 @@ export function createOwnedContentSync(deps: OwnedContentSyncDeps) {
         return result;
       } finally {
         const count = (publications.get(projectId) ?? 1) - 1;
-        if (count === 0) publications.delete(projectId); else publications.set(projectId, count);
+        if (count === 0) {
+          publications.delete(projectId);
+          // Reconcile even a failed/null upload: a newer, unacknowledged head
+          // still needs consent, while an acknowledged self echo is up to date.
+          if (scope && supported) publish(scope);
+        } else publications.set(projectId, count);
       }
     },
   };
