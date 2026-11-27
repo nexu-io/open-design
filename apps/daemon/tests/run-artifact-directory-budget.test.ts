@@ -30,12 +30,14 @@ for (const mode of ['sync', 'async'] as const) {
         reads += 1;
         return dir === root ? entries : [];
       };
+      // The walkers request string dirents; the mock's overloaded Node type
+      // instead selects the Buffer-name signature, so bridge only that typing.
       if (mode === 'sync') {
         vi.spyOn(fs, 'readdirSync').mockImplementation((dir) =>
-          readDirectory(String(dir)) as ReturnType<typeof fs.readdirSync>);
+          readDirectory(String(dir)) as unknown as ReturnType<typeof fs.readdirSync>);
       } else {
         vi.spyOn(fs.promises, 'readdir').mockImplementation(async (dir) =>
-          readDirectory(String(dir)) as Awaited<ReturnType<typeof fs.promises.readdir>>);
+          readDirectory(String(dir)) as unknown as Awaited<ReturnType<typeof fs.promises.readdir>>);
       }
       return () => reads;
     }
