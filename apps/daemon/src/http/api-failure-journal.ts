@@ -16,6 +16,8 @@ export interface ApiFailureToRecord extends Omit<RecentApiFailure, 'method' | 'p
     method?: string;
     route?: { path?: unknown };
   };
+  /** Privacy-safe path shape for a response no route produced; see api-not-found.ts. */
+  routeTemplate?: string;
 }
 
 const failures: RecentApiFailure[] = [];
@@ -25,8 +27,26 @@ export function observeApiFailures(listener: (failure: RecentApiFailure) => void
   return () => { listeners.delete(listener); };
 }
 
+/**
+ * Reduce a declared RegExp route to a template of its literal segments, with
+ * each capture group replaced by its `req.params` index. Returns null for any
+ * pattern outside that literal-plus-capture shape, so nothing derived from an
+ * unrecognized regex can leak into diagnostics.
+ */
+export function regExpRouteTemplate(pattern: RegExp): string | null {
+  let index = 0;
+  const template = pattern.source
+    .replace(/^\^|\$$/gu, '')
+    .replace(/\((?:\[\^\/\]\+|\.\+)\)/gu, () => `:${index++}`)
+    .replaceAll('\\/', '/');
+  return /^\/api(?:\/(?:[\w-]+|:\d+))*$/u.test(template) ? template : null;
+}
+
 function diagnosticRouteTemplate(request: ApiFailureToRecord['request']): string {
   const routePath = request?.route?.path;
+  if (routePath instanceof RegExp) {
+    return regExpRouteTemplate(routePath) ?? '/api/:unmatched';
+  }
   if (typeof routePath !== 'string' || routePath.length === 0) {
     return '/api/:unmatched';
   }
@@ -42,12 +62,13 @@ function diagnosticRouteTemplate(request: ApiFailureToRecord['request']): string
 }
 
 export function recordApiFailure(failure: ApiFailureToRecord): void {
-  const { request, ...metadata } = failure;
-  recordDiagnosticFailure({ source: 'local-api', operation: diagnosticRouteTemplate(request), status: failure.status, requestId: failure.requestId });
+  const { request, routeTemplate, ...metadata } = failure;
+  const path = routeTemplate ?? diagnosticRouteTemplate(request);
+  recordDiagnosticFailure({ source: 'local-api', operation: path, status: failure.status, requestId: failure.requestId });
   const entry: RecentApiFailure = {
     ...metadata,
     method: request?.method?.toUpperCase() ?? 'UNKNOWN',
-    path: diagnosticRouteTemplate(request),
+    path,
   };
   failures.push(entry);
   for (const listener of listeners) { try { listener({ ...entry }); } catch { /* diagnostics cannot break API errors */ } }

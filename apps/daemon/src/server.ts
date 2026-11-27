@@ -102,6 +102,7 @@ import {
   createCompatApiErrorResponse,
   sendApiError,
 } from './http/api-errors.js';
+import { registerApiNotFoundFallback } from './http/api-not-found.js';
 export {
   createCompatApiError,
   createCompatApiErrorResponse,
@@ -18762,6 +18763,7 @@ export async function startServer({
   });
 
   registerStaticSpaFallback(app, staticDir);
+  registerApiNotFoundFallback(app);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar

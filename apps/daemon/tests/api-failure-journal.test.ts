@@ -106,6 +106,20 @@ describe('API failure diagnostics journal', () => {
       expected: '/api/:mounted/resources/:resourceId',
       privateValue: 'customer-success',
     },
+    {
+      label: 'RegExp route file path',
+      routePath: /^\/api\/projects\/([^/]+)\/raw\/(.+)$/u,
+      originalUrl: '/api/projects/client-alpha/raw/customer-notes.md',
+      expected: '/api/projects/:0/raw/:1',
+      privateValue: 'customer-notes.md',
+    },
+    {
+      label: 'RegExp route version id',
+      routePath: /^\/api\/projects\/([^/]+)\/files\/(.+)\/versions\/([^/]+)\/restore$/u,
+      originalUrl: '/api/projects/client-alpha/files/plan.md/versions/v-secret/restore',
+      expected: '/api/projects/:0/files/:1/versions/:2/restore',
+      privateValue: 'v-secret',
+    },
   ])('records the declared route template instead of a user-controlled $label', ({
     routePath,
     originalUrl,
@@ -135,5 +149,16 @@ describe('API failure diagnostics journal', () => {
 
     expect(readRecentApiFailures()[0]?.path).toBe('/api/:unmatched');
     expect(JSON.stringify(readRecentApiFailures())).not.toContain('private-crm');
+  });
+
+  it('uses the fixed marker for a RegExp route that does not reduce to declared segments', () => {
+    sendApiError(
+      responseForRoute(/^\/api\/(private-crm|billing)\/export$/u, '/api/private-crm/export'),
+      404,
+      'NOT_FOUND',
+      'not found',
+    );
+
+    expect(readRecentApiFailures()[0]?.path).toBe('/api/:unmatched');
   });
 });

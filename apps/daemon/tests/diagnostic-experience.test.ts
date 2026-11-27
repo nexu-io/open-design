@@ -45,6 +45,9 @@ it('collapses a repeating API failure into one incident per signature and hour',
   expect(failure('2026-09-25T10:00:05.000Z', { path: '/api/runs/:id' })?.sourceId).not.toBe(first?.sourceId);
   expect(first?.detail).toMatchObject({ requestId: 'req-2026-09-25T10:00:01.000Z' });
 });
+it.each(['/api/:unmatched', '/api/:unmatched/projects', '/api/projects/:0/raw/:1', '/api/projects/:0/preview/:1/:2'])('keeps unclassified journal path %s out of incidents', (path) => {
+  expect(diagnosticFaultFromApi({ at: new Date().toISOString(), method: 'GET', path, status: 503, code: 'WORKSPACE_AUTHORITY_UNAVAILABLE', retryable: false })).toBeNull();
+});
 it.each(['/api/telemetry', '/api/diagnostics/export', '/api/objects/batch', '/api/health'])('does not recursively capture infrastructure route %s', (path) => {
   expect(diagnosticFaultFromApi({ at: new Date().toISOString(), method: 'POST', path, status: 500, code: 'INTERNAL_ERROR', retryable: false })).toBeNull();
 });

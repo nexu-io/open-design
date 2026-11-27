@@ -12,6 +12,7 @@ import {
   listPreviewComments,
   openDatabase,
 } from '../src/db.js';
+import { clearRecentApiFailures, readRecentApiFailures } from '../src/http/api-failure-journal.js';
 import { startServer } from '../src/server.js';
 
 describe('local project data plane during Workspace authority outage', () => {
@@ -224,5 +225,45 @@ describe('local project data plane during Workspace authority outage', () => {
       expect(listPreviewComments(fixture.db, projectId, conversationId)).toEqual([]);
     }
     expect(fixture.directoryRequests(), 'claimed Owner headers never replace fresh directory authority').toBeGreaterThan(0);
+  });
+
+  it('separates unknown API routes from authority failures in the response and the failure journal', async () => {
+    const fixture = await startOutageFixture();
+    const { projectId } = await seedProject(fixture);
+    const workspaceId = `workspace-${randomUUID()}`;
+    const memberId = `member-${randomUUID()}`;
+    ensureWorkspaceProject(fixture.db, {
+      projectId, workspaceId, visibility: 'team', resourceState: 'active',
+      createdByWorkspaceMemberId: memberId, updatedByWorkspaceMemberId: memberId,
+      resourceHubResourceId: null, cloudTombstonedAt: null, syncState: 'local_only',
+    });
+    const claimedHeaders = { 'x-od-workspace-id': workspaceId, 'x-od-workspace-member-id': memberId };
+    clearRecentApiFailures();
+
+    const unknown = await fetch(`${fixture.url}/api/projects/${projectId}/not-a-route`, { headers: claimedHeaders });
+    expect(unknown.status).toBe(404);
+    await expect(unknown.json()).resolves.toMatchObject({
+      error: { code: 'NOT_FOUND', message: `No API route for GET /api/projects/${projectId}/not-a-route` },
+    });
+
+    const boundRead = await fetch(`${fixture.url}/api/projects/${projectId}/raw/index.html`, { headers: claimedHeaders });
+    expect(boundRead.status).toBe(503);
+
+    const failures = readRecentApiFailures();
+    expect(failures).toEqual([
+      expect.objectContaining({ status: 404, code: 'NOT_FOUND', method: 'GET', path: '/api/:unmatched/projects' }),
+      expect.objectContaining({
+        status: 503, code: 'WORKSPACE_AUTHORITY_UNAVAILABLE', method: 'GET', path: '/api/projects/:0/raw/:1',
+      }),
+    ]);
+    expect(JSON.stringify(failures)).not.toContain(projectId);
+
+    const head = await fetch(`${fixture.url}/api/projects/${projectId}/not-a-route`, { method: 'HEAD' });
+    expect(head.status).toBe(404);
+    expect(head.headers.get('content-type')).toContain('application/json');
+
+    const preflight = await fetch(`${fixture.url}/api/projects/${projectId}/workspace-scope`, { method: 'OPTIONS' });
+    expect(preflight.status, 'known routes keep the Express OPTIONS answer').toBe(200);
+    expect(preflight.headers.get('allow')).toContain('GET');
   });
 });

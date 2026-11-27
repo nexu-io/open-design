@@ -85,6 +85,8 @@ export const API_FAULT_DEDUPE_WINDOW_MS = 3600_000;
 /** Route templates contain no user filenames, query strings or request bodies. */
 export function diagnosticFaultFromApi(failure: RecentApiFailure): FaultEvidence | null {
   if (failure.status < 400 || /\/(telemetry|diagnostics|objects|health)(?:\/|$)/.test(failure.path)) return null;
+  // Unmatched requests and RegExp-route templates (`:0`) predate this classifier; they stay out of incidents until classified deliberately.
+  if (/\/:(?:unmatched|\d+)(?:\/|$)/.test(failure.path)) return null;
   let kind: string;
   if (/\/chat$|\/runs\/[^/]+\/(resume|retry)$/.test(failure.path)) kind = 'admission_failure';
   else if (/\/runs(?:\/|$)/.test(failure.path)) kind = 'run_api_failure';
