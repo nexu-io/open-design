@@ -188,6 +188,11 @@ signals that must come from the active frame re-check the active window.
 6. The assistant ends with an ordinary summary of the files it wrote; it does
    not duplicate source in a code `<artifact>` block.
 
+Runtime starts record the requested model and the daemon's dispatch selection.
+The chat header and `od run watch` show that run's model information. A model
+reported by the provider is tracked separately when the runtime supplies it.
+The latest start marks a new attempt, so earlier reports cannot label a retry.
+
 ### Text-artifact execution profile
 
 Plain-stream runtimes and BYOK/API execution have no filesystem tools in the

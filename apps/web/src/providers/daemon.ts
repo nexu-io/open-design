@@ -1,5 +1,6 @@
 import type { AmrLogoutRequest, AmrLogoutResponse } from "@open-design/contracts";
 import type { RunSubmission, UserSubmissionReceipt } from "@open-design/contracts";
+import { runFallbackModel, runStartStatus } from '@open-design/contracts';
 /**
  * Daemon provider — fetch-based SSE client for /api/runs. The daemon can
  * emit three event streams depending on the agent's streamFormat:
@@ -2209,11 +2210,7 @@ async function consumeDaemonPhysicalRun({
             const data = event.data as ChatSseStartPayload;
             if (data.strategyTask) onStrategyTaskSettled?.(data.strategyTask);
             onRunStatus?.('running');
-            handlers.onAgentEvent({
-              kind: 'status',
-              label: 'starting',
-              detail: typeof data.bin === 'string' ? data.bin : undefined,
-            });
+            handlers.onAgentEvent(runStartStatus(data));
             continue;
           }
 
@@ -2599,6 +2596,7 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
     return {
       kind: 'status',
       label: normalizeAgentStatusLabel(data.label),
+      ...runFallbackModel(data.label, data.model),
       detail:
         typeof data.detail === 'string'
           ? data.detail

@@ -1061,19 +1061,15 @@ export type PersistedAgentEvent =
       kind: 'status';
       label: string;
       detail?: string;
+      agentId?: string;
+      requestedModel?: string;
+      dispatchedModel?: string;
       code?: string;
       failureCategory?: RunFailureCategory;
       failureDetail?: RunFailureDetail;
       failureAction?: RunFailureAction;
       retryable?: boolean;
-      /**
-       * `label: 'error'` only. Bounded, secret-redacted tail of the agent
-       * process's stderr for this run — the original cause behind a generic
-       * `detail`. Kept separate from `detail` on purpose: `detail` is the
-       * string the failure classifiers pattern-match on, so mixing raw agent
-       * output into it would change which card a failure resolves to.
-       * Absent when the run wrote no stderr.
-       */
+      /** Redacted process stderr for error status. Keep it out of classification detail. */
       stderrTail?: string;
       /**
        * `code: 'AMR_INSUFFICIENT_BALANCE'` only. The USD wallet balance read

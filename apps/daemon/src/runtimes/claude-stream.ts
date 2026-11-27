@@ -19,6 +19,7 @@
  * `tool_use` event when that block stops.
  */
 
+import { runModelId } from '@open-design/contracts';
 import { createRoleMarkerGuard, type RoleMarkerGuard } from '../role-marker-guard.js';
 import {
   createClaudeChildEvidenceCollector,
@@ -159,6 +160,7 @@ export function createClaudeStreamHandler(
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
   let currentMessageId: string | null = null;
+  let reportedModel: string | undefined;
   // Message ids that already streamed assistant text/thinking via
   // `stream_event` deltas.
   // When `--include-partial-messages` is OFF (older Claude Code, e.g. 1.0.84
@@ -785,19 +787,16 @@ export function createClaudeStreamHandler(
     // covered it (older Claude Code without --include-partial-messages
     // delivers text only here; newer builds stream it and would duplicate).
     if (obj.type === 'assistant' && isRecord(obj.message) && Array.isArray(obj.message.content)) {
+      const providerModel = runModelId(obj.message.model);
+      if (providerModel && providerModel !== reportedModel && obj.parent_tool_use_id == null) {
+        reportedModel = providerModel;
+        onEvent({ type: 'status', label: 'provider_model', model: providerModel });
+      }
       const explicitMsgId = typeof obj.message.id === 'string' ? obj.message.id : null;
       const textMsgId = explicitMsgId ?? (currentMessageStreamedText ? currentMessageId : null);
       const thinkingMsgId = explicitMsgId ?? (currentMessageStreamedThinking ? currentMessageId : null);
       if (explicitMsgId) currentMessageId = explicitMsgId;
-      // Per-request usage: every assistant message carries its own
-      // `message.usage` (per-turn input/output/cache tokens). The run-level
-      // `result.usage` collapses these into one aggregate, which is why
-      // request-level cost/percentile analysis can't graduate from run-level
-      // (#3408 / #3547 follow-up B). Surface the per-request record here,
-      // keyed by `message.id` (the provider `msg_…` request id), so the per-
-      // request token sum reconciles against `result.usage`. Emitted before
-      // the content-block loop so the record exists even if the message has
-      // only tool_use blocks.
+      // Use the provider message ID for request usage, including tool-only turns.
       if (explicitMsgId) {
         const perRequest = perRequestUsageFrom(obj.message.usage);
         if (perRequest) {

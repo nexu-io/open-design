@@ -106,6 +106,8 @@ import {
 } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
 import { agentDisplayName, agentIconId, exactAgentDisplayName } from "../utils/agentLabels";
+import { modelProvenance } from '../runtime/chat/run-model';
+import { RunModelIdentity } from './chat/RunModelIdentity';
 import { AgentIcon } from "./AgentIcon";
 import { filterImplicitProducedFiles } from "../produced-files";
 import type {
@@ -920,8 +922,11 @@ function AssistantMessageImpl({
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
-  const roleName = assistantRoleName(message, t);
-  const roleIconId = agentIconId(message.agentId, message.agentName);
+  const identity = modelProvenance(events);
+  const recordedAgent = identity.agentId && identity.agentId !== message.agentId ? identity.agentId : null;
+  const roleName = recordedAgent ? agentDisplayName(recordedAgent) ?? recordedAgent : assistantRoleName(message, t);
+  const roleIconId = agentIconId(recordedAgent ?? message.agentId, recordedAgent ? undefined : message.agentName);
+  const modelIdentity = <RunModelIdentity identity={identity} />;
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
   );
@@ -1335,8 +1340,9 @@ function AssistantMessageImpl({
         <div className="role" data-testid="assistant-role">
           <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
           <span className="role-name">{roleName}</span>
+          {modelIdentity}
         </div>
-      ) : null}
+      ) : modelIdentity}
       <div className="assistant-flow" data-testid="assistant-flow">
         {task?.owner ? <TaskExecutionRecord key={task.display.id} task={task} nowMs={nowMs}
           foldPreference={taskFoldPreference}
@@ -4052,22 +4058,9 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "requesting" ||
         ev.label === "thinking" ||
         ev.label === "empty_response" ||
-        /*
-         * `model` —— **AMR(ACP)独有**的一条运行时标记,不是助手内容。
-         *
-         * `apps/daemon/src/agent-protocol/acp/session.ts` 在 `session/new`、
-         * `session/set_model` 完成、以及选型失败回落时各发一次
-         * `{ label: 'model', model: <当前模型> }`;`providers/daemon.ts` 把
-         * `model` 折进 `detail`。走 stdout 协议的 runtime(claude / codex /
-         * opencode …)一条都不发,所以这一行只在 AMR 那一路冒出来。
-         *
-         * 它无条件戳在**一轮的最下面**,内容是模型 id —— 而模型身份输入区的
-         * 模型芯片上已经写着了。用户 2026-08-27:「这个模型的标识可以去掉」。
-         *
-         * 只是不画:事件照发照存,daemon 的 `run-analytics-observability.ts`
-         * 仍按 `label === 'model'` 归因,那一路不受影响。
-        */
+        // Keep model evidence in the run identity and analytics rather than the transcript.
         ev.label === "model" ||
+        ev.label === "provider_model" ||
         // Vela emits OpenCode's compaction lifecycle as internal observability.
         // Older transcripts persisted it as a generic status before the ACP
         // adapter classified it as a diagnostic, so suppress that legacy label
