@@ -34,6 +34,7 @@ export type ManagedDownloadOptions = {
   fileName: string;
   fetch?: typeof globalThis.fetch;
   maxAttempts?: number;
+  /** Synchronous progress observer; a thrown error rejects this caller's wait without stopping the shared transfer. */
   onProgress?: (progress: ManagedDownloadProgress) => void;
   payload: ManagedDownloadPayload;
   signal?: AbortSignal;

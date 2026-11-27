@@ -50,6 +50,8 @@ export function targetActiveKey(target: NormalizedTarget): string {
 /**
  * Attach a caller's progress listener and abort signal to a shared task and
  * resolve/reject with its outcome, cleaning up listeners on settle or abort.
+ * Each caller owns a distinct subscription even when callbacks are shared. A
+ * thrown callback error rejects only that caller, leaving the transfer and others intact.
  * @returns A promise that settles with the shared task's result, or rejects with
  * `ABORTED` if the caller's signal fires first.
  */
@@ -62,8 +64,15 @@ export function waitForTask(
       rejectWait(new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.ABORTED, "download wait was aborted"));
       return;
     }
-    const listener = options.onProgress;
-    if (listener != null) task.listeners.add(listener);
+    const onProgress = options.onProgress;
+    const listener = onProgress == null ? undefined : (progress: ManagedDownloadProgress) => {
+      try {
+        onProgress(progress);
+      } catch (error) {
+        cleanup();
+        rejectWait(error);
+      }
+    };
     const cleanup = () => {
       if (listener != null) task.listeners.delete(listener);
       options.signal?.removeEventListener("abort", onAbort);
@@ -73,6 +82,7 @@ export function waitForTask(
       rejectWait(new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.ABORTED, "download wait was aborted"));
     };
     options.signal?.addEventListener("abort", onAbort, { once: true });
+    if (listener != null) task.listeners.add(listener);
     task.promise.then(
       (result) => {
         cleanup();
