@@ -27,6 +27,30 @@ it('waits for visible, authorized content and deduplicates refreshes and StrictM
   }), undefined);
 });
 
+it('still exposes content when crypto.randomUUID is unavailable on an insecure origin (issue #9359)', () => {
+  // Plain-HTTP non-localhost origin: crypto.randomUUID is undefined, but
+  // crypto.getRandomValues is still available. The surface id must come
+  // from the shared uuid helper, not a direct crypto.randomUUID() call,
+  // or the exposure throws and the workspace content view is never tracked.
+  const originalCrypto = globalThis.crypto;
+  vi.stubGlobal('crypto', {
+    getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto),
+  });
+  try {
+    renderHook(() => useWorkspaceContentView({
+      context, pageName: 'home', ready: true, active: true,
+    }), { wrapper: StrictMode });
+    expect(track).toHaveBeenCalledExactlyOnceWith('surface_view', expect.objectContaining({
+      area: 'workspace_content',
+      surface_instance_id: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      ),
+    }), undefined);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it('does not expose a background window until it becomes visible', () => {
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
   renderHook(() => useWorkspaceContentView({ context, pageName: 'home', ready: true, active: true }));

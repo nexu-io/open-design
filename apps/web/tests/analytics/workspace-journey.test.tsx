@@ -11,6 +11,27 @@ function Surface({ visible = true, workspace = 'one' }: { visible?: boolean; wor
   const journey = useWorkspaceJourney({ page_name: 'home', area: 'credit_exhausted_dialog', reason: 'credit_exhausted', workspace_key: workspace }, visible);
   return <button onClick={() => journey.click('close')}>close</button>;
 }
+it('still exposes a surface when crypto.randomUUID is unavailable on an insecure origin (issue #9359)', () => {
+  // Plain-HTTP non-localhost origin: crypto.randomUUID is undefined, but
+  // crypto.getRandomValues is still available. The journey id must come
+  // from the shared uuid helper, not a direct crypto.randomUUID() call,
+  // or rendering the surface throws and the app shell crashes.
+  const originalCrypto = globalThis.crypto;
+  vi.stubGlobal('crypto', {
+    getRandomValues: originalCrypto.getRandomValues.bind(originalCrypto),
+  });
+  try {
+    const view = render(<StrictMode><Surface /></StrictMode>);
+    expect(track.mock.calls.filter(([e]) => e === 'surface_view')).toHaveLength(1);
+    expect(track.mock.calls[0]![1].surface_instance_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    view.unmount();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it('only exposes visible instances and associates clicks with the same block', () => {
   const view = render(<StrictMode><Surface visible={false} /></StrictMode>);
   expect(track).not.toHaveBeenCalled();
