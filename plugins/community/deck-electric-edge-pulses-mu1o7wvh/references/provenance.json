@@ -1,0 +1,33 @@
+{
+  "candidateId": "656eaf8a-e945-4a05-86bf-1a11a428dc0c",
+  "projectId": "831471ea-98d6-406c-90a6-8de91f285c13",
+  "runId": "d5686d0a-9812-4585-a519-ff5cbc229f23",
+  "conversationId": "0098a64e-726d-47b1-af44-58ad795e8934",
+  "provenance": {
+    "summary": "Detected from skills/deck-electric-edge-pulses/SKILL.md, AGENTS.md, .atl/skill-registry.md after a successful run.",
+    "detectedAt": 1789410932414
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "skills/deck-electric-edge-pulses/SKILL.md",
+      "label": "skills/deck-electric-edge-pulses/SKILL.md",
+      "size": 1995,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "AGENTS.md",
+      "label": "AGENTS.md",
+      "size": 219,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": ".atl/skill-registry.md",
+      "label": ".atl/skill-registry.md",
+      "size": 32091,
+      "copied": true
+    }
+  ]
+}
