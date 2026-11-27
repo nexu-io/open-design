@@ -11,6 +11,7 @@
  * errors, public types, and the platform atomic copier.
  */
 
+import { stat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 
 import { atomicCopyFile } from "@open-design/platform";
@@ -120,9 +121,24 @@ export async function downloadCopyAndClear(options: DownloadCopyAndClearOptions)
         throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.OUTPUT_CONFLICT, `output already exists with different bytes: ${outputPath}`);
       }
     } else {
-      await atomicCopyFile(downloaded.path, outputPath);
+      let competingOutput = false;
+      try {
+        await atomicCopyFile(downloaded.path, outputPath);
+      } catch (error) {
+        if (typeof error !== "object" || error == null || !("code" in error) || error.code !== "EEXIST") throw error;
+        // Another caller can publish after the existence check. Accept that
+        // output only when it is still a regular file with the requested bytes.
+        const entry = await stat(outputPath);
+        if (!entry.isFile()) {
+          throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.OUTPUT_CONFLICT, `output already exists and is not a regular file: ${outputPath}`);
+        }
+        competingOutput = true;
+      }
       const copiedDigest = await hashFile(outputPath, target.checksum.algorithm);
       if (copiedDigest !== target.checksum.value) {
+        if (competingOutput) {
+          throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.OUTPUT_CONFLICT, `output already exists with different bytes: ${outputPath}`);
+        }
         throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.CHECKSUM_MISMATCH, "copied output checksum did not match requested payload");
       }
     }
