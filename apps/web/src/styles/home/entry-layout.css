@@ -256,6 +256,12 @@
   .entry-shell--no-header .entry { transition-delay: 0ms; }
 }
 
+/* Wide windows dock the rail and never show the overlay's click-catcher. It is
+   fixed so it never takes a grid track from the rail or the content. */
+.entry-rail-backdrop {
+  display: none;
+}
+
 /* Narrow window: below the comfortable split width the docked rail
    auto-collapses instead of squeezing into a broken sliver — the grid track
    zeroes out and the floating panel is clipped and inert. The open state is
@@ -276,6 +282,40 @@
      against the window edge while the right side kept its 12. */
   .entry-shell--no-header .entry.entry--rail-open .entry-main--scroll {
     margin-left: 12px;
+  }
+  /* The rail toggle still has to open something here, or it reads as dead on
+     phones and narrow windows. EntryShell answers it with a transient overlay
+     drawer (`.entry--rail-overlay`, never persisted): the rail leaves the
+     zeroed grid track and floats over the content below the tabs chrome, with
+     a click-catcher behind it. Escape, a destination, the backdrop or the
+     toggle dismiss it. */
+  .entry-shell--no-header .entry.entry--rail-overlay .entry-nav-rail {
+    position: fixed;
+    top: var(--workspace-tabs-chrome-height, 44px);
+    bottom: 0;
+    left: 0;
+    width: min(var(--entry-rail-width, 236px), 85vw);
+    overflow-x: hidden;
+    overflow-y: auto;
+    pointer-events: auto;
+    background: var(--veil-page);
+    border-top-right-radius: 12px;
+    box-shadow: var(--shadow-lg);
+  }
+  .entry-rail-backdrop {
+    display: block;
+    position: fixed;
+    inset: var(--workspace-tabs-chrome-height, 44px) 0 0 0;
+    z-index: 29;
+    background: rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .entry--rail-overlay .entry-rail-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+    transition-duration: 200ms;
   }
 }
 /* Topbar panel toggle — the single affordance left visible when the rail
