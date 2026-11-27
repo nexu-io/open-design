@@ -103,6 +103,9 @@ export async function startEgressProxy(options: EgressProxyOptions = {}): Promis
         if (buffered.length > 16 * 1024) refuse(socket);
         return;
       }
+      // Removing the data listener does not leave flowing mode. Preserve bytes
+      // arriving during DNS validation and connection setup until pipe resumes.
+      socket.pause();
       socket.off('data', onData);
       const head = buffered.slice(0, end);
       const rest = buffered.slice(end + 4);
@@ -124,8 +127,8 @@ export async function startEgressProxy(options: EgressProxyOptions = {}): Promis
             socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
           } else {
             upstream.write(`${head}\r\n\r\n`);
-            if (rest) upstream.write(Buffer.from(rest, 'latin1'));
           }
+          if (rest) upstream.write(Buffer.from(rest, 'latin1'));
           socket.pipe(upstream);
           upstream.pipe(socket);
         });
