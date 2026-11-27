@@ -169,6 +169,10 @@ function handleExecute(command: Extract<DshProfileHostCommand, { type: 'execute'
     stop_reason: 'completed',
     resume_rejected: false,
   });
+  if (mode === 'linger-after-result') {
+    setInterval(() => {}, 1_000);
+    return;
+  }
   finish();
 }
 

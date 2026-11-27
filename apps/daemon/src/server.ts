@@ -16769,7 +16769,14 @@ export async function startServer({
           : {}),
         onReady: () => noteCliReadyAt(),
         onSession: () => noteSessionInitDoneAt(),
-        onComplete: () => clearFirstOutputWatchdog(),
+        onComplete: () => {
+          clearInactivityWatchdog();
+          clearFirstOutputWatchdog();
+          void beginAcpAttemptTermination('dsh_profile_completed', {
+            gracefulWaitMs: 1_500,
+            onChildSignal: () => { acpCompletionShutdownRequested = true; },
+          });
+        },
         send: (event, data) => {
           noteAgentActivity();
           if (event === 'agent') {
@@ -17302,19 +17309,8 @@ export async function startServer({
           ),
         });
       }
-      // Native agents that don't shut down on stdin.end() (e.g. Devin or Pi)
-      // are forced to exit via SIGTERM after
-      // a clean prompt completion. Without an override, the chat run would
-      // be marked `failed` because `code === 0` fails (code is null on a
-      // signal exit). `completedSuccessfully()` reports whether the ACP
-      // session resolved without a fatal error or abort.
-      //
-      // The override covers SIGTERM (or vela's code 130) after clean
-      // completion, and any exit after the daemon itself signalled the
-      // completed attempt (`acpCompletionShutdownRequested`; Windows reports
-      // that kill as code 1 with no signal). Other post-response failures,
-      // including a non-zero exit during the grace wait, still propagate as
-      // `failed`.
+      // A completed native turn can exit via a daemon-owned signal. A non-zero
+      // exit during the grace period is still the subprocess's own failure.
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
