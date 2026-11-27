@@ -6,6 +6,7 @@ import { buildAutomaticDiagnostics, DIAGNOSTIC_MAX_BYTES, redactJsonValue,
 import { DiagnosticOutbox, type DiagnosticIncident } from '../storage/diagnostic-outbox.js';
 import { DiagnosticRelay, DiagnosticRelayError, type DiagnosticDevice } from '../integrations/diagnostic-relay.js';
 import { DiagnosticConsentFence } from './diagnostic-consent.js';
+import type { ClientExperienceDiagnostic } from '@open-design/contracts/analytics';
 
 export interface FaultEvidence {
   sourceId: string; kind: string; at: number;
@@ -58,6 +59,24 @@ export class AutomaticDiagnostics {
       void this.tick();
       return item.id;
     } catch { console.warn('[diagnostics] incident persistence unavailable'); return null; }
+  }
+  /**
+   * An error card or project status names a run outcome the daemon already
+   * bundled with the run's own evidence; reuse that incident instead of
+   * uploading a second copy. Runs the daemon never captured keep client evidence.
+   */
+  recordClientExperience(evidence: ClientExperienceDiagnostic): string | null {
+    if (evidence.runId && (evidence.category === 'visible_error' || evidence.category === 'project_failure') && this.allowed()) {
+      try {
+        const existing = this.outbox.runIncident(evidence.runId);
+        if (existing) return existing;
+      } catch { /* fall through to recording the client evidence */ }
+    }
+    return this.record({ sourceId: `client:${evidence.occurrenceId}`, kind: evidence.category,
+      at: Date.now(), errorCode: evidence.errorCode, detail: evidence,
+      ...(evidence.runId ? { runId: evidence.runId } : {}),
+      ...(evidence.projectId ? { projectId: evidence.projectId } : {}),
+      ...(evidence.conversationId ? { conversationId: evidence.conversationId } : {}) });
   }
   start(): void {
     this.outbox.recoverRuns(this.hasConsent());
