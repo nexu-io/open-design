@@ -520,4 +520,91 @@ describe('DesignKitView iframe sandboxing', () => {
       }
     }
   });
+
+  it('renders native Components catalog, structural Design tokens, and Open-in-new-tab control from package files', async () => {
+    const kitWithManifest: DesignKit = {
+      ...previewKit(),
+      system: {
+        kitUrl: '/api/design-systems/user%3Aacme/static?path=components.html',
+        designTokensUrl: '/api/design-systems/user%3Aacme/static?path=design-tokens.json',
+        componentsManifestUrl: '/api/design-systems/user%3Aacme/static?path=components.manifest.json',
+        kitLabel: 'components.html',
+      },
+    };
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('components.manifest.json')) {
+        return Response.json({
+          schemaVersion: 1,
+          brandId: 'acme',
+          tokens: {
+            declared: ['--accent', '--bg', '--radius-md', '--space-4'],
+            referenced: ['--accent', '--radius-md'],
+          },
+          groups: [
+            {
+              id: 'buttons',
+              label: 'Buttons and calls to action',
+              present: true,
+              selectors: ['.btn-primary'],
+              classes: ['btn-primary'],
+              elements: ['button'],
+              tokenReferences: ['--accent'],
+            },
+            {
+              id: 'badges',
+              label: 'Badges, chips, and status labels',
+              present: false,
+              selectors: [],
+              classes: [],
+              elements: [],
+              tokenReferences: [],
+            },
+          ],
+        });
+      }
+      if (url.includes('design-tokens.json')) {
+        return Response.json({
+          format: 'od-design-tokens/v1',
+          tokens: [
+            { name: '--bg', value: '#020617', type: 'color', layer: 'A1-identity', confidence: 'high' },
+            { name: '--space-4', value: '16px', type: 'dimension', layer: 'A1-structure', confidence: 'high' },
+            { name: '--radius-md', value: '12px', type: 'dimension', layer: 'A1-structure', confidence: 'high' },
+            { name: '--elev-raised', value: '0 10px 30px rgba(2, 6, 23, 0.55)', type: 'shadow', layer: 'A2', confidence: 'high' },
+            { name: '--motion-fast', value: '150ms', type: 'duration', layer: 'A2', confidence: 'high' },
+          ],
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    try {
+      render(
+        <I18nProvider initial="en">
+          <DesignKitView kit={kitWithManifest} />
+        </I18nProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Buttons and calls to action')).toBeTruthy();
+        expect(screen.getByText('--space-4')).toBeTruthy();
+        expect(screen.getByText('--radius-md')).toBeTruthy();
+        expect(screen.getByText('--elev-raised')).toBeTruthy();
+        expect(screen.getByText('--motion-fast')).toBeTruthy();
+      });
+      expect(screen.queryByText('Badges, chips, and status labels')).toBeNull();
+
+      const openTabButton = screen.getByRole('button', { name: 'Open in new tab' });
+      fireEvent.click(openTabButton);
+      expect(openSpy).toHaveBeenCalledWith(
+        '/api/design-systems/user%3Aacme/static?path=components.html',
+        '_blank',
+        'noopener,noreferrer',
+      );
+    } finally {
+      fetchMock.mockRestore();
+      openSpy.mockRestore();
+    }
+  });
 });

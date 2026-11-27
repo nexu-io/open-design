@@ -185,7 +185,8 @@ export function validateDesignTokenOutputs(input: {
   }
   for (const [name, value] of declarations) {
     for (const ref of extractVarReferences(value)) {
-      if (!declaredNames.has(ref)) errors.push(`${name} references undeclared token ${ref}`);
+      if (ref === name) errors.push(`${name} references itself`);
+      else if (!declaredNames.has(ref)) errors.push(`${name} references undeclared token ${ref}`);
     }
   }
   if (input.fixtureHtml !== undefined) {
@@ -208,14 +209,19 @@ export function buildReportWithSelfCheck(
 }
 
 function bindSchemaToken(spec: TokenSpec, sourceTokens: readonly SourceDesignToken[]): DesignTokenBinding {
-  const exact = sourceTokens.find((token) => token.name === spec.name && valueIsUsableForSchema(token.value));
+  const exactMatches = sourceTokens.filter(
+    (token) => token.name === spec.name && valueIsUsableForSchema(token.value, spec.name),
+  );
+  const exact =
+    exactMatches.find((token) => extractVarReferences(token.value).length === 0)
+    ?? exactMatches[0];
   if (exact !== undefined) {
     return binding(spec, exact.value, 'high', `Exact source token ${exact.name} matched TOKEN_SCHEMA.`, sourceRefs(exact), exact.name);
   }
 
   const hint = ROLE_HINTS[spec.name];
   if (hint !== undefined) {
-    const candidate = bestCandidate(sourceTokens, hint);
+    const candidate = bestCandidate(spec.name, sourceTokens, hint);
     if (candidate !== undefined) {
       return binding(
         spec,
@@ -245,15 +251,31 @@ function bindSchemaToken(spec: TokenSpec, sourceTokens: readonly SourceDesignTok
   return binding(spec, 'initial', 'low', 'No source-backed value or schema fallback found.', []);
 }
 
-function bestCandidate(tokens: readonly SourceDesignToken[], hint: RoleHint): SourceDesignToken | undefined {
+function bestCandidate(
+  targetName: string,
+  tokens: readonly SourceDesignToken[],
+  hint: RoleHint,
+): SourceDesignToken | undefined {
   const validator = hint.validator ?? (() => true);
   return tokens
     .map((token) => ({
       token,
       score: scoreTokenName(token.name, hint.needles),
     }))
-    .filter(({ token, score }) => score > 0 && validator(token.value) && valueIsUsableForSchema(token.value))
-    .sort((a, b) => b.score - a.score || a.token.name.localeCompare(b.token.name))[0]?.token;
+    .filter(
+      ({ token, score }) =>
+        score > 0
+        && validator(token.value)
+        && valueIsUsableForSchema(token.value, targetName)
+        && valueIsUsableForSchema(token.value, token.name),
+    )
+    .sort(
+      (a, b) =>
+        b.score - a.score
+        || Number(extractVarReferences(a.token.value).length > 0)
+          - Number(extractVarReferences(b.token.value).length > 0)
+        || a.token.name.localeCompare(b.token.name),
+    )[0]?.token;
 }
 
 function scoreTokenName(name: string, needles: readonly string[]): number {
@@ -366,8 +388,10 @@ function extractVarReferences(value: string): string[] {
   return Array.from(value.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)).map((match) => match[1]!).filter(Boolean);
 }
 
-function valueIsUsableForSchema(value: string): boolean {
-  return extractVarReferences(value).every((ref) => SCHEMA_NAMES.has(ref));
+function valueIsUsableForSchema(value: string, targetName?: string): boolean {
+  const refs = extractVarReferences(value);
+  if (targetName !== undefined && refs.includes(targetName)) return false;
+  return refs.every((ref) => SCHEMA_NAMES.has(ref));
 }
 
 function isColorValue(value: string): boolean {

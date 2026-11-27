@@ -235,6 +235,72 @@ interface BrandTokenSubset {
   borderRadius?: number;
 }
 
+interface ComponentManifestGroupSummary {
+  id: string;
+  label: string;
+  present: boolean;
+  selectors: string[];
+  classes: string[];
+  elements: string[];
+  tokenReferences: string[];
+}
+
+interface ParsedComponentsManifest {
+  declaredCount: number;
+  referencedCount: number;
+  groups: ComponentManifestGroupSummary[];
+}
+
+interface DesignTokenContractEntry {
+  name: string;
+  value: string;
+  type: string;
+  layer: string;
+  confidence: string;
+}
+
+type DesignTokenCategoryKey = 'spacing' | 'radii' | 'typeScale' | 'elevation' | 'motion';
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function classifyStructuralToken(entry: DesignTokenContractEntry): DesignTokenCategoryKey | null {
+  if (entry.type === 'color' || entry.name.startsWith('--font-')) return null;
+  if (entry.name.startsWith('--radius-')) return 'radii';
+  if (
+    entry.name.startsWith('--text-')
+    || entry.name.startsWith('--leading-')
+    || entry.name.startsWith('--tracking-')
+  ) {
+    return 'typeScale';
+  }
+  if (entry.name.startsWith('--elev-') || entry.name === '--focus-ring') {
+    return 'elevation';
+  }
+  if (entry.name.startsWith('--motion-') || entry.name.startsWith('--ease-')) {
+    return 'motion';
+  }
+  if (
+    entry.name.startsWith('--space-')
+    || entry.name.startsWith('--section-y-')
+    || entry.name.startsWith('--container-')
+  ) {
+    return 'spacing';
+  }
+  return null;
+}
+
+function previewTypeScaleSize(name: string, value: string): string {
+  if (!name.startsWith('--text-')) return '14px';
+  const match = value.trim().match(/^([0-9.]+)(rem|px)$/);
+  if (!match) return '15px';
+  const num = parseFloat(match[1]!);
+  const px = match[2] === 'rem' ? num * 16 : num;
+  const clamped = Math.max(11, Math.min(22, Math.round(px)));
+  return `${clamped}px`;
+}
+
 export interface KitDesignMdActions {
   body: string;
   onSave?: (value: string) => void | Promise<void>;
@@ -344,6 +410,8 @@ function DesignKitViewInner({
   const compact = variant === 'compact';
   const [coverPreviewOpen, setCoverPreviewOpen] = useState(false);
   const [tokens, setTokens] = useState<BrandTokenSubset | null>(null);
+  const [componentsManifest, setComponentsManifest] = useState<ParsedComponentsManifest | null>(null);
+  const [designTokens, setDesignTokens] = useState<DesignTokenContractEntry[] | null>(null);
   const [dsTheme, setDsTheme] = useState<'light' | 'dark'>('light');
   const [activeLogo, setActiveLogo] = useState(0);
   const [imagesExpanded, setImagesExpanded] = useState(false);
@@ -490,6 +558,112 @@ function DesignKitViewInner({
       cancelled = true;
     };
   }, [kit.system?.tokensUrl]);
+
+  useEffect(() => {
+    const url = kit.system?.componentsManifestUrl;
+    if (!url) {
+      setComponentsManifest(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) return;
+        const raw = (await resp.json()) as Record<string, unknown>;
+        if (cancelled) return;
+        const rawGroups = Array.isArray(raw.groups) ? raw.groups : [];
+        const groups: ComponentManifestGroupSummary[] = rawGroups
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+          .map((item) => ({
+            id: typeof item.id === 'string' ? item.id : '',
+            label: typeof item.label === 'string' ? item.label : '',
+            present: item.present === true,
+            selectors: stringArray(item.selectors),
+            classes: stringArray(item.classes),
+            elements: stringArray(item.elements),
+            tokenReferences: stringArray(item.tokenReferences),
+          }))
+          .filter((item) => item.id && item.label);
+        const tokenMeta = (raw.tokens && typeof raw.tokens === 'object')
+          ? raw.tokens as Record<string, unknown>
+          : {};
+        const declaredCount = stringArray(tokenMeta.declared).length;
+        const referencedCount = stringArray(tokenMeta.referenced).length;
+        setComponentsManifest({ declaredCount, referencedCount, groups });
+      } catch {
+        if (!cancelled) setComponentsManifest(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kit.system?.componentsManifestUrl]);
+
+  useEffect(() => {
+    const url = kit.system?.designTokensUrl;
+    if (!url) {
+      setDesignTokens(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const resp = await fetch(url, { cache: 'no-store' });
+        if (!resp.ok) return;
+        const raw = (await resp.json()) as Record<string, unknown>;
+        if (cancelled) return;
+        if (!Array.isArray(raw.tokens)) {
+          setDesignTokens(null);
+          return;
+        }
+        const entries: DesignTokenContractEntry[] = raw.tokens
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+          .map((item) => ({
+            name: typeof item.name === 'string' ? item.name : '',
+            value: typeof item.value === 'string' ? item.value : '',
+            type: typeof item.type === 'string' ? item.type : 'other',
+            layer: typeof item.layer === 'string' ? item.layer : '',
+            confidence: typeof item.confidence === 'string' ? item.confidence : '',
+          }))
+          .filter((item) => item.name && item.value);
+        setDesignTokens(entries.length > 0 ? entries : null);
+      } catch {
+        if (!cancelled) setDesignTokens(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [kit.system?.designTokensUrl]);
+
+  const presentComponentGroups = useMemo(
+    () => (componentsManifest?.groups ?? []).filter((group) => group.present),
+    [componentsManifest],
+  );
+
+  const structuralTokenGroups = useMemo(() => {
+    if (!designTokens || designTokens.length === 0) return [];
+    const buckets: Record<DesignTokenCategoryKey, DesignTokenContractEntry[]> = {
+      spacing: [],
+      radii: [],
+      typeScale: [],
+      elevation: [],
+      motion: [],
+    };
+    for (const token of designTokens) {
+      const cat = classifyStructuralToken(token);
+      if (cat) buckets[cat].push(token);
+    }
+    const ordered: Array<{ key: DesignTokenCategoryKey; label: string; items: DesignTokenContractEntry[] }> = [
+      { key: 'spacing', label: t('brandDetail.tokenSpacing'), items: buckets.spacing },
+      { key: 'radii', label: t('brandDetail.tokenRadii'), items: buckets.radii },
+      { key: 'typeScale', label: t('brandDetail.tokenTypeScale'), items: buckets.typeScale },
+      { key: 'elevation', label: t('brandDetail.tokenElevation'), items: buckets.elevation },
+      { key: 'motion', label: t('brandDetail.tokenMotion'), items: buckets.motion },
+    ];
+    return ordered.filter((group) => group.items.length > 0);
+  }, [designTokens, t]);
 
   const colors = useMemo(
     () => kit.colors.map((color, index) => ({
@@ -1612,7 +1786,18 @@ function DesignKitViewInner({
                       </button>
                     ) : null}
                   </div>
-                  <span className={styles.dsCap}>{kit.system.kitLabel ?? 'system/kit.html'}</span>
+                  <div className={styles.dsBarMeta}>
+                    <span className={styles.dsCap}>{kit.system.kitLabel ?? 'system/kit.html'}</span>
+                    <button
+                      type="button"
+                      className={styles.moduleAction}
+                      onClick={() => openUrlInNewTab(dsKitUrl)}
+                      title={t('preview.openInNewTab')}
+                      aria-label={t('preview.openInNewTab')}
+                    >
+                      <Icon name="external-link" size={13} />
+                    </button>
+                  </div>
                 </div>
                 <iframe
                   key={dsKitUrl}
@@ -1639,6 +1824,106 @@ function DesignKitViewInner({
                   ) : null}
                 </div>
               ) : null}
+            </section>
+          ) : null}
+
+          {!compact && presentComponentGroups.length > 0 ? (
+            <section className={styles.section} aria-label={t('brandDetail.components')}>
+              <div className={styles.dsHead}>
+                <h3 className={styles.sectionTitle}>{t('brandDetail.components')}</h3>
+                {componentsManifest && componentsManifest.declaredCount > 0 ? (
+                  <span className={styles.manifestSummary}>
+                    {presentComponentGroups.length} · {componentsManifest.referencedCount}/{componentsManifest.declaredCount}
+                  </span>
+                ) : null}
+              </div>
+              <div className={styles.componentsGrid}>
+                {presentComponentGroups.map((group) => {
+                  const tags = Array.from(
+                    new Set([
+                      ...group.selectors,
+                      ...group.classes.map((cls) => `.${cls}`),
+                      ...group.elements,
+                    ]),
+                  ).slice(0, 6);
+                  const tokenRefs = group.tokenReferences.slice(0, 6);
+                  return (
+                    <article key={group.id} className={styles.componentCard}>
+                      <h4 className={styles.componentTitle}>{group.label}</h4>
+                      {tags.length > 0 ? (
+                        <div className={styles.componentPills}>
+                          {tags.map((tag) => (
+                            <code key={tag} className={styles.componentPill}>
+                              {tag}
+                            </code>
+                          ))}
+                        </div>
+                      ) : null}
+                      {tokenRefs.length > 0 ? (
+                        <div className={styles.componentTokens}>
+                          {tokenRefs.map((tok) => (
+                            <code key={tok} className={styles.componentTokenChip}>
+                              {tok}
+                            </code>
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
+          {!compact && structuralTokenGroups.length > 0 ? (
+            <section className={styles.section} aria-label={t('brandDetail.tokens')}>
+              <h3 className={styles.sectionTitle}>{t('brandDetail.tokens')}</h3>
+              <div className={styles.tokenGroups}>
+                {structuralTokenGroups.map((group) => (
+                  <div key={group.key} className={styles.tokenGroup}>
+                    <h4 className={styles.subTitle}>{group.label}</h4>
+                    <div className={styles.tokenRows}>
+                      {group.items.map((tok) => (
+                        <div key={tok.name} className={styles.tokenRow}>
+                          <div className={styles.tokenPreview} aria-hidden>
+                            {group.key === 'spacing' ? (
+                              <span className={styles.tokenSpaceTrack}>
+                                <span
+                                  className={styles.tokenSpaceFill}
+                                  style={{ width: `min(100%, ${tok.value})` }}
+                                />
+                              </span>
+                            ) : group.key === 'radii' ? (
+                              <span
+                                className={styles.tokenRadiusSample}
+                                style={{ borderRadius: tok.value }}
+                              />
+                            ) : group.key === 'typeScale' ? (
+                              <span
+                                className={styles.tokenTypeSample}
+                                style={{ fontSize: previewTypeScaleSize(tok.name, tok.value) }}
+                              >
+                                Aa
+                              </span>
+                            ) : group.key === 'elevation' ? (
+                              <span
+                                className={styles.tokenElevSample}
+                                style={{ boxShadow: tok.value }}
+                              />
+                            ) : (
+                              <span className={styles.tokenMotionSample}>ms</span>
+                            )}
+                          </div>
+                          <div className={styles.tokenMeta}>
+                            <code className={styles.tokenName}>{tok.name}</code>
+                            <span className={styles.tokenVal}>{tok.value}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </section>
           ) : null}
 

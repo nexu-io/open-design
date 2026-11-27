@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
 import { renderDesignTokensJson, renderTailwindV4Css } from '@open-design/contracts/design-systems/derived-token-outputs';
+import { findRealTagOffset } from '@open-design/contracts/runtime/html-injection-points';
 import {
   buildDesignTokenContract,
   buildReportWithSelfCheck,
@@ -50,12 +51,21 @@ export type DesignSystemProjectSource =
       importedAt?: string;
     };
 
+type SourceDesignSections = {
+  typography?: string;
+  voice?: string;
+  imagery?: string;
+  layout?: string;
+};
+
 type ProjectScan = {
   sourceRoot: string;
   packageName: string | undefined;
   packageDescription: string | undefined;
   packageTech: string[];
   readmeExcerpt: string | undefined;
+  sourceComponentsHtml: string | undefined;
+  sourceSections: SourceDesignSections;
   cssVariables: CssVariable[];
   tailwindSignals: string[];
   assets: AssetCandidate[];
@@ -148,7 +158,7 @@ export async function importLocalDesignSystemProject(
   const designMd = renderDesignMd(id, displayName, scan);
   const tokenContract = buildDesignTokenContract({ sourceTokens: scan.cssVariables, generatedAt: now });
   const tokensCss = tokenContract.tokensCss;
-  const componentsHtml = renderComponentsHtml(displayName, tokensCss);
+  const componentsHtml = scan.sourceComponentsHtml ?? renderComponentsHtml(displayName, tokensCss);
   const tokenContractReport = buildReportWithSelfCheck(
     tokenContract.report,
     validateDesignTokenOutputs({ tokensCss, fixtureHtml: componentsHtml }),
@@ -173,7 +183,7 @@ export async function importLocalDesignSystemProject(
     `${JSON.stringify(componentsManifest, null, 2)}\n`,
     'utf8',
   );
-  files.push(...(await writePreviewFiles(outDir, displayName, scan, tokenContract.bindings)));
+  files.push(...(await writePreviewFiles(outDir, displayName, scan, tokenContract.bindings, tokensCss)));
   files.push(...(await writeSourceEvidenceFiles(outDir, scan, tokenContractReport)));
   await writeFile(
     path.join(outDir, 'manifest.json'),
@@ -202,24 +212,55 @@ export class LocalDesignSystemImportError extends Error {
   }
 }
 
+function styleFilePriority(relPath: string): number {
+  const base = path.basename(relPath).toLowerCase();
+  if (base === 'tokens.css') return 0;
+  if (relPath.toLowerCase().includes('token')) return 1;
+  if (base.includes('tailwind')) return 3;
+  return 2;
+}
+
+function isSelfReferentialCssVar(variable: CssVariable): boolean {
+  for (const match of variable.value.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)) {
+    if (match[1] === variable.name) return true;
+  }
+  return false;
+}
+
+function prioritizeCssVariables(variables: readonly CssVariable[]): CssVariable[] {
+  const concrete: CssVariable[] = [];
+  const aliased: CssVariable[] = [];
+  for (const variable of variables) {
+    if (isSelfReferentialCssVar(variable)) continue;
+    if (/\bvar\(/.test(variable.value)) aliased.push(variable);
+    else concrete.push(variable);
+  }
+  return [...concrete, ...aliased];
+}
+
 async function scanProject(sourceRoot: string): Promise<ProjectScan> {
-  const [packageJson, readmeExcerpt, files] = await Promise.all([
+  const [packageJson, readmeExcerpt, sourceComponentsHtml, sourceSections, files] = await Promise.all([
     readPackageJson(sourceRoot),
     readReadme(sourceRoot),
+    readSourceComponentsHtml(sourceRoot),
+    readSourceDesignSections(sourceRoot),
     walkProject(sourceRoot),
   ]);
   const styleFiles = files
     .filter((file) => STYLE_EXTENSIONS.has(path.extname(file.absPath).toLowerCase()))
+    .sort((a, b) => styleFilePriority(a.relPath) - styleFilePriority(b.relPath) || a.relPath.localeCompare(b.relPath))
     .slice(0, 80);
-  const cssVariables = (await Promise.all(styleFiles.map((file) => readCssVariables(file.absPath, file.relPath))))
-    .flat()
-    .slice(0, 80);
+  const rawCssVariables = (await Promise.all(styleFiles.map((file) => readCssVariables(file.absPath, file.relPath))))
+    .flat();
+  const cssVariables = prioritizeCssVariables(rawCssVariables).slice(0, 240);
   return {
     sourceRoot,
     packageName: packageJson.name,
     packageDescription: packageJson.description,
     packageTech: packageJson.tech,
     readmeExcerpt,
+    sourceComponentsHtml,
+    sourceSections,
     cssVariables,
     tailwindSignals: await readTailwindSignals(sourceRoot),
     assets: await findAssets(sourceRoot, files),
@@ -227,6 +268,46 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
     components: findComponentSignals(files),
     files,
   };
+}
+
+async function readSourceComponentsHtml(sourceRoot: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(path.join(sourceRoot, 'components.html'), 'utf8');
+    if (raw.trim().length === 0 || findRealTagOffset(raw, /<[a-z]/i) < 0) {
+      return undefined;
+    }
+    return raw;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readSourceDesignSections(sourceRoot: string): Promise<SourceDesignSections> {
+  for (const candidate of ['DESIGN.md', 'design.md']) {
+    try {
+      const raw = await readFile(path.join(sourceRoot, candidate), 'utf8');
+      const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+      const matches = [...body.matchAll(/^##\s+(.+?)\s*$/gm)];
+      if (matches.length === 0) return {};
+      const out: SourceDesignSections = {};
+      for (let i = 0; i < matches.length; i += 1) {
+        const match = matches[i]!;
+        const start = (match.index ?? 0) + match[0].length;
+        const end = matches[i + 1]?.index ?? body.length;
+        const heading = (match[1] ?? '').replace(/^\d+[.)]\s*/, '').trim().toLowerCase();
+        const content = body.slice(start, end).trim();
+        if (!content) continue;
+        if (!out.typography && /(typograph|type|font)/.test(heading)) out.typography = content;
+        else if (!out.voice && /(voice|tone)/.test(heading)) out.voice = content;
+        else if (!out.imagery && /(imagery|photograph|illustration)/.test(heading)) out.imagery = content;
+        else if (!out.layout && /(layout|spacing|grid|composition)/.test(heading)) out.layout = content;
+      }
+      return out;
+    } catch {
+      // Try next casing variant.
+    }
+  }
+  return {};
 }
 
 async function readPackageJson(
@@ -463,7 +544,7 @@ function renderManifest(
     ...(scan.fonts.length > 0
       ? {
           fonts: scan.fonts.map((font) => ({
-            family: cleanDisplayName(path.basename(font.relPath, path.extname(font.relPath))),
+            family: normalizeImportedFontFamily(font.relPath),
             file: `fonts/${slugify(path.basename(font.relPath, path.extname(font.relPath)))}${path.extname(font.relPath).toLowerCase()}`,
           })),
         }
@@ -544,6 +625,10 @@ function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
     '',
     assets.length > 0 ? assets.join('\n') : '- No logo/icon assets were copied for this import.',
     '',
+    ...(scan.sourceSections.typography ? ['## Typography', '', scan.sourceSections.typography, ''] : []),
+    ...(scan.sourceSections.voice ? ['## Voice & Tone', '', scan.sourceSections.voice, ''] : []),
+    ...(scan.sourceSections.imagery ? ['## Imagery', '', scan.sourceSections.imagery, ''] : []),
+    ...(scan.sourceSections.layout ? ['## Layout', '', scan.sourceSections.layout, ''] : []),
     '## Agent Guidance',
     '',
     '- Use `tokens.css` as the first source of truth for color, radius, spacing, and type.',
@@ -644,16 +729,17 @@ async function writePreviewFiles(
   name: string,
   scan: ProjectScan,
   bindings: readonly DesignTokenBinding[],
+  tokensCss: string,
 ): Promise<string[]> {
   const previewDir = path.join(outDir, 'preview');
   await mkdir(previewDir, { recursive: true });
   const pages: Array<[string, string]> = [
-    ['colors.html', renderColorsPreview(name, bindings)],
-    ['typography.html', renderTypographyPreview(name)],
-    ['spacing.html', renderSpacingPreview(name)],
-    ['components-buttons.html', renderButtonsPreview(name)],
-    ['components-inputs.html', renderInputsPreview(name)],
-    ['app.html', renderAppPreview(name, scan)],
+    ['colors.html', renderColorsPreview(name, bindings, tokensCss)],
+    ['typography.html', renderTypographyPreview(name, tokensCss)],
+    ['spacing.html', renderSpacingPreview(name, tokensCss)],
+    ['components-buttons.html', renderButtonsPreview(name, tokensCss)],
+    ['components-inputs.html', renderInputsPreview(name, tokensCss)],
+    ['app.html', renderAppPreview(name, scan, tokensCss)],
   ];
   await Promise.all(pages.map(([fileName, html]) => writeFile(path.join(previewDir, fileName), html, 'utf8')));
   return pages.map(([fileName]) => `preview/${fileName}`);
@@ -751,7 +837,7 @@ async function writeSourceEvidenceFiles(
   ];
 }
 
-function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding[]): string {
+function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding[], tokensCss: string): string {
   const values = new Map(bindings.map((binding) => [binding.name, binding.value]));
   return renderPreviewPage(
     `${name} colors`,
@@ -770,51 +856,57 @@ function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding
       const value = values.get(token) ?? 'transparent';
       return `<article class="swatch"><div style="background:${escapeHtml(value)}"></div><strong>${label}</strong><code>${token}: ${escapeHtml(value)}</code></article>`;
     }).join('\n'),
+    tokensCss,
   );
 }
 
-function renderTypographyPreview(name: string): string {
+function renderTypographyPreview(name: string, tokensCss: string): string {
   return renderPreviewPage(
     `${name} typography`,
     'Typography',
     '<h1>Build focused product surfaces</h1><h2>Section heading</h2><p>Body text uses the imported body token stack and normalized rhythm.</p><code>Code and metadata use the mono token.</code>',
+    tokensCss,
   );
 }
 
-function renderSpacingPreview(name: string): string {
+function renderSpacingPreview(name: string, tokensCss: string): string {
   return renderPreviewPage(
     `${name} spacing`,
     'Spacing and radius',
     [1, 2, 3, 4, 5, 6, 8].map((step) => `<article class="meter"><strong>--space-${step}</strong><span style="width:var(--space-${step})"></span></article>`).join('\n'),
+    tokensCss,
   );
 }
 
-function renderButtonsPreview(name: string): string {
+function renderButtonsPreview(name: string, tokensCss: string): string {
   return renderPreviewPage(
     `${name} buttons`,
     'Buttons',
     '<p><button class="primary">Primary action</button> <button class="secondary">Secondary action</button></p>',
+    tokensCss,
   );
 }
 
-function renderInputsPreview(name: string): string {
+function renderInputsPreview(name: string, tokensCss: string): string {
   return renderPreviewPage(
     `${name} inputs`,
     'Inputs',
     '<label>Project name<input value="Imported design system" /></label><label>Notes<textarea>Preserve source evidence.</textarea></label>',
+    tokensCss,
   );
 }
 
-function renderAppPreview(name: string, scan: ProjectScan): string {
+function renderAppPreview(name: string, scan: ProjectScan, tokensCss: string): string {
   const componentItems = scan.components.map((component) => `<li>${escapeHtml(component.name)} <code>${escapeHtml(component.relPath)}</code></li>`).join('');
   return renderPreviewPage(
     `${name} app preview`,
     'App preview',
     `<section class="app-shell"><aside><strong>${escapeHtml(name)}</strong><nav>Overview<br/>Components<br/>Assets</nav></aside><main><h1>${escapeHtml(name)}</h1><p>${escapeHtml(scan.packageDescription ?? 'Imported design system preview.')}</p><ul>${componentItems || '<li>No representative components detected.</li>'}</ul></main></section>`,
+    tokensCss,
   );
 }
 
-function renderPreviewPage(title: string, heading: string, body: string): string {
+function renderPreviewPage(title: string, heading: string, body: string, tokensCss: string): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -823,6 +915,7 @@ function renderPreviewPage(title: string, heading: string, body: string): string
     <title>${escapeHtml(title)}</title>
     <link rel="stylesheet" href="../tokens.css" />
     <style>
+${indentCss(tokensCss, 6)}
       body { margin: 0; font-family: var(--font-body); color: var(--fg); background: var(--bg); }
       main { max-width: 1040px; margin: 0 auto; padding: var(--space-8) var(--space-5); }
       h1 { font-size: var(--text-3xl); line-height: var(--leading-tight); }
@@ -921,6 +1014,37 @@ function compactMarkdown(raw: string): string {
     .filter(Boolean)
     .slice(0, 16)
     .join('\n');
+}
+
+const FONTSOURCE_SUFFIX_RE =
+  /-(latin|latin-ext|cyrillic|greek|vietnamese)(?:-\d{3})?(?:-(normal|italic))?$/i;
+
+const KNOWN_FONT_FAMILY_CASES: Record<string, string> = {
+  inter: 'Inter',
+  'jetbrains mono': 'JetBrains Mono',
+  'ibm plex sans': 'IBM Plex Sans',
+  'ibm plex mono': 'IBM Plex Mono',
+  'fira code': 'Fira Code',
+  'space grotesk': 'Space Grotesk',
+  'plus jakarta sans': 'Plus Jakarta Sans',
+  'dm sans': 'DM Sans',
+  'source sans 3': 'Source Sans 3',
+  'source serif 4': 'Source Serif 4',
+  roboto: 'Roboto',
+  geist: 'Geist',
+  'geist mono': 'Geist Mono',
+};
+
+export function normalizeImportedFontFamily(relPath: string): string {
+  const base = path.basename(relPath, path.extname(relPath));
+  const stripped = base.replace(FONTSOURCE_SUFFIX_RE, '');
+  if (stripped !== base) {
+    const cleaned = cleanDisplayName(stripped);
+    const known = KNOWN_FONT_FAMILY_CASES[cleaned.toLowerCase()];
+    if (known) return known;
+    return cleaned.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  }
+  return cleanDisplayName(base);
 }
 
 function cleanDisplayName(value: string): string {

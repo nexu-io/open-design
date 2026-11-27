@@ -794,6 +794,18 @@ export function registerDesignSystemRoutes(
       if (!file) return res.status(404).type('text/plain').send('not found');
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Last-Modified', file.updatedAt);
+      if (file.contentType.startsWith('text/html')) {
+        const normalizedRelPath = requestedPath.replace(/\\/g, '/');
+        const baseDir = path.posix.dirname(normalizedRelPath);
+        return res.type('text/html').send(
+          rewriteDesignSystemShowcaseAssetUrls(
+            file.bytes.toString('utf8'),
+            req.params.id,
+            baseDir === '.' ? '' : baseDir,
+            designSystemNavigationWorkspaceQuery(req),
+          ),
+        );
+      }
       res.type(file.contentType).send(file.bytes);
     } catch (err) {
       res.status(500).type('text/plain').send(String(err));

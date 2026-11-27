@@ -300,4 +300,109 @@ describe('importLocalDesignSystemProject', () => {
       },
     });
   });
+
+  it('preserves authored components.html, carries DESIGN.md sections, normalizes fontsource names, and inlines preview tokens', async () => {
+    fs.writeFileSync(
+      path.join(sourceRoot, 'components.html'),
+      [
+        '<!doctype html>',
+        '<html><head><title>Authored showcase</title><link rel="stylesheet" href="./tokens.css" /><style>',
+        'body { background: var(--bg); color: var(--fg); }',
+        '.btn-primary { background: var(--accent); color: var(--accent-on); }',
+        '.badge { border: 1px solid var(--border); }',
+        '</style></head>',
+        '<body><main><nav><a href="#cards">Overview</a><kbd>⌘K</kbd></nav><section class="card"><span class="badge">Live</span><button class="btn-primary">Launch</button></section></main></body></html>',
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(sourceRoot, 'DESIGN.md'),
+      [
+        '# Kami App',
+        '',
+        '## 3. Typography Rules',
+        '- **Display:** "Inter" — weights 500, 700',
+        '- **Body:** "Inter" — weights 400, 500',
+        '',
+        '## Voice & Tone',
+        '- **Adjectives:** Crisp, Direct, Quiet',
+        '- **Tone:** Technical and concise',
+        '',
+        '## Imagery',
+        '- **Style:** Dark editorial screenshots',
+        '',
+        '## Layout',
+        '- **Radius:** 12px',
+        '- **Spacing:** 4px baseline grid',
+      ].join('\n'),
+    );
+    fs.writeFileSync(path.join(sourceRoot, 'src', 'assets', 'fonts', 'inter-latin-400-normal.woff2'), 'font');
+    fs.writeFileSync(path.join(sourceRoot, 'src', 'assets', 'fonts', 'jetbrains-mono-latin-500-normal.woff2'), 'font');
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+
+    const componentsHtml = fs.readFileSync(path.join(result.dir, 'components.html'), 'utf8');
+    expect(componentsHtml).toContain('Authored showcase');
+    expect(componentsHtml).toContain('btn-primary');
+
+    const componentsManifest = JSON.parse(
+      fs.readFileSync(path.join(result.dir, 'components.manifest.json'), 'utf8'),
+    ) as { groups: Array<{ id: string; present: boolean }> };
+    expect(componentsManifest.groups.find((g) => g.id === 'badges')?.present).toBe(true);
+    expect(componentsManifest.groups.find((g) => g.id === 'keyboard')?.present).toBe(true);
+
+    const designMd = fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8');
+    expect(designMd).toContain('## Typography');
+    expect(designMd).toContain('## Voice & Tone');
+    expect(designMd).toContain('## Imagery');
+    expect(designMd).toContain('## Layout');
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8')) as {
+      fonts: Array<{ family: string; file: string }>;
+    };
+    expect(manifest.fonts.map((f) => f.family)).toEqual(
+      expect.arrayContaining(['AcmeSans Regular', 'Inter', 'JetBrains Mono']),
+    );
+
+    const colorsPreview = fs.readFileSync(path.join(result.dir, 'preview', 'colors.html'), 'utf8');
+    expect(colorsPreview).toContain('--accent: #ff3366;');
+    expect(colorsPreview).toContain('<link rel="stylesheet" href="../tokens.css" />');
+  });
+
+  it('prioritizes concrete tokens.css declarations over large tailwind @theme alias files', async () => {
+    const tailwindThemeLines = Array.from({ length: 65 }, (_, i) => `  --scale-${i}: var(--scale-${i});`);
+    tailwindThemeLines.push('  --radius-md: var(--radius-md);', '  --container-max: var(--container-max);');
+    fs.writeFileSync(
+      path.join(sourceRoot, 'tailwind-v4.css'),
+      `@theme {\n${tailwindThemeLines.join('\n')}\n}\n`,
+    );
+    fs.writeFileSync(
+      path.join(sourceRoot, 'tokens.css'),
+      [
+        ':root {',
+        '  --bg: #020617;',
+        '  --surface: #0f172a;',
+        '  --fg: #f1f5f9;',
+        '  --muted: #94a3b8;',
+        '  --border: rgba(255, 255, 255, 0.1);',
+        '  --accent: #38bdf8;',
+        '  --radius-md: 12px;',
+        '  --section-y-desktop: 64px;',
+        '  --container-max: 1200px;',
+        '  --elev-raised: 0 10px 30px rgba(2, 6, 23, 0.55);',
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+    const tokensCss = fs.readFileSync(path.join(result.dir, 'tokens.css'), 'utf8');
+    expect(tokensCss).toContain('--radius-md: 12px;');
+    expect(tokensCss).toContain('--section-y-desktop: 64px;');
+    expect(tokensCss).toContain('--container-max: 1200px;');
+    expect(tokensCss).toContain('--elev-raised: 0 10px 30px rgba(2, 6, 23, 0.55);');
+    expect(tokensCss).not.toContain('--radius-md: var(--radius-md);');
+  });
 });
