@@ -11,7 +11,8 @@
  * errors, public types, and the platform atomic copier.
  */
 
-import { isAbsolute, resolve } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { atomicCopyFile } from "@open-design/platform";
 
@@ -48,6 +49,49 @@ const copyLeases = new Map<string, CopyLeaseState>();
  */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** @internal Check containment by path segments, including names beginning with two dots. */
+function containsPath(basePath: string, outputPath: string): boolean {
+  const rel = relative(basePath, outputPath);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/** @internal Resolve existing ancestors without requiring the destination to exist yet. */
+async function resolveWithMissingTail(path: string): Promise<string> {
+  const tail: string[] = [];
+  let current = path;
+  for (;;) {
+    try {
+      return resolve(await realpath(current), ...tail.reverse());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const entry = await lstat(current).catch((statError: unknown) => {
+        if ((statError as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw statError;
+      });
+      // A dangling link is an existing path component, not a missing tail. It
+      // may become an alias of the managed base once the download creates it.
+      if (entry != null) {
+        throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.INVALID_TARGET, `cannot resolve copy path: ${current}`);
+      }
+      const parent = dirname(current);
+      if (parent === current) throw error;
+      tail.push(basename(current));
+      current = parent;
+    }
+  }
+}
+
+/** @internal Keep caller-owned output outside the managed tree before any download or cleanup. */
+async function assertExternalOutput(basePath: string, outputPath: string): Promise<void> {
+  if (containsPath(basePath, outputPath)) {
+    throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.INVALID_TARGET, "outputPath must be outside basePath");
+  }
+  const [realBase, realOutput] = await Promise.all([resolveWithMissingTail(basePath), resolveWithMissingTail(outputPath)]);
+  if (containsPath(realBase, realOutput)) {
+    throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.INVALID_TARGET, "outputPath must be outside basePath, including symbolic-link aliases");
+  }
 }
 
 /**
@@ -97,7 +141,8 @@ async function releaseCopyLease(lease: CopyLease): Promise<void> {
  * Download a payload and copy the verified bytes to an external `outputPath`,
  * then clear the managed copy when no other copy lease is outstanding. An
  * existing output with matching bytes is accepted; a differing one throws
- * `OUTPUT_CONFLICT`.
+ * `OUTPUT_CONFLICT`. An output within the managed base (including an alias)
+ * throws `INVALID_TARGET` before any download or managed-state mutation.
  * @returns The copied byte count, output path, reuse/resume flags, and the
  * cleanup outcome (with a warning if cleanup failed).
  */
@@ -110,6 +155,7 @@ export async function downloadCopyAndClear(options: DownloadCopyAndClearOptions)
   if (!isAbsolute(outputPath)) {
     throw new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.INVALID_TARGET, `outputPath must resolve to an absolute path: ${options.outputPath}`);
   }
+  await assertExternalOutput(target.basePath, outputPath);
   const lease = acquireCopyLease(target);
   try {
     const downloaded = await managedDownload(options);
