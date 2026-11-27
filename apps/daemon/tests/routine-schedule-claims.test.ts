@@ -23,6 +23,13 @@ import { writeAppConfig } from '../src/app-config.js';
 import { upsertInstalledPlugin } from '../src/plugins/registry.js';
 import { createSnapshot, getSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
 
+// Hourly schedules fire on the daemon's local wall clock (`nextHourlyRunAt`
+// uses setMinutes/setHours), so these fixtures pin local time, not UTC. A UTC
+// instant puts the next ":01" 30 minutes away in a half-hour zone such as
+// Asia/Kolkata, and the scheduler never fires inside the test window.
+const localTime = (hour: number, minute: number, second = 0) =>
+  new Date(2026, 4, 17, hour, minute, second);
+
 let tmp: string;
 let dbFile: string;
 
@@ -96,7 +103,7 @@ function makeRun(id: string, overrides: Record<string, unknown> = {}) {
 describe('routine scheduled loser cleanup', () => {
   it('prepares a winning scheduled reuse run after the slot claim is persisted', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
@@ -183,7 +190,7 @@ describe('routine scheduled loser cleanup', () => {
 
   it('does not let a discarded reuse-mode loser replace the shared project snapshot pin', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
@@ -236,7 +243,7 @@ describe('routine scheduled loser cleanup', () => {
       });
       expect(createRoutine.status).toBe(201);
       const created = await createRoutine.json() as { routine: { id: string } };
-      const slotAt = Date.UTC(2026, 4, 17, 10, 1);
+      const slotAt = localTime(10, 1).getTime();
       insertScheduledRoutineRun(db, {
         ...makeRun('rollback-winning-run', {
           routineId: created.routine.id,
@@ -269,7 +276,7 @@ describe('routine scheduled loser cleanup', () => {
     // never-inserted path through `design.runs.drop()` so duplicate losers
     // do not leak in-memory runs back through the public API.
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
@@ -302,7 +309,7 @@ describe('routine scheduled loser cleanup', () => {
       });
       expect(createRoutine.status).toBe(201);
       const created = await createRoutine.json() as { routine: { id: string } };
-      const slotAt = Date.UTC(2026, 4, 17, 10, 1);
+      const slotAt = localTime(10, 1).getTime();
       // Pre-claim the slot from a sibling daemon so the loser branch fires
       // in this process. The winning row carries the same routine and slot.
       insertScheduledRoutineRun(db, {
@@ -365,7 +372,7 @@ describe('routine scheduled loser cleanup', () => {
     // links the snapshot to the conversation row before returning, and
     // that link path updates `conversations.applied_plugin_snapshot_id`).
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
@@ -473,7 +480,7 @@ describe('routine scheduled loser cleanup', () => {
 
   it('does not create provisional database state for a reuse-mode loser before the slot is won', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
@@ -526,7 +533,7 @@ describe('routine scheduled loser cleanup', () => {
       });
       expect(createRoutine.status).toBe(201);
       const created = await createRoutine.json() as { routine: { id: string } };
-      const slotAt = Date.UTC(2026, 4, 17, 10, 1);
+      const slotAt = localTime(10, 1).getTime();
       insertScheduledRoutineRun(db, {
         ...makeRun('winning-run', {
           routineId: created.routine.id,
@@ -556,7 +563,7 @@ describe('routine scheduled loser cleanup', () => {
 describe('routine prepare failure cleanup', () => {
   it('clears scheduled placeholder IDs when project creation fails before real IDs are assigned', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-17T10:00:00.000Z'));
+    vi.setSystemTime(localTime(10, 0));
 
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
