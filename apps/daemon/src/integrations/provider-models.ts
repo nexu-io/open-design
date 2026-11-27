@@ -19,6 +19,7 @@ type ProviderModelsInput = ProviderModelsRequest & {
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
+const PROVIDER_MODELS_MAX_PAGES = 100;
 const BEDROCK_MODEL_OPTIONS: ProviderModelOption[] = [
   { id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', label: 'Claude 3.5 Sonnet v2' },
   { id: 'anthropic.claude-3-5-haiku-20241022-v1:0', label: 'Claude 3.5 Haiku' },
@@ -291,6 +292,31 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   return [];
 }
 
+function nextModelPageUrl(protocol: ConnectionTestProtocol, currentUrl: string, data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const page = data as { nextPageToken?: unknown; has_more?: unknown; last_id?: unknown };
+  let parameter: string;
+  let cursor: unknown;
+  if (protocol === 'google') {
+    cursor = page.nextPageToken;
+    if (cursor == null || cursor === '') return null;
+    parameter = 'pageToken';
+  } else if (protocol === 'anthropic' && page.has_more === true) {
+    cursor = page.last_id;
+    parameter = 'after_id';
+  } else {
+    return null;
+  }
+  if (typeof cursor !== 'string' || cursor.length === 0) {
+    throw new Error('Provider returned an invalid model pagination cursor.');
+  }
+  // Treat cursors as opaque values and retain the original endpoint and auth
+  // query parameters; a provider response never supplies the next request URL.
+  const next = new URL(currentUrl);
+  next.searchParams.set(parameter, cursor);
+  return next.toString();
+}
+
 export async function listProviderModels(
   input: ProviderModelsInput,
 ): Promise<ProviderModelsResponse> {
@@ -345,47 +371,62 @@ export async function listProviderModels(
   const timer = setTimeout(() => controller.abort(), PROVIDER_MODELS_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: providerModelsHeaders(input.protocol, input.apiKey),
-      ...input.requestInit,
-      signal: controller.signal,
-      redirect: 'error',
-    });
+    const collectedModels: ProviderModelOption[] = [];
+    const visited = new Set<string>();
+    let status = 0;
+    for (;;) {
+      if (visited.has(url)) throw new Error('Provider repeated a model pagination cursor.');
+      if (visited.size >= PROVIDER_MODELS_MAX_PAGES) throw new Error('Provider model pagination exceeded the page limit.');
+      visited.add(url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: providerModelsHeaders(input.protocol, input.apiKey),
+        ...input.requestInit,
+        signal: controller.signal,
+        redirect: 'error',
+      });
+      status = response.status;
+      const rawText = await response.text();
+      const latencyMs = Date.now() - start;
+      let data: unknown = {};
+      let parseError: string | undefined;
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (err) {
+        parseError = err instanceof Error ? err.message : String(err);
+      }
+
+      if (!response.ok) {
+        const detail = parseError
+          ? rawText.trim().slice(0, 240) || parseError
+          : extractProviderErrorDetail(data, rawText);
+        return {
+          ok: false,
+          kind: statusToKind(status),
+          latencyMs,
+          status,
+          detail: redactSecrets(detail, [input.apiKey]),
+        };
+      }
+
+      if (parseError) {
+        return {
+          ok: false,
+          kind: 'unknown',
+          latencyMs,
+          status,
+          detail: redactSecrets(parseError, [input.apiKey]),
+        };
+      }
+
+      collectedModels.push(...extractModels(input.protocol, data));
+      const nextUrl = nextModelPageUrl(input.protocol, url, data);
+      if (nextUrl == null) break;
+      url = nextUrl;
+    }
+
+    const models = uniqueModels(collectedModels);
     const latencyMs = Date.now() - start;
-    const rawText = await response.text();
-    let data: unknown = {};
-    let parseError: string | undefined;
-    try {
-      data = rawText ? JSON.parse(rawText) : {};
-    } catch (err) {
-      parseError = err instanceof Error ? err.message : String(err);
-    }
-
-    if (!response.ok) {
-      const detail = parseError
-        ? rawText.trim().slice(0, 240) || parseError
-        : extractProviderErrorDetail(data, rawText);
-      return {
-        ok: false,
-        kind: statusToKind(response.status),
-        latencyMs,
-        status: response.status,
-        detail: redactSecrets(detail, [input.apiKey]),
-      };
-    }
-
-    if (parseError) {
-      return {
-        ok: false,
-        kind: 'unknown',
-        latencyMs,
-        status: response.status,
-        detail: redactSecrets(parseError, [input.apiKey]),
-      };
-    }
-
-    const models = extractModels(input.protocol, data);
     console.log(
       `[provider:models] ${input.protocol} ${validated.parsed.hostname} → ${models.length} models in ${latencyMs}ms`,
     );
@@ -394,7 +435,7 @@ export async function listProviderModels(
         ok: false,
         kind: 'no_models',
         latencyMs,
-        status: response.status,
+        status,
         detail: 'Provider returned no usable text-generation models.',
       };
     }
@@ -402,7 +443,7 @@ export async function listProviderModels(
       ok: true,
       kind: 'success',
       latencyMs,
-      status: response.status,
+      status,
       models,
     };
   } catch (err) {
