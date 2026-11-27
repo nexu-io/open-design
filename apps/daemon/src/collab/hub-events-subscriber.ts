@@ -16,7 +16,8 @@
 //     hammering.
 //   - A heartbeat watchdog kills half-dead connections: the server sends a
 //     frame at least every 15s, so 45s of silence means the TCP stream is
-//     zombied and we abort + reconnect.
+//     zombied and we abort + reconnect. Waiting for the initial response
+//     headers is bounded by the same timeout.
 
 import type { WorkspaceBillingRevisionClock } from '@open-design/contracts';
 
@@ -358,7 +359,7 @@ export interface HubEventsSubscriberOptions {
   onReconnect?: (connection: { identityKey?: string }) => void;
   onError?: (error: unknown) => void;
   fetchImpl?: typeof fetch;
-  /** Abort the stream when no frame (event OR heartbeat) arrives for this long. */
+  /** Abort a pending response or a stream with no event/heartbeat for this long. */
   heartbeatTimeoutMs?: number;
   backoffMinMs?: number;
   backoffMaxMs?: number;
@@ -467,6 +468,9 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
     try {
       const endpointUrl = new URL(endpoint.url);
       endpointUrl.searchParams.set('codingPlanUsageEvents', '1');
+      // A server can accept the connection without ever returning headers.
+      // Include that wait in the watchdog so the reconnect loop can recover.
+      armWatchdog();
       const response = await fetchImpl(endpointUrl.toString(), {
         headers: { ...endpoint.headers, accept: 'text/event-stream' },
         signal: abortController.signal,
