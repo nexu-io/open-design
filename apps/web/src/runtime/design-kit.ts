@@ -114,6 +114,7 @@ export interface DesignKit {
   logoSrc?: string | null;
   logoAlternates: string[];
   logoNotes?: string;
+  fontsManifestUrl?: string | null;
   colors: KitColor[];
   typography: { display?: KitFont; body?: KitFont; mono?: KitFont };
   fonts: KitFont[];
@@ -570,6 +571,28 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     ? firstAvailablePackageFile(opts.packageInfo, ['system/index.html'])
     : null;
 
+  // Imported / preset systems serve their bundle through the daemon static
+  // route: resolve the brand logo and self-hosted font manifest from the
+  // package file list when availableFiles is explicitly populated. Kits
+  // backed by a project keep the project logo/font plumbing instead.
+  const hasExplicitBundleFiles = Boolean(
+    staticUrl && Array.isArray(opts.packageInfo?.availableFiles),
+  );
+  const resolveBundleAsset = hasExplicitBundleFiles
+    ? (rel: string): string | null => {
+        const available = firstAvailablePackageFile(opts.packageInfo, [rel]);
+        return available ? staticUrl!(rel) : null;
+      }
+    : null;
+  const logoSrc = resolveBundleAsset
+    ? (['assets/logo.svg', 'logo.svg', 'assets/logo.png', 'logo.png', 'assets/favicon.svg', 'favicon.svg']
+        .map((rel) => resolveBundleAsset!(rel))
+        .find((url): url is string => Boolean(url)) ?? null)
+    : null;
+  const fontsManifestUrl = hasExplicitBundleFiles && firstAvailablePackageFile(opts.packageInfo, ['fonts/manifest.json'])
+    ? staticUrl!('fonts/manifest.json')
+    : null;
+
   return {
     designSystemId: opts.designSystemId,
     name: parsed.name?.trim() || opts.title || 'Design system',
@@ -579,8 +602,9 @@ export function parsedToKit(parsed: ParsedDesignMd, opts: ParsedKitOptions): Des
     projectId: opts.projectId,
     editable: opts.editable,
     canUpload: opts.editable && Boolean(opts.projectId),
-    logoSrc: null,
+    logoSrc,
     logoAlternates: [],
+    fontsManifestUrl,
     colors,
     typography,
     fonts: fontList(typography),

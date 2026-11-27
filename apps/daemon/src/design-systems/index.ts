@@ -535,6 +535,11 @@ async function listAvailableDesignSystemPackageFiles(
   add(manifest.componentsManifest);
   for (const page of manifest.preview?.pages ?? []) add(page.path);
   for (const font of manifest.fonts ?? []) add(font.file);
+  // Self-hosted fonts ship a manifest so the web kit can inject @font-face.
+  add('fonts/manifest.json');
+  if (manifest.assetsDir === 'assets') {
+    await addFilesUnderDeclaredDir(brandRoot, 'assets', candidates);
+  }
 
   const out: string[] = [];
   const resolvedRoot = path.resolve(brandRoot);
@@ -1057,6 +1062,21 @@ async function isAllowedDesignSystemStaticFile(
   add(manifest?.componentsManifest ?? 'components.manifest.json');
   for (const page of manifest?.preview?.pages ?? []) add(page.path);
   for (const font of manifest?.fonts ?? []) add(font.file);
+  // Self-hosted fonts ship a manifest so the web kit can inject @font-face;
+  // serve it (and any font files it declares) alongside the fonts themselves.
+  add('fonts/manifest.json');
+  if (relativePath.startsWith('fonts/')) {
+    try {
+      const fontsManifest = JSON.parse(
+        await readFile(path.join(brandRoot, 'fonts', 'manifest.json'), 'utf8'),
+      ) as { files?: Array<{ file?: unknown }> | null };
+      for (const entry of fontsManifest?.files ?? []) {
+        if (typeof entry?.file === 'string') add(`fonts/${entry.file}`);
+      }
+    } catch {
+      // No font manifest: only the fonts declared above are served.
+    }
+  }
 
   if (manifest?.assetsDir === 'assets') {
     await addFilesUnderDeclaredDir(brandRoot, 'assets', allowed);
