@@ -56,6 +56,11 @@ import {
 } from '../app-version.js';
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+
+// After this many failed delivery attempts a run's Langfuse completion is
+// given up on: the durable `failed` status stays, but reconciliation stops
+// re-attempting on every daemon boot (#9411).
+const MAX_TELEMETRY_DELIVERY_ATTEMPTS = 10;
 const RECONCILED_STATUS_MESSAGE = 'Run terminal state reconciled after daemon restart.';
 const PRESERVED_TERMINAL_INTEGRITY = new Set<TrackingRunTerminalIntegrity>([
   'duplicate',
@@ -554,9 +559,16 @@ export async function reconcileDurableRunTerminals(
     const needsAnalytics = Boolean(
       state.analyticsRecovery && !state.analyticsRecovery.completedAt,
     );
+    // A run whose telemetry delivery already burned through its attempt
+    // budget stays `failed` permanently — reconciliation must not re-queue
+    // it on every boot or the same dead delivery retries forever (#9411).
+    const telemetryDeliveryExhausted =
+      typeof state.telemetryDelivery?.attemptCount === 'number'
+      && state.telemetryDelivery.attemptCount >= MAX_TELEMETRY_DELIVERY_ATTEMPTS;
     const needsLangfuse = TERMINAL_STATUSES.has(state.status)
       && !state.langfuseCompletedAt
       && typeof state.telemetryDelivery?.finalizedAt !== 'number'
+      && !telemetryDeliveryExhausted
       && (
         state.telemetryDelivery === undefined
         || state.telemetryDelivery.status === 'failed'
