@@ -706,6 +706,20 @@ describe("Test campaign decision and lifecycle guards", () => {
 		);
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 	});
+	it("diagnoses immutable byte integrity failure and revokes every created Blob URL", async () => {
+		const create = vi
+			.spyOn(URL, "createObjectURL")
+			.mockReturnValue("blob:verified");
+		const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+		await expect(
+			touchpointComponent.verifyWebTouchpoint({
+				...content,
+				entryModule: "tampered",
+			}),
+		).rejects.toThrow("touchpoint_integrity_failed");
+		expect(create).toHaveBeenCalledOnce();
+		expect(revoke).toHaveBeenCalledExactlyOnceWith("blob:verified");
+	});
 	it("gives initial focus to the first control a user can reach, past hidden and unfocusable ones", async () => {
 		const { focusWebTouchpointModal } = await import(
 			"../../src/components/touchpoint-component"
