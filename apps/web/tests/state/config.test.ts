@@ -76,6 +76,33 @@ describe('KNOWN_PROVIDERS', () => {
     }
   });
 
+  it('moves the Anthropic preset off Sonnet 4.5 ahead of its 2026-11-30 retirement', () => {
+    const anthropic = KNOWN_PROVIDERS.find(
+      (provider) => provider.label === 'Anthropic (Claude)',
+    );
+
+    expect(defaultKnownProviderModel(anthropic)).toBe('claude-sonnet-5-5');
+    // A fresh install and the Anthropic quick fill must start on the same model.
+    expect(DEFAULT_CONFIG.model).toBe(defaultKnownProviderModel(anthropic));
+    expect(anthropic?.retiredModels).toEqual([
+      'claude-sonnet-4-5',
+      'claude-sonnet-4-5-20250929',
+    ]);
+  });
+
+  it('never prefers a model its own provider has marked retired', () => {
+    // A preferred id that is also retired would make the on-load migration a
+    // silent no-op, so the stale id would survive in saved configs.
+    for (const provider of KNOWN_PROVIDERS) {
+      for (const model of provider.retiredModels ?? []) {
+        expect(
+          provider.preferredModels,
+          `${provider.label} prefers its retired model ${model}`,
+        ).not.toContain(model);
+      }
+    }
+  });
+
   it('keeps gpt-oss:120b as the Ollama Cloud default', () => {
     const ollamaCloud = KNOWN_PROVIDERS.find(
       (provider) => provider.label === 'Ollama Cloud (managed)',
@@ -1094,6 +1121,205 @@ describe('loadConfig', () => {
 
     expect(config.model).toBe('anthropic/claude-sonnet-4.6');
     expect(config.configMigrationVersion).toBe(3);
+  });
+
+  it.each([
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-5-20250929',
+  ])('migrates retired Anthropic model %s in active, protocol, and provider-draft configs', (retired) => {
+    const anthropicBaseUrl = 'https://api.anthropic.com';
+    const anthropicConfig = {
+      apiKey: 'sk-ant-test',
+      baseUrl: anthropicBaseUrl,
+      model: retired,
+      apiProviderBaseUrl: anthropicBaseUrl,
+    };
+    const persisted: Partial<AppConfig> = {
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      ...anthropicConfig,
+      configMigrationVersion: 3,
+      apiProtocolConfigs: {
+        anthropic: { ...anthropicConfig },
+        openai: {
+          apiKey: 'sk-openai-test',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-4o',
+        },
+      },
+      byokProviderConfigDrafts: {
+        [`anthropic:${anthropicBaseUrl}`]: { apiConfig: { ...anthropicConfig } },
+      },
+    };
+    store.set('open-design:config', JSON.stringify(persisted));
+
+    const config = loadConfig();
+
+    expect(config.model).toBe('claude-sonnet-5-5');
+    expect(config.apiKey).toBe('sk-ant-test');
+    expect(config.apiProtocolConfigs?.anthropic?.model).toBe('claude-sonnet-5-5');
+    expect(
+      config.byokProviderConfigDrafts?.[`anthropic:${anthropicBaseUrl}`]?.apiConfig.model,
+    ).toBe('claude-sonnet-5-5');
+    // Other protocols keep their own saved model.
+    expect(config.apiProtocolConfigs?.openai?.model).toBe('gpt-4o');
+    // The retired id is rewritten in storage, not just in the returned value.
+    expect(JSON.parse(store.get('open-design:config') ?? '{}').model).toBe(
+      'claude-sonnet-5-5',
+    );
+  });
+
+  it('migrates the Sonnet 4.5 default that older builds saved, even in Local CLI mode', () => {
+    // Older builds persisted DEFAULT_CONFIG verbatim, so every install that ever
+    // saved a setting carries this model, including users who never used BYOK.
+    store.set('open-design:config', JSON.stringify({
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProtocol: 'anthropic',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+      configMigrationVersion: 3,
+      agentId: 'claude-code',
+    } satisfies Partial<AppConfig>));
+
+    expect(loadConfig()).toMatchObject({
+      mode: 'daemon',
+      agentId: 'claude-code',
+      model: 'claude-sonnet-5-5',
+    });
+  });
+
+  it('migrates a Sonnet 4.5 config saved before apiProtocol and apiProviderBaseUrl existed', () => {
+    store.set('open-design:config', JSON.stringify({
+      mode: 'api',
+      apiKey: 'sk-ant-legacy',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+    }));
+
+    expect(loadConfig()).toMatchObject({
+      apiProtocol: 'anthropic',
+      apiKey: 'sk-ant-legacy',
+      model: 'claude-sonnet-5-5',
+    });
+  });
+
+  it.each([
+    'claude-sonnet-4-5',
+    'claude-sonnet-4-5-20250929',
+  ])('keeps %s on a custom Anthropic-compatible endpoint', (model) => {
+    // A self-hosted gateway or cloud-partner proxy runs its own model lifecycle,
+    // so only the Anthropic preset's endpoint is migrated.
+    store.set('open-design:config', JSON.stringify({
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiKey: 'sk-gateway',
+      baseUrl: 'https://llm-gateway.example.com',
+      model,
+      apiProviderBaseUrl: null,
+      configMigrationVersion: 3,
+    } satisfies Partial<AppConfig>));
+
+    expect(loadConfig().model).toBe(model);
+  });
+
+  it.each([
+    'https://api.anthropic.com/',
+    'https://api.anthropic.com/v1',
+    'https://api.anthropic.com/v1/',
+  ])('migrates native Anthropic endpoint %s without a provider marker', (baseUrl) => {
+    store.set('open-design:config', JSON.stringify({
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiKey: 'sk-ant-test',
+      baseUrl,
+      model: 'claude-sonnet-4-5-20250929',
+      apiProviderBaseUrl: null,
+      configMigrationVersion: 3,
+    } satisfies Partial<AppConfig>));
+
+    expect(loadConfig()).toMatchObject({
+      baseUrl,
+      model: 'claude-sonnet-5-5',
+    });
+  });
+
+  it.each([undefined, 'https://api.anthropic.com'])(
+    'keeps custom endpoints with provider marker %s',
+    (apiProviderBaseUrl) => {
+      const customConfig = {
+        apiKey: 'sk-custom',
+        baseUrl: 'https://gateway.example.com/anthropic',
+        model: 'claude-sonnet-4-5',
+        ...(apiProviderBaseUrl ? { apiProviderBaseUrl } : {}),
+      };
+      store.set('open-design:config', JSON.stringify({
+        mode: 'api',
+        apiProtocol: 'anthropic',
+        ...customConfig,
+        apiProtocolConfigs: { anthropic: { ...customConfig } },
+        byokProviderConfigDrafts: {
+          'anthropic:https://api.anthropic.com': { apiConfig: { ...customConfig } },
+        },
+        configMigrationVersion: 3,
+      } satisfies Partial<AppConfig>));
+
+      const config = loadConfig();
+
+      expect(config.model).toBe(customConfig.model);
+      expect(config.apiProtocolConfigs?.anthropic?.model).toBe(customConfig.model);
+      expect(
+        config.byokProviderConfigDrafts?.['anthropic:https://api.anthropic.com']?.apiConfig.model,
+      ).toBe(customConfig.model);
+    },
+  );
+
+  it.each([
+    'claude-sonnet-5-5',
+    'claude-sonnet-4-6',
+    'claude-haiku-4-5',
+    'claude-opus-5-5',
+    'claude-opus-4-5',
+  ])('keeps the supported Anthropic model %s the user chose', (model) => {
+    store.set('open-design:config', JSON.stringify({
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiKey: 'sk-ant-test',
+      baseUrl: 'https://api.anthropic.com',
+      model,
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+      configMigrationVersion: 3,
+    } satisfies Partial<AppConfig>));
+    const writesBefore = vi.mocked(localStorage.setItem).mock.calls.length;
+
+    expect(loadConfig().model).toBe(model);
+    expect(vi.mocked(localStorage.setItem).mock.calls.length).toBe(writesBefore);
+  });
+
+  it('writes the migrated Anthropic model back once and then leaves storage alone', () => {
+    store.set('open-design:config', JSON.stringify({
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiKey: 'sk-ant-test',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      apiProviderBaseUrl: 'https://api.anthropic.com',
+      configMigrationVersion: 3,
+    } satisfies Partial<AppConfig>));
+    const writesBefore = vi.mocked(localStorage.setItem).mock.calls.length;
+
+    const first = loadConfig();
+    const writesAfterFirst = vi.mocked(localStorage.setItem).mock.calls.length;
+    const second = loadConfig();
+
+    expect(first.model).toBe('claude-sonnet-5-5');
+    expect(writesAfterFirst).toBe(writesBefore + 1);
+    expect(vi.mocked(localStorage.setItem).mock.calls.length).toBe(writesAfterFirst);
+    expect(second).toEqual(first);
   });
 
   it('migrates legacy SiliconFlow Global configs to the known OpenAI preset', () => {

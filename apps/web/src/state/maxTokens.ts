@@ -27,6 +27,11 @@ const OVERRIDES: Record<string, number> = {
   // 32k matches what issue #29 reports as the working ceiling.
   'mimo-v2.5-pro': 32768,
 
+  // Claude 5.5 models are not tracked by the vendored LiteLLM slice yet.
+  // Spec: https://platform.claude.com/docs/en/about-claude/models/overview
+  'claude-sonnet-5-5': 128000,
+  'claude-opus-5-5': 128000,
+
   // DeepSeek v4 models not tracked by LiteLLM as of 2026-05-07.
   // Spec: https://platform.deepseek.com/docs/model-cards
   'deepseek-v4-pro': 384000,

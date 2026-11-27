@@ -78,7 +78,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   mode: 'daemon',
   apiKey: '',
   baseUrl: 'https://api.anthropic.com',
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-5-5',
   // New configs should be explicit. loadConfig() still detects parsed legacy
   // saved configs that did not have this field and migrates those from their
   // saved baseUrl/model before applying the current migration version.
@@ -144,7 +144,10 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     label: 'Anthropic (Claude)',
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    preferredModels: ['claude-sonnet-4-5', 'claude-opus-4-5', 'claude-haiku-4-5'],
+    preferredModels: ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-4-5'],
+    // Sonnet 4.5 retires on the Claude API on 2026-11-30, and the retirement
+    // covers the undated alias as well as the dated snapshot.
+    retiredModels: ['claude-sonnet-4-5', 'claude-sonnet-4-5-20250929'],
   },
   {
     label: 'DeepSeek — Anthropic',
@@ -667,8 +670,13 @@ function migrateRetiredKnownProviderModel(
   const provider = KNOWN_PROVIDERS.find((candidate) =>
     candidate.protocol === protocol &&
     (
-      candidate.baseUrl === config.apiProviderBaseUrl ||
-      candidate.baseUrl === config.baseUrl
+      // Native retirement dates apply to the serving endpoint. A provider
+      // marker can be stale or inherited from DEFAULT_CONFIG on older saves.
+      candidate.baseUrl === 'https://api.anthropic.com'
+        ? typeof config.baseUrl === 'string' &&
+          config.baseUrl.trim().replace(/\/+$/, '').replace(/\/v1$/, '') === candidate.baseUrl
+        : candidate.baseUrl === config.apiProviderBaseUrl ||
+          candidate.baseUrl === config.baseUrl
     ),
   );
   if (!provider?.retiredModels?.includes(config.model)) return false;

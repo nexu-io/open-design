@@ -21,8 +21,8 @@ import type { ApiProtocol } from '../types';
 // the user types in the model field is what's variable, not the API.
 export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]> = {
   anthropic: [
-    'claude-opus-4-5',
-    'claude-sonnet-4-5',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
     'claude-haiku-4-5',
     'deepseek-chat',
     'deepseek-reasoner',
