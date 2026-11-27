@@ -8,6 +8,7 @@ export const kimiAgentDef = {
     versionArgs: ['--version'],
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
+      { id: 'kimi-k3', label: 'kimi-k3' },
       { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },
       { id: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
       { id: 'moonshot-v1-32k', label: 'moonshot-v1-32k' },
