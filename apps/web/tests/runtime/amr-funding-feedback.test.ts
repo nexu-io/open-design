@@ -12,6 +12,14 @@ function fixture(result: 'available' | 'insufficient' | 'unknown' | undefined) {
   return { scope, preflight, fetchMock };
 }
 
+function delayResponse(fetchMock: ReturnType<typeof fixture>['fetchMock'], preflight: unknown) {
+  vi.useFakeTimers();
+  fetchMock.mockImplementationOnce(async () => {
+    vi.advanceTimersByTime(5_001);
+    return new Response(JSON.stringify({ preflight }));
+  });
+}
+
 afterEach(() => { invalidateAmrFundingFeedback(); vi.unstubAllGlobals(); vi.useRealTimers(); resetWorkspaceAccountGeneration(); });
 describe('independent AMR funding feedback', () => {
   it('uses the dedicated read without fetching display billing or creating a run', async () => {
@@ -24,13 +32,13 @@ describe('independent AMR funding feedback', () => {
     const { scope } = fixture(result);
     expect(await checkAmrFundingFeedback(scope, 'model')).toBe('unknown');
   });
-  it.each(['member', 'workspace', 'model', 'stale', 'future'] as const)('rejects %s evidence', async (change) => {
-    const { scope, preflight } = fixture('insufficient');
+  it.each(['member', 'workspace', 'model', 'invalid-timestamp', 'late-response'] as const)('rejects %s evidence', async (change) => {
+    const { scope, preflight, fetchMock } = fixture('insufficient');
     if (change === 'member') preflight.workspaceMemberId = 'other';
     if (change === 'workspace') preflight.workspaceId = 'other';
     if (change === 'model') preflight.modelId = 'other';
-    if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 60_000).toISOString();
-    if (change === 'future') preflight.generatedAt = new Date(Date.now() + 60_000).toISOString();
+    if (change === 'invalid-timestamp') preflight.generatedAt = 'invalid';
+    if (change === 'late-response') delayResponse(fetchMock, preflight);
     expect(await checkAmrFundingFeedback(scope, 'model')).toBe('unknown');
   });
   it('deduplicates concurrent reads but never reuses a negative result for a new send', async () => {
@@ -135,7 +143,10 @@ describe('Home cached funding gate', () => {
     expect(retireHomeAmrFundingBlock(scope, 'model', {
       ...recovered, generatedAt: new Date(Date.now() - 60_000).toISOString(),
     })).toBe(false);
-    expect(retireHomeAmrFundingBlock(scope, 'model', recovered)).toBe(true);
+    expect(retireHomeAmrFundingBlock(scope, 'model', recovered)).toBe(false); // Not read by this client.
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ preflight: recovered })));
+    const evidence = await readSendTimeAmrFundingEvidence(scope, 'model');
+    expect(retireHomeAmrFundingBlock(scope, 'model', evidence.preflight!)).toBe(true);
     expect(takeHomeAmrFundingFastBlock(scope, 'model')).toBeNull();
     // The next confirmed exhaustion is a new episode, even within five
     // seconds. Retiring Home state must not grant Project a positive cache.
@@ -143,7 +154,7 @@ describe('Home cached funding gate', () => {
     expect(takeHomeAmrFundingFastBlock(scope, 'model')).not.toBeNull();
     noteHomeAmrFundingBlockPresented(scope, 'model');
     expect(takeHomeAmrFundingFastBlock(scope, 'model')).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
   it('uses only a recent exact-member insufficient preflight for early paint', async () => {
     vi.useFakeTimers();
@@ -186,12 +197,11 @@ describe('Home cached funding gate', () => {
     await checkAmrFundingFeedback(scope, 'model');
     expect(cachedHomeAmrFundingBlock(scope, 'model', snapshot)).toBeNull();
   });
-  it('retains confirmed insufficiency after its server timestamp ages out', async () => {
+  it('retains confirmed insufficiency after the observation ages out', async () => {
     vi.useFakeTimers();
-    const { scope, preflight } = fixture('insufficient');
-    preflight.generatedAt = new Date(Date.now() - 10_000).toISOString();
+    const { scope } = fixture('insufficient');
     await checkAmrFundingFeedback(scope, 'model');
-    vi.advanceTimersByTime(30_000 - 10_001);
+    vi.advanceTimersByTime(29_999);
     expect(cachedHomeAmrFundingBlock(scope, 'model')).not.toBeNull();
     vi.advanceTimersByTime(1);
     expect(cachedHomeAmrFundingBlock(scope, 'model')).not.toBeNull();
@@ -221,16 +231,16 @@ describe('Home cached funding gate', () => {
     vi.advanceTimersByTime(5_001);
     expect(cachedHomeAmrFundingBlock(scope, 'model')).toBeNull();
   });
-  it.each(['unknown', 'stale-available', 'wrong-model', 'unavailable', 'timeout'] as const)(
+  it.each(['unknown', 'late-response', 'wrong-model', 'unavailable', 'timeout'] as const)(
     'retains a confirmed block after invalidation and %s, then recovers on fresh available', async (result) => {
       const { scope, preflight, fetchMock } = fixture('insufficient');
       await checkAmrFundingFeedback(scope, 'model');
       invalidateAmrFundingFeedback();
       const confirmation = { ...preflight, fundingCheck: 'available' };
       if (result === 'unknown') confirmation.fundingCheck = 'unknown';
-      if (result === 'stale-available') confirmation.generatedAt = new Date(Date.now() - 31_000).toISOString();
       if (result === 'wrong-model') confirmation.modelId = 'other';
-      if (result === 'timeout') fetchMock.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
+      if (result === 'late-response') delayResponse(fetchMock, confirmation);
+      else if (result === 'timeout') fetchMock.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
       else fetchMock.mockResolvedValueOnce(result === 'unavailable'
         ? new Response(null, { status: 503 }) : new Response(JSON.stringify({ preflight: confirmation })));
       expect(await checkAmrFundingFeedback(scope, 'model')).toBe('unknown');
@@ -289,12 +299,12 @@ describe('Home uncached funding evidence before handoff', () => {
     expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'insufficient', preflight });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
-  it.each(['workspace', 'member', 'model', 'stale', 'missing', 'offline'] as const)('cannot authorize Home using %s evidence', async (change) => {
+  it.each(['workspace', 'member', 'model', 'invalid-timestamp', 'missing', 'offline'] as const)('cannot authorize Home using %s evidence', async (change) => {
     const { scope, preflight, fetchMock } = fixture('available');
     if (change === 'workspace') preflight.workspaceId = 'previous-space';
     if (change === 'member') preflight.workspaceMemberId = 'previous-member';
     if (change === 'model') preflight.modelId = 'previous-model';
-    if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 31_000).toISOString();
+    if (change === 'invalid-timestamp') preflight.generatedAt = 'invalid';
     if (change === 'missing') fetchMock.mockResolvedValue(new Response('{}'));
     if (change === 'offline') fetchMock.mockRejectedValue(new Error('offline'));
     expect(await readFreshAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'unknown', preflight: null });
@@ -337,13 +347,13 @@ describe('same funding observation also explains the plan', () => {
     expect(await checkAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'insufficient', preflight });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
-  it.each(['workspace', 'member', 'model', 'stale', 'future'] as const)('does not expose untrusted %s tier evidence', async (change) => {
-    const { scope, preflight } = fixture('insufficient');
+  it.each(['workspace', 'member', 'model', 'invalid-timestamp', 'late-response'] as const)('does not expose untrusted %s tier evidence', async (change) => {
+    const { scope, preflight, fetchMock } = fixture('insufficient');
     if (change === 'workspace') preflight.workspaceId = 'other-workspace';
     if (change === 'member') preflight.workspaceMemberId = 'other-member';
     if (change === 'model') preflight.modelId = 'other-model';
-    if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 31_000).toISOString();
-    if (change === 'future') preflight.generatedAt = new Date(Date.now() + 6_000).toISOString();
+    if (change === 'invalid-timestamp') preflight.generatedAt = 'invalid';
+    if (change === 'late-response') delayResponse(fetchMock, preflight);
     expect(await checkAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'unknown', preflight: null });
   });
   it('does not expose a late old-account preflight or reuse its positive tier', async () => {
@@ -361,6 +371,61 @@ describe('same funding observation also explains the plan', () => {
 
 
 describe('explicit Send funding observations', () => {
+  it('keeps hint expiry independent of wall-clock corrections', async () => {
+    vi.useFakeTimers();
+    const { scope, preflight, fetchMock } = fixture('available');
+    await checkAmrFundingFeedback(scope, 'model');
+    vi.setSystemTime(Date.now() - 104_000);
+    vi.advanceTimersByTime(4_999);
+    expect(await checkAmrFundingFeedback(scope, 'model')).toBe('available');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    preflight.fundingCheck = 'insufficient';
+    vi.advanceTimersByTime(1);
+    expect(await checkAmrFundingFeedback(scope, 'model')).toBe('insufficient');
+    expect(recentHomeAmrFundingInsufficiency(scope, 'model')).not.toBeNull();
+    vi.setSystemTime(Date.now() + 208_000);
+    vi.advanceTimersByTime(5_000);
+    expect(recentHomeAmrFundingInsufficiency(scope, 'model')).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(recentHomeAmrFundingInsufficiency(scope, 'model')).toBeNull();
+    expect(cachedHomeAmrFundingBlock(scope, 'model')).not.toBeNull();
+  });
+  it('rejects recovery evidence after its local age limit or an account change', async () => {
+    vi.useFakeTimers();
+    const { scope } = fixture('available');
+    const evidence = await readSendTimeAmrFundingEvidence(scope, 'model');
+    vi.setSystemTime(Date.now() - 104_000);
+    vi.advanceTimersByTime(30_000);
+    expect(retireHomeAmrFundingBlock(scope, 'model', evidence.preflight!)).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(retireHomeAmrFundingBlock(scope, 'model', evidence.preflight!)).toBe(false);
+    const latest = await readSendTimeAmrFundingEvidence(scope, 'model');
+    advanceWorkspaceAccountGeneration('after-funding-read');
+    expect(retireHomeAmrFundingBlock(scope, 'model', latest.preflight!)).toBe(false);
+  });
+  it('rejects a response whose body arrives after the request budget', async () => {
+    vi.useFakeTimers();
+    const { scope, preflight, fetchMock } = fixture('available');
+    let finish!: (body: unknown) => void;
+    fetchMock.mockResolvedValueOnce({ ok: true, json: () => new Promise(resolve => { finish = resolve; }) } as Response);
+    const result = readSendTimeAmrFundingEvidence(scope, 'model');
+    await vi.advanceTimersByTimeAsync(5_001);
+    finish({ preflight });
+    expect(await result).toEqual({ kind: 'unknown', preflight: null });
+  });
+  it.each([104_000, -104_000])('accepts a fresh verdict with a %s ms client clock offset and retires the old block', async (offset) => {
+    vi.useFakeTimers();
+    const { scope, preflight, fetchMock } = fixture('insufficient');
+    await checkAmrFundingFeedback(scope, 'model');
+    expect(cachedHomeAmrFundingBlock(scope, 'model')).not.toBeNull();
+    vi.setSystemTime(Date.now() + offset);
+    preflight.fundingCheck = 'available';
+    const evidence = await readSendTimeAmrFundingEvidence(scope, 'model');
+    expect(evidence).toEqual({ kind: 'available', preflight });
+    expect(retireHomeAmrFundingBlock(scope, 'model', evidence.preflight!)).toBe(true);
+    expect(cachedHomeAmrFundingBlock(scope, 'model')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
   it.each([1, 8, 99])('accepts its own fresh server proof after %s display invalidations', async (invalidations) => {
     const { scope, preflight, fetchMock } = fixture('available');
     let finish!: (response: Response) => void;
@@ -379,14 +444,14 @@ describe('explicit Send funding observations', () => {
     expect(await readSendTimeAmrFundingEvidence(scope, 'model')).toEqual({ kind: 'insufficient', preflight });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
-  it.each(['workspace', 'member', 'model', 'stale', 'future', 'missing', 'forbidden', 'timeout', 'offline', 'unknown'] as const)(
+  it.each(['workspace', 'member', 'model', 'invalid-timestamp', 'late-response', 'missing', 'forbidden', 'timeout', 'offline', 'unknown'] as const)(
     'cannot authorize Send using %s evidence despite display invalidation', async (change) => {
       const { scope, preflight, fetchMock } = fixture('available');
       if (change === 'workspace') preflight.workspaceId = 'other-space';
       if (change === 'member') preflight.workspaceMemberId = 'other-member';
       if (change === 'model') preflight.modelId = 'other-model';
-      if (change === 'stale') preflight.generatedAt = new Date(Date.now() - 31_000).toISOString();
-      if (change === 'future') preflight.generatedAt = new Date(Date.now() + 6_000).toISOString();
+      if (change === 'invalid-timestamp') preflight.generatedAt = 'invalid';
+      if (change === 'late-response') delayResponse(fetchMock, preflight);
       if (change === 'missing') fetchMock.mockResolvedValue(new Response('{}'));
       if (change === 'forbidden') fetchMock.mockResolvedValue(new Response(null, { status: 403 }));
       if (change === 'timeout') fetchMock.mockRejectedValue(new DOMException('timeout', 'TimeoutError'));

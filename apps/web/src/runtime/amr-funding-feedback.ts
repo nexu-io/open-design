@@ -7,10 +7,19 @@ interface FundingEvidence { kind: FundingFeedback; preflight: WorkspaceBillingPr
 const pending = new Map<string, { generation: number; promise: Promise<FundingEvidence> }>();
 let positive: { key: string; expiresAt: number; preflight: WorkspaceBillingPreflight } | null = null;
 const homeBlocks = new Map<string, AmrWalletSnapshot>();
-const recentHomeInsufficiency = new Map<string, { preflight: WorkspaceBillingPreflight; observedAt: number }>();
+const recentHomeInsufficiency = new Map<string, WorkspaceBillingPreflight>();
 const presentedHomeInsufficiency = new Set<string>();
+const observations = new WeakMap<WorkspaceBillingPreflight, { startedAt: number; accountGeneration: number }>();
 let blockAccountGeneration = currentWorkspaceAccountGeneration();
 let cacheGeneration = 0;
+
+/** Server timestamps and the desktop clock need not agree. Age only responses
+ * read here, using elapsed time since their no-store request began. */
+function observationAge(preflight: WorkspaceBillingPreflight): number {
+  const observation = observations.get(preflight);
+  return observation?.accountGeneration === currentWorkspaceAccountGeneration()
+    ? performance.now() - observation.startedAt : Infinity;
+}
 
 /** Distinguish a superseded send-time read from an ordinary unavailable read. */
 export function currentAmrFundingFeedbackGeneration(): number {
@@ -38,7 +47,7 @@ export function cachedHomeAmrFundingBlock(
 ): AmrWalletSnapshot | null {
   if (!scope) return null;
   const key = fundingKey(scope, modelId);
-  if (positive?.key === key && positive.expiresAt > Date.now()) return null;
+  if (positive?.key === key && positive.expiresAt > performance.now()) return null;
   return homeBlocks.get(key) ?? memorySnapshot;
 }
 
@@ -51,10 +60,8 @@ export function recentHomeAmrFundingInsufficiency(
   if (!scope) return null;
   const key = fundingKey(scope, modelId);
   const recent = recentHomeInsufficiency.get(key);
-  if (!recent || positive?.key === key && positive.expiresAt > Date.now()) return null;
-  const age = Date.now() - Date.parse(recent.preflight.generatedAt);
-  return Date.now() - recent.observedAt <= 5_000 && Number.isFinite(age) && age >= -5_000 && age <= 5_000
-    ? recent.preflight : null;
+  if (!recent || positive?.key === key && positive.expiresAt > performance.now()) return null;
+  return observationAge(recent) <= 5_000 ? recent : null;
 }
 
 /** A remembered negative may accelerate only the first dialog of this
@@ -88,10 +95,10 @@ export function retireHomeAmrFundingBlock(
   modelId: string | null,
   preflight: WorkspaceBillingPreflight,
 ): boolean {
-  const age = Date.now() - Date.parse(preflight.generatedAt);
+  const age = observationAge(preflight);
   if (preflight.schemaVersion !== 1 || preflight.workspaceId !== scope.workspaceId
     || preflight.workspaceMemberId !== scope.workspaceMemberId || preflight.modelId !== modelId
-    || preflight.fundingCheck !== 'available' || !Number.isFinite(age) || age < -5_000 || age > 30_000) return false;
+    || preflight.fundingCheck !== 'available' || age > 30_000) return false;
   const key = fundingKey(scope, modelId);
   homeBlocks.delete(key);
   recentHomeInsufficiency.delete(key);
@@ -108,7 +115,7 @@ export function confirmHomeAmrFundingAvailable(
 ): void {
   if (!retireHomeAmrFundingBlock(scope, modelId, preflight)) return;
   const key = fundingKey(scope, modelId);
-  positive = { key, expiresAt: Date.now() + 5_000, preflight };
+  positive = { key, expiresAt: performance.now() + 5_000, preflight };
 }
 
 /** Invalidate reusable positives and in-flight reads, never a confirmed block. */
@@ -151,20 +158,23 @@ async function readAmrFundingObservation(
   if (!isCurrent()) return unknown;
   const generation = currentWorkspaceAccountGeneration();
   try {
+    const startedAt = performance.now();
+    const signal = AbortSignal.timeout(5_000);
     const query = new URLSearchParams({ workspaceId: scope.workspaceId });
     if (modelId) query.set('modelId', modelId);
     const response = await fetch(`/api/workspace/billing/preflight?${query}`, {
-      cache: 'no-store', signal: AbortSignal.timeout(5_000),
+      cache: 'no-store', signal,
     });
     if (!response.ok) return unknown;
     const { preflight } = await response.json() as WorkspaceBillingPreflightResponse;
-    const age = Date.now() - Date.parse(preflight?.generatedAt);
     if (!isCurrent() || generation !== currentWorkspaceAccountGeneration()
       || !preflight
       || preflight.schemaVersion !== 1 || preflight.workspaceId !== scope.workspaceId
       || preflight.workspaceMemberId !== scope.workspaceMemberId || preflight.modelId !== modelId
-      || !Number.isFinite(age) || age < -5_000 || age > 30_000) return unknown;
+      || !Number.isFinite(Date.parse(preflight.generatedAt))
+      || signal.aborted || performance.now() - startedAt > 5_000) return unknown;
     if (preflight.fundingCheck === 'available' || preflight.fundingCheck === 'insufficient') {
+      observations.set(preflight, { startedAt, accountGeneration: generation });
       return { kind: preflight.fundingCheck, preflight };
     }
     return unknown;
@@ -184,7 +194,7 @@ export function checkAmrFundingEvidence(
   if (!scope || !isCurrent()) return Promise.resolve(unknown);
   const generation = currentWorkspaceAccountGeneration();
   const key = fundingKey(scope, modelId);
-  if (positive?.key === key && positive.expiresAt > Date.now()) return Promise.resolve({ kind: 'available', preflight: positive.preflight });
+  if (positive?.key === key && positive.expiresAt > performance.now()) return Promise.resolve({ kind: 'available', preflight: positive.preflight });
   const requestGeneration = cacheGeneration;
   const existing = pending.get(key);
   if (existing) {
@@ -204,13 +214,13 @@ export function checkAmrFundingEvidence(
         homeBlocks.delete(key);
         recentHomeInsufficiency.delete(key);
         presentedHomeInsufficiency.delete(key);
-        positive = { key, expiresAt: Date.now() + 5_000, preflight };
+        positive = { key, expiresAt: performance.now() + 5_000, preflight };
         return evidence;
       }
       if (preflight.fundingCheck === 'insufficient') {
         const balance = preflight.balanceUsd?.trim();
         if (balance && Number.isFinite(Number(balance)) && Number(balance) <= 0) {
-          recentHomeInsufficiency.set(key, { preflight, observedAt: Date.now() });
+          recentHomeInsufficiency.set(key, preflight);
           homeBlocks.set(key, {
             status: 'available', profile: 'default', user: null, balanceUsd: balance,
             updatedAt: preflight.generatedAt, fetchedAt: new Date().toISOString(),
