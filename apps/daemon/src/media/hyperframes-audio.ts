@@ -1,5 +1,6 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { load } from 'cheerio';
 
 export interface HyperFramesAudioTrack {
@@ -27,7 +28,11 @@ export async function prepareHyperFramesAudio(html: string, compositionDir: stri
     if (!src || /^(?:[a-z][a-z\d+.-]*:|[\\/])/i.test(src)) {
       throw new Error('HyperFrames audio requires a local relative src inside the composition');
     }
-    const file = await realpath(path.resolve(root, src));
+    const sourceUrl = new URL(src, pathToFileURL(`${root}${path.sep}`));
+    if (sourceUrl.search || sourceUrl.hash) {
+      throw new Error('HyperFrames audio requires a local file without a query or fragment; use pre-trimmed tracks');
+    }
+    const file = await realpath(fileURLToPath(sourceUrl));
     const relative = path.relative(root, file);
     if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
       throw new Error('HyperFrames audio must stay inside the composition');
