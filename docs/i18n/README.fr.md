@@ -303,6 +303,12 @@ Si le navigateur demande des identifiants, utilisez `open-design` comme nom d'ut
 
 Le modèle Sealos App Store exécute l'image Docker publiée d'OpenDesign avec un stockage persistant pour l'espace de travail et une Basic Auth sur le proxy public. Pour les déploiements Docker publics ou partagés personnalisés, suivez les indications de proxy inverse et `OPEN_DESIGN_ALLOWED_ORIGINS` dans [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚂 Déployer sur Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Le modèle Railway exécute l'image Docker publiée d'OpenDesign avec les CLI Claude Code, Codex et OpenCode ajoutées, un stockage persistant pour les projets et les connexions des CLI, et la connexion `OD_API_TOKEN` (utilisateur `open-design`) en façade. Pour utiliser ces agents, ajoutez au service une clé de modèle comme `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` ou `OPENROUTER_API_KEY`.
+
 ### 🧑‍💻 Exécutez depuis les sources
 
 ```bash

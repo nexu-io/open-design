@@ -289,6 +289,12 @@ docker compose up -d
 
 يشغّل قالب Sealos App Store صورة Docker المنشورة لـ OpenDesign مع تخزين دائم لمساحة العمل وBasic Auth على الوكيل العام. لعمليات نشر Docker العامة أو المشتركة المخصصة، اتبع إرشادات الوكيل العكسي و`OPEN_DESIGN_ALLOWED_ORIGINS` في [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚂 النشر على Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+يشغّل قالب Railway صورة OpenDesign المنشورة على Docker مع إضافة أدوات سطر الأوامر Claude Code وCodex وOpenCode، وتخزين دائم للمشاريع ولبيانات تسجيل الدخول لهذه الأدوات، مع تسجيل الدخول عبر `OD_API_TOKEN` (اسم المستخدم `open-design`). لاستخدام هذه الوكلاء، أضف إلى الخدمة مفتاح نموذج مثل `ANTHROPIC_API_KEY` أو `OPENAI_API_KEY` أو `OPENROUTER_API_KEY`.
+
 ### 🧑‍💻 التشغيل من المصدر
 
 ```bash

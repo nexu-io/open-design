@@ -287,6 +287,12 @@ docker compose up -d
 
 Sealos App Store テンプレートは、公開済みの OpenDesign Docker イメージを永続的なワークスペースストレージと公開プロキシの Basic Auth 付きで実行します。独自の公開または共有 Docker デプロイでは、[`deploy/README.md`](../../deploy/README.md#local-compose) のリバースプロキシと `OPEN_DESIGN_ALLOWED_ORIGINS` の手順に従ってください。
 
+### 🚂 Railway にデプロイ
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Railway テンプレートは、公開済みの OpenDesign Docker イメージに Claude Code、Codex、OpenCode の CLI を追加して実行し、プロジェクトと CLI のログイン情報を永続ストレージに保存し、`OD_API_TOKEN` のログイン（ユーザー名 `open-design`）で保護します。これらのエージェントを使うには、サービスに `ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`OPENROUTER_API_KEY` などのモデルキーを追加してください。
+
 ### 🧑‍💻 ソースから実行
 
 ```bash

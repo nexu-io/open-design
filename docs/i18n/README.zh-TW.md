@@ -298,6 +298,12 @@ docker compose up -d
 
 Sealos App Store 範本會執行已發布的 OpenDesign Docker 映像，提供持久化工作區儲存，並在公開代理層啟用 Basic Auth。自訂公開或共享 Docker 部署請遵循 [`deploy/README.md`](../../deploy/README.md#local-compose) 中的反向代理與 `OPEN_DESIGN_ALLOWED_ORIGINS` 指引。
 
+### 🚂 部署到 Railway
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/opendesign)
+
+Railway 範本會執行已發布的 OpenDesign Docker 映像，並額外安裝 Claude Code、Codex 與 OpenCode CLI，為專案與 CLI 登入資訊提供持久化儲存，並透過 `OD_API_TOKEN` 登入（使用者名稱 `open-design`）保護存取。要使用這些 agent，請在服務中加入 `ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 或 `OPENROUTER_API_KEY` 等模型金鑰。
+
 ### 🧑‍💻 從原始碼執行
 
 ```bash
