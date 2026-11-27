@@ -98,6 +98,35 @@ afterEach(() => {
 });
 
 describe('nextRunAtForSchedule DST handling', () => {
+  it.each([
+    [
+      'the next daily date in New York',
+      { kind: 'daily', time: '09:00', timezone: 'America/New_York' },
+      '2026-03-08T04:30:00Z',
+      '2026-03-08T13:00:00.000Z',
+    ],
+    [
+      'the next weekly date in New York',
+      { kind: 'weekly', time: '09:00', timezone: 'America/New_York', weekday: 0 },
+      '2026-03-08T04:30:00Z',
+      '2026-03-08T13:00:00.000Z',
+    ],
+    [
+      'Friday in Cairo',
+      { kind: 'weekdays', time: '09:00', timezone: 'Africa/Cairo' },
+      '2026-04-23T21:30:00Z',
+      '2026-04-24T06:00:00.000Z',
+    ],
+    [
+      'the next daily date across Lord Howe\'s half-hour change',
+      { kind: 'daily', time: '09:00', timezone: 'Australia/Lord_Howe' },
+      '2026-10-03T13:15:00Z',
+      '2026-10-03T22:00:00.000Z',
+    ],
+  ] as const)('does not skip %s after a late-night check', (_name, schedule, now, expected) => {
+    expect(nextRunAtForSchedule(schedule, new Date(now))?.toISOString()).toBe(expected);
+  });
+
   it('does not fire before the requested wall time on a spring-forward gap day', () => {
     // 2026-03-08 in America/New_York: clocks jump 02:00 EST → 03:00 EDT, so
     // a daily routine scheduled at 02:30 has no valid wall clock that day.

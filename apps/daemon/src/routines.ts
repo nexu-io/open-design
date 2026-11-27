@@ -314,19 +314,23 @@ function nextWallTimeMatching(
   if (!Number.isFinite(hour) || hour < 0 || hour > 23) return null;
   if (!Number.isFinite(minute) || minute < 0 || minute > 59) return null;
 
-  // Walk day by day in the target timezone.
+  // Advance calendar dates, not 24-hour instants: a late-night probe can
+  // skip the next local date when a spring-forward day is shorter than 24h.
+  const today = partsInTimezone(timezone, now);
   for (let offset = 0; offset < 14; offset += 1) {
-    const probe = new Date(now.getTime() + offset * 24 * 60 * 60_000);
-    const parts = partsInTimezone(timezone, probe);
-    if (!predicate(parts.weekday)) continue;
+    const date = new Date(Date.UTC(today.year, today.month - 1, today.day + offset));
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+    const day = date.getUTCDate();
+    if (!predicate(date.getUTCDay() as Weekday)) continue;
     const candidates = tzWallToUtcCandidates(
-      timezone, parts.year, parts.month, parts.day, hour, minute,
+      timezone, year, month, day, hour, minute,
     );
     if (candidates.length === 0) {
       // Spring-forward gap: no valid wall instant exists today; pick the
       // synthesized post-gap fallback so the routine still fires today.
       const fallback = tzWallToUtcGapFallback(
-        timezone, parts.year, parts.month, parts.day, hour, minute,
+        timezone, year, month, day, hour, minute,
       );
       if (!fallback) return null;
       if (fallback.getTime() > now.getTime()) return fallback;
