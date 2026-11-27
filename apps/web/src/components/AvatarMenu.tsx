@@ -13,8 +13,11 @@ import {
   effectiveAgentModelChoice,
 } from './agentModelSelection';
 import {
+  matchesModelSearch,
   modelVersionLabel,
   orderModelOptionsByAvailability,
+  sharedProviderPrefix,
+  withoutSharedProviderPrefix,
 } from './modelOptions';
 import {
   mergeProviderModelOptions,
@@ -133,6 +136,7 @@ export function AvatarMenu({
       : undefined,
   );
   const [open, setOpen] = useState(false);
+  const [modelQuery, setModelQuery] = useState('');
   // Toggle that reports the closed→open transition (for analytics) without
   // firing on close.
   function toggleOpen() {
@@ -156,6 +160,10 @@ export function AvatarMenu({
       return true;
     });
   }, [openSignal, onOpen]);
+  // The model filter is per-open: a closed popover reopens on the full list.
+  useEffect(() => {
+    if (!open) setModelQuery('');
+  }, [open]);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -265,6 +273,13 @@ export function AvatarMenu({
     if (currentAgent?.id !== 'amr') return models;
     return orderModelOptionsByAvailability(models);
   }, [currentAgent]);
+
+  // A provider prefix shared by the whole catalog is context, not identity —
+  // dropped from the row labels below so the ellipsised half stays the part
+  // that tells the rows apart.
+  const agentSharedProviderPrefix = sharedProviderPrefix(
+    currentAgentModelOptions.map((m) => m.label),
+  );
 
   const amrAgent = useMemo(
     () => agents.find((a) => a.id === 'amr' && a.available) ?? null,
@@ -545,6 +560,37 @@ export function AvatarMenu({
         (currentAgent.reasoningOptions && currentAgent.reasoningOptions.length > 0)),
   );
 
+  // Search filter for the model lists below (project composer agent menu).
+  // Matches id and label with the same rule the shared `SearchableModelSelect`
+  // uses, so a query means the same thing on every model picker.
+  const normalizedModelQuery = modelQuery.trim().toLowerCase();
+  const matchesQuery = (model: { id: string; label: string }) =>
+    !normalizedModelQuery || matchesModelSearch(model, normalizedModelQuery);
+  const customAgentModelOption =
+    currentAgent?.models &&
+    currentModelId &&
+    !currentAgent.models.some((m) => m.id === currentModelId)
+      ? {
+          id: currentModelId,
+          label: `${currentModelId} ${t('avatar.customSuffix')}`,
+        }
+      : null;
+  const visibleAgentModelOptions = [
+    ...currentAgentModelOptions,
+    ...(customAgentModelOption ? [customAgentModelOption] : []),
+  ].filter(matchesQuery);
+  const customByokModelOption =
+    config.model && !byokModelOptions.some((m) => m.id === config.model)
+      ? {
+          id: config.model,
+          label: `${config.model} ${t('avatar.customSuffix')}`,
+        }
+      : null;
+  const visibleByokModelOptions = [
+    ...byokModelOptions,
+    ...(customByokModelOption ? [customByokModelOption] : []),
+  ].filter(matchesQuery);
+
   return (
     <div className={`avatar-menu avatar-menu--${placement}`} ref={wrapRef}>
       <button
@@ -598,23 +644,30 @@ export function AvatarMenu({
                       <span className="avatar-select-label">
                         {t('avatar.modelLabel')}
                       </span>
+                      <input
+                        type="search"
+                        className="ds-picker-search avatar-model-search"
+                        value={modelQuery}
+                        placeholder={t('newproj.modelSearch')}
+                        aria-label={t('newproj.modelSearch')}
+                        data-testid="avatar-model-search"
+                        onChange={(event) => setModelQuery(event.target.value)}
+                      />
+                      {visibleAgentModelOptions.length === 0 ? (
+                        <div
+                          className="avatar-model-empty"
+                          data-testid="avatar-model-empty"
+                        >
+                          {t('homeHero.footer.noMatches')}
+                        </div>
+                      ) : null}
                       <div
                         className="avatar-model-list"
                         role="radiogroup"
                         aria-label={t('avatar.modelLabel')}
                         data-testid="avatar-model-list"
                       >
-                        {(currentModelId &&
-                        !currentAgent.models.some((m) => m.id === currentModelId)
-                          ? [
-                              ...currentAgentModelOptions,
-                              {
-                                id: currentModelId,
-                                label: `${currentModelId} ${t('avatar.customSuffix')}`,
-                              },
-                            ]
-                          : currentAgentModelOptions
-                        ).map((model) => {
+                        {visibleAgentModelOptions.map((model) => {
                           const active = model.id === currentModelId;
                           // Same gate the home composer's compact list asks —
                           // one definition of "locked", derived from what the
@@ -675,7 +728,10 @@ export function AvatarMenu({
                                 })()}
                               </span>
                               <span className="avatar-model-option-label">
-                                {modelVersionLabel(model.id, model.label)}
+                                {withoutSharedProviderPrefix(
+                                  modelVersionLabel(model.id, model.label),
+                                  agentSharedProviderPrefix,
+                                )}
                               </span>
                               {locked ? (
                                 <RemixIcon
@@ -788,23 +844,30 @@ export function AvatarMenu({
                   <span className="avatar-select-label">
                     {t('avatar.modelLabel')}
                   </span>
+                  <input
+                    type="search"
+                    className="ds-picker-search avatar-model-search"
+                    value={modelQuery}
+                    placeholder={t('newproj.modelSearch')}
+                    aria-label={t('newproj.modelSearch')}
+                    data-testid="avatar-model-search"
+                    onChange={(event) => setModelQuery(event.target.value)}
+                  />
+                  {visibleByokModelOptions.length === 0 ? (
+                    <div
+                      className="avatar-model-empty"
+                      data-testid="avatar-model-empty"
+                    >
+                      {t('homeHero.footer.noMatches')}
+                    </div>
+                  ) : null}
                   <div
                     className="avatar-model-list"
                     role="radiogroup"
                     aria-label={t('avatar.modelLabel')}
                     data-testid="avatar-model-list"
                   >
-                    {(config.model &&
-                    !byokModelOptions.some((m) => m.id === config.model)
-                      ? [
-                          ...byokModelOptions,
-                          {
-                            id: config.model,
-                            label: `${config.model} ${t('avatar.customSuffix')}`,
-                          },
-                        ]
-                      : byokModelOptions
-                    ).map((model) => {
+                    {visibleByokModelOptions.map((model) => {
                       const active = model.id === config.model;
                       return (
                         <button
