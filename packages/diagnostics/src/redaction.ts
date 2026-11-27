@@ -5,8 +5,9 @@ const URL_QUERY_SECRET_RE = /([?&#])(token|password|secret|key|dsn|api[_-]?key|a
 // Catch loose key=value pairs in log lines that aren't inside a URL — e.g. env
 // dumps, command-line args, or json-line meta. The leading boundary stops it
 // from matching mid-identifier (e.g. `not_a_token`). Order alternatives long-
-// first so `access_token` wins over `token`.
-const BARE_SECRET_RE = /(^|[\s,;])(access_token|refresh_token|id_token|api[_-]?key|password|secret|token|auth(?:orization)?)(=|:\s*)([^\s,;"']+)/gi;
+// first so `access_token` wins over `token`. Quoted values may contain spaces
+// and delimiters; an unfinished quote stops at the next log line boundary.
+const BARE_SECRET_RE = /(^|[\s,;])(access_token|refresh_token|id_token|api[_-]?key|password|secret|token|auth(?:orization)?)(=|:\s*)("(?:\\[^\r\n]|[^"\\\r\n])*"?|'(?:\\[^\r\n]|[^'\\\r\n])*'?|[^\s,;"']+)/gi;
 
 // Bearer / Token / Basic auth schemes embed the secret after the scheme
 // keyword, so the BARE pattern above stops at the space before `Bearer` and
