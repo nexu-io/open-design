@@ -27,16 +27,32 @@ function errorMessage(error: unknown): string {
  */
 export async function waitForHttpOk(url: string, { timeoutMs = 20000 }: HttpWaitOptions = {}): Promise<true> {
   const startedAt = Date.now();
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), timeoutMs);
   let lastError: Error | null = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch(url, { cache: "no-store" });
-      if (response.ok) return true;
-      lastError = new Error(`HTTP ${response.status} from ${url}`);
-    } catch (error) {
-      lastError = new Error(errorMessage(error));
+  try {
+    while (Date.now() - startedAt < timeoutMs && !controller.signal.aborted) {
+      try {
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        // Readiness needs only the status. Release streaming bodies without
+        // letting a slow or failed cancellation extend the readiness deadline.
+        void response.body?.cancel().catch(() => undefined);
+        if (controller.signal.aborted) break;
+        if (response.ok) return true;
+        lastError = new Error(`HTTP ${response.status} from ${url}`);
+      } catch (error) {
+        lastError = new Error(errorMessage(error));
+      }
+      const remaining = timeoutMs - (Date.now() - startedAt);
+      if (remaining <= 0 || controller.signal.aborted) break;
+      try {
+        await sleep(Math.min(150, remaining), undefined, { signal: controller.signal });
+      } catch (error) {
+        if (!controller.signal.aborted) throw error;
+      }
     }
-    await sleep(150);
+    throw new Error(`timed out waiting for ${url}${lastError ? ` (${lastError.message})` : ""}`);
+  } finally {
+    clearTimeout(deadline);
   }
-  throw new Error(`timed out waiting for ${url}${lastError ? ` (${lastError.message})` : ""}`);
 }
