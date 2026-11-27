@@ -58,8 +58,8 @@ type ProjectScan = {
   readmeExcerpt: string | undefined;
   cssVariables: CssVariable[];
   tailwindSignals: string[];
-  assets: AssetCandidate[];
-  fonts: FileCandidate[];
+  assets: CopyCandidate[];
+  fonts: CopyCandidate[];
   components: ComponentSignal[];
   files: ProjectFile[];
 };
@@ -82,6 +82,8 @@ type FileCandidate = {
   relPath: string;
   size: number;
 };
+
+type CopyCandidate = FileCandidate & { targetName: string };
 
 type ProjectFile = {
   absPath: string;
@@ -222,8 +224,8 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
     readmeExcerpt,
     cssVariables,
     tailwindSignals: await readTailwindSignals(sourceRoot),
-    assets: await findAssets(sourceRoot, files),
-    fonts: findFonts(sourceRoot, files),
+    assets: assignCopyNames(await findAssets(sourceRoot, files)),
+    fonts: assignCopyNames(findFonts(sourceRoot, files)),
     components: findComponentSignals(files),
     files,
   };
@@ -372,26 +374,52 @@ function findFonts(sourceRoot: string, files: ProjectFile[]): FileCandidate[] {
     }));
 }
 
-async function copyAssets(assets: AssetCandidate[], outDir: string): Promise<string[]> {
+function assignCopyNames(files: FileCandidate[]): CopyCandidate[] {
+  const preferred = files.map((file) => {
+    const ext = path.extname(file.relPath);
+    return slugify(path.basename(file.relPath, ext)) + ext.toLowerCase();
+  });
+  // Reserve natural names before allocating suffixes, so logo-2.svg keeps its name.
+  const reserved = new Set(preferred);
+  const used = new Set<string>();
+  return files.map((file, index) => {
+    const original = preferred[index]!;
+    let targetName = original;
+    if (used.has(targetName)) {
+      const ext = path.extname(original);
+      const stem = path.basename(original, ext);
+      let number = 2;
+      do {
+        const suffix = `-${number++}`;
+        // Normalized names are ASCII; leave room for the suffix and extension.
+        targetName = `${stem.slice(0, 255 - suffix.length - ext.length)}${suffix}${ext}`;
+      } while (reserved.has(targetName) || used.has(targetName));
+    }
+    used.add(targetName);
+    return { ...file, targetName };
+  });
+}
+
+async function copyAssets(assets: CopyCandidate[], outDir: string): Promise<string[]> {
   if (assets.length === 0) return [];
   const assetsDir = path.join(outDir, 'assets');
   await mkdir(assetsDir, { recursive: true });
   const copied: string[] = [];
   for (const asset of assets) {
-    const targetName = slugify(path.basename(asset.relPath, path.extname(asset.relPath))) + path.extname(asset.relPath).toLowerCase();
+    const targetName = asset.targetName;
     await copyFile(asset.absPath, path.join(assetsDir, targetName));
     copied.push(`assets/${targetName}`);
   }
   return copied;
 }
 
-async function copyFonts(fonts: FileCandidate[], outDir: string): Promise<string[]> {
+async function copyFonts(fonts: CopyCandidate[], outDir: string): Promise<string[]> {
   if (fonts.length === 0) return [];
   const fontsDir = path.join(outDir, 'fonts');
   await mkdir(fontsDir, { recursive: true });
   const copied: string[] = [];
   for (const font of fonts) {
-    const targetName = slugify(path.basename(font.relPath, path.extname(font.relPath))) + path.extname(font.relPath).toLowerCase();
+    const targetName = font.targetName;
     await copyFile(font.absPath, path.join(fontsDir, targetName));
     copied.push(`fonts/${targetName}`);
   }
@@ -464,7 +492,7 @@ function renderManifest(
       ? {
           fonts: scan.fonts.map((font) => ({
             family: cleanDisplayName(path.basename(font.relPath, path.extname(font.relPath))),
-            file: `fonts/${slugify(path.basename(font.relPath, path.extname(font.relPath)))}${path.extname(font.relPath).toLowerCase()}`,
+            file: `fonts/${font.targetName}`,
           })),
         }
       : {}),
