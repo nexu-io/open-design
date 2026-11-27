@@ -1950,7 +1950,7 @@ describe('WorkspaceTabsBar dock dropdown run status', () => {
     dock.remove();
   });
 
-  it('pins the current project but orders the other tabs by user sends rather than visits', async () => {
+  it('matches Home recency order even when switching to an older project', async () => {
     render(<WorkspaceTabsBar
       route={{ ...projectRoute, projectId: projectGamma.id }}
       projects={[
@@ -1965,16 +1965,36 @@ describe('WorkspaceTabsBar dock dropdown run status', () => {
     const names = () => within(screen.getByRole('listbox')).getAllByRole('option')
       .map(row => row.textContent);
     expect(names()).toEqual([
-      expect.stringContaining('Project Alpha'),
       expect.stringContaining('Project Gamma'),
       expect.stringContaining('Project Beta'),
+      expect.stringContaining('Project Alpha'),
     ]);
     act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
     expect(names()).toEqual([
-      expect.stringContaining('Project Beta'),
       expect.stringContaining('Project Gamma'),
+      expect.stringContaining('Project Beta'),
       expect.stringContaining('Project Alpha'),
     ]);
+  });
+
+  it('keeps same-named projects distinct and refreshes their names and recent order by ID', async () => {
+    const rows: [Project, Project] = [
+      { ...project, name: 'Hi', lastUserQueryAt: 5 },
+      { ...projectBeta, name: 'Hi', lastUserQueryAt: 10 },
+    ];
+    const view = render(<WorkspaceTabsBar route={projectRoute} projects={rows} />);
+    act(() => { openWorkspaceTab({ ...projectRoute, projectId: projectBeta.id }); });
+    fireEvent.click(await screen.findByTestId('workspace-tabs-dropdown-trigger'));
+    const options = () => within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(options().map(row => row.textContent)).toEqual(['Hi', 'Hi']);
+    expect(options().map(row => row.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+
+    view.rerender(<WorkspaceTabsBar route={projectRoute} projects={[
+      { ...rows[0], name: 'Renamed Alpha', lastUserQueryAt: 20 },
+      rows[1],
+    ]} />);
+    expect(options().map(row => row.textContent)).toEqual(['Renamed Alpha', 'Hi']);
+    expect(options().map(row => row.getAttribute('aria-selected'))).toEqual(['false', 'true']);
   });
 
   it('marks a finished project with the still blue ball and spends it when the row opens it', async () => {
