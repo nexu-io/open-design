@@ -289,6 +289,12 @@ docker compose up -d
 
 يشغّل قالب Sealos App Store صورة Docker المنشورة لـ OpenDesign مع تخزين دائم لمساحة العمل وBasic Auth على الوكيل العام. لعمليات نشر Docker العامة أو المشتركة المخصصة، اتبع إرشادات الوكيل العكسي و`OPEN_DESIGN_ALLOWED_ORIGINS` في [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚀 النشر على Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+يشغّل قالب Pethost صورة `ghcr.io/nexu-io/od` المنشورة مع حفظ البيانات في وحدة تخزين دائمة، ويستخدم رمز API كـ Basic Auth: اسم المستخدم `open-design` وكلمة المرور هي التي تُدخلها عند النشر.
+
 ### 🧑‍💻 التشغيل من المصدر
 
 ```bash

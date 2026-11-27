@@ -303,6 +303,12 @@ Si le navigateur demande des identifiants, utilisez `open-design` comme nom d'ut
 
 Le modèle Sealos App Store exécute l'image Docker publiée d'OpenDesign avec un stockage persistant pour l'espace de travail et une Basic Auth sur le proxy public. Pour les déploiements Docker publics ou partagés personnalisés, suivez les indications de proxy inverse et `OPEN_DESIGN_ALLOWED_ORIGINS` dans [`deploy/README.md`](../../deploy/README.md#local-compose).
 
+### 🚀 Déployer sur Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+Le modèle Pethost exécute l'image publiée `ghcr.io/nexu-io/od` avec ses données dans un volume et le jeton d'API en Basic Auth : l'utilisateur est `open-design`, le mot de passe celui indiqué au déploiement.
+
 ### 🧑‍💻 Exécutez depuis les sources
 
 ```bash

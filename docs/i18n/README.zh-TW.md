@@ -298,6 +298,12 @@ docker compose up -d
 
 Sealos App Store 範本會執行已發布的 OpenDesign Docker 映像，提供持久化工作區儲存，並在公開代理層啟用 Basic Auth。自訂公開或共享 Docker 部署請遵循 [`deploy/README.md`](../../deploy/README.md#local-compose) 中的反向代理與 `OPEN_DESIGN_ALLOWED_ORIGINS` 指引。
 
+### 🚀 部署到 Pethost
+
+[![Deploy on Pethost](https://pethost.dev/button.svg)](https://pethost.dev/templates/open-design/)
+
+Pethost 範本會執行已發布的 `ghcr.io/nexu-io/od` 映像，資料保存在磁碟區中，並以 API token 作為 Basic Auth：使用者名稱為 `open-design`，密碼為部署時填寫的密碼。
+
 ### 🧑‍💻 從原始碼執行
 
 ```bash
