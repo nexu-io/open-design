@@ -244,9 +244,11 @@ export function createArtifactFocusMarkerStripper(
    *    *same* file is a no-op.
    */
   let releasedOpen: string | null = null;
+  // Only probes belonging to the latest accepted open marker may change focus.
+  let openGeneration = 0;
 
   /** Probe an accepted open path; emit when the bytes are there. */
-  const tryEmitOpen = async (projectRelative: string): Promise<boolean> => {
+  const tryEmitOpen = async (projectRelative: string, generation: number): Promise<boolean> => {
     if (!projectRoot) return false;
     if (releasedOpen === projectRelative) {
       pendingOpen = null;
@@ -254,6 +256,7 @@ export function createArtifactFocusMarkerStripper(
     }
     const absolute = path.resolve(projectRoot, projectRelative);
     const found = await probe(absolute).catch(() => null);
+    if (generation !== openGeneration) return false;
     if (!found || found.size <= 0) {
       pendingOpen = projectRelative;
       return false;
@@ -286,9 +289,10 @@ export function createArtifactFocusMarkerStripper(
     );
     if (openPath) {
       pendingOpen = openPath;
+      const generation = ++openGeneration;
       // Fire-and-forget: the stream must not stall on a stat. `settle()`
       // re-probes anything this pass could not release.
-      void tryEmitOpen(openPath);
+      void tryEmitOpen(openPath, generation);
     }
 
     const showPaths: string[] = [];
@@ -354,7 +358,7 @@ export function createArtifactFocusMarkerStripper(
     async settle() {
       const waiting = pendingOpen;
       if (!waiting) return false;
-      return tryEmitOpen(waiting);
+      return tryEmitOpen(waiting, openGeneration);
     },
     /*
      * Stream over. What is still held is one of two things:
