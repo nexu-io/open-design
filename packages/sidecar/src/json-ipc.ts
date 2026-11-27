@@ -175,6 +175,7 @@ export async function createJsonIpcServer({
   await prepareIpcPath(socketPath);
   const server = createNetServer((socket) => {
     let buffer = "";
+    let requestClaimed = false;
     // Decode UTF-8 across chunk boundaries: a multibyte character (e.g. CJK,
     // 3 bytes) can be split across two `data` events. `chunk.toString()` per
     // chunk would turn each half into U+FFFD, corrupting the payload (observed
@@ -183,6 +184,10 @@ export async function createJsonIpcServer({
     const decoder = new StringDecoder("utf8");
     const traceId = nextJsonIpcTraceId();
     const startedAt = process.hrtime.bigint();
+    const reply = (response: unknown): void => {
+      if (socket.destroyed || socket.writableEnded) return;
+      socket.end(`${JSON.stringify(response)}\n`);
+    };
     traceJsonIpc("server.connection", { socketPath, traceId });
     socket.on("error", (error) => {
       traceJsonIpc("server.socket_error", {
@@ -200,6 +205,7 @@ export async function createJsonIpcServer({
       });
     });
     socket.on("data", async (chunk) => {
+      if (requestClaimed || socket.destroyed) return;
       traceJsonIpc("server.data", {
         bytes: chunk.byteLength,
         durationMs: jsonIpcTraceDurationMs(startedAt),
@@ -209,8 +215,11 @@ export async function createJsonIpcServer({
       buffer += decoder.write(chunk);
       const newlineIndex = buffer.indexOf("\n");
       if (newlineIndex < 0) return;
+      // Claim the connection before parsing or awaiting the handler, so another
+      // data event cannot dispatch a second request while the first is pending.
+      requestClaimed = true;
       const frame = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
+      buffer = "";
       let message: unknown;
       try {
         message = JSON.parse(frame);
@@ -222,12 +231,7 @@ export async function createJsonIpcServer({
           socketPath,
           traceId,
         });
-        socket.end(
-          `${JSON.stringify({
-            ok: false,
-            error: jsonIpcError(error),
-          })}\n`,
-        );
+        reply({ ok: false, error: jsonIpcError(error) });
         return;
       }
       const messageSummary = summarizeJsonIpcMessage(message);
@@ -252,7 +256,7 @@ export async function createJsonIpcServer({
           socketPath,
           traceId,
         });
-        socket.end(`${JSON.stringify({ ok: true, result })}\n`);
+        reply({ ok: true, result });
       } catch (error) {
         traceJsonIpc("server.handler_failed", {
           durationMs: jsonIpcTraceDurationMs(startedAt),
@@ -261,12 +265,7 @@ export async function createJsonIpcServer({
           socketPath,
           traceId,
         });
-        socket.end(
-          `${JSON.stringify({
-            ok: false,
-            error: jsonIpcError(error),
-          })}\n`,
-        );
+        reply({ ok: false, error: jsonIpcError(error) });
       }
     });
   });
