@@ -155,6 +155,22 @@ function configFile(projectRoot: string): string {
   return path.join(mediaConfigDir(projectRoot), 'media-config.json');
 }
 
+// Settings saves and chat-side seeds share one read-modify-write transaction.
+// Key by the resolved file because several project roots can share a data dir.
+const configWriteLocks = new Map<string, Promise<unknown>>();
+
+async function withConfigWriteLock<T>(projectRoot: string, operation: () => Promise<T>): Promise<T> {
+  const file = path.resolve(configFile(projectRoot));
+  const previous = configWriteLocks.get(file) ?? Promise.resolve();
+  const task = previous.catch(() => {}).then(operation);
+  configWriteLocks.set(file, task);
+  try {
+    return await task;
+  } finally {
+    if (configWriteLocks.get(file) === task) configWriteLocks.delete(file);
+  }
+}
+
 /**
  * Normalise an arbitrary unknown into a string-to-string map, dropping
  * keys that have empty / non-string values. Shared by the env-var
@@ -435,6 +451,10 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
  * previous session) without silently destroying the user's data.
  */
 export async function writeConfig(projectRoot: string, body: unknown) {
+  return withConfigWriteLock(projectRoot, () => writeConfigUnlocked(projectRoot, body));
+}
+
+async function writeConfigUnlocked(projectRoot: string, body: unknown) {
   const incoming = isRecord(body) && isRecord(body.providers) ? body.providers : {};
   const force = Boolean(isRecord(body) && body.force === true);
   const prior = await readStored(projectRoot);
@@ -512,6 +532,14 @@ export async function writeConfig(projectRoot: string, body: unknown) {
  * whether to swallow them (fire-and-forget) or propagate.
  */
 export async function seedProviderIfMissing(
+  projectRoot: string,
+  providerId: string,
+  entry: { apiKey?: string; baseUrl?: string; model?: string },
+): Promise<boolean> {
+  return withConfigWriteLock(projectRoot, () => seedProviderIfMissingUnlocked(projectRoot, providerId, entry));
+}
+
+async function seedProviderIfMissingUnlocked(
   projectRoot: string,
   providerId: string,
   entry: { apiKey?: string; baseUrl?: string; model?: string },
