@@ -102,6 +102,17 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'deepseek-chat',
     'deepseek-reasoner',
   ],
+  // aimlapi.com fronts ~900 models behind one key; these are the flagships the
+  // catalog marks hottest, which is what the dropdown should open on.
+  aimlapi: [
+    'openai/gpt-5.6-terra',
+    'anthropic/claude-sonnet-5',
+    'anthropic/claude-opus-5',
+    'google/gemini-3.6-flash',
+    'deepseek/deepseek-v4-pro',
+    'x-ai/grok-4-5',
+    'moonshot/kimi-k3',
+  ],
   bedrock: [
     'anthropic.claude-3-5-sonnet-20241022-v2:0',
     'anthropic.claude-3-5-haiku-20241022-v1:0',
@@ -174,6 +185,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   ollama: 'gemma3:4b',
   senseaudio: 'senseaudio-s2-flash',
   aihubmix: 'gpt-4o-mini',
+  aimlapi: 'google/gemini-3.6-flash',
   bedrock: 'amazon.nova-lite-v1:0',
 };
 
@@ -188,6 +200,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
   { id: 'aihubmix', title: 'AIHubMix' },
+  { id: 'aimlapi', title: 'aimlapi.com' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -198,6 +211,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
   aihubmix: 'AIHubMix API',
+  aimlapi: 'aimlapi.com',
   bedrock: 'AWS Bedrock',
 };
 
@@ -209,6 +223,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
   aihubmix: 'sk-...',
+  aimlapi: 'aimlapi.com API key',
   bedrock: 'AWS credentials',
 };
 
@@ -223,6 +238,7 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  aimlapi: 'https://api.aimlapi.com/v1',
   bedrock: 'https://bedrock-runtime.us-east-1.amazonaws.com',
 };
 

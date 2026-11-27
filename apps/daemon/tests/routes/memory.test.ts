@@ -1,7 +1,7 @@
 import type http from 'node:http';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   memoryDir,
@@ -385,6 +385,74 @@ describe('memory routes', () => {
     };
     expect(json.attemptedLLM).toBe(true);
     expect(json.changed).toEqual([]);
+  });
+
+  // Regression: the web app used to POST the BYOK snapshot under
+  // `byokChatProvider`, a key the route never read, and the route's own
+  // provider allowlist stopped at 'ollama' — so an aimlapi (or senseaudio /
+  // aihubmix) BYOK turn silently fell back to legacy env/media credentials
+  // instead of the user's actual key. The tests above only assert
+  // `attemptedLLM`, which stays true either way — this one verifies the
+  // snapshot the extractor's outbound call actually carries.
+  it('forwards the aimlapi chatProvider snapshot to the extractor with attribution headers', async () => {
+    await fetch(`${baseUrl}/api/memory/config`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chatExtractionEnabled: true }),
+    });
+
+    const providerCalls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+      if (url.startsWith(baseUrl)) return previousFetch(input, init);
+      const headers: Record<string, string> = {};
+      new Headers(init?.headers ?? {}).forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+      providerCalls.push({ url, headers, body: String(init?.body ?? '') });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '[]' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    try {
+      const res = await fetch(`${baseUrl}/api/memory/extract`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          userMessage: 'Remember that I prefer dark mode for demos.',
+          assistantMessage: 'I will keep future demos darker and quieter.',
+          chatProvider: {
+            provider: 'aimlapi',
+            apiKey: 'test-aimlapi-key',
+            model: 'openai/gpt-5.6-terra',
+          },
+        }),
+      });
+      expect(res.status).toBe(200);
+      const json = await res.json() as { attemptedLLM: boolean };
+      expect(json.attemptedLLM).toBe(true);
+
+      // extractWithLLM runs fire-and-forget in the background — the HTTP
+      // response above does not wait on it, so poll for the outbound call.
+      await vi.waitFor(() => expect(providerCalls).toHaveLength(1));
+      expect(providerCalls[0]?.url).toBe('https://api.aimlapi.com/v1/chat/completions');
+      expect(providerCalls[0]?.headers.authorization).toBe('Bearer test-aimlapi-key');
+      expect(providerCalls[0]?.headers['x-aimlapi-source']).toBeTruthy();
+      expect(providerCalls[0]?.headers['x-aimlapi-partner-id']).toBeTruthy();
+      expect(JSON.parse(providerCalls[0]?.body ?? '{}').model).toBe('openai/gpt-5.6-terra');
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 
   it('returns the composed system prompt body from indexed memory entries', async () => {

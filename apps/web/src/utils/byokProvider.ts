@@ -39,6 +39,7 @@ export const API_PROTOCOL_AGENT_IDS: Record<ApiProtocol, string> = {
   ollama: 'ollama-cloud-api',
   senseaudio: 'senseaudio-api',
   aihubmix: 'aihubmix-api',
+  aimlapi: 'aimlapi-api',
   bedrock: 'bedrock-api',
 };
 
