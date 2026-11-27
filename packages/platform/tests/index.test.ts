@@ -176,6 +176,15 @@ describe("system proxy env resolution", () => {
     expect(env.NODE_USE_ENV_PROXY).toBe("0");
   });
 
+  it("normalizes bracketed IPv6 loopback entries when merging NO_PROXY values", () => {
+    const env = mergeProxyAwareEnv("darwin", {
+      NO_PROXY: "localhost,[::1],.corp",
+    });
+
+    expect(env.NO_PROXY).toBe("localhost,::1,.corp");
+    expect(env.no_proxy).toBe("localhost,::1,.corp");
+  });
+
   it("parses macOS scutil output into standard proxy env vars", () => {
     const env = parseMacosScutilProxyOutput(`
 <dictionary> {
@@ -199,12 +208,12 @@ describe("system proxy env resolution", () => {
       HTTP_PROXY: "http://127.0.0.1:7890",
       HTTPS_PROXY: "http://corp-proxy.internal:7891",
       ALL_PROXY: "socks5://127.0.0.1:1080",
-      NO_PROXY: ".local,localhost,127.0.0.1,[::1]",
+      NO_PROXY: ".local,localhost,127.0.0.1,::1",
       NODE_USE_ENV_PROXY: "1",
       http_proxy: "http://127.0.0.1:7890",
       https_proxy: "http://corp-proxy.internal:7891",
       all_proxy: "socks5://127.0.0.1:1080",
-      no_proxy: ".local,localhost,127.0.0.1,[::1]",
+      no_proxy: ".local,localhost,127.0.0.1,::1",
     });
   });
 
@@ -253,7 +262,7 @@ HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settin
       HTTP_PROXY: "http://10.0.0.2:8080",
       HTTPS_PROXY: "http://10.0.0.3:8443",
       ALL_PROXY: "socks5://10.0.0.4:1080",
-      NO_PROXY: "localhost,<local>,127.0.0.1,[::1],.local,.corp",
+      NO_PROXY: "localhost,<local>,127.0.0.1,::1,.local,.corp",
       NODE_USE_ENV_PROXY: "1",
     });
   });
@@ -291,7 +300,7 @@ HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settin
     });
   });
 
-  it("normalizes bare IPv6 loopback bypass entries to bracketed form", () => {
+  it("keeps IPv6 loopback bypass entries bare for child-process compatibility", () => {
     const env = parseWindowsInternetSettingsProxyOutput({
       proxyEnable: `
 HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings
@@ -307,7 +316,7 @@ HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settin
 `,
     });
 
-    expect(env.NO_PROXY).toBe("[::1],localhost,127.0.0.1");
+    expect(env.NO_PROXY).toBe("::1,localhost,127.0.0.1");
   });
 
   it("preserves a wildcard macOS bypass list", () => {
@@ -353,8 +362,8 @@ HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settin
 }
 `);
 
-    expect(env.NO_PROXY).toBe("<local>,localhost,127.0.0.1,[::1],.local");
-    expect(env.no_proxy).toBe("<local>,localhost,127.0.0.1,[::1],.local");
+    expect(env.NO_PROXY).toBe("<local>,localhost,127.0.0.1,::1,.local");
+    expect(env.no_proxy).toBe("<local>,localhost,127.0.0.1,::1,.local");
   });
 
   it("preserves a wildcard Windows bypass list", () => {
