@@ -131,6 +131,8 @@ describe('HandoffButton zero-editors fallback', () => {
         screen.getByTestId('handoff-cli-item-codex'),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(screen.getByTestId('handoff-cli-item-omp').textContent).toContain('OMP');
+    expect(screen.getByTestId('handoff-cli-item-omp').className).toContain('dim');
     fireEvent.click(await screen.findByRole('button', { name: 'Vue.js' }));
     fireEvent.click(await screen.findByTestId('handoff-cli-item-claude'));
 

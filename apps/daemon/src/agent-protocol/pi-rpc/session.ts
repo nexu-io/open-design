@@ -21,6 +21,8 @@ export type PiImagePayload = {
 };
 /** Generic parameter bag for a pi RPC command written to child stdin. */
 export type PiRpcParams = JsonRecord;
+/** Directory under the working directory holding a runtime's session `.jsonl` files. */
+export const DEFAULT_PI_SESSION_DIR_NAME = '.pi';
 /** Options for `attachPiRpcSession`. All fields map directly to the pi RPC protocol. */
 export type PiRpcSessionOptions = {
   child: ChildProcess;
@@ -31,6 +33,7 @@ export type PiRpcSessionOptions = {
   imagePaths?: string[];
   uploadRoot?: string;
   parentSession?: string;
+  sessionDirName?: string;
 };
 /** Handle returned by `attachPiRpcSession` for querying run state and requesting abort. */
 export type PiRpcSession = {
@@ -96,15 +99,34 @@ export function replyExtensionUi(writable: Writable, raw: JsonRecord): void {
 /** Snapshot of `.pi/sessions/` file metadata taken before a prompt is sent. */
 export type PiSessionFileSnapshot = Map<string, { mtimeMs: number; size: number }>;
 /**
- * Reads `.pi/sessions/*.jsonl` entries from the given working directory,
- * returning file paths with their mtime and size. Returns an empty array
- * when the directory is absent, empty, or unreadable.
+ * Absolute path of the session directory a pi-family runtime writes into,
+ * given its working directory. Each runtime owns its own directory name so two
+ * adapters (pi and Oh My Pi) running against the same project cannot see each
+ * other's transcripts as "the file this run changed".
  *
- * @param cwd - Absolute path to the pi working directory; may be undefined.
+ * @param cwd            - Absolute path to the runtime's working directory.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
  */
-export function readPiSessionFiles(cwd: string | undefined): Array<{ path: string; mtimeMs: number; size: number }> {
+export function piSessionsDir(
+  cwd: string,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
+): string {
+  return path.join(cwd, sessionDirName, 'sessions');
+}
+/**
+ * Reads `<sessionDirName>/sessions/*.jsonl` entries from the given working
+ * directory, returning file paths with their mtime and size. Returns an empty
+ * array when the directory is absent, empty, or unreadable.
+ *
+ * @param cwd            - Absolute path to the pi working directory; may be undefined.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
+ */
+export function readPiSessionFiles(
+  cwd: string | undefined,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
+): Array<{ path: string; mtimeMs: number; size: number }> {
   if (typeof cwd !== 'string' || cwd.length === 0) return [];
-  const sessionsDir = path.join(cwd, '.pi', 'sessions');
+  const sessionsDir = piSessionsDir(cwd, sessionDirName);
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(sessionsDir, { withFileTypes: true });
@@ -125,33 +147,39 @@ export function readPiSessionFiles(cwd: string | undefined): Array<{ path: strin
   return files;
 }
 /**
- * Takes a before-snapshot of `.pi/sessions/` to enable changed-file detection
- * after the prompt completes.
+ * Takes a before-snapshot of the session directory to enable changed-file
+ * detection after the prompt completes.
  *
- * @param cwd - Absolute path to the pi working directory; may be undefined.
+ * @param cwd            - Absolute path to the pi working directory; may be undefined.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
  */
-export function snapshotPiSessionFiles(cwd: string | undefined): PiSessionFileSnapshot {
+export function snapshotPiSessionFiles(
+  cwd: string | undefined,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
+): PiSessionFileSnapshot {
   const snapshot: PiSessionFileSnapshot = new Map();
-  for (const file of readPiSessionFiles(cwd)) {
+  for (const file of readPiSessionFiles(cwd, sessionDirName)) {
     snapshot.set(file.path, { mtimeMs: file.mtimeMs, size: file.size });
   }
   return snapshot;
 }
 /**
- * Compares the current `.pi/sessions/` directory against a before-snapshot
- * and returns the path of the single changed file. Returns `null` when zero
- * or more than one file changed — concurrent pi processes are detected this
- * way to avoid associating the wrong session with this run.
+ * Compares the current session directory against a before-snapshot and returns
+ * the path of the single changed file. Returns `null` when zero or more than
+ * one file changed — concurrent pi processes are detected this way to avoid
+ * associating the wrong session with this run.
  *
- * @param cwd    - Absolute path to the pi working directory; may be undefined.
- * @param before - Snapshot taken before the prompt was sent.
+ * @param cwd            - Absolute path to the pi working directory; may be undefined.
+ * @param before         - Snapshot taken before the prompt was sent.
+ * @param sessionDirName - Directory under `cwd`; defaults to pi's `.pi`.
  * @returns Absolute path of the changed session file, or `null`.
  */
 export function resolveSessionPathChangedSince(
   cwd: string | undefined,
   before: PiSessionFileSnapshot,
+  sessionDirName: string = DEFAULT_PI_SESSION_DIR_NAME,
 ): string | null {
-  const changed = readPiSessionFiles(cwd).filter((file) => {
+  const changed = readPiSessionFiles(cwd, sessionDirName).filter((file) => {
     const previous = before.get(file.path);
     return !previous || file.mtimeMs > previous.mtimeMs || file.size !== previous.size;
   });
@@ -189,6 +217,7 @@ export function attachPiRpcSession({
   imagePaths,
   uploadRoot,
   parentSession,
+  sessionDirName = DEFAULT_PI_SESSION_DIR_NAME,
 }: PiRpcSessionOptions): PiRpcSession {
   const stdin = child.stdin;
   const stdout = child.stdout;
@@ -200,7 +229,7 @@ export function attachPiRpcSession({
   }
 
   const runStartedAt = Date.now();
-  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd);
+  const sessionFilesBeforePrompt = snapshotPiSessionFiles(cwd, sessionDirName);
   let finished = false;
   let fatal = false;
   const sentFirstToken = { value: false };
@@ -317,11 +346,21 @@ export function attachPiRpcSession({
 
   // `new_session.parentSession` records ancestry but starts with no history.
   // `switch_session` restores the native conversation used by a trimmed prompt.
-  // Do not send the prompt until pi acknowledges this RPC: resumed prompts
-  // intentionally contain only the latest user turn, so continuing after a
-  // failed parent load would silently drop prior conversation context.
+  // Do not send the prompt until the runtime acknowledges this RPC: resumed
+  // prompts intentionally contain only the latest user turn, so continuing
+  // after a failed load would silently drop prior conversation context.
   if (parentSession) {
-    parentSessionRpcId = sendCommand(stdin, 'switch_session', { sessionPath: parentSession });
+    // OMP can acknowledge a missing path by opening an empty transcript.
+    if (!fs.existsSync(parentSession)) {
+      fail(
+        `parent session file is missing: ${parentSession}`,
+        'PI_PARENT_SESSION_FAILED',
+      );
+    } else {
+      parentSessionRpcId = sendCommand(stdin, 'switch_session', {
+        sessionPath: parentSession,
+      });
+    }
   } else {
     sendPromptCommand();
   }
@@ -395,11 +434,11 @@ export function attachPiRpcSession({
     if (result === 'agent_end') {
       finished = true;
       promptCompleted = true;
-      // Pi owns its session location (normally under its external agent home).
-      // Legacy fixtures/runtimes without get_state may still write the old
-      // project-local directory; only one changed file is safe to associate.
+      // The runtime owns its session location. Older runtimes without get_state
+      // may still write the configured directory; only one changed file is safe
+      // to associate with this run.
       capturedSessionPath = reportedSessionPath
-        ?? resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt);
+        ?? resolveSessionPathChangedSince(cwd, sessionFilesBeforePrompt, sessionDirName);
       // pi's RPC process stays alive after agent_end (designed for
       // multi-prompt sessions). The daemon's /api/chat is single-shot,
       // so close stdin and let the process exit naturally, or kill it
