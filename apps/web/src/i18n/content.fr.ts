@@ -68,7 +68,7 @@ export const FR_SKILL_COPY: Record<string, { description?: string; examplePrompt
     examplePrompt:
       'Concevez une app gamifiée de life management — prototype mobile multi-screen : cover poster, quêtes du jour avec XP et détail de quête. “Daily quests for becoming a better human.”',
   },
-  'magazine-web-ppt': {
+  'guizang-ppt': {
     examplePrompt:
       'Créez-moi un PPT magazine sur “entreprises d’une personne · organisations pliées par l’IA”, talk de 25 minutes, audience designers + founders. Recommandez d’abord une direction (Monocle / WIRED / Kinfolk / Domus / Lab) pour que je choisisse.',
   },

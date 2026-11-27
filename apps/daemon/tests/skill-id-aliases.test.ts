@@ -73,6 +73,10 @@ describe('resolveSkillId', () => {
     );
   });
 
+  it('forwards the old magazine-web-ppt id to guizang-ppt', () => {
+    expect(resolveSkillId('magazine-web-ppt')).toBe('guizang-ppt');
+  });
+
   it('passes non-aliased ids through unchanged', () => {
     expect(resolveSkillId('simple-deck')).toBe('simple-deck');
     expect(resolveSkillId('totally-unknown')).toBe('totally-unknown');
