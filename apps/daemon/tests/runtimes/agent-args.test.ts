@@ -720,21 +720,41 @@ test('antigravity runs headless stream-json with the prompt as one agy user mess
   // The prompt never rides argv, so no argv budget applies.
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Picker exposes the synthetic Default + the labels `agy models`
+  // reports for agy 1.5.x (Gemini 4 Argon / Carbon / Neon / Hydrogen,
+  // Orchestrator, Gemini 3.8 Flash, Claude 5.5, GPT-OSS). Ids are the
+  // display labels because that is what agy reads from settings.json
+  // `model`.
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
-      'Gemini 3.1 Pro (High)',
-      'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
-      'Claude Sonnet 4.6 (Thinking)',
-      'Claude Opus 4.6 (Thinking)',
+      'Gemini 4 Argon (High)',
+      'Gemini 4 Argon (Medium)',
+      'Gemini 4 Argon (Low)',
+      'Gemini 4 Carbon (High)',
+      'Gemini 4 Carbon (Medium)',
+      'Gemini 4 Carbon (Low)',
+      'Gemini 4 Neon (XHigh)',
+      'Gemini 4 Neon (High)',
+      'Gemini 4 Neon (Medium)',
+      'Gemini 4 Neon (Low)',
+      'Gemini 4 Hydrogen (XHigh)',
+      'Gemini 4 Hydrogen (High)',
+      'Gemini 4 Hydrogen (Medium)',
+      'Gemini 4 Hydrogen (Low)',
+      'Orchestrator (Argon)',
+      'Orchestrator (Carbon)',
+      'Orchestrator (Neon)',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Claude Opus 5.5 (High)',
+      'Claude Opus 5.5 (Medium)',
+      'Claude Opus 5.5 (Low)',
+      'Claude Sonnet 5.5 (High)',
+      'Claude Sonnet 5.5 (Medium)',
+      'Claude Sonnet 5.5 (Low)',
       'GPT-OSS 120B (Medium)',
     ],
   );
