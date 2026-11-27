@@ -45,6 +45,20 @@ it('collapses a repeating API failure into one incident per signature and hour',
   expect(failure('2026-09-25T10:00:05.000Z', { path: '/api/runs/:id' })?.sourceId).not.toBe(first?.sourceId);
   expect(first?.detail).toMatchObject({ requestId: 'req-2026-09-25T10:00:01.000Z' });
 });
+it('does not capture an expired preview scope renewal the viewer recovers from by minting a new scope', () => {
+  // FileViewer renews 5 minutes before the 1-hour expiry; sleep, background
+  // timer throttling or a daemon restart lets the scope lapse first, and the
+  // viewer then fetches a fresh preview URL, whose own failure is still captured.
+  const renew = (overrides: Record<string, unknown> = {}) => diagnosticFaultFromApi({
+    at: new Date().toISOString(), method: 'POST', path: '/api/projects/:id/preview/:scope/renew',
+    status: 404, code: 'PREVIEW_SCOPE_NOT_FOUND', retryable: false, ...overrides,
+  });
+  expect(renew()).toBeNull();
+  expect(renew({ status: 403, code: 'FORBIDDEN' })?.kind).toBe('delivery_api_failure');
+  expect(renew({ status: 404, code: 'PROJECT_NOT_FOUND' })?.kind).toBe('delivery_api_failure');
+  expect(renew({ status: 500, code: 'INTERNAL_ERROR' })?.kind).toBe('delivery_api_failure');
+  expect(renew({ method: 'GET', path: '/api/projects/:id/preview-url', status: 503 })?.kind).toBe('delivery_api_failure');
+});
 it.each(['/api/telemetry', '/api/diagnostics/export', '/api/objects/batch', '/api/health'])('does not recursively capture infrastructure route %s', (path) => {
   expect(diagnosticFaultFromApi({ at: new Date().toISOString(), method: 'POST', path, status: 500, code: 'INTERNAL_ERROR', retryable: false })).toBeNull();
 });
