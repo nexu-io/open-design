@@ -1,0 +1,14 @@
+{
+  "direction": "rtl",
+  "geometry": {
+    "rocketBottom": 38,
+    "rocketLeft": 0,
+    "rocketRight": 32,
+    "promptTop": 49.62282943725586,
+    "promptBottom": 245.00564193725586,
+    "promptLeft": -328,
+    "promptRight": 32,
+    "viewportWidth": 700,
+    "viewportHeight": 600
+  }
+}
