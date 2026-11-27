@@ -234,7 +234,9 @@ async function* installFromGithub(
   let lastError: string | undefined;
   const triedUrls: string[] = [];
   for (const candidate of parsed.candidates) {
-    if (candidate.subpath) {
+    // An archive digest authenticates the tarball bytes, not the independent
+    // contents API downloads. Use the verifying archive path when it is pinned.
+    if (candidate.subpath && !opts.archiveIntegrity) {
       const contentsUrl = githubContentsUrl(parsed.owner, parsed.repo, candidate.subpath, candidate.ref);
       triedUrls.push(contentsUrl);
       const buffered: InstallEvent[] = [];
