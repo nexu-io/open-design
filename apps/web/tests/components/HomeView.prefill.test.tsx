@@ -284,6 +284,31 @@ const SIMPLE_DECK_PLUGIN = {
   },
 };
 
+const ALTERNATE_DECK_PLUGIN = {
+  ...SIMPLE_DECK_PLUGIN,
+  id: 'example-alternate-deck',
+  title: 'Alternate Deck',
+  source: '/tmp/alternate-deck',
+  fsPath: '/tmp/alternate-deck',
+  manifest: {
+    ...SIMPLE_DECK_PLUGIN.manifest,
+    name: 'example-alternate-deck',
+    title: 'Alternate Deck',
+    tags: ['slide-deck'],
+    od: {
+      ...SIMPLE_DECK_PLUGIN.manifest.od,
+      useCase: { query: 'Create an alternate deck for {{audience}} about {{topic}} with {{slideCount}}. Speaker notes: {{speakerNotes}}.' },
+      inputs: SIMPLE_DECK_PLUGIN.manifest.od.inputs.map((field) => (
+        field.name === 'slideCount'
+          ? { ...field, default: '5-10 pages' }
+          : field.name === 'speakerNotes'
+            ? { ...field, default: 'no speaker notes' }
+            : field
+      )),
+    },
+  },
+};
+
 const LIVE_ARTIFACT_PLUGIN = {
   ...DEFAULT_PLUGIN,
   id: 'example-live-artifact',
@@ -1619,7 +1644,7 @@ describe('HomeView prompt handoff', () => {
   it('keeps a deck example card on the automatic ppt route and sends its example reference', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+        return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN, ALTERNATE_DECK_PLUGIN] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -1645,13 +1670,21 @@ describe('HomeView prompt handoff', () => {
     );
 
     await pickHomeTemplate('deck');
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-slideCount'));
+    const slideCountMenu = await screen.findByTestId('home-hero-footer-option-slideCount-menu');
+    fireEvent.click(within(slideCountMenu).getByRole('option', { name: /20-25 pages/ }));
     fireEvent.click(
       (await screen.findAllByTestId('home-hero-plugin-preset')).find(
-        (item) => item.getAttribute('data-plugin-id') === 'example-simple-deck',
+        (item) => item.getAttribute('data-plugin-id') === 'example-alternate-deck',
       )!,
     );
 
-    await waitFor(() => expect(homeHeroPromptText().length).toBeGreaterThan(0));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('20-25 pages');
+      expect(screen.getByTestId('home-hero-footer-option-speakerNotes').getAttribute('aria-pressed')).toBe('true');
+      expect(homeHeroPromptText()).toContain('20-25 pages');
+      expect(homeHeroPromptText()).toContain('include speaker notes');
+    });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
@@ -1662,15 +1695,50 @@ describe('HomeView prompt handoff', () => {
       taskKind: null,
       skillId: null,
       exampleReference: {
-        pluginId: 'example-simple-deck',
-        source: '/tmp/simple-deck',
+        pluginId: 'example-alternate-deck',
+        source: '/tmp/alternate-deck',
       },
       projectKind: 'deck',
+      projectMetadata: {
+        kind: 'deck',
+        slideCount: '20-25 pages',
+        speakerNotes: true,
+      },
     })));
     const [submittedDeck] = onSubmit.mock.calls[0] as [Record<string, unknown>];
     expect(submittedDeck).not.toHaveProperty('pluginInputs');
     expect(submittedDeck).not.toHaveProperty('pluginSource');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply-local'))).toBe(false);
+
+    fireEvent.click(screen.getByTestId('home-hero-footer-option-speakerNotes'));
+    fireEvent.click(
+      (await screen.findAllByTestId('home-hero-plugin-preset')).find(
+        (item) => item.getAttribute('data-plugin-id') === 'example-simple-deck',
+      )!,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-footer-option-speakerNotes').getAttribute('aria-pressed')).toBe('false');
+      expect(homeHeroPromptText()).toContain('no speaker notes');
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    const [submittedWithoutNotes] = onSubmit.mock.calls[1] as [Record<string, unknown>];
+    expect(submittedWithoutNotes).toEqual(expect.objectContaining({
+      pluginId: null,
+      automaticStrategyTaskProfile: 'ppt',
+      exampleReference: {
+        pluginId: 'example-simple-deck',
+        source: '/tmp/simple-deck',
+      },
+      projectKind: 'deck',
+      projectMetadata: {
+        kind: 'deck',
+        slideCount: '20-25 pages',
+        speakerNotes: false,
+      },
+    }));
+    expect(submittedWithoutNotes).not.toHaveProperty('pluginInputs');
   });
 
   it.each([
@@ -1947,10 +2015,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('binds the deck chip and keeps only the design-system picker in the footer', async () => {
-    // Slide count + speaker-notes footer controls were removed from the deck
-    // composer; the agent asks for them in the first-turn discovery flow. The
-    // deck footer now mirrors the prototype footer — design system only.
+  it('keeps page count neutral and submits the visible Notes default on a bare deck', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
@@ -1979,8 +2044,8 @@ describe('HomeView prompt handoff', () => {
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
     });
-    expect(screen.queryByTestId('home-hero-footer-option-speakerNotes')).toBeNull();
-    expect(screen.queryByTestId('home-hero-footer-option-slideCount')).toBeNull();
+    expect(screen.getByTestId('home-hero-footer-option-speakerNotes').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('home-hero-footer-option-slideCount').textContent).toContain('Page quantity');
     expect(screen.queryByTestId('home-hero-footer-option-designSystem')).toBeNull();
     // The design-system picker is the persistent control below the composer.
     expect(screen.getByTestId('home-hero-design-system-trigger')).toBeTruthy();
@@ -2000,6 +2065,8 @@ describe('HomeView prompt handoff', () => {
         kind: 'deck',
       }),
     })));
+    expect(onSubmit.mock.calls[0]?.[0].projectMetadata).not.toHaveProperty('slideCount');
+    expect(onSubmit.mock.calls[0]?.[0].projectMetadata).toHaveProperty('speakerNotes', true);
     expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('pluginInputs');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply-local'))).toBe(false);
   });
@@ -2105,7 +2172,7 @@ describe('HomeView prompt handoff', () => {
     ))).toBe(false);
     await waitFor(() => {
       expect(homeHeroPromptText()).toBe(
-        'Create a pitch deck for decision makers about the user brief with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
+        'Create a pitch deck for decision makers about the user brief with {{slideCount}}. Speaker notes: include speaker notes. Use the active project design system.',
       );
     });
 
