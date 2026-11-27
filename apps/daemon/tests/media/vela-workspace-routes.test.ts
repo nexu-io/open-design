@@ -14,6 +14,8 @@ vi.mock('../../src/media/vela.js', () => ({ fetchVelaVideoModels: vi.fn(), fetch
 const servers: http.Server[] = [];
 
 afterEach(async () => {
+  vi.mocked(fetchVelaVideoModels).mockReset();
+  vi.mocked(fetchVelaImageModels).mockReset();
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => {
     server.close(() => resolve());
   })));
@@ -148,7 +150,11 @@ describe('Vela media route Workspace attribution', () => {
   it('filters the static catalogue using the same workspace as generation, including an empty catalogue', async () => {
     const catalogue = vi.mocked(fetchVelaVideoModels);
     const imageCatalogue = vi.mocked(fetchVelaImageModels);
-    catalogue.mockResolvedValueOnce(['doubao-seedance-2-0-260128']).mockResolvedValueOnce([]);
+    catalogue.mockResolvedValueOnce([
+      'doubao-seedance-2-5-260628',
+      'doubao-seedance-2-5-flash-261115',
+      'wan-2.7',
+    ]).mockResolvedValueOnce([]);
     imageCatalogue
       .mockResolvedValueOnce([{ id: 'vela/gpt-image-2', label: 'gpt-image-2 (Cloud)', hint: 'Cloud', provider: 'vela', caps: ['t2i', 'i2i'], default: true }])
       .mockResolvedValueOnce([]);
@@ -156,7 +162,11 @@ describe('Vela media route Workspace attribution', () => {
     const first = await fetch(`${url}/api/media/models?cloud=true&projectId=team-project`);
     expect(first.status).toBe(200);
     const firstJson = await first.json() as { video: { id: string }[]; image?: { id: string }[] };
-    expect(firstJson.video.map((m) => m.id)).toEqual(['vela/doubao-seedance-2-0-260128']);
+    expect(firstJson.video.map((m) => m.id)).toEqual([
+      'vela/doubao-seedance-2-5-260628',
+      'vela/doubao-seedance-2-5-flash-261115',
+      'vela/wan-2.7',
+    ]);
     expect(firstJson.image?.map((m) => m.id)).toEqual(['vela/gpt-image-2']);
     expect(catalogue).toHaveBeenLastCalledWith('workspace-from-database');
     expect(imageCatalogue).toHaveBeenLastCalledWith('workspace-from-database');
