@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -58,6 +58,29 @@ describe('app-config', () => {
     it('preserves defaults on valid older configs without telemetry', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '{"onboardingCompleted":true}');
       expect(await readMetricsConsent(dataDir)).toEqual({ status: 'available', metrics: true });
+    });
+  });
+
+  // POSIX permission bits are not meaningful on Windows, so these are skipped there.
+  describe.skipIf(process.platform === 'win32')('writeAppConfig file permissions', () => {
+    const modeOf = async (file: string) => (await stat(file)).mode & 0o777;
+
+    it('stores app-config.json owner-only because agentCliEnv can hold API keys', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: { claude: { ANTHROPIC_API_KEY: 'sk-ant-owner-only' } },
+      });
+      expect(await modeOf(path.join(dataDir, 'app-config.json'))).toBe(0o600);
+    });
+
+    it('tightens a world-readable file left by an older version on the next save', async () => {
+      const file = path.join(dataDir, 'app-config.json');
+      await writeFile(file, '{"onboardingCompleted":true}');
+      await chmod(file, 0o644);
+
+      await writeAppConfig(dataDir, { agentId: 'codex' });
+
+      expect(await modeOf(file)).toBe(0o600);
+      expect(await readAppConfig(dataDir)).toMatchObject({ onboardingCompleted: true, agentId: 'codex' });
     });
   });
 

@@ -18,7 +18,7 @@
 // this machine.
 
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { OdNextRolloutMode } from '@open-design/contracts';
@@ -965,8 +965,19 @@ async function doWrite(
   const file = configFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
-  await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), 'utf8');
+  // `agentCliEnv` can hold agent API keys, so keep the file owner-only like the
+  // other credential files in the data dir (mcp-tokens.json, connectors/credentials.json).
+  await writeFile(tmp, JSON.stringify(normalizedNextWithoutRetiredAgents, null, 2), { encoding: 'utf8', mode: 0o600 });
   await rename(tmp, file);
+  try {
+    await chmod(file, 0o600);
+  } catch (err: unknown) {
+    // Best effort: some filesystems have no POSIX modes. Saving must not fail over it.
+    const e = err as { code?: string; message?: string };
+    if (e.code !== 'ENOTSUP' && e.code !== 'EPERM') {
+      console.warn('[app-config] could not chmod 0600', file, e.message ?? err);
+    }
+  }
   for (const observer of configObservers.get(dataDir) ?? []) {
     try { observer(); } catch { /* preference persistence must not depend on background consumers */ }
   }
