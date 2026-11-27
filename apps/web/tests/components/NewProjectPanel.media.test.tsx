@@ -93,6 +93,14 @@ describe('NewProjectPanel media provider badges', () => {
     await waitFor(() => {
       expect(screen.getByTestId('model-picker-trigger').textContent).toContain('gpt-image-2 (Cloud)');
     });
+
+    const trigger = screen.getByTestId('model-picker-trigger');
+    expect(trigger.getAttribute('title')).toContain('gpt-image-2 (Cloud)');
+
+    fireEvent.click(trigger);
+    const option = screen.getByTestId('model-picker-option-vela/gpt-image-2');
+    expect(option.getAttribute('title')).toContain('gpt-image-2 (Cloud)');
+
     fireEvent.change(screen.getByTestId('new-project-name'), {
       target: { value: 'Vela default image' },
     });
