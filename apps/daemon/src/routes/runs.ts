@@ -48,6 +48,10 @@ import {
 } from '../codex-rollout-usage.js';
 import type { ConnectorService } from '../connectors/service.js';
 import {
+  createRunProjectionCache,
+  readRunProjectionEpoch,
+} from './run-projection-cache.js';
+import {
   conversationTurnIndexForRun,
   getFirstProjectConversation,
   getConversation,
@@ -1037,7 +1041,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     return task;
   };
-  const statusWithStrategyTask = (run: ChatRun): ChatRunStatusResponse => {
+  // Terminal runs freeze `updatedAt`, so their strategy-task projection and
+  // task telemetry only change when the underlying task/delivery tables do.
+  // Cache the derived status keyed on (run.updatedAt, table epoch) so the
+  // 4s client poll does not re-walk rowToTask + telemetry for every settled
+  // run on every read.
+  const runProjectionCache = createRunProjectionCache();
+  const statusWithStrategyTask = (
+    run: ChatRun,
+    epoch = readRunProjectionEpoch(db),
+  ): ChatRunStatusResponse => {
+    const cached = runProjectionCache.get(run, epoch);
+    if (cached) {
+      if (cached.strategyTask === undefined) delete run.strategyTask;
+      else run.strategyTask = cached.strategyTask;
+      return cached.status;
+    }
     let projectedSnapshotId: string | undefined;
     try {
       const strategyTask = strategyTaskForRun(run, true);
@@ -1067,9 +1086,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     if (taskTelemetry) status.taskTelemetry = taskTelemetry;
     // A read can derive display identity from the validated task, but must not
     // stamp the source Run and bypass clarification's linked-snapshot witness.
-    return projectedSnapshotId
+    const resolved = projectedSnapshotId
       ? { ...status, appliedPluginSnapshotId: projectedSnapshotId }
       : status;
+    runProjectionCache.set(run, epoch, resolved);
+    return resolved;
   };
 
   /**
@@ -3059,8 +3080,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const awaitingInputConversationIds = visibleConversationIds.size
       ? [...listConversationsAwaitingInput(db)].filter((id) => visibleConversationIds.has(id))
       : [];
+    const projectionEpoch = readRunProjectionEpoch(db);
     const body = {
-      runs: visibleRuns.map(statusWithStrategyTask),
+      runs: visibleRuns.map((run) => statusWithStrategyTask(run, projectionEpoch)),
       awaitingInputProjectIds,
       awaitingInputConversationIds,
     };
