@@ -118,7 +118,7 @@ async function previewPptx(zip: JSZip): Promise<PreviewSection[]> {
   const sections: PreviewSection[] = [];
   for (let i = 0; i < slideNames.length; i += 1) {
     const xml = await readZipText(zip, slideNames[i] ?? '');
-    const lines = extractTextRuns(xml);
+    const lines = extractTextRuns(xml).map((text) => text.trim()).filter(Boolean);
     sections.push({
       title: `Slide ${i + 1}`,
       lines: lines.length > 0 ? lines : ['No readable text found.'],
@@ -205,14 +205,20 @@ function extractWorksheetRows(xml: string, sharedStrings: string[]): string[] {
 
 function extractParagraphs(xml: string, paragraphPattern: RegExp): string[] {
   return Array.from(xml.matchAll(paragraphPattern))
-    .map((m) => extractTextRuns(m[0]).join(' ').replace(/\s+/g, ' ').trim())
+    .map((m) => m[0]
+      .split(/<w:(?:tab|br|cr)\b[^>]*\/?\s*>/g)
+      .map((part) => extractTextRuns(part).join(''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim())
     .filter(Boolean);
 }
 
 function extractTextRuns(xml: string): string[] {
-  return Array.from(xml.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>|<w:t[^>]*>([\s\S]*?)<\/w:t>|<t[^>]*>([\s\S]*?)<\/t>/g))
-    .map((m) => decodeXml(m[1] ?? m[2] ?? m[3] ?? '').trim())
-    .filter(Boolean);
+  // A run boundary changes formatting, not the text. Preserve whitespace
+  // until the paragraph, cell, or presentation line has been assembled.
+  return Array.from(xml.matchAll(/<(a:t|w:t|t)(?=[\s>])(?![^>]*\/>)[^>]*>([\s\S]*?)<\/\1>/g))
+    .map((m) => decodeXml(m[2] ?? ''));
 }
 
 async function readZipText(zip: JSZip, name: string): Promise<string> {
