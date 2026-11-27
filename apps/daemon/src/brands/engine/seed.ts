@@ -39,9 +39,11 @@ const CODE_STACK =
 
 // ─────────────────────────── default seed ───────────────────────────────────
 
-/** The frozen Ant light-theme seed — also the source of every untouched field. */
+/** The light-theme seed — also the source of every untouched field. */
 export const defaultSeed: SeedToken = {
   colorPrimary: "#1677ff",
+  // Bright seeds keep light alert tints; deriveTokens pushes the base step
+  // down each ladder until it is readable as text on white.
   colorSuccess: "#52c41a",
   colorWarning: "#faad14",
   colorError: "#ff4d4f",
