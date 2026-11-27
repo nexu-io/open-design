@@ -200,6 +200,9 @@ interface ClientCacheFile {
   clients: RegisteredClient[];
 }
 
+const pendingRegistrations = new Map<string, Promise<RegisteredClient>>();
+const clientCacheWrites = new Map<string, Promise<RegisteredClient>>();
+
 function clientsFile(dataDir: string): string {
   return path.join(dataDir, 'mcp-oauth-clients.json');
 }
@@ -236,6 +239,32 @@ async function writeClientCache(
   const tmp = file + '.' + randomBytes(4).toString('hex') + '.tmp';
   await writeFile(tmp, JSON.stringify(next, null, 2), 'utf8');
   await rename(tmp, file);
+}
+
+/** Merge each completed registration into the latest cache without holding
+ * a data-directory lock while an independent issuer is being contacted. */
+async function cacheRegisteredClient(
+  dataDir: string,
+  client: RegisteredClient,
+): Promise<RegisteredClient> {
+  const previous = clientCacheWrites.get(dataDir) ?? Promise.resolve();
+  const task = previous.catch(() => {}).then(async () => {
+    const cache = await readClientCache(dataDir);
+    const cached = cache.clients.find(
+      (entry) => entry.authServerIssuer === client.authServerIssuer
+        && entry.redirectUri === client.redirectUri,
+    );
+    if (cached) return cached;
+    cache.clients.push(client);
+    await writeClientCache(dataDir, cache);
+    return client;
+  });
+  clientCacheWrites.set(dataDir, task);
+  try {
+    return await task;
+  } finally {
+    if (clientCacheWrites.get(dataDir) === task) clientCacheWrites.delete(dataDir);
+  }
 }
 
 /**
@@ -290,6 +319,25 @@ export async function getOrRegisterClient(
   redirectUri: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<RegisteredClient> {
+  const resolvedDataDir = path.resolve(dataDir);
+  const key = JSON.stringify([resolvedDataDir, authServer.issuer, redirectUri]);
+  const pending = pendingRegistrations.get(key);
+  if (pending) return pending;
+  const task = getOrRegisterClientOnce(resolvedDataDir, authServer, redirectUri, fetchImpl);
+  pendingRegistrations.set(key, task);
+  try {
+    return await task;
+  } finally {
+    if (pendingRegistrations.get(key) === task) pendingRegistrations.delete(key);
+  }
+}
+
+async function getOrRegisterClientOnce(
+  dataDir: string,
+  authServer: AuthorizationServerMetadata,
+  redirectUri: string,
+  fetchImpl: typeof fetch,
+): Promise<RegisteredClient> {
   const cache = await readClientCache(dataDir);
   const cached = cache.clients.find(
     (c) => c.authServerIssuer === authServer.issuer && c.redirectUri === redirectUri,
@@ -312,9 +360,7 @@ export async function getOrRegisterClient(
     registeredAt: Date.now(),
   };
   if (reg.clientSecret) next.clientSecret = reg.clientSecret;
-  cache.clients.push(next);
-  await writeClientCache(dataDir, cache);
-  return next;
+  return cacheRegisteredClient(dataDir, next);
 }
 
 // ───────────────────────────────────────────────────────────────────────
