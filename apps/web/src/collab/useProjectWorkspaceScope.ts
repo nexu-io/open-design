@@ -93,6 +93,25 @@ export function projectWorkspaceScopeReady(
 }
 
 /**
+ * Whether the project's workspace scope read has SETTLED with the daemon's
+ * authoritative `unbound` verdict — this project is bound to no workspace.
+ *
+ * The only reading in which a null project workspace context may be treated
+ * as "no share surface in scope" by destructive flows (the design-system
+ * project delete confirmation): publishing requires the workspace binding
+ * the project lacks. A null scope alone proves nothing — `loading` holds no
+ * answer yet, and a `failure` (or an `unavailable` scope kind) means the
+ * binding is unknown, so treating those as workspace-free is the same bug
+ * shape `workspaceIdentitySettledSignedOut` guards against on the shell
+ * identity read.
+ */
+export function projectWorkspaceScopeSettledUnbound(
+  state: Pick<ProjectWorkspaceScopeState, 'loading' | 'scope' | 'failure'>,
+): boolean {
+  return !state.loading && !state.failure && state.scope?.kind === 'unbound';
+}
+
+/**
  * The daemon's own visibility verdict for a resolved project scope.
  *
  * Deliberately independent of `kind`: a private draft can live in a team
