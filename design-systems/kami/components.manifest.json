@@ -299,9 +299,11 @@
         "--accent",
         "--accent-on",
         "--ease-standard",
+        "--elev-raised",
         "--elev-ring",
         "--elev-ring-accent",
         "--fg-2",
+        "--focus-ring",
         "--font-display",
         "--motion-base",
         "--radius-md",
@@ -341,6 +343,7 @@
       "tokenReferences": [
         "--border",
         "--ease-standard",
+        "--elev-raised",
         "--motion-base",
         "--radius-md",
         "--space-3",
@@ -369,6 +372,7 @@
         "--font-display",
         "--radius-sm",
         "--radius-xs",
+        "--tag-bg-faint",
         "--tag-bg-soft",
         "--tag-bg-strong",
         "--text-sm",
@@ -387,7 +391,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent"
+      ]
     },
     {
       "id": "keyboard",
@@ -432,11 +438,17 @@
       ],
       "tokenReferences": [
         "--font-display",
+        "--leading-display",
         "--leading-tight",
+        "--meta",
         "--muted",
         "--space-6",
         "--text-2xl",
-        "--text-sm"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--tracking-display",
+        "--tracking-eyebrow"
       ]
     },
     {
@@ -468,8 +480,12 @@
         "--container-gutter-tablet",
         "--container-max",
         "--font-display",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
         "--space-4",
+        "--space-6",
         "--text-base",
         "--tracking-label"
       ]

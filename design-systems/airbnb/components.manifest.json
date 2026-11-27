@@ -379,7 +379,10 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border",
         "--ease-standard",
         "--elev-ring",
@@ -388,8 +391,10 @@
         "--font-display",
         "--motion-fast",
         "--radius-lg",
+        "--radius-pill",
         "--radius-sm",
         "--space-2",
+        "--space-3",
         "--surface",
         "--text-base",
         "--text-sm"
@@ -431,12 +436,17 @@
         "--danger",
         "--ease-standard",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
+        "--font-display",
         "--motion-fast",
         "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
-        "--text-base"
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -470,9 +480,17 @@
       "tokenReferences": [
         "--accent",
         "--accent-on",
+        "--elev-ring",
         "--fg",
+        "--font-display",
         "--radius-md",
-        "--surface-warm"
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--success",
+        "--surface",
+        "--surface-warm",
+        "--text-xs"
       ]
     },
     {
@@ -508,7 +526,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg",
+        "--font-mono",
+        "--radius-sm",
+        "--surface-warm",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -547,11 +572,15 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg",
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
+        "--text-base",
         "--text-sm",
         "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -587,13 +616,22 @@
         "section"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--font-display",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
-        "--space-4"
+        "--space-3",
+        "--space-4",
+        "--space-6",
+        "--text-lg",
+        "--tracking-display"
       ]
     }
   ],
