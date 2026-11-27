@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * poster — a 3:4 print-style sheet (~900×1200) built to the content-structure
  * playbook in docs/content-structures/poster.md: 3 秒拦住人,传达一件事.
