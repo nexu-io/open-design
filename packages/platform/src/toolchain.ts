@@ -26,7 +26,14 @@ export type WellKnownUserToolchainOptions = {
   // npm prefixes are picked up automatically. Pass an empty object to
   // suppress lookup (useful in tests).
   env?: NodeJS.ProcessEnv;
+  // Homebrew prefixes probed for keg-only versioned Node formulae
+  // (`<prefix>/opt/node@<major>/bin`). Defaults to the Apple Silicon and
+  // Intel prefixes; only consulted when includeSystemBins is true. Tests
+  // pass a fixture prefix.
+  homebrewPrefixes?: readonly string[];
 };
+
+const HOMEBREW_PREFIXES = ["/opt/homebrew", "/usr/local"] as const;
 
 /** @internal Resolve a possibly `~`-prefixed or absolute path against `home`, or `null` when it is neither. */
 function resolveUserScopedHome(raw: string | undefined, home: string): string | null {
@@ -56,7 +63,7 @@ function resolveUserScopedHome(raw: string | undefined, home: string): string | 
  * candidates (existence is not required) except version-manager install roots,
  * which are probed and version-sorted.
  *
- * @param options - Optional `home`, `includeSystemBins`, and `env` overrides (all default to real values).
+ * @param options - Optional `home`, `includeSystemBins`, `env`, and `homebrewPrefixes` overrides (all default to real values).
  * @returns The ordered list of candidate bin directories, most-specific first.
  */
 export function wellKnownUserToolchainBins(
@@ -185,6 +192,14 @@ export function wellKnownUserToolchainBins(
     dirs.push("/run/current-system/sw/bin");
     // `/nix/var/nix/profiles/default/bin` — default system profile
     dirs.push("/nix/var/nix/profiles/default/bin");
+    // Keg-only versioned Node formulae (`brew install node@22`) are never
+    // linked into <prefix>/bin, yet their npm still installs global CLI shims
+    // there. Without these dirs a GUI-launched daemon finds a
+    // `#!/usr/bin/env node` shim such as `dsh` but no `node` to run it
+    // (issue #9226). They come after the linked bins so a linked `node` wins.
+    for (const prefix of options.homebrewPrefixes ?? HOMEBREW_PREFIXES) {
+      dirs.push(...existingHomebrewNodeKegBinDirs(prefix));
+    }
   }
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
@@ -249,6 +264,25 @@ function existingMiseNpmPackageBinDirs(root: string): string[] {
     out.push(...existingChildBinDirs(packageRoot, ["bin"]));
   }
   return out;
+}
+
+const HOMEBREW_NODE_KEG_PATTERN = /^node@(\d+)$/;
+
+/** @internal List existing `<prefix>/opt/node@<major>/bin` directories, newest major first. */
+function existingHomebrewNodeKegBinDirs(prefix: string): string[] {
+  const optDir = join(prefix, "opt");
+  let names: string[];
+  try {
+    names = readdirSync(optDir);
+  } catch {
+    return [];
+  }
+  const major = (name: string) => Number(HOMEBREW_NODE_KEG_PATTERN.exec(name)?.[1]);
+  return names
+    .filter((name) => HOMEBREW_NODE_KEG_PATTERN.test(name))
+    .sort((left, right) => major(right) - major(left))
+    .map((name) => join(optDir, name, "bin"))
+    .filter((dir) => existsSync(dir));
 }
 
 /** @internal List existing `<root>/<versionDir>/<...segments>` directories, version-sorted, skipping non-directories. */
