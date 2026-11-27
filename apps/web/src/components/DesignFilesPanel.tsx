@@ -57,7 +57,13 @@ interface Props {
   /** Read-only viewer of a team-shared project: disables project mutations. */
   viewerOnly?: boolean;
   /**
-   * True while a non-owner member's local mirror has not yet caught up to the
+   * When true, the panel was hidden by the user via the close button. Skip all
+   * file rendering and show a small "hidden" placeholder instead so the parent
+   * doesn't fetch or process any files at all. Prevents UI freeze on large
+   * projects where listing thousands of files would lock up the client.
+   */
+  noFiles?: boolean;
+  /** True while a non-owner member's local mirror has not yet caught up to the
    * project's published head. Existing files belong to the last complete
    * local materialization and remain useful while the next version downloads;
    * only an empty local result swaps the creation CTAs for a syncing notice.
@@ -488,6 +494,7 @@ export function DesignFilesPanel({
   filesRefreshKey = 0,
   viewerOnly = false,
   downloadPending = false,
+  noFiles = false,
   filesAuthoritative = true,
   emptyLookBeforeFirstListing = false,
   rootDirName,
@@ -526,6 +533,22 @@ export function DesignFilesPanel({
   const { workspaceContext } = useProjectCollabContext();
   const t = useT();
   const analytics = useAnalytics();
+
+  // Early return when the tab is hidden - skip all file processing and rendering
+  if (noFiles) {
+    return (
+      <div className="df-panel df-hidden-panel">
+        <div className="df-hidden-panel-content">
+          <div className="df-hidden-panel-icon">
+            <Icon name="folder" size={24} />
+          </div>
+          <div className="df-hidden-panel-text">
+            {t('designFiles.hiddenPanelText')}
+          </div>
+        </div>
+      </div>
+    );
+  }
   // The page the run is currently building, if it has produced one. Only HTML
   // qualifies: there is nothing to watch take shape in a markdown file or an
   // image, and swapping the preview for one mid-run would be a downgrade.

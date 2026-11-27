@@ -1406,3 +1406,37 @@ button.df-card-thumb:focus:not(:disabled) {
 .df-row-popover button:hover { background: var(--bg-subtle); }
 .df-row-popover button.danger { color: var(--red); }
 .df-row-popover button.danger:hover { background: var(--red-bg); }
+
+/* Hidden panel placeholder shown when user closes Design Files tab on large
+   projects. Prevents the file list from being fetched/rendered at all. */
+.df-hidden-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 48px 24px;
+  color: var(--text-faint);
+  background: var(--bg-panel);
+}
+.df-hidden-panel-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+.df-hidden-panel-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+.df-hidden-panel-text {
+  font-size: 14px;
+  font-weight: 500;
+}

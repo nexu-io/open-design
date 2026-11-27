@@ -3885,6 +3885,8 @@ export interface Dict {
   'workspace.noFilesMatch': string;
   'workspace.allFiles': string;
   'workspace.createNew': string;
+  'workspace.reopenDesignFiles': string;
+  'workspace.reopenDesignFilesLabel': string;
   'workspace.tabOpen': string;
   'workspace.sideChatContextBanner': string;
   'workspace.sideChatDefaultTitle': string;
@@ -4042,6 +4044,7 @@ export interface Dict {
   'designFiles.usefulInfoTip18': string;
   'designFiles.usefulInfoTip19': string;
   'designFiles.usefulInfoTip20': string;
+  'designFiles.hiddenPanelText': string;
   'quickSwitcher.placeholder': string;
   'quickSwitcher.empty': string;
   'quickSwitcher.noMatches': string;
