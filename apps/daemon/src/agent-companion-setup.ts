@@ -163,6 +163,21 @@ async function stageVerifiedBundleInProfile(
   return `${relativeDirectory}/${file}`;
 }
 
+/**
+ * Arguments that install the staged bundle into the `open-design` profile.
+ *
+ * dsh initialises every profile with its own `pnpm-workspace.yaml`
+ * (`packages: [.]`) and forwards everything after `add` to `pnpm add` with
+ * the profile directory as cwd. pnpm 9 refuses a bare `pnpm add` at a
+ * workspace root (ERR_PNPM_ADDING_TO_ROOT) unless `--workspace-root` is
+ * explicit; pnpm 11 accepts the flag as well. It travels between `add` and
+ * the spec so the profile's package manager sees it before the tarball path
+ * (#8919).
+ */
+export function dshPluginAddArgs(packageSpec: string): string[] {
+  return ['plugin', '--profile', 'open-design', 'add', '--workspace-root', packageSpec];
+}
+
 function commandFailureDetail(error: unknown): string | null {
   if (!error || typeof error !== 'object') return null;
   const candidate = error as { code?: unknown; signal?: unknown; stderr?: unknown };
@@ -229,7 +244,7 @@ async function installDeepSeekHarnessCompanionOnce(options: {
   try {
     await execAgentFile(
       launch.launchPath,
-      ['plugin', '--profile', 'open-design', 'add', packageSpec],
+      dshPluginAddArgs(packageSpec),
       { env: childEnv, timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
     );
   } catch (error) {
