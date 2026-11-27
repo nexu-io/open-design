@@ -39,4 +39,14 @@ describe('card-separated Markdown boundaries for real question forms', () => {
     const input = `${prefix}${card(1)}\`literal example\n${NESTED_FORM}\`\n\n${REAL_FORM}`;
     expectOnlyActualForm(input);
   });
+
+  // #8379: a close marker quoted in a card string must not end the card's
+  // ownership, or the form-like text after it becomes an interactive sibling.
+  it('keeps form-like text after a quoted close marker owned by the card', () => {
+    const owned = `<od-card type="memory-applied">${JSON.stringify({
+      summary: 'Saved one preference',
+      used: [{ id: 'memory-1', type: 'profile', name: `Literal </od-card> ${NESTED_FORM} \`tick` }],
+    })}</od-card>`;
+    expectOnlyActualForm(`${owned}\n\n${REAL_FORM}`);
+  });
 });
