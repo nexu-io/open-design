@@ -135,6 +135,94 @@ describe('resolveXAIBearer', () => {
     expect(resolved).toBeNull();
   });
 
+  it('shares one rotating-token refresh across concurrent callers', async () => {
+    await setXAIToken(dataDir, {
+      accessToken: 'expired', refreshToken: 'refresh-once', tokenType: 'Bearer', savedAt: 0, expiresAt: 0,
+    });
+    let calls = 0;
+    const rotatingFetch: typeof fetch = async () => {
+      const first = ++calls === 1;
+      return new Response(JSON.stringify(first
+        ? { access_token: 'fresh', refresh_token: 'rotated', expires_in: 1800 }
+        : { error: 'invalid_grant' }), { status: first ? 200 : 400 });
+    };
+
+    const results = await Promise.all(Array.from({ length: 3 }, () => resolveXAIBearer(dataDir, rotatingFetch)));
+    expect(results).toEqual(Array.from({ length: 3 }, () => ({ accessToken: 'fresh', source: 'refreshed' })));
+    expect(calls).toBe(1);
+    const stored = JSON.parse(await readFile(path.join(dataDir, 'xai-tokens.json'), 'utf8'));
+    expect(stored.token.refreshToken).toBe('rotated');
+  });
+
+  it('coalesces equivalent data-directory paths', async () => {
+    await setXAIToken(dataDir, {
+      accessToken: 'expired', refreshToken: 'refresh-once', tokenType: 'Bearer', savedAt: 0, expiresAt: 0,
+    });
+    let calls = 0;
+    const refresh: typeof fetch = async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ access_token: 'fresh', expires_in: 1800 }));
+    };
+    await Promise.all([
+      resolveXAIBearer(dataDir, refresh),
+      resolveXAIBearer(`${dataDir}${path.sep}.`, refresh),
+    ]);
+    expect(calls).toBe(1);
+  });
+
+  it('allows another attempt after a shared refresh failure', async () => {
+    await setXAIToken(dataDir, {
+      accessToken: 'expired', refreshToken: 'refresh-once', tokenType: 'Bearer', savedAt: 0, expiresAt: 0,
+    });
+    let calls = 0;
+    const failingFetch: typeof fetch = async () => {
+      calls += 1;
+      throw new Error('connection reset');
+    };
+    expect(await Promise.all([
+      resolveXAIBearer(dataDir, failingFetch), resolveXAIBearer(dataDir, failingFetch),
+    ])).toEqual([null, null]);
+    expect(calls).toBe(1);
+    expect(await resolveXAIBearer(dataDir, fetchOk({ access_token: 'recovered', expires_in: 1800 })))
+      .toEqual({ accessToken: 'recovered', source: 'refreshed' });
+  });
+
+  it('reads the stored credential again after a successful refresh settles', async () => {
+    await setXAIToken(dataDir, {
+      accessToken: 'expired', refreshToken: 'refresh-once', tokenType: 'Bearer', savedAt: 0, expiresAt: 0,
+    });
+    await resolveXAIBearer(dataDir, fetchOk({ access_token: 'fresh', expires_in: 1800 }));
+    expect(await resolveXAIBearer(dataDir, fetchAlwaysFails()))
+      .toEqual({ accessToken: 'fresh', source: 'stored' });
+  });
+
+  it('refreshes independent token stores without waiting for each other', async () => {
+    const otherDir = path.join(dataDir, 'other');
+    for (const dir of [dataDir, otherDir]) {
+      await setXAIToken(dir, {
+        accessToken: 'expired', refreshToken: 'refresh-once', tokenType: 'Bearer', savedAt: 0, expiresAt: 0,
+      });
+    }
+    let signalStarted!: () => void;
+    let releaseRefresh!: () => void;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const release = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+    const first = resolveXAIBearer(dataDir, async () => {
+      signalStarted();
+      await release;
+      return new Response(JSON.stringify({ access_token: 'first', expires_in: 1800 }));
+    });
+    await started;
+    try {
+      expect(await resolveXAIBearer(otherDir, fetchOk({ access_token: 'second', expires_in: 1800 })))
+        .toEqual({ accessToken: 'second', source: 'refreshed' });
+    } finally {
+      releaseRefresh();
+      await first;
+    }
+    expect(await first).toEqual({ accessToken: 'first', source: 'refreshed' });
+  });
+
   it('preserves the existing refresh_token when the refresh response omits it', async () => {
     const stored: StoredXAIToken = {
       accessToken: 'old-bearer',

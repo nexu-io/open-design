@@ -11,6 +11,7 @@
 // short-lived — every active call site naturally sees expiry often
 // enough that we don't need a separate background refresher.
 
+import path from 'node:path';
 import { refreshXAIToken } from './xai-oauth.js';
 import {
   getXAIToken,
@@ -25,6 +26,8 @@ export interface ResolvedXAICredential {
   source: 'stored' | 'refreshed';
 }
 
+const pendingResolutions = new Map<string, Promise<ResolvedXAICredential | null>>();
+
 /**
  * Get a usable xAI bearer, refreshing in place if the stored token is
  * within the expiry skew window. Returns null when nothing is stored,
@@ -33,6 +36,24 @@ export interface ResolvedXAICredential {
  * back to API key / re-login UI".
  */
 export async function resolveXAIBearer(
+  dataDir: string,
+  fetchImpl?: typeof fetch,
+): Promise<ResolvedXAICredential | null> {
+  // Refresh tokens may rotate after one use. All callers for this token store
+  // must share the pending exchange instead of retrying its old refresh token.
+  const key = path.resolve(dataDir);
+  const pending = pendingResolutions.get(key);
+  if (pending) return pending;
+  const task = resolveStoredXAIBearer(dataDir, fetchImpl);
+  pendingResolutions.set(key, task);
+  try {
+    return await task;
+  } finally {
+    if (pendingResolutions.get(key) === task) pendingResolutions.delete(key);
+  }
+}
+
+async function resolveStoredXAIBearer(
   dataDir: string,
   fetchImpl?: typeof fetch,
 ): Promise<ResolvedXAICredential | null> {
