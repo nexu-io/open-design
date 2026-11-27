@@ -72,6 +72,9 @@ export function buildPreviewBaseHrefBridge(
       var base = document.querySelector('base[data-od-project-preview-base]');
       if (!base) return;
       base.setAttribute('href', next.href);
+      initialScope = typeof data.expiresAt === 'number' && Number.isFinite(data.expiresAt)
+        ? { href: next.href, expiresAt: data.expiresAt }
+        : null;
       window.parent.postMessage({
         type: 'od:preview-base-updated',
         requestId: typeof data.requestId === 'string' ? data.requestId : '',
