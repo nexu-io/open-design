@@ -3002,6 +3002,8 @@ export const uk: Dict = {
   'designFiles.empty': 'Тут з\'являться ваші роботи',
   'designFiles.buildingPreview': 'Повний перегляд',
   'designFiles.syncing': 'Синхронізація файлів, якими поділилася команда…',
+  'designFiles.loadFailed': 'Не вдалося завантажити файли цього проєкту.',
+  'designFiles.retry': 'Повторити',
   'designFiles.refresh': 'Оновити',
   'designFiles.delete': 'Видалити',
   'designFiles.searchPlaceholder': 'Пошук файлів…',

@@ -3205,6 +3205,8 @@ export const zhCN: Dict = {
   "designFiles.empty": "生成的设计会出现在这里",
   "designFiles.buildingPreview": "全屏预览",
   "designFiles.syncing": "正在同步团队共享的文件…",
+  "designFiles.loadFailed": "无法加载此项目的文件。",
+  "designFiles.retry": "重试",
   "designFiles.refresh": "刷新",
   "designFiles.delete": "删除",
   "designFiles.searchPlaceholder": "搜索文件…",

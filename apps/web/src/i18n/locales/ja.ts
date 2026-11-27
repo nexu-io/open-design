@@ -3002,6 +3002,8 @@ export const ja: Dict = {
   'designFiles.empty': 'ここに作品が表示されます',
   'designFiles.buildingPreview': '全画面プレビュー',
   'designFiles.syncing': 'チームで共有されたファイルを同期中…',
+  'designFiles.loadFailed': 'このプロジェクトのファイルを読み込めませんでした。',
+  'designFiles.retry': '再試行',
   'designFiles.refresh': '更新',
   'designFiles.delete': '削除',
   'designFiles.searchPlaceholder': 'ファイルを検索…',

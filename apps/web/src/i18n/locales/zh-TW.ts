@@ -3216,6 +3216,8 @@ export const zhTW: Dict = {
   "designFiles.empty": "生成的設計會出現在這裡",
   "designFiles.buildingPreview": "全螢幕預覽",
   "designFiles.syncing": "正在同步團隊共享的檔案…",
+  "designFiles.loadFailed": "無法載入此專案的檔案。",
+  "designFiles.retry": "重試",
   "designFiles.refresh": "重新整理",
   "designFiles.delete": "刪除",
   "designFiles.searchPlaceholder": "搜尋檔案…",

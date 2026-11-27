@@ -3002,6 +3002,8 @@ export const hu: Dict = {
   'designFiles.empty': 'A kreációk itt jelennek meg',
   'designFiles.buildingPreview': 'Teljes képernyős előnézet',
   'designFiles.syncing': 'A csapat megosztott fájljainak szinkronizálása…',
+  'designFiles.loadFailed': 'A projekt fájljait nem sikerült betölteni.',
+  'designFiles.retry': 'Újra',
   'designFiles.refresh': 'Frissítés',
   'designFiles.delete': 'Törlés',
   'designFiles.searchPlaceholder': 'Fájlok keresése…',

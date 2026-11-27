@@ -3002,6 +3002,8 @@ export const pl: Dict = {
   'designFiles.empty': 'Twoje kreacje pojawią się tutaj',
   'designFiles.buildingPreview': 'Podgląd pełnoekranowy',
   'designFiles.syncing': 'Synchronizowanie plików udostępnionych przez zespół…',
+  'designFiles.loadFailed': 'Nie udało się wczytać plików tego projektu.',
+  'designFiles.retry': 'Ponów',
   'designFiles.refresh': 'Odśwież',
   'designFiles.delete': 'Usuń',
   'designFiles.searchPlaceholder': 'Szukaj plików…',

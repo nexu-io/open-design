@@ -3002,6 +3002,8 @@ export const id: Dict = {
   'designFiles.empty': 'Belum ada file desain.',
   'designFiles.buildingPreview': 'Pratinjau layar penuh',
   'designFiles.syncing': 'Menyinkronkan file yang dibagikan tim…',
+  'designFiles.loadFailed': 'Tidak dapat memuat file proyek ini.',
+  'designFiles.retry': 'Coba lagi',
   'designFiles.refresh': 'Refresh',
   'designFiles.delete': 'Hapus',
   'designFiles.searchPlaceholder': 'Cari file...',
