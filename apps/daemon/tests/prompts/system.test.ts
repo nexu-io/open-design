@@ -491,9 +491,12 @@ describe('composeSystemPrompt', () => {
         '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
       );
       expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
+      expect(prototypePrompt).toContain('od media models --cloud --json');
       expect(prototypePrompt).not.toContain(
         'For the best fal image model use `--model flux-pro-ultra`',
       );
+      expect(imagePrompt).toContain('media models --cloud --json');
+      expect(imagePrompt.replace(/\s+/g, ' ')).toContain('Never silently substitute');
     });
 
     // The classified-failure branch has to reach the prompt the DAEMON

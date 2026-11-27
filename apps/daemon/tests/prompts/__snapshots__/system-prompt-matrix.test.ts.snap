@@ -15,7 +15,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 68799,
+    "totalChars": 69050,
   },
   "ask-mode-full-context": {
     "sections": [
@@ -50,7 +50,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 55863,
+    "totalChars": 56307,
   },
   "critique-enabled": {
     "sections": [
@@ -73,7 +73,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 68327,
+    "totalChars": 68578,
   },
   "deck-kind-no-skill": {
     "sections": [
@@ -90,7 +90,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 97093,
+    "totalChars": 97344,
   },
   "deck-kind-with-skill-seed": {
     "sections": [
@@ -107,7 +107,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 67855,
+    "totalChars": 68106,
   },
   "design-ds-fixture-fallback": {
     "sections": [
@@ -130,7 +130,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 92848,
+    "totalChars": 93099,
   },
   "design-full-stack": {
     "sections": [
@@ -160,7 +160,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 75480,
+    "totalChars": 75731,
   },
   "design-minimal": {
     "sections": [
@@ -177,7 +177,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 97049,
+    "totalChars": 97300,
   },
   "design-no-ds-multitarget": {
     "sections": [
@@ -194,7 +194,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 73421,
+    "totalChars": 73672,
   },
   "example-prompt": {
     "sections": [
@@ -211,7 +211,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 71668,
+    "totalChars": 71919,
   },
   "freeform-other": {
     "sections": [
@@ -229,7 +229,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 100745,
+    "totalChars": 100996,
   },
   "freeform-other-no-deck-signal": {
     "sections": [
@@ -245,7 +245,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 70591,
+    "totalChars": 70842,
   },
   "media-image": {
     "sections": [
@@ -259,7 +259,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 55861,
+    "totalChars": 56305,
   },
   "memory-hooks-off": {
     "sections": [
@@ -277,7 +277,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 98554,
+    "totalChars": 98805,
   },
   "plan-mode": {
     "sections": [
@@ -294,7 +294,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 74615,
+    "totalChars": 74866,
   },
   "plugin-stages": {
     "sections": [
@@ -313,7 +313,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 97145,
+    "totalChars": 97396,
   },
   "skip-discovery-brief": {
     "sections": [
@@ -330,7 +330,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 71179,
+    "totalChars": 71430,
   },
   "slim-design-full-stack": {
     "sections": [
@@ -357,7 +357,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 51521,
+    "totalChars": 51772,
   },
   "slim-freeform-no-deck-signal": {
     "sections": [
@@ -369,7 +369,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "comment-identity-edit",
       "role-marker-guard",
     ],
-    "totalChars": 43576,
+    "totalChars": 43827,
   },
 }
 `;
