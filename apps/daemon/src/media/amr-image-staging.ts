@@ -49,6 +49,12 @@ export async function stageAmrImagePaths(
     : null;
   const stagingDir = path.join(root, STAGING_DIRNAME);
   await fs.promises.mkdir(stagingDir, { recursive: true });
+  // A workspace may already contain this path. Never follow a directory link
+  // into unrelated files when pruning old attachments or copying new ones.
+  const stagingStat = await fs.promises.lstat(stagingDir);
+  if (!stagingStat.isDirectory() || stagingStat.isSymbolicLink()) {
+    throw new Error('AMR attachment staging path must be a real directory');
+  }
   await pruneStagedAttachments(stagingDir);
 
   const staged: string[] = [];
