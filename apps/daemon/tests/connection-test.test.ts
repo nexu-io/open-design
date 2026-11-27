@@ -4010,6 +4010,104 @@ process.stdin.on('end', () => console.log(JSON.stringify({ type: 'text', part: {
     }
   });
 
+  describe('OpenCode Zen free-tier client rejection (#9627)', () => {
+    const ZEN_TEXT = 'OpenCode 1.18.0 or newer is required to use the free tier.';
+    const shapes: Array<[string, string]> = [
+      [
+        'stdout JSON error event',
+        `console.log(JSON.stringify({ type: 'error', error: { data: { message: ${JSON.stringify(ZEN_TEXT)} } } }));
+setTimeout(() => process.exit(0), 50);`,
+      ],
+      [
+        'plain stderr and exit 1',
+        `console.error(${JSON.stringify(ZEN_TEXT)});
+process.exit(1);`,
+      ],
+    ];
+
+    it.each(shapes)('explains the rejection for opencode (%s)', async (_name, body) => {
+      await withFakeOpenCode(
+        `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('opencode/big-pickle');
+  process.exit(0);
+}
+${body}
+`,
+        async () => {
+          const result = await testAgentConnection({ agentId: 'opencode' });
+          expect(result.ok).toBe(false);
+          expect(result.kind).toBe('agent_spawn_failed');
+          expect(result.detail).toContain('free tier');
+          expect(result.detail).toContain('own API key');
+          expect(result.detail).toContain('1.18.0');
+          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        },
+      );
+    });
+
+    it.each(shapes)('explains the rejection for byok-opencode (%s)', async (_name, body) => {
+      const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-byok-zen-'));
+      const bin = path.join(dir, 'opencode-byok');
+      try {
+        await fsp.writeFile(
+          bin,
+          `#!/usr/bin/env node
+process.stdin.resume();
+${body}
+`,
+        );
+        await fsp.chmod(bin, 0o755);
+        const result = await testAgentConnection({
+          agentId: 'byok-opencode',
+          agentCliEnv: { opencode: { OPENCODE_BIN: bin } },
+        });
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('agent_spawn_failed');
+        expect(result.detail).toContain('bundled with OpenDesign');
+        expect(result.detail).toContain('own API key');
+        expect(result.detail).toContain('1.18.0');
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        expect(JSON.stringify(result.diagnostics)).toContain('free tier');
+      } finally {
+        await fsp.rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('explains the rejection when the runtime hangs until the test times out', async () => {
+      const previousTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+      process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
+      try {
+        await withFakeOpenCode(
+          `
+const args = process.argv.slice(2);
+if (args[0] === 'models') {
+  console.log('opencode/big-pickle');
+  process.exit(0);
+}
+console.error(${JSON.stringify(ZEN_TEXT)});
+setInterval(() => {}, 1000);
+`,
+          async () => {
+            const result = await testAgentConnection({ agentId: 'opencode' });
+            expect(result.ok).toBe(false);
+            expect(result.kind).toBe('agent_spawn_failed');
+            expect(result.detail).toContain('free tier');
+            expect(result.detail).toContain('own API key');
+            expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+          },
+        );
+      } finally {
+        if (previousTimeout === undefined) {
+          delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
+        } else {
+          process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = previousTimeout;
+        }
+      }
+    });
+  });
+
   it('surfaces OpenCode provider connectivity errors captured before timeout (#4999)', async () => {
     await withFakeOpenCode(
       `

@@ -458,7 +458,7 @@ function isByokOpenCodeProviderNotFoundText(
 }
 
 function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
-  if (/\brequires a newer version of codex\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
+  if (/\brequires a newer version of codex\b|\bor newer is required to use the free tier\b|\bunknown option [`'"]?--[\w-]+[`'"]?\b/i.test(text)) {
     return 'cli_version_incompatible';
   }
   if (/\bmodel is disabled\b/i.test(text)) return 'model_disabled';
