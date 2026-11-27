@@ -7726,9 +7726,12 @@ async function runProject(args) {
   od project open-in <id> --editor <slug> Open the project's working directory
                                           in the chosen editor (cursor, zed,
                                           vscode, finder, terminal, …).
-  od project handoff <id> --conversation <id> --api-key <key> --model <model>
-                    [--base-url <url>] [--max-tokens <n>]
-                    Synthesize a resume-conversation handoff prompt.
+  od project handoff <id> --conversation <id> --model <model>
+                    [--api-key-file <path|->] [--api-key <key>] [--base-url <url>]
+                    [--max-tokens <n>]
+                    Synthesize a resume-conversation handoff prompt. The API key
+                    falls back to ANTHROPIC_API_KEY; prefer --api-key-file or the
+                    env var, since --api-key exposes the key in shell history.
   od project artifact-snapshot list --project <id> --conversation <id>
                     --message <id> [--json]
                     List one chat message's artifact refs — which version each

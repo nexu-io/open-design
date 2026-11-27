@@ -5,7 +5,18 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { runProjectHandoff } from '../src/handoff-cli.js';
+
+// Passthrough-by-default fs mock so `--api-key-file -` (stdin, fd 0) can be
+// intercepted without breaking real file reads elsewhere.
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, readFileSync: vi.fn(actual.readFileSync) };
+});
 
 // Isolate the test from real daemon discovery — the flagUrl is echoed back.
 vi.mock('../src/daemon-url.js', () => ({
@@ -47,6 +58,7 @@ describe('od project handoff CLI', () => {
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   afterEach(() => {
@@ -245,5 +257,118 @@ describe('od project handoff CLI', () => {
     expect(result.exitCode).toBe(1);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(stderr.join('')).toContain('max-tokens');
+  });
+
+  describe('API key resolution (#2456)', () => {
+    const baseArgs = ['proj-1', '--conversation', 'conv-9', '--model', 'claude-opus-4-7', '--daemon-url', DAEMON];
+
+    function keyFile(contents: string): string {
+      const dir = mkdtempSync(join(tmpdir(), 'handoff-key-'));
+      const path = join(dir, 'key');
+      writeFileSync(path, contents);
+      return path;
+    }
+
+    it('reads the key from --api-key-file <path> without an argv warning', async () => {
+      const path = keyFile('sk-from-file\n');
+      const result = await runProjectHandoff([...baseArgs, '--api-key-file', path]);
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body)).apiKey).toBe('sk-from-file');
+      expect(stderr.join('')).not.toContain('shell history');
+    });
+
+    it('reads the key from stdin when --api-key-file is -', async () => {
+      // The only readFileSync call on this path is the fd-0 stdin read.
+      vi.mocked(readFileSync).mockReturnValueOnce('sk-from-stdin\n' as never);
+
+      const result = await runProjectHandoff([...baseArgs, '--api-key-file', '-']);
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body)).apiKey).toBe('sk-from-stdin');
+    });
+
+    it('falls back to ANTHROPIC_API_KEY when no flag is given', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-from-env';
+      const result = await runProjectHandoff([...baseArgs]);
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body)).apiKey).toBe('sk-from-env');
+      expect(stderr.join('')).not.toContain('shell history');
+    });
+
+    it('warns on stderr when --api-key passes the key via argv but still uses it', async () => {
+      const result = await runProjectHandoff([...baseArgs, '--api-key', 'sk-argv']);
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body)).apiKey).toBe('sk-argv');
+      expect(stderr.join('')).toContain('shell history');
+    });
+
+    it('prefers --api-key over --api-key-file and the environment', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-from-env';
+      const path = keyFile('sk-from-file');
+      const result = await runProjectHandoff([...baseArgs, '--api-key', 'sk-argv', '--api-key-file', path]);
+
+      expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body)).apiKey).toBe('sk-argv');
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('prefers --api-key-file over the environment', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-from-env';
+      const path = keyFile('sk-from-file');
+      const result = await runProjectHandoff([...baseArgs, '--api-key-file', path]);
+
+      expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body)).apiKey).toBe('sk-from-file');
+    });
+
+    it('fails without calling the daemon when no key is available anywhere', async () => {
+      const result = await runProjectHandoff([...baseArgs]);
+
+      expect(result.exitCode).toBe(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(stderr.join('')).toContain('--api-key-file');
+      expect(stderr.join('')).toContain('ANTHROPIC_API_KEY');
+    });
+
+    it('treats an empty ANTHROPIC_API_KEY as missing', async () => {
+      process.env.ANTHROPIC_API_KEY = '   ';
+      const result = await runProjectHandoff([...baseArgs]);
+
+      expect(result.exitCode).toBe(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('fails when the key file cannot be read', async () => {
+      const result = await runProjectHandoff([...baseArgs, '--api-key-file', '/nonexistent/key-path']);
+
+      expect(result.exitCode).toBe(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(stderr.join('')).toContain('cannot read API key');
+    });
+
+    it('fails when the key file is empty', async () => {
+      const path = keyFile('  \n');
+      const result = await runProjectHandoff([...baseArgs, '--api-key-file', path]);
+
+      expect(result.exitCode).toBe(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(stderr.join('')).toContain('empty');
+    });
+
+    it('fails when --api-key is empty', async () => {
+      const result = await runProjectHandoff([...baseArgs, '--api-key', '  ']);
+
+      expect(result.exitCode).toBe(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('fails at the parser when --api-key-file has no value', async () => {
+      const result = await runProjectHandoff([...baseArgs, '--api-key-file']);
+
+      expect(result.exitCode).toBe(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(stderr.join('')).toContain('--api-key-file requires a value');
+    });
   });
 });
