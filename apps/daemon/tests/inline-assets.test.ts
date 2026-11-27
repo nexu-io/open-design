@@ -84,6 +84,84 @@ describe('inlineRelativeAssets (FS-backed)', () => {
     expect(out).toBe(html);
   });
 
+  it.each([
+    '<script>const example = `<link rel="stylesheet" href="a.css">`;</script>',
+    '<!-- <script src="app.js"></script> -->',
+    '<textarea><link rel="stylesheet" href="a.css"></textarea>',
+    '<div data-example=\'<link rel="stylesheet" href="a.css">\'></div>',
+    '<style>.example::after { content: \'<link rel="stylesheet" href="a.css">\'; }</style>',
+    '<iframe><script src="app.js"></script></iframe>',
+    '<noscript><link rel="stylesheet" href="a.css"></noscript>',
+  ])('preserves asset-like text outside real tags: %s', async (html) => {
+    write('a.css', 'body{color:red}');
+    write('app.js', 'window.OD_OK = 1;');
+    const readPaths: string[] = [];
+    const read = fsReader();
+    const out = await inlineRelativeAssets(html, 'index.html', async (rel) => {
+      readPaths.push(rel);
+      return read(rel);
+    });
+    expect(out).toBe(html);
+    expect(readPaths).toEqual([]);
+  });
+
+  it('continues to real assets after raw text without counting the literal as a candidate', async () => {
+    write('a.css', 'body{color:red}');
+    const literal = '<script>const example = `<link rel="stylesheet" href="a.css">`;</script>';
+    const out = await inlineRelativeAssets(
+      `${literal}<link rel="stylesheet" href="a.css">`,
+      'index.html',
+      fsReader(),
+      { maxCandidates: 1 },
+    );
+    expect(out).toContain(literal);
+    expect(out).toContain('<style data-od-inline-asset="a.css">');
+  });
+
+  it('preserves a greater-than sign in an external script attribute', async () => {
+    write('app.js', 'window.OD_OK = 1;');
+    const out = await inlineRelativeAssets(
+      '<script data-note="a > b" src="app.js"></script>',
+      'index.html',
+      fsReader(),
+    );
+    expect(out).toContain('<script data-note="a > b">');
+    expect(out).toContain('window.OD_OK = 1;');
+    expect(out).not.toContain('src="app.js"');
+  });
+
+  it.each([
+    ['<template>', '</template>'],
+    ['<template><template>', '</template></template>'],
+    ['<svg><foreignObject>', '</foreignObject></svg>'],
+  ])('inlines real asset nodes inside %s', async (before, after) => {
+    write('a.css', 'body{color:red}');
+    write('app.js', 'window.OD_OK = 1;');
+    const out = await inlineRelativeAssets(
+      `${before}<link rel="stylesheet" href="a.css"><script src="app.js"></script>${after}`,
+      'index.html',
+      fsReader(),
+    );
+    expect(out.startsWith(before)).toBe(true);
+    expect(out.endsWith(after)).toBe(true);
+    expect(out).toContain('body{color:red}');
+    expect(out).toContain('window.OD_OK = 1;');
+    expect(out).not.toContain('href="a.css"');
+    expect(out).not.toContain('src="app.js"');
+  });
+
+  it('preserves author formatting and Unicode outside the asset source spans', async () => {
+    write('a.css', 'body{color:red}');
+    const before = '<!DOCTYPE html>\r\n<p data-note="😀 &amp;">原文</p>\r\n';
+    const after = '\r\n<DIV title = "unmodified &quot;">🌍</DIV>';
+    const out = await inlineRelativeAssets(
+      `${before}<link rel="stylesheet" href="a.css">${after}`,
+      'index.html',
+      fsReader(),
+    );
+    expect(out).toBe(`${before}<style data-od-inline-asset="a.css">\nbody{color:red}\n</style>${after}`);
+  });
+
   it('does NOT inline <link rel=preload> (only rel=stylesheet is in scope)', async () => {
     write('x.css', '.x{}');
     const html = '<link rel="preload" href="x.css">';

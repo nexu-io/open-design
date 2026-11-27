@@ -33,6 +33,8 @@
 // callers later, you'll want a bounded-concurrency reader and an
 // output-size limit.
 
+import { load } from 'cheerio';
+
 /**
  * A handle to a project-relative asset. Decoupled into `size` (cheap;
  * sourced from `stat` or equivalent) and `read()` (full materialization)
@@ -99,7 +101,7 @@ export async function inlineRelativeAssets(
   fileReader: InlineAssetReader,
   opts: InlineOptions = {},
 ): Promise<string> {
-  // Each pending entry records the exact byte span in the ORIGINAL html
+  // Each pending entry records the exact source span in the ORIGINAL html
   // plus the builder that turns the asset's content into the
   // replacement string. We never mutate-then-rescan, so a tag literal
   // that happens to appear inside an inlined asset body is left
@@ -140,38 +142,41 @@ export async function inlineRelativeAssets(
   }
 
   const pending: Pending[] = [];
-
-  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
-    const tag = match[0];
-    const start = match.index!;
-    const rel = readHtmlAttr(tag, 'rel');
-    const href = readHtmlAttr(tag, 'href');
-    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, href);
-    if (!resolved) continue;
-    pending.push({
-      start,
-      end: start + tag.length,
-      resolved,
-      build: (css) => buildInlineStyleBlock(tag, href, css),
-    });
-  }
-
-  for (const match of html.matchAll(
-    /<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi,
-  )) {
-    const tag = match[0];
-    const start = match.index!;
-    const src = readHtmlAttr(tag, 'src');
-    if (!src) continue;
-    const resolved = resolveProjectRelativePath(ownerFileName, src);
-    if (!resolved) continue;
-    pending.push({
-      start,
-      end: start + tag.length,
-      resolved,
-      build: (js) => buildInlineScriptBlock(tag, js),
-    });
+  // Parse only to identify real nodes and their original source boundaries.
+  // Serializing the DOM would change author formatting; regex-only discovery
+  // would also rewrite tag literals in comments, attributes, and raw text.
+  // Template content and HTML inside foreignObject still contain real nodes.
+  const $ = load(html, { sourceCodeLocationInfo: true });
+  for (const node of $('link,script')) {
+    const location = node.sourceCodeLocation;
+    const opening = location?.startTag;
+    if (!opening) continue;
+    const tag = html.slice(opening.startOffset, opening.endOffset);
+    if (node.name === 'link') {
+      const rel = readHtmlAttr(tag, 'rel');
+      const href = readHtmlAttr(tag, 'href');
+      if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
+      const resolved = resolveProjectRelativePath(ownerFileName, href);
+      if (!resolved) continue;
+      pending.push({
+        start: opening.startOffset,
+        end: opening.endOffset,
+        resolved,
+        build: (css) => buildInlineStyleBlock(tag, href, css),
+      });
+    } else {
+      const closing = location?.endTag;
+      if (!closing || html.slice(opening.endOffset, closing.startOffset).trim() !== '') continue;
+      const src = readHtmlAttr(tag, 'src');
+      const resolved = src ? resolveProjectRelativePath(ownerFileName, src) : null;
+      if (!resolved) continue;
+      pending.push({
+        start: opening.startOffset,
+        end: closing.endOffset,
+        resolved,
+        build: (js) => buildInlineScriptBlock(tag, js),
+      });
+    }
   }
 
   if (pending.length === 0) return html;
@@ -351,8 +356,7 @@ function buildInlineStyleBlock(tag: string, href: string, css: string): string {
 }
 
 function buildInlineScriptBlock(tag: string, js: string): string {
-  const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
-  const attrs = open
+  const attrs = tag
     .replace(/^<script/i, '')
     .replace(/>$/i, '')
     .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
