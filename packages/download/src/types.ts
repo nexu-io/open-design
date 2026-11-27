@@ -53,6 +53,7 @@ export type ManagedDownloadResult = {
 
 /** Options accepted by {@link downloadCopyAndClear}. */
 export type DownloadCopyAndClearOptions = ManagedDownloadOptions & {
+  /** Caller-owned destination outside basePath, including through symbolic-link aliases. */
   outputPath: string;
 };
 
