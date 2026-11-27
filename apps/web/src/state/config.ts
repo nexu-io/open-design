@@ -208,6 +208,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     },
   },
   {
+    label: 'LLMTR',
+    protocol: 'openai',
+    baseUrl: 'https://llmtr.com/v1',
+    preferredModels: [
+      'qwen/qwen3.8-27b-free',
+      'llmtr/qwen3-8-27b',
+      'qwen/qwen3.5-flash',
+      'qwen/qwen3.7-plus',
+      'deepseek/deepseek-v4-pro',
+      'google/gemini-3.5-flash',
+    ],
+    apiKeyConsoleLink: {
+      host: 'llmtr.com',
+      url: 'https://llmtr.com/dashboard/keys?utm_source=open_design&utm_medium=provider_preset&utm_campaign=llmtr_byok',
+    },
+  },
+  {
     label: 'OpenRouter',
     protocol: 'openai',
     baseUrl: 'https://openrouter.ai/api/v1',
@@ -527,6 +544,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'anthropic', title: 'Anthropic', providerLabel: 'Anthropic (Claude)' },
   { id: 'openai', title: 'OpenAI', providerLabel: 'OpenAI' },
   { id: 'atlascloud', title: 'Atlas Cloud', providerLabel: 'Atlas Cloud' },
+  { id: 'llmtr', title: 'LLMTR', providerLabel: 'LLMTR' },
   { id: 'google-ai-studio', title: 'Google Gemini', providerLabel: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud', providerLabel: 'Ollama Cloud (managed)' },
   { id: 'azure', title: 'Azure OpenAI', providerLabel: 'Azure OpenAI' },
