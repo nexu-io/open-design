@@ -65,6 +65,7 @@ import {
 } from './memory-extractions.js';
 import { resolveProviderConfig } from './media/config.js';
 import { AIHUBMIX_APP_CODE } from './integrations/aihubmix.js';
+import { normalizeOpenAICompletion } from './integrations/openaiCompletionShape.js';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -848,7 +849,7 @@ async function callOpenAI(provider, system, user) {
     throw new Error(`openai ${resp.status}: ${await resp.text().catch(() => '')}`);
   }
   const json = await resp.json();
-  return json?.choices?.[0]?.message?.content ?? '';
+  return (normalizeOpenAICompletion(json) as any)?.choices?.[0]?.message?.content ?? '';
 }
 
 // Azure OpenAI speaks the same chat-completions JSON as OpenAI, but on
@@ -887,7 +888,7 @@ async function callAzure(provider, system, user) {
     throw new Error(`azure ${resp.status}: ${await resp.text().catch(() => '')}`);
   }
   const json = await resp.json();
-  return json?.choices?.[0]?.message?.content ?? '';
+  return (normalizeOpenAICompletion(json) as any)?.choices?.[0]?.message?.content ?? '';
 }
 
 // Google Gemini's REST surface uses a different request shape:
