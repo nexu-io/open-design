@@ -15,7 +15,7 @@ import { pipeline } from "node:stream/promises";
 
 import { MANAGED_DOWNLOAD_ERROR_CODES, ManagedDownloadError } from "./errors.js";
 import { statFileSize, writeJson } from "./fs-io.js";
-import { createManifest, type DownloadManifest } from "./manifest.js";
+import { createManifest, manifestMatchesTarget, readManifest, type DownloadManifest } from "./manifest.js";
 import type { NormalizedTarget } from "./target.js";
 import type { ManagedDownloadProgress } from "./types.js";
 
@@ -244,6 +244,12 @@ export async function downloadWithRetries(
       lastError = error;
       const partialBytes = await statFileSize(target.partialPath);
       if (partialBytes != null && partialBytes > 0) {
+        // The attempt saves response metadata before streaming. Keep those
+        // validators when its body fails instead of restoring the older input.
+        const savedManifest = await readManifest(target.manifestPath);
+        if (savedManifest != null && savedManifest !== "invalid" && manifestMatchesTarget(savedManifest, target)) {
+          nextManifest = savedManifest;
+        }
         nextManifest = {
           ...(nextManifest ?? createManifest(target, "partial")),
           state: "partial",
