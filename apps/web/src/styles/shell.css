@@ -941,9 +941,6 @@ html.od-radial-open .workspace-shell {
   outline-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.chrome-action-export.export-ready-nudge {
-  animation: export-ready-nudge 1600ms cubic-bezier(0.23, 1, 0.32, 1) 1;
-}
 .chrome-share-menu .share-menu-popover,
 .chrome-present-wrap .present-menu {
   top: calc(100% + 6px);
@@ -1179,9 +1176,6 @@ html.od-radial-open .workspace-shell {
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: var(--text);
-}
-.chrome-action-unified.export-ready-nudge {
-  animation: export-ready-nudge 1600ms cubic-bezier(0.23, 1, 0.32, 1) 1;
 }
 body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   display: none;
