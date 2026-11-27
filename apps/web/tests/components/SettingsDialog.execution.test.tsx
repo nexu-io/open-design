@@ -1643,9 +1643,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
     fireEvent.blur(screen.getByLabelText('API key'));
 
-    // If onByokKeyCommit committed the dirty-key cache key, the auto-fetch
-    // effect would bail on providerModelsCommittedKey !== providerModelsKey
-    // and this text would never appear.
+    // Discovery starts with the cleaned key.
     expect(await screen.findByText(/✓ Loaded \d+ models(?: from your account)?\./)).toBeTruthy();
     expect(fetchProviderModelsMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1678,6 +1676,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain(
       'Account Ready (account-ready-model) · From your account',
     );
+    expect(screen.getByText('Model gpt-4o → account-ready-model')).toBeTruthy();
     await waitForPersist(
       onPersist,
       expect.objectContaining({

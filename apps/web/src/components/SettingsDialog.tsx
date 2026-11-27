@@ -1857,6 +1857,8 @@ export function SettingsDialog({
   } | null>(null);
   const [providerModelsState, setProviderModelsState] =
     useState<ProviderModelsState>({ status: 'idle' });
+  const [modelReplacement, setModelReplacement] =
+    useState<{ key: string; from: string; to: string } | null>(null);
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
   const hasSharedProviderModelsCache =
@@ -3672,11 +3674,7 @@ export function SettingsDialog({
     setProviderModelsCommittedKey(providerModelsKey);
   };
   const onByokKeyCommit = () => {
-    // Normalize the stored key on blur so the value that flows into the
-    // connection-test / model-fetch requests below (and back to the daemon
-    // via autosave) is already free of pasted whitespace / zero-width
-    // characters — otherwise a key like "sk-ant-...\n" would only raise a
-    // non-blocking warning yet still go out malformed over the wire.
+    // Use the same cleaned key for discovery, validation, and autosave.
     const cleanedApiKey = cleanByokApiKey(cfg.apiKey);
     const currentProviderKey = byokProviderKeyForConfig(cfg);
     const activeConfig = autosaveLastSavedRef.current;
@@ -3692,13 +3690,7 @@ export function SettingsDialog({
       setAutosaveCommitTick((tick) => tick + 1);
     }
     if (cleanedApiKey !== cfg.apiKey) {
-      // Writing the cleaned key changes cfg.apiKey, which re-runs the reset
-      // effects above: one nulls providerModelsCommittedKey, the other bumps
-      // providerTestRevisionRef / clears providerAutoTestKeyRef. So committing
-      // the model key or starting the auto-test here would be clobbered — the
-      // model commit before the auto-fetch effect reads it. Defer the commit
-      // until the cleaned value has landed (effect below); connection testing
-      // waits for model discovery and reconciliation.
+      // The key update resets discovery and validation. Commit after it lands.
       deferAfterKeyCleanRef.current = true;
       updateApiConfig({ apiKey: cleanedApiKey });
       return;
@@ -3875,6 +3867,8 @@ export function SettingsDialog({
   );
   useEffect(() => {
     if (pendingProviderModelReconciliation === null) return;
+    const from = cfg.model.trim();
+    if (from) setModelReplacement({ key: providerModelsKey, from, to: pendingProviderModelReconciliation });
     updateApiConfig({ model: pendingProviderModelReconciliation });
   }, [
     pendingProviderModelReconciliation,
@@ -5732,6 +5726,9 @@ export function SettingsDialog({
                   suggestedModelsHint: t('settings.suggestedModelsHint'),
                 }}
                 model={cfg.model}
+                replacedModel={modelReplacement?.key === providerModelsKey &&
+                  modelReplacement.to === cfg.model && !apiModelUserSelectedRef.current
+                  ? modelReplacement.from : undefined}
                 modelSelectRef={modelSelectRef}
                 models={apiModelOptions.map((m) => ({
                   ...m,
