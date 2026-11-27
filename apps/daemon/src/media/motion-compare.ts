@@ -21,7 +21,7 @@ export class MotionCompareError extends Error {
 
 export interface MotionComparePair {
   at: number;
-  /** Structural similarity of the two frames, 0–1; lower means further apart. */
+  /** Structural similarity; 1 is identical and negative scores are valid. */
   ssim: number;
   referenceFrame: string;
   candidateFrame: string;
@@ -68,8 +68,9 @@ export function parseDuration(stderr: string): number {
 
 /** `All:0.984` from ffmpeg's ssim filter. */
 export function parseSsim(stderr: string): number | null {
-  const m = /All:([\d.]+)/.exec(stderr);
-  return m ? Math.round(Number(m[1]) * 10000) / 10000 : null;
+  const m = /\bAll:([+-]?\d+(?:\.\d+)?)(?=\s|$)/.exec(stderr);
+  const score = Number(m?.[1]);
+  return Number.isFinite(score) ? Math.round(score * 10000) / 10000 : null;
 }
 
 /**
