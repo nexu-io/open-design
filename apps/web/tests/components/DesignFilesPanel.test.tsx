@@ -497,6 +497,37 @@ describe("DesignFilesPanel selection", () => {
     }
   });
 
+  it("renders Download as a single anchor menu item, not a button inside a link", () => {
+    renderPanel([file({ name: "alpha.html" })]);
+    fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+
+    const menu = screen.getByTestId("design-file-menu-popover");
+    // One interactive element per action: no <button> nested in an <a>.
+    expect(menu.querySelector("a button, a [role='button']")).toBeNull();
+
+    const download = screen.getByTestId("design-file-download-alpha.html");
+    expect(download.tagName).toBe("A");
+    expect(download.textContent).toBe("Download");
+    expect(download.getAttribute("download")).toBe("alpha.html");
+    expect(download.getAttribute("href")).toContain("alpha.html");
+    expect(download.getAttribute("href")).toContain("test-project");
+
+    fireEvent.click(download);
+    expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+  });
+
+  it("activates the Download link with Space, like the button items", () => {
+    renderPanel([file({ name: "alpha.html" })]);
+    fireEvent.click(screen.getByTestId("design-file-menu-alpha.html"));
+    const download = screen.getByTestId("design-file-download-alpha.html");
+    const onClick = vi.fn();
+    download.addEventListener("click", onClick);
+    const notCancelled = fireEvent.keyDown(download, { key: " " });
+    expect(notCancelled).toBe(false); // page does not scroll
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("design-file-menu-popover")).toBeNull();
+  });
+
   // #5517 contract: the card grid IS the preview surface, so one click on the
   // thumb opens the page in a workspace tab. There is no detail pane and no
   // double-click step.

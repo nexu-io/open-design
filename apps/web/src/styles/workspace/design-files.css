@@ -433,57 +433,86 @@
   position: relative;
   transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.df-row-live-artifact {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-}
-.df-row-plugin-folder {
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
-  cursor: default;
-}
-.df-row-folder-main {
-  appearance: none;
-  display: grid;
+/* Result rows (plugin folders, live artifacts) live in their own tabs and
+   never mix with file rows, so they drop the check column: the icon starts at
+   the row padding, in line with the tab bar. Height matches file rows. Status sits in the meta line under the name; the trailing
+   cluster is time · one action · ⋯ (plugin) or time · Refresh (live), each
+   column only as wide as its content and ending at the row's right padding. */
+.df-row-result {
+  /* 36px holds the 32px icon with 4px to spare, so with the 8px gap the
+     name sits 12px from the icon instead of touching it. */
   grid-template-columns: 36px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
 }
-.df-plugin-install {
-  appearance: none;
+.df-row-result .df-row-time {
+  /* A fixed minimum keeps the action buttons lined up from row to row;
+     the 26px box centres the text on the small button. */
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-}
-.df-plugin-install:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.df-plugin-install:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-.df-plugin-actions {
-  display: flex;
   justify-content: flex-end;
-  gap: 6px;
-  flex-wrap: wrap;
+  min-width: 64px;
+  height: 26px;
+  /* Matches the button label's optical centre (measured, not guessed). */
+  padding-top: 2px;
+  box-sizing: border-box;
+}
+.df-row-meta-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.df-row-meta-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  flex-shrink: 0;
+}
+/* Glyphs centre on the line box; lift them 1px onto the text's x-height.
+   `top`, not `transform`, because the spinner already rotates. */
+.df-row-meta-status .od-icon,
+.df-row-meta-dot {
+  position: relative;
+  top: -1px;
+  flex-shrink: 0;
+}
+/* Let a long (translated) label ellipsize: the inline-flex wrapper cannot. */
+.df-row-meta-status > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* --red is under 4.5:1 as text on the light panel, so the label uses the
+   strong text token and the tone stays in the glyph. */
+.df-row-meta-status[data-tone="failed"] { color: var(--text-strong); }
+.df-row-meta-status[data-tone="failed"] .od-icon { color: var(--red); }
+.df-row-action {
+  white-space: nowrap;
+}
+/* The plugin row menu holds real actions (Publish repo, OpenDesign PR), so
+   its trigger is visible at rest rather than on hover. */
+.df-row-plugin-folder .df-row-menu { opacity: 1; }
+/* The action and ⋯ share one grid row: ⋯ stretches to the button's own
+   height (whatever the font makes it) and aspect-ratio keeps it round, so
+   the hover / pressed circle is exactly as tall as the button. Grid, not
+   flex: Chromium ignores aspect-ratio on a stretched flex item. */
+.df-row-actions {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.df-row-actions .df-row-menu {
+  align-self: stretch;
+  justify-self: start;
+  width: auto;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+@container (max-width: 470px) {
+  /* Narrow panes keep the name readable by dropping the time column. */
+  .df-row-result .df-row-time { display: none; }
 }
 .df-inline-notice {
   margin: 0 20px 6px;
@@ -1372,14 +1401,16 @@ button.df-card-thumb:focus:not(:disabled) {
     linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--accent)) 0%, var(--bg-panel) 100%);
 }
 
-/* Row context menu */
+/* Row context menu (file rows and plugin-folder rows). Opaque, like the
+   panel's project menu: the menu opens over the next row, and a translucent
+   glass surface let that row's buttons and text show through the items.
+   --bg-elevated is the same surface the glass falls back to under
+   prefers-reduced-transparency. */
 .df-row-popover {
   position: fixed;
   z-index: 200;
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  border: 1px solid var(--material-separator);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   padding: 4px;
@@ -1387,7 +1418,8 @@ button.df-card-thumb:focus:not(:disabled) {
   display: flex;
   flex-direction: column;
 }
-.df-row-popover button {
+.df-row-popover button,
+.df-row-popover .df-row-popover-link {
   width: 100%;
   display: flex;
   justify-content: flex-start;
@@ -1399,10 +1431,27 @@ button.df-card-thumb:focus:not(:disabled) {
   border-radius: var(--radius-xs);
   color: var(--text);
 }
-.df-row-popover a {
-  display: block;
-  width: 100%;
+/* The Download item is a plain anchor; give it what the other items get
+   from the global `button` rule so it looks and focuses the same. */
+.df-row-popover .df-row-popover-link {
+  box-sizing: border-box;
+  align-items: center;
+  gap: var(--spacing-8, 8px);
+  height: 36px;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
-.df-row-popover button:hover { background: var(--bg-subtle); }
+.df-row-popover .df-row-popover-link:active { transform: translateY(1px); }
+.df-row-popover .df-row-popover-link:focus-visible {
+  outline: var(--stroke-thin, 1px) solid var(--blue);
+  outline-offset: 2px;
+}
+.df-row-popover button:hover,
+.df-row-popover .df-row-popover-link:hover { background: var(--bg-subtle); }
 .df-row-popover button.danger { color: var(--red); }
 .df-row-popover button.danger:hover { background: var(--red-bg); }

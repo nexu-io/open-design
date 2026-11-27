@@ -7,7 +7,7 @@ import { communityForLocale } from '../lib/community-links';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { projectFileUrl, projectRawUrl } from '../providers/registry';
+import { projectFileUrl, projectRawUrl, refreshLiveArtifact } from '../providers/registry';
 import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
@@ -26,8 +26,9 @@ import type { PluginFolderAgentAction } from './design-files/pluginFolderActions
 import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { FileSyncBadge } from '../collab/FileSyncBadge';
 import { Icon } from './Icon';
-import { LiveArtifactBadges } from './LiveArtifactBadges';
+import { refreshErrorMessage } from './live-artifact-refresh-message';
 import { RemixIcon } from './RemixIcon';
+import { Button } from '@open-design/components';
 import {
   getHtmlSourceSnapshot,
   htmlSourceSnapshotRefreshKey,
@@ -500,6 +501,7 @@ export function DesignFilesPanel({
   liveArtifacts,
   onOpenFile,
   onOpenLiveArtifact,
+  onRefreshFiles,
   onRenameFile,
   onDeleteFile,
   onDeleteFiles,
@@ -550,7 +552,18 @@ export function DesignFilesPanel({
   const [dropReadError, setDropReadError] = useState<string | null>(null);
   const dragDepthRef = useRef(0);
   const [hover, setHover] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ name: string; top: number; left: number } | null>(null);
+  // `kind` picks which item set the shared row popover shows: file rows get
+  // open / rename / copy path / download / delete, plugin-folder result rows
+  // get their secondary share actions.
+  const [menuPos, setMenuPos] = useState<{
+    kind: 'file' | 'plugin-folder';
+    name: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  // The ⋯ trigger that opened the popover, so Escape can hand focus back.
+  const menuTriggerRef = useRef<HTMLElement | null>(null);
+  const menuPopoverRef = useRef<HTMLDivElement | null>(null);
   const MENU_ESTIMATED_HEIGHT = 180;
   const MENU_SAFE_PADDING = 8;
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -558,6 +571,8 @@ export function DesignFilesPanel({
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<ActionNotice | null>(null);
+  const [refreshingArtifactId, setRefreshingArtifactId] = useState<string | null>(null);
+  const [liveRefreshNotice, setLiveRefreshNotice] = useState<ActionNotice | null>(null);
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [copiedLocalPath, setCopiedLocalPath] = useState<string | null>(null);
   const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
@@ -782,8 +797,15 @@ export function DesignFilesPanel({
     if (!menuPos) return;
     const close = () => setMenuPos(null);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        close();
+        menuTriggerRef.current?.focus();
+      }
     };
+    // Move focus into the menu so keyboard users land on its first item.
+    menuPopoverRef.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+      ?.focus();
     window.addEventListener('mousedown', close);
     window.addEventListener('keydown', onKey);
     return () => {
@@ -839,9 +861,20 @@ export function DesignFilesPanel({
     setSelected(new Set());
   }
 
-  function openMenuFor(name: string, el: HTMLElement) {
-    const rect = el.closest('.df-row-menu')?.getBoundingClientRect();
+  function closeMenuAndRefocus() {
+    setMenuPos(null);
+    menuTriggerRef.current?.focus();
+  }
+
+  function openMenuFor(
+    name: string,
+    el: HTMLElement,
+    kind: 'file' | 'plugin-folder' = 'file',
+  ) {
+    const trigger = el.closest<HTMLElement>('.df-row-menu');
+    const rect = trigger?.getBoundingClientRect();
     if (!rect) return;
+    menuTriggerRef.current = trigger;
 
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - rect.bottom;
@@ -861,7 +894,7 @@ export function DesignFilesPanel({
 
     const left = Math.max(MENU_SAFE_PADDING, rect.right - 160);
 
-    setMenuPos({ name, top, left });
+    setMenuPos({ kind, name, top, left });
   }
 
   async function copyLocalPath(fileName: string) {
@@ -1385,6 +1418,32 @@ export function DesignFilesPanel({
     }
   }
 
+  async function handleRefreshLiveArtifact(artifactId: string, title: string) {
+    if (refreshingArtifactId) return;
+    setRefreshingArtifactId(artifactId);
+    setLiveRefreshNotice(null);
+    try {
+      const result = await refreshLiveArtifact(projectId, artifactId, workspaceContext);
+      // Same outcome rule as the viewer toolbar: zero refreshed sources is
+      // not a success, so say so instead of silently going back to idle.
+      if (result.refresh.refreshedSourceCount === 0) {
+        setLiveRefreshNotice({ message: `${title}: ${t('liveArtifact.refresh.noSourceTitle')}` });
+      }
+    } catch (err) {
+      setLiveRefreshNotice({ message: `${title}: ${refreshErrorMessage(err, t)}` });
+    }
+    try {
+      // Pull the new refresh status (Refresh failed / updated time) into the
+      // row before dropping the local Refreshing state.
+      await onRefreshFiles();
+    } catch {
+      // The refresh itself finished; a failed list reload is not worth a
+      // second notice, and the next reload will pick the state up.
+    } finally {
+      setRefreshingArtifactId(null);
+    }
+  }
+
   const fileActions = viewerOnly ? null : (
     <div className="df-actions">
       {LIBRARY_UI_VISIBLE && onSelectFromLibrary ? (
@@ -1770,36 +1829,71 @@ export function DesignFilesPanel({
               ) : null}
               {resolvedTab === 'live-artifacts' ? (
                 <div className="df-section" key="live-artifacts">
-                  {liveArtifacts.map((artifact) => (
-                    <button
+                  {liveRefreshNotice ? (
+                    <div className="df-inline-notice" role="status">
+                      <ActionNoticeView notice={liveRefreshNotice} />
+                    </div>
+                  ) : null}
+                  {liveArtifacts.map((artifact) => {
+                    const refreshing =
+                      refreshingArtifactId === artifact.artifactId
+                      || artifact.refreshStatus === 'running';
+                    // One refresh at a time from this list (the handler drops a
+                    // second click), so every row's Refresh reads as disabled.
+                    const refreshDisabled = refreshing || refreshingArtifactId !== null;
+                    return (
+                    // A div row (not a <button>) so the name button and Refresh
+                    // can sit inside it, and so the global 36px button height
+                    // no longer clips the row. Row click opens.
+                    <div
                       key={artifact.artifactId}
-                      type="button"
                       data-testid={`design-file-row-${artifact.tabId}`}
-                      className="df-row df-row-live-artifact"
-                      onDoubleClick={() => onOpenLiveArtifact(artifact.tabId)}
+                      className="df-row df-row-result df-row-openable"
                       onClick={() => onOpenLiveArtifact(artifact.tabId)}
                     >
                       <span className="df-row-icon" data-kind="live-artifact" aria-hidden>
                         ◉
                       </span>
-                      <span className="df-row-name-wrap">
-                        <span className="df-row-name" title={artifact.title}>
-                          {artifact.title}
-                        </span>
-                        <span className="df-row-sub">
-                          <span>{t('designFiles.kindLiveArtifact')}</span>
-                          <LiveArtifactBadges
-                            compact
-                            status={artifact.status}
-                            refreshStatus={artifact.refreshStatus}
-                          />
-                        </span>
-                      </span>
+                      <div className="df-row-name-wrap">
+                        <button type="button" className="df-row-name-btn">
+                          <span className="df-row-name-wrap">
+                            <span className="df-row-name" title={artifact.title}>
+                              {artifact.title}
+                            </span>
+                            <span className="df-row-sub">
+                              <span>{t('designFiles.kindLiveArtifact')}</span>
+                              <span aria-hidden>·</span>
+                              <LiveArtifactRowStatus
+                                testId={`design-file-status-${artifact.tabId}`}
+                                status={artifact.status}
+                                refreshStatus={refreshing ? 'running' : artifact.refreshStatus}
+                              />
+                            </span>
+                          </span>
+                        </button>
+                      </div>
                       <span className="df-row-time">
                         {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
                       </span>
-                    </button>
-                  ))}
+                      {viewerOnly ? null : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="df-row-action"
+                          data-testid={`design-live-artifact-refresh-${artifact.tabId}`}
+                          disabled={refreshDisabled}
+                          aria-busy={refreshing}
+                          title={t('liveArtifact.refresh.buttonTitle')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleRefreshLiveArtifact(artifact.artifactId, artifact.title);
+                          }}
+                        >
+                          {t('liveArtifact.refresh.button')}
+                        </Button>
+                      )}
+                    </div>
+                  );})}
                 </div>
               ) : null}
               {resolvedTab === 'plugin-folders' ? (
@@ -1811,62 +1905,89 @@ export function DesignFilesPanel({
                   ) : null}
                   {pluginFolders.filter((folder) => !hiddenPluginActionPaths.has(folder.path)).map((folder) => {
                     const actionBusy = activePluginActionPaths.has(folder.path);
+                    // Publish / contribute keep running as an agent task after
+                    // the handler resolves; the parent tracks those paths in
+                    // activePluginActionPaths, so they count as sending too.
+                    const sending =
+                      actionBusy
+                      || installingFolder === folder.path
+                      || sharingFolder === `publish:${folder.path}`
+                      || sharingFolder === `contribute:${folder.path}`;
+                    const menuOpen = menuPos?.kind === 'plugin-folder' && menuPos.name === folder.path;
                     return (
                     <div
                       key={folder.path}
-                      className="df-row df-row-plugin-folder"
+                      className="df-row df-row-result df-row-plugin-folder df-row-openable"
                       data-testid={`design-plugin-folder-${folder.path}`}
+                      onClick={() => onOpenFile(folder.manifestPath)}
                     >
-                      <button
-                        type="button"
-                        className="df-row-folder-main"
-                        onClick={() => onOpenFile(folder.manifestPath)}
-                      >
-                        <span className="df-row-icon" data-kind="folder" aria-hidden>
-                          DIR
-                        </span>
-                        <span className="df-row-name-wrap">
-                          <span className="df-row-name">{folder.path}</span>
-                          <span className="df-row-sub">
-                            {folder.fileCount} files · ready to add to My plugins
+                      <span className="df-row-icon" data-kind="folder" aria-hidden>
+                        DIR
+                      </span>
+                      <div className="df-row-name-wrap">
+                        <button type="button" className="df-row-name-btn">
+                          <span className="df-row-name-wrap">
+                            <span className="df-row-name" title={folder.path}>{folder.path}</span>
+                            <span
+                              className="df-row-sub"
+                              data-testid={`design-plugin-folder-status-${folder.path}`}
+                            >
+                              {sending ? (
+                                <span className="df-row-meta-status" data-tone="running">
+                                  <Icon name="spinner" size={11} />
+                                  <span>{t('designFiles.pluginFolder.sending')}</span>
+                                </span>
+                              ) : (
+                                <span>
+                                  {t('designFiles.pluginFolder.readyToAdd', { count: folder.fileCount })}
+                                </span>
+                              )}
+                            </span>
                           </span>
-                        </span>
-                      </button>
+                        </button>
+                      </div>
                       <span className="df-row-time">{relativeTime(folder.updatedAt, t)}</span>
                       {onPluginFolderAgentAction ? (
-                        <div className="df-plugin-actions">
-                          <button
-                            type="button"
-                            className="df-plugin-install"
+                        // One group so ⋯ can take the button's exact height.
+                        <div className="df-row-actions">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="df-row-action"
                             data-testid={`design-plugin-folder-install-${folder.path}`}
                             disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
-                            onClick={() =>
-                              void handlePluginFolderAgentAction(folder.path, 'install')
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handlePluginFolderAgentAction(folder.path, 'install');
+                            }}
                           >
-                            {installingFolder === folder.path ? 'Sending…' : 'Add to My plugins'}
-                          </button>
+                            {t('designFiles.pluginFolder.addToMyPlugins')}
+                          </Button>
                           <button
                             type="button"
-                            className="df-plugin-install"
-                            data-testid={`design-plugin-folder-publish-${folder.path}`}
-                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
-                            onClick={() =>
-                              void handlePluginFolderAgentAction(folder.path, 'publish')
-                            }
+                            className="df-row-menu"
+                            data-testid={`design-plugin-folder-menu-${folder.path}`}
+                            aria-label={t('designFiles.rowMenuFor', { name: folder.path })}
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpen}
+                            onMouseDown={(e) => {
+                              // Keep focus where it is: in Safari / Firefox on
+                              // macOS a button press does not focus the button,
+                              // so blurring the open menu would close it and
+                              // this click would reopen it.
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (menuOpen) {
+                                setMenuPos(null);
+                                return;
+                              }
+                              openMenuFor(folder.path, e.currentTarget, 'plugin-folder');
+                            }}
                           >
-                            {sharingFolder === `publish:${folder.path}` ? 'Sending…' : 'Publish repo'}
-                          </button>
-                          <button
-                            type="button"
-                            className="df-plugin-install"
-                            data-testid={`design-plugin-folder-contribute-${folder.path}`}
-                            disabled={actionBusy || installingFolder !== null || sharingFolder !== null}
-                            onClick={() =>
-                              void handlePluginFolderAgentAction(folder.path, 'contribute')
-                            }
-                          >
-                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'OpenDesign PR'}
+                            ⋯
                           </button>
                         </div>
                       ) : null}
@@ -1924,73 +2045,190 @@ export function DesignFilesPanel({
           style={{ top: menuPos.top, left: menuPos.left }}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
+          ref={menuPopoverRef}
+          onBlur={(e) => {
+            // Tabbing out of the plugin menu closes it, like Escape without
+            // the focus hand-back. The file menu keeps its existing behaviour.
+            if (menuPos.kind !== 'plugin-folder') return;
+            const next = e.relatedTarget as Node | null;
+            if (next && e.currentTarget.contains(next)) return;
+            if (next && next === menuTriggerRef.current) return;
+            setMenuPos(null);
+          }}
+          role={menuPos.kind === 'plugin-folder' ? 'menu' : undefined}
+          onKeyDown={(e) => {
+            if (menuPos.kind !== 'plugin-folder') return;
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            const items = Array.from(
+              e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'),
+            );
+            if (items.length === 0) return;
+            const current = items.indexOf(document.activeElement as HTMLButtonElement);
+            const step = e.key === 'ArrowDown' ? 1 : -1;
+            items[(current + step + items.length) % items.length]?.focus();
+          }}
         >
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const name = menuPos.name;
-              setMenuPos(null);
-              onOpenFile(name);
-            }}
-          >
-            {t('designFiles.openInTab')}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              startRename(menuPos.name);
-            }}
-          >
-            {t('common.rename')}
-          </button>
-          <button
-            type="button"
-            disabled={!files.some((file) => file.name === menuPos.name && file.localPath)}
-            onClick={(e) => {
-              e.stopPropagation();
-              const name = menuPos.name;
-              setMenuPos(null);
-              void copyLocalPath(name);
-            }}
-          >
-            {copiedLocalPath === menuPos.name
-              ? t('designFiles.copiedLocalPath')
-              : t('designFiles.copyLocalPath')}
-          </button>
-          <a
-            href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
-            download={menuPos.name}
-            style={{ textDecoration: 'none' }}
-          >
+          {menuPos.kind === 'plugin-folder' ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`design-plugin-folder-publish-${menuPos.name}`}
+                disabled={
+                  activePluginActionPaths.has(menuPos.name)
+                  || installingFolder !== null
+                  || sharingFolder !== null
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = menuPos.name;
+                  closeMenuAndRefocus();
+                  void handlePluginFolderAgentAction(name, 'publish');
+                }}
+              >
+                {t('designFiles.pluginFolder.publishRepo')}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`design-plugin-folder-contribute-${menuPos.name}`}
+                disabled={
+                  activePluginActionPaths.has(menuPos.name)
+                  || installingFolder !== null
+                  || sharingFolder !== null
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = menuPos.name;
+                  closeMenuAndRefocus();
+                  void handlePluginFolderAgentAction(name, 'contribute');
+                }}
+              >
+                {t('designFiles.pluginFolder.openDesignPr')}
+              </button>
+            </>
+          ) : (
+            <>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                const name = menuPos.name;
                 setMenuPos(null);
+                onOpenFile(name);
+              }}
+            >
+              {t('designFiles.openInTab')}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                startRename(menuPos.name);
+              }}
+            >
+              {t('common.rename')}
+            </button>
+            <button
+              type="button"
+              disabled={!files.some((file) => file.name === menuPos.name && file.localPath)}
+              onClick={(e) => {
+                e.stopPropagation();
+                const name = menuPos.name;
+                setMenuPos(null);
+                void copyLocalPath(name);
+              }}
+            >
+              {copiedLocalPath === menuPos.name
+                ? t('designFiles.copiedLocalPath')
+                : t('designFiles.copyLocalPath')}
+            </button>
+            {/* The anchor itself is the menu item: one interactive element,
+                not a <button> nested inside an <a>. */}
+            <a
+              className="df-row-popover-link"
+              data-testid={`design-file-download-${menuPos.name}`}
+              href={projectFileUrl(projectId, menuPos.name, workspaceContext)}
+              download={menuPos.name}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuPos(null);
+              }}
+              onKeyDown={(e) => {
+                // Space runs the neighbouring button items; give the link the
+                // same key instead of scrolling the page.
+                if (e.key === ' ') {
+                  e.preventDefault();
+                  e.currentTarget.click();
+                }
               }}
             >
               {t('designFiles.download')}
+            </a>
+            <button
+              type="button"
+              className="danger"
+              data-testid={`design-file-delete-${menuPos.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const name = menuPos.name;
+                setMenuPos(null);
+                onDeleteFile(name);
+              }}
+            >
+              {t('designFiles.delete')}
             </button>
-          </a>
-          <button
-            type="button"
-            className="danger"
-            data-testid={`design-file-delete-${menuPos.name}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              const name = menuPos.name;
-              setMenuPos(null);
-              onDeleteFile(name);
-            }}
-          >
-            {t('designFiles.delete')}
-          </button>
+            </>
+          )}
         </div>
       ) : null}
     </div>
+  );
+}
+
+// Live-artifact status for the Design Files meta line: one state, sentence
+// case, a glyph plus text so it never relies on colour alone. A specific
+// state (refreshing, failed, archived) replaces the generic "Live".
+function LiveArtifactRowStatus({
+  status,
+  refreshStatus,
+  testId,
+}: {
+  status: LiveArtifactWorkspaceEntry['status'];
+  refreshStatus: LiveArtifactWorkspaceEntry['refreshStatus'];
+  testId: string;
+}) {
+  const t = useT();
+  if (refreshStatus === 'running') {
+    return (
+      <span className="df-row-meta-status" data-tone="running" data-testid={testId}>
+        <Icon name="spinner" size={11} />
+        <span>{t('designs.statusRefreshing')}</span>
+      </span>
+    );
+  }
+  if (refreshStatus === 'failed') {
+    return (
+      <span className="df-row-meta-status" data-tone="failed" data-testid={testId}>
+        <Icon name="alert-triangle" size={11} />
+        <span>{t('designs.statusRefreshFailed')}</span>
+      </span>
+    );
+  }
+  if (status === 'archived') {
+    return (
+      <span className="df-row-meta-status" data-tone="archived" data-testid={testId}>
+        <span>{t('designs.statusArchived')}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="df-row-meta-status" data-tone="live" data-testid={testId}>
+      <span className="df-row-meta-dot" aria-hidden />
+      <span>{t('designs.badgeLive')}</span>
+    </span>
   );
 }
 

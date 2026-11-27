@@ -630,7 +630,8 @@ test('[P1] design files page keeps the current single-file menu actions', async 
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('button', { name: /open in tab/i })).toBeVisible();
   await expect(menu.getByRole('button', { name: /rename/i })).toBeVisible();
-  await expect(menu.getByRole('button', { name: /download/i })).toBeVisible();
+  // Download is the anchor itself (no button nested inside a link).
+  await expect(menu.getByRole('link', { name: /download/i })).toBeVisible();
   await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
 });
 

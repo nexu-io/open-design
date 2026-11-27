@@ -3915,6 +3915,12 @@ export interface Dict {
   'designFiles.back': string;
   'designFiles.crumbs': string;
   'designFiles.rowMenu': string;
+  'designFiles.rowMenuFor': string;
+  'designFiles.pluginFolder.readyToAdd': string;
+  'designFiles.pluginFolder.sending': string;
+  'designFiles.pluginFolder.addToMyPlugins': string;
+  'designFiles.pluginFolder.publishRepo': string;
+  'designFiles.pluginFolder.openDesignPr': string;
   'designFiles.openInTab': string;
   'designFiles.download': string;
   'designFiles.downloadSelected': string;
