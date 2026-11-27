@@ -3301,7 +3301,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       if (!nativeEvent) return;
       const mapped = encodeOdEventForAgui(
         nativeEvent,
-        { runId: run.id, seq: record.id, now: Date.now() },
+        { runId: run.id, seq: record.id, now: record.timestamp ?? Date.now() },
       );
       if (mapped) sse.send(mapped.kind, mapped, record.id);
     };

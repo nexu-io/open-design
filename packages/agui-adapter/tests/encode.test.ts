@@ -1,12 +1,55 @@
 // AG-UI encoder unit test.
 
 import { describe, expect, it } from 'vitest';
-import { encodeOdEventForAgui } from '../src/encode.js';
+import { encodeOdEventForAgui, type OdNativeEvent } from '../src/encode.js';
 
 const RUN_ID = 'run-1';
 const NOW = 1_700_000_000_000;
 
+const timestampedEvents: OdNativeEvent[] = [
+  { kind: 'message_chunk', text: 'hello', ts: NOW },
+  { kind: 'tool_call', toolName: 'render', ts: NOW },
+  { kind: 'state_update', path: 'status', ts: NOW },
+  { kind: 'run_started', ts: NOW },
+  { kind: 'end', status: 'succeeded', ts: NOW },
+  {
+    kind: 'pipeline_stage_started', runId: RUN_ID, snapshotId: 'snap-1',
+    stageId: 'render', iteration: 0, startedAt: NOW,
+  },
+  {
+    kind: 'pipeline_stage_completed', runId: RUN_ID, snapshotId: 'snap-1',
+    stageId: 'render', iteration: 0, completedAt: NOW,
+  },
+  {
+    kind: 'genui_surface_request', runId: RUN_ID, surfaceId: 'form-1',
+    payload: { kind: 'form' }, requestedAt: NOW,
+  },
+  {
+    kind: 'genui_surface_response', runId: RUN_ID, surfaceId: 'form-1',
+    value: {}, respondedBy: 'user', respondedAt: NOW,
+  },
+];
+
 describe('encodeOdEventForAgui', () => {
+  it.each(timestampedEvents)('preserves the $kind source time across replays', (event) => {
+    const first = encodeOdEventForAgui(event, { runId: RUN_ID, seq: 7, now: NOW + 60_000 });
+    const replay = encodeOdEventForAgui(event, { runId: RUN_ID, seq: 7, now: NOW + 120_000 });
+    expect(first?.ts).toBe(NOW);
+    expect(replay).toEqual(first);
+  });
+
+  it('preserves a zero source timestamp', () => {
+    expect(encodeOdEventForAgui({ kind: 'run_started', ts: 0 }, { runId: RUN_ID, now: NOW })?.ts).toBe(0);
+  });
+
+  it('uses the source timestamp without a caller clock', () => {
+    expect(encodeOdEventForAgui({ kind: 'message_chunk', ts: NOW }, { runId: RUN_ID })?.ts).toBe(NOW);
+  });
+
+  it.each([NaN, Infinity, -Infinity])('falls back for a non-finite source timestamp (%s)', (ts) => {
+    expect(encodeOdEventForAgui({ kind: 'message_chunk', ts }, { runId: RUN_ID, now: NOW })?.ts).toBe(NOW);
+  });
+
   it('maps message_chunk to agent.message + carries done', () => {
     const out = encodeOdEventForAgui(
       { kind: 'message_chunk', text: 'hello', done: true },
