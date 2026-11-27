@@ -141,7 +141,13 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
   async function handleAddFolder() {
     setError(null);
     setStatus(null);
-    const selected = await openProjectLocationFolderDialog();
+    let selected: string | null;
+    try {
+      selected = await openProjectLocationFolderDialog();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.projectLocationsNoFolderSelected'));
+      return;
+    }
     if (!selected) {
       setStatus(t('settings.projectLocationsNoFolderSelected'));
       return;

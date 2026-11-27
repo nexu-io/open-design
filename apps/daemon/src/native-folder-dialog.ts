@@ -48,12 +48,50 @@ export function buildWindowsFolderDialogCommand(): NativeFolderDialogCommand {
   };
 }
 
-export function parseFolderDialogStdout(error: unknown, stdout: string): string | null {
-  if (error) {
-    return null;
+function isTimeout(error: unknown): boolean {
+  return Boolean(
+    error && typeof error === 'object' && (error as { killed?: unknown }).killed === true,
+  );
+}
+
+function throwFolderDialogFailure(error: unknown, stderrText: string, tool: string): never {
+  if (errorCode(error) === 'ENOENT') {
+    throw new Error(`Could not open folder picker: ${tool} is not available`);
   }
+  if (isTimeout(error)) {
+    throw new Error('Could not open folder picker: the dialog timed out');
+  }
+  throw new Error(`Could not open folder picker: ${stderrText || errorMessage(error)}`);
+}
+
+// PowerShell exits 0 with empty stdout when the user cancels, so any error here
+// is a real failure (missing binary, policy block, timeout), not a cancel.
+export function parseWindowsFolderDialogResult(
+  error: unknown,
+  stdout: string,
+  stderr: string,
+): string | null {
+  if (error) throwFolderDialogFailure(error, stderr.trim(), 'powershell.exe');
 
   const selectedPath = stdout.trim();
+  return selectedPath.length > 0 ? selectedPath : null;
+}
+
+// `osascript` exits 1 with "User canceled. (-128)" on cancel; anything else is a failure.
+export function parseMacFolderDialogResult(
+  error: unknown,
+  stdout: string,
+  stderr: string,
+): string | null {
+  if (error) {
+    const stderrText = stderr.trim();
+    if (!isTimeout(error) && errorCode(error) !== 'ENOENT' && /user canceled|\(-128\)/i.test(stderrText)) {
+      return null;
+    }
+    throwFolderDialogFailure(error, stderrText, 'osascript');
+  }
+
+  const selectedPath = stdout.trim().replace(/\/$/, '');
   return selectedPath.length > 0 ? selectedPath : null;
 }
 

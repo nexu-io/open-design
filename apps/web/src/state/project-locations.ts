@@ -1,3 +1,4 @@
+import { pickLocalFolderPath } from './projects';
 import type {
   ProjectLocation,
   ProjectLocationsResponse,
@@ -44,12 +45,6 @@ export async function scanProjectLocations(): Promise<ScanProjectLocationsRespon
 }
 
 export async function openProjectLocationFolderDialog(): Promise<string | null> {
-  try {
-    const resp = await fetch('/api/dialog/open-folder', { method: 'POST' });
-    if (!resp.ok) return null;
-    const json = (await resp.json()) as { path?: string | null };
-    return typeof json.path === 'string' && json.path.trim() ? json.path : null;
-  } catch {
-    return null;
-  }
+  // Throws on picker failure so callers can tell it apart from a user cancel (null).
+  return pickLocalFolderPath();
 }
