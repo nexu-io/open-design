@@ -43,4 +43,22 @@ describe('apiProtocols table consistency', () => {
     expect(atlasCloudProvider?.preferredModels).toContain('qwen/qwen3.5-flash');
     expect(atlasCloudProvider?.preferredModels).toContain('deepseek-ai/deepseek-v4-flash');
   });
+
+  it('keeps the MartLLM preset wired to OpenAI-compatible chat models', () => {
+    const martllmProvider = KNOWN_PROVIDERS.find(
+      (provider) =>
+        provider.protocol === 'openai' &&
+        provider.baseUrl === 'https://api.martllm.com/v1',
+    );
+
+    expect(martllmProvider).toMatchObject({
+      label: 'MartLLM',
+      apiKeyConsoleLink: {
+        host: 'martllm.com',
+        url: 'https://martllm.com/signup',
+      },
+    });
+    expect(martllmProvider?.preferredModels[0]).toBe('anthropic/claude-sonnet-4.6');
+    expect(martllmProvider?.preferredModels).toContain('deepseek/deepseek-v4.1-flash');
+  });
 });

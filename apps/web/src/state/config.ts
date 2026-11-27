@@ -227,6 +227,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     ],
   },
   {
+    label: 'MartLLM',
+    protocol: 'openai',
+    baseUrl: 'https://api.martllm.com/v1',
+    preferredModels: [
+      'anthropic/claude-sonnet-4.6',
+      'deepseek/deepseek-v4.1-flash',
+      'deepseek/deepseek-v4-pro',
+      'qwen/qwen3.5-flash',
+      'google/gemini-3.5-flash',
+      'moonshotai/kimi-k2.6',
+    ],
+    apiKeyConsoleLink: {
+      host: 'martllm.com',
+      url: 'https://martllm.com/signup',
+    },
+  },
+  {
     label: 'Azure OpenAI',
     protocol: 'azure',
     baseUrl: '',
@@ -542,6 +559,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
   { id: 'openrouter', title: 'OpenRouter', providerLabel: 'OpenRouter' },
+  { id: 'martllm', title: 'MartLLM', providerLabel: 'MartLLM' },
   { id: 'mistral', title: 'Mistral AI', providerLabel: 'Mistral AI' },
   { id: 'xai', title: 'xAI', providerLabel: 'xAI' },
   { id: 'together', title: 'Together AI', providerLabel: 'Together AI' },
