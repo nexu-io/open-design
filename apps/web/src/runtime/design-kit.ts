@@ -438,7 +438,7 @@ export function brandToKit(brand: Brand, opts: BrandKitOptions): DesignKit {
         }
       : undefined,
     assets: showSystem
-      ? ASSET_TILES.map((a) => ({ kind: a.kind, label: a.label, url: asset(a.file)! }))
+      ? packageAssetTiles(opts.packageInfo, (rel) => assetUrl(rel))
       : undefined,
     showcaseHtml: opts.showcaseHtml ?? null,
   };
