@@ -31,6 +31,8 @@ import {
   planAgentInstall,
   applyJsonInstall,
   removeJsonInstall,
+  applyYamlInstall,
+  removeYamlInstall,
 } from './mcp-agent-install.js';
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
 import { parseStockSearchRequest, type StockSearchResponse } from '@open-design/contracts';
@@ -3096,7 +3098,10 @@ async function runMcpInstall(args) {
     return;
   }
 
-  // plan.kind === 'json'
+  // plan.kind === 'json' | 'yaml' — same file-merge IO, format-specific
+  // apply/remove (yaml preserves comments via the Document API).
+  const applyInstall = plan.kind === 'yaml' ? applyYamlInstall : applyJsonInstall;
+  const removeInstall = plan.kind === 'yaml' ? removeYamlInstall : removeJsonInstall;
   const fs = await import('node:fs/promises');
   const path = await import('node:path');
   let existing = null;
@@ -3107,12 +3112,12 @@ async function runMcpInstall(args) {
   }
 
   if (uninstall) {
-    const next = removeJsonInstall(existing, plan);
+    const next = removeInstall(existing, plan);
     if (next == null) {
       emitInstallResult(useJson, {
         ok: true,
         agent: slug,
-        kind: 'json',
+        kind: plan.kind,
         configPath: plan.configPath,
         message: `${serverName} not present in ${plan.configPath} — nothing to remove`,
       });
@@ -3122,7 +3127,7 @@ async function runMcpInstall(args) {
       emitInstallResult(useJson, {
         ok: true,
         agent: slug,
-        kind: 'json',
+        kind: plan.kind,
         configPath: plan.configPath,
         preview: next,
         message: `would update ${plan.configPath}`,
@@ -3133,19 +3138,19 @@ async function runMcpInstall(args) {
     emitInstallResult(useJson, {
       ok: true,
       agent: slug,
-      kind: 'json',
+      kind: plan.kind,
       configPath: plan.configPath,
       message: `removed ${serverName} from ${plan.configPath}`,
     });
     return;
   }
 
-  const next = applyJsonInstall(existing, plan);
+  const next = applyInstall(existing, plan);
   if (dryRun) {
     emitInstallResult(useJson, {
       ok: true,
       agent: slug,
-      kind: 'json',
+      kind: plan.kind,
       launchSpec: spec,
       configPath: plan.configPath,
       preview: next,
@@ -3158,7 +3163,7 @@ async function runMcpInstall(args) {
   emitInstallResult(useJson, {
     ok: true,
     agent: slug,
-    kind: 'json',
+    kind: plan.kind,
     configPath: plan.configPath,
     message: `installed ${serverName} into ${plan.configPath}`,
   });
