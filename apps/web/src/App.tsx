@@ -263,6 +263,17 @@ import {
   removeProjectFromDisplaySnapshots,
   writeProjectDisplaySnapshot,
 } from './state/project-display-cache';
+import {
+  applyProjectAgentChange,
+  applyProjectAgentModelChange,
+  applyProjectApiModelChange,
+  applyProjectApiProtocolChange,
+  applyProjectModeChange,
+  applyProjectSwitchToCloud,
+  ensureProjectMetadataRuntimePrefs,
+  resolveProjectAppConfig,
+  snapshotProjectRuntimePrefs,
+} from './state/projectRuntimePrefs';
 import { getOpenDesignHost, isOpenDesignHostAvailable, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
@@ -277,6 +288,7 @@ import type {
   DesignSystemSummary,
   Project,
   ProjectMetadata,
+  ProjectRuntimePrefs,
   ProjectTemplate,
   ProviderModelOption,
   PromptTemplateSummary,
@@ -823,6 +835,34 @@ interface SettingsReturnTarget {
 }
 
 /**
+ * Resolve which project (if any) owns runtime preference edits for the current
+ * surface: either the active project route directly, or the originating project
+ * recorded when Settings was opened via `openSettings` (`view: 'settings'`).
+ */
+function resolveScopedRuntimeTargetProjectId(
+  currentRoute: Route,
+  returnTarget: SettingsReturnTarget | null,
+  accountGeneration: number,
+  identityScopeKey: string | null,
+): string | null {
+  if (currentRoute.kind === 'project') {
+    return currentRoute.projectId;
+  }
+  if (
+    currentRoute.kind === 'home'
+    && currentRoute.view === 'settings'
+    && returnTarget
+    && returnTarget.route.kind === 'project'
+    && returnTarget.accountGeneration === accountGeneration
+    && identityScopeKey !== null
+    && returnTarget.identityScopeKey === identityScopeKey
+  ) {
+    return returnTarget.route.projectId;
+  }
+  return null;
+}
+
+/**
  * The project route must never use `!activeProject` as an unbounded loading
  * condition. Once the initial list is complete, every absent-project path is
  * either a bounded deep-link resolution or an explicit terminal surface.
@@ -1142,6 +1182,7 @@ function AppInner() {
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const [projectCreateError, setProjectCreateError] = useState<string | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
+  const [runtimePrefsError, setRuntimePrefsError] = useState<string | null>(null);
   const [deepLinkResolutionFailure, setDeepLinkResolutionFailure] = useState<{
     projectId: string;
     failure: 'missing' | 'materialization-failed';
@@ -1285,9 +1326,25 @@ function AppInner() {
     projectIds: ReadonlySet<string>;
   } | null>(null);
   const projectsRef = useRef<Project[]>(projects);
+  projectsRef.current = projects;
   useEffect(() => {
     projectsRef.current = projects;
   }, [projects]);
+  const projectRuntimePrefsRef = useRef<Map<string, ProjectRuntimePrefs>>(new Map());
+  const legacyRuntimeSnapshotInFlightRef = useRef<Promise<void>>(Promise.resolve());
+  const globalRuntimeChangeChainRef = useRef<Promise<void>>(Promise.resolve());
+  const globalRuntimeChangePendingCountRef = useRef(0);
+  const [projectRuntimePrefsRevision, setProjectRuntimePrefsRevision] = useState(0);
+  const routeProjectSnapshotRef = useRef<{
+    project: Project;
+    accountGeneration: number;
+    capturedAfterListGeneration: number;
+    workspaceScope?: ProjectWorkspaceScope;
+    resolvedDir?: string | null;
+    workspaceContext?: WorkspaceCollabContext;
+    awaitingFirstMaterialization?: boolean;
+  } | null>(null);
+  const [, setRouteProjectSnapshotRevision] = useState(0);
   // Project names from another member's team-catalog row are authoritative:
   // the local mirror can carry an older real name (not only "共享项目") with a
   // newer local timestamp. Scope keys prevent a project id observed in one
@@ -1826,6 +1883,18 @@ function AppInner() {
       return false;
     }
     const projectedList = list.map((project) => {
+      const cachedRuntimePrefs = projectRuntimePrefsRef.current.get(project.id);
+      if (cachedRuntimePrefs) {
+        project = {
+          ...project,
+          metadata: {
+            ...(project.metadata ?? { kind: 'other' }),
+            runtimePrefs: cachedRuntimePrefs,
+          },
+        };
+      } else if (project.metadata?.runtimePrefs) {
+        projectRuntimePrefsRef.current.set(project.id, project.metadata.runtimePrefs);
+      }
       const key = JSON.stringify([
         request.accountGeneration,
         request.scopeKey,
@@ -2191,6 +2260,8 @@ function AppInner() {
   });
   tabScopeWorkspaceIdRef.current = nextTabScopeWorkspaceId;
   tabScopeAccountIdRef.current = nextTabScopeAccountId;
+  const identityScopeKeyRef = useRef<string | null>(null);
+  identityScopeKeyRef.current = identityScopeKey;
 
   // v2 analytics requires every event to carry the configure-state
   // triplet (has_available_configure_cli / configure_type /
@@ -3098,6 +3169,210 @@ function AppInner() {
     await silentUpdatePreferenceWriterRef.current.write(allowSilentUpdates);
   }, []);
 
+  const collectLegacySnapshotTargets = useCallback(
+    (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null) => {
+      const fallbackPrefs = snapshotProjectRuntimePrefs(baseConfigSnapshot);
+      const targets: Array<{
+        project: Project;
+        nextMetadata: ProjectMetadata;
+        projectContext: WorkspaceCollabContext | null;
+      }> = [];
+      const seenIds = new Set<string>();
+      const candidates: Project[] = [...projectsRef.current];
+      const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
+      if (routeSnapshotProject) {
+        candidates.push(routeSnapshotProject);
+      }
+
+      for (const project of candidates) {
+        if (seenIds.has(project.id)) continue;
+        seenIds.add(project.id);
+        if (excludeProjectId && project.id === excludeProjectId) continue;
+        if (project.metadata?.runtimePrefs) {
+          if (!projectRuntimePrefsRef.current.has(project.id)) {
+            projectRuntimePrefsRef.current.set(
+              project.id,
+              project.metadata.runtimePrefs,
+            );
+          }
+          continue;
+        }
+
+        const pendingCreation =
+          pendingProjectCreation?.projectId === project.id
+            ? pendingProjectCreation
+            : null;
+        if (pendingCreation && !pendingCreation.created) {
+          if (!projectRuntimePrefsRef.current.has(project.id)) {
+            projectRuntimePrefsRef.current.set(project.id, fallbackPrefs);
+          }
+          continue;
+        }
+
+        const nextMetadata: ProjectMetadata = {
+          ...(project.metadata ?? { kind: 'prototype' }),
+          runtimePrefs: fallbackPrefs,
+        };
+        const projectContext =
+          routeRef.current.kind === 'project' && routeRef.current.projectId === project.id
+            ? projectRouteWorkspaceContextRef.current
+            : workspaceContextRef.current;
+        targets.push({ project, nextMetadata, projectContext });
+      }
+      return targets;
+    },
+    [pendingProjectCreation],
+  );
+
+  const preserveExistingProjectsRuntimePrefs = useCallback(
+    (baseConfigSnapshot: AppConfig, excludeProjectId?: string | null): Promise<void> => {
+      const run = async () => {
+        const targets = collectLegacySnapshotTargets(baseConfigSnapshot, excludeProjectId);
+        if (targets.length === 0) return;
+
+        const results = await Promise.allSettled(
+          targets.map(({ project, nextMetadata, projectContext }) =>
+            patchProject(project.id, { metadata: nextMetadata }, projectContext),
+          ),
+        );
+
+        const persistedById = new Map<string, ProjectMetadata>();
+        const failedIds: string[] = [];
+        results.forEach((result, index) => {
+          const target = targets[index]!;
+          if (result.status === 'fulfilled' && result.value != null) {
+            const persistedMetadata =
+              result.value.metadata?.runtimePrefs
+                ? result.value.metadata
+                : target.nextMetadata;
+            persistedById.set(target.project.id, persistedMetadata);
+          } else {
+            failedIds.push(target.project.id);
+          }
+        });
+
+        const routeSnapshotProject = routeProjectSnapshotRef.current?.project;
+        if (persistedById.size > 0) {
+          for (const [projectId, persistedMetadata] of persistedById.entries()) {
+            if (persistedMetadata.runtimePrefs) {
+              projectRuntimePrefsRef.current.set(
+                projectId,
+                persistedMetadata.runtimePrefs,
+              );
+            }
+          }
+          projectsRef.current = projectsRef.current.map((project) => {
+            const nextMetadata = persistedById.get(project.id);
+            return nextMetadata ? { ...project, metadata: nextMetadata } : project;
+          });
+          setProjects((curr) =>
+            curr.map((project) => {
+              const nextMetadata = persistedById.get(project.id);
+              return nextMetadata ? { ...project, metadata: nextMetadata } : project;
+            }),
+          );
+          const snapshotMetadata = routeSnapshotProject
+            ? persistedById.get(routeSnapshotProject.id)
+            : undefined;
+          if (routeProjectSnapshotRef.current && snapshotMetadata) {
+            routeProjectSnapshotRef.current = {
+              ...routeProjectSnapshotRef.current,
+              project: {
+                ...routeProjectSnapshotRef.current.project,
+                metadata: snapshotMetadata,
+              },
+            };
+            setRouteProjectSnapshotRevision((current) => current + 1);
+          }
+          setProjectRuntimePrefsRevision((current) => current + 1);
+        }
+
+        if (failedIds.length > 0) {
+          throw new Error(
+            `Failed to persist runtime preferences for existing projects: ${failedIds.join(', ')}`,
+          );
+        }
+      };
+
+      const promise = legacyRuntimeSnapshotInFlightRef.current.then(run, run);
+      legacyRuntimeSnapshotInFlightRef.current = promise.catch(() => undefined);
+      return promise;
+    },
+    [collectLegacySnapshotTargets],
+  );
+
+  const getScopedRuntimeTargetProjectId = useCallback(
+    () =>
+      resolveScopedRuntimeTargetProjectId(
+        routeRef.current,
+        settingsReturnTargetRef.current,
+        currentWorkspaceAccountGeneration(),
+        identityScopeKeyRef.current,
+      ),
+    [],
+  );
+
+  const updateProjectRuntimePrefsById = useCallback(
+    (
+      projectId: string,
+      updater: (
+        current: ProjectRuntimePrefs | undefined,
+        baseConfig: AppConfig,
+      ) => ProjectRuntimePrefs,
+      baseConfigForSnapshot: AppConfig = latestPersistedConfigRef.current,
+    ): Promise<Project | null> => {
+      const existingProject =
+        projectsRef.current.find((candidate) => candidate.id === projectId)
+        ?? (routeProjectSnapshotRef.current?.project.id === projectId
+          ? routeProjectSnapshotRef.current.project
+          : null);
+      const currentPrefs =
+        projectRuntimePrefsRef.current.get(projectId)
+        ?? existingProject?.metadata?.runtimePrefs;
+      const nextRuntimePrefs = updater(currentPrefs, baseConfigForSnapshot);
+      projectRuntimePrefsRef.current.set(projectId, nextRuntimePrefs);
+      setProjectRuntimePrefsRevision((current) => current + 1);
+      if (!existingProject) return Promise.resolve(null);
+      const nextMetadata: ProjectMetadata = {
+        ...(existingProject.metadata ?? { kind: 'prototype' }),
+        runtimePrefs: nextRuntimePrefs,
+      };
+      if (routeProjectSnapshotRef.current?.project.id === projectId) {
+        routeProjectSnapshotRef.current = {
+          ...routeProjectSnapshotRef.current,
+          project: {
+            ...routeProjectSnapshotRef.current.project,
+            metadata: nextMetadata,
+          },
+        };
+        setRouteProjectSnapshotRevision((current) => current + 1);
+      }
+      projectsRef.current = projectsRef.current.map((p) =>
+        p.id === projectId ? { ...p, metadata: nextMetadata } : p,
+      );
+      setProjects((curr) =>
+        curr.map((p) => (p.id === projectId ? { ...p, metadata: nextMetadata } : p)),
+      );
+      const pendingCreation =
+        pendingProjectCreation?.projectId === projectId
+          ? pendingProjectCreation
+          : null;
+      if (!pendingCreation || pendingCreation.created) {
+        const projectContext =
+          routeRef.current.kind === 'project' && routeRef.current.projectId === projectId
+            ? projectRouteWorkspaceContextRef.current
+            : workspaceContextRef.current;
+        return patchProject(
+          projectId,
+          { metadata: nextMetadata },
+          projectContext,
+        );
+      }
+      return Promise.resolve(null);
+    },
+    [pendingProjectCreation],
+  );
+
   /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
@@ -3117,16 +3392,54 @@ function AppInner() {
     // already committed so an unmount autosave cannot re-open the welcome flow.
     // allowSilentUpdates is daemon-owned and must not be applied optimistically:
     // keep the previous value in memory until the daemon write succeeds.
-    const prevSilent = latestPersistedConfigRef.current.allowSilentUpdates;
+    const prevConfig = latestPersistedConfigRef.current;
+    const prevSilent = prevConfig.allowSilentUpdates;
     const nextSilent = next.allowSilentUpdates;
     const silentChanged = nextSilent !== prevSilent;
     const nextForOptimistic = silentChanged
       ? { ...next, allowSilentUpdates: prevSilent }
       : next;
     const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
+    const targetProjectId = getScopedRuntimeTargetProjectId();
+    const nextRuntimePrefs = snapshotProjectRuntimePrefs(persisted);
+    const runtimeSnapshotChanged =
+      JSON.stringify(snapshotProjectRuntimePrefs(prevConfig))
+      !== JSON.stringify(nextRuntimePrefs);
+    const activeProjectExisting = targetProjectId
+      ? (projectsRef.current.find((candidate) => candidate.id === targetProjectId)
+        ?? (routeProjectSnapshotRef.current?.project.id === targetProjectId
+          ? routeProjectSnapshotRef.current.project
+          : null))
+      : null;
+    const activeProjectCurrentPrefs = targetProjectId
+      ? (projectRuntimePrefsRef.current.get(targetProjectId)
+        ?? activeProjectExisting?.metadata?.runtimePrefs)
+      : undefined;
+    const activeProjectPrefsChanged = Boolean(
+      targetProjectId
+      && (
+        runtimeSnapshotChanged
+        || (
+          activeProjectCurrentPrefs !== undefined
+          && JSON.stringify(activeProjectCurrentPrefs) !== JSON.stringify(nextRuntimePrefs)
+        )
+      ),
+    );
+    if (runtimeSnapshotChanged) {
+      await preserveExistingProjectsRuntimePrefs(prevConfig, targetProjectId);
+    }
     latestPersistedConfigRef.current = persisted;
-    saveConfig(persisted);
     setConfig(persisted);
+    saveConfig(persisted);
+    setRuntimePrefsError(null);
+    const projectPrefsPatchPromise =
+      targetProjectId && activeProjectPrefsChanged
+        ? updateProjectRuntimePrefsById(
+            targetProjectId,
+            () => nextRuntimePrefs,
+            prevConfig,
+          )
+        : Promise.resolve(null);
     const shouldSyncMediaProviders =
       daemonMediaProvidersFetchState === 'ok'
       && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
@@ -3136,6 +3449,7 @@ function AppInner() {
       ? { ...persisted, allowSilentUpdates: nextSilent }
       : persisted;
     await Promise.all([
+      projectPrefsPatchPromise,
       shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
             force: options?.forceMediaProviderSync,
@@ -3152,7 +3466,13 @@ function AppInner() {
       };
       setConfig((curr) => ({ ...curr, allowSilentUpdates: nextSilent }));
     }
-  }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
+  }, [
+    daemonMediaProviders,
+    daemonMediaProvidersFetchState,
+    getScopedRuntimeTargetProjectId,
+    preserveExistingProjectsRuntimePrefs,
+    updateProjectRuntimePrefsById,
+  ]);
 
   const handleSettingsDraftChange = useCallback((draft: AppConfig) => {
     settingsDraftConfigRef.current = draft;
@@ -3195,25 +3515,89 @@ function AppInner() {
     [],
   );
 
+  const applyScopedRuntimeChange = useCallback(
+    (
+      computeGlobalNext: (previous: AppConfig) => AppConfig,
+      projectUpdater: (
+        current: ProjectRuntimePrefs | undefined,
+        baseConfig: AppConfig,
+      ) => ProjectRuntimePrefs,
+      options: { syncDaemon?: boolean } = {},
+    ) => {
+      const previous = latestPersistedConfigRef.current;
+      const targetProjectId = getScopedRuntimeTargetProjectId();
+      if (targetProjectId) {
+        updateProjectRuntimePrefsById(targetProjectId, projectUpdater, previous);
+      }
+
+      const targets = collectLegacySnapshotTargets(previous, targetProjectId);
+      if (targets.length === 0 && globalRuntimeChangePendingCountRef.current === 0) {
+        const next = computeGlobalNext(previous);
+        latestPersistedConfigRef.current = next;
+        saveConfig(next);
+        setConfig(next);
+        setRuntimePrefsError(null);
+        if (options.syncDaemon) {
+          void syncConfigToDaemon(next);
+        }
+        return;
+      }
+
+      globalRuntimeChangePendingCountRef.current += 1;
+      const runGlobalStep = async () => {
+        const currentPrev = latestPersistedConfigRef.current;
+        const next = computeGlobalNext(currentPrev);
+        await preserveExistingProjectsRuntimePrefs(currentPrev, targetProjectId);
+        latestPersistedConfigRef.current = next;
+        saveConfig(next);
+        setConfig(next);
+        setRuntimePrefsError(null);
+        if (options.syncDaemon) {
+          void syncConfigToDaemon(next);
+        }
+      };
+      globalRuntimeChangeChainRef.current = globalRuntimeChangeChainRef.current
+        .then(runGlobalStep, runGlobalStep)
+        .catch((err) => {
+          setRuntimePrefsError(
+            "Couldn't update default runtime settings because an existing project's preferences could not be saved. Retry your selection.",
+          );
+          console.error('Failed to update global runtime defaults:', err);
+        })
+        .finally(() => {
+          globalRuntimeChangePendingCountRef.current = Math.max(
+            0,
+            globalRuntimeChangePendingCountRef.current - 1,
+          );
+        });
+    },
+    [
+      collectLegacySnapshotTargets,
+      getScopedRuntimeTargetProjectId,
+      preserveExistingProjectsRuntimePrefs,
+      updateProjectRuntimePrefsById,
+    ],
+  );
+
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
-      const next = { ...latestPersistedConfigRef.current, mode };
-      latestPersistedConfigRef.current = next;
-      saveConfig(next);
-      setConfig(next);
+      applyScopedRuntimeChange(
+        (previous) => ({ ...previous, mode }),
+        (current, base) => applyProjectModeChange(current, base, mode),
+      );
     },
-    [],
+    [applyScopedRuntimeChange],
   );
 
   const handleAgentChange = useCallback(
     (agentId: string) => {
-      const next = { ...latestPersistedConfigRef.current, agentId };
-      latestPersistedConfigRef.current = next;
-      saveConfig(next);
-      void syncConfigToDaemon(next);
-      setConfig(next);
+      applyScopedRuntimeChange(
+        (previous) => ({ ...previous, agentId }),
+        (current, base) => applyProjectAgentChange(current, base, agentId),
+        { syncDaemon: true },
+      );
     },
-    [],
+    [applyScopedRuntimeChange],
   );
 
   // OPEND-3205: this action changes the runtime in the current project. Do not
@@ -3223,7 +3607,17 @@ function AppInner() {
     const issuedAccount = currentWorkspaceAccountGeneration();
     const issuedIdentity = workspaceIdentityCacheKey(workspaceContextRef.current);
     const issuedRoute = JSON.stringify(routeRef.current);
+    const targetProjectId = getScopedRuntimeTargetProjectId();
     const next: AppConfig = { ...previous, mode: 'daemon', agentId: 'amr' };
+    await preserveExistingProjectsRuntimePrefs(previous, targetProjectId);
+    if (
+      latestPersistedConfigRef.current !== previous
+      || currentWorkspaceAccountGeneration() !== issuedAccount
+      || workspaceIdentityCacheKey(workspaceContextRef.current) !== issuedIdentity
+      || JSON.stringify(routeRef.current) !== issuedRoute
+    ) {
+      throw new Error('Cloud configuration acknowledgement no longer owns the active selection');
+    }
     await syncConfigToDaemon(next, { throwOnError: true });
     if (
       latestPersistedConfigRef.current !== previous
@@ -3235,27 +3629,41 @@ function AppInner() {
       // local selection or acknowledge the action in another route/identity.
       throw new Error('Cloud configuration acknowledgement no longer owns the active selection');
     }
-    latestPersistedConfigRef.current = next;
     saveConfig(next);
+    latestPersistedConfigRef.current = next;
     setConfig(next);
-  }, []);
+    if (targetProjectId) {
+      updateProjectRuntimePrefsById(
+        targetProjectId,
+        (current, base) => applyProjectSwitchToCloud(current, base),
+        previous,
+      );
+    }
+  }, [
+    getScopedRuntimeTargetProjectId,
+    preserveExistingProjectsRuntimePrefs,
+    updateProjectRuntimePrefsById,
+  ]);
 
   const handleAgentModelChange = useCallback(
     (agentId: string, choice: { model?: string; reasoning?: string; serviceTier?: string }) => {
-      const current = latestPersistedConfigRef.current;
-      const prev = current.agentModels?.[agentId] ?? {};
-      const merged = mergeAgentModelChoice(prev, choice);
-      const nextAgentModels = {
-        ...(current.agentModels ?? {}),
-        [agentId]: merged,
-      };
-      const next = { ...current, agentModels: nextAgentModels };
-      latestPersistedConfigRef.current = next;
-      saveConfig(next);
-      void syncConfigToDaemon(next);
-      setConfig(next);
+      applyScopedRuntimeChange(
+        (current) => {
+          const prev = current.agentModels?.[agentId] ?? {};
+          const merged = mergeAgentModelChoice(prev, choice);
+          return {
+            ...current,
+            agentModels: {
+              ...(current.agentModels ?? {}),
+              [agentId]: merged,
+            },
+          };
+        },
+        (prefs, base) => applyProjectAgentModelChange(prefs, base, agentId, choice),
+        { syncDaemon: true },
+      );
     },
-    [],
+    [applyScopedRuntimeChange],
   );
 
   // BYOK protocol switch — also flips `mode` to 'api' so the user does
@@ -3264,16 +3672,13 @@ function AppInner() {
   // user had previously configured for the target protocol.
   const handleApiProtocolChange = useCallback(
     (protocol: ApiProtocol) => {
-      const next = switchApiProtocolConfig(
-        latestPersistedConfigRef.current,
-        protocol,
+      applyScopedRuntimeChange(
+        (previous) => switchApiProtocolConfig(previous, protocol),
+        (prefs, base) => applyProjectApiProtocolChange(prefs, base, protocol),
+        { syncDaemon: true },
       );
-      latestPersistedConfigRef.current = next;
-      saveConfig(next);
-      void syncConfigToDaemon(next);
-      setConfig(next);
     },
-    [],
+    [applyScopedRuntimeChange],
   );
 
   // BYOK model picker — patches `model` (and the per-protocol shadow
@@ -3281,16 +3686,13 @@ function AppInner() {
   // mid-session without retyping their key.
   const handleApiModelChange = useCallback(
     (model: string) => {
-      const next = updateCurrentApiProtocolConfig(
-        latestPersistedConfigRef.current,
-        { model },
+      applyScopedRuntimeChange(
+        (previous) => updateCurrentApiProtocolConfig(previous, { model }),
+        (prefs, base) => applyProjectApiModelChange(prefs, base, model),
+        { syncDaemon: true },
       );
-      latestPersistedConfigRef.current = next;
-      saveConfig(next);
-      void syncConfigToDaemon(next);
-      setConfig(next);
     },
-    [],
+    [applyScopedRuntimeChange],
   );
 
   const handleChangeDefaultDesignSystem = useCallback(
@@ -3475,6 +3877,7 @@ function AppInner() {
       clearLocalProject(projectId);
       releaseProjectRunStatusReads(projectId);
       pendingProjectConversationIdsRef.current.delete(projectId);
+      projectRuntimePrefsRef.current.delete(projectId);
       removeWorkspaceProjectTabs(projectId);
       setProjects((current) => current.filter((project) => project.id !== projectId));
       setPendingProjectCreation((current) =>
@@ -3507,7 +3910,10 @@ function AppInner() {
       const derivedPendingPrompt =
         input.pendingPrompt ??
         (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
-      const metadata = mergeLinkedDirsIntoMetadata(input.metadata, input.linkedDirs);
+      const metadata = ensureProjectMetadataRuntimePrefs(
+        mergeLinkedDirsIntoMetadata(input.metadata, input.linkedDirs),
+        latestPersistedConfigRef.current,
+      );
       const stagedFiles = Array.isArray(input.pendingFiles)
         ? input.pendingFiles.filter((file): file is File => file instanceof File)
         : [];
@@ -3520,6 +3926,9 @@ function AppInner() {
         ? null
         : workspaceResourceReadContext(createWorkspaceState);
       const optimisticProjectId = randomUUID();
+      if (metadata.runtimePrefs) {
+        projectRuntimePrefsRef.current.set(optimisticProjectId, metadata.runtimePrefs);
+      }
       const optimisticConversationId = randomUUID();
       const now = Date.now();
       const optimisticProject: Project = {
@@ -3590,7 +3999,10 @@ function AppInner() {
       input.pendingPrompt ??
       (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
 
-      const metadata = mergeLinkedDirsIntoMetadata(input.metadata, input.linkedDirs);
+      const metadata = ensureProjectMetadataRuntimePrefs(
+        mergeLinkedDirsIntoMetadata(input.metadata, input.linkedDirs),
+        latestPersistedConfigRef.current,
+      );
       const fidelity = fidelityToTracking(metadata?.fidelity ?? null);
       let createWorkspaceContext: WorkspaceCollabContext | null = null;
       let optimisticProjectId: string | null = input.optimisticProjectId ?? null;
@@ -3705,12 +4117,30 @@ function AppInner() {
         );
         return false;
       }
-      const project = result.appliedPluginSnapshotId
+      const effectiveRuntimePrefs =
+        (optimisticProjectId
+          ? projectRuntimePrefsRef.current.get(optimisticProjectId)
+          : undefined)
+        ?? result.project.metadata?.runtimePrefs
+        ?? metadata.runtimePrefs;
+      if (effectiveRuntimePrefs) {
+        projectRuntimePrefsRef.current.set(result.project.id, effectiveRuntimePrefs);
+      }
+      const baseProject = result.appliedPluginSnapshotId
         ? {
             ...result.project,
             appliedPluginSnapshotId: result.appliedPluginSnapshotId,
           }
         : result.project;
+      const project = effectiveRuntimePrefs
+        ? {
+            ...baseProject,
+            metadata: {
+              ...(baseProject.metadata ?? metadata),
+              runtimePrefs: effectiveRuntimePrefs,
+            },
+          }
+        : baseProject;
       if (input.autoSendFirstMessage) initialHomeRequestSourcesRef.current.set(project.id, {
         prompt: derivedPendingPrompt ?? '', files: stagedFiles,
         accountGeneration: creationAccountGeneration,
@@ -4623,6 +5053,7 @@ function AppInner() {
       });
     }
     clearLocalProject(id, { deleted: true });
+    projectRuntimePrefsRef.current.delete(id);
     removeWorkspaceProjectTabs(id);
     iframeKeepAlivePool.evictProject(id, { includeActive: true });
     setProjects((curr) => curr.filter((p) => p.id !== id));
@@ -5019,16 +5450,6 @@ function AppInner() {
   // project is not ambient: retain its persisted row independently so that
   // clearing/replacing the Home catalog cannot tear down ProjectView, lose the
   // exact A authority, or reinterpret the same route under B.
-  const routeProjectSnapshotRef = useRef<{
-    project: Project;
-    accountGeneration: number;
-    capturedAfterListGeneration: number;
-    workspaceScope?: ProjectWorkspaceScope;
-    resolvedDir?: string | null;
-    workspaceContext?: WorkspaceCollabContext;
-    awaitingFirstMaterialization?: boolean;
-  } | null>(null);
-  const [, setRouteProjectSnapshotRevision] = useState(0);
   const activeAccountGeneration = currentWorkspaceAccountGeneration();
   let loadedActiveProject: Project | null = null;
   if (route.kind === 'project') {
@@ -5108,6 +5529,13 @@ function AppInner() {
   // start from two headerless 400 waves plus a scoped retry into one scoped
   // wave. Unbound local projects still mount as soon as their real row lands.
   const activeProject = loadedActiveProject;
+  const activeProjectRuntimePrefs = activeProject
+    ? projectRuntimePrefsRef.current.get(activeProject.id) ?? activeProject.metadata?.runtimePrefs
+    : undefined;
+  const activeProjectConfig = useMemo(
+    () => resolveProjectAppConfig(config, activeProjectRuntimePrefs),
+    [config, activeProjectRuntimePrefs, projectRuntimePrefsRevision],
+  );
   const activeProjectWorkspaceContext = activeProject
     ? projectRouteWorkspaceContext.context
     : null;
@@ -5473,6 +5901,19 @@ function AppInner() {
     recordProjectListFailure,
   ]);
 
+  const recordSettingsReturnTarget = useCallback(() => {
+    const currentRoute = routeRef.current;
+    if (currentRoute.kind === 'project' && identityScopeKey !== null) {
+      settingsReturnTargetRef.current = {
+        route: { ...currentRoute },
+        accountGeneration: currentWorkspaceAccountGeneration(),
+        identityScopeKey,
+      };
+    } else if (currentRoute.kind !== 'home' || currentRoute.view !== 'settings') {
+      settingsReturnTargetRef.current = null;
+    }
+  }, [identityScopeKey]);
+
   const openSettings = useCallback((
     section: SettingsSection = 'execution',
     opts?: { highlight?: SettingsHighlight },
@@ -5489,20 +5930,12 @@ function AppInner() {
       navigate({ kind: 'home', view: 'integrations' });
       return;
     }
-    const currentRoute = routeRef.current;
-    settingsReturnTargetRef.current =
-      currentRoute.kind === 'project' && identityScopeKey !== null
-        ? {
-            route: { ...currentRoute },
-            accountGeneration: currentWorkspaceAccountGeneration(),
-            identityScopeKey,
-          }
-        : null;
+    recordSettingsReturnTarget();
     setSettingsWelcome(false);
     setSettingsInitialSection(section);
     setSettingsHighlight(opts?.highlight ?? null);
     navigate({ kind: 'home', view: 'settings' });
-  }, [identityScopeKey]);
+  }, [recordSettingsReturnTarget]);
 
   // Entry point from the failed-run AMR nudge: open Settings on the execution
   // section and flag the AMR agent card for a one-shot scroll-into-view +
@@ -5512,20 +5945,12 @@ function AppInner() {
   }, [openSettings]);
 
   const openPetSettings = useCallback(() => {
-    const currentRoute = routeRef.current;
-    settingsReturnTargetRef.current =
-      currentRoute.kind === 'project' && identityScopeKey !== null
-        ? {
-            route: { ...currentRoute },
-            accountGeneration: currentWorkspaceAccountGeneration(),
-            identityScopeKey,
-          }
-        : null;
+    recordSettingsReturnTarget();
     setSettingsWelcome(false);
     setSettingsInitialSection('pet');
     setSettingsHighlight(null);
     navigate({ kind: 'home', view: 'settings' });
-  }, [identityScopeKey]);
+  }, [recordSettingsReturnTarget]);
 
   const openMcpSettings = useCallback(() => {
     setIntegrationInitialTab('mcp');
@@ -5739,44 +6164,63 @@ function AppInner() {
     await syncConfigToDaemon(next, { allowOnboardingReset: true });
   }, []);
 
-  const renderSettingsSurface = (presentation: 'modal' | 'page') => (
-    <SettingsDialog
-      presentation={presentation}
-      initial={config}
-      agents={agents}
-      agentsLoading={agentsLoading}
-      daemonLive={daemonLive}
-      appVersionInfo={appVersionInfo}
-      welcome={presentation === 'modal' ? settingsWelcome : false}
-      initialSection={settingsInitialSection}
-      initialHighlight={settingsHighlight}
-      persistedProjectWorkspaceId={
-        route.kind === 'project'
-          ? projects.find((project) => project.id === route.projectId)?.workspaceId ?? null
-          : null
-      }
-      composioConfigLoading={composioConfigLoading}
-      onPersist={handleConfigPersist}
-      onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
-      onDraftChange={handleSettingsDraftChange}
-      onPersistComposioKey={handleConfigPersistComposioKey}
-      onClose={handleCloseSettings}
-      onResetOnboarding={handleResetOnboarding}
-      onAmrSignedOut={handleActiveCloudSignOut}
-      onRefreshAgents={refreshAgents}
-      onAmrLoginStatusChange={handleAmrLoginStatusChange}
-      daemonMediaProviders={daemonMediaProviders}
-      daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
-      mediaProvidersNotice={mediaProvidersNotice}
-      onReloadMediaProviders={reloadMediaProvidersFromDaemon}
-      onProjectsRefresh={refreshProjects}
-      onSkillsChanged={handleSkillsChanged}
-      onDesignSystemsChanged={handleDesignSystemsChanged}
-      onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
-      providerModelsCache={providerModelsCache}
-      onProviderModelsCacheChange={setProviderModelsCache}
-    />
-  );
+  const renderSettingsSurface = (presentation: 'modal' | 'page') => {
+    const settingsTargetProjectId = resolveScopedRuntimeTargetProjectId(
+      route,
+      settingsReturnTargetRef.current,
+      activeAccountGeneration,
+      identityScopeKey,
+    );
+    const settingsTargetProject =
+      route.kind === 'project'
+        ? activeProject
+        : settingsTargetProjectId
+          ? projects.find((project) => project.id === settingsTargetProjectId) ?? null
+          : null;
+    const settingsTargetRuntimePrefs = settingsTargetProject
+      ? (projectRuntimePrefsRef.current.get(settingsTargetProject.id)
+        ?? settingsTargetProject.metadata?.runtimePrefs)
+      : settingsTargetProjectId
+        ? projectRuntimePrefsRef.current.get(settingsTargetProjectId)
+        : undefined;
+    const settingsInitialConfig = settingsTargetProjectId
+      ? resolveProjectAppConfig(config, settingsTargetRuntimePrefs)
+      : config;
+    return (
+      <SettingsDialog
+        presentation={presentation}
+        initial={settingsInitialConfig}
+        agents={agents}
+        agentsLoading={agentsLoading}
+        daemonLive={daemonLive}
+        appVersionInfo={appVersionInfo}
+        welcome={presentation === 'modal' ? settingsWelcome : false}
+        initialSection={settingsInitialSection}
+        initialHighlight={settingsHighlight}
+        persistedProjectWorkspaceId={settingsTargetProject?.workspaceId ?? null}
+        composioConfigLoading={composioConfigLoading}
+        onPersist={handleConfigPersist}
+        onSilentUpdatePreferenceChange={handleSilentUpdatePreferenceChange}
+        onDraftChange={handleSettingsDraftChange}
+        onPersistComposioKey={handleConfigPersistComposioKey}
+        onClose={handleCloseSettings}
+        onResetOnboarding={handleResetOnboarding}
+        onAmrSignedOut={handleActiveCloudSignOut}
+        onRefreshAgents={refreshAgents}
+        onAmrLoginStatusChange={handleAmrLoginStatusChange}
+        daemonMediaProviders={daemonMediaProviders}
+        daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+        mediaProvidersNotice={mediaProvidersNotice}
+        onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+        onProjectsRefresh={refreshProjects}
+        onSkillsChanged={handleSkillsChanged}
+        onDesignSystemsChanged={handleDesignSystemsChanged}
+        onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
+        providerModelsCache={providerModelsCache}
+        onProviderModelsCacheChange={setProviderModelsCache}
+      />
+    );
+  };
 
   // Phase 2B / spec §11.6 — marketplace deep UI dispatch. The
   // /marketplace and /marketplace/:id routes render outside the
@@ -6117,7 +6561,7 @@ function AppInner() {
           resolveAuthoritativeProjectName={resolveAuthoritativeProjectName}
           routeFileName={route.fileName}
           routeConversationId={route.conversationId ?? null}
-          config={config}
+          config={activeProjectConfig}
           agents={agents}
           skills={enabledFunctionalSkills}
           designTemplates={designTemplates}
@@ -6439,6 +6883,14 @@ function AppInner() {
           role="alert"
           tone="error"
           onDismiss={() => setProjectOpenError(null)}
+        />
+      ) : null}
+      {runtimePrefsError ? (
+        <Toast
+          message={runtimePrefsError}
+          role="alert"
+          tone="error"
+          onDismiss={() => setRuntimePrefsError(null)}
         />
       ) : null}
       {/* First-run privacy consent banner. It waits for daemon config
