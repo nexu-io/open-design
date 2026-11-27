@@ -33,7 +33,12 @@ import {
   getStrategyTaskExecution,
   getStrategyTaskExecutionByRunId,
   migrateStrategyTaskStore,
+  reconcileStrategyTaskRunTerminal,
 } from '../../src/strategies/task-store.js';
+import {
+  endFailedAutomaticContinuation,
+  odNextNativeSessionGuardReason,
+} from '../../src/strategies/od-next/automatic-simple-production.js';
 import {
   TEST_PROMPT_BUNDLE,
   strategyTaskCreateIdentityFixture,
@@ -1010,6 +1015,93 @@ describe('durable strategy task store', () => {
       activeRunId: 'run-request',
       revision: 0,
     });
+  });
+
+  it('logs which writer settled a running task after its physical Run ended', async () => {
+    // Production bundle: a healthy production Run was still streaming when its
+    // task was settled as interrupted, and nothing in the daemon log said which
+    // path (startup reconciliation of a second daemon, or a live Run end) wrote
+    // it. The writer must leave its identity.
+    const task = createTask(db, snapshot);
+    const runDir = path.join(tempDir, 'runs', 'run-request');
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'state.json'), JSON.stringify({
+      schemaVersion: 1,
+      id: 'run-request',
+      projectId: 'project-1',
+      conversationId: 'conversation-1',
+      agentId: AGENT_ID,
+      status: 'running',
+      createdAt: 100,
+      updatedAt: 150,
+    }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await reconcileDurableRunTerminals({
+      analytics: { capture: vi.fn() },
+      appVersion: '0.24.1',
+      db,
+      reportLangfuse: vi.fn(),
+      runsLogDir: path.join(tempDir, 'runs'),
+    });
+
+    expect(result.strategyTasksReconciled).toBe(1);
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toMatchObject({ outcome: 'canceled' });
+    const reconciled = warn.mock.calls.filter(
+      ([message]) => message === '[od-next-task] run terminal reconciled',
+    );
+    expect(reconciled).toHaveLength(1);
+    expect(reconciled[0]?.[1]).toMatchObject({
+      taskExecutionId: task.taskExecutionId,
+      runId: 'run-request',
+      outcome: 'canceled',
+      settlementReason: 'ended',
+      source: 'startup_reconciliation',
+      runTerminalTrigger: 'daemon_restart',
+      pid: process.pid,
+    });
+    expect(reconciled[0]?.[1]).toHaveProperty('processStartedAt', expect.any(Number));
+
+    warn.mockClear();
+    const live = createTask(db, snapshot, 'run-live', 'task-live');
+    expect(reconcileStrategyTaskRunTerminal(db, {
+      runId: 'run-live',
+      status: 'failed',
+      source: 'live_run_end',
+    })).toBe(true);
+    expect(warn).toHaveBeenCalledWith('[od-next-task] run terminal reconciled', expect.objectContaining({
+      taskExecutionId: live.taskExecutionId,
+      runId: 'run-live',
+      source: 'live_run_end',
+      pid: process.pid,
+    }));
+  });
+
+  it('names why a refused continuation could not resume its native session', () => {
+    // Production bundles carried only "cold re-seeding is forbidden": nothing
+    // said whether the stored session was missing, refused by the resume guard
+    // (model/cwd/cursor), or unsupported by the runtime.
+    expect(odNextNativeSessionGuardReason({
+      supportsSessionResume: false, storedSessionId: 'thread-1', invalidationReason: null,
+    })).toBe('unsupported');
+    expect(odNextNativeSessionGuardReason({
+      supportsSessionResume: true, storedSessionId: null, invalidationReason: null,
+    })).toBe('no_stored_session');
+    expect(odNextNativeSessionGuardReason({
+      supportsSessionResume: true, storedSessionId: 'thread-1', invalidationReason: 'model_changed',
+    })).toBe('model_changed');
+
+    const task = createTask(db, snapshot, 'run-guarded', 'task-guarded');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ended = endFailedAutomaticContinuation(db, { runId: 'run-guarded', guardReason: 'no_stored_session' });
+    expect(ended).toMatchObject({ taskExecutionId: task.taskExecutionId, outcome: 'completed' });
+    expect(warn).toHaveBeenCalledWith('[od-next-task] continuation failed', expect.objectContaining({
+      runId: 'run-guarded',
+      reasonCodes: [
+        'od_next_native_session_continuity_unproven',
+        'od_next_native_session_guard_no_stored_session',
+      ],
+    }));
   });
 
   it('keeps one unreadable Prompt Bundle from cancelling every sibling Run terminal', async () => {
