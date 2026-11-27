@@ -120,6 +120,7 @@ const SAFE_MCP_DAEMON_RETRY_CALLS = new Set([
   'get_run',
   'get_vela_login_status',
   'list_agents',
+  'list_conversations',
   'list_files',
   'list_plugins',
   'list_projects',
@@ -697,6 +698,38 @@ export const TOOL_DEFS = [
     },
     annotations: { ...WRITE_ANNOTATIONS, title: 'Create OpenDesign project' },
   },
+  {
+    name: 'list_conversations',
+    description:
+      'List conversations in an OpenDesign project. Project optional; defaults to the active project. Pass a returned conversation id to start_run(conversationId) to target a specific session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...READ_ANNOTATIONS, title: 'List project conversations' },
+  },
+  {
+    name: 'create_conversation',
+    description:
+      'Create a new conversation inside an OpenDesign project so subsequent start_run calls can target a fresh session. Project optional; defaults to the active project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: PROJECT_ARG,
+        title: {
+          type: 'string',
+          description: 'Optional human-readable title for the new conversation.',
+        },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
+      },
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create project conversation' },
+  },
   // Discovery + generation. An external coding agent does NOT run a
   // skill itself — it commissions OpenDesign to, via start_run. The
   // daemon then spawns ITS OWN agent (Claude Code / API fallback /…)
@@ -763,6 +796,11 @@ export const TOOL_DEFS = [
       type: 'object',
       properties: {
         project: PROJECT_ARG,
+        conversationId: {
+          type: 'string',
+          description:
+            'Optional conversation id within the project (from list_conversations or create_conversation). When omitted, OpenDesign binds the project\'s earliest conversation.',
+        },
         prompt: {
           type: 'string',
           description: 'What to make or change, in natural language. Optional when a plugin supplies its own brief.',
@@ -1962,7 +2000,9 @@ async function runMcpStdioImplementation(options: RunMcpOptions): Promise<void> 
         '    returned list will actually spawn on this machine.',
         ' - create_project(name) first if you need a fresh project to',
         '    generate into; start_run requires an existing project.',
-        ' - start_run(prompt, requestId, [skill], [plugin], [inputs]) kicks off',
+        ' - list_conversations([project]) / create_conversation([project], [title])',
+        '    to discover or create conversation threads inside a project.',
+        ' - start_run(prompt, requestId, [conversationId], [skill], [plugin], [inputs]) kicks off',
         '    generation in the active or named project and returns a runId.',
         '    Generate a canonical UUID or ULID requestId once per confirmed',
         '    user action and reuse the exact same value after a timeout/lost',
@@ -2153,6 +2193,8 @@ const PROJECT_OR_RUN_TOOLS = new Set([
   'delete_file',
   'delete_project',
   'create_project',
+  'list_conversations',
+  'create_conversation',
   'create_artifact',
   'start_run',
   'get_run',
@@ -2340,6 +2382,38 @@ async function handleMcpToolCall(
         return await deleteProject(baseUrl, args, headers);
       case 'create_project':
         return await createProject(baseUrl, args, headers);
+      case 'list_conversations': {
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
+        return ok(
+          withActiveEcho(
+            await getJson<JsonObject>(
+              `${baseUrl}/api/projects/${encodeURIComponent(id)}/conversations`,
+              headers,
+            ),
+            active,
+            resolved,
+          ),
+        );
+      }
+      case 'create_conversation': {
+        const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
+        const body: JsonObject = {};
+        if (args.title !== undefined) {
+          if (typeof args.title !== 'string') throw new Error('title must be a string.');
+          if (args.title.length > 0) body.title = args.title;
+        }
+        return ok(
+          withActiveEcho(
+            await postJson<JsonObject>(
+              `${baseUrl}/api/projects/${encodeURIComponent(id)}/conversations`,
+              body,
+              headers ?? {},
+            ),
+            active,
+            resolved,
+          ),
+        );
+      }
       case 'list_skills':
         return ok(await getJson<SkillsPayload>(`${baseUrl}/api/skills`));
       case 'list_plugins':
@@ -2626,6 +2700,7 @@ async function startRun(
     );
   }
   const { id, resolved, active } = await resolveProjectArg(baseUrl, args.project, headers);
+  if (args.conversationId !== undefined) requireString(args.conversationId, 'conversationId');
   if (args.requestId !== undefined) requireString(args.requestId, 'requestId');
   if (
     options.pluginAttribution
@@ -2640,6 +2715,9 @@ async function startRun(
       ? args.requestId
       : randomUUID();
   const body: JsonObject = { projectId: id, clientRequestId: requestId };
+  if (typeof args.conversationId === 'string' && args.conversationId.length > 0) {
+    body.conversationId = args.conversationId;
+  }
   if (options.pluginAttribution) {
     validatePluginRequestId(requestId);
     const logical = logicalPluginRequestDigest(requestId);

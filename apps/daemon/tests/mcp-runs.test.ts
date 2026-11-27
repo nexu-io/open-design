@@ -1002,4 +1002,200 @@ describe('public MCP discovery + generation tools', () => {
     const devin = parsed.agents.find((a: { id: string }) => a.id === 'devin');
     expect(devin).toMatchObject({ id: 'devin', available: false, installUrl: 'https://cli.devin.ai' });
   });
+
+  // #9086: External agents driving OpenDesign over MCP need to discover
+  // conversations, create new ones, and target a specific conversationId
+  // in start_run (while keeping the earliest-conversation fallback when
+  // conversationId is omitted).
+
+  it('exposes list_conversations, create_conversation, and start_run.conversationId in tool definitions', () => {
+    const definitions = localMcpToolDefinitions();
+    const listConvs = definitions.find((tool) => tool.name === 'list_conversations');
+    const createConv = definitions.find((tool) => tool.name === 'create_conversation');
+    const startRun = definitions.find((tool) => tool.name === 'start_run');
+
+    expect(listConvs).toBeDefined();
+    expect(listConvs?.inputSchema.properties).toHaveProperty('project');
+    expect(createConv).toBeDefined();
+    expect(createConv?.inputSchema.properties).toHaveProperty('project');
+    expect(createConv?.inputSchema.properties).toHaveProperty('title');
+    expect(startRun?.inputSchema.properties).toHaveProperty('conversationId');
+  });
+
+  it('list_conversations resolves a project and proxies GET /api/projects/:id/conversations', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      expect(url).toBe('http://127.0.0.1:17456/api/projects/project-1/conversations');
+      expect(init?.method ?? 'GET').toBe('GET');
+      return new Response(
+        JSON.stringify({
+          conversations: [
+            { id: 'conv-1', projectId: 'project-1', title: 'Initial' },
+            { id: 'conv-2', projectId: 'project-1', title: 'Second pass' },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_conversations', {
+      project: 'Demo',
+    });
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(firstText(result));
+    expect(parsed.conversations).toHaveLength(2);
+    expect(parsed.conversations[1]).toMatchObject({ id: 'conv-2', title: 'Second pass' });
+  });
+
+  it('list_conversations falls back to the active project when project is omitted', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/active')) {
+        return new Response(
+          JSON.stringify({ active: true, projectId: 'active-1', projectName: 'Active', fileName: null }),
+          { status: 200 },
+        );
+      }
+      expect(url).toBe('http://127.0.0.1:17456/api/projects/active-1/conversations');
+      return new Response(JSON.stringify({ conversations: [{ id: 'conv-a', projectId: 'active-1' }] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'list_conversations', {});
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(firstText(result));
+    expect(parsed.conversations).toEqual([{ id: 'conv-a', projectId: 'active-1' }]);
+    expect(parsed.usedActiveContext).toMatchObject({ projectId: 'active-1' });
+  });
+
+  it('create_conversation POSTs /api/projects/:id/conversations with optional title', async () => {
+    const postBodies: unknown[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      expect(url).toBe('http://127.0.0.1:17456/api/projects/project-1/conversations');
+      expect(init?.method).toBe('POST');
+      const body = JSON.parse(String(init?.body));
+      postBodies.push(body);
+      return new Response(
+        JSON.stringify({ conversation: { id: 'conv-new', projectId: 'project-1', title: body.title ?? null } }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const withTitle = await handleMcpToolCall('http://127.0.0.1:17456', 'create_conversation', {
+      project: 'Demo',
+      title: 'Dark mode exploration',
+    });
+    expect(withTitle.isError).toBeUndefined();
+    expect(postBodies[0]).toEqual({ title: 'Dark mode exploration' });
+    expect(JSON.parse(firstText(withTitle))).toMatchObject({
+      conversation: { id: 'conv-new', projectId: 'project-1', title: 'Dark mode exploration' },
+    });
+
+    const withoutTitle = await handleMcpToolCall('http://127.0.0.1:17456', 'create_conversation', {
+      project: 'Demo',
+    });
+    expect(withoutTitle.isError).toBeUndefined();
+    expect(postBodies[1]).toEqual({});
+  });
+
+  it('start_run forwards conversationId to POST /api/runs and builds studioUrl from the bound conversation', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: 'http://127.0.0.1:65321' }), { status: 200 });
+      }
+      expect(url).toBe('http://127.0.0.1:17456/api/runs');
+      expect(init?.method).toBe('POST');
+      const body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          runId: 'run-88',
+          conversationId: body.conversationId,
+          assistantMessageId: 'msg-88',
+        }),
+        { status: 202 },
+      );
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: 'Demo',
+      conversationId: 'conv-2',
+      prompt: 'Try a minimal layout',
+    });
+    expect(result.isError).toBeUndefined();
+    const runsCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith('/api/runs') && (init as RequestInit)?.method === 'POST',
+    );
+    const postBody = JSON.parse(String(runsCall?.[1]?.body));
+    expect(postBody).toMatchObject({
+      projectId: 'project-1',
+      conversationId: 'conv-2',
+      message: 'Try a minimal layout',
+    });
+    const parsed = JSON.parse(firstText(result));
+    expect(parsed.conversationId).toBe('conv-2');
+    expect(parsed.studioUrl).toBe('http://127.0.0.1:65321/projects/project-1/conversations/conv-2');
+  });
+
+  it('start_run omits conversationId from POST body when not provided (earliest-conversation fallback)', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/mcp/install-info')) {
+        return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
+      }
+      expect(url).toBe('http://127.0.0.1:17456/api/runs');
+      expect(init?.method).toBe('POST');
+      return new Response(JSON.stringify({ runId: 'run-89', conversationId: 'conv-1' }), { status: 202 });
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: 'Demo',
+      prompt: 'Use default thread',
+    });
+    expect(result.isError).toBeUndefined();
+    const runsCall = fetchMock.mock.calls.find(
+      ([url, init]) => String(url).endsWith('/api/runs') && (init as RequestInit)?.method === 'POST',
+    );
+    const postBody = JSON.parse(String(runsCall?.[1]?.body));
+    expect(postBody).not.toHaveProperty('conversationId');
+  });
+
+  it('start_run surfaces 404 CONVERSATION_NOT_FOUND on cross-project conversationId', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects')) {
+        return new Response(JSON.stringify({ projects: [{ id: 'project-1', name: 'Demo' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/runs') && init?.method === 'POST') {
+        const body = JSON.parse(String(init?.body));
+        expect(body.conversationId).toBe('conv-from-other-project');
+        return new Response(
+          JSON.stringify({ error: { code: 'CONVERSATION_NOT_FOUND', message: 'conversation not found for project' } }),
+          { status: 404 },
+        );
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+    vi.stubGlobal('fetch', withDirectory(fetchMock));
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'start_run', {
+      project: 'Demo',
+      conversationId: 'conv-from-other-project',
+      prompt: 'Cross-project attempt',
+    });
+    expect(result).toMatchObject({ isError: true });
+    expect(firstText(result)).toContain('404');
+    expect(firstText(result)).toContain('CONVERSATION_NOT_FOUND');
+  });
 });
