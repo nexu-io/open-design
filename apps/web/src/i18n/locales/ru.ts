@@ -4576,6 +4576,8 @@ export const ru: Dict = {
   'dsManager.createTitle': 'Создать новую дизайн-систему',
   'dsManager.createBody': 'Обучите OpenDesign вашему бренду, продукту, коду, ресурсам и дизайн-референсам.',
   'dsManager.createAction': 'Создать',
+  'dsManager.importFolderAction': 'Импортировать папку',
+  'dsManager.importingFolder': 'Импорт папки...',
   'dsManager.emptyMine': 'Дизайн-систем пока нет. Создайте систему из реального контекста продукта, проверьте черновик и опубликуйте её для будущих проектов.',
   'dsManager.badgeDefault': 'По умолчанию',
   'dsManager.rowMetaUpdated': 'Вы · обновлено {date}',

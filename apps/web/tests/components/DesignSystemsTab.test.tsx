@@ -2,20 +2,42 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DesignSystemSummary } from '@open-design/contracts';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type DesignSystemSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
 import {
   deleteDesignSystemDraft,
   DesignSystemDeleteError,
   fetchDesignSystem,
+  importLocalDesignSystem,
+  openFolderDialog,
   updateDesignSystemDraft,
 } from '../../src/providers/registry';
 
 const exportMocks = vi.hoisted(() => ({
   downloadDesignSystemArchive: vi.fn(async () => true),
   downloadProjectArchive: vi.fn(async () => false),
+  workspaceContext: null as WorkspaceCollabContext | null,
 }));
+
+vi.mock('../../src/collab/useWorkspaceContext', async () => {
+  const actual = await vi.importActual<typeof import('../../src/collab/useWorkspaceContext')>(
+    '../../src/collab/useWorkspaceContext',
+  );
+  return {
+    ...actual,
+    useWorkspaceContext: () => ({
+      context: exportMocks.workspaceContext,
+      loading: false,
+      refresh: vi.fn(),
+    }),
+  };
+});
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -30,6 +52,8 @@ vi.mock('../../src/providers/registry', async () => {
       category: id === 'linear' ? 'Productivity & SaaS' : 'Custom',
       body: `# ${id}\n\n## Colors\n- Primary #111111`,
     })),
+    importLocalDesignSystem: vi.fn(),
+    openFolderDialog: vi.fn(async () => null),
     updateDesignSystemDraft: vi.fn(async () => null),
     deleteDesignSystemDraft: vi.fn(async () => true),
   };
@@ -43,6 +67,10 @@ afterEach(() => {
   exportMocks.downloadDesignSystemArchive.mockResolvedValue(true);
   exportMocks.downloadProjectArchive.mockReset();
   exportMocks.downloadProjectArchive.mockResolvedValue(false);
+  exportMocks.workspaceContext = null;
+  vi.mocked(openFolderDialog).mockReset();
+  vi.mocked(openFolderDialog).mockResolvedValue(null);
+  vi.mocked(importLocalDesignSystem).mockReset();
   vi.restoreAllMocks();
 });
 
@@ -476,5 +504,89 @@ describe('DesignSystemsTab surface filtering', () => {
     expect(imageTab?.getAttribute('aria-selected')).toBe('true');
     // ...and it honestly reports zero matches for the current search.
     expect(surfacePillCount('Image')).toBe('0');
+  });
+
+  it('imports a local design-system folder via the header Import folder button with workspace context', async () => {
+    const signedInContext: WorkspaceCollabContext = {
+      workspaceId: 'ws-personal',
+      workspaceType: 'personal',
+      workspaceMemberId: 'mem-1',
+      role: 'owner',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'platform_credits',
+      seatSummary: buildWorkspaceSeatSummary({ seatLimit: 1, usedSeats: 1 }),
+      permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+    };
+    exportMocks.workspaceContext = signedInContext;
+    const onSystemsRefresh = vi.fn(async () => {});
+    vi.mocked(openFolderDialog).mockResolvedValueOnce('/tmp/acme-ds');
+    vi.mocked(importLocalDesignSystem).mockResolvedValueOnce({
+      designSystem: ds({ id: 'user:acme-ds', title: 'Acme Studio', source: 'user' }),
+      tokenContractRebuild: {
+        decision: {
+          designSystemId: 'user:acme-ds',
+          available: true,
+          recommended: false,
+          forced: false,
+          reason: 'Token contract report is usable; no rebuild recommended.',
+          triggers: [],
+        },
+      },
+    });
+
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onSystemsRefresh={onSystemsRefresh}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('design-systems-import-folder'));
+
+    await waitFor(() => {
+      expect(openFolderDialog).toHaveBeenCalledWith({ throwOnError: true });
+      expect(importLocalDesignSystem).toHaveBeenCalledWith(
+        { baseDir: '/tmp/acme-ds' },
+        signedInContext,
+      );
+      expect(onSystemsRefresh).toHaveBeenCalledOnce();
+    });
+  });
+
+  it('ignores cancelled folder selection and surfaces import errors cleanly', async () => {
+    vi.mocked(openFolderDialog).mockResolvedValueOnce(null);
+
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId="user:acme"
+        onSelect={() => {}}
+        onCreate={() => {}}
+        onSystemsRefresh={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('design-systems-import-folder'));
+
+    await waitFor(() => {
+      expect(openFolderDialog).toHaveBeenCalledTimes(1);
+    });
+    expect(importLocalDesignSystem).not.toHaveBeenCalled();
+
+    vi.mocked(openFolderDialog).mockResolvedValueOnce('/tmp/bad-ds');
+    vi.mocked(importLocalDesignSystem).mockResolvedValueOnce({
+      error: { message: 'Folder does not contain a readable project.' },
+    });
+
+    fireEvent.click(screen.getByTestId('design-systems-import-folder'));
+
+    await screen.findByText('Folder does not contain a readable project.');
+    expect(importLocalDesignSystem).toHaveBeenCalledWith({ baseDir: '/tmp/bad-ds' });
   });
 });

@@ -47,6 +47,8 @@ import {
   designSystemStaticUrl,
   fetchDesignSystemStaticText,
   fetchProjectFileText,
+  importLocalDesignSystem,
+  openFolderDialog,
   projectRawUrl,
   updateDesignSystemDraft,
 } from '../providers/registry';
@@ -201,6 +203,7 @@ export function DesignSystemsTab({
   const [searchExpanded, setSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [busyAction, setBusyAction] = useState<{ systemId: string; action: DesignSystemActionKind } | null>(null);
+  const [importingFolder, setImportingFolder] = useState(false);
   const busyId = busyAction?.systemId ?? null;
   const [actionToast, setActionToast] = useState<{ message: string; tone: DesignKitActionFeedbackTone } | null>(null);
   const notifyAction = (tone: DesignKitActionFeedbackTone, message: string) => {
@@ -881,6 +884,32 @@ export function DesignSystemsTab({
     }
   }
 
+  async function handleImportLocalFolder() {
+    if (importingFolder || busyAction) return;
+    try {
+      const selected = await openFolderDialog({ throwOnError: true });
+      if (!selected) return;
+      setImportingFolder(true);
+      notifyActionLoading(t('dsManager.importingFolder'));
+      const activeWorkspace = workspaceContextRef.current;
+      const result = activeWorkspace
+        ? await importLocalDesignSystem({ baseDir: selected }, activeWorkspace)
+        : await importLocalDesignSystem({ baseDir: selected });
+      if ('error' in result) {
+        notifyAction('error', result.error.message || t('ds.actionFailed'));
+        return;
+      }
+      setDesignSystemCollection('mine');
+      setPendingFocus(result.designSystem.id);
+      await refreshSystems();
+      notifyAction('success', t('ds.actionDone'));
+    } catch (err) {
+      notifyAction('error', err instanceof Error ? err.message : t('ds.actionFailed'));
+    } finally {
+      setImportingFolder(false);
+    }
+  }
+
   function trackCardClick(system: DesignSystemSummary): void {
     trackDesignSystemsTemplateCardClick(analytics.track, {
       page_name: 'design_systems',
@@ -995,6 +1024,17 @@ export function DesignSystemsTab({
           <h1 className={styles.pageTitle}>{t('entry.navDesignSystems')}</h1>
         </div>
         <div className={styles.headerTools} data-testid="design-systems-header-tools">
+          <Button
+            variant="secondary"
+            className={`${styles.newBtn} ${styles.headerImport}`}
+            disabled={importingFolder || busyAction !== null}
+            aria-busy={importingFolder || undefined}
+            onClick={() => void handleImportLocalFolder()}
+            data-testid="design-systems-import-folder"
+          >
+            <Icon name={importingFolder ? 'spinner' : 'folder'} />
+            {t('dsManager.importFolderAction')}
+          </Button>
           {onCreate ? (
             <Button
               variant="primary"

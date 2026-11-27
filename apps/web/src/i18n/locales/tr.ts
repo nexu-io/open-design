@@ -4576,6 +4576,8 @@ export const tr: Dict = {
   'dsManager.createTitle': 'Yeni tasarım sistemi oluştur',
   'dsManager.createBody': 'OpenDesign\'a markanızı, ürününüzü, kodunuzu, varlıklarınızı ve tasarım referanslarınızı öğretin.',
   'dsManager.createAction': 'Oluştur',
+  'dsManager.importFolderAction': 'Klasörü içe aktar',
+  'dsManager.importingFolder': 'Klasör içe aktarılıyor...',
   'dsManager.emptyMine': 'Henüz tasarım sistemi yok. Gerçek ürün bağlamından bir tane oluşturun, taslağı inceleyin, ardından gelecekteki projeler için yayımlayın.',
   'dsManager.badgeDefault': 'Varsayılan',
   'dsManager.rowMetaUpdated': 'Siz · güncellendi {date}',
