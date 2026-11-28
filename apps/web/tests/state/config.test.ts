@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildMediaProvidersForDaemonSave,
   BYOK_PROVIDER_PRESETS,
@@ -16,6 +16,7 @@ import {
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
+  persistConfigWithRollback,
 } from '../../src/state/config';
 import type { AppConfig } from '../../src/types';
 
@@ -1616,5 +1617,52 @@ describe('saveConfig', () => {
       claude: { apiKeyOverride: true },
       codex: { apiKeyOverride: true },
     });
+  });
+});
+
+
+describe('persistConfigWithRollback', () => {
+  const store = new Map<string, string>();
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    store.clear();
+    fetchMock.mockReset();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value); },
+      removeItem: (key: string) => { store.delete(key); },
+      clear: () => { store.clear(); },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('restores the previous cache when the daemon write rejects', async () => {
+    fetchMock.mockRejectedValue(new Error('daemon down'));
+    const previous = { ...DEFAULT_CONFIG, theme: 'light' } as AppConfig;
+    const next = { ...DEFAULT_CONFIG, theme: 'dark' } as AppConfig;
+
+    await expect(persistConfigWithRollback(next, previous)).rejects.toThrow('daemon down');
+
+    const written = JSON.parse(store.get('open-design:config') ?? '{}') as Partial<AppConfig>;
+    // The failed dark draft must NOT survive in the cache: it would be
+    // re-written to the daemon on the next startup sync, resurrecting the
+    // preference the daemon refused.
+    expect(written.theme).toBe('light');
+  });
+
+  it('keeps the next cache when the daemon write succeeds', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ config: {} }), { status: 200 }));
+    const previous = { ...DEFAULT_CONFIG, theme: 'light' } as AppConfig;
+    const next = { ...DEFAULT_CONFIG, theme: 'dark' } as AppConfig;
+
+    await persistConfigWithRollback(next, previous);
+
+    const written = JSON.parse(store.get('open-design:config') ?? '{}') as Partial<AppConfig>;
+    expect(written.theme).toBe('dark');
   });
 });

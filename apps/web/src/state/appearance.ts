@@ -105,9 +105,21 @@ export function applyAppearanceToDocument({
   getOpenDesignHost()?.appearance?.setTheme(resolved);
 
   const root = document.documentElement;
-  const normalized = resolveAccentColor(accentColor);
-  const vars = accentVars(normalized);
-  for (const name of ACCENT_VARS) {
-    root.style.setProperty(name, vars[name]);
+  // A CUSTOM accent is stamped inline; the color-mix ratios resolve against
+  // the live theme tokens, so one stamp covers both themes. The DEFAULT
+  // accent must stay UNSTAMPED: tokens.css owns all five values per theme
+  // (#353535 light / #ededed dark with a matching contrast), and an inline
+  // light-default stamp would override the dark palette and leave primary
+  // buttons dark-on-dark.
+  const custom = normalizeAccentColor(accentColor);
+  if (custom) {
+    const vars = accentVars(custom);
+    for (const name of ACCENT_VARS) {
+      root.style.setProperty(name, vars[name]);
+    }
+  } else {
+    for (const name of ACCENT_VARS) {
+      root.style.removeProperty(name);
+    }
   }
 }

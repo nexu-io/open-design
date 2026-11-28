@@ -1562,7 +1562,12 @@ export function SettingsDialog({
   >(() => new Set());
   const previousInitialRef = useRef(initial);
   // Theme + accent — the appearance fields the live preview can change and
-  // that revert-on-close must restore when autosave has not landed yet.
+  // that revert-on-close must restore. The snapshot is ACKNOWLEDGED state
+  // only: it starts from the mount-time initial and advances exclusively in
+  // the persist-success callback. Incoming `initial` props are optimistic
+  // (App applies them before awaiting the daemon write), so mirroring them
+  // here would let a failed save's draft theme win the revert-on-close —
+  // App rolls its optimistic apply back on failure instead.
   const lastSavedAppearanceRef = useRef({
     accentColor: resolveAccentColor(initial.accentColor),
     theme: normalizeThemePreference(initial.theme),
@@ -1577,13 +1582,6 @@ export function SettingsDialog({
   // The fire is keyed on section so a section bounce (open → switch →
   // close) emits one event per surface.
   const lastViewSectionRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    lastSavedAppearanceRef.current = {
-      accentColor: resolveAccentColor(initial.accentColor),
-      theme: normalizeThemePreference(initial.theme),
-    };
-  }, [initial.accentColor, initial.theme]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;

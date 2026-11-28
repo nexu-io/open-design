@@ -44,7 +44,7 @@
 .root .add:is(:hover,:active):not(:disabled) { background:transparent;color:var(--invite-label); }
 .root .remove:is(:hover,:active):not(:disabled),.root .close:is(:hover,:active):not(:disabled) { background:transparent;color:var(--invite-text); }
 .root .info:is(:hover,:active):not(:disabled) { background:transparent;color:var(--invite-faint); }
-.root .skip:is(:hover,:active):not(:disabled) { background:transparent;color:#666; }
+.root .skip:is(:hover,:active):not(:disabled) { background:transparent;color:var(--text-muted); }
 .menu .option:is(:hover,:active):not(:disabled) { background:var(--invite-selected);color:var(--invite-text); }
 @media(max-width:480px) { .panel { padding:20px; }.labels,.row { grid-template-columns:minmax(0,1fr) 92px 20px;gap:8px 6px; }.single { grid-template-columns:minmax(0,1fr) 92px; }.row { margin-bottom:12px; } }
 .onboarding { position:fixed;inset:0;width:100%;height:100dvh;min-height:0;z-index:1000;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);place-items:stretch;gap:0;padding:8px;box-sizing:border-box;background:var(--bg);font-size:14px;font-weight:600; }
@@ -52,16 +52,16 @@
 .onboarding .panel > header,.onboarding .panel > p,.onboarding form,.onboarding .skip { width:440px;max-width:100%;align-self:center;box-sizing:border-box; }
 .onboarding .heading { justify-content:center;padding:0; }
 .onboarding .heading h2 { font-size:clamp(24px,2vw,28px);line-height:1.35;font-weight:700;letter-spacing:-.6px;text-align:center;overflow-wrap:anywhere; }
-.onboarding .context { text-align:left;margin:12px 0 24px;font-size:14px;line-height:21px;color:#666; }
+.onboarding .context { text-align:left;margin:12px 0 24px;font-size:14px;line-height:21px;color:var(--text-muted); }
 .onboarding .sentence { display:block;overflow-wrap:anywhere; }
 .onboarding .labels,.onboarding .row { grid-template-columns:minmax(0,1fr) 112px;gap:8px;position:relative; }
 .onboarding .labels { width:calc(100% - 14px);font-size:13px;line-height:18px; }
-.onboarding .labels > span { font-size:12px;line-height:18px;color:#5c5c5c; }
+.onboarding .labels > span { font-size:12px;line-height:18px;color:var(--text-muted); }
 .onboarding .labels > span:first-child { position:relative;top:6px; }
 .onboarding .labels > span:last-child { padding-left:13px; }
 .onboarding .rows { display:flex;flex-direction:column;gap:12px;width:calc(100% + 38px);margin-left:-4px;padding:4px 42px 4px 4px;box-sizing:border-box;max-height:176px;overflow-x:hidden;scroll-padding-block:4px;scrollbar-gutter:stable;scrollbar-width:auto; }
 .onboarding .rows::-webkit-scrollbar { width:6px; }
-.onboarding .rows::-webkit-scrollbar-thumb { background:#c7c7c7;border-radius:4px; }
+.onboarding .rows::-webkit-scrollbar-thumb { background:var(--border-soft);border-radius:4px; }
 .onboarding .input,.onboarding .role,.onboarding .fixedRole { height:48px;min-height:48px;font-size:14px;font-weight:600;line-height:17.5px;border-radius:9px; }
 /* Fixed member roles follow B03 plain text; align with the registration role label. */
 .onboarding .fixedRole { margin-inline-start:13px;padding:0;border:0;border-radius:0;background:transparent;color:var(--invite-note);font-size:13px;font-weight:500;line-height:20px; }
@@ -69,15 +69,15 @@
 .onboarding .role:not(:disabled),.onboarding .role:is(:hover,:active):not(:disabled) { color:var(--text);border-color:var(--border-soft); }
 .onboarding .input::placeholder { color:var(--text-faint);opacity:1; }
 .onboarding .remove { position:absolute;left:calc(100% + 6px);top:12px;width:24px;min-width:24px;height:24px;min-height:24px;font-size:17px;font-weight:600;line-height:17px; }
-.onboarding .add { color:#666;line-height:13px;height:36px;min-height:36px;margin:12px 0 24px;font-size:13px;font-weight:600;gap:6px; }
+.onboarding .add { color:var(--text-muted);line-height:13px;height:36px;min-height:36px;margin:12px 0 24px;font-size:13px;font-weight:600;gap:6px; }
 .onboarding .footer { margin:0;display:block; }
 .onboarding .submit { width:100%;height:48px;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:600;line-height:21px; }
-.onboarding .submit:disabled { opacity:1;background:#f2f2f2;color:#b6b6b6; }
+.onboarding .submit:disabled { opacity:1;background:var(--bg-subtle);color:var(--text-faint); }
 .onboarding .skip { line-height:1.4;position:relative;top:-8px;width:max-content;height:48px;min-height:48px;margin:24px 0 0;padding:12px 16px;border:0;background:none;box-shadow:none;color:#888;font-size:13px;font-weight:600; }
 .onboarding .lineError,.onboarding .error { color:#d43c32; }
 .onboarding .row { flex-shrink:0;margin-bottom:0;row-gap:0; }
 .onboarding .lineError { position:relative;top:2px;grid-column:1;margin:0;line-height:20px;color:#f04142; }
-.onboarding .input[aria-invalid=true] { border-color:#cf6868;background:#fffafa; }
+.onboarding .input[aria-invalid=true] { border-color:#cf6868;background:var(--bg); }
 .onboarding .error { position:relative;top:2px;margin:12px 0;line-height:20px;color:#f04142; }
 .onboarding .summary { position:relative;top:2px;margin:36px 0 12px;font-size:12px;line-height:18px;color:#f04142;font-weight:600; }
 .art { min-width:0;min-height:0;padding:8px 8px 8px 0;overflow:hidden; }
@@ -103,9 +103,9 @@
 .root:not(.onboarding) .add:disabled { background:transparent;color:var(--invite-label);opacity:.45; }
 /* Registration reference uses explicit disabled inks rather than primitive fills. */
 .onboarding .role:disabled { background:var(--bg-subtle);color:var(--text-faint);border-color:var(--border-soft);opacity:1; }
-.onboarding .remove:disabled { background:transparent;color:#c6c6c6;opacity:1; }
-.onboarding .add:disabled { background:transparent;color:#666;opacity:1; }
-.onboarding .skip:disabled { background:transparent;color:#888;opacity:1; }
+.onboarding .remove:disabled { background:transparent;color:var(--text-faint);opacity:1; }
+.onboarding .add:disabled { background:transparent;color:var(--text-muted);opacity:1; }
+.onboarding .skip:disabled { background:transparent;color:var(--text-muted);opacity:1; }
 
 .onboarding .panel > .submit { width:440px;max-width:100%;align-self:center;box-sizing:border-box;margin-top:24px; }
 
@@ -224,4 +224,28 @@
  .onboarding .panel:not(:has(.complete)) { padding-bottom:24px; }
  .onboarding .panel > header,.onboarding .panel > p,.onboarding form,.onboarding .skip { flex-shrink:0; }
  .onboarding .panel > .onboardingFooter { position:static;align-self:flex-start;flex-shrink:0;margin-top:auto;padding-top:32px; }
+}
+
+
+/* Dark theme: re-point the local invite palette at the global tokens.
+   The literals above are the designed light values; every surface below
+   already consumes these custom properties, so one scope overrides the
+   whole family coherently (inputs, role buttons, menus, tooltips). */
+.root:global([data-theme='dark']),
+.menu:global([data-theme='dark']) {
+  --invite-ink: var(--text-strong);
+  --invite-text: var(--text);
+  --invite-surface: var(--bg-panel);
+  --invite-muted: var(--text-muted);
+  --invite-note: var(--text-muted);
+  --invite-faint: var(--text-faint);
+  --invite-secondary: var(--text-muted);
+  --invite-label: var(--text);
+  --invite-option: var(--text);
+  --invite-border: var(--border-soft);
+  --invite-menu-border: var(--border-soft);
+  --invite-error: var(--red);
+  --invite-error-bg: var(--bg);
+  --invite-secondary-bg: var(--bg-subtle);
+  --invite-selected: var(--bg-subtle);
 }

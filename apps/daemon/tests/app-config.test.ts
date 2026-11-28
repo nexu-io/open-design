@@ -1421,3 +1421,37 @@ describe('app-config odNextStrategyMode', () => {
     });
   });
 });
+
+describe('theme preference persistence', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(path.join(tmpdir(), 'od-appconfig-theme-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('normalizes a null write to an explicit system so the reset outranks cached web state', async () => {
+    await writeAppConfig(dataDir, { theme: 'dark' });
+    expect((await readAppConfig(dataDir)).theme).toBe('dark');
+
+    await writeAppConfig(dataDir, { theme: null });
+    // NOT a delete: a deleted key is indistinguishable from a legacy config
+    // without a theme, and the web layer would write its cached preference
+    // straight back, undoing the reset (see the applyConfigValue comment).
+    expect((await readAppConfig(dataDir)).theme).toBe('system');
+  });
+
+  it('normalizes a hand-edited junk value to system and keeps neighbours intact', async () => {
+    // Junk is refused on the WRITE path (assertWritableControlValues); the
+    // read path is what must not take the daemon down or pin a broken theme.
+    await writeAppConfig(dataDir, { agentId: 'codex' });
+    const file = path.join(dataDir, 'app-config.json');
+    await writeFile(file, JSON.stringify({ agentId: 'codex', theme: 'sepia' }));
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.theme).toBe('system');
+    expect(cfg.agentId).toBe('codex');
+  });
+});

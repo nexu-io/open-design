@@ -2156,7 +2156,7 @@
   align-items: center;
   min-width: 0;
   gap: 7px;
-  color: #202020;
+  color: var(--text-strong);
   font-size: 13px;
   font-weight: 600;
 }
@@ -2182,14 +2182,14 @@
   padding: 6px 12px;
   font-size: 11.5px;
   font-weight: 600;
-  color: #8A8A8A;
+  color: var(--text-muted);
 }
 .comment-side-select-all {
   border: 0;
   border-radius: var(--radius-sm);
   padding: 4px 6px;
   background: transparent;
-  color: #8A8A8A;
+  color: var(--text-muted);
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
@@ -2283,17 +2283,17 @@
   border-radius: 8px;
   padding: 6px 10px 6px 8px;
   background: transparent;
-  color: #333333;
+  color: var(--text);
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 .comment-side-item.selected {
-  background: #EDEDED;
+  background: var(--bg-subtle);
   border-color: transparent;
 }
 .comment-side-item.active {
-  background: #EDEDED;
+  background: var(--bg-subtle);
   border-color: transparent;
   box-shadow: none;
 }
@@ -2366,7 +2366,7 @@
 .comment-side-author strong {
   font-size: 13px;
   font-weight: 600;
-  color: #202020;
+  color: var(--text-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2377,7 +2377,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: #888888;
+  color: var(--text-muted);
   line-height: normal;
 }
 .comment-side-avatar {
@@ -2395,7 +2395,7 @@
   flex: none;
   font-size: 10.5px;
   line-height: 16px;
-  color: #A0A0A0;
+  color: var(--text-faint);
   white-space: nowrap;
 }
 .comment-side-check {
@@ -2419,7 +2419,7 @@
 .comment-side-body {
   padding-left: 28px;
   font-size: 13px;
-  color: #494949;
+  color: var(--text);
   line-height: 20px;
   word-break: break-word;
   white-space: pre-wrap;
@@ -2475,7 +2475,7 @@
   flex: 1;
   font-size: 12px;
   font-weight: 500;
-  color: #8A8A8A;
+  color: var(--text-muted);
 }
 .comment-side-selectbar .ghost {
   height: 28px;
@@ -2484,7 +2484,7 @@
   border-radius: 6px;
   background: transparent;
   font-size: 12px;
-  color: #202020;
+  color: var(--text-strong);
   cursor: pointer;
 }
 .comment-side-selectbar .ghost:hover {
@@ -2497,8 +2497,8 @@
   gap: 4px;
   height: 28px;
   padding: 0 9px;
-  background: #202020;
-  color: #FFFFFF;
+  background: var(--text);
+  color: var(--bg-panel);
   border: 0;
   border-radius: 6px;
   font-size: 12px;
@@ -2512,8 +2512,8 @@
   cursor: not-allowed;
 }
 .comment-side-selectbar .primary:hover:not(:disabled) {
-  background: #202020;
-  border-color: #202020;
+  background: var(--text);
+  border-color: var(--text);
 }
 .comment-side-new-comment {
   flex: 0 0 auto;

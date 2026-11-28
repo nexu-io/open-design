@@ -688,11 +688,14 @@ function applyConfigValue(
     // Read-path tolerance only — a truncated file or hand edit must not take
     // the daemon down, and an unknown value must not pin a broken theme. The
     // WRITE path refuses invalid values in assertWritableControlValues first.
-    // Deleting on anything else is safe: absent IS the default (system).
+    // `null` is the supported reset gesture, so it normalizes to an EXPLICIT
+    // 'system' (not a delete): a deleted key is indistinguishable from a
+    // legacy config without a theme, and the web layer would write its cached
+    // preference straight back, undoing the reset.
     if (value === 'system' || value === 'light' || value === 'dark') {
       target[key] = value;
     } else {
-      delete target[key];
+      target[key] = 'system';
     }
     return;
   }

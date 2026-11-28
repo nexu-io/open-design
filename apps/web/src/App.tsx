@@ -192,6 +192,7 @@ import {
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
+  persistConfigWithRollback,
 } from './state/config';
 import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
 import { applyAppearanceToDocument } from './state/appearance';
@@ -3123,9 +3124,9 @@ function AppInner() {
     const nextForOptimistic = silentChanged
       ? { ...next, allowSilentUpdates: prevSilent }
       : next;
+    const previous = configRef.current;
     const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
     latestPersistedConfigRef.current = persisted;
-    saveConfig(persisted);
     setConfig(persisted);
     const shouldSyncMediaProviders =
       daemonMediaProvidersFetchState === 'ok'
@@ -3135,16 +3136,26 @@ function AppInner() {
     const daemonPayload = silentChanged
       ? { ...persisted, allowSilentUpdates: nextSilent }
       : persisted;
-    await Promise.all([
-      shouldSyncMediaProviders
-        ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
-            force: options?.forceMediaProviderSync,
-            daemonProviders: daemonMediaProviders,
-            throwOnError: options?.forceMediaProviderSync,
-          })
-        : Promise.resolve(),
-      syncConfigToDaemon(daemonPayload, { throwOnError: true }),
-    ]);
+    try {
+      await Promise.all([
+        shouldSyncMediaProviders
+          ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
+              force: options?.forceMediaProviderSync,
+              daemonProviders: daemonMediaProviders,
+              throwOnError: options?.forceMediaProviderSync,
+            })
+          : Promise.resolve(),
+          persistConfigWithRollback(daemonPayload, previous),
+      ]);
+    } catch (error) {
+      // State and the acknowledged appearance snapshot roll back here; the
+      // localStorage cache was already restored by persistConfigWithRollback.
+      // The document re-applies the previous values via the config effect.
+      // Re-throw so the caller's autosave still surfaces the failure.
+      latestPersistedConfigRef.current = previous;
+      setConfig(previous);
+      throw error;
+    }
     if (silentChanged) {
       latestPersistedConfigRef.current = {
         ...latestPersistedConfigRef.current,

@@ -84,12 +84,27 @@ describe('applyAppearanceToDocument', () => {
     expect(document.documentElement.style.getPropertyValue('--accent-hover')).toContain('#ef4444');
   });
 
-  it('falls back to the default accent when no valid accent is configured', () => {
+  it('leaves the accent to the tokens when no valid accent is configured', () => {
     document.documentElement.style.setProperty('--accent', '#4f46e5');
 
     applyAppearanceToDocument({ accentColor: 'not-a-color' });
 
+    // The default accent must stay UNSTAMPED: tokens.css owns all five accent
+    // values per theme, and a light-default inline stamp would override the
+    // dark palette (#ededed accent + #202020 contrast) leaving primary
+    // buttons dark-on-dark.
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe(DEFAULT_ACCENT_COLOR);
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--accent-strong')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--accent-soft')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--accent-tint')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--accent-hover')).toBe('');
+  });
+
+  it('stamps a custom accent inline in either theme', () => {
+    applyAppearanceToDocument({ accentColor: '#ff8800', theme: 'dark' });
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#ff8800');
   });
 });

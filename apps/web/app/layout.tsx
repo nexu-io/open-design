@@ -35,10 +35,14 @@ export const viewport: Viewport = {
  * OS (`@media (prefers-color-scheme: dark) html:not([data-theme])` in
  * tokens.css). A storage read that throws pins the known-good light theme so
  * a broken localStorage can never blank the page.
- * Keep the accent variable mix ratios in sync with `accentVars()` in
- * `src/state/appearance.ts`; this script cannot import application modules.
+ * A CUSTOM accent (any validated value other than the #353535 default) is
+ * stamped inline with the same color-mix ratios as `accentVars()` in
+ * `src/state/appearance.ts`; the DEFAULT accent stays unstamped so
+ * tokens.css owns all five accent values per theme (the light default
+ * stamped inline would override the dark palette's #ededed accent).
+ * This script cannot import application modules.
  */
-const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;t=(t==='dark'||t==='light'||t==='system')?t:'system';var r=document.documentElement;if(t==='dark')r.setAttribute('data-theme','dark');else if(t==='light')r.setAttribute('data-theme','light');else r.removeAttribute('data-theme');var dk=t==='dark'||(t==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',dk?'#202020':'#f7f7f7');var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#353535';if(c.configMigrationVersion!==3&&(a==='#87ea5c'||a==='#c96442'))a='#353535';var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 82%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 12%, var(--bg-subtle))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 6%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 86%, var(--text-strong))');}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
+const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;t=(t==='dark'||t==='light'||t==='system')?t:'system';var r=document.documentElement;if(t==='dark')r.setAttribute('data-theme','dark');else if(t==='light')r.setAttribute('data-theme','light');else r.removeAttribute('data-theme');var dk=t==='dark'||(t==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',dk?'#202020':'#f7f7f7');var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#353535';if(c.configMigrationVersion!==3&&(a==='#87ea5c'||a==='#c96442'))a='#353535';if(a!=='#353535'){var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 82%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 12%, var(--bg-subtle))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 6%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 86%, var(--text-strong))');}}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

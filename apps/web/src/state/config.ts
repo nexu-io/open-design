@@ -1279,6 +1279,28 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   }
 }
 
+/**
+ * Persist the config cache and sync the daemon, rolling the CACHE back to
+ * `previous` when the daemon write fails. The daemon is the durable theme
+ * truth: leaving the failed draft in localStorage would re-write it to the
+ * daemon on the next startup sync and resurrect a preference the user
+ * reverted (or one the daemon refused). Callers own their state revert.
+ */
+export async function persistConfigWithRollback(
+  next: AppConfig,
+  previous: AppConfig,
+  options?: {
+    allowOnboardingReset?: boolean;
+  },
+): Promise<void> {
+  saveConfig(next);
+  try {
+    await syncConfigToDaemon(next, { throwOnError: true, allowOnboardingReset: options?.allowOnboardingReset });
+  } catch (error) {
+    saveConfig(previous);
+    throw error;
+  }
+}
 export async function syncConfigToDaemon(
   config: AppConfig,
   options?: {
