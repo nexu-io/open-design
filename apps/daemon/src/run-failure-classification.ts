@@ -1768,6 +1768,20 @@ export function isAcpCliSessionRefusalText(text: string | null | undefined): boo
     && failure.failure_stage === 'session_init';
 }
 
+/**
+ * An agent CLI that rejected one of our launch arguments outright. OpenCode
+ * prints `Unrecognized flag: <flag> in command opencode <subcommand>` and
+ * exits 1 with a usage dump; other CLIs have equivalent wordings ("unknown
+ * option"). This is a version-dialect break between the daemon's adapter and
+ * the installed CLI — not an upstream/model problem — so the surfaced detail
+ * must point the user at updating one side or the other instead of looking
+ * like a generic spawn failure.
+ */
+export function matchUnrecognizedCliFlag(text: string | null | undefined): string | null {
+  const match = /unrecognized (?:flag|option)\s*:?\s*(")?((?:"|--)?[\w-]+)\1?/i.exec(text ?? '');
+  return match?.[2] ?? null;
+}
+
 export function classifyRunFailure(
   input: RunFailureClassificationInput,
 ): RunFailureClassification | undefined {

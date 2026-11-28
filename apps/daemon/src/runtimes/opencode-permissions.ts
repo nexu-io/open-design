@@ -10,14 +10,108 @@ export const OPENCODE_WORKSPACE_DIR_FLAG = '--dir';
 export const OPENCODE_PERMISSION_CAPABILITY = {
   helpArgs: ['run', '--help'],
   capabilityFlags: {
+    // One capability, two CLI generations: 1.x documents the legacy spelling,
+    // 2.x documents `--auto` (where the 1.x spelling survives as a hidden
+    // alias). `scanHelpCapabilities` records whichever this binary advertises.
     [OPENCODE_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
+    '--auto': 'skipPermissions',
+    // OpenCode 2.x-only flags. Their presence in `--help` both identifies the
+    // CLI generation (see `isOpenCodeV2Dialect`) and gates the flags
+    // themselves, so buildArgs never sends a 2.x-only flag to a 1.x binary.
+    '--archived': 'archivedSessions',
+    '--standalone': 'standaloneServer',
+    '--variant': 'modelVariant',
   },
 } satisfies Pick<RuntimeAgentDef, 'helpArgs' | 'capabilityFlags'>;
 
 export function appendOpenCodePermissionBypass(args: string[], agentId: string): void {
-  if (agentCapabilities.get(agentId)?.skipPermissions) {
-    args.push(OPENCODE_SKIP_PERMISSIONS_FLAG);
+  const advertised = agentCapabilities.get(agentId)?.skipPermissions;
+  if (!advertised) return;
+  // The scan records the flag this binary documents (`--dangerously-skip-
+  // permissions` on 1.x, `--auto` on 2.x); a bare `true` (hidden-flag probe)
+  // falls back to the legacy spelling.
+  args.push(typeof advertised === 'string' ? advertised : OPENCODE_SKIP_PERMISSIONS_FLAG);
+}
+
+/**
+ * True when the cached `--help` scan positively identified an OpenCode 2.x
+ * CLI (`--archived` shipped in 2.2.6 and never existed on 1.x).
+ *
+ * Everything the 2.x CLI *removed* (`--dir`, `--pure`, `--variant`) is
+ * conditioned on this marker: only positive 2.x evidence suppresses a 1.x
+ * flag, so an unprobed or unreadable CLI keeps today's exact 1.x argv. A
+ * 2.x binary that somehow lacks the marker fails loudly at spawn with
+ * "Unrecognized flag: --dir" (now classified as a version-incompatibility
+ * diagnostic) instead of silently changing where the agent writes.
+ */
+export function isOpenCodeV2Dialect(agentId: string): boolean {
+  return Boolean(agentCapabilities.get(agentId)?.archivedSessions);
+}
+
+/**
+ * Run against a private OpenCode server that inherits this child's env.
+ *
+ * OpenCode 2.x `run` reuses a background service when one is up — but a
+ * reused service carries its OWN environment, so the daemon's
+ * `OPENCODE_CONFIG_CONTENT` / `OPENCODE_DISABLE_PROJECT_CONFIG` injection
+ * would be silently ignored whenever the user has an interactive OpenCode
+ * session running. `--standalone` gives the run a private server whose env
+ * is the daemon's, and whose stdin-ownership lease tears the server down
+ * when the run process dies — which matters because the daemon's Windows
+ * kill path has no process groups.
+ */
+export function appendOpenCodeStandaloneServer(args: string[], agentId: string): void {
+  if (agentCapabilities.get(agentId)?.standaloneServer) {
+    args.push('--standalone');
   }
+}
+
+/**
+ * Reasoning-variant selection across OpenCode CLI generations.
+ *
+ * 1.x spelled variants as a dedicated `--variant` flag. 2.x removed the flag
+ * and folded variants into the model reference (`provider/model#variant`,
+ * split at `#` by the CLI's own schema). Only a positively-advertised
+ * `--variant` uses the flag form; a probe-confirmed absence folds the
+ * variant into `-m`, and an unprobed binary keeps the 1.x status quo.
+ */
+export function appendOpenCodeVariant(
+  args: string[],
+  agentId: string,
+  modelId: string,
+  variant: string,
+): void {
+  const advertised = agentCapabilities.get(agentId)?.modelVariant;
+  if (!isOpenCodeV2Dialect(agentId) && (advertised === undefined || advertised)) {
+    args.push('--variant', variant);
+    return;
+  }
+  const modelFlagIndex = args.indexOf('-m');
+  if (modelFlagIndex !== -1) {
+    args[modelFlagIndex + 1] = `${args[modelFlagIndex + 1]}#${variant}`;
+  } else {
+    args.push('-m', `${modelId}#${variant}`);
+  }
+}
+
+/**
+ * Connection smoke-test isolation across OpenCode CLI generations.
+ *
+ * `opencode run --pure` (1.x) kept the one-off smoke test isolated from
+ * user-installed plugins while regular chat runs retained the user's full
+ * plugin environment. 2.x has no `--pure`; the archived session is the 2.x
+ * hygiene equivalent — the smoke session stays out of the user's session
+ * list, and the daemon resumes/export sessions by id, which `--archived`
+ * does not block. mimo is a fork that still speaks `--pure` and rides the
+ * legacy branch (it never advertises the 2.x marker).
+ */
+export function appendOpenCodeConnectionTestFlags(args: string[], agentId: string): void {
+  if (isOpenCodeV2Dialect(agentId)) {
+    if (!args.includes('--archived')) args.push('--archived');
+  } else if (!args.includes('--pure')) {
+    args.push('--pure');
+  }
+  if (!args.includes('--title')) args.push('--title', 'Connection test');
 }
 
 export interface OpenCodeEditBaseResolution {
@@ -105,16 +199,22 @@ async function nearestGitAncestor(from: string): Promise<string | null> {
  * `no_artifact`. `permission.external_directory` cannot catch it either — once
  * the repository is the worktree, writing inside it is an in-project write.
  *
- * Sent unconditionally, matching the BYOK OpenCode definition that already
- * carried this workaround. Gating it on the `--help` capability probe would
- * turn a missing flag back into the silent data-loss bug; an OpenCode build
- * without `--dir` should fail loudly at spawn instead.
+ * OpenCode 2.x removed `--dir` entirely: the run directory is the spawn cwd,
+ * and the config-discovery walk-up the flag used to defeat is disabled
+ * instead via `OPENCODE_DISABLE_PROJECT_CONFIG` (see `env.ts`). Only positive
+ * 2.x evidence (`--archived` in the cached `--help` scan, a flag that never
+ * existed on 1.x) omits `--dir`; an unprobed or unreadable CLI keeps the
+ * unconditional append, so a 1.x binary never silently loses workspace
+ * pinning. (A 2.x binary without the marker would fail loudly at spawn with
+ * "Unrecognized flag: --dir" — a version-incompatibility diagnostic.)
  */
 export function appendOpenCodeWorkspaceDir(
   args: string[],
   cwd: string | null | undefined,
+  agentId: string = 'opencode',
 ): void {
   if (typeof cwd !== 'string' || cwd.length === 0) return;
+  if (isOpenCodeV2Dialect(agentId)) return;
   args.push(OPENCODE_WORKSPACE_DIR_FLAG, cwd);
 }
 

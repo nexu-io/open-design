@@ -221,6 +221,12 @@ function openCodeToolResult(
 function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
   if (state.openCodeToolEvents.handle(obj, onEvent)) return true;
+  // OpenCode 2.x emits line types this adapter deliberately does not consume:
+  // `retry` (provider-level retry notice — informational) and
+  // `background_wait` (background shell/subagent job markers; child evidence
+  // is collected post-run through the sanitized export instead). Swallow
+  // them so they neither surface as raw noise nor break the stream.
+  if (obj.type === 'retry' || obj.type === 'background_wait') return true;
   const part = isRecord(obj.part) ? obj.part : {};
 
   if (obj.type === 'step_start') {
@@ -243,15 +249,25 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
     return true;
   }
 
-  if (obj.type === 'tool_use' && typeof part.tool === 'string' && typeof part.callID === 'string') {
-    state.openCodeToolEvents.complete(part.callID);
+  // The tool call id is `part.callID` on OpenCode 1.x and was renamed to
+  // `part.id` on 2.x (`MiniToolPart` in the CLI source). Accept both so one
+  // parser spans the CLI generations; dropping the line on either spelling
+  // would make every tool call invisible to the run.
+  const callId =
+    typeof part.callID === 'string' && part.callID.length > 0
+      ? part.callID
+      : typeof part.id === 'string' && part.id.length > 0
+        ? part.id
+        : null;
+  if (obj.type === 'tool_use' && typeof part.tool === 'string' && callId !== null) {
+    state.openCodeToolEvents.complete(callId);
     const statePart = isRecord(part.state) ? part.state : null;
-    const key = `${obj.sessionID || 'session'}:${part.callID}`;
+    const key = `${obj.sessionID || 'session'}:${callId}`;
     if (!state.openCodeToolUses.has(key)) {
       state.openCodeToolUses.add(key);
       onEvent({
         type: 'tool_use',
-        id: part.callID,
+        id: callId,
         name: part.tool,
         input: safeParseJson(statePart?.input) ?? statePart?.input ?? null,
       });
@@ -261,7 +277,7 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
       state.openCodeToolResults.add(key);
       onEvent({
         type: 'tool_result',
-        toolUseId: part.callID,
+        toolUseId: callId,
         content: result.content,
         isError: result.isError,
       });

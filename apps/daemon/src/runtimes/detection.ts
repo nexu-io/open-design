@@ -223,26 +223,34 @@ async function fetchModels(
   if (!def.listModels) {
     return { models: def.fallbackModels, source: 'fallback' };
   }
-  try {
-    const { stdout } = await execAgentFile(resolvedBin, def.listModels.args, {
-      env,
-      timeout: def.listModels.timeoutMs ?? 5000,
-      // Models lists from popular CLIs (e.g. opencode) easily exceed the
-      // default 1MB buffer once you include every openrouter model. Bump
-      // it so we don't truncate the listing.
-      maxBuffer: 8 * 1024 * 1024,
-    });
-    const parsed = def.listModels.parse(String(stdout));
-    // Empty / null parse result means the CLI didn't actually return a
-    // usable list (e.g. cursor-agent's "No models available"); fall back
-    // to the static hint so the picker isn't stuck on Default-only.
-    if (!parsed || parsed.length === 0) {
-      return { models: def.fallbackModels, source: 'fallback' };
+  const listModelArgShapes: string[][] = def.listModels.fallbackArgs
+    ? [def.listModels.args, def.listModels.fallbackArgs]
+    : [def.listModels.args];
+  for (const args of listModelArgShapes) {
+    try {
+      const { stdout } = await execAgentFile(resolvedBin, args, {
+        env,
+        timeout: def.listModels.timeoutMs ?? 5000,
+        // Models lists from popular CLIs (e.g. opencode) easily exceed the
+        // default 1MB buffer once you include every openrouter model. Bump
+        // it so we don't truncate the listing.
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      const parsed = def.listModels.parse(String(stdout));
+      // Empty / null parse result means the CLI didn't actually return a
+      // usable list (e.g. cursor-agent's "No models available"); fall back
+      // to the static hint so the picker isn't stuck on Default-only.
+      if (!parsed || parsed.length === 0) {
+        return { models: def.fallbackModels, source: 'fallback' };
+      }
+      return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
+    } catch {
+      // Try the next argument shape. OpenCode 2.x dropped `models --verbose`
+      // and the retry without the flag still parses; a CLI that fails every
+      // declared shape falls through to the static catalog below.
     }
-    return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
-  } catch {
-    return { models: def.fallbackModels, source: 'fallback' };
   }
+  return { models: def.fallbackModels, source: 'fallback' };
 }
 
 export type VersionProbeOutcome =
@@ -501,16 +509,43 @@ async function probeCapabilities(
     // support it, and `--dir` (which pins the workspace to the project so the
     // agent stops adopting the enclosing git root) never applied either.
     const help = `${String(stdout)}\n${String(stderr)}`;
-    const caps: RuntimeCapabilityMap = {};
-    for (const [flag, key] of Object.entries(def.capabilityFlags)) {
-      caps[key] = help.includes(flag);
-    }
-    return caps;
+    return scanHelpCapabilities(def, help);
   } catch {
     // If --help fails, leave caps empty so buildArgs falls back to the safe
     // baseline (no optional flags).
     return {};
   }
+}
+
+// Several CLIs spell one capability with more than one flag across CLI
+// generations — OpenCode renamed its headless permission bypass to `--auto`
+// in 2.x, keeping the 1.x spelling only as a hidden alias — so a capability
+// key may be reached from several candidate flags. Single-candidate
+// capabilities keep the plain boolean contract every existing consumer
+// asserts. Multi-candidate capabilities record the literal flag the binary
+// documents (first candidate to match wins; declare candidates
+// oldest-first), which is what lets buildArgs append the right spelling for
+// the detected CLI generation.
+export function scanHelpCapabilities(
+  def: Pick<RuntimeAgentDef, 'capabilityFlags'>,
+  help: string,
+): RuntimeCapabilityMap {
+  const candidatesByKey = new Map<string, string[]>();
+  for (const [flag, key] of Object.entries(def.capabilityFlags ?? {})) {
+    const list = candidatesByKey.get(key) ?? [];
+    list.push(flag);
+    candidatesByKey.set(key, list);
+  }
+  const caps: RuntimeCapabilityMap = {};
+  for (const [key, flags] of candidatesByKey) {
+    const matched = flags.filter((flag) => help.includes(flag));
+    caps[key] = matched.length === 0
+      ? false
+      : flags.length === 1
+        ? true
+        : matched[0]!;
+  }
+  return caps;
 }
 
 // A value no option can legitimately accept, so the CLI is forced to validate

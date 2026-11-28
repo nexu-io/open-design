@@ -13,8 +13,14 @@ describe('byok-opencode runtime config', () => {
   it('gates non-interactive permission bypass on the installed OpenCode capability', () => {
     agentCapabilities.delete('byok-opencode');
     expect(byokOpenCodeAgentDef.helpArgs).toEqual(['run', '--help']);
+    // One capability reached by both CLI generations' spellings, plus the
+    // 2.x-only dialect flags whose advertisement identifies the generation.
     expect(byokOpenCodeAgentDef.capabilityFlags).toEqual({
       '--dangerously-skip-permissions': 'skipPermissions',
+      '--auto': 'skipPermissions',
+      '--archived': 'archivedSessions',
+      '--standalone': 'standaloneServer',
+      '--variant': 'modelVariant',
     });
     expect(byokOpenCodeAgentDef.buildArgs('', [], [], {})).toEqual([
       'run',

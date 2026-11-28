@@ -17069,9 +17069,10 @@ export async function startServer({
       // stream, so the live stream can only produce a terminal-only L1
       // candidate — which fails the evidence graph on `child_started_missing`
       // and refuses every COMPLEX task on this runtime. `opencode export
-      // --sanitize` is the only surface that pairs a child's `parentID` with
-      // its own transcript, and it can only be read once the child has exited.
-      // Any failure here publishes nothing, leaving the L1 candidate in place.
+      // --sanitize` (1.x; `session export` on 2.x) is the only surface that
+      // pairs a child's `parentID` with its own transcript, and it can only
+      // be read once the child has exited. Any failure here publishes
+      // nothing, leaving the L1 candidate in place.
       if (def.id === 'opencode' && strategyTaskAtStart) {
         const launchPath = agentLaunch.launchPath;
         const candidates = jsonEventStreamHandler?.childEvidenceCandidates() ?? [];
@@ -17082,6 +17083,7 @@ export async function startServer({
               loadSanitizedExport: createOpenCodeSanitizedExportLoader({
                 launchPath,
                 env: spawnedAgentEnv,
+                cliVersion: getDetectedRuntimeVersions(def.id)?.agentCliVersion,
               }),
             });
             for (const fact of facts) {
