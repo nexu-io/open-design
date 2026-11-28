@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { captureProcessSnapshot, collectProcessTreePids, isProcessAlive, selectOwnedProcessTree,
-  signalProcesses, stopProcesses, type ProcessSnapshot } from '@open-design/platform';
+  stopProcesses, terminateProcessGroup, type ProcessSnapshot } from '@open-design/platform';
 import type { CodexClosedThreadCleanup } from './session.js';
 
 /** Same measured compatibility floor used by the live session's archive path. */
@@ -85,7 +85,7 @@ export async function cleanupClosedCodexThread(opts: CodexThreadCleanupOptions):
       try {
         // Only this spawned group is proven owned. A detached descendant can
         // retain our pipes without belonging to that group.
-        if (child.pid) signalProcesses([-child.pid], 'SIGKILL');
+        if (child.pid) await terminateProcessGroup(child.pid, { termGraceMs: 0, killGraceMs: 0 });
         else child.kill('SIGKILL');
       } catch (error) {
         result = { status: 'failed', message: `codex thread cleanup timed out; ${String(error)}` };
