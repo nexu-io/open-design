@@ -56,7 +56,7 @@
   max-width: 220px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #fafafa;
+  background: var(--bg-subtle);
   color: #333;
   box-shadow: 0 4px 12px #0002;
   font-size: 11px;

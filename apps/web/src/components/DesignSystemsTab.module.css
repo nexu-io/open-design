@@ -680,8 +680,8 @@
 
 .itemRowActive,
 .itemRowActive:hover {
-  border-color: #dbdbdb;
-  background: #ffffff;
+  border-color: var(--border);
+  background: var(--bg-panel);
 }
 
 .itemRow:hover > .item,

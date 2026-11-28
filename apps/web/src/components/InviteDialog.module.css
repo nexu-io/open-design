@@ -47,7 +47,7 @@
 .root .skip:is(:hover,:active):not(:disabled) { background:transparent;color:#666; }
 .menu .option:is(:hover,:active):not(:disabled) { background:var(--invite-selected);color:var(--invite-text); }
 @media(max-width:480px) { .panel { padding:20px; }.labels,.row { grid-template-columns:minmax(0,1fr) 92px 20px;gap:8px 6px; }.single { grid-template-columns:minmax(0,1fr) 92px; }.row { margin-bottom:12px; } }
-.onboarding { position:fixed;inset:0;width:100%;height:100dvh;min-height:0;z-index:1000;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);place-items:stretch;gap:0;padding:8px;box-sizing:border-box;background:#fff;font-size:14px;font-weight:600; }
+.onboarding { position:fixed;inset:0;width:100%;height:100dvh;min-height:0;z-index:1000;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);place-items:stretch;gap:0;padding:8px;box-sizing:border-box;background:var(--bg);font-size:14px;font-weight:600; }
 .onboarding .panel { display:flex;flex-direction:column;justify-content:center;align-items:stretch;width:auto;max-width:none;max-height:none;min-width:0;padding:32px 54px;border-radius:0;box-shadow:none;overflow-y:auto; }
 .onboarding .panel > header,.onboarding .panel > p,.onboarding form,.onboarding .skip { width:440px;max-width:100%;align-self:center;box-sizing:border-box; }
 .onboarding .heading { justify-content:center;padding:0; }
@@ -65,9 +65,9 @@
 .onboarding .input,.onboarding .role,.onboarding .fixedRole { height:48px;min-height:48px;font-size:14px;font-weight:600;line-height:17.5px;border-radius:9px; }
 /* Fixed member roles follow B03 plain text; align with the registration role label. */
 .onboarding .fixedRole { margin-inline-start:13px;padding:0;border:0;border-radius:0;background:transparent;color:var(--invite-note);font-size:13px;font-weight:500;line-height:20px; }
-.onboarding .input { background:#fafafa;color:#494949; }
-.onboarding .role:not(:disabled),.onboarding .role:is(:hover,:active):not(:disabled) { color:#494949;border-color:#dedede; }
-.onboarding .input::placeholder { color:#bdbdbd;opacity:1; }
+.onboarding .input { background:var(--bg-subtle);color:var(--text); }
+.onboarding .role:not(:disabled),.onboarding .role:is(:hover,:active):not(:disabled) { color:var(--text);border-color:var(--border-soft); }
+.onboarding .input::placeholder { color:var(--text-faint);opacity:1; }
 .onboarding .remove { position:absolute;left:calc(100% + 6px);top:12px;width:24px;min-width:24px;height:24px;min-height:24px;font-size:17px;font-weight:600;line-height:17px; }
 .onboarding .add { color:#666;line-height:13px;height:36px;min-height:36px;margin:12px 0 24px;font-size:13px;font-weight:600;gap:6px; }
 .onboarding .footer { margin:0;display:block; }
@@ -102,7 +102,7 @@
 .root:not(.onboarding) .remove:disabled,.root:not(.onboarding) .close:disabled { background:transparent;color:var(--invite-note); }
 .root:not(.onboarding) .add:disabled { background:transparent;color:var(--invite-label);opacity:.45; }
 /* Registration reference uses explicit disabled inks rather than primitive fills. */
-.onboarding .role:disabled { background:#fff;color:#bdbdbd;border-color:#dedede;opacity:1; }
+.onboarding .role:disabled { background:var(--bg-subtle);color:var(--text-faint);border-color:var(--border-soft);opacity:1; }
 .onboarding .remove:disabled { background:transparent;color:#c6c6c6;opacity:1; }
 .onboarding .add:disabled { background:transparent;color:#666;opacity:1; }
 .onboarding .skip:disabled { background:transparent;color:#888;opacity:1; }

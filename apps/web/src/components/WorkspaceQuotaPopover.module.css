@@ -69,8 +69,8 @@
   padding: 8px 10px;
   border: 0;
   border-radius: 8px;
-  background: #fafafa;
-  color: #333;
+  background: var(--bg-subtle);
+  color: var(--text);
   box-shadow: none;
   filter: drop-shadow(0 4px 10px #0002);
   font: 400 11px/1.5 Arial, sans-serif;

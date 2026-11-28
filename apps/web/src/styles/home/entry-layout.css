@@ -6863,10 +6863,10 @@ body[data-web-modal-scroll-lock] .entry-main--scroll {
   min-width: 62px;
   min-height: 30px;
   padding: 5px 13px;
-  border: 1px solid #d9d9d6;
+  border: 1px solid var(--border-soft);
   border-radius: 30px;
-  background: #fafafa;
-  color: #666;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 600;
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -6881,8 +6881,8 @@ body[data-web-modal-scroll-lock] .entry-main--scroll {
 .entry-top-right-account-pill:not(.entry-top-right-account-pill--upgrade):has(
     .entry-top-right-credits[aria-expanded='true']
   ) {
-  background: #fff;
-  color: #202020;
+  background: var(--bg-panel);
+  color: var(--text-strong);
 }
 /* Avatar-only trigger at the capsule's right end: a circle sized to the
    capsule's inner height — the name/email/plan all live in the hover menu. */
@@ -7645,8 +7645,8 @@ button.entry-nav-rail__menu-credits-row:active:not(:disabled) {
 }
 
 [data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"][aria-pressed="true"]) {
-  border-color: #dbdbdb;
-  background: #ffffff;
+  border-color: var(--border);
+  background: var(--bg-panel);
 }
 
 [data-testid="design-systems-tab"] > aside div:has(> [data-testid^="design-system-card-"]):hover > [data-testid^="design-system-card-"],

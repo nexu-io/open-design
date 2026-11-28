@@ -2127,12 +2127,12 @@
   height: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  background: #FAFAFA;
-  border: 1px solid #E6E6E6;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
   box-shadow: none;
   font-size: 13px;
-  color: #333333;
+  color: var(--text);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2148,8 +2148,8 @@
   height: 56px;
   min-height: 56px;
   padding: 0 16px;
-  border-bottom: 1px solid #EDEDED;
-  background: #FAFAFA;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-panel);
 }
 .comment-side-title {
   display: inline-flex;
@@ -2402,8 +2402,8 @@
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1px solid #CFCFCF;
-  background: #FFFFFF;
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2468,8 +2468,8 @@
   min-height: 40px;
   box-sizing: border-box;
   padding: 4px 14px 8px;
-  border-top: 1px solid #EDEDED;
-  background: #FAFAFA;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-panel);
 }
 .comment-side-selectcount {
   flex: 1;

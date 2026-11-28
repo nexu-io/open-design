@@ -1333,7 +1333,7 @@
 }
 .workspace-shell .workspace-tab.is-active {
   border-radius: 12px;
-  background: #ffffff;
+  background: var(--bg-panel);
   border-color: var(--workspace-active-tab-border);
   box-shadow:
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
@@ -3108,14 +3108,14 @@
 
 .app .df-panel,
 .app .df-main {
-  background: #fff;
+  background: var(--bg-panel);
 }
 .app .df-main {
   border-right-color: var(--border);
 }
 .app .df-body {
   padding: 4px 20px 20px;
-  background: #fff;
+  background: var(--bg-panel);
 }
 .app .df-controls-row {
   margin: 0 0 14px;

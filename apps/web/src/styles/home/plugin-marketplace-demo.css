@@ -154,7 +154,7 @@
 
 .plugin-marketplace__switch button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-panel);
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
@@ -164,7 +164,7 @@
 .plugin-marketplace__filters button.is-active,
 .plugin-marketplace__category-tags button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-panel);
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }
@@ -735,7 +735,7 @@
 
 .plugin-marketplace__create-tabs button.is-active {
   border-color: transparent;
-  background: #fff;
+  background: var(--bg-panel);
   color: var(--text-strong);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 7%, transparent);
 }

@@ -17,8 +17,8 @@
   overflow: hidden;
   border: 0;
   border-radius: 20px;
-  color: #11120f;
-  background: #fff;
+  color: var(--text);
+  background: var(--bg-panel);
   box-shadow: 0 28px 80px rgb(17 18 15 / 20%);
   font-family: var(--sans);
 }

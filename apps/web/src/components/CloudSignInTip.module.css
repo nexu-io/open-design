@@ -1,5 +1,5 @@
 .card:global(.entry-local-mode-tip) { order: 2; display: grid; box-sizing: border-box; gap: 8px; width: calc(100% - 16px); margin: 0 auto; padding: 8px; border: 1px solid #dbdbdb; border-radius: 12px; background: #fafafa; color: var(--text-muted); box-shadow: none; }
-.card:hover, .card:focus-visible { background: #fafafa; transform: none; }
+.card:hover, .card:focus-visible { background: var(--bg-subtle); transform: none; }
 .card :global(.entry-local-mode-tip__title) { display: flex; align-items: center; gap: 7px; color: #272a30; font-size: 14px; font-weight: 650; line-height: 20px; }
 .card :global(.entry-local-mode-tip__pitch) p { margin: 0; color: #555; font-size: 12px; font-weight: 600; line-height: 18px; }
 .card :global(.entry-local-mode-tip__head) { display: flex; margin-top: 0; }
