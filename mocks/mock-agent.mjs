@@ -114,6 +114,24 @@ async function main() {
     failUsage(`too many arguments: ${opts.positionals.join(' ')}`);
   }
 
+  // OpenCode 2.x removed the 1.x flag surface (`--dir`, `--pure`, `--variant`)
+  // and rejects unknown flags with a usage dump + exit 1. With
+  // OD_MOCKS_OPENCODE_DIALECT=2 the mock reproduces that parser so daemon
+  // regression tests fail fast when they send 1.x argv to a 2.x-dialect
+  // binary. Default (unset) keeps the permissive replay behavior the 1.x-era
+  // golden tests rely on.
+  if ((opts.as === 'opencode' || opts.as === 'opencode-cli')
+      && process.env.OD_MOCKS_OPENCODE_DIALECT === '2') {
+    const rejected = ['--dir', '--pure', '--variant'].find((f) => process.argv.slice(2).includes(f));
+    if (rejected) {
+      process.stderr.write(
+        'DESCRIPTION\n  Run OpenCode with a message\n\nUSAGE\n  opencode run [flags] [<message...>]\n\n'
+        + `ERROR\n  Unrecognized flag: ${rejected} in command opencode run\n`,
+      );
+      process.exit(1);
+    }
+  }
+
   // ACP agents read JSON-RPC messages off stdin one line at a time, so the
   // bulk-prompt buffering logic below doesn't apply — pickRecording sees no
   // prompt for hash-mode (use OD_MOCKS_TRACE or _POOL instead).
@@ -145,7 +163,7 @@ async function main() {
   const renderOpts = { noDelay: opts.noDelay, reportFile: opts.reportFile };
 
   switch (opts.as) {
-    case 'opencode':     await renderAsOpencode(events, renderOpts);    break;
+    case 'opencode':     await renderAsOpencode(events, { ...renderOpts, dialect: process.env.OD_MOCKS_OPENCODE_DIALECT === '2' ? 2 : 1 });    break;
     case 'codex':        await renderAsCodex(events, renderOpts);       break;
     case 'claude':
     case 'amp':          await renderAsClaude(events, renderOpts);      break;

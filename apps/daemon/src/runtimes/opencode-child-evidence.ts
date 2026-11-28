@@ -348,6 +348,11 @@ export function verifyOpenCodeChildExport(input: {
   return facts;
 }
 
+function isMajorVersionAtLeast(version: string | undefined, major: number): boolean {
+  const match = /^v?(\d+)\./u.exec(version ?? '');
+  return Boolean(match && Number(match[1]) >= major);
+}
+
 /**
  * Run the post-run lookup through an injected, exact-id loader. Query failures
  * deliberately degrade to no facts and never escape into the parent Run.
@@ -374,6 +379,9 @@ export async function collectOpenCodeChildRuntimeFacts(input: {
  * the two-sided verification needs, and with transcript and file bytes already
  * redacted by the CLI itself.
  *
+ * OpenCode 2.x moved the command under `session export` and dropped `--pure`
+ * (a `cliVersion` with major >= 2 selects that argv), keeping `--sanitize`.
+ *
  * `--pure` keeps a user-installed OpenCode plugin from executing inside the
  * evidence path, and `execAgentFile` supplies a neutral working directory so
  * the bun-based CLI cannot drop a lockfile into the user's project (see
@@ -386,14 +394,19 @@ export function createOpenCodeSanitizedExportLoader(input: {
   env: NodeJS.ProcessEnv;
   timeoutMs?: number;
   maxBytes?: number;
+  /** Detected CLI version; major >= 2 reads the `session export` surface. */
+  cliVersion?: string;
 }): (childSessionId: string) => Promise<unknown> {
+  const exportArgs = isMajorVersionAtLeast(input.cliVersion, 2)
+    ? (childSessionId: string) => ['session', 'export', childSessionId, '--sanitize']
+    : (childSessionId: string) => ['export', childSessionId, '--sanitize', '--pure'];
   return async (childSessionId: string) => {
     if (!OPENCODE_CHILD_SESSION_ID.test(childSessionId)) {
       throw new TypeError(`Unsupported OpenCode child session id: ${childSessionId}`);
     }
     const { stdout } = await execAgentFile(
       input.launchPath,
-      ['export', childSessionId, '--sanitize', '--pure'],
+      exportArgs(childSessionId),
       {
         env: input.env,
         timeout: input.timeoutMs ?? OPENCODE_CHILD_EXPORT_TIMEOUT_MS,

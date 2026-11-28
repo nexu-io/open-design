@@ -77,6 +77,7 @@ import {
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -996,6 +997,11 @@ async function callLocalCli(provider, system, user, options) {
     user,
   ].join('\n');
 
+  // def.buildArgs speaks per-CLI-generation argv for OpenCode (workspace,
+  // bypass, and standalone flags differ across the 1.x/2.x CLI dialects);
+  // make sure the `--help` capability scan for this binary is cached first.
+  // A no-op when detection already warmed the cache.
+  await ensureDetectedRuntimeCapabilities(provider.agentId);
   let args;
   let stdinText = prompt;
   let parseStdout = (raw) => raw.trim();

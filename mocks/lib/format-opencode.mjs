@@ -1,5 +1,10 @@
 // OD-faithful opencode renderer. Emits the JSONL shape OD's
 // `json-event-stream.ts:handleOpenCodeEvent` parser accepts.
+//
+// `opts.dialect === 2` switches to the OpenCode 2.x CLI stream shapes
+// (verified against the v2.4.2 CLI source): the tool call id moved from
+// `part.callID` to `part.id`. Dialect 1 (default) keeps the 1.x shapes the
+// golden replay corpus was recorded with.
 
 import { writeFile } from 'node:fs/promises';
 
@@ -9,6 +14,7 @@ export async function renderAsOpencode(events, opts = {}) {
   const emit = opts.emit ?? (s => process.stdout.write(s));
   const maxSleep = opts.maxSleepMs ?? 3000;
   const sessionId = opts.sessionId ?? `mock-${Date.now()}`;
+  const v2 = opts.dialect === 2;
   const meta = events.find(e => e.type === 'meta');
 
   const results = new Map();
@@ -33,7 +39,7 @@ export async function renderAsOpencode(events, opts = {}) {
         sessionID: sessionId,
         part: {
           tool: e.name,
-          callID: e.obs_id,
+          ...(v2 ? { id: e.obs_id } : { callID: e.obs_id }),
           state: {
             input: e.input ?? null,
             status: isErr ? 'failed' : 'completed',

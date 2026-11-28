@@ -95,10 +95,26 @@ export type RuntimeContext = {
 // pattern-matches that and re-emits the form on turn 2, looking like
 // the discovery loop never breaks.
 
-export type RuntimeCapabilityMap = Record<string, boolean>;
+// Values record HOW a capability is satisfied: `true` when a probe proved the
+// capability without naming a flag, or the literal flag string the CLI's own
+// `--help` advertised. Several CLIs spell one capability with more than one
+// flag across CLI generations (OpenCode renamed its headless permission
+// bypass to `--auto` in 2.x; the 1.x spelling survives as a hidden alias), so
+// `buildArgs` must append the one the detected binary actually documents.
+// Consumers stay truthiness-based; the string form is an additive
+// refinement, not a third state.
+export type RuntimeCapabilityMap = Record<string, boolean | string>;
 
 export type RuntimeListModels = {
   args: string[];
+  /**
+   * Arguments to retry with when the primary `args` spawn fails. OpenCode 2.x
+   * dropped the `models --verbose` metadata flag (and rejects unknown flags
+   * outright), while the plain `models` listing parses with the same parser —
+   * so the def retries without the flag instead of collapsing to the
+   * hardcoded fallback catalog.
+   */
+  fallbackArgs?: string[];
   timeoutMs?: number;
   parse: (stdout: string) => RuntimeModelOption[] | null;
 };

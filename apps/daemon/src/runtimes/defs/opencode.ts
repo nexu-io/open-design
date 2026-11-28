@@ -2,6 +2,8 @@ import { DEFAULT_MODEL_OPTION } from './shared.js';
 import {
   OPENCODE_PERMISSION_CAPABILITY,
   appendOpenCodePermissionBypass,
+  appendOpenCodeStandaloneServer,
+  appendOpenCodeVariant,
   appendOpenCodeWorkspaceDir,
 } from '../opencode-permissions.js';
 import { getRememberedLiveModels } from '../models.js';
@@ -120,6 +122,10 @@ export const opencodeAgentDef = {
     // (devin, hermes, kiro, kilo, kimi, trae-cli, vibe, reasonix).
     listModels: {
       args: ['models', '--verbose'],
+      // OpenCode 2.x removed `models --verbose` (and rejects unknown flags
+      // outright). The plain listing parses with the same parser, so retry
+      // without the flag instead of collapsing to the fallback catalog.
+      fallbackArgs: ['models'],
       parse: parseOpenCodeModels,
       timeoutMs: 15_000,
     },
@@ -142,7 +148,11 @@ export const opencodeAgentDef = {
         'json',
       ];
       appendOpenCodePermissionBypass(args, 'opencode');
-      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd);
+      appendOpenCodeWorkspaceDir(args, runtimeContext.cwd, 'opencode');
+      // OpenCode 2.x only: a private server that inherits this child's env
+      // (a reused background service would silently drop the daemon's
+      // OPENCODE_CONFIG_CONTENT / OPENCODE_DISABLE_PROJECT_CONFIG injection).
+      appendOpenCodeStandaloneServer(args, 'opencode');
       // Capture-style resume: OpenCode mints its own session id (reported on
       // the stream as `sessionID`, e.g. `ses_...`). On a follow-up turn the
       // daemon continues that session with `-s <id>` instead of re-sending the
@@ -161,7 +171,7 @@ export const opencodeAgentDef = {
         args.push('-m', options.model);
       }
       if (supportsOpenCodeVariant(options.model, options.reasoning)) {
-        args.push('--variant', options.reasoning);
+        appendOpenCodeVariant(args, 'opencode', options.model!, options.reasoning!);
       }
       return args;
     },

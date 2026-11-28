@@ -42,6 +42,9 @@ import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
 import { agentStdinPromptPayload } from './runtimes/chat-run-lifecycle.js';
+import { appendOpenCodeConnectionTestFlags } from './runtimes/opencode-permissions.js';
+import { ensureDetectedRuntimeCapabilities } from './runtimes/detection.js';
+import { matchUnrecognizedCliFlag } from './run-failure-classification.js';
 import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
 import {
   antigravityAuthGuidance,
@@ -2579,6 +2582,11 @@ async function testAgentConnectionInternal(
     if (input.agentId === 'opencode' || input.agentId === 'mimo') {
       if (input.agentId === 'opencode') await prepareOpenCodeConnectionTestCwd(tempDir);
     }
+    // buildArgs speaks per-CLI-generation argv for OpenCode (and honors the
+    // permission-bypass / standalone capabilities generally); make sure the
+    // `--help` capability scan for THIS binary is cached before it runs. A
+    // no-op when detection already warmed the cache for the same executable.
+    await ensureDetectedRuntimeCapabilities(input.agentId, configuredAgentEnv);
     let args: string[];
     try {
       promptFile = await preparePromptFileForAgent(def, SMOKE_PROMPT, 'connection-test');
@@ -2607,14 +2615,12 @@ async function testAgentConnectionInternal(
         },
       );
       // Connection tests should validate the adapter's core CLI path, not
-      // fail on unrelated user-installed OpenCode plugins. `opencode run
-      // --pure` keeps the smoke test isolated while regular chat runs retain
-      // the user's full plugin environment.
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--pure')) {
-        args.push('--pure');
-      }
-      if ((input.agentId === 'opencode' || input.agentId === 'mimo') && !args.includes('--title')) {
-        args.push('--title', 'Connection test');
+      // fail on unrelated user-installed OpenCode plugins. 1.x isolated the
+      // smoke run with `--pure`; 2.x archives the smoke session instead (the
+      // daemon resumes/exports sessions by id, which `--archived` does not
+      // block). See `appendOpenCodeConnectionTestFlags`.
+      if (input.agentId === 'opencode' || input.agentId === 'mimo') {
+        appendOpenCodeConnectionTestFlags(args, input.agentId);
       }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -2776,6 +2782,34 @@ async function testAgentConnectionInternal(
             code: winner.code,
             signal: winner.signal,
           });
+        }
+      }
+      // An agent CLI that rejected one of our launch arguments ("Unrecognized
+      // flag: --dir in command opencode run", exit 1, usage dump) is a
+      // version-dialect break between this build's adapter and the installed
+      // CLI — name it as such instead of a generic spawn failure.
+      if (input.agentId === 'opencode' || input.agentId === 'mimo') {
+        const rejectedFlag = matchUnrecognizedCliFlag(
+          `${sink.getStderrTail()}\n${sink.getRawStdoutTail()}`,
+        );
+        if (rejectedFlag) {
+          const detail =
+            `The installed ${def.name} CLI rejected the OpenDesign launch argument \`${rejectedFlag}\`. ` +
+            'The CLI generation is incompatible with this adapter — update Open Design (or the CLI) so both speak the same generation.';
+          console.warn(`[test:agent] ${def.name} → agent_spawn_failed: ${detail}`);
+          return {
+            ok: false,
+            kind: 'agent_spawn_failed',
+            latencyMs,
+            model,
+            agentName: def.name,
+            detail,
+            diagnostics: buildDiagnostics({
+              phase: 'spawn',
+              ...(winner.code !== null ? { exitCode: winner.code } : {}),
+              ...(winner.signal ? { signal: winner.signal } : {}),
+            }),
+          };
         }
       }
       const buffered = sink.getText().trim();
