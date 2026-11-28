@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import { relative, resolve } from 'node:path';
+import { utimesSync } from 'node:fs';
 import {
   assert, chmodSync, claude, codex, deepseek, join, minimalAgentDef, mkdirSync, mkdtempSync, resolveAgentExecutable, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
@@ -9,6 +10,56 @@ import {
 } from '../../src/runtimes/executables.js';
 
 const fsTest = process.platform === 'win32' ? test.skip : test;
+
+test('Windows Codex app discovery handles updates, precedence, and isolated homes', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-codex-windows-'));
+  try {
+    return withEnvSnapshot(
+      ['PATH', 'PATHEXT', 'LOCALAPPDATA', 'OD_AGENT_HOME', 'OD_SANDBOX_MODE', 'OD_DATA_DIR', 'CODEX_BIN'],
+      () => withPlatform('win32', () => {
+        delete process.env.OD_SANDBOX_MODE;
+        delete process.env.OD_DATA_DIR;
+        delete process.env.CODEX_BIN;
+        process.env.OD_AGENT_HOME = home;
+        process.env.LOCALAPPDATA = join(home, 'host-local');
+        process.env.PATH = '';
+        process.env.PATHEXT = '.EXE;.CMD';
+
+        assert.deepEqual(codexAppBundleCandidates(), []);
+        const binDir = join(home, 'AppData', 'Local', 'OpenAI', 'Codex', 'bin');
+        const oldBin = join(binDir, 'old-hash', 'codex.exe');
+        const newBin = join(binDir, 'new-hash', 'codex.exe');
+        for (const version of ['old-hash', 'new-hash', 'incomplete']) {
+          mkdirSync(join(binDir, version), { recursive: true });
+        }
+        writeFileSync(oldBin, '');
+        writeFileSync(newBin, '');
+        utimesSync(oldBin, 100, 100);
+        utimesSync(newBin, 200, 200);
+        assert.deepEqual(codexAppBundleCandidates(), [newBin, oldBin]);
+        assert.equal(resolveAgentExecutable(codex), newBin);
+        assert.equal(resolveAgentExecutable(minimalAgentDef({ bin: 'codex' })), null);
+
+        const pathDir = join(home, 'path-bin');
+        mkdirSync(pathDir);
+        const pathBin = join(pathDir, 'codex.EXE');
+        writeFileSync(pathBin, '');
+        process.env.PATH = pathDir;
+        assert.equal(resolveAgentExecutable(codex), pathBin);
+        assert.equal(resolveAgentExecutable(codex, { CODEX_BIN: oldBin }), oldBin);
+
+        // Without an isolated home, respect redirected Windows LocalAppData.
+        delete process.env.OD_AGENT_HOME;
+        process.env.LOCALAPPDATA = join(home, 'AppData', 'Local');
+        assert.deepEqual(codexAppBundleCandidates(), [newBin, oldBin]);
+        process.env.LOCALAPPDATA = join(home, 'host-local');
+        assert.deepEqual(codexAppBundleCandidates(), []);
+      }),
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
 
 // ---- OpenClaude fallback (issue #235) -------------------------------------
 // OpenClaude (https://github.com/Gitlawb/openclaude) is a Claude Code fork

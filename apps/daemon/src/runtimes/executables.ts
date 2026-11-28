@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, statSync } from 'node:fs';
+import { accessSync, constants, existsSync, readdirSync, statSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
 import { homedir } from 'node:os';
@@ -342,10 +342,32 @@ function codexAppBundleExecutable(def: RuntimeAgentDef): string | null {
 // candidate list directly to catch a path typo or ordering regression in the
 // common real-world install case.
 export function codexAppBundleCandidates(): string[] {
-  // The Codex app bundle is a macOS-only concept; other platforms have no
-  // analogous standalone install of the `codex` CLI to probe for here.
-  if (process.platform !== 'darwin') return [];
   const { home, hasOverride } = resolveDetectionHome();
+  if (process.platform === 'win32') {
+    const localAppData = (!hasOverride && process.env.LOCALAPPDATA) ||
+      path.join(home, 'AppData', 'Local');
+    const binDir = path.join(localAppData, 'OpenAI', 'Codex', 'bin');
+    try {
+      // App updates leave hash-named versions behind. Prefer the most recently
+      // installed executable, ignoring incomplete or concurrently removed files.
+      return readdirSync(binDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .flatMap((entry) => {
+          const candidate = path.join(binDir, entry.name, 'codex.exe');
+          try {
+            const stat = statSync(candidate);
+            return stat.isFile() ? [{ candidate, mtime: stat.mtimeMs }] : [];
+          } catch {
+            return [];
+          }
+        })
+        .sort((a, b) => b.mtime - a.mtime || a.candidate.localeCompare(b.candidate))
+        .map(({ candidate }) => candidate);
+    } catch {
+      return [];
+    }
+  }
+  if (process.platform !== 'darwin') return [];
   const bundleSuffix = ['Codex.app', 'Contents', 'Resources', 'codex'];
   // User-scoped install (~/Applications). Honors the override home so
   // sandboxed detection runs and tests stay deterministic.
