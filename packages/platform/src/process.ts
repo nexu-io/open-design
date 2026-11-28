@@ -317,15 +317,20 @@ export async function spawnLoggedProcess(request: SpawnProcessRequest): Promise<
   return child;
 }
 
+/** @internal Individual PIDs must not select a process group or overflow Node's signed PID range. */
+function isIndividualPid(pid: number | null | undefined): pid is number {
+  return typeof pid === "number" && Number.isInteger(pid) && pid > 0 && pid <= 0x7fffffff;
+}
+
 /**
  * Probe whether a process is alive via a signal-0 `process.kill`. Treats
  * `ESRCH` as dead and any other error (e.g. `EPERM`) as alive.
  *
- * @param pid - The PID to probe (non-number values are treated as dead).
+ * @param pid - The PID to probe (invalid individual PIDs are treated as dead).
  * @returns `true` when the process appears to exist.
  */
 export function isProcessAlive(pid: number | null | undefined): boolean {
-  if (typeof pid !== "number") return false;
+  if (!isIndividualPid(pid)) return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -625,10 +630,11 @@ export function collectProcessTreePids(
   processes: ProcessSnapshot[],
   rootPids: Array<number | null | undefined>,
 ): number[] {
-  const queue = [...new Set(rootPids.filter((pid): pid is number => typeof pid === "number"))];
+  const queue = [...new Set(rootPids.filter(isIndividualPid))];
   const visited = new Set<number>();
   const childrenByParent = new Map<number, number[]>();
   for (const processInfo of processes) {
+    if (!isIndividualPid(processInfo.pid)) continue;
     const children = childrenByParent.get(processInfo.ppid) ?? [];
     children.push(processInfo.pid);
     childrenByParent.set(processInfo.ppid, children);
@@ -844,6 +850,7 @@ export function signalProcesses(
   onSignal?: (pid: number, signal: NodeJS.Signals) => void,
 ): void {
   for (const pid of pids) {
+    if (!isIndividualPid(pid)) continue;
     try {
       process.kill(pid, signal);
     } catch (error) {
@@ -869,7 +876,7 @@ async function waitForProcessesToExit(pids: number[], timeoutMs = 5000): Promise
  * Stop a set of PIDs with escalation: SIGTERM, wait, then SIGKILL any
  * survivors. Excludes the current process and de-duplicates the input.
  *
- * @param pids - The PIDs to stop (non-numbers and the current PID are ignored).
+ * @param pids - The PIDs to stop (invalid individual PIDs and the current PID are ignored).
  * @returns A result describing matched, stopped, force-killed, and remaining PIDs.
  */
 export async function stopProcesses(
@@ -877,7 +884,7 @@ export async function stopProcesses(
   options: StopProcessesOptions = {},
 ): Promise<StopProcessesResult> {
   const uniquePids = [...new Set(pids)]
-    .filter((pid): pid is number => typeof pid === "number" && pid !== process.pid)
+    .filter((pid): pid is number => isIndividualPid(pid) && pid !== process.pid)
     .sort((left, right) => right - left);
   if (uniquePids.length === 0) {
     return { alreadyStopped: true, forcedPids: [], matchedPids: [], remainingPids: [], stoppedPids: [] };
