@@ -39,6 +39,9 @@ export interface ProjectLocationPrefs {
   path: string;
 }
 
+/** UI theme for the app chrome; `system` follows the OS preference. */
+export type ThemePreference = 'system' | 'light' | 'dark';
+
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
   agentId?: string | null;
@@ -60,6 +63,13 @@ export interface AppConfigPrefs {
    */
   privacyDecisionAt?: number | null;
   allowSilentUpdates?: boolean;
+  /**
+   * UI theme for the app chrome. Absent or `null` means follow the OS
+   * (system). The web app caches the last-known value in localStorage so the
+   * pre-hydration script can stamp the correct theme before first paint; the
+   * daemon copy is the durable truth that survives cleared web storage.
+   */
+  theme?: ThemePreference | null;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
   /** External project library roots. The daemon adds its built-in .od/projects location at read time. */

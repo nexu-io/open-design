@@ -210,7 +210,10 @@ import {
 } from '../collab/useProjectWorkspaceScope';
 import {
   applyAppearanceToDocument,
+  normalizeThemePreference,
   resolveAccentColor,
+  resolveAppTheme,
+  THEME_PREFERENCES,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
 import {
@@ -296,6 +299,13 @@ interface ByokProviderPreset {
 export type SettingsHighlight = 'amr' | null;
 
 const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/releases';
+
+// Theme picker options, in display order (see `THEME_PREFERENCES`).
+const THEME_OPTION_I18N_KEYS = {
+  system: 'settings.themeSystem',
+  light: 'settings.themeLight',
+  dark: 'settings.themeDark',
+} as const;
 
 type AboutUpdatePrimaryAction = 'check' | 'download' | 'install' | 'quit';
 type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
@@ -1551,9 +1561,11 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
-  // Accent only — the theme is a constant now that the app ships light-only.
+  // Theme + accent — the appearance fields the live preview can change and
+  // that revert-on-close must restore when autosave has not landed yet.
   const lastSavedAppearanceRef = useRef({
     accentColor: resolveAccentColor(initial.accentColor),
+    theme: normalizeThemePreference(initial.theme),
   });
 
   useEffect(() => {
@@ -1569,8 +1581,9 @@ export function SettingsDialog({
   useEffect(() => {
     lastSavedAppearanceRef.current = {
       accentColor: resolveAccentColor(initial.accentColor),
+      theme: normalizeThemePreference(initial.theme),
     };
-  }, [initial.accentColor]);
+  }, [initial.accentColor, initial.theme]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -3375,6 +3388,7 @@ export function SettingsDialog({
           }
           lastSavedAppearanceRef.current = {
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
+            theme: normalizeThemePreference(persistedSnapshot.theme),
           };
           // If a newer edit landed while the request was in flight,
           // leave the status as 'pending' so the next debounce tick
@@ -3931,10 +3945,10 @@ export function SettingsDialog({
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
-    // The theme setting is gone (the app ships light-only), so `appearance` has
-    // no copy of its own. It survives only as a legacy deep-link token that
-    // `normalizeSettingsSection` folds into General, so this entry can never be
-    // the active header — it exists to keep the Record exhaustive.
+    // `appearance` renders inside General (theme + system prefs live there),
+    // so it survives as a deep-link token that `normalizeSettingsSection`
+    // folds into General; this entry can never be the active header — it
+    // exists to keep the Record exhaustive.
     appearance: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     critiqueTheater: {
       title: t('critiqueTheater.settingsNav'),
@@ -6011,6 +6025,39 @@ export function SettingsDialog({
                       {LOCALES.map((code) => (
                         <option key={code} value={code}>
                           {LOCALE_LABEL[code]} · {code}
+                        </option>
+                      ))}
+                    </select>
+                    <Icon name="chevron-down" size={14} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.appearanceTitle')}</h3>
+                  <p className="hint">{t('settings.appearanceHint')}</p>
+                </div>
+                <div className="settings-general-field">
+                  <span className="settings-general-label">{t('settings.theme')}</span>
+                  <label className="settings-general-select">
+                    <select
+                      value={resolveAppTheme(cfg.theme)}
+                      aria-label={t('settings.theme')}
+                      data-testid="settings-theme-select"
+                      onChange={(event) => {
+                        const next = normalizeThemePreference(event.target.value);
+                        if (!next) return;
+                        setCfg((current) => ({ ...current, theme: next }));
+                        // Live preview: stamp the document before the debounced
+                        // autosave round-trips. Revert-on-close restores the
+                        // persisted appearance if the save never lands.
+                        applyAppearanceToDocument({ accentColor: cfg.accentColor, theme: next });
+                      }}
+                    >
+                      {THEME_PREFERENCES.map((pref) => (
+                        <option key={pref} value={pref}>
+                          {t(THEME_OPTION_I18N_KEYS[pref])}
                         </option>
                       ))}
                     </select>

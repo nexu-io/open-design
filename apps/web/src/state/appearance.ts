@@ -43,47 +43,68 @@ function accentVars(accentColor: string): Record<(typeof ACCENT_VARS)[number], s
   };
 }
 
-/**
- * The one appearance OpenDesign ships.
- *
- * Product removed the theme setting: the workspace surfaces have no dark
- * tokens, so a dark app is a broken app. `data-theme` is therefore a constant
- * rather than a preference — and it must always be PRESENT, not merely
- * non-dark. Every dark rule in the app is gated on the attribute being absent
- * (`html:not([data-theme])` in CSS) or falls back to `prefers-color-scheme`
- * when the attribute is missing (`shiki`, `ConnectorLogo`, `SketchEditor`,
- * `TerminalViewer`, `connectorBrandColor`, `MentionNode`). Stamping it
- * unconditionally is what keeps a dark OS from leaking through.
- */
-export const FORCED_APP_THEME = 'light' as const;
+/** Valid theme preferences, in picker order. */
+export const THEME_PREFERENCES: readonly AppTheme[] = ['system', 'light', 'dark'] as const;
+
+export function normalizeThemePreference(value: unknown): AppTheme | null {
+  return value === 'system' || value === 'light' || value === 'dark' ? value : null;
+}
+
+const DEFAULT_THEME: AppTheme = 'system';
+
+/** The browser chrome / title-bar color for each resolved appearance. */
+const LIGHT_THEME_COLOR = '#f7f7f7';
+const DARK_THEME_COLOR = '#202020';
 
 /**
- * Coerce any persisted theme to the only one that still exists.
- *
- * Changing the default alone cannot fix an existing install: every user who
- * ever opened the old picker has `'dark'` — or `'system'`, which resolves dark
- * on a dark OS — written to localStorage, and a stored value does not move
- * when the default does. Config reads funnel through here so those installs
- * come back light.
+ * Resolve a persisted theme preference. Absent or unknown falls back to
+ * `system`, so a fresh install follows the OS and a hand-edited config can
+ * never pin a broken value.
  */
 export function resolveAppTheme(persisted?: AppTheme | null): AppTheme {
-  return persisted === FORCED_APP_THEME ? persisted : FORCED_APP_THEME;
+  return normalizeThemePreference(persisted) ?? DEFAULT_THEME;
+}
+
+function applyThemeDocument(theme: AppTheme): void {
+  const root = document.documentElement;
+  // Absence IS system mode. tokens.css carries the full dark set both in
+  // `[data-theme="dark"]` and in `@media (prefers-color-scheme: dark)
+  // html:not([data-theme])`, so removing the attribute is what makes the
+  // document follow the OS live. Attribute consumers (ConnectorLogo,
+  // SketchEditor, TerminalViewer, MentionNode, shiki) already treat absence
+  // as OS-following.
+  if (theme === 'system') {
+    root.removeAttribute('data-theme');
+  } else {
+    root.setAttribute('data-theme', theme);
+  }
+  const dark = theme === 'dark'
+    || (theme === 'system'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', dark ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
 }
 
 export function applyAppearanceToDocument({
   accentColor,
+  theme,
 }: {
   accentColor?: string;
+  theme?: AppTheme | null;
 }): void {
-  const root = document.documentElement;
-  root.setAttribute('data-theme', FORCED_APP_THEME);
+  const resolved = resolveAppTheme(theme);
+  applyThemeDocument(resolved);
   // Desktop shell: keep the native window appearance (the macOS vibrancy
   // glass material) in step with the app theme. Without this the glass
   // follows the OS appearance, so the light app over a dark OS sat on dark
   // glass and read as a muddy gray (#94). Feature-detected — browsers and
-  // older host builds have no appearance capability.
-  getOpenDesignHost()?.appearance?.setTheme(FORCED_APP_THEME);
+  // older host builds have no appearance capability. `system` hands the
+  // decision to `nativeTheme.themeSource` so the window tracks the OS live.
+  getOpenDesignHost()?.appearance?.setTheme(resolved);
 
+  const root = document.documentElement;
   const normalized = resolveAccentColor(accentColor);
   const vars = accentVars(normalized);
   for (const name of ACCENT_VARS) {

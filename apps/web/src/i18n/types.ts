@@ -467,6 +467,12 @@ export interface Dict {
   'settings.subtitle': string;
   'settings.general': string;
   'settings.generalHint': string;
+  'settings.appearanceTitle': string;
+  'settings.appearanceHint': string;
+  'settings.theme': string;
+  'settings.themeSystem': string;
+  'settings.themeLight': string;
+  'settings.themeDark': string;
   'settings.modeAria': string;
   'settings.protocolAria': string;
   'settings.modeDaemon': string;
