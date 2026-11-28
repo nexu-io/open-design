@@ -1493,13 +1493,17 @@ export type SplashWindowHandle = {
 };
 
 /**
- * Pin Electron's native appearance to light.
+ * Pin Electron's native appearance to light until the renderer reports the
+ * saved theme.
  *
- * The app has one theme now, so `themeSource` is not a preference to sync — it
- * is a constant. Leaving it at Electron's `system` default lets a dark-mode OS
- * colour everything the web layer does not own: the macOS vibrancy glass
- * (`vibrancy: "under-window"`), native menus and dialogs, and the renderer's
- * own `prefers-color-scheme` before `data-theme` is stamped.
+ * The main process cannot read the web layer's stored theme before its first
+ * window exists, so cold boots start light and the `od:appearance:set-theme`
+ * IPC corrects `themeSource` to the user's `light` / `dark` / `system`
+ * preference as soon as the app mounts. Leaving the default at Electron's
+ * `system` would instead let a dark-mode OS colour everything the web layer
+ * does not own — the macOS vibrancy glass (`vibrancy: "under-window"`),
+ * native menus and dialogs, and the renderer's own `prefers-color-scheme`
+ * before `data-theme` is stamped — for users whose saved theme is light.
  *
  * Idempotent, so both the splash path and the `od:appearance:set-theme` handler
  * can call it.
@@ -1517,11 +1521,12 @@ export function pinNativeAppearanceToLight(): void {
  * + matching size so the reveal swap reads as a single window, never a flash.
  */
 export function createSplashWindow(): SplashWindowHandle {
-  // OpenDesign ships light-only (the theme setting was removed), so pin the
-  // native appearance before the first window exists. Electron defaults
-  // `themeSource` to `system`, which paints the macOS vibrancy glass and the
-  // native chrome dark on a dark-mode Mac — visible on the splash and again in
-  // the gap before the renderer's `od:appearance:set-theme` lands.
+  // Cold boots start light (see pinNativeAppearanceToLight); the renderer's
+  // first `od:appearance:set-theme` re-points `themeSource` at the saved
+  // `light` / `dark` / `system` preference once the app mounts. Electron
+  // defaults `themeSource` to `system`, which paints the macOS vibrancy glass
+  // and the native chrome dark on a dark-mode Mac — visible on the splash and
+  // again in the gap before the renderer lands.
   pinNativeAppearanceToLight();
   // Stamp creation time at the instant the window appears (see SplashWindowHandle).
   const startedAt = Date.now();
@@ -2645,13 +2650,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.on("od:appearance:set-theme", (event, theme: unknown) => {
     if (window.isDestroyed() || event.sender !== window.webContents) return;
     if (theme !== "light" && theme !== "dark" && theme !== "system") return;
-    // Pin the native appearance to the app theme. The macOS frosted window
+    // Sync the native appearance with the app theme. The macOS frosted window
     // (vibrancy: under-window) draws its glass in the SYSTEM appearance by
     // default, so a light app over a dark OS sat on dark glass and read as a
-    // muddy gray (#94); forcing the native theme keeps the glass material in
-    // step with the app's tokens. The host protocol still carries all three
-    // values as generic infrastructure, but the app ships light-only, so this
-    // is the same value `pinNativeAppearanceToLight` already set at startup.
+    // muddy gray (#94); keeping `themeSource` in step with the saved theme
+    // keeps the glass material and native chrome matching the app's tokens.
+    // `system` hands the decision back to the OS so the window tracks it live.
     nativeTheme.themeSource = theme;
   });
 

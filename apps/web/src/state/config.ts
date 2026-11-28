@@ -13,9 +13,8 @@ import type {
 import { resolveFixedOriginBaseUrl } from './apiProtocols';
 import {
   DEFAULT_ACCENT_COLOR,
-  FORCED_APP_THEME,
   normalizeAccentColor,
-  resolveAppTheme,
+  normalizeThemePreference,
 } from './appearance';
 import {
   DEFAULT_FAILURE_SOUND_ID,
@@ -91,7 +90,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   skillId: null,
   designSystemId: null,
   onboardingCompleted: false,
-  theme: FORCED_APP_THEME,
+  // Theme default is `system` (applied when the key is absent); the picker
+  // writes an explicit value that persists to localStorage and the daemon.
   accentColor: DEFAULT_ACCENT_COLOR,
   mediaProviders: {},
   composio: {},
@@ -714,17 +714,16 @@ export function loadConfig(): AppConfig {
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
       accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
-      // Coerce on read, not just on default: the theme setting is gone, but
-      // 'dark' / 'system' is still on disk in every install that ever used it.
-      theme: resolveAppTheme(parsed.theme),
+      // Keep only well-formed values; unknown junk falls back to the default
+      // (system) at apply time rather than pinning a broken theme.
+      theme: normalizeThemePreference(parsed.theme) ?? undefined,
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
     };
-    // A stored `dark` / `system` theme is dead data now that the app ships
-    // light-only. Flag it so the coerced value is written back once and the old
-    // preference stops existing on disk, instead of being re-coerced forever.
-    let migratedConfig = parsed.theme != null && parsed.theme !== FORCED_APP_THEME;
+    // Theme values no longer need a migration: `system` / `light` / `dark`
+    // are all live preferences again, and unknown junk is normalized on read.
+    let migratedConfig = false;
     const parsedMigrationVersion =
       typeof parsed.configMigrationVersion === 'number'
         ? parsed.configMigrationVersion
@@ -1126,6 +1125,11 @@ export function mergeDaemonConfig(
   if (daemonConfig.installationId !== undefined) {
     next.installationId = daemonConfig.installationId;
   }
+  if (daemonConfig.theme !== undefined) {
+    // The daemon copy is the durable theme truth (survives cleared web
+    // storage); normalize junk to the system default at apply time.
+    next.theme = normalizeThemePreference(daemonConfig.theme) ?? undefined;
+  }
   if (daemonConfig.telemetry !== undefined) {
     next.telemetry = { ...daemonConfig.telemetry };
   }
@@ -1275,6 +1279,28 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   }
 }
 
+/**
+ * Persist the config cache and sync the daemon, rolling the CACHE back to
+ * `previous` when the daemon write fails. The daemon is the durable theme
+ * truth: leaving the failed draft in localStorage would re-write it to the
+ * daemon on the next startup sync and resurrect a preference the user
+ * reverted (or one the daemon refused). Callers own their state revert.
+ */
+export async function persistConfigWithRollback(
+  next: AppConfig,
+  previous: AppConfig,
+  options?: {
+    allowOnboardingReset?: boolean;
+  },
+): Promise<void> {
+  saveConfig(next);
+  try {
+    await syncConfigToDaemon(next, { throwOnError: true, allowOnboardingReset: options?.allowOnboardingReset });
+  } catch (error) {
+    saveConfig(previous);
+    throw error;
+  }
+}
 export async function syncConfigToDaemon(
   config: AppConfig,
   options?: {
@@ -1301,6 +1327,7 @@ export async function syncConfigToDaemon(
     telemetry: config.telemetry,
     privacyDecisionAt: config.privacyDecisionAt,
     allowSilentUpdates: config.allowSilentUpdates,
+    ...(config.theme ? { theme: config.theme } : {}),
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
     defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',

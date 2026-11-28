@@ -1004,13 +1004,13 @@ html.od-radial-open .workspace-shell {
   max-width: calc(100vw - 32px);
   padding: 16px 20px;
   gap: 12px;
-  border: 1px solid #00000008;
+  border: 1px solid var(--border-soft);
   border-radius: 12px;
-  background: #FFFFFF;
-  box-shadow: 0 8px 28px #00000010, 0 2px 6px #00000006;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
   font-size: 12px;
   font-weight: 400;
-  color: #333333;
+  color: var(--text);
 }
 .chrome-unified-panel {
   display: flex;
@@ -1200,7 +1200,7 @@ body[data-artifact-share-access='private'] .ws-tabs-file-actions-before {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-panel) 96%, white 4%);
+  background: var(--bg-panel);
   box-shadow: var(--shadow-lg);
 }
 .artifact-version-panel__head {
@@ -2195,7 +2195,7 @@ a.avatar-item:visited {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #fff;
+  background: var(--bg);
   color: var(--text);
   font-size: 12px;
   line-height: 1.4;
@@ -2457,9 +2457,9 @@ a.avatar-item:visited {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #E6E6E6;
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
-  background: #FAFAFA;
+  background: var(--bg-panel);
   box-shadow: none;
 }
 /* The floating comments card lives outside the workspace grid, so it does not

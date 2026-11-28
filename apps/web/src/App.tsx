@@ -192,6 +192,7 @@ import {
   syncComposioConfigToDaemon,
   syncConfigToDaemon,
   syncMediaProvidersToDaemon,
+  persistConfigWithRollback,
 } from './state/config';
 import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
 import { applyAppearanceToDocument } from './state/appearance';
@@ -2236,13 +2237,13 @@ function AppInner() {
   ]);
 
   // Stamp the app appearance onto the <html> element so CSS variables pick it
-  // up. The theme itself is a constant (light-only), but the accent still comes
-  // from config, and the stamp must be re-applied whenever that changes.
+  // up. Theme and accent both come from config, and the stamp must be
+  // re-applied whenever either changes.
   // useLayoutEffect (vs useEffect) fires before the browser paints, so no
   // 1-frame flash. Safe here because the component tree is ssr:false.
   useLayoutEffect(() => {
-    applyAppearanceToDocument({ accentColor: config.accentColor });
-  }, [config.accentColor]);
+    applyAppearanceToDocument({ accentColor: config.accentColor, theme: config.theme });
+  }, [config.accentColor, config.theme]);
 
   // Tell the daemon what the user is currently looking at, so the MCP
   // server can surface it as `get_active_context` to a coding agent in
@@ -3123,9 +3124,9 @@ function AppInner() {
     const nextForOptimistic = silentChanged
       ? { ...next, allowSilentUpdates: prevSilent }
       : next;
+    const previous = configRef.current;
     const persisted = buildPersistedConfig(nextForOptimistic, configRef.current);
     latestPersistedConfigRef.current = persisted;
-    saveConfig(persisted);
     setConfig(persisted);
     const shouldSyncMediaProviders =
       daemonMediaProvidersFetchState === 'ok'
@@ -3135,16 +3136,26 @@ function AppInner() {
     const daemonPayload = silentChanged
       ? { ...persisted, allowSilentUpdates: nextSilent }
       : persisted;
-    await Promise.all([
-      shouldSyncMediaProviders
-        ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
-            force: options?.forceMediaProviderSync,
-            daemonProviders: daemonMediaProviders,
-            throwOnError: options?.forceMediaProviderSync,
-          })
-        : Promise.resolve(),
-      syncConfigToDaemon(daemonPayload, { throwOnError: true }),
-    ]);
+    try {
+      await Promise.all([
+        shouldSyncMediaProviders
+          ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
+              force: options?.forceMediaProviderSync,
+              daemonProviders: daemonMediaProviders,
+              throwOnError: options?.forceMediaProviderSync,
+            })
+          : Promise.resolve(),
+          persistConfigWithRollback(daemonPayload, previous),
+      ]);
+    } catch (error) {
+      // State and the acknowledged appearance snapshot roll back here; the
+      // localStorage cache was already restored by persistConfigWithRollback.
+      // The document re-applies the previous values via the config effect.
+      // Re-throw so the caller's autosave still surfaces the failure.
+      latestPersistedConfigRef.current = previous;
+      setConfig(previous);
+      throw error;
+    }
     if (silentChanged) {
       latestPersistedConfigRef.current = {
         ...latestPersistedConfigRef.current,

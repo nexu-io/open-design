@@ -69,6 +69,7 @@
   padding: 8px 10px;
   border: 0;
   border-radius: 8px;
+  /* Designed section of an always-dark popover — paired literal ink. */
   background: #fafafa;
   color: #333;
   box-shadow: none;

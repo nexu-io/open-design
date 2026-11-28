@@ -857,7 +857,7 @@
 }
 .msg-mode-chip--chat {
   border-color: color-mix(in srgb, var(--text-soft) 22%, var(--border));
-  background: color-mix(in srgb, var(--bg-subtle) 78%, #fff);
+  background: color-mix(in srgb, var(--bg-subtle) 78%, var(--bg));
   color: var(--text-muted);
 }
 .msg-plugin-context {

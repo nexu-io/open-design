@@ -122,6 +122,11 @@ export interface AppConfigPrefs {
   telemetry?: TelemetryPrefs;
   privacyDecisionAt?: number | null;
   allowSilentUpdates?: boolean;
+  // UI theme for the app chrome. Absent and null both mean "follow the OS".
+  // The web app caches the last-known value in localStorage for flash-free
+  // first paint; this copy is the durable truth that survives cleared web
+  // storage. Structurally identical to contracts' ThemePreference.
+  theme?: 'system' | 'light' | 'dark' | null;
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
@@ -157,6 +162,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'telemetry',
   'privacyDecisionAt',
   'allowSilentUpdates',
+  'theme',
   'orbit',
   'customInstructions',
   'projectLocations',
@@ -678,6 +684,21 @@ function applyConfigValue(
     }
     return;
   }
+  if (key === 'theme') {
+    // Read-path tolerance only — a truncated file or hand edit must not take
+    // the daemon down, and an unknown value must not pin a broken theme. The
+    // WRITE path refuses invalid values in assertWritableControlValues first.
+    // `null` is the supported reset gesture, so it normalizes to an EXPLICIT
+    // 'system' (not a delete): a deleted key is indistinguishable from a
+    // legacy config without a theme, and the web layer would write its cached
+    // preference straight back, undoing the reset.
+    if (value === 'system' || value === 'light' || value === 'dark') {
+      target[key] = value;
+    } else {
+      target[key] = 'system';
+    }
+    return;
+  }
   if (key === 'recentLinkedDirs') {
     if (Array.isArray(value)) {
       // Keep non-empty strings, trim, de-dupe preserving most-recent-first
@@ -934,13 +955,30 @@ export class InvalidAppConfigValueError extends Error {
  * change the new active default. Invalid legacy writes still fail explicitly.
  */
 function assertWritableControlValues(partial: Record<string, unknown>): void {
-  if (!Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) return;
-  const value = partial.odNextStrategyMode;
-  if (value === null || value === 'off' || value === 'observe' || value === 'active') return;
-  throw new InvalidAppConfigValueError(
-    'odNextStrategyMode',
-    'odNextStrategyMode must be one of "off", "observe", "active", or null',
-  );
+  if (Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) {
+    const value = partial.odNextStrategyMode;
+    if (!(value === null || value === 'off' || value === 'observe' || value === 'active')) {
+      throw new InvalidAppConfigValueError(
+        'odNextStrategyMode',
+        'odNextStrategyMode must be one of "off", "observe", "active", or null',
+      );
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
+    const value = partial.theme;
+    if (!(
+      value === null
+      || value === undefined
+      || value === 'system'
+      || value === 'light'
+      || value === 'dark'
+    )) {
+      throw new InvalidAppConfigValueError(
+        'theme',
+        'theme must be one of "system", "light", "dark", or null',
+      );
+    }
+  }
 }
 
 async function doWrite(

@@ -56,7 +56,8 @@
   max-width: 220px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: #fafafa;
+  /* Designed section of an always-dark popover — paired literal ink. */
+background: #fafafa;
   color: #333;
   box-shadow: 0 4px 12px #0002;
   font-size: 11px;

@@ -17,6 +17,8 @@
   overflow: hidden;
   border: 0;
   border-radius: 20px;
+  /* Designed light surface (green sunset treatment with paired ink colors
+     below) — it stays light in both themes so those pairs keep contrast. */
   color: #11120f;
   background: #fff;
   box-shadow: 0 28px 80px rgb(17 18 15 / 20%);

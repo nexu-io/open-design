@@ -240,7 +240,7 @@
   margin: 0;
   padding: 20px 24px;
   overflow: auto;
-  background: #fff;
+  background: var(--bg);
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.6;

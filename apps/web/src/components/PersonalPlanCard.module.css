@@ -57,8 +57,8 @@
   padding: 2px 9px;
   border: 0;
   border-radius: 100px;
-  background: #fafafa;
-  color: #202020;
+  background: var(--bg-subtle);
+  color: var(--text);
   font: inherit;
   white-space: nowrap;
 }
