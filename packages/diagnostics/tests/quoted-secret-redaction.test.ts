@@ -18,6 +18,19 @@ describe('quoted secret assignments', () => {
     assert.equal(redactText("secret='private\\'still-secret' status=ok"), 'secret=[REDACTED] status=ok');
   });
 
+  it.each([
+    ['a bare suffix', 'token="private words"suffix status=ok', 'token=[REDACTED] status=ok'],
+    ['adjacent quote styles', `secret='private words'"more data" status=ok`, 'secret=[REDACTED] status=ok'],
+    ['a bare prefix and suffix', 'password=prefix"private words"suffix;status=ok', 'password=[REDACTED];status=ok'],
+    ['an empty quoted fragment', `api_key=""'private words' status=ok`, 'api_key=[REDACTED] status=ok'],
+    ['escaped whitespace', String.raw`token="private"\ still-secret status=ok`, 'token=[REDACTED] status=ok'],
+    ['escaped separators', String.raw`secret='private'\,more\;data,status=ok`, 'secret=[REDACTED],status=ok'],
+    ['a colon assignment', `Authorization: "private"'suffix'; status=ok`, 'Authorization: [REDACTED]; status=ok'],
+    ['an unfinished final fragment', 'token="private"suffix"more data\nnext event', 'token=[REDACTED]\nnext event'],
+  ])('redacts the whole shell word with %s', (_name, input, expected) => {
+    assert.equal(redactText(input), expected);
+  });
+
   it('redacts an unfinished quoted assignment up to the log line boundary', () => {
     assert.equal(redactText('password="private words\nnext event'), 'password=[REDACTED]\nnext event');
     assert.equal(redactText("secret='private words\r\nnext event"), 'secret=[REDACTED]\r\nnext event');
@@ -40,12 +53,12 @@ describe('quoted secret assignments', () => {
     const directory = await mkdtemp(join(tmpdir(), 'diagnostics-quoted-secret-'));
     try {
       const log = join(directory, 'daemon.log');
-      await writeFile(log, 'request password="private words, more" failed\nretry token=\'second private value\' status=503\n');
+      await writeFile(log, 'request password="private words, more"suffix failed\nretry token=\'second private value\'"last fragment" status=503\n');
       const outputDirectory = join(directory, 'archive');
       const { manifest } = await buildAutomaticDiagnostics({
         directory: outputDirectory,
         incidentId: 'quoted-assignment',
-        summary: { message: 'request token="summary private value" failed' },
+        summary: { message: 'request token="summary private value"suffix failed' },
         sources: [{ name: 'daemon.log', absolutePath: log, kind: 'text' }],
       });
       const chunks = await Promise.all(manifest.chunks.map((chunk) => readFile(join(outputDirectory, String(chunk.index)))));
