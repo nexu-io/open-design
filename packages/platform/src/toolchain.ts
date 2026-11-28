@@ -113,6 +113,10 @@ export function wellKnownUserToolchainBins(
   // conventional dirs below, which are also added without an existence check.
   if (process.platform === "win32") {
     dirs.push(join(home, "AppData", "Roaming", "npm"));
+    // The Antigravity installer uses LOCALAPPDATA; GUI launches may retain
+    // an older PATH from before the CLI was installed.
+    const localAppData = env.LOCALAPPDATA?.trim() || join(home, 'AppData', 'Local');
+    dirs.push(join(localAppData, 'agy', 'bin'));
   }
   dirs.push(
     join(home, ".local", "bin"),

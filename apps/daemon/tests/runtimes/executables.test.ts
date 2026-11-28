@@ -63,6 +63,30 @@ test('resolveAgentExecutable finds Grok Build in OD_AGENT_HOME on Windows', () =
   }
 });
 
+test('resolveAgentExecutable finds Antigravity in its standard Windows install directory', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-antigravity-home-'));
+  try {
+    return withEnvSnapshot(['PATH', 'PATHEXT', 'OD_AGENT_HOME'], () =>
+      withPlatform('win32', () => {
+        const binDir = join(home, 'AppData', 'Local', 'agy', 'bin');
+        const executable = join(binDir, 'agy.EXE');
+        mkdirSync(binDir, { recursive: true });
+        writeFileSync(executable, '');
+        process.env.PATH = '';
+        process.env.PATHEXT = '.EXE';
+        process.env.OD_AGENT_HOME = home;
+
+        assert.equal(
+          resolveAgentExecutable(minimalAgentDef({ id: 'antigravity', bin: 'agy' })),
+          executable,
+        );
+      }),
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 // resolveAgentExecutable touches the filesystem via existsSync; on
 // Windows resolveOnPath also walks PATHEXT extensions, which our fixture
 // files don't carry. Skip the filesystem-backed cases there — the
